@@ -14,6 +14,7 @@ fn bundled_families_only() {
         [
             "Caveat",
             "Inter",
+            "Inter Variable",
             "JetBrains Mono",
             "Noto Emoji",
             "Noto Sans Arabic",

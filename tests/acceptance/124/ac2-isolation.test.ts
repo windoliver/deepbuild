@@ -117,7 +117,7 @@ describe(`${ID.isolation} a replica's input never answers an ask in your record,
       requireMacos();
       const clip = pasteboard();
       const front = frontApp().asn;
-      const bundle = /"CFBundleIdentifier"="([^"]+)"/.exec(execFileSync('lsappinfo', ['info', '-only', 'bundleid', front], { encoding: 'utf8' }))?.[1];
+      const bundle = /(?:"CFBundleIdentifier"|\bbundleID)="([^"]+)"/.exec(execFileSync('lsappinfo', ['info', '-only', 'bundleid', front], { encoding: 'utf8' }))?.[1];
       try {
         const problems = await tryIn(plant);
         expect(problems.join('\n'), `the judge names what ${plant} let through`).toMatch(named);

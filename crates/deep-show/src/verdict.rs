@@ -395,6 +395,14 @@ impl<'a> Hub<'a> {
         if docs.is_empty() {
             return done(row, "INCONCLUSIVE", Vec::new());
         }
+        // #464: a check that would read a display-only snapshot is refused: it never counts.
+        if let Some(sha) = r.check["snapshot"]
+            .as_str()
+            .filter(|s| self.display_only.contains(*s))
+        {
+            let refusal = json!({"code": "display_only", "snapshot": sha});
+            return done(row, "INVALID", vec![refusal]);
+        }
         let core = CORE_CHECK_KINDS.contains(&kind.as_str());
         let registered = if core { None } else { sealed.check_kind(&kind) };
         if !core && registered.is_none() {
