@@ -1,4 +1,5 @@
 {
+  "acceptance.state@1": "d1:67346ed3ad9cdc6eb45208d5e094279c6da05d50ce9adb7f5eaafef7f9a33256",
   "access@1": "d1:fa089cd2f1c87d6e0b58795fb53ca6ced52939abc8f72f285383d80a75c2f000",
   "action.entered@1": "d1:ce1f041d0f94f1e632d96c720123f37de37b2c116a18e1d77238436c50e45896",
   "action.reported@1": "d1:c21b2b44e7f1f43d92d91644f1bcf078867e2db3fd08985bf63dee44fd4f1e4f",
@@ -38,6 +39,7 @@
   "ask.superseded@1": "d1:0205b5fc0a2fce67f1a11585a1315d4a4820eb8cd21645d854bc7136dd652a8a",
   "ask_task.machine@1": "d1:c3de8ec85a9598de258736b7c257f5447031b7d6d34009ef0c636c079647b131",
   "attempt.machine@1": "d1:9ed7c521a98e45c855275648fdf8c120856b605ac6e2d08ca285bd2500c07974",
+  "attempt.started@1": "d1:aedbe680e21a487d3fa7bf93a61824ad9c0afa584f45aa880c0f478d76d1cf7f",
   "call.overrun@1": "d1:046f0b6b50e28b7b8fd63788af4132c9a856250c2768d8a14bf1bcc6aa12372c",
   "capability.refused@1": "d1:58b1bc494f3e12c48305fb46d5f27e8a2f93287d379ebefade87a1deea69ad2a",
   "card_rule.set@1": "d1:b0d0f3ff9a803f01af46f187bcc2ccee9cc2bde5453755a25afad82e4f29c520",

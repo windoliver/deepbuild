@@ -1,5 +1,24 @@
 // Generated from packages/contracts/schemas by generateTypeScript. Do not edit.
 
+/** acceptance.state@1 */
+export interface AcceptanceState {
+  v: 1;
+  id: string;
+  kind: "acceptance.state";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    issue: string;
+    entry: unknown;
+  };
+  evidence?: Array<string>;
+}
+
 /** access@1 */
 export interface Access {
   words: Array<string>;
@@ -2560,6 +2579,27 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
+/** attempt.started@1 */
+export interface AttemptStarted {
+  v: 1;
+  id: string;
+  kind: "attempt.started";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    issue: string;
+    branch: string;
+    commit: string;
+    base: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** call.overrun@1 */
 export interface CallOverrun {
   v: 1;
@@ -4378,6 +4418,11 @@ export interface JobRecorded {
     folder: string;
     prompt: string;
     waiting: Array<string>;
+    inputs?: Array<{
+      kind: "issue" | "design" | "base" | "criterion";
+      ref: string;
+      sha256?: string;
+    }>;
   };
   evidence?: Array<string>;
 }
