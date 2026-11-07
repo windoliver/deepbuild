@@ -8,4 +8,5 @@ pub mod mips;
 pub mod planted;
 pub mod reference;
 pub mod runner;
+mod uniformity;
 pub use deep_gpu::structural;

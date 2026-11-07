@@ -288,6 +288,11 @@ impl Issue {
         if !self.close.is_empty() {
             out.insert("close".into(), json!(self.close));
         }
+        // An operator's issue at one of its steps names the step (#431: `operator_kind_rule
+        // {step, reason}`).
+        if let Some((_, step)) = self.path.split_once("/params/steps/") {
+            out.insert("step".into(), json!(step));
+        }
         Value::Object(out)
     }
 }

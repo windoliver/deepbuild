@@ -259,6 +259,21 @@ impl Store {
         Some(key)
     }
 
+    /// An image's view by its hash, uploaded the first time it's asked for, or the white
+    /// stand-in when this frame holds no texels for it (#431: a material operator's texture
+    /// input).
+    pub fn view_of(
+        &mut self,
+        d: &wgpu::Device,
+        queue: &wgpu::Queue,
+        sha: &str,
+    ) -> wgpu::TextureView {
+        match self.texture(d, queue, sha) {
+            Some(key) => self.textures[&key].1.clone(),
+            None => self.white.clone(),
+        }
+    }
+
     fn bind(
         &mut self,
         d: &wgpu::Device,

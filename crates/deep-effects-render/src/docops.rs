@@ -261,6 +261,9 @@ pub struct DocOps {
     pub params: BTreeMap<String, BTreeMap<String, Value>>,
     /// And the px each may write, `[x, y, w, h]` of the frame, by item.
     pub within: BTreeMap<String, [u32; 4]>,
+    /// The core's targets beside color, depth and object ID that this frame drew because an
+    /// operator reads them (#431): velocity and emission, by name.
+    pub core: BTreeMap<&'static str, wgpu::TextureView>,
 }
 
 /// The issue a rejected pipeline raises, naming its canvas module, operator and item, with the
@@ -317,6 +320,7 @@ impl DocOps {
             hooks: Hooks::default(),
             params: BTreeMap::new(),
             within: BTreeMap::new(),
+            core: BTreeMap::new(),
         }
     }
 
@@ -695,6 +699,11 @@ impl DocOps {
             }
             From::Target { op, output } if op == "core" && output == "depth" => {
                 depth.cloned().unwrap_or_else(|| src.clone())
+            }
+            From::Target { op, output }
+                if op == "core" && self.core.contains_key(output.as_str()) =>
+            {
+                self.core[output.as_str()].clone()
             }
             From::Target { op, output } | From::Texture3d { op, output, .. } => {
                 if let Some(t) = self.textures.get(&(op.clone(), output.clone())) {

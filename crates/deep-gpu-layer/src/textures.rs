@@ -53,10 +53,21 @@ fn role(roles: &BTreeSet<&str>, planted: Option<Planted>) -> &'static str {
     }
 }
 
-/// Every map hash the scene's solids sample, with the fields that name it.
+/// Every map hash the scene's solids sample, with the fields that name it; a material
+/// operator's texture input by hash (#431) is linear data, its mips made from its texels' codes.
 fn usages(scene: &Scene) -> BTreeMap<String, BTreeSet<&'static str>> {
     let mut out: BTreeMap<String, BTreeSet<&'static str>> = BTreeMap::new();
     for s in scene.layers.iter().flat_map(|l| &l.solids) {
+        let inputs =
+            s.op.as_ref()
+                .and_then(|o| o.item["params"]["inputs"].as_object());
+        for (_, i) in inputs.into_iter().flatten() {
+            if let Some(sha) = i["from"]["texture"].as_str() {
+                out.entry(sha.to_ascii_lowercase())
+                    .or_default()
+                    .insert("operator");
+            }
+        }
         let Some(m) = &s.maps else { continue };
         for (field, slot) in m.slots() {
             if let Some(slot) = slot {

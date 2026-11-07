@@ -7,6 +7,7 @@ use deep_canvas_scene3d::scene::Shape;
 use deep_gpu::device::Device;
 use wgpu::util::DeviceExt as _;
 
+#[derive(Clone)]
 pub struct Mesh {
     pub vertices: wgpu::Buffer,
     pub indices: wgpu::Buffer,

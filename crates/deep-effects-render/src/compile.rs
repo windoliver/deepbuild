@@ -22,6 +22,8 @@ pub fn validate(wgsl: &str) -> Result<naga::Module, String> {
     )
     .validate(&module)
     .map_err(|e| e.emit_to_string(wgsl))?;
+    // The derivative uniformity naga 30 leaves off for fragment stages (#431).
+    crate::uniformity::check(&module)?;
     Ok(module)
 }
 

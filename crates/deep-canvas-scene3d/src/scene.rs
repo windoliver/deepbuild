@@ -654,6 +654,9 @@ pub struct Scene {
     /// Motion blur by velocity this frame (#419): the evaluations at t ± half the shutter that the
     /// renderer's velocity target reads, or `None`.
     pub motion: Option<Arc<Motion>>,
+    /// The core's velocity target this frame (#431): the evaluations at t ± half the shutter an
+    /// effect or operator reading it is drawn from, or `None` where nothing reads it.
+    pub velocity: Option<Arc<Motion>>,
     /// Each `overlay.text@1` readout (#419): drawn by the view after the frame's samples and
     /// motion blur resolve, over the frame, never into the frame itself.
     pub readouts: Vec<Label>,
@@ -2731,6 +2734,7 @@ pub(crate) fn evaluate_compiled(
         curves,
         pages: labels.pages(),
         motion: None,
+        velocity: None,
         readouts,
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
