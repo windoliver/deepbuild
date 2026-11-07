@@ -37,6 +37,15 @@
       "literals": []
     },
     {
+      "panel": "deepbuild/rules",
+      "entry": "crates/deep-app/src/views.rs Shipped, Kind::Rules",
+      "roles": [
+        "ink_primary",
+        "ink_secondary"
+      ],
+      "literals": []
+    },
+    {
       "panel": "deepbuild/session",
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::Session",
       "roles": [
