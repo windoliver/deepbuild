@@ -140,6 +140,7 @@ describe('a held push (#1156)', () => {
     ['jj git push', ['cur']],
     ['sl push --to b', ['b']],
     ['gt submit --stack', ['cur']],
+    ['jj git push --all', ['*']],
   ])('`%s` pushes %j', (line, branches) => {
     expect(pushBranches(line, 'cur')).toEqual(branches);
   });
