@@ -216,8 +216,6 @@ interface Session {
   results?: string[];
   /** The thread its ID joins: IDs rotated by `/clear`, `/compact` or a fork are one thread. */
   thread: string;
-  /** Ended by a SessionEnd whose reason is `clear`: the process, by PID and start time, that goes on under a new ID on its thread (#1632). */
-  cleared?: { pid: number; start: string; thread: string };
   read: number; turn: Turn | undefined; closed: Turn[]; reached: Set<string>;
   /** Calls whose hooks' events are on their way to the record, and how many: their turns wait for them. */
   pending: Map<string, number>;
@@ -1601,10 +1599,7 @@ export class Core {
       // Only an event checked against its session acts on it: an unverified SessionEnd ends nothing.
       // pi resumes a session it replaced in the same process, so the same session can start again.
       if (meta.event === 'SessionStart' && meta.agent === 'pi') session.ended = false;
-      if (meta.event === 'SessionEnd') {
-        this.sessionOver(session);
-        if (drafts.some((d) => d.kind === 'session.end' && d.data.reason === 'clear')) session.cleared = { pid: session.pid, start: session.start, thread: session.thread };
-      }
+      if (meta.event === 'SessionEnd') this.sessionOver(session);
       // A replayed PreToolUse was let through late; its call has run, so it stamps nothing a later call could bind.
       if (verified && meta.stamp && !replayed) this.stamps.push({ session: session.id, tool: meta.stamp.tool, digest: meta.stamp.digest });
     }
@@ -6527,23 +6522,22 @@ export class Core {
     return [...this.binds.values()].includes(session);
   }
   /**
-   * A deep mcp whose session `/clear` rotated in its own process (#1632): a SessionEnd `clear`, then a live session of the
-   * same process, by PID and start time, on its thread. Its calls then bind one by one by their own stamps, as an unbound
-   * connection's do, so each acts for the new ID and none inherits the old one. A session that ended any other way, or
-   * whose successor runs in another process, keeps its binding, and its calls are refused naming it.
+   * A deep mcp whose session `/clear` rotated in its own process (#1632): a later session of the same process, by PID and
+   * start time, is live on its thread, which only a rotation joins it to. That start says so whether the old ID's
+   * SessionEnd came yet or was recorded unverified. Its calls then bind one by one by their own stamps, as an unbound
+   * connection's do, so each acts for the new ID and none for the old. A session that ended with no successor in its
+   * process keeps its binding, and its calls are refused naming it.
    */
   private async rebound(context: CallContext): Promise<CallContext> {
     const { session: id, parent } = context;
     if (!id || !parent || this.byToken(id)) return context;
     const was = this.sessions.get(id);
-    // Still its own: live in this deep mcp's process. One resumed in another process since is no longer this one's.
-    if (was && !was.ended && was.pid === parent.pid && was.start === parent.start) return context;
-    // Forgotten past ENDED_KEPT (#824): the record keeps its thread and how it ended.
-    const [row] = was ? [] : (await this.record.raw(`SELECT s.thread_id AS thread, EXISTS (SELECT 1 FROM events WHERE kind = 'session.end' AND session_id = s.id AND json_extract(data, '$.reason') = 'clear') AS cleared FROM sessions s WHERE s.id = ?`, [id])) as { thread: string | null; cleared: number }[];
-    const cleared = was ? was.cleared : row?.cleared ? { ...parent, thread: row.thread ?? id } : undefined;
-    if (!cleared || cleared.pid !== parent.pid || cleared.start !== parent.start) return context;
-    const thread = cleared.thread;
-    const rotated = [...this.sessions.values()].some((s) => !s.ended && s.id !== id && s.thread === thread && s.pid === parent.pid && s.start === parent.start);
+    // Forgotten past ENDED_KEPT (#824): the record keeps its thread.
+    const [row] = was ? [] : (await this.record.raw(`SELECT thread_id FROM sessions WHERE id = ?`, [id])) as { thread_id: string | null }[];
+    const thread = was ? was.thread : row?.thread_id ?? id;
+    // Sessions in the order they began: only one after it can have rotated it.
+    const all = [...this.sessions.values()];
+    const rotated = all.slice(was ? all.indexOf(was) + 1 : 0).some((s) => !s.ended && s.id !== id && s.thread === thread && s.pid === parent.pid && s.start === parent.start);
     return rotated ? { ...context, session: null } : context;
   }
   /**
