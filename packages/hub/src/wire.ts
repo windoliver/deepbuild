@@ -101,7 +101,7 @@ export interface HookMeta {
   command?: string;
   /** The agent version the session's transcript names; unset until it holds an entry. */
   version?: string;
-  /** Set for a session on a version its facts don't cover: recorded unverified, its holds and blocks watch-only. */
+  /** Set for a session on a version its facts don't cover: recorded unverified, its holds and every block but the floor watch-only (#1501). */
   watchOnly?: boolean;
   /**
    * A line from paseo's plugin (#55): the agent's provider and paseo's own agent ID, the token its DeepBuild MCP server
