@@ -136,9 +136,6 @@ export interface Sources {
   /** The decisions covering the ask, each with the normalized targets of the plan it was saved from. */
   decisions: { handle: string; targets: Set<string> }[];
 }
-/** The wrong programs #1098's criteria name that change placing (tests only). */
-export type PlacePlant = 'origin-from-agent-message' | 'first-recipient-origin' | 'push-target-as-repo';
-
 const NOUN: Record<TargetKind, string> = { address: 'address', host: 'host', remote: 'remote', repo: 'repo', channel: 'channel', payee: 'payee' };
 const keyOf = (kind: TargetKind, ref: string): string => `${kind}\u0000${ref.toLowerCase()}`;
 

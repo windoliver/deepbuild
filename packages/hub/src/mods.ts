@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { accessSync, constants, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
+import { readFacts } from '@deepbuild/adapters';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -18,7 +19,7 @@ export interface ModsFacts {
   holdsWhen: { case: 'managed' | 'login' | 'plan' | 'interactive'; text: string; subscriptionTypes?: string[]; mode?: string; since?: string; tools?: string[] }[];
 }
 /** The Claude Code facts' mods entry. */
-export const modsFacts = (): ModsFacts => (JSON.parse(readFileSync(new URL('../../../adapters/claude-code.facts.json', import.meta.url), 'utf8')) as { mods: ModsFacts }).mods;
+export const modsFacts = (): ModsFacts => readFacts<{ mods: ModsFacts }>('claude-code.facts.json').mods;
 
 export interface Mod {
   /** The plugin as Claude Code names it, `name@marketplace`. */
