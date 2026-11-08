@@ -6,6 +6,11 @@
 //!
 //! `deep-app --set-up` runs the first launch's Set up click with no window and prints its one line (#326).
 //!
+//! Issue #41, each with no window: `--hub-needs` prints the hub contract the app speaks and every method it calls as
+//! one JSON line; `--hub-check` connects to the running hub as the window does and says `hub ok`, or, when the hub's
+//! hello doesn't cover the app, prints the one screen naming the older side and its fix, having called nothing;
+//! `--check-for-updates` prints Check for updates' line.
+//!
 //! Issue #883: the window's app posts each ask to Notification Center and withdraws it once the
 //! record says it closed (`notifications`, below); macOS shows them only from the app bundle `scripts/app-bundle`
 //! builds. Issue #994: a second launch brings the first window forward and exits, and the notifier keeps trying a hub
@@ -83,6 +88,9 @@ enum Mode {
         chords: u64,
     },
     SetUp,
+    HubNeeds,
+    HubCheck,
+    CheckForUpdates,
     NotificationCenter,
     CaptureBug {
         store: PathBuf,
@@ -117,6 +125,41 @@ fn main() {
     }
     if mode == Mode::NotificationCenter {
         notification_center::print();
+        return;
+    }
+    if mode == Mode::HubNeeds {
+        let needs = serde_json::json!({ "contract": deep_app::hub::CONTRACT, "features": deep_app::hub::NEEDS });
+        println!("{needs}");
+        return;
+    }
+    if mode == Mode::HubCheck {
+        let mut reader = deep_app::record::RecordReader::unopened_folded(
+            &deep_app::hub::address(),
+            &deep_app::hub::root().join("control.token"),
+        );
+        match reader.check() {
+            Err(deep_app::hub::HubError::Older(screen)) => println!("{screen}"),
+            Err(
+                error @ (deep_app::hub::HubError::Io(_) | deep_app::hub::HubError::Protocol(_)),
+            ) => {
+                eprintln!(
+                    "deep-app: the hub at {} didn't answer: {error:?}",
+                    deep_app::hub::address().display()
+                );
+                std::process::exit(1);
+            }
+            // A hello that covers the app: the window's calls are made, whatever each returns.
+            reached => {
+                println!("hub ok: contract {}", deep_app::hub::CONTRACT);
+                if let Err(error) = reached {
+                    eprintln!("deep-app: the hub refused a call: {error:?}");
+                }
+            }
+        }
+        return;
+    }
+    if mode == Mode::CheckForUpdates {
+        println!("{}", deep_app::setup::check_for_updates());
         return;
     }
     if mode == Mode::SetUp {
@@ -321,6 +364,9 @@ fn args() -> (Option<PathBuf>, Option<String>, Mode) {
                 }
             }
             "--set-up" => mode = Mode::SetUp,
+            "--hub-needs" => mode = Mode::HubNeeds,
+            "--hub-check" => mode = Mode::HubCheck,
+            "--check-for-updates" => mode = Mode::CheckForUpdates,
             "--notification-center" => mode = Mode::NotificationCenter,
             "--capture-bug" => {
                 mode = Mode::CaptureBug {
@@ -558,7 +604,12 @@ mod trusted {
                             poster_started && tick > 10 + presses + 120
                         }
                     }
-                    Mode::PostForged { .. } | Mode::SetUp | Mode::NotificationCenter => {
+                    Mode::PostForged { .. }
+                    | Mode::SetUp
+                    | Mode::HubNeeds
+                    | Mode::HubCheck
+                    | Mode::CheckForUpdates
+                    | Mode::NotificationCenter => {
                         unreachable!("these modes have no window")
                     }
                     Mode::CaptureBug { .. } => unreachable!("the bug capture runs on its own"),
