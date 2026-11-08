@@ -19,6 +19,7 @@ import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readd
 import { homedir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFacts } from '@deepbuild/adapters';
 import { keychainStore, type SecretStore } from '@deepbuild/extension-host';
 import { CANT_UNDO } from '@deepbuild/asks';
 import { ulid } from '@deepbuild/record';
@@ -34,7 +35,6 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sha = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex');
 const canonical = (v: unknown): string => JSON.stringify(v, (_, x: unknown) => (isObj(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x));
-const FACTS = new URL('../../../adapters/', import.meta.url);
 /** The agents a sync knows, by their facts files' names. */
 export const AGENT_IDS = ['claude-code', 'codex', 'pi', 'opencode', 'cursor'] as const;
 const NAME = /^[A-Za-z0-9_-]{1,64}$/;
@@ -56,7 +56,7 @@ let factsCache: AgentFacts[] | undefined;
 export function agentFacts(): AgentFacts[] {
   return (factsCache ??= AGENT_IDS.flatMap((id) => {
     let f: Obj;
-    try { f = JSON.parse(readFileSync(new URL(`${id}.facts.json`, FACTS), 'utf8')) as Obj; } catch { return []; }
+    try { f = readFacts<Obj>(`${id}.facts.json`); } catch { return []; }
     const e = isObj(f.entries) ? f.entries : {};
     const out: AgentFacts = { id, name: typeof e.name === 'string' ? e.name : id, binary: String(f.agent), versions: (f.versions ?? []) as string[] };
     if (typeof e.home === 'string') out.home = e.home;

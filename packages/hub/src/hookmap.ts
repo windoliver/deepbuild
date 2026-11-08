@@ -3,7 +3,7 @@
 // fields, its text scrubbed of every value the hub holds. Runs in the parser workers, off the event loop.
 import { closeSync, openSync, readFileSync, readSync, readdirSync, fstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { ADAPTERS, factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
+import { ADAPTERS, factsAdapter, readFacts, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
@@ -115,7 +115,7 @@ export function toolClasses(): Record<string, 'read'> {
 /** The loop facts (adapters/loops.facts.json): the tools that schedule, cancel and run in the background, per agent. */
 let loopFacts: JsonObject | undefined;
 const loopsOf = (name: string): JsonObject => {
-  loopFacts ??= JSON.parse(readFileSync(new URL('../../../adapters/loops.facts.json', import.meta.url), 'utf8')) as JsonObject;
+  loopFacts ??= readFacts<JsonObject>('loops.facts.json');
   const agents = loopFacts.agents as JsonObject;
   return isObj(agents[name]) ? agents[name] : {};
 };
