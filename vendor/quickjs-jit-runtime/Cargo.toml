@@ -1,5 +1,4 @@
-# Issue #358: quickjs-jit-runtime 0.12.11 at 96593cd from longbridge/quickjs-jit (MIT, LICENSE here), with the
-# one change marked "DeepBuild patch" in src/lib.rs. Tests, benches and examples are left out.
+# DeepBuild patch (windoliver/deepbuild#358): quickjs-jit-runtime 0.12.11 at 96593cd from longbridge/quickjs-jit (MIT, LICENSE here).
 [package]
 name = "quickjs-jit-runtime"
 version = "0.12.11"
@@ -15,11 +14,11 @@ build = "build.rs"
 name = "rquickjs_jit"
 
 [build-dependencies]
-rquickjs-sys = { package = "quickjs-jit-sys", version = "=0.12.11", git = "https://github.com/longbridge/quickjs-jit", rev = "96593cd7a54440ac060a391b8baea7e9a3cf1393", features = ["jit-abi"] }
+rquickjs-sys = { package = "quickjs-jit-sys", version = "=0.12.11", git = "https://github.com/longbridge/quickjs-jit", rev = "96593cd7a54440ac060a391b8baea7e9a3cf1393", features = ["jit-abi"] } # DeepBuild patch (windoliver/deepbuild#358)
 
 [dependencies]
 rustc-hash = "2.1"
-rquickjs-core = { package = "quickjs-jit-core", version = "=0.12.11", git = "https://github.com/longbridge/quickjs-jit", rev = "96593cd7a54440ac060a391b8baea7e9a3cf1393", features = ["jit-abi", "loader"] }
+rquickjs-core = { package = "quickjs-jit-core", version = "=0.12.11", git = "https://github.com/longbridge/quickjs-jit", rev = "96593cd7a54440ac060a391b8baea7e9a3cf1393", features = ["jit-abi", "loader"] } # DeepBuild patch (windoliver/deepbuild#358)
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
@@ -47,6 +46,7 @@ gimli = { version = "0.31", optional = true, default-features = false, features 
 postcard = { version = "1", optional = true, default-features = false, features = ["alloc"] }
 target-lexicon = { version = "0.13", optional = true }
 
+# DeepBuild patch (windoliver/deepbuild#358): upstream's dev-dependencies, bins and benches are not vendored.
 [features]
 default = []
 bindgen = ["rquickjs-core/bindgen"]
@@ -63,3 +63,4 @@ compiler = [
 ]
 test-support = ["rquickjs-core/jit-test-support"]
 
+# DeepBuild patch (windoliver/deepbuild#358): upstream's tests are not vendored.
