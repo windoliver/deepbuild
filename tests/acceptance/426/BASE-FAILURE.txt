@@ -1,0 +1,102 @@
+# #426 acceptance suite at the current commit c12a65bb (before any #426 implementation), one run:
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/426 --no-file-parallelism --testTimeout=3600000
+# Result: 5 passed, 4 failed (9 tests). Long lists of per-pixel failures are cut to their first lines below.
+#
+#   PASS  AC1 gradient/studio test (environment-background.test.ts, test 1) and HDR rotation test (test 2)
+#   PASS  AC2 backdrop test (backdrop-ground.test.ts, test 1): background_ground, both camera poses, seeked = played, no pick
+#   PASS  AC3 product test (background-blur.test.ts, test 2): product pixels byte-equal at blur 0.5 and 0; planted relit product fails naming pixels
+#   PASS  AC4 fog test (background-fog.test.ts, test 1): near, far, above and below the horizon; planted mean fog fails naming pixels
+#   FAIL  AC2 catcher test: the shadow's core reads the floor value x 0.75 within 1 code only partly; 2 core pixels are 2 codes off (renderer: soft shadow edge)
+#   FAIL  AC3 blur test: every background pixel is 3-4 codes off a GGX roughness-0.5 prefilter, and the mirror identity fails by 12.5/255 (renderer, or the test's filter assumption; see README Assumed surfaces 4)
+#   FAIL  AC4 froxel test: fog: background with froxels is drawn, not refused (renderer gap)
+#   INCONCLUSIVE/FAIL  AC5 taste test: no TASTE.json (by design)
+ RUN  v5.0.5 <checkout>/tests/acceptance/426
+ ❯ backdrop-ground.test.ts (2 tests | 1 failed) 31770ms
+   ❯ AC2 #426.f893b6e0 an HDR backdrop on its own ground, with a shadow catcher's shadow on it (2)
+     × AC2 #426.f893b6e0 over a shadow catcher the projected floor in the box's shadow reads the floor's value x (1 - alpha) within 1 code; the planted backdrop drawn after the catcher shows no shadow 655ms
+ ❯ background-blur.test.ts (2 tests | 1 failed) 89179ms
+   ❯ AC3 #426.c90d2152 the blurred background reads the prefiltered cube; the product in front of it is the frame at blur 0 (2)
+     × AC3 #426.c90d2152 at background_blur 0.5 the background pixels equal the roughness 0.5 prefilter within 1 code, and mirror about the horizon 5223ms
+ ❯ background-fog.test.ts (2 tests | 1 failed) 68996ms
+   ❯ AC4 #426.46bdf631 fog takes the background's color (2)
+     × AC4 #426.46bdf631 fog: background with the froxel grid is refused naming the sky; a fog color with the grid, and background fog without it, are drawn 1714ms
+stdout | taste.test.ts > AC5 #426.45886847 the screenshots and the one taste call on them > AC5 #426.45886847 the run writes the product on its dark gradient, the backdrop on its ground, the blurred background and the background fog from the renderer's own out
+AC5 #426.45886847: screenshots written from this run's pixels:
+  target/acceptance/426/product-gradient.png  8648dba938d016d66eae83e7e68dac40cf5cdaf1c400f722ec3e8cba6561f706
+  target/acceptance/426/backdrop-ground.png  15e10013328a54727e9b76e7bac9e944a582efa766ecf47e1e5ac6409d3bd6d6
+  target/acceptance/426/blurred-background.png  27784aba00136c304d239e0a85dd7f5c5b21c752959666768a75df5761df9e3d
+  target/acceptance/426/background-fog.png  13b734aafb325a7523948e92f80d03c30782dce8d43850b31e32f26f8c989a71
+ ❯ taste.test.ts (1 test | 1 failed) 20342ms
+   ❯ AC5 #426.45886847 the screenshots and the one taste call on them (1)
+     × AC5 #426.45886847 the run writes the product on its dark gradient, the backdrop on its ground, the blurred background and the background fog from the renderer's own output, and the owner's recorded call on exactly those says they look right 4246ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  backdrop-ground.test.ts > AC2 #426.f893b6e0 an HDR backdrop on its own ground, with a shadow catcher's shadow on it > AC2 #426.f893b6e0 over a shadow catcher the projected floor in the box's shadow reads the floor's value x (1 - alpha) within 1 code; th
+AssertionError: the projected floor in the shadow reads the floor's value × 0.75:
+  (198, 134) the shadow's core, cell 270: reads 79, 169, 62, should read 78, 167, 61 (2 codes off)
+  (201, 134) the shadow's core, cell 269: reads 169, 62, 62, should read 167, 61, 61 (2 codes off): expected [ …(2) ] to deeply equal []
+ ❯ none helpers.ts:64:73
+     62| /** No failures; the message lists them. */
+     63| export function none(failures: readonly string[], what: string): void {
+     64|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     65| }
+     66| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ backdrop-ground.test.ts:141:5
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+ FAIL  background-blur.test.ts > AC3 #426.c90d2152 the blurred background reads the prefiltered cube; the product in front of it is the frame at blur 0 > AC3 #426.c90d2152 at background_blur 0.5 the background pixels equal the roughness 0.5 prefilter within 1 
+AssertionError: the blurred background does not mirror about the horizon (73692 row pairs):
+  (0, 0) and (0, 359) sum 0.9241, 0.7695, 0.7300, upper + lower is 0.8750, 0.7500, 0.7500 (12.51 off, in 1/255 of linear)
+  (1, 0) and (1, 359) sum 0.9241, 0.7695, 0.7300, upper + lower is 0.8750, 0.7500, 0.7500 (12.51 off, in 1/255 of linear)
+  (2, 0) and (2, 359) sum 0.9238, 0.7693, 0.7302, upper + lower is 0.8750, 0.7500, 0.7500 (12.45 off, in 1/255 of linear)
+  (3, 0) and (3, 359) sum 0.9243, 0.7693, 0.7300, upper + lower is 0.8750, 0.7500, 0.7500 (12.58 off, in 1/255 of linear)
+  (4, 0) and (4, 359) sum 0.9241, 0.7695, 0.7300, upper + lower is 0.8750, 0.7500, 0.7500 (12.51 off, in 1/255 of linear)
+  (5, 0) and (5, 359) sum 0.9241, 0.7695, 0.7300, upper + lower is 0.8750, 0.7500, 0.7500 (12.51 off, in 1/255 of linear)
+  (6, 0) and (6, 359) sum 0.9238, 0.7695, 0.7300, upper + lower is 0.8750, 0.7500, 0.7500 (12.45 off, in 1/255 of linear)
+  (7, 0) and (7, 359) sum 0.9238, 0.7693, 0.7302, upper + lower is 0.8750, 0.7500, 0.7500 (12.45 off, in 1/255 of linear)
+  (8, 0) and (8, 359) sum 0.9241, 0.7693, 0.7302, upper + lower is 0.8750, 0.7500, 0.7500 (12.51 off, in 1/255 of linear)
+  (9, 0) and (9, 359) sum 0.9241, 0.7693, 0.7302, upper + lower is 0.8750, 0.7500, 0.7500 (12.51 off, in 1/255 of linear)
+the blurred background does not equal the roughness 0.5 prefilter (147384 pixels of 147384):
+  (0, 0) at blur 0.5, elevation 20.51°: reads 214, 182, 145, should read 210, 180, 147 (4 codes off)
+  (1, 0) at blur 0.5, elevation 20.53°: reads 214, 182, 145, should read 210, 180, 147 (4 codes off)
+  (2, 0) at blur 0.5, elevation 20.55°: reads 214, 182, 145, should read 210, 180, 147 (4 codes off)
+  (3, 0) at blur 0.5, elevation 20.57°: reads 214, 182, 145, should read 211, 180, 147 (3 codes off)
+  (4, 0) at blur 0.5, elevation 20.59°: reads 214, 182, 145, should read 211, 180, 147 (3 codes off)
+  (5, 0) at blur 0.5, elevation 20.61°: reads 214, 182, 145, should read 211, 181, 147 (3 codes off)
+  (6, 0) at blur 0.5, elevation 20.63°: reads 214, 182, 145, should read 211, 181, 147 (3 codes off)
+  (7, 0) at blur 0.5, elevation 20.65°: reads 214, 182, 145, should read 211, 181, 147 (3 codes off)
+  (8, 0) at blur 0.5, elevation 20.67°: reads 214, 182, 145, should read 211, 181, 147 (3 codes off)
+  (9, 0) at blur 0.5, elevation 20.69°: reads 214, 182, 145, should read 211, 181, 147 (3 codes off): expected [ …(2) ] to deeply equal []
+ ❯ background-blur.test.ts:72:35
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+ FAIL  background-fog.test.ts > AC4 #426.46bdf631 fog takes the background's color > AC4 #426.46bdf631 fog: background with the froxel grid is refused naming the sky; a fog color with the grid, and background fog without it, are drawn
+AssertionError: fog: background with the froxel grid is refused (a reply with a code): {"frames":[{"frame":0,"settled":true,"samples":{"drawn":1,"settling":false},"resident":[],"frame_seq":0,"pixel_hash":"ac502ed6a4150bbfa90b35298628bd5690de4c4ecee291448c4ae25
+Expected: "string"
+Received: "undefined"
+ ❯ background-fog.test.ts:92:129
+     90|     expect(colored!['code'], `a fog color with the froxel grid is draw…
+     91|     expect(plain!['code'], `background fog without the froxel grid is …
+     92|     expect(typeof refused!['code'], `fog: background with the froxel g…
+       |                                                                                                                                 ^
+     93|     expect(refused!['code'], 'the refusal is not the platform').not.to…
+     94|     const text = Object.entries(refused!).filter(([k]) => k !== 'code'…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+ FAIL  taste.test.ts > AC5 #426.45886847 the screenshots and the one taste call on them > AC5 #426.45886847 the run writes the product on its dark gradient, the backdrop on its ground, the blurred background and the background fog from the renderer's own outpu
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner
+  target/acceptance/426/product-gradient.png  8648dba938d016d66eae83e7e68dac40cf5cdaf1c400f722ec3e8cba6561f706
+  target/acceptance/426/backdrop-ground.png  15e10013328a54727e9b76e7bac9e944a582efa766ecf47e1e5ac6409d3bd6d6
+  target/acceptance/426/blurred-background.png  27784aba00136c304d239e0a85dd7f5c5b21c752959666768a75df5761df9e3d
+  target/acceptance/426/background-fog.png  13b734aafb325a7523948e92f80d03c30782dce8d43850b31e32f26f8c989a71
+and record the answer in tests/acceptance/426/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive helpers.ts:92:10
+     90| /** A test that can't be judged here fails with this, never passes. */
+     91| export function inconclusive(reason: string): never {
+     92|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     93| }
+     94| /** The GPU layer draws these pixels on macOS's Metal device, the refe…
+ ❯ taste.test.ts:47:29
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+ Test Files  4 failed | 1 passed (5)
+      Tests  4 failed | 5 passed (9)
+   Start at  23:14:01
+   Duration  235.55s (tests 99%)
