@@ -28,7 +28,7 @@ const matte = (mode) => film(`matte-${mode}`, [160, 90], [
   item('m', 'matte@1', 'a2', { source: 'msrc', mode: 'luma', luma: mode, applies_to: 'tgt' }),
 ]);
 const FILMS = {
-  'echo-8-copies': film('echo-8-copies', [400, 60], [
+  'echo-8-copies': film('echo-8-copies', [1000, 60], [
     item('g', 'group@1', 'a0', { echo: { copies: 8, lag: '2f', decay: 0.5, mode: 'over', newest: 'top' } }),
     rect('bar', 'a1', [0, 10, 4, 40], 'accent', { parent: 'g' }),
   ], { channels: { bx: slide('items/bar/at/pos/0', [[0, 0], [2, 960]]) } }),
