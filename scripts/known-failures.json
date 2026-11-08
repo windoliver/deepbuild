@@ -28,8 +28,6 @@
     "clippy: tests/acceptance/327/card.rs unused variable: `card`": 1,
     "clippy: tests/acceptance/327/common.rs this `map_or` can be simplified": 1,
     "clippy: tests/acceptance/327/planted.rs this `map_or` can be simplified": 1,
-    "code mappings: doctor job_failing maps to no verdict": 1,
-    "code mappings: verdict uncounted maps to no verdict": 1,
     "color literal: crates/deep-app/src/panel_check.rs: `div().size_full().bg(rgb(0xffffff)).child(panel)` names a color; use the look's role ground (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>": 1,
     "color literal: crates/deep-app/src/panel_tree.rs: `assert_eq!(color(&tree.ops[2].args), Some(0xf8f8f8));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>": 1,
     "color literal: crates/deep-app/src/panel_tree.rs: `assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some(\"#f8f8f8\"));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>": 1,

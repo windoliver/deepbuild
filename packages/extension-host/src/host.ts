@@ -1728,7 +1728,7 @@ class Host implements ExtensionHost {
       const d = JSON.parse(row.data) as RunEvent;
       const r = runs.get(d.run) ?? { run: d.run, schedule, due: d.due, dispatched: null, ended: null, verdict: null, cause: null, stopped: null, sends: [], changes: [] };
       if (d.phase === 'dispatched') r.dispatched ??= row.ts;
-      if (d.phase === 'ended') Object.assign(r, { ended: row.ts, verdict: d.verdict ?? null, cause: d.cause ?? null, stopped: d.stopped ? 'before dispatch' : null, changes: d.changes ?? [] });
+      if (d.phase === 'ended') Object.assign(r, { ended: row.ts, verdict: d.noop ? 'uncounted' : d.verdict ?? null, cause: d.cause ?? null, stopped: d.stopped ? 'before dispatch' : null, changes: d.changes ?? [] });
       runs.set(d.run, r);
     }
     // Whether each send a run started went out: one still waiting on your answer has not.

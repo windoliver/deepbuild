@@ -1,0 +1,16 @@
+{
+  "issue": 493,
+  "criterion": "#493.b09e45f7",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in the session (\"Judge them for me\"); not the owner's own call",
+  "when": "2026-11-08T07:48:31Z",
+  "screenshots": {
+    "push.png": "f53bb78efe17bfe7ae833d895e2adb1bb17191ada49cddbef4a66ed67ec9ff38",
+    "orbit.png": "018f1cdb97cdb2bdb34a15b6b9a82535f01c4ef0f576a2d997f18a03a10bd513",
+    "cut.png": "ca8b7daed9a606414d729e162dad5738373317847c9b1c27f68deb9a2c9bb54a",
+    "log-zoom.png": "641fda0676a997ce11780adc6e38ae5da9e2b8639dbfa0d3bc727d0e63ff9318",
+    "cross-fade.png": "8c499867739fe4acc9887f50ec911f0c56d7e9af4b12b42e356466c1564fc0b5",
+    "shot-list.apng": "6c836e258f6de56cdfe0ae0f94aecbeee1d0b1bfc2fc6187d705ed09a8895840"
+  },
+  "note": "Read the five stills at full size and twelve frames of the 96-frame shot list. Push: the camera comes in on the hero box, which stays framed. Glide: its first frame is the push's last pose, then it eases into the orbit. Orbit: the eye turns about the hero at a fixed distance. Cut: a hard change to a low angle, with no blend frames. Log zoom: it pulls back from the hero to the whole stage at an even rate in log space. Cross-fade: the AgX side (lighter, flattened) dissolves into the untoned side, the two camera framings overlapping as expected. Before this call, the shot script's log zoom started too close (by 0.02, 1.2 m from the target), so its first frames were solid accent. That was a fault in the film's data, not in the canvas: by became 0.1 and every picture was re-shot. The other four pictures came back byte-identical across the main merge. These are plain boxes in the clean look: this judges the camera grammar, not finish."
+}
