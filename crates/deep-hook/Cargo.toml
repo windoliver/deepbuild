@@ -27,5 +27,8 @@ plant-compiled-rule = []
 plant-listed-kinds-only = []
 # The planted wrong program for #1097's AC4: a reader that reads a program the line computes as no program at all.
 plant-computed-misses = []
+# Issue #1408: the wrong programs a test selects with DEEP_HUB_PLANT, read only in a build with this feature. A release
+# build refuses it, so no shipped hook reads the variable.
+env-plants = []
 # The planted wrong program for #1407: a matcher that panics on every call it matches.
 plant-matcher-panic = []
