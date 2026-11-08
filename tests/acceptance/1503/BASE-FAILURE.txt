@@ -1,0 +1,60 @@
+#1503 acceptance suite on the base commit c12a65bb (origin/main), November 6, 2026, before any #1503 code.
+Run: npx vitest run --root tests/acceptance/1503 --no-file-parallelism --testTimeout=600000
+     (Node v24.22.0, Linux; 1-minute load about 39 while it ran)
+Result: Test Files 4 failed (4); Tests 7 failed | 2 passed (9). Every criterion test fails at a named assertion or
+BLOCKS on a documented missing surface. The 2 that pass are AC4's twins (allowed on the base, as they must stay) and
+AC1's merge-base wrong-program test (on the base the pinned merge base is this checkout, so it fails the criterion as
+the test expects). Trimmed to each failing assertion.
+
+Before the run, base deep-hook (target/debug/deep-hook) in hook mode, no hub answering, rules.json = the shipped
+defaults: every call of AC1, AC2 and AC3, and `cat scripts/build.sh | sh` with a file that writes rules.json, exit 0
+(allowed); the controls `sed -i 's/a/b/' ~/.deepbuild/rules.json` and `cat ~/.deepbuild/control.token` exit 2, denied
+by no-deepbuild-home-write and no-control-token-read. `deep-hook match` at the merge base over the corpus's 101
+recorded calls that ran clean: no denial on any.
+
+inline.test.ts (AC1 #1503.22d68710, AC2 #1503.fcb087fa)
+  x AC1 each of the six python3 -c and node -e calls is denied with the hub stopped, naming the guard
+    Error: `python3 -c "open('/tmp/dh1503-KRHVEj/h/.claude/settings.json','w').write('{}')"` (plain path) must be
+    denied with the hub stopped: exit 0 after 27.7 ms, stdout "", stderr "deep-hook: spooled …, but its sync didn't
+    finish within the hook's 50 ms\n"
+    -> the base reader doesn't read an interpreter's inline text; no entry matches; the write is let through.
+  v AC1 (wrong program) deep-hook on the merge base allows all of them and fails this test, naming the call
+    (passes: the failure names the first call; all six allowed with the hub stopped)
+  x AC2 python3 <<'EOF' and python3 - <<EOF naming ~/.deepbuild/ledger.db are each denied with the hub stopped,
+    naming the guard
+    Error: `python3 <<'EOF' … ~/.deepbuild/ledger.db … EOF` (python3 <<'EOF', ~ through expanduser) must be denied
+    with the hub stopped: exit 0
+    -> a heredoc to an interpreter isn't read as program text on the base.
+
+unread.test.ts (AC3 #1503.c4d8f829)
+  x AC3 echo ZWNobyBoZWxsbw== | base64 -d | sh, eval "$(…)", curl … | sh, bash <(curl …), sh -c "$(curl …)" are each
+    denied with the hub stopped by a fail_closed guard, naming what couldn't be read
+    Error: `echo ZWNobyBoZWxsbw== | base64 -d | sh` must be denied with the hub stopped: exit 0 after 27.8 ms,
+    stdout "", stderr "deep-hook: spooled …, but its sync didn't finish within the hook's 50 ms\n"
+    -> a shell fed from a pipe matches nothing on the base (the other four are allowed too, per the probe above).
+
+twins.test.ts (AC4 #1503.2e57e7be)
+  v AC4 python3 -c "print(1)", node -e "console.log(1)", echo hello | base64, cat scripts/build.sh | sh (a clean file)
+    and curl -s https://example.com/x.json | python3 -c "…" are each allowed, hub up and stopped   (passes on the base)
+  x AC4 (Scope: a pipe from a plain file is read as that file) cat scripts/build.sh | sh, the file writing
+    ~/.deepbuild/rules.json, is denied with the hub stopped, naming no-deepbuild-home-write
+    Error: `cat scripts/build.sh | sh` with scripts/build.sh writing ~/.deepbuild/rules.json must be denied with the hub
+    stopped: exit 0 after 30.0 ms
+    -> the base doesn't read the piped file as the shell's program.
+  x AC4 (wrong program) a reader that reads any pipe into an interpreter as unread (plant-any-pipe-unread) denies the
+    last twin and fails this test, naming it
+    Error: BLOCKED: the deep-hook build with the plant plant-any-pipe-unread did not build: … error: the package
+    'deep-hook' does not contain this feature: plant-any-pipe-unread
+    -> the plant is the implementer's to write.
+
+corpus.test.ts (AC5 #1503.935f1060)
+  x AC5 every recorded call that ran clean, through this checkout's deep-hook and the merge base's: no new deny, or
+    each one listed (INCONCLUSIVE)
+    Error: BLOCKED: the branch's deep-hook doesn't read inline program text yet (it lets `python3 -c
+    "open('/tmp/dh1503-VIJSLw/h/.claude/settings.json','w').write('{}')"` through with the hub stopped), so a replay
+    would compare the merge base with itself
+  x AC5 (wrong program) a reader that reads every pipe as unread (plant-every-pipe-unread) newly denies the clean
+    rg … | sort | head -20 call, and the replay lists it
+    Error: BLOCKED: the deep-hook build with the plant plant-every-pipe-unread did not build: … error: the package
+    'deep-hook' does not contain this feature: plant-every-pipe-unread
+    -> the plant is the implementer's to write.

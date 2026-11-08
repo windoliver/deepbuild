@@ -1,0 +1,125 @@
+{
+  "title": "run.under_load@1",
+  "description": "A timing check's run failed while the machine's load was past its core count (#352, #29): kept with the load it read, counted as neither a pass nor a failure; the check is rerun alone once the load is back under the cores, and that run decides. Only the core appends it.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "run.under_load"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^run:[0-9A-Za-z]+$",
+      "description": "The run under load."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "description": "A run: handle.",
+          "maxLength": 8192
+        },
+        "check": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "claim": {
+          "type": "string",
+          "pattern": "^claim:[0-9A-Za-z]+$",
+          "description": "A claim: handle.",
+          "maxLength": 8192
+        },
+        "under_load": {
+          "const": true,
+          "description": "The run ran under load."
+        },
+        "load": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "The machine's 1-minute load average when the run failed."
+        },
+        "cores": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "The core count the load was read against."
+        }
+      },
+      "required": [
+        "run",
+        "check",
+        "claim",
+        "under_load",
+        "load",
+        "cores"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
