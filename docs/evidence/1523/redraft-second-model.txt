@@ -1,0 +1,45 @@
+# #1523 blind redraft of the PR-flow fixture (the second model): tests/acceptance/1523 on the branch, 2026-11-07
+
+Builds first: npm run build --workspaces (exit 0), cargo build --locked -p deep-hook (exit 0). Node v24.22.0.
+
+## Before the redraft's window reading (fake reviewer installed, no windows.report): AC5 and AC6 BLOCKED, 'no second model is free'
+start 2026-11-07T23:23:48-08:00 load 40.27 commit 1f4c5aa3 + uncommitted redraft
+     × AC6 #1523.ea4ec67a with gh pr merge --auto armed on branch b, jj git push --bookmark b is denied by merge-names-head; the card of jj git push --remote fork names fork 7186ms
+     × AC5 #1523.d4c1de27 in a thread that names a merge, the GraphQL merge with no head and gt merge are denied by merge-names-head, gt merge's denial naming gh pr merge --match-head-commit, and the GraphQL merge with expectedHeadOid set to the PASS's commit runs 5523ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  2 failed | 7 passed (9)
+      Tests  2 failed | 12 passed (14)
+exit 1 load 41.98
+review: missing BLOCKED: no second model is free to review the diff (first reading: waiting for acct-dh1523-0001's first window reading), owner you
+
+## The redraft (fake reviewer first on runner.login_path, windows.report 5% before the thread): full suite
+start 2026-11-07T23:26:05-08:00 load 60.46 commit 1f4c5aa3 + uncommitted redraft
+ Test Files  9 passed (9)
+      Tests  13 passed | 1 skipped (14)
+exit 0 load 70.30
+
+## The same, AC5 and AC6 alone, right after the window reading was added
+start 2026-11-07T23:25:38-08:00 load 53.70
+ Test Files  2 passed (2)
+      Tests  2 passed (2)
+exit 0 load 59.41
+
+## The full suite again, verbose, under heavier load: AC6 INCONCLUSIVE (a call let through before the hub decided it, load 81-84 on 20 cores), the rest pass
+start 2026-11-07T23:27:20-08:00 load 80.96 commit 1f4c5aa3 + uncommitted redraft
+ ✓ free.test.ts > AC3 #1523.2436253f the read-only forms of jj, gt and gh api go through > AC3 #1523.2436253f jj log, jj git fetch, gt log, gh api repos/acme/shop/pulls/3, gh api repos/acme/shop/pulls/3/merge each go through with no ask, in a thread whose prompts name none of push, PR or merge 6470ms
+ ✓ free.test.ts > AC3 #1523.2436253f the read-only forms of jj, gt and gh api go through > AC3 #1523.2436253f (wrong program) a matcher that holds every call to these programs (DEEP_HUB_PLANT=holds-every-program) fails this test, naming the call 1883ms
+ ↓ auto.test.ts > AC6 #1523.ea4ec67a jj pushes meet the armed --auto merge and name their remote on the card > AC6 #1523.ea4ec67a with gh pr merge --auto armed on branch b, jj git push --bookmark b is denied by merge-names-head; the card of jj git push --remote fork names fork 9149ms [INCONCLUSIVE AC6 #1523.ea4ec67a `jj git push --remote fork` was let through before the hub decided it (exit 0 after 30 ms, stdout ""
+ ✓ head.test.ts > AC5 #1523.d4c1de27 a GraphQL merge names its head by expectedHeadOid; gt merge can't, and is denied > AC5 #1523.d4c1de27 in a thread that names a merge, the GraphQL merge with no head and gt merge are denied by merge-names-head, gt merge's denial naming gh pr merge --match-head-commit, and the GraphQL merge with expectedHeadOid set to the PASS's commit runs 6805ms
+ ✓ proceed.test.ts > AC7 #1523.bc21ee43 no proceed covers gh issue create: it is a send > AC7 #1523.bc21ee43 in the turn a planted sorter's proceed starts, gh issue create -t x is held with an authority ask whose card names the send; gh issue list runs 4302ms
+ ✓ create-pr.test.ts > AC2 #1523.6933063f "create PR" covers gt submit; "push" alone doesn't > AC2 #1523.6933063f after "create PR" gt submit --stack runs; in a thread that says only "push" it is held as a PR 2484ms
+ ✓ held.test.ts > AC1 #1523.b593135b the new push, PR and merge forms are held in a thread that names none of them > AC1 #1523.b593135b jj git push --bookmark main, gt submit --stack, git town ship, sl push, glab mr merge 3, gh api graphql are each held with an authority ask whose card names the effect 2217ms
+ ✓ unreadable.test.ts > AC4 #1523.fca551f5 a jj push whose program the line computes is denied by no-unreadable-push > AC4 #1523.fca551f5 "$(printf jj)" git push is denied by no-unreadable-push, naming $(printf jj), as "$(printf git)" push origin main is 2236ms
+ ✓ calls.test.ts > AC1 #1523.b593135b the new push, PR and merge forms meet their effect classes in check mode > AC1 #1523.b593135b each of AC1's calls meets the effect classes its Scope line gives it; git push and gh pr merge still do 149ms
+ ✓ calls.test.ts > AC1 #1523.b593135b the new push, PR and merge forms meet their effect classes in check mode > AC1 #1523.b593135b (Scope) every new form the Scope names meets its classes: jj, sl, gt, git town, glab, a GraphQL merge or auto-merge, and gh issue create 186ms
+ ✓ calls.test.ts > AC3 #1523.2436253f the read-only forms of the same tools meet no push, PR, merge or send > AC3 #1523.2436253f jj log, jj git fetch, gt log and a gh api GET of a pull request or its merge endpoint meet none of effect:push, effect:pr, effect:merge, effect:send, unread:push; a PUT of the merge endpoint is still a merge 223ms
+ ✓ calls.test.ts > AC4 #1523.fca551f5 a jj push whose program the line computes meets unread:push > AC4 #1523.fca551f5 "$(printf jj)" git push meets unread:push, as "$(printf git)" push origin main does 55ms
+ ✓ calls.test.ts > Scope (install check) each new form lands with a planted call and a twin in the guard's install check > Scope (install check) for each new form, a default entry of its class ships a planted call of that form and a twin, and check mode matches the planted call and not the twin 404ms
+ ✓ hubdown.test.ts > AC8 #1523.da8f9b01 with the hub stopped the new forms go through and are spooled; the unreadable jj push stays denied > AC8 #1523.da8f9b01 git push origin HEAD, jj git push --bookmark main, gt submit --stack, git town ship, sl push, glab mr merge 3, gh api graphql, gh issue create -t x go through and are spooled with their effect entries; "$(printf jj)" git push is denied by no-unreadable-push 
+ Test Files  9 passed (9)
+      Tests  13 passed | 1 skipped (14)
+exit 0 load 83.97

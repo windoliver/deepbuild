@@ -773,7 +773,7 @@ impl Display for ColorSpace {
         match self {
             ColorSpace::Srgb => write!(f, "sRGB"),
             ColorSpace::Oklab => write!(f, "Oklab"),
-            ColorSpace::OklabExact => write!(f, "Oklab (exact)"),
+            ColorSpace::OklabExact => write!(f, "Oklab (exact)"), // DeepBuild patch (windoliver/deepbuild#391)
         }
     }
 }
