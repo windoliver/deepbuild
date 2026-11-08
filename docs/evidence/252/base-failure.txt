@@ -1,0 +1,13 @@
+The #252 suite run at base 9bdebdfb (npx vitest run --root tests/acceptance/252 --no-file-parallelism, 2026-11-07, Mac17,10): 8 of 8 fail.
+
+× #252.1d7d5564 forced to 20 checkpoints' bytes, the ring stays within them every frame, thins to every 240 steps, and the seek to 1,800 restores its nearest checkpoint and equals the play 5119ms
+× #252.1d7d5564 the seek to 1,800 renders within the showpiece's seek time for this ring, 488 ms (five seeks after a warm-up) 8ms
+× #252.1d7d5564 a planted ring that keeps every checkpoint (--planted ring_keeps_every_checkpoint) passes the budget and fails, naming the operator 186ms
+× #252.b3fac129 the flock of 262,144 boids, live fire and a soft blob, each a screenshot and a recording of its stepping from the canvas's own frames, and the recorded taste call says they look right 1774ms
+× #252.e326cc65 the flock of 262,144 boids stepped to 3,600 and seeked to 1,800, played at 30 and 144 Hz, and opened cold at 1,800, has the 60 Hz play's hash at step 1,800 1781ms
+× #252.e326cc65 a planted operator that steps per frame (--planted steps_per_frame) differs at 30 and 144 Hz and fails, naming the step 166ms
+× #252.3f867a9b on the recording machine the flock at step 1,800 passes its recording and fails a one-ulp shift; on a second machine both read INCONCLUSIVE, naming both GPUs 1634ms
+× #252.3f867a9b a planted class that compares the flock across machines (--planted carried_class_exact) reads FAIL on a second machine and fails, naming the class 143ms
+
+   1 AssertionError: INCONCLUSIVE: not a reference Mac (Mac15,7 or Mac15,12): hw.model is Mac17,10; this is not a pass
+   7 AssertionError: flock_grid checks on its own: [{"code":"operator_type","severity":"error","path":"stepped","message":"not a field of an operator"}]: expected 'refused' to be 'accepted' // Object.is equality

@@ -1,9 +1,13 @@
 // Criterion 5, the part that is a count and not a timing: at most two replicas per machine, under a lease. Agents reach
 // replicas through the deep_drive tool of `deep mcp`, so this test does too: a real hub in a temporary home, two agent
 // stand-ins (#806's, a Claude Code session and a Codex session known to the hub by their hooks) each with their own
-// `deep mcp`. Two launches hold the machine's two replicas; a third, from the other session, is refused naming the lease
-// while no third replica process runs; once one replica is closed, the third launch gets it. The wrong program is a hub
-// planted to launch replicas without the lease (DEEP_HUB_PLANT=deep-drive-no-lease), which the same judge fails.
+// `deep mcp`, each driven as that agent is: a Claude Code call binds by its deep mcp's parent, the session whose hooks came
+// from that process, so its deep mcp starts after those hooks; a Codex process may run another thread at any time, so its
+// deep mcp binds to nothing and each call binds only by the PreToolUse Codex fires for it (Core.mcpHello, Core.bind; #26's
+// binding tests; design: One role per credential), one stamp per call, spent even when the call is refused.
+// Two launches hold the machine's two replicas; a third, from the other session, is refused naming the lease while no third
+// replica process runs; once one replica is closed, the third launch gets it. The wrong program is a hub planted to launch
+// replicas without the lease (DEEP_HUB_PLANT=deep-drive-no-lease), which the same judge fails.
 // The timings (launch, round trip, snapshot, memory) are in ac5-budgets.live.test.ts, on the reference Mac; this file
 // also checks the perf lane holds the four tasks that compare them with the merge base.
 import { spawnSync } from 'node:child_process';
@@ -31,6 +35,12 @@ const refusedFor = (o: t26.Outcome): string | null => {
   return o.isError || (o.value as Obj | undefined)?.ok === false ? text : null;
 };
 
+/** One deep_drive call as its agent makes it: `stamp` is the PreToolUse a Codex call needs, and nothing for Claude Code's. */
+async function drive(hub: t26.Hub, agent: Stand, args: Obj): Promise<t26.Outcome> {
+  await agent.stamp(hub, 'deep_drive', args);
+  return t26.callTool(agent, 'deep_drive', args, 180_000);
+}
+
 async function threeLaunches(plant?: string): Promise<{ problems: string[]; most: number }> {
   buildDrive();
   const { tmp, home } = t26.makeHome();
@@ -42,25 +52,33 @@ async function threeLaunches(plant?: string): Promise<{ problems: string[]; most
   const problems: string[] = [];
   let most = 0;
   const count = () => { const n = replicasUnder(hub.pid).length; most = Math.max(most, n); return n; };
-  const first = await t26.callTool(a, 'deep_drive', launchArgs, 180_000);
-  const second = await t26.callTool(a, 'deep_drive', launchArgs, 180_000);
+  const running = (n: number, when: string) => { const seen = count(); if (seen !== n) problems.push(`${seen} replica processes ran ${when}, not ${n}`); };
+  const first = await drive(hub, a, launchArgs);
+  const second = await drive(hub, a, launchArgs);
   for (const [o, which] of [[first, 'first'], [second, 'second']] as const) if (refusedFor(o)) problems.push(`the ${which} launch was refused: ${refusedFor(o)!.slice(0, 400)}`);
-  count();
-  const third = await t26.callTool(b, 'deep_drive', launchArgs, 180_000);
-  for (let i = 0; i < 10; i++) { count(); await sleep(100); }
+  running(REPLICAS_PER_MACHINE, 'after the two launches');
+  // Sampled from before the call until a second after its answer: a third process that starts and goes again counts too.
+  const sampling = setInterval(count, 100);
+  let third: t26.Outcome;
+  try {
+    third = await drive(hub, b, launchArgs);
+    await sleep(1000);
+  } finally {
+    clearInterval(sampling);
+  }
   const why = refusedFor(third);
   if (!why) problems.push(`a third replica launched while two ran: ${JSON.stringify(third.value).slice(0, 300)}`);
   else if (!/lease/i.test(why)) problems.push(`the third launch was refused without naming the lease: ${why.slice(0, 400)}`);
-  if (most > REPLICAS_PER_MACHINE) problems.push(`${most} replica processes ran at once under the hub`);
   const handle = (first.value as Obj | undefined)?.replica;
-  const closed = await t26.callTool(a, 'deep_drive', { call: 'close', replica: handle }, 180_000);
+  const closed = await drive(hub, a, { call: 'close', replica: handle });
   if (refusedFor(closed)) problems.push(`closing the first replica was refused: ${refusedFor(closed)!.slice(0, 300)}`);
   await sleep(500);
-  const again = await t26.callTool(b, 'deep_drive', launchArgs, 180_000);
+  running(REPLICAS_PER_MACHINE - 1, 'once one replica closed');
+  const again = await drive(hub, b, launchArgs);
   if (refusedFor(again)) problems.push(`with one replica closed, the third launch is still refused: ${refusedFor(again)!.slice(0, 300)}`);
-  for (let i = 0; i < 5; i++) { count(); await sleep(100); }
+  running(REPLICAS_PER_MACHINE, 'once the third launch got the closed one\'s place');
   if (most > REPLICAS_PER_MACHINE) problems.push(`${most} replica processes ran at once under the hub`);
-  return { problems: [...new Set(problems)], most };
+  return { problems, most };
 }
 
 describe(`${ID.budgets} the local preflight compares the replica's budgets with the merge base`, () => {

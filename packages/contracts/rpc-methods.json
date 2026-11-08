@@ -216,6 +216,30 @@
     "called_by": "deep setup"
   },
   {
+    "method": "acceptance.start",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1328"
+  },
+  {
+    "method": "acceptance.status",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1328"
+  },
+  {
+    "method": "acceptance.dispute",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1328"
+  },
+  {
+    "method": "acceptance.ended",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1328"
+  },
+  {
     "method": "job.submit",
     "since": "R1",
     "stability": "preview",
@@ -327,5 +351,40 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#67"
+  },
+  {
+    "method": "agents.propose",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#148",
+    "called_by": "the app's Agents page"
+  },
+  {
+    "method": "agents.read",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#148",
+    "called_by": "the app's Agents page"
+  },
+  {
+    "method": "agents.restart",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#148",
+    "called_by": "the app's Agents page"
+  },
+  {
+    "method": "agents.undo",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#148",
+    "called_by": "deep undo sync:<id>"
+  },
+  {
+    "method": "mcp.exec",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#148",
+    "called_by": "deep mcp-exec"
   }
 ]

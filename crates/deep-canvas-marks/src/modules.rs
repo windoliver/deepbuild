@@ -459,62 +459,41 @@ fn shape(v: &mut View<'_>) -> Result<(), OpError> {
     v.write("text.run", Val::typed(Run { spec, shaped }))
 }
 
-/// A text animator's coverage of each unit (its glyphs, in order), mapped to a lift and an
-/// opacity: `range` with its `offset` selects units, `falloff` softens its edges and `shape`
-/// eases them; `props.y` lifts and `props.opacity` fades a covered unit. Under reduced motion
-/// only opacity is kept, so units fade in place (Transport).
+/// A text animator's amount for each unit (its glyphs, in order), mapped to a lift and an
+/// opacity: the animator's selectors as the per-glyph layout reads them (#496: its range in
+/// Lottie's shapes, then noise and field selectors by their modes); `props.y` lifts and
+/// `props.opacity` fades a covered unit. Under reduced motion only opacity is kept, so units fade
+/// in place (Transport). The operator reads no clock: a noise or field selector is read at t = 0
+/// here, and moves in the per-glyph layout drawing reads (`animator::lay_out`).
 fn animate(v: &mut View<'_>) -> Result<(), OpError> {
     let fields = fields_of(v)?;
     let run = v.typed::<Run>("text.run")?.ok_or_else(|| missing(v))?;
     let reduced = v.reduced_motion()?;
-    let units = run.shaped.glyphs.len();
-    let mut out: Vec<[f64; 2]> = vec![[0.0, 1.0]; units];
+    let t = 0;
+    let id = v.id().unwrap_or_default().to_string();
+    let mut out: Vec<[f64; 2]> = vec![[0.0, 1.0]; run.shaped.glyphs.len()];
     let animators = fields
         .get("params")
         .and_then(|p| p.get("animators"))
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    for a in &animators {
-        let num = |v: Option<&Value>, d: f64| v.and_then(Value::as_f64).unwrap_or(d);
-        let range = a.get("range");
-        let offset = num(range.and_then(|r| r.get("offset")), 0.0);
-        let (from, to) = (
-            num(range.and_then(|r| r.get("from")), 0.0) + offset,
-            num(range.and_then(|r| r.get("to")), 1.0) + offset,
-        );
-        let falloff = num(range.and_then(|r| r.get("falloff")), 0.0);
-        let shape = a.get("shape").and_then(Value::as_str).unwrap_or("square");
+    for (k, a) in animators.iter().enumerate() {
+        let Value::Object(a) = a else {
+            return Err(OpError::new(
+                "bad_doc",
+                format!("items/{id}/params/animators/{k}"),
+            ));
+        };
+        let amounts = crate::animator::amounts(&id, k, a, &run.shaped, t).map_err(refused)?;
         let props = a.get("props");
-        let lift = num(props.and_then(|p| p.get("y")), 0.0);
+        let lift = props
+            .and_then(|p| p.get("y"))
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
         let fade = props.and_then(|p| p.get("opacity")).and_then(Value::as_f64);
-        for (i, unit) in out.iter_mut().enumerate() {
-            let s = (i as f64 + 0.5) / units.max(1) as f64;
-            let d = if s < from {
-                from - s
-            } else if s > to {
-                s - to
-            } else {
-                0.0
-            };
-            let mut w = if d == 0.0 {
-                1.0
-            } else if falloff > 0.0 {
-                (1.0 - d / falloff).max(0.0)
-            } else {
-                0.0
-            };
-            w = match shape {
-                "smooth" => w * w * (3.0 - 2.0 * w),
-                "square" => {
-                    if w > 0.0 {
-                        1.0
-                    } else {
-                        0.0
-                    }
-                }
-                _ => w,
-            };
+        for (unit, g) in out.iter_mut().zip(&run.shaped.glyphs) {
+            let w = amounts.get(g.grapheme).copied().unwrap_or(0.0);
             if !reduced {
                 unit[0] += w * lift;
             }
@@ -845,9 +824,14 @@ fn look_with(r: &mut Registrar, finish: fn(&mut View<'_>) -> Result<(), OpError>
     )
     .document()
     .run(palette);
-    r.operator("finish", "items", &["self", "look.palette"], &["look.finish"])
-        .applies(is_finish)
-        .run(finish);
+    r.operator(
+        "finish",
+        "items",
+        &["self", "look.palette"],
+        &["look.finish"],
+    )
+    .applies(is_finish)
+    .run(finish);
     r.fixture("roles", roles_board(), None).sidecar(json!({
         "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
         "oracles": ["seek_play"],

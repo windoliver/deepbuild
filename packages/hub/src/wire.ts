@@ -123,6 +123,8 @@ export interface HookMeta {
   pr?: string;
   /** A shell call that ran, with what it printed, read against the repo's outside resources (#342). */
   ran?: { command: string; stdout: string };
+  /** All a shell call printed, its stdout, stderr and error, failed or not: what a started session's sandbox refused (#1330). */
+  printed?: string;
   /**
    * A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, a background subagent or
    * command (#907) started, by its call, or a monitor's watch armed or stopped, by its ID (#997).
@@ -202,7 +204,7 @@ export const EXTENSION_HOOK_MS = 500;
 export const EXTENSION_HOLD_MS = EXTENSION_HOOK_MS + 500;
 
 /** The test VFS's settings, from DEEP_HUB_TEST_VFS. */
-export interface VfsSettings { points?: string; cutAfter?: number; syncDelayMs?: number; refuse?: string }
+export interface VfsSettings { points?: string; cutAfter?: number; syncDelayMs?: number; refuse?: string; /** Cut right after the nth point of one kind (#148). */ cutAt?: { kind: string; nth: number } }
 
 /** What the core is started with, in its worker or inline. */
 export interface CoreOptions {
