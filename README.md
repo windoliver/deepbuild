@@ -94,19 +94,39 @@ clone made with `--single-branch` needs `git fetch origin main` first.
 
 DeepBuild can post each verdict as a commit status with the context `deepbuild/verdict`, on the commit it covers. A PASS is `success`; INCONCLUSIVE and BLOCKED are `pending`; FAIL and INVALID are `failure` and `error`. A verdict on uncommitted work waits for a pushed commit with the same files. A head that holds a commit neither a session made nor an account of yours pushed stays `pending`, with `untrusted head` in the description.
 
-Nothing posts until the repo has a delivery rule, and every repo starts with it off. Turn it on in `~/.deepbuild/config.json`, naming the accounts that push for you. The hub posts with the `GH_TOKEN` or `GITHUB_TOKEN` in its own environment, never your `gh` login, which your agents can use too.
+Nothing posts until the repo has a delivery rule, and every repo starts with it off. Turn it on in `~/.deepbuild/config.json`, naming the accounts that push for you.
 
-```json
-{ "github": { "delivery": { "owner/name": "on" }, "yours": ["your-account"] } }
-```
+Only the gate should turn a commit green, so make two GitHub Apps and install both on the repo:
 
-DeepBuild never changes branch protection itself. To require the status, open the repo's Settings, Branches, edit the default branch's rule, turn on "Require status checks to pass before merging" and add `deepbuild/verdict`. Or run:
+- **The gate's app** posts every status. It needs "Commit statuses: write". Its key is used only by the hub.
+- **The agents' app** gives each session DeepBuild starts its own short-lived token for that repo. It needs "Contents: write", "Pull requests: write" and "Issues: write". The token can push branches, open PRs and comment. It can't post a status, and the hub revokes it when its session ends, even if the hub restarted in between. Each push it makes is recorded with its session and the person who approved the session's run, never the commit's author. Your own `GH_TOKEN` stays with the hub and never reaches a session.
+
+Put each app's private key in your login Keychain, then name both apps in your settings:
 
 ```bash
-gh api -X PATCH repos/OWNER/NAME/branches/main/protection/required_status_checks -f 'contexts[]=deepbuild/verdict'
+security add-generic-password -s deepbuild.github.gate -a deepbuild -w "$(cat gate.private-key.pem)"
 ```
 
-Any account with write access can post that context until [#1325](https://github.com/windoliver/deepbuild/issues/1325) requires it from the gate's own identity.
+```json
+{ "github": { "delivery": { "owner/name": "on" }, "yours": ["your-account"],
+    "gate": { "app_id": 1234, "key": "deepbuild.github.gate" },
+    "agents": { "app_id": 5678, "key": "deepbuild.github.agents" } } }
+```
+
+Until `github.gate` is set, the hub posts with the `GH_TOKEN` or `GITHUB_TOKEN` in its own environment, which the rules below don't count.
+
+DeepBuild never changes branch protection or the repo's rules itself. `deep gate rules` prints the two rulesets the repo needs:
+
+- The default branch requires `deepbuild/verdict` from the gate's app. Only an admin, through the forge's bypass, updates or deletes the branch, so no agent's token merges or pushes it.
+- Only an admin makes, moves or deletes a `deep/approved/` tag.
+
+Put each one on as the repo's admin:
+
+```bash
+deep gate rules --json | jq -c '.rulesets[]' | while read -r r; do echo "$r" | gh api -X POST repos/OWNER/NAME/rulesets --input -; done
+```
+
+A push you make yourself through the bypass is recorded as unguarded, and never reads PASS.
 
 ## Documentation
 

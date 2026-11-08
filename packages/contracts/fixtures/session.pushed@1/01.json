@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "session.pushed",
+  "subject": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "ref": "refs/heads/deep/1325-k4t9xq",
+    "commit": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+    "pusher": "deepbuild-agents[bot]",
+    "session": "4a6c1f0e-2b7d-4e55-9c1a-0d2f6b8e3a71",
+    "run": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "approval": "ask:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "approved_by": "you"
+  }
+}
