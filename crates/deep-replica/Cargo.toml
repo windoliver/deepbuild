@@ -150,3 +150,10 @@ harness = false
 name = "acceptance_1425"
 path = "../../tests/acceptance/1425/app/panels.rs"
 harness = false
+
+# Issue #1425 AC3, redrafted blind in tests/acceptance/1425/ac3-redraft: a component off the panel catalog is
+# refused at pack check and at load, and every catalog name renders in light and dark. No harness, as above.
+[[test]]
+name = "acceptance_1425_ac3"
+path = "../../tests/acceptance/1425/ac3-redraft/ac3.rs"
+harness = false
