@@ -840,6 +840,10 @@ pub struct Hitbox {
     pub content_mask: ContentMask<Pixels>,
     /// Flags that specify hitbox behavior.
     pub behavior: HitboxBehavior,
+    /// DeepBuild patch (windoliver/deepbuild#124): the element that inserted the hitbox, so a
+    /// replica can name what a hit test finds.
+    #[cfg(any(test, feature = "test-support"))]
+    pub element: GlobalElementId,
 }
 
 impl Hitbox {
@@ -5358,9 +5362,26 @@ impl Window {
             bounds,
             content_mask,
             behavior,
+            #[cfg(any(test, feature = "test-support"))]
+            element: self.element_id_stack.global_id(),
         };
         self.next_frame.hitboxes.push(hitbox.clone());
         hitbox
+    }
+
+    /// DeepBuild patch (windoliver/deepbuild#124): the hitboxes the last frame's own hit test
+    /// finds at `position`, front to back, as a mouse event there would. Nothing is dispatched
+    /// and the mouse doesn't move, so a replica can ask before it acts.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn hits_at(&self, position: Point<Pixels>) -> Vec<Hitbox> {
+        let frame = &self.rendered_frame;
+        let hit_test = frame.hit_test(position);
+        hit_test
+            .ids
+            .iter()
+            .filter_map(|id| frame.hitboxes.iter().find(|hitbox| hitbox.id == *id))
+            .cloned()
+            .collect()
     }
 
     /// Set a hitbox which will act as a control area of the platform window.

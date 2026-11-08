@@ -25,6 +25,9 @@ pub const OUTPUTS: &[(&str, &str, &str)] = &[
     ("material", "alpha", "f32"),
     ("material", "metallic", "f32"),
     ("material", "roughness", "f32"),
+    // A see-through part's colored shadow (#431): written only in shadow passes, by a part with
+    // `shadow: colored`, multiplying its transmittance.
+    ("material", "shadow_filter", "vec3<f32>"),
 ];
 
 /// The WGSL type an operator of `kind` writes its output `name` as, if it has that output.

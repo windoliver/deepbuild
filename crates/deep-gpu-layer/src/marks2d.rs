@@ -175,7 +175,8 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
             three: three.contains(&l.id.as_str()),
             marks: l.marks.iter().cloned().collect(),
         })
-        .filter(|l| l.three || !l.marks.is_empty())
+        // A layer whose items are all hidden (a flip showing none) is still the film's layer.
+        .filter(|l| l.three || !l.marks.is_empty() || flat.values().any(|v| v["layer"] == l.id.as_str()))
         .collect();
     let gpu = match look3 {
         Some((look, themed)) => {
@@ -725,6 +726,10 @@ pub(crate) struct Frame2 {
     pub packs: Arc<Vec<Named>>,
     /// #149: where the frame's pixels land on its look's paper.
     pub page: Option<Arc<Page>>,
+    /// #464: the look's print finish for this frame, when it prints anything.
+    pub print: Option<Arc<crate::print2d::Printing>>,
+    /// #464: an indexed look's frame, which the index operator draws in place of Vello GPU.
+    pub indexed: Option<Arc<crate::indexed::IndexFrame>>,
 }
 
 impl Frame2 {
@@ -747,6 +752,10 @@ struct Module2 {
     error: Arc<Mutex<Option<Value>>>,
     /// When the film's frame finished encoding Vello GPU's passes (#417).
     encoded: Option<crate::film::Encoded>,
+    /// #464: the textures a printed frame draws through, and what the call reads back.
+    stage: Option<Arc<crate::print2d::Stage>>,
+    taps: crate::print2d::Taps,
+    indexer: Option<Arc<Mutex<crate::indexed::Indexer>>>,
 }
 
 impl RenderModule for Module2 {
@@ -825,22 +834,78 @@ impl RenderModule for Module2 {
                 .map(|(done, ..)| done);
             (g.clone(), done)
         });
+        // #464: a printed frame draws its base and each ink's coverage into the stage, and the
+        // finish prints them into the slot.
+        let printing = frame.print.clone();
+        let wants_linear = self.taps.wants_linear();
+        let stage = printing.as_ref().map(|p| {
+            let kept = self.stage.take().and_then(|s| Arc::try_unwrap(s).ok());
+            let s = Arc::new(crate::print2d::Stage::ensure(
+                kept,
+                &device.device,
+                FORMAT,
+                target.size,
+                p.print.separations.len(),
+                wants_linear,
+            ));
+            self.stage = Some(s.clone());
+            s
+        });
+        let taps = self.taps.clone();
+        let indexer = self
+            .indexer
+            .get_or_insert_with(|| Arc::new(Mutex::new(crate::indexed::Indexer::new(&device.device))))
+            .clone();
         let job: Job = Box::new(move |encoder| {
-            let drawn = match groups {
-                Some((g, done)) => done.map(|done| {
+            let base = stage.as_ref().map_or(&target.view, |s| &s.source.1);
+            let inked = printing.as_ref().map(|p| p.inked()).unwrap_or_default();
+            // Each ink's coverage first, each Vello GPU draw on its own encoder and submit, since
+            // its uploads land before any encoder that shares its buffers runs (#430).
+            let mut inks = Ok(());
+            if let (Some(p), Some(s)) = (&printing, &stage) {
+                for (k, items) in p.inks.iter().enumerate() {
+                    let mut own = dev.create_command_encoder(&Default::default());
+                    inks = inks.and(vello.lock().unwrap_or_else(|e| e.into_inner()).draw(
+                        &dev,
+                        &queue,
+                        &mut own,
+                        frame.marks().filter(|d| items.contains(d.mark.item())),
+                        target.size,
+                        &s.covs[k].1,
+                        options,
+                    ));
+                    queue.submit([own.finish()]);
+                }
+            }
+            let drawn = match (groups, &frame.indexed) {
+                // #464: an indexed look draws its marks through the index operator.
+                (_, Some(f)) => {
+                    let mut ix = indexer.lock().unwrap_or_else(|e| e.into_inner());
+                    ix.record(&dev, encoder, f, base, FORMAT, &taps.indices);
+                    Ok(())
+                }
+                (Some((g, done)), None) => done.map(|done| {
                     let mut g = g.lock().unwrap_or_else(|e| e.into_inner());
-                    g.finish(&dev, encoder, &done, &target.view, FORMAT, false);
+                    g.finish(&dev, encoder, &done, base, FORMAT, false);
                 }),
-                None => vello.lock().unwrap_or_else(|e| e.into_inner()).draw(
+                (None, None) => vello.lock().unwrap_or_else(|e| e.into_inner()).draw(
                     &dev,
                     &queue,
                     encoder,
-                    frame.marks(),
+                    frame.marks().filter(|d| !inked.contains(d.mark.item())),
                     target.size,
-                    &target.view,
+                    base,
                     options,
                 ),
             };
+            let drawn = drawn.and(inks);
+            if let (Ok(()), Some(p), Some(s)) = (&drawn, &printing, &stage) {
+                s.record(&dev, encoder, p, &target.view, FORMAT, wants_linear);
+                if let Some((t, _)) = s.linear.as_ref().filter(|_| wants_linear) {
+                    *taps.linear.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some((t.clone(), target.size));
+                }
+            }
             if let Some(at) = &encoded {
                 *at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
             }
@@ -860,6 +925,7 @@ pub(crate) fn open2(
     marks: Marks2,
     size: [u32; 2],
     encoded: Option<crate::film::Encoded>,
+    taps: crate::print2d::Taps,
 ) -> Result<(deep_gpu::view::Ui, Refusal), Value> {
     let error = Arc::new(Mutex::new(None));
     let module = Module2 {
@@ -875,6 +941,9 @@ pub(crate) fn open2(
         },
         error: error.clone(),
         encoded,
+        stage: None,
+        taps,
+        indexer: None,
     };
     let path = app.decision.path;
     let ui = app
@@ -970,6 +1039,8 @@ pub fn window2d(app: &mut App, out: &str, call: &Value) -> Value {
             guard: ev.guard.clone(),
             packs: ev.packs.clone(),
             page: ev.page.clone(),
+            print: None,
+            indexed: None,
         };
         for l in &ev.layers {
             let path = path_of(app, l);
@@ -1007,6 +1078,7 @@ pub fn window2d(app: &mut App, out: &str, call: &Value) -> Value {
                 Arc::new(Mutex::new(Arc::new(frame2(marks)))),
                 ev.size,
                 None,
+                Default::default(),
             )?),
             None => None,
         };
@@ -1145,8 +1217,16 @@ pub fn spike2d(app: &mut App, out: &str, call: &Value) -> Value {
             guard: ev.guard.clone(),
             packs: ev.packs.clone(),
             page: ev.page.clone(),
+            print: None,
+            indexed: None,
         };
-        let (ui, error) = open2(app, Arc::new(Mutex::new(Arc::new(frame))), ev.size, None)?;
+        let (ui, error) = open2(
+            app,
+            Arc::new(Mutex::new(Arc::new(frame))),
+            ev.size,
+            None,
+            Default::default(),
+        )?;
         app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
         ui.record(false);
         ui.take_record();

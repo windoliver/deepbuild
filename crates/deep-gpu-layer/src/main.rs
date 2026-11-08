@@ -29,6 +29,7 @@ mod golden;
 mod groups;
 mod guard;
 mod host;
+mod indexed;
 mod interp_suite;
 mod levels;
 mod live;
@@ -36,8 +37,10 @@ mod liveview;
 mod lod;
 mod marks2d;
 mod opframe;
+mod paintfx;
 mod parity;
 mod plugin;
+mod print2d;
 mod reference;
 mod scene;
 mod seam;
@@ -73,6 +76,14 @@ use crate::worker::Worker;
 /// The wrong programs, each reachable only through `--planted` (README: Planted programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #431's wrong programs (tests/acceptance/431/README.md: Planted programs).
+    VelocityFromPreviousFrame,
+    EmissionThresholdsColor,
+    BuildsUnreadTargets,
+    SampleGradImplicit,
+    NoDivergenceRule,
+    BackdropAfterSeeThrough,
+    PeriodFirstOctave,
     /// #430's wrong programs (tests/acceptance/430/README.md: Planted programs).
     GroupPassAtLayerEnd,
     GroupPassReadsEarlier,
@@ -81,6 +92,8 @@ pub enum Planted {
     BackdropReadsLaterItems,
     BackdropPastCoverage,
     BackdropReadsStatus,
+    /// #467 AC5's: a bevel lit from the side opposite its light.
+    BevelLitOpposite,
     VividLightAsLinearLight,
     DissolveReadsPlayback,
     PassLinearIn2d,
@@ -133,6 +146,10 @@ pub enum Planted {
     /// #383's wrong programs (tests/acceptance/383/README.md: Planted programs).
     LoadsEverything,
     SlowGpuFrame,
+    /// #465: each ghost at a fixed place, whatever its light.
+    FlareFixedGhosts,
+    /// #465: the flare built as if nothing covered its light.
+    FlareIgnoresOcclusion,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -281,11 +298,29 @@ pub enum Planted {
     MipsLevel0Only,
     MipsKeptUnderOldKey,
     PoolWithoutClear,
+    // #252: stepped carried state's wrong programs.
+    StepsPerFrame,
+    RingKeepsEveryCheckpoint,
+    CarriedClassExact,
+    // #464: print and pixel looks' wrong programs (tests/acceptance/464/README.md).
+    VignettePixels,
+    GrainFromT,
+    PartialCoverage,
+    PuffFullOpacity,
+    LightAfterUpscale,
+    FlickerWallTime,
 }
 
 impl Planted {
     fn parse(name: &str) -> Option<Planted> {
         Some(match name {
+            "velocity_from_previous_frame" => Planted::VelocityFromPreviousFrame,
+            "emission_thresholds_color" => Planted::EmissionThresholdsColor,
+            "builds_unread_targets" => Planted::BuildsUnreadTargets,
+            "sample_grad_implicit" => Planted::SampleGradImplicit,
+            "no_divergence_rule" => Planted::NoDivergenceRule,
+            "backdrop_after_see_through" => Planted::BackdropAfterSeeThrough,
+            "period_first_octave" => Planted::PeriodFirstOctave,
             "group_pass_at_layer_end" => Planted::GroupPassAtLayerEnd,
             "group_pass_reads_earlier" => Planted::GroupPassReadsEarlier,
             "group_pass_past_grow" => Planted::GroupPassPastGrow,
@@ -293,6 +328,7 @@ impl Planted {
             "backdrop_reads_later_items" => Planted::BackdropReadsLaterItems,
             "backdrop_past_coverage" => Planted::BackdropPastCoverage,
             "backdrop_reads_status" => Planted::BackdropReadsStatus,
+            "bevel_lit_opposite" => Planted::BevelLitOpposite,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,
@@ -339,6 +375,8 @@ impl Planted {
             "guard_to_grey" => Planted::GuardToGrey,
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
+            "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
+            "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
@@ -451,6 +489,15 @@ impl Planted {
             "mips_level0_only" => Planted::MipsLevel0Only,
             "mips_kept_under_old_key" => Planted::MipsKeptUnderOldKey,
             "pool_without_clear" => Planted::PoolWithoutClear,
+            "steps_per_frame" => Planted::StepsPerFrame,
+            "ring_keeps_every_checkpoint" => Planted::RingKeepsEveryCheckpoint,
+            "carried_class_exact" => Planted::CarriedClassExact,
+            "vignette_pixels" => Planted::VignettePixels,
+            "grain_from_t" => Planted::GrainFromT,
+            "partial_coverage" => Planted::PartialCoverage,
+            "puff_full_opacity" => Planted::PuffFullOpacity,
+            "light_after_upscale" => Planted::LightAfterUpscale,
+            "flicker_wall_time" => Planted::FlickerWallTime,
             _ => return None,
         })
     }
@@ -659,7 +706,7 @@ impl App {
             Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
             Some("check_operator") if opframe::wants(call) => opframe::call(self, out, call),
-            Some("check_operator") => effects::check_operator(self, call),
+            Some("check_operator") => effects::check_operator(self, out, call),
             Some("op") => effects::op(self, call),
             Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),

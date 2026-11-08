@@ -1,0 +1,130 @@
+{
+  "title": "forge.refused@1",
+  "description": "The forge refused a call made with a session's own credential in a session DeepBuild started (#1325), as the call's output says: which of the four calls only the gate or a person may make, and the call it was part of.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "forge.refused"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "description": "A run: handle.",
+          "maxLength": 8192
+        },
+        "session": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "post-status",
+            "merge",
+            "push-default-branch",
+            "push-approved-tag"
+          ],
+          "x-closure": {
+            "closed": "the four calls a session's credential may never make (#1325); a refusal of anything else isn't this kind",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          },
+          "description": "What the credential tried: post a status, merge a pull request, push the default branch, or push a deep/approved/ tag."
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "What the forge's answer named: the endpoint's documentation, or the ref."
+        },
+        "call": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192,
+          "description": "The tool call's ID."
+        }
+      },
+      "required": [
+        "run",
+        "session",
+        "action",
+        "target",
+        "call"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

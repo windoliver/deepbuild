@@ -73,6 +73,8 @@ pub struct Look3 {
     pub blur: Option<crate::samples::Blur>,
     /// A drawing look's drawn fields (#149): its light, paper, lines and fills.
     pub drawn: Option<std::sync::Arc<deep_canvas_drawn::spec::Look>>,
+    /// #464: its separations and print finishes, which the print pass draws after the output.
+    pub print: std::sync::Arc<deep_canvas_marks::print::Print>,
 }
 
 /// The EV100 whose exposure scale is 1, a look's default.
@@ -108,6 +110,7 @@ impl Look3 {
             samples: crate::samples::Samples::default(),
             blur: None,
             drawn: None,
+            print: Default::default(),
         }
     }
 
@@ -156,6 +159,10 @@ impl Look3 {
             }
         };
         out.grade = read_grade(look.get("grade"))?;
+        out.print = std::sync::Arc::new(
+            deep_canvas_marks::print::read(look, &out.roles, 1920.0)
+                .map_err(|r| format!("{}: {}", r.code, r.path))?,
+        );
         out.filter_taps = match look.get("filter_taps").map(Value::as_u64) {
             None => 8,
             Some(Some(n @ (1 | 2 | 4 | 8))) => n as u8,

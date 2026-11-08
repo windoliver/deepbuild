@@ -421,6 +421,7 @@ mod trusted {
         active_at_post: bool,
     ) -> serde_json::Value {
         let posted: Option<Posted> = child
+            // blocking call: the probe's report, read once its run is over and the window has nothing left to draw.
             .wait_with_output()
             .ok()
             .and_then(|output| serde_json::from_slice(&output.stdout).ok());
@@ -498,6 +499,7 @@ mod trusted {
                     // so the last line says so, and no poster is left running.
                     if let Some(mut child) = poster.take() {
                         let _ = child.kill();
+                        // blocking call: reaps the poster it just killed, as the probe's window closes.
                         let _ = child.wait();
                     }
                     println!(

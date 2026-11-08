@@ -1,0 +1,53 @@
+The #344 acceptance suite run on the base commit ed83819d, before any implementation.
+
+Node:         v24.22.0 (fnm exec --using=24), vitest 5.0.5, macOS (Darwin 25.6.0)
+Setup:        fnm exec --using=24 npm ci --offline --ignore-scripts; fnm exec --using=24 npm run build --workspaces (twice);
+              cargo build --locked -q -p deep-hook
+Command:      fnm exec --using=24 node node_modules/vitest/vitest.mjs run --root tests/acceptance/344 --no-file-parallelism
+Result:       Test Files 7 failed (7); Tests 17 failed (17); 82 s
+Type check:   fnm exec --using=24 node node_modules/typescript/bin/tsc -p tests/acceptance/344/tsconfig.json  -> exit 0
+
+Every test fails at an assertion, none at an import or load error. At the base there is no `deep rules sync`, `deep rules
+reach`, `deep rules credit` or `deep session rules` (the CLI answers "Unsupported command"), no `session.rules_delivered` event, no
+rule delivery to a session, and no rules page, so the page tests read an empty page and fail at what it lacks. AC4's proposal and
+AC8's start slice fail at the base's behavior: its start slice and prompts carry no rules. AC12 is INCONCLUSIVE by design.
+The vitest output below is the run's failure list, assertion by assertion (long messages cut at 330 characters).
+
+ FAIL  deliver.test.ts > #344 rules reach sessions > AC1 #344.d84014c1 a rule typed in one session reaches a second open session at its next prompt
+AssertionError: session B (session:a1bffdff-4b94-4c33-8ebb-981f8f57b84f) hears the rule A typed at its next prompt; its reply was "": expected false to be true // Object.is equality
+ FAIL  deliver.test.ts > #344 rules reach sessions > AC5 #344.edd0e73e after a compaction or a resume, the session's next prompt carries every rule you typed in it
+AssertionError: after /compact, session A's next prompt carries "Squash merge every pull request"; it carried "": expected false to be true // Object.is equality
+ FAIL  deliver.test.ts > #344 rules reach sessions > AC9 #344.d074b17a a scoped rule reaches a session as one notice at its first call inside the scope, once more after /compact or a resume, and never in a start slice or for a session that stays outside
+AssertionError: session Y (session:613c17d7-324a-4214-b967-cf3cf0bcdb5c) hears the rule once, at its third call and not at its fourth (calls 1 to 4): expected [ false, false, false, false ] to deeply equal [ false, false, true, false ]
+ FAIL  lessons.test.ts > #344 removal lessons > AC13 #344.9052e54a "never force-push" enforced by a guard whose planted call is denied lists a removal lesson naming the guard; with the planted call failing there is no lesson and the rule reads text only; a rule you typed is never offered
+AssertionError: a rule file with "never force-push" enforced by a passing guard lists one removal lesson; the list is:
+ FAIL  lessons.test.ts > #344 removal lessons > AC14 #344.8b8dd0f4 a rule scoped to legacy/** that no session touched in 60 days lists a removal lesson naming the count; a rule scoped to a folder touched last week does not
+AssertionError: the legacy rule is scoped to legacy/**: expected undefined to be 'legacy/**' // Object.is equality
+ FAIL  lessons.test.ts > #344 removal lessons > AC15 #344.b9bc3486 declining a lesson doesn't bring it back while the rule's text is unchanged
+AssertionError: the lesson is offered once: expected +0 to be 1 // Object.is equality
+ FAIL  lessons.test.ts > #344 removal lessons > AC16 #344.0ee7b472 taking a removal the eval reads as a regression leaves the file byte-identical and names the tasks
+AssertionError: the lesson to take is offered: expected undefined to be defined
+ FAIL  proposal.test.ts > #344 deleting a rule line > AC4 #344.e5587b74 an agent that deletes "never push without asking" from AGENTS.md still can't push unasked, and the deletion reaches you as one proposal; an edit outside an agent's tool calls changes the page
+AssertionError: the rules page lists "never push without asking" before the edit: expected undefined to be defined
+ FAIL  reach.test.ts > #344 the preview before a rule is rescoped > AC10 #344.ba9f0acc rescoping a rule from packages/dev/** to packages/dev/render/** shows, before save, 12 of the month's 40 sessions matched the old scope and 3 match the new one, each by handle
+AssertionError: deep rules reach --scope packages/dev/** prints one JSON object: exit 2 after 126 ms, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ FAIL  rules-page.test.ts > #344 the rules page > AC2 #344.4280c950 the rules page shows what enforces each rule, and a text-only rule is listed as such
+AssertionError: the rules page lists the rules of every rule file:
+ FAIL  rules-page.test.ts > #344 the rules page > AC3 #344.a8ce0546 a rule in Codex's rule file reaches a Claude Code session, and the rules page shows what enforces it
+AssertionError: the rules page lists "Always run npm test before opening a PR" from Codex's ~/.codex/AGENTS.md:
+ FAIL  rules-page.test.ts > #344 the rules page > AC6 #344.bc7c40dc a rule whose guard entry fails its planted call reads text only on the rules page; a page that lists that guard as its enforcer fails, naming the rule
+AssertionError: the control: "never force-push" has a guard whose planted call is denied and twin allowed:
+ FAIL  rules-page.test.ts > #344 the rules page > AC7 #344.91134104 the rules page lists every rule from the root AGENTS.md, the nested packages/app/AGENTS.md, .github/copilot-instructions.md and render.instructions.md, each with its file and its scope
+AssertionError: a reader that sees only root files misses the nested, Copilot and applyTo rules (it misses 5 here); the page lists:
+ FAIL  rules-page.test.ts > #344 the rules page > scope: the rules page shows each rule's size in tokens and each rule file's total
+AssertionError: the page lists rules: expected 0 to be greater than 0
+ FAIL  sets.test.ts > #344 which set a session ran under > AC8 #344.e8cceead a session started before you roll back a slice entry reads, on its page, that it runs the earlier set, and a regression in it is credited to that set
+AssertionError: session 1's start slice holds both entries; it holds "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"DeepBuild is watching this session. No checks are active in this repo yet. When you finish a piece of work, declare it with the deep_claim tool (say what you claim is done)
+ FAIL  sets.test.ts > #344 which set a session ran under > AC11 #344.0a0ed1fb judging a scoped rule credits only the sessions whose record names its delivery, never a session the rule never reached
+AssertionError: the rules page lists the applyTo rule: expected undefined to be defined
+ FAIL  taste.test.ts > #344.10e389aa the screenshots and the one taste call on them > #344.10e389aa the screenshots of the rules page exist, and the owner's recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: the check run left no target/acceptance/344/rules-page.png: take it from the rules page in the app at the reference window; this is not a pass
+
+Summary lines:
+ Test Files  7 failed (7)
+      Tests  17 failed (17)
