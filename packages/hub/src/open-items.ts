@@ -2,10 +2,12 @@
 // done, Done means switched on). At each claim the gate reads, with no model: the final message's open sections, the
 // bugs it says it left and the issues it filed instead of fixing; placeholder text in the files the change touched;
 // the limits it writes into its PR body or its docs; each review thread on its PR; and the agent's own task list, as
-// its adapter's facts name it. Each is `open_item.opened@2` under its ID, the hash of its normalized text and scope,
+// its adapter's facts name it. Each is `open_item.opened` under its ID, the hash of its normalized text and scope,
 // so the same item raised twice is one record. An item closes only on evidence, your answer or a rule: a thread a
 // reviewer resolves, your waiver through the item's ask. The agent's word closes nothing: a thread its own account
-// resolved stays open, naming who resolved it, and an item it marks completed stays open.
+// resolved stays open, naming who resolved it, and an item it marks completed stays open. Raised again after evidence
+// closed it, such as a thread unresolved after a reviewer resolved it, an item opens again citing that closing (#1633);
+// one your answer closed stays closed.
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -52,7 +54,7 @@ export interface ClaimRead {
 
 /** One thing found open, with what it says beside its words. */
 interface Found extends Omit<LeftOpen, 'from'> { from: LeftOpen['from'] | 'review_thread'; resolved_by?: string }
-interface Standing { item: string; text: string; from: string; open: boolean; by: string | null; resolved_by: string | null }
+interface Standing { item: string; text: string; from: string; open: boolean; by: string | null; resolved_by: string | null; closing: string | null }
 
 const run = (cmd: string, args: string[], cwd: string): Promise<string> => new Promise((resolve) => {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
@@ -76,14 +78,14 @@ export class OpenItems {
 
   /** The task's open items as the record has them, by ID: the newest opening's words, and whether a closing came after it. */
   private async standing(task: string): Promise<Map<string, Standing>> {
-    const rows = (await this.o.raw(`SELECT kind, data FROM events WHERE kind IN ('open_item.opened', 'open_item.closed') AND json_extract(data, '$.task_ref') = ? AND json_extract(data, '$.item') IS NOT NULL ORDER BY log_pos`, [task])) as { kind: string; data: string }[];
+    const rows = (await this.o.raw(`SELECT id, kind, data FROM events WHERE kind IN ('open_item.opened', 'open_item.closed') AND json_extract(data, '$.task_ref') = ? AND json_extract(data, '$.item') IS NOT NULL ORDER BY log_pos`, [task])) as { id: string; kind: string; data: string }[];
     const out = new Map<string, Standing>();
     for (const row of rows) {
       const d = JSON.parse(row.data) as Obj;
       const item = String(d.item);
       const was = out.get(item);
-      if (row.kind === 'open_item.opened') out.set(item, { item, text: String(d.text), from: String(d.from), open: true, by: null, resolved_by: typeof d.resolved_by === 'string' ? d.resolved_by : was?.resolved_by ?? null });
-      else if (was) out.set(item, { ...was, open: false, by: String(d.by) });
+      if (row.kind === 'open_item.opened') out.set(item, { item, text: String(d.text), from: String(d.from), open: true, by: null, resolved_by: typeof d.resolved_by === 'string' ? d.resolved_by : was?.resolved_by ?? null, closing: null });
+      else if (was) out.set(item, { ...was, open: false, by: String(d.by), closing: row.id });
     }
     return out;
   }
@@ -118,15 +120,22 @@ export class OpenItems {
       if (seen.has(item)) continue;
       seen.add(item);
       const was = standing.get(item);
-      // Raised again, it is the same record; one whose thread the session resolved since is revised, naming who did.
-      if (was && !(f.resolved_by && was.open && was.resolved_by !== f.resolved_by)) continue;
+      // Raised again after evidence closed it, it opens again, citing that closing; one your answer closed stays
+      // closed, as does one you accepted or waived through its ask while evidence held it closed. The planted wrong
+      // program opens again whatever closed it.
+      const asked = was && !was.open ? await this.asked(item) : undefined;
+      const again = was && !was.open && ((!was.by?.startsWith('your answer') && !asked?.closed) || this.o.plant === 'reopens-every-item') ? was.closing : null;
+      // Raised again while open, it is the same record; one whose thread the session resolved since is revised, naming who did.
+      if (was && !again && !(f.resolved_by && was.open && was.resolved_by !== f.resolved_by)) continue;
       // The same error as one you waived, its run-to-run values aside, stays closed by that waiver.
       if (!was && waived.has(this.shapeOf(f.text))) continue;
-      await this.opened(core, c.task, item, f);
-      if (!was && f.from === 'section' && f.section && UNVERIFIED.has(f.section)) await this.askWaiver(c, item, f.text);
+      await this.opened(core, c.task, item, f, again);
+      // Opened again, it reaches you through its ask only when none was ever raised: never the same question twice.
+      const ask = !was || (again !== null && !asked?.any);
+      if (ask && f.from === 'section' && f.section && UNVERIFIED.has(f.section)) await this.askWaiver(c, item, f.text);
       // A review note on the PR keeps it from Closes until it is fixed or you accept it (#87). Its ask is raised
       // apart from the claim, so no verdict waits on the ask's resolver.
-      if (!was && f.from === 'review_thread' && !f.resolved_by) {
+      if (ask && f.from === 'review_thread' && !f.resolved_by) {
         void this.askAccept(c, item, f.text).catch((error: unknown) => process.stderr.write(`deep hub: the ask for review note ${item} was not raised: ${error instanceof Error ? error.message : String(error)}\n`));
       }
     }
@@ -203,9 +212,15 @@ export class OpenItems {
     }
     this.waiting.set(c.task, left);
   }
-  private async opened(core: Connection, task: string, item: string, f: Found): Promise<void> {
+  /** Records an item opened, or opened again citing the closing it replaces (`open_item.opened@4`). */
+  private async opened(core: Connection, task: string, item: string, f: Found, replaces: string | null): Promise<void> {
     const ts = this.o.now();
-    await this.o.append(core, { v: 2, id: ulid(ts), kind: 'open_item.opened', ts, data: { task_ref: task, text: f.text.slice(0, 8192), item, from: f.from, ...(f.resolved_by ? { resolved_by: f.resolved_by.slice(0, 256) } : {}) } });
+    await this.o.append(core, { v: replaces ? 4 : 2, id: ulid(ts), kind: 'open_item.opened', ts, data: { task_ref: task, text: f.text.slice(0, 8192), item, from: f.from, ...(f.resolved_by ? { resolved_by: f.resolved_by.slice(0, 256) } : {}), ...(replaces ? { replaces } : {}) } });
+  }
+  /** The item's asks: whether any was ever raised, and whether you closed it through one, accepting or waiving it. */
+  private async asked(item: string): Promise<{ any: boolean; closed: boolean }> {
+    const rows = (await this.o.raw(`SELECT status, answer FROM asks WHERE key = ?`, [waiverKey(item)])) as { status: string; answer: string | null }[];
+    return { any: rows.length > 0, closed: rows.some((r) => r.status === 'answered' && (r.answer === '"accept"' || r.answer === '"waive"')) };
   }
   private async closed(core: Connection, task: string, item: string, text: string, by: string): Promise<void> {
     const ts = this.o.now();
