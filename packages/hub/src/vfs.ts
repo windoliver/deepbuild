@@ -10,11 +10,13 @@ import Database, { type Statement } from 'better-sqlite3';
 import type { Backend } from '@deepbuild/record';
 import type { VfsSettings } from './wire.js';
 
-export type PointKind = 'commit' | 'log_pos_block' | 'spool_read' | 'spool_removal' | 'evidence_rename' | 'rules_rewrite' | 'journal_rewrite' | 'terminals_rewrite';
+export type PointKind = 'commit' | 'log_pos_block' | 'spool_read' | 'spool_removal' | 'evidence_rename' | 'rules_rewrite' | 'journal_rewrite' | 'terminals_rewrite'
+  // An agent sync's (#148): its crash journal durable, a target renamed into place, that target's folder flushed, the sync recorded complete.
+  | 'sync_intent' | 'sync_replace' | 'sync_flush' | 'sync_complete';
 
 export interface Durable {
   /** Marks a durable write point just made. */
-  point(kind: PointKind, detail?: { mode?: 'full' | 'normal'; ids?: string[] }): void;
+  point(kind: PointKind, detail?: { mode?: 'full' | 'normal'; ids?: string[]; path?: string }): void;
   /** One sync's worth of waiting, as a WAL checkpoint costs. */
   sync(): void;
   /** True when a write can be made durable in `dir` now. */
@@ -127,6 +129,7 @@ export async function copySynced(from: string, to: string): Promise<void> {
 
 export function testVfs(settings: VfsSettings): Durable {
   let n = 0;
+  const kinds = new Map<string, number>();
   const held = new Int32Array(new SharedArrayBuffer(4));
   // Held open: a file open can cost milliseconds on a watched disk, and every commit is a point.
   const points = settings.points ? openSync(settings.points, 'a') : undefined;
@@ -136,7 +139,9 @@ export function testVfs(settings: VfsSettings): Durable {
       n++;
       if (points !== undefined) writeSync(points, `${JSON.stringify({ n, kind, ...detail })}\n`);
       // Right after point n the process ends as by kill -9: nothing after it, and nothing unsynced, survives.
-      if (settings.cutAfter === n) {
+      const nth = (kinds.get(kind) ?? 0) + 1;
+      kinds.set(kind, nth);
+      if (settings.cutAfter === n || (settings.cutAt?.kind === kind && settings.cutAt.nth === nth)) {
         process.kill(process.pid, 'SIGKILL');
         // The signal lands a moment later: this thread makes no further write meanwhile.
         Atomics.wait(held, 0, 0);
@@ -186,7 +191,7 @@ export function testVfs(settings: VfsSettings): Durable {
             vfs.sync();
             // The image reaches ledger.db at once only when a cut is set up, the one way this process ends
             // without its close; otherwise the close writes it, so a sync costs its delay, not the ledger's size.
-            if (settings.cutAfter !== undefined) writeSynced(file!, db.serialize());
+            if (settings.cutAfter !== undefined || settings.cutAt !== undefined) writeSynced(file!, db.serialize());
           }
           vfs.point(!ids.length && scalar(db, "SELECT value FROM meta WHERE key = 'log_block_end'") !== block ? 'log_pos_block' : 'commit', { mode, ids });
         },

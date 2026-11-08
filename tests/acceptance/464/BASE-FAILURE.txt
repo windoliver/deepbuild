@@ -1,0 +1,29 @@
+#464 acceptance suite at the base, b52f7357 (Merge pull request #1641), before any implementation.
+
+The full suite was not run there. One representative file was, `tables.test.ts`, with
+`npx vitest run --root tests/acceptance/464 --no-file-parallelism --testTimeout=600000 tables.test.ts`
+(deep-gpu built by the file, debug, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0). Both tests fail:
+
+ x #464.6ebf11ae the hero draws through flash from 1.00 s to before 1.05 s ... while the child naming frozen keeps frozen
+   AssertionError: played straight, frame 99: indices is a string, got undefined
+ x #464.6ebf11ae a table that would remap a protected index is refused at check, naming the table and the index
+   AssertionError: the look is refused at check, before any frame is drawn: {"size":[1280,720],"frames":[{"frame":0,
+   "gpu_ms":5.69,"cpu_ms":1.51,"pixel_hash":"3c2eea57…","final":"5fe54371…"}],"switches":[]}
+ Test Files 1 failed (1); Tests 2 failed (2)
+
+So at the base `film2d` accepts a look with `basis: {indexed: …}`, `tables` and `protected` and draws the frame as an
+ordinary 2D look: it ignores the indexed basis, writes no `indices` target and refuses no table that remaps a protected
+index. The other files fail the same way on fields the base ignores or lacks: no `linear` or `indices` target, no
+`indexed` record, no `flicker` answer on `film2d`; no separations, grain, vignette, print wear, tone curve or screen in
+the finish (so AC2's off-identity frames equal the bare one); no `grade` on `tone`; one snapshot, not two, from a 2D
+render-back; and the six planted names, which `deep-gpu run --planted` refuses at startup (exit 2).
+
+A second file was run once to check the harness against a surface the base already has: `grade.test.ts`.
+ v #464.93ecbe88 white balance at 6,500 K with tint 0 changes no pixel   (passes: #418's grade on view3d)
+ x #464.93ecbe88 the color decision list matches the ASC CDL reference ... at 64 sampled pixels
+   `tone` ignores `grade`: each output equals its input, e.g. "sample 63 (0.1123, 0.5049, 0.9698) channel 0: 0.11228
+   where the CDL gives 0.23995, 161.51 10-bit codes apart"
+ Test Files 1 failed (1); Tests 1 failed | 1 passed (2)
+
+`npx tsc -p tests/acceptance/464/tsconfig.json` exits 0. taste.test.ts stays INCONCLUSIVE until the owner's taste call
+is recorded, and each two-GPU test stays BLOCKED on a one-GPU machine.
