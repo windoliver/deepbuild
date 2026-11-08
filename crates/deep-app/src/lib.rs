@@ -1,5 +1,6 @@
-//! The app on gpui-kit. A panel runs under an empty gpui-shell policy plus DeepBuild's one module, `deepbuild`, which
-//! serves recorded quotes. It has no network, files, programs or storage.
+//! The app on gpui-kit. A panel runs under an empty gpui-shell policy and imports only `@deepbuild/panel`, DeepBuild's
+//! own module (#1425, [`panel_module`]), which also serves the `deepbuild` module's recorded quotes. It has no network,
+//! files, programs or storage.
 //!
 //! Issue #338 adds the app's shell with its shipped views as dock panels ([`views`]), the fixture
 //! record and inbox projection they draw ([`events`]), the canvas as a registered component
@@ -30,6 +31,7 @@ pub mod notify;
 pub mod panel_check;
 #[cfg(feature = "panel-check")]
 pub mod panel_keys;
+pub mod panel_module;
 pub mod panel_tree;
 pub mod panel_values;
 pub mod question;
@@ -238,22 +240,30 @@ pub fn init(cx: &mut App) {
 }
 
 /// Loads a panel directory's `main.js` and mounts its view. A panel loads nothing from the network: one whose
-/// gpui-shell manifest lists a Git dependency is refused before gpui-shell reads it, so nothing is fetched (#326).
+/// gpui-shell manifest lists a Git dependency is refused before gpui-shell reads it, so nothing is fetched (#326). A
+/// panel that imports the toolkit, or a name off the panel catalog, is refused before it loads too (#1425).
 pub fn mount_panel(
     runtime: &Rc<ShellRuntime>,
     dir: &Path,
     window: &mut Window,
     cx: &mut App,
 ) -> anyhow::Result<Entity<ScriptView>> {
-    if let Some(dependency) = fetched_dependency(dir) {
-        anyhow::bail!("{}", fetch_refusal(&dependency));
-    }
+    admit(dir)?;
     let loaded = runtime.load_application(dir, "main.js")?;
     runtime.mount_application(&loaded, window, cx)
 }
 
-/// The entry a view's page mounts through, written beside its panel's `main.js`.
-const PAGE_ENTRY: &str = ".deepbuild-page.js";
+/// The checks a panel passes before gpui-shell reads it, then `@deepbuild/panel` written where gpui-shell resolves it.
+fn admit(dir: &Path) -> anyhow::Result<()> {
+    if let Some(dependency) = fetched_dependency(dir) {
+        anyhow::bail!("{}", fetch_refusal(&dependency));
+    }
+    // #1425's planted loader skips the module check, as the merge base's did.
+    if !panel_module::planted("panel-load-unchecked") {
+        panel_module::check(dir).map_err(anyhow::Error::msg)?;
+    }
+    Ok(panel_module::serve(dir)?)
+}
 
 /// Mounts one of a view's pages (#366): the panel in `dir`, its script's `init` given `props.page`. gpui-shell gives a
 /// top-level script no props, so a small entry beside the panel's `main.js` creates the panel as a nested view with
@@ -265,17 +275,15 @@ pub fn mount_page(
     window: &mut Window,
     cx: &mut App,
 ) -> anyhow::Result<Entity<ScriptView>> {
-    if let Some(dependency) = fetched_dependency(dir) {
-        anyhow::bail!("{}", fetch_refusal(&dependency));
-    }
+    admit(dir)?;
     let props = serde_json::json!({ "page": page });
     std::fs::write(
-        dir.join(PAGE_ENTRY),
+        dir.join(panel_module::PAGE_ENTRY),
         format!(
-            "import {{ View }} from \"gpui-kit\";\nimport Panel from \"./main.js\";\n\nexport default class Page extends View {{\n  init(_props, cx) {{\n    this.panel = cx.new(Panel, {props});\n  }}\n\n  render() {{\n    return this.panel;\n  }}\n}}\n"
+            "import {{ View }} from \"@deepbuild/panel\";\nimport Panel from \"./main.js\";\n\nexport default class Page extends View {{\n  init(_props, cx) {{\n    this.panel = cx.new(Panel, {props});\n  }}\n\n  render() {{\n    return this.panel;\n  }}\n}}\n"
         ),
     )?;
-    let loaded = runtime.load_application(dir, PAGE_ENTRY)?;
+    let loaded = runtime.load_application(dir, panel_module::PAGE_ENTRY)?;
     runtime.mount_application(&loaded, window, cx)
 }
 

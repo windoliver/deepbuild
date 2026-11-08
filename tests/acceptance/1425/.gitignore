@@ -1,0 +1,3 @@
+# gpui-shell writes its typings beside a panel it loads.
+fixtures/*/gpui-kit.d.ts
+fixtures/*/jsconfig.json

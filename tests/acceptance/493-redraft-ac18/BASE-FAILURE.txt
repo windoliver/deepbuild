@@ -1,0 +1,57 @@
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-493-929fac/agent-ae355f500511b416f/tests/acceptance/493-redraft-ac18
+
+ ❯ match-cut.test.ts (2 tests | 2 failed) 1586ms
+   ❯ AC18: a match cut solves the incoming framing onto the outgoing item (2)
+     × AC18 #493.e1213b8a the sun's centre within 0.5 px of the ball's point and its radius within 1% on the incoming first frame 385ms
+     × AC18 #493.e1213b8a a planted framer that fits the sun by its keep at [0.5, 0.5] misses by more than 450 px and fails, naming the transition 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  match-cut.test.ts > AC18: a match cut solves the incoming framing onto the outgoing item > AC18 #493.e1213b8a the sun's centre within 0.5 px of the ball's point and its radius within 1% on the incoming first frame
+AssertionError: the match cut is accepted: {"ok":false,"code":"ref_unresolved","path":"transitions/cut1/from"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:235:64
+    233| /** An answer that accepted its document, with one frame per time, in …
+    234| export function accepted(answer: JsonObject, times: readonly number[],…
+    235|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    236|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    237|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:247:10
+ ❯ match-cut.test.ts:89:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  match-cut.test.ts > AC18: a match cut solves the incoming framing onto the outgoing item > AC18 #493.e1213b8a a planted framer that fits the sun by its keep at [0.5, 0.5] misses by more than 450 px and fails, naming the transition
+AssertionError: the planted framer: the planted program match_framer_ignores_match answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evalPlanted helpers.ts:257:109
+    255| export function evalPlanted(bin: string, line: EvalLine & { planted: s…
+    256|   const answer = evalOne(bin, line);
+    257|   expect(answer['ok'], `${what}: the planted program ${line.planted} a…
+       |                                                                                                             ^
+    258|   return accepted(answer, line.times, what);
+    259| }
+ ❯ match-cut.test.ts:98:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:48:22
+   Duration  1.70s (tests 97%, transform 2%, import 1%)
+

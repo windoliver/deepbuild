@@ -1,7 +1,7 @@
 // #326 AC6, one fault: a registerView panel that moves focus without your gesture. Right after it
 // mounts, with no input from anyone, a timer moves the keyboard onto the panel. panel@1 refuses it
 // with a message that says "focus", and the window's focus stays where it was.
-import { View, div } from "gpui-kit";
+import { View, div } from "@deepbuild/panel";
 
 export default class Focus extends View {
   init(_props, cx) {
