@@ -1,0 +1,317 @@
+Base of tests/acceptance/494 at dba9cd04 (main plus #493's shots work, no implementation of #494), on this worktree.
+
+Run: deep-motion's files and the taste test, deep-motion built from the base by each file's beforeAll
+(cargo build --locked --bin deep-motion):
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/494 --no-file-parallelism --reporter=verbose path-morph travel taste
+
+7 of 8 tests fail, each on an AssertionError raised by an expect in this suite's own files; none fails on loading, a
+build or a type error.
+- AC1 (path-morph.test.ts, 3 of 3): `type: "path"` is refused `bad_type` at channels/circle-to-star/type
+  (crates/deep-canvas-motion/src/doc.rs, channel_of: the types are f32, color, vec2, vec3, quat, angle, bool, enum).
+- AC3 (travel.test.ts, 3 of 4): channel_of reads a key's `t`, `value`, `interp` and `velocity` only, so `travel` is
+  ignored and every key goes straight: the arc reads (0, 0) at u = 0.5, the spiral (50, 0), and the swapped squares
+  overlap through the middle. The fourth, the 0.5° arc equal to straight bit for bit, passes: the base gets it by
+  ignoring `travel` (README: What the base already does).
+- AC5 (taste.test.ts): INCONCLUSIVE, its one honest reading; docs/evidence/494/ holds no pictures.
+
+Not run at the base: match-morph.test.ts (AC2, 2 tests) and of-keys.test.ts (AC4, 4 tests), which need a full deep-show
+build; the surfaces they read plainly don't exist there, so each fails on an assertion:
+- Every film's `eval` reply carries a film block of `cameras`, `dissolve`, `parallax` and `glyphs` only
+  (crates/deep-show/src/film.rs, `block`), so `film.morphs` is undefined: "film.morphs is an object, got undefined".
+  Behind that, a transition whose `from` and `to` name items, not shots, is skipped (crates/deep-canvas-motion/src/
+  shots.rs: `names` looks among the shots and the loop `continue`s), so nothing morphs.
+- AC4's `{of}` test also keys `type: "path"`, refused `bad_type` by channel_of, so `deep show` doesn't present it
+  ("is presented ... expected 'refused' to be 'presented'"), and the film block has no `paths`.
+
+The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/494/tsconfig.json, exits 0.
+
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/494
+
+ × path-morph.test.ts > AC1 #494.e411da84 a path channel from a circle to a five-point star, matched at check > AC1 #494.e411da84 equals the circle at its first key and the star at its last within 0.01 u at 64 points, closed with one point count at every 60 fps frame between, each point the mix of its matched ends 805ms
+   → the circle-to-star channel is accepted: {"ok":false,"code":"bad_type","path":"channels/circle-to-star/type"}: expected false to be true // Object.is equality
+ × path-morph.test.ts > AC1 #494.e411da84 a path channel from a circle to a five-point star, matched at check > AC1 #494.e411da84 seeking equals playing: each frame alone reads the same path, bit for bit, as the frames played in order 150ms
+   → the play is accepted: {"ok":false,"code":"bad_type","path":"channels/circle-to-star/type"}: expected false to be true // Object.is equality
+ × path-morph.test.ts > AC1 #494.e411da84 a path channel from a circle to a five-point star, matched at check > AC1 #494.e411da84 with morph: strict the same keys are refused naming the channel, while strict keys of equal counts and the matched keys are accepted 84ms
+   → the keys under morph: match (the default) are accepted: {"ok":false,"code":"bad_type","path":"channels/circle-to-star/type"}: expected false to be true // Object.is equality
+ × travel.test.ts > AC3 #494.32c3ee38 keys travel on arcs and spirals > AC3 #494.32c3ee38 from (−2, 0) to (2, 0) an arc of 180° passes (0, 2) and one of −180° passes (0, −2) at u = 0.5, within 1e-9 437ms
+   → the arc of 180° is at (0, 2) at u = 0.5 within 1e-9, got (0, 0): expected false to be true // Object.is equality
+ × travel.test.ts > AC3 #494.32c3ee38 keys travel on arcs and spirals > AC3 #494.32c3ee38 two items swapped on arcs of 180°, and of −180°, never overlap at 200 sampled times, though swapped straight they do 65ms
+   → the swap at 180°:
+  at 265929648 flicks the squares overlap: left (-0.4924623129251702, 0), right (0.4924623129251702, 0)
+  at 269475377 flicks the squares overlap: left (-0.47236180839002273, 0), right (0.47236180839002273, 0)
+  at 273021106 flicks the squares overlap: left (-0.4522613038548753, 0), right (0.4522613038548753, 0)
+  at 276566834 flicks the squares overlap: left (-0.43216080498866205, 0), right (0.43216080498866205, 0)
+  at 280112563 flicks the squares overlap: left (-0.4120603004535148, 0), right (0.4120603004535148, 0)
+  at 283658291 flicks the squares overlap: left (-0.3919598015873016, 0), right (0.3919598015873016, 0)
+  at 287204020 flicks the squares overlap: left (-0.37185929705215415, 0), right (0.37185929705215415, 0)
+  at 290749749 flicks the squares overlap: left (-0.3517587925170067, 0), right (0.3517587925170067, 0)
+  at 294295477 flicks the squares overlap: left (-0.3316582936507937, 0), right (0.3316582936507937, 0)
+  at 297841206 flicks the squares overlap: left (-0.31155778911564624, 0), right (0.31155778911564624, 0)
+  at 301386935 flicks the squares overlap: left (-0.2914572845804988, 0), right (0.2914572845804988, 0)
+  at 304932663 flicks the squares overlap: left (-0.2713567857142858, 0), right (0.2713567857142858, 0)
+  at 308478392 flicks the squares overlap: left (-0.25125628117913834, 0), right (0.25125628117913834, 0)
+  at 312024121 flicks the squares overlap: left (-0.2311557766439909, 0), right (0.2311557766439909, 0)
+  at 315569849 flicks the squares overlap: left (-0.21105527777777788, 0), right (0.21105527777777788, 0)
+  at 319115578 flicks the squares overlap: left (-0.19095477324263044, 0), right (0.19095477324263044, 0)
+  at 322661307 flicks the squares overlap: left (-0.170854268707483, 0), right (0.170854268707483, 0)
+  at 326207035 flicks the squares overlap: left (-0.15075376984126976, 0), right (0.15075376984126976, 0)
+  at 329752764 flicks the squares overlap: left (-0.13065326530612253, 0), right (0.13065326530612253, 0)
+  at 333298492 flicks the squares overlap: left (-0.1105527664399093, 0), right (0.1105527664399093, 0)
+  at 336844221 flicks the squares overlap: left (-0.09045226190476185, 0), right (0.09045226190476185, 0)
+  at 340389950 flicks the squares overlap: left (-0.07035175736961441, 0), right (0.07035175736961441, 0)
+  at 343935678 flicks the squares overlap: left (-0.0502512585034014, 0), right (0.0502512585034014, 0)
+  at 347481407 flicks the squares overlap: left (-0.03015075396825395, 0), right (0.03015075396825395, 0)
+  at 351027136 flicks the squares overlap: left (-0.010050249433106506, 0), right (0.010050249433106506, 0)
+  at 354572864 flicks the squares overlap: left (0.010050249433106728, 0), right (-0.010050249433106728, 0)
+  at 358118593 flicks the squares overlap: left (0.03015075396825395, 0), right (-0.03015075396825395, 0)
+  at 361664322 flicks the squares overlap: left (0.050251258503401175, 0), right (-0.050251258503401175, 0)
+  at 365210050 flicks the squares overlap: left (0.07035175736961463, 0), right (-0.07035175736961463, 0)
+  at 368755779 flicks the squares overlap: left (0.09045226190476185, 0), right (-0.09045226190476185, 0)
+  at 372301508 flicks the squares overlap: left (0.11055276643990908, 0), right (-0.11055276643990908, 0)
+  at 375847236 flicks the squares overlap: left (0.13065326530612253, 0), right (-0.13065326530612253, 0)
+  at 379392965 flicks the squares overlap: left (0.15075376984126976, 0), right (-0.15075376984126976, 0)
+  at 382938693 flicks the squares overlap: left (0.17085426870748321, 0), right (-0.17085426870748321, 0)
+  at 386484422 flicks the squares overlap: left (0.19095477324263044, 0), right (-0.19095477324263044, 0)
+  at 390030151 flicks the squares overlap: left (0.21105527777777766, 0), right (-0.21105527777777766, 0)
+  at 393575879 flicks the squares overlap: left (0.23115577664399112, 0), right (-0.23115577664399112, 0)
+  at 397121608 flicks the squares overlap: left (0.25125628117913834, 0), right (-0.25125628117913834, 0)
+  at 400667337 flicks the squares overlap: left (0.27135678571428556, 0), right (-0.27135678571428556, 0)
+  at 404213065 flicks the squares overlap: left (0.291457284580499, 0), right (-0.291457284580499, 0): expected [ …(50) ] to deeply equal []
+ × travel.test.ts > AC3 #494.32c3ee38 keys travel on arcs and spirals > AC3 #494.32c3ee38 a spiral of 90° from (0, 0) to (100, 0) u is at 0.5 × R(−45°)(100, 0) u at u = 0.5 within 1e-9, R counterclockwise on screen 12ms
+   → the spiral is at (35.35533905932738, 35.35533905932737) at u = 0.5 within 1e-9, got (50, 0): expected false to be true // Object.is equality
+ ✓ travel.test.ts > AC3 #494.32c3ee38 keys travel on arcs and spirals > AC3 #494.32c3ee38 an arc of 0.5° gives positions bit-identical to straight at 200 sampled times 75ms
+ × taste.test.ts > AC5 #494.862daf9a the screenshots, the recording of the arc and the two morphs, and the one taste call on them > AC5 #494.862daf9a the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS 3ms
+   → INCONCLUSIVE: the check run's pictures are not in docs/evidence/494/: arc.png, circle-star.png, formula-morph.png, arc-and-morphs.apng; this is not a pass
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  path-morph.test.ts > AC1 #494.e411da84 a path channel from a circle to a five-point star, matched at check > AC1 #494.e411da84 equals the circle at its first key and the star at its last within 0.01 u at 64 points, closed with one point count at every 60 fps frame between, each point the mix of its matched ends
+AssertionError: the circle-to-star channel is accepted: {"ok":false,"code":"bad_type","path":"channels/circle-to-star/type"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:157:64
+    155| /** An answer that accepted its document, with one frame per time, in …
+    156| export function accepted(answer: JsonObject, times: readonly number[],…
+    157|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    158|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    159|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:165:79
+ ❯ path-morph.test.ts:29:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  path-morph.test.ts > AC1 #494.e411da84 a path channel from a circle to a five-point star, matched at check > AC1 #494.e411da84 seeking equals playing: each frame alone reads the same path, bit for bit, as the frames played in order
+AssertionError: the play is accepted: {"ok":false,"code":"bad_type","path":"channels/circle-to-star/type"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:157:64
+    155| /** An answer that accepted its document, with one frame per time, in …
+    156| export function accepted(answer: JsonObject, times: readonly number[],…
+    157|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    158|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    159|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ path-morph.test.ts:61:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  path-morph.test.ts > AC1 #494.e411da84 a path channel from a circle to a five-point star, matched at check > AC1 #494.e411da84 with morph: strict the same keys are refused naming the channel, while strict keys of equal counts and the matched keys are accepted
+AssertionError: the keys under morph: match (the default) are accepted: {"ok":false,"code":"bad_type","path":"channels/circle-to-star/type"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ path-morph.test.ts:78:104
+     76|       { doc: doc({ morph: 'strict' }, bigger), times: [fl(0.5)] },
+     77|     ]);
+     78|     expect(matched!['ok'], `the keys under morph: match (the default) …
+       |                                                                                                        ^
+     79|     expect(strict!['ok'], `the same keys under morph: strict are refus…
+     80|     expect(mentions(strict, CHANNEL), `the refusal names the channel $…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  taste.test.ts > AC5 #494.862daf9a the screenshots, the recording of the arc and the two morphs, and the one taste call on them > AC5 #494.862daf9a the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: INCONCLUSIVE: the check run's pictures are not in docs/evidence/494/: arc.png, circle-star.png, formula-morph.png, arc-and-morphs.apng; this is not a pass
+ ❯ inconclusive helpers.ts:93:10
+     91| /** The criterion stays open, whatever the reason: never a pass (AGENT…
+     92| export function inconclusive(reason: string): never {
+     93|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     94| }
+     95|
+ ❯ taste.test.ts:23:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  travel.test.ts > AC3 #494.32c3ee38 keys travel on arcs and spirals > AC3 #494.32c3ee38 from (−2, 0) to (2, 0) an arc of 180° passes (0, 2) and one of −180° passes (0, −2) at u = 0.5, within 1e-9
+AssertionError: the arc of 180° is at (0, 2) at u = 0.5 within 1e-9, got (0, 0): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ travel.test.ts:50:122
+     48|       const [start, mid, end] = frames.map((f) => posOf(f, 'dot', `the…
+     49|       expect(within(start!, [-2, 0], 1e-9) && within(end!, [2, 0], 1e-…
+     50|       expect(within(mid!, want, 1e-9), `the arc of ${name} is at ${fmt…
+       |                                                                                                                          ^
+     51|     }
+     52|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  travel.test.ts > AC3 #494.32c3ee38 keys travel on arcs and spirals > AC3 #494.32c3ee38 two items swapped on arcs of 180°, and of −180°, never overlap at 200 sampled times, though swapped straight they do
+AssertionError: the swap at 180°:
+  at 265929648 flicks the squares overlap: left (-0.4924623129251702, 0), right (0.4924623129251702, 0)
+  at 269475377 flicks the squares overlap: left (-0.47236180839002273, 0), right (0.47236180839002273, 0)
+  at 273021106 flicks the squares overlap: left (-0.4522613038548753, 0), right (0.4522613038548753, 0)
+  at 276566834 flicks the squares overlap: left (-0.43216080498866205, 0), right (0.43216080498866205, 0)
+  at 280112563 flicks the squares overlap: left (-0.4120603004535148, 0), right (0.4120603004535148, 0)
+  at 283658291 flicks the squares overlap: left (-0.3919598015873016, 0), right (0.3919598015873016, 0)
+  at 287204020 flicks the squares overlap: left (-0.37185929705215415, 0), right (0.37185929705215415, 0)
+  at 290749749 flicks the squares overlap: left (-0.3517587925170067, 0), right (0.3517587925170067, 0)
+  at 294295477 flicks the squares overlap: left (-0.3316582936507937, 0), right (0.3316582936507937, 0)
+  at 297841206 flicks the squares overlap: left (-0.31155778911564624, 0), right (0.31155778911564624, 0)
+  at 301386935 flicks the squares overlap: left (-0.2914572845804988, 0), right (0.2914572845804988, 0)
+  at 304932663 flicks the squares overlap: left (-0.2713567857142858, 0), right (0.2713567857142858, 0)
+  at 308478392 flicks the squares overlap: left (-0.25125628117913834, 0), right (0.25125628117913834, 0)
+  at 312024121 flicks the squares overlap: left (-0.2311557766439909, 0), right (0.2311557766439909, 0)
+  at 315569849 flicks the squares overlap: left (-0.21105527777777788, 0), right (0.21105527777777788, 0)
+  at 319115578 flicks the squares overlap: left (-0.19095477324263044, 0), right (0.19095477324263044, 0)
+  at 322661307 flicks the squares overlap: left (-0.170854268707483, 0), right (0.170854268707483, 0)
+  at 326207035 flicks the squares overlap: left (-0.15075376984126976, 0), right (0.15075376984126976, 0)
+  at 329752764 flicks the squares overlap: left (-0.13065326530612253, 0), right (0.13065326530612253, 0)
+  at 333298492 flicks the squares overlap: left (-0.1105527664399093, 0), right (0.1105527664399093, 0)
+  at 336844221 flicks the squares overlap: left (-0.09045226190476185, 0), right (0.09045226190476185, 0)
+  at 340389950 flicks the squares overlap: left (-0.07035175736961441, 0), right (0.07035175736961441, 0)
+  at 343935678 flicks the squares overlap: left (-0.0502512585034014, 0), right (0.0502512585034014, 0)
+  at 347481407 flicks the squares overlap: left (-0.03015075396825395, 0), right (0.03015075396825395, 0)
+  at 351027136 flicks the squares overlap: left (-0.010050249433106506, 0), right (0.010050249433106506, 0)
+  at 354572864 flicks the squares overlap: left (0.010050249433106728, 0), right (-0.010050249433106728, 0)
+  at 358118593 flicks the squares overlap: left (0.03015075396825395, 0), right (-0.03015075396825395, 0)
+  at 361664322 flicks the squares overlap: left (0.050251258503401175, 0), right (-0.050251258503401175, 0)
+  at 365210050 flicks the squares overlap: left (0.07035175736961463, 0), right (-0.07035175736961463, 0)
+  at 368755779 flicks the squares overlap: left (0.09045226190476185, 0), right (-0.09045226190476185, 0)
+  at 372301508 flicks the squares overlap: left (0.11055276643990908, 0), right (-0.11055276643990908, 0)
+  at 375847236 flicks the squares overlap: left (0.13065326530612253, 0), right (-0.13065326530612253, 0)
+  at 379392965 flicks the squares overlap: left (0.15075376984126976, 0), right (-0.15075376984126976, 0)
+  at 382938693 flicks the squares overlap: left (0.17085426870748321, 0), right (-0.17085426870748321, 0)
+  at 386484422 flicks the squares overlap: left (0.19095477324263044, 0), right (-0.19095477324263044, 0)
+  at 390030151 flicks the squares overlap: left (0.21105527777777766, 0), right (-0.21105527777777766, 0)
+  at 393575879 flicks the squares overlap: left (0.23115577664399112, 0), right (-0.23115577664399112, 0)
+  at 397121608 flicks the squares overlap: left (0.25125628117913834, 0), right (-0.25125628117913834, 0)
+  at 400667337 flicks the squares overlap: left (0.27135678571428556, 0), right (-0.27135678571428556, 0)
+  at 404213065 flicks the squares overlap: left (0.291457284580499, 0), right (-0.291457284580499, 0): expected [ …(50) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at 265929648 flicks the squares overlap: left (-0.4924623129251702, 0), right (0.4924623129251702, 0)",
++   "at 269475377 flicks the squares overlap: left (-0.47236180839002273, 0), right (0.47236180839002273, 0)",
++   "at 273021106 flicks the squares overlap: left (-0.4522613038548753, 0), right (0.4522613038548753, 0)",
++   "at 276566834 flicks the squares overlap: left (-0.43216080498866205, 0), right (0.43216080498866205, 0)",
++   "at 280112563 flicks the squares overlap: left (-0.4120603004535148, 0), right (0.4120603004535148, 0)",
++   "at 283658291 flicks the squares overlap: left (-0.3919598015873016, 0), right (0.3919598015873016, 0)",
++   "at 287204020 flicks the squares overlap: left (-0.37185929705215415, 0), right (0.37185929705215415, 0)",
++   "at 290749749 flicks the squares overlap: left (-0.3517587925170067, 0), right (0.3517587925170067, 0)",
++   "at 294295477 flicks the squares overlap: left (-0.3316582936507937, 0), right (0.3316582936507937, 0)",
++   "at 297841206 flicks the squares overlap: left (-0.31155778911564624, 0), right (0.31155778911564624, 0)",
++   "at 301386935 flicks the squares overlap: left (-0.2914572845804988, 0), right (0.2914572845804988, 0)",
++   "at 304932663 flicks the squares overlap: left (-0.2713567857142858, 0), right (0.2713567857142858, 0)",
++   "at 308478392 flicks the squares overlap: left (-0.25125628117913834, 0), right (0.25125628117913834, 0)",
++   "at 312024121 flicks the squares overlap: left (-0.2311557766439909, 0), right (0.2311557766439909, 0)",
++   "at 315569849 flicks the squares overlap: left (-0.21105527777777788, 0), right (0.21105527777777788, 0)",
++   "at 319115578 flicks the squares overlap: left (-0.19095477324263044, 0), right (0.19095477324263044, 0)",
++   "at 322661307 flicks the squares overlap: left (-0.170854268707483, 0), right (0.170854268707483, 0)",
++   "at 326207035 flicks the squares overlap: left (-0.15075376984126976, 0), right (0.15075376984126976, 0)",
++   "at 329752764 flicks the squares overlap: left (-0.13065326530612253, 0), right (0.13065326530612253, 0)",
++   "at 333298492 flicks the squares overlap: left (-0.1105527664399093, 0), right (0.1105527664399093, 0)",
++   "at 336844221 flicks the squares overlap: left (-0.09045226190476185, 0), right (0.09045226190476185, 0)",
++   "at 340389950 flicks the squares overlap: left (-0.07035175736961441, 0), right (0.07035175736961441, 0)",
++   "at 343935678 flicks the squares overlap: left (-0.0502512585034014, 0), right (0.0502512585034014, 0)",
++   "at 347481407 flicks the squares overlap: left (-0.03015075396825395, 0), right (0.03015075396825395, 0)",
++   "at 351027136 flicks the squares overlap: left (-0.010050249433106506, 0), right (0.010050249433106506, 0)",
++   "at 354572864 flicks the squares overlap: left (0.010050249433106728, 0), right (-0.010050249433106728, 0)",
++   "at 358118593 flicks the squares overlap: left (0.03015075396825395, 0), right (-0.03015075396825395, 0)",
++   "at 361664322 flicks the squares overlap: left (0.050251258503401175, 0), right (-0.050251258503401175, 0)",
++   "at 365210050 flicks the squares overlap: left (0.07035175736961463, 0), right (-0.07035175736961463, 0)",
++   "at 368755779 flicks the squares overlap: left (0.09045226190476185, 0), right (-0.09045226190476185, 0)",
++   "at 372301508 flicks the squares overlap: left (0.11055276643990908, 0), right (-0.11055276643990908, 0)",
++   "at 375847236 flicks the squares overlap: left (0.13065326530612253, 0), right (-0.13065326530612253, 0)",
++   "at 379392965 flicks the squares overlap: left (0.15075376984126976, 0), right (-0.15075376984126976, 0)",
++   "at 382938693 flicks the squares overlap: left (0.17085426870748321, 0), right (-0.17085426870748321, 0)",
++   "at 386484422 flicks the squares overlap: left (0.19095477324263044, 0), right (-0.19095477324263044, 0)",
++   "at 390030151 flicks the squares overlap: left (0.21105527777777766, 0), right (-0.21105527777777766, 0)",
++   "at 393575879 flicks the squares overlap: left (0.23115577664399112, 0), right (-0.23115577664399112, 0)",
++   "at 397121608 flicks the squares overlap: left (0.25125628117913834, 0), right (-0.25125628117913834, 0)",
++   "at 400667337 flicks the squares overlap: left (0.27135678571428556, 0), right (-0.27135678571428556, 0)",
++   "at 404213065 flicks the squares overlap: left (0.291457284580499, 0), right (-0.291457284580499, 0)",
++   "at 407758794 flicks the squares overlap: left (0.31155778911564624, 0), right (-0.31155778911564624, 0)",
++   "at 411304523 flicks the squares overlap: left (0.33165829365079347, 0), right (-0.33165829365079347, 0)",
++   "at 414850251 flicks the squares overlap: left (0.3517587925170069, 0), right (-0.3517587925170069, 0)",
++   "at 418395980 flicks the squares overlap: left (0.37185929705215415, 0), right (-0.37185929705215415, 0)",
++   "at 421941709 flicks the squares overlap: left (0.39195980158730137, 0), right (-0.39195980158730137, 0)",
++   "at 425487437 flicks the squares overlap: left (0.4120603004535148, 0), right (-0.4120603004535148, 0)",
++   "at 429033166 flicks the squares overlap: left (0.43216080498866205, 0), right (-0.43216080498866205, 0)",
++   "at 432578894 flicks the squares overlap: left (0.45226130385487506, 0), right (-0.45226130385487506, 0)",
++   "at 436124623 flicks the squares overlap: left (0.47236180839002273, 0), right (-0.47236180839002273, 0)",
++   "at 439670352 flicks the squares overlap: left (0.49246231292516995, 0), right (-0.49246231292516995, 0)",
++ ]
+
+ ❯ none helpers.ts:84:73
+     82| /** No failures; the message lists them. */
+     83| export function none(failures: readonly string[], what: string): void {
+     84|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     85| }
+     86| /** A check that must fail on a planted program or a wrong fixture: at…
+ ❯ travel.test.ts:55:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  travel.test.ts > AC3 #494.32c3ee38 keys travel on arcs and spirals > AC3 #494.32c3ee38 a spiral of 90° from (0, 0) to (100, 0) u is at 0.5 × R(−45°)(100, 0) u at u = 0.5 within 1e-9, R counterclockwise on screen
+AssertionError: the spiral is at (35.35533905932738, 35.35533905932737) at u = 0.5 within 1e-9, got (50, 0): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ travel.test.ts:65:112
+     63|     const [start, mid, end] = accepted(answer!, [0, HALF, fl(1)], 'the…
+     64|     expect(within(start!, [0, 0], 1e-9) && within(end!, [100, 0], 1e-9…
+     65|     expect(within(mid!, want, 1e-9), `the spiral is at ${fmt(want)} at…
+       |                                                                                                                ^
+     66|   }, TIMEOUT);
+     67|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  7 failed | 1 passed (8)
+   Start at  09:34:57
+   Duration  123.95s (tests 100%)
+

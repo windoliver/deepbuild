@@ -12,6 +12,7 @@ import { chmodSync, createReadStream, existsSync, lstatSync, mkdirSync, mkdtempS
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+import { readFacts } from '@deepbuild/adapters';
 import type { Outcome } from '@deepbuild/budget';
 import type { JsonValue } from '@deepbuild/contracts';
 import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
@@ -70,7 +71,8 @@ const compare = (a: string, b: string): number => {
 
 /** What isn't data in an agent's facts: the flags that confine its job, and where it records its account. */
 interface AgentParts {
-  facts: URL;
+  /** Its facts file's name in the repo's adapters/ folder, read through @deepbuild/adapters. */
+  facts: string;
   /**
    * Added to the facts' read-only launch: the job's own MCP servers and nothing else, their tools allowed, read tools
    * only, and the sub-agents it may hand work to.
@@ -129,7 +131,7 @@ export function codexWindows(limits: unknown): Map<string, { used: number; reset
 
 const AGENTS: Partial<Record<Agent, AgentParts>> = {
   'claude-code': {
-    facts: new URL('../../../adapters/claude-code.facts.json', import.meta.url),
+    facts: 'claude-code.facts.json',
     writing: true,
     confine: (mcp, subagents, writes) => [
       '--mcp-config', JSON.stringify({ mcpServers: mcp }),
@@ -174,7 +176,7 @@ const AGENTS: Partial<Record<Agent, AgentParts>> = {
     },
   },
   codex: {
-    facts: new URL('../../../adapters/codex.facts.json', import.meta.url),
+    facts: 'codex.facts.json',
     // The MCP servers go on the command line, since the facts' launch ignores your config. Codex has no sub-agents to name.
     confine: (mcp, subagents) => {
       if (Object.keys(subagents).length) throw Error('a Codex job takes no sub-agents');
@@ -257,7 +259,7 @@ export function codexLogRefused(log: string): boolean {
 }
 
 AGENTS.pi = {
-  facts: new URL('../../../adapters/pi.facts.json', import.meta.url),
+  facts: 'pi.facts.json',
   // pi has no MCP and no sub-agents: a job that names them is refused, never run without them.
   confine: (mcp, subagents) => {
     if (Object.keys(mcp).length || Object.keys(subagents).length) throw Error('a pi job takes no MCP server and no sub-agent');
@@ -646,7 +648,7 @@ class LocalRunner implements Runner {
   private readonly factsCache = new Map<Agent, Facts>();
   private facts(agent: Agent): Facts {
     let facts = this.factsCache.get(agent);
-    if (!facts) this.factsCache.set(agent, (facts = JSON.parse(readFileSync(AGENTS[agent]!.facts, 'utf8')) as Facts));
+    if (!facts) this.factsCache.set(agent, (facts = readFacts<Facts>(AGENTS[agent]!.facts)));
     return facts;
   }
   private covers(facts: Facts, version: string): boolean {
