@@ -40,13 +40,12 @@ pub fn layout_no_cost() -> Module {
 
 /// The layout's ns per row and doubling, rows being its graph's nodes and edges: reading them,
 /// the ranks, the barycenter sweeps and the positions each pass over the rows, sorting them or
-/// finding them by ID (#1417). With its fixed part, a fit of `deep-graph layout`'s own time
-/// (`timed`) on layered graphs of 100 to 10,000 nodes, less the per-item term `costs.json` holds.
+/// finding them by ID (#1417). A fit of `deep-graph layout`'s own time (`timed`) on layered
+/// graphs of 100 to 10,000 nodes, where it reads 44 to 49 ns; what doesn't grow with the rows is
+/// the operator's per-item term in `costs.json`, which the bench fits apart from this.
 const NS_PER_ROW_DOUBLING: f64 = 46.0;
-const NS_PER_LAYOUT: f64 = 30_000.0;
 
-/// The layout's CPU time on an item on top of its per-item term, in ms: a fixed part and
-/// `rows · log2 rows`.
+/// The layout's CPU time on an item on top of its per-item term, in ms: `rows · log2 rows`.
 fn layout_cost(item: &Value) -> f64 {
     let count = |rows: &str| {
         item.pointer(&format!("/params/graph/{rows}"))
@@ -54,7 +53,7 @@ fn layout_cost(item: &Value) -> f64 {
             .map_or(0.0, |a| a.len() as f64)
     };
     let rows = count("nodes") + count("edges");
-    (NS_PER_LAYOUT + NS_PER_ROW_DOUBLING * rows * rows.max(2.0).log2()) / 1e6
+    NS_PER_ROW_DOUBLING * rows * rows.max(2.0).log2() / 1e6
 }
 
 fn manifest(implementation: &str) -> Manifest {
@@ -210,7 +209,7 @@ fn board() -> Value {
 }
 
 /// 600 steps in 30 ranks of 20, each fed from the step above it, on a board that allows 0.2 ms of
-/// CPU a frame: the layout's cost (about 0.6 ms) passes it, every other operator's stays under.
+/// CPU a frame: the layout's cost (about 0.55 ms) passes it, every other operator's stays under.
 fn over_budget_board() -> Value {
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
