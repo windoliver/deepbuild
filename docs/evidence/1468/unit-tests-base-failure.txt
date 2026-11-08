@@ -25,3 +25,21 @@ called `Result::unwrap_err()` on an `Ok` value: Num(1.0)
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 265 filtered out; finished in 0.00s
 error: test failed, to rerun pass `-p deep-canvas --lib`
+
+Review round 1's regressions, each run on 59cd7829 (the first fix) with only its test added:
+
+packs.rs: a recipe value past a cap read as text
+test document::packs::tests::a_recipe_value_past_a_cap_is_refused_not_read_as_text ... FAILED
+thread 'document::packs::tests::a_recipe_value_past_a_cap_is_refused_not_read_as_text' (524742) panicked at crates/deep-canvas/src/document/packs.rs:3161:63:
+called `Result::unwrap_err()` on an `Ok` value: String("((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((n))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))")
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 266 filtered out; finished in 0.00s
+
+expr.rs: a dotted name read with no bound (the 50 ms budget missed), then, with that fixed, a char after the refusal replacing it
+test expr::tests::a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows ... FAILED
+thread 'expr::tests::a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows' (544425) panicked at crates/deep-canvas/src/expr.rs:2742:9:
+255.184677ms
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 267 filtered out; finished in 0.28s
+test expr::tests::a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows ... FAILED
+thread 'expr::tests::a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows' (553073) panicked at crates/deep-canvas/src/expr.rs:2753:9:
+`((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((($`: unexpected `$`
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 267 filtered out; finished in 0.00s

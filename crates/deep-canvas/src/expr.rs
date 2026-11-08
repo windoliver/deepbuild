@@ -690,6 +690,11 @@ impl Parser<'_> {
 
     /// A new node, counted against the most the parse may make.
     fn node(&mut self, p: P) -> Result<P, Refusal> {
+        self.count()?;
+        Ok(p)
+    }
+
+    fn count(&mut self) -> Result<(), Refusal> {
         self.nodes += 1;
         if self.nodes > self.max_nodes {
             return Err(self.fail(format!(
@@ -697,7 +702,7 @@ impl Parser<'_> {
                 self.max_nodes, self.cap
             )));
         }
-        Ok(p)
+        Ok(())
     }
 
     fn expr(&mut self) -> Result<P, Refusal> {
@@ -853,7 +858,7 @@ impl Parser<'_> {
         loop {
             // `table` and `ease` name a pack's entry as `<pack>.<name>`.
             if (name == "table" || name == "ease") && args.is_empty() {
-                if let Some(n) = self.dotted() {
+                if let Some(n) = self.dotted()? {
                     args.push(self.node(P::Name(n))?);
                     if self.eat(",") {
                         continue;
@@ -876,11 +881,13 @@ impl Parser<'_> {
         Ok(args)
     }
 
-    /// A name with dots (`physics.drag`), if the next tokens are one followed by `,` or `)`.
-    fn dotted(&mut self) -> Option<String> {
-        let save = self.at;
+    /// A name with dots (`physics.drag`), if the next tokens are one followed by `,` or `)`. Each
+    /// part counts as a node while it reads, and is given back if it isn't one.
+    fn dotted(&mut self) -> Result<Option<String>, Refusal> {
+        let (save, nodes) = (self.at, self.nodes);
         let mut out = String::new();
         while let Some(Tok::Name(n)) = self.peek().cloned() {
+            self.count()?;
             out.push_str(&n);
             self.at += 1;
             if self.sym(".") {
@@ -891,10 +898,10 @@ impl Parser<'_> {
             break;
         }
         if !out.is_empty() && !out.ends_with('.') && (self.sym(",") || self.sym(")")) {
-            return Some(out);
+            return Ok(Some(out));
         }
-        self.at = save;
-        None
+        (self.at, self.nodes) = (save, nodes);
+        Ok(None)
     }
 }
 
@@ -1180,7 +1187,8 @@ impl Expr {
             cap,
         };
         let parsed = p.expr();
-        let trailing = p.peek().is_some();
+        // Past a refusal nothing more is read, so what follows it never replaces it.
+        let trailing = parsed.is_ok() && p.peek().is_some();
         if let Some(bad) = p.bad {
             return Err(bad);
         }
@@ -2730,5 +2738,19 @@ mod tests {
         assert_eq!(e.why, "unexpected `$`");
         let e = Expr::compile("1 2", &Nothing, 512).unwrap_err();
         assert_eq!(e.why, "trailing text after the expression");
+    }
+
+    #[test]
+    fn a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows() {
+        // A table's dotted name reads no further than the node bound lets it.
+        let long = format!("table({}a + 1)", "a.".repeat(1_000_000));
+        let t = std::time::Instant::now();
+        let e = Expr::compile(&long, &Nothing, 512).unwrap_err();
+        assert!(e.why.contains("twice the cap of 512"), "{e}");
+        assert!(t.elapsed().as_millis() < 50, "{:?}", t.elapsed());
+        // A refusal for the cap stands, whatever char comes after where it stopped.
+        let deep = format!("{}$", "(".repeat(65));
+        let e = Expr::compile(&deep, &Nothing, 512).unwrap_err();
+        assert!(e.why.contains("the cap of 64 levels"), "{e}");
     }
 }

@@ -2354,6 +2354,8 @@ enum Form {
     Expr(Expr),
     /// A number, a bool, null, or text the grammar doesn't read (`"a b"`, `"#fff"`).
     Literal,
+    /// Text the grammar refuses for one of its caps, never a literal: evaluating it fails.
+    Refused(String),
     List(Vec<Template>),
     Map(Vec<(String, Template)>),
     /// `{"repeat": {count | over, as, let?, of}}`: a list of `of`, once per index (or element),
@@ -2408,18 +2410,41 @@ impl ListRepeat {
     }
 }
 
+/// What every refusal for one of the grammar's caps says, so a capped text is never a literal.
+const CAPPED: &str = "past the cap of";
+
+/// A cap's refusal of a repeat's `count`, `over` or `let` text, if one has it.
+fn capped_in(r: &Value) -> Option<String> {
+    let o = r.as_object()?;
+    let lets = o
+        .get("let")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    o.get("count")
+        .into_iter()
+        .chain(o.get("over"))
+        .chain(lets.map(|(_, v)| v))
+        .filter_map(Value::as_str)
+        .find_map(|t| Expr::parse(t).err().filter(|e| e.contains(CAPPED)))
+}
+
 impl Template {
     pub fn of(value: &Value) -> Template {
         let form = match value {
             Value::String(text) => match Expr::parse(text) {
                 Ok(expr) => Form::Expr(expr),
+                Err(e) if e.contains(CAPPED) => Form::Refused(e),
                 Err(_) => Form::Literal,
             },
             Value::Array(list) => Form::List(list.iter().map(Template::of).collect()),
             Value::Object(map) => match map.get("repeat").filter(|_| map.len() == 1) {
                 Some(r) => match ListRepeat::of(r) {
                     Some(r) => Form::Repeat(Box::new(r)),
-                    None => Form::Literal,
+                    None => match capped_in(r) {
+                        Some(e) => Form::Refused(e),
+                        None => Form::Literal,
+                    },
                 },
                 None => Form::Map(
                     map.iter()
@@ -2458,7 +2483,7 @@ impl Template {
     fn walk(&self, bound: &mut Vec<String>, out: &mut Vec<String>, words: &mut Vec<String>) {
         match &self.form {
             Form::Expr(e) => e.free(bound, out, words),
-            Form::Literal => {}
+            Form::Literal | Form::Refused(_) => {}
             Form::List(l) => l.iter().for_each(|t| t.walk(bound, out, words)),
             Form::Map(m) => m.iter().for_each(|(_, t)| t.walk(bound, out, words)),
             Form::Repeat(r) => {
@@ -2485,6 +2510,7 @@ impl Template {
             }
             Form::Expr(expr) => expr.value(scope),
             Form::Literal => Ok(self.source.clone()),
+            Form::Refused(e) => Err(e.clone()),
             Form::List(list) => list
                 .iter()
                 .map(|t| t.eval(scope))
@@ -2846,7 +2872,7 @@ fn tokenize(text: &str) -> Result<Vec<String>, String> {
     let mut i = 0;
     while i < chars.len() {
         if out.len() == MAX_TOKENS {
-            return Err(format!("takes more than the cap of {MAX_TOKENS} tokens"));
+            return Err(format!("runs past the cap of {MAX_TOKENS} tokens"));
         }
         let c = chars[i];
         let next = chars.get(i + 1).copied();
@@ -3136,7 +3162,14 @@ mod tests {
     #[test]
     fn a_recipe_expression_nests_at_most_64_levels_and_takes_at_most_1024_tokens() {
         // Each opener completes to a valid expression; 64 levels parse, 65 are refused.
-        let forms = [("(", ")"), ("-", ""), ("!", ""), ("abs(", ")"), ("i ? 1 : ", ""), ("a[", "]")];
+        let forms = [
+            ("(", ")"),
+            ("-", ""),
+            ("!", ""),
+            ("abs(", ")"),
+            ("i ? 1 : ", ""),
+            ("a[", "]"),
+        ];
         for (open, close) in forms {
             let at = |n: usize| format!("{}1{}", open.repeat(n), close.repeat(n));
             assert!(Expr::parse(&at(64)).is_ok(), "{open}");
@@ -3150,6 +3183,20 @@ mod tests {
         assert!(postfix(&chain(511)).is_ok());
         let e = postfix(&chain(100_000)).unwrap_err();
         assert!(e.contains("the cap of 1024 tokens"), "{e}");
+    }
+
+    #[test]
+    fn a_recipe_value_past_a_cap_is_refused_not_read_as_text() {
+        // Text the grammar doesn't read is a literal, but text it refuses for a cap never is.
+        let deep = format!("{}n{}", "(".repeat(70), ")".repeat(70));
+        let long = format!("{}1", "n+".repeat(600));
+        for text in [deep.clone(), long.clone()] {
+            let e = Template::of(&json!(text)).eval(&scope()).unwrap_err();
+            assert!(e.contains("past the cap of"), "{e}");
+            let repeat = json!({"repeat": {"count": text, "as": "j", "of": "j"}});
+            let e = Template::of(&repeat).eval(&scope()).unwrap_err();
+            assert!(e.contains("past the cap of"), "{e}");
+        }
     }
 
     #[test]
