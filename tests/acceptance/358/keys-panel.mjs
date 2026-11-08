@@ -39,9 +39,7 @@ export const rowText = (v, k, rebuild) => `${k} ${(rebuild * v.salt) % v.prime}`
 export function writePanel(v) {
   const dir = mkdtempSync(join(tmpdir(), 'deep-358-keys-'));
   writeFileSync(join(dir, 'gpui-shell.json'), JSON.stringify({ id: `dev.deepbuild.keys.${v.root}`, name: 'Keys', version: '1.0.0', entry: 'main.js' }));
-  writeFileSync(join(dir, 'main.js'), `import { View, div } from "gpui-kit";
-import { v_flex, InputState, Input } from "gpui-base";
-import { rebuild_count, fold } from "deepbuild";
+  writeFileSync(join(dir, 'main.js'), `import { View, div, v_flex, InputState, Input, rebuild_count, fold } from "@deepbuild/panel";
 
 const V = ${JSON.stringify(v)};
 

@@ -1,7 +1,5 @@
 // Issue #338, a planted fault: the view caps the list at 20 rows. The kit names the 21st.
-import { View, div } from "gpui-kit";
-import { DockArea, v_flex } from "gpui-base";
-import { needs_you } from "deepbuild";
+import { View, div, DockArea, v_flex, needs_you } from "@deepbuild/panel";
 
 class NeedsYou extends View {
   init() {
