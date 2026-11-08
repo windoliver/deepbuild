@@ -2369,6 +2369,9 @@ pub(crate) fn resolve(
     }
     match fields.as_slice() {
         [] | ["params"] | ["at"] => Ok(()),
+        // #494: what a path or a vector import draws is a path channel's target (Channel and
+        // key: path).
+        ["path"] if matches!(kind_text(target), Some("path@1" | "vector@1")) => Ok(()),
         // A step inside a param, such as a camera's `orbit/azimuth`, must reach a value the item
         // holds: no kind gives a param's parts a schema in this slice.
         ["params", name, rest @ ..] if !rest.is_empty() => {

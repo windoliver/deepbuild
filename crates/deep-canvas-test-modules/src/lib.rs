@@ -664,14 +664,34 @@ fn register_test_gpu(r: &mut Registrar) {
         "",
     );
     r.kind(kind("test", "burn", vec![json_param("loops")]), &[], "");
+    // #1413: a labeled buffer and a labeled pipeline, each built as its revision latches.
+    r.kind(
+        kind(
+            "test",
+            "alloc",
+            vec![
+                str_param("label", ""),
+                json_param("bytes"),
+                json_param("uses"),
+            ],
+        ),
+        &[],
+        "",
+    );
+    r.kind(
+        kind("test", "pipeline", vec![str_param("label", "")]),
+        &[],
+        "",
+    );
     r.pass(TEST_GPU_DRAW, "geometry");
     r.pass(TEST_BURN, "effects");
 }
 
 /// `test.gpu` (issue #379, tests/acceptance/379/README.md: The test canvas module): a texture
 /// with its whole mip chain and a generated mesh, each a result keyed by its content key, and
-/// `test.burn`, an effect whose fragment loops `loops` times per pixel. Only `deep-gpu`'s
-/// `test-meter` build holds it.
+/// `test.burn`, an effect whose fragment loops `loops` times per pixel; and `test.alloc` and
+/// `test.pipeline` (#1413), a labeled buffer and pipeline built as a revision latches. Only
+/// `deep-gpu`'s `test-meter` build holds it.
 pub fn test_gpu() -> Module {
     Module {
         manifest: manifest("test.gpu", &[]),

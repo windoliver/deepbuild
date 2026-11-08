@@ -326,7 +326,7 @@ pub fn lower(
 }
 
 /// A vector item's whole outline in its own units (its `at` left out), every path at full
-/// write, and the role its first painted path maps to: what a frame draws it as when the
+/// write, each part's outline by its id, and the role its first painted path maps to: what a frame draws it as when the
 /// evidence store's holder inlines it (#1162).
 pub fn outline(svg: &Svg, item: &Value, colors: &BTreeMap<Color, String>) -> Value {
     let mut local = item.clone();
@@ -345,7 +345,9 @@ pub fn outline(svg: &Svg, item: &Value, colors: &BTreeMap<Color, String>) -> Val
         .find_map(|p| p.fill.map(|f| f.color).or(p.stroke.as_ref().map(|s| s.paint.color)))
         .and_then(|c| colors.get(&c))
         .map_or("ink", String::as_str);
-    json!({"d": d_of(&verbs), "role": role})
+    // #494: each part's outline too, so a path key `{of: ID#part}` and a match morph read it.
+    let parts: Map<String, Value> = parts(svg, &local).into_iter().map(|(id, _, verbs)| (id, json!(d_of(&verbs)))).collect();
+    json!({"d": d_of(&verbs), "role": role, "parts": parts})
 }
 
 /// What one path draws: its outline, and its fill and stroke as `(role, opacity[, width])`.
