@@ -66,8 +66,11 @@ starts or stops anything in the person's own:
    where there is no Keychain).
 
 The hub is stopped (AC4's removal) by SIGTERM to the unit's `MainPID`, by PID. Teardown sends the manager SIGTERM
-(a user manager then starts `exit.target`, stopping the hub's unit), stops the keyring by PID, then SIGKILLs by PID
-anything left in the manager's scope cgroup.
+(a user manager then starts `exit.target`, stopping the hub's unit), stops the keyring by PID, SIGKILLs by PID anything
+left in the manager's scope cgroup, and waits for all of it to exit. Then, as the same user and without sudo, it makes
+every folder under the temp folder enterable and writable (the manager leaves systemd's `inaccessible` nodes in
+`<tmp>/run/systemd/` with mode 000) and removes `<tmp>/run`; the suite's own cleanup then removes the rest, and runs
+even when the teardown fails. A teardown that can't stop a process or remove the folder fails the file, naming it.
 
 ## Assumed surfaces
 
