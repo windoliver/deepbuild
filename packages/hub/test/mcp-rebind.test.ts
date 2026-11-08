@@ -93,4 +93,44 @@ describe('a deep mcp whose session /clear rotated', () => {
       }
     });
   }, 60_000);
+
+  it('refuses, naming it, a call for its session once that session ended with no successor here and was resumed in another process', async () => {
+    await withHub(async (root, home) => {
+      const work = join(home, 'work');
+      const projects = join(home, '.claude', 'projects', work.replace(/[^a-zA-Z0-9]/g, '-'));
+      mkdirSync(work, { recursive: true });
+      mkdirSync(projects, { recursive: true });
+      const hook = (session: string, event: string, extra: Record<string, unknown> = {}, ppid = process.pid) => {
+        const transcript = join(projects, `${session}.jsonl`);
+        writeFileSync(transcript, '', { flag: 'a' });
+        return send(join(root, 'hub.sock'), hookLine(ulid(Date.now()), event, { session_id: session, transcript_path: transcript, cwd: work, hook_event_name: event, ...extra }, { ppid }));
+      };
+      const a = '1632cccc-0000-4000-8000-000000000001';
+      await hook(a, 'SessionStart', { source: 'startup' });
+      const client = mcp(home, work, false);
+      const other = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { argv0: join(home, 'versions', 'claude'), stdio: 'ignore' });
+      try {
+        await client.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } });
+        expect((await client.call('deep_status', {})).value?.session, 'the deep mcp binds to A at its hello').toBe(a);
+        // An in-process `/resume` of another session ends A, not by `clear`; then `claude --resume <A>` takes A into another process.
+        await hook(a, 'SessionEnd', { reason: 'resume' });
+        await hook(a, 'SessionStart', { source: 'resume' }, other.pid);
+        const args = { task_ref: 'task:01K74G0A1B2C3D4E5F6G7H8J9K', attempt: 1, commit: '0'.repeat(40), scope: 'session', predictions: null };
+        const refused = await client.call('deep_claim', args);
+        expect(refused.isError, `A runs in another process now: ${JSON.stringify(refused.value)}`).toBe(true);
+        expect(refused.value?.code).toBe('unbound');
+        expect(String(refused.value?.remediation), 'the refusal names A').toContain(a);
+        await new Promise((r) => setTimeout(r, 300));
+        const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+        try {
+          expect(db.prepare("SELECT session_id FROM events WHERE kind = 'claim.made'").all(), 'nothing is claimed for A').toEqual([]);
+        } finally {
+          db.close();
+        }
+      } finally {
+        other.kill();
+        client.close();
+      }
+    });
+  }, 60_000);
 });
