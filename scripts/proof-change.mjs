@@ -250,16 +250,16 @@ export const tagsWithImports = (root, rev, path) => [...new Set([...testImports(
  * ($DEEP_APPROVERS, else ~/.deepbuild/approvers) lists, with one `Approves: <item>` line per item.
  * Nothing in the change itself can make one: it needs the maintainer's private key. The signature is
  * checked with ssh-keygen itself, never through git verify-tag, whose verifier the repository's own
- * config could replace.
+ * config could replace. A tag under refs/tags/deep/gate/<n>/, signed by a key the gates file
+ * ($DEEP_GATES, else ~/.deepbuild/gates) lists, approves only files of the issue's own test folder.
  */
-export function readApprovals(root, change) {
+export function readApprovals(root, change, issue) {
   const approvals = new Map();
-  const approvers = resolve(process.env.DEEP_APPROVERS || join(homedir(), '.deepbuild', 'approvers'));
-  if (!existsSync(approvers)) return approvals;
   const shas = new Set(change.commits.map(({ sha }) => sha).filter(Boolean));
   const directory = mkdtempSync(join(tmpdir(), 'deep-proof-approval-'));
-  try {
-    for (const row of git(root, ['for-each-ref', '--format=%(refname)%09%(objecttype)%09%(*objectname)', 'refs/tags/deep/approved/']).split('\n').filter(Boolean)) {
+  const read = (signers, refs, keep) => {
+    if (!existsSync(signers)) return;
+    for (const row of git(root, ['for-each-ref', '--format=%(refname)%09%(objecttype)%09%(*objectname)', refs]).split('\n').filter(Boolean)) {
       const [ref, type, target] = row.split('\t');
       if (type !== 'tag' || !shas.has(target)) continue;
       const tag = git(root, ['cat-file', 'tag', ref]);
@@ -267,13 +267,18 @@ export function readApprovals(root, change) {
       if (at < 0 || !tag.trimEnd().endsWith('-----END SSH SIGNATURE-----')) continue;
       const signature = join(directory, 'signature');
       writeFileSync(signature, tag.slice(at));
-      const ssh = (args, input) => spawnSync('ssh-keygen', ['-Y', ...args, '-f', approvers, '-s', signature], { input, encoding: 'utf8' });
+      const ssh = (args, input) => spawnSync('ssh-keygen', ['-Y', ...args, '-f', signers, '-s', signature], { input, encoding: 'utf8' });
       const principal = ssh(['find-principals']).stdout?.split('\n')[0]?.trim();
       if (!principal || ssh(['verify', '-n', 'git', '-I', principal], tag.slice(0, at)).status !== 0) continue;
       const message = tag.slice(0, at).split('\n\n').slice(1).join('\n\n');
-      const items = [...message.matchAll(/^Approves: (.+?)\s*$/gm)].map(([, item]) => item);
+      const items = [...message.matchAll(/^Approves: (.+?)\s*$/gm)].map(([, item]) => item).filter(keep);
       approvals.set(target, [...(approvals.get(target) ?? []), ...items]);
     }
+  };
+  try {
+    read(resolve(process.env.DEEP_APPROVERS || join(homedir(), '.deepbuild', 'approvers')), 'refs/tags/deep/approved/', () => true);
+    // The gate identity's swap of a disputed blind test (#1328): in place of a person's signature for that folder alone.
+    if (issue?.number) read(resolve(process.env.DEEP_GATES || join(homedir(), '.deepbuild', 'gates')), `refs/tags/deep/gate/${issue.number}/`, (item) => item.startsWith(`tests/acceptance/${issue.number}/`));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

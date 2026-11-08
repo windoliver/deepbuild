@@ -117,6 +117,28 @@ impl Drawn {
         out
     }
 
+    /// #464: the same draw list with only the marks whose item `keep` takes: a print look's base
+    /// frame without its inks, or one ink's coverage.
+    pub fn only(&self, keep: impl Fn(&str) -> bool) -> Drawn {
+        let mut frame = self.frame.clone();
+        for l in &mut frame.layers {
+            l.marks = (&l.marks)
+                .into_iter()
+                .filter(|m| keep(m.mark.item()))
+                .cloned()
+                .collect();
+        }
+        Drawn {
+            frame,
+            boxes: self.boxes.clone(),
+            status: self.status.clone(),
+            images: self.images.clone(),
+            runs: self.runs.clone(),
+            animated: self.animated.clone(),
+            view: self.view,
+        }
+    }
+
     /// Each item's box in the document's units, from its marks, in draw order.
     pub fn boxes(&self) -> Vec<(String, [f64; 4])> {
         let mut out: Vec<(String, [f64; 4])> = Vec::new();

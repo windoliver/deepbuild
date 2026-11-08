@@ -1,0 +1,63 @@
+Base run of the #1537 acceptance tests, on base commit a4d2c5d4 (main), Node 24.22.0, vitest 5.0.5, macOS, after
+`npm ci`, `npm run build --workspaces` and `cargo build --locked -q -p deep-hook`, from the worktree root:
+
+  npx vitest run tests/acceptance/1537 --testTimeout=600000 --no-file-parallelism
+
+ Test Files  5 failed | 1 passed (6)
+      Tests  5 failed | 1 passed (6)
+   Duration  171.64s
+
+What the base does: every run of a claim is a command check. A claim that opens PR 21 is judged on its spec check
+and R1's drafted check alone and passes; the runner records no review job, so the fake reviewer is never called. A
+number the claim states is never re-run. A drafted check file holding a document check's spec is never run as one:
+the claim is INVALID with no run of it. The hub serves no `checks.kinds` and knows no plant `kind-without-route`.
+In every hub test the setup held: the definition locked, and the spec's unit check and R1's drafted check passed on
+the claim (R1's check failing only on the merge base, which proves the fix).
+
+review.test.ts (AC1 #1537.efe493fd)
+  x Error: AC1 #1537.efe493fd claim:01M6VQF4MAVMKY0KWPPNRZ5S0Q opened PR 21 with green commands and the planted bug
+    at src/auth.js:4; the session must get one send-back naming src/auth.js:4, and 0 did (the stop's reply:
+    {"systemMessage":"https://github.com/acme/shop/pull/21 · Part of · PASS 1/1 · 2 tests · next: you · receipt"} /
+    the next prompt's reply: {"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"DeepBuild:
+    PASS 1/1 · 2 tests · next: you · receipt"}} ). Review jobs the runner recorded: 0. Verdicts on
+    claim:01M6VQF4MAVMKY0KWPPNRZ5S0Q: PASS {"outcome":"PASS", ... "reasons":[".deepbuild/checks/expired-token.sh: PASS
+    on 1 clean run","unit: PASS on 1 clean run"] ...}
+  (At review.test.ts:48, the one-send-back assertion. The same claim passes on the base, and the failure names it.)
+
+numbers.test.ts (AC2 #1537.cc546fc7)
+  x Error: AC2 #1537.cc546fc7 claim:01M6VQE54P8GVG285466M5EXCJ states "the suite has 412 tests" while SELECT
+    count(*) FROM tests on data/suite.db counts 398, so it is never PASS: PASS {"outcome":"PASS", ... "reasons":
+    [".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run"] ...}
+  (At numbers.test.ts:47, the never-PASS assertion: on the base the claim passes.)
+
+document.test.ts (AC3 #1537.59bd30dc)
+  x Error: AC3 #1537.59bd30dc the document check ran on claim:01M6VQHPJFPBEWNGCJKW5D678Q: its verdict or the stop's
+    reply names the number 1,250 that doesn't match sources/q3.json (as #68 states). Verdicts: INVALID {"outcome":
+    "INVALID", ... "reasons":[".deepbuild/checks/q3-report.json: has no run on the merge base, so nothing proves the
+    fix"], "requirements":[{... "check":".deepbuild/checks/q3-report.json", "runs":{"clean":0,"needed":1,
+    "counted":[]} ...}] ...}; the stop's reply: {"systemMessage":"not verified: R1 · INVALID 0/1 · next: agent ·
+    receipt"}
+  (At document.test.ts:51. The never-PASS assertion before it holds on the base, for another reason: the document
+  check never runs, so the claim is INVALID. The naming assertion is what fails.)
+
+no-model.test.ts (AC4 #1537.930e77d5)
+  x Error: AC4 #1537.930e77d5 claim:01M6VQG44X7C0K5AD2KXENX30P needs a review and no second model is free (the
+    window at your reserve), so it is never PASS: PASS {"outcome":"PASS", ... "reasons":
+    [".deepbuild/checks/expired-token.sh: PASS on 1 clean run","unit: PASS on 1 clean run"] ...}
+  (At no-model.test.ts:41, the never-PASS assertion.)
+
+no-jobs.test.ts (AC5 #1537.70369576)
+  ✓ passes on the base: it starts no review job and runs only the command checks. Its wrong program is a hub that
+    reviews every claim, or runs a numbers check on a claim with no number; none exists at the base, and none was run.
+
+reach.test.ts (AC6 #1537.552d1d30)
+  x Error: AC6 #1537.552d1d30 on the real hub every shipped kind is held with a route into a gate run, and every held
+    kind has one: checks.kinds refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no
+    method checks.kinds.","path":"/method","actual":"checks.kinds","evidence":[]}
+  (At reach.test.ts:26: the surface the reach test reads doesn't exist at the base, so it fails before it can name
+  a kind; the planted half was not reached.)
+
+Two earlier runs of this suite, while it was being written, failed in setup and were fixed in the suite itself
+(#322's `node -e` drafted check counts no tests and ran nothing; the merge-base run of R1's check was counted as the
+claim's; a number cited in backticks was read by the validity gate as an unmade run). The run above is the one after
+those fixes.

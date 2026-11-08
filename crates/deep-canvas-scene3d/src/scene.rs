@@ -656,6 +656,9 @@ pub struct Scene {
     /// Motion blur by velocity this frame (#419): the evaluations at t ± half the shutter that the
     /// renderer's velocity target reads, or `None`.
     pub motion: Option<Arc<Motion>>,
+    /// The core's velocity target this frame (#431): the evaluations at t ± half the shutter an
+    /// effect or operator reading it is drawn from, or `None` where nothing reads it.
+    pub velocity: Option<Arc<Motion>>,
     /// Each `overlay.text@1` readout (#419): drawn by the view after the frame's samples and
     /// motion blur resolve, over the frame, never into the frame itself.
     pub readouts: Vec<Label>,
@@ -680,6 +683,8 @@ pub struct Scene {
     pub shadowing: crate::light::Shadowing,
     /// Under samples per frame, the angle this sample turns a soft shadow's disk by (#446).
     pub sample_turn: Option<f64>,
+    /// #464: what the look's print finish draws from at this frame's t and the document's seed.
+    pub print: deep_canvas_marks::print::Frame,
 }
 
 impl Scene {
@@ -2826,6 +2831,7 @@ pub(crate) fn evaluate_compiled(
         curves,
         pages: labels.pages(),
         motion: None,
+        velocity: None,
         readouts,
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
@@ -2834,6 +2840,12 @@ pub(crate) fn evaluate_compiled(
         distributions: tables,
         shadowing: crate::sets::policy(map)?,
         sample_turn: None,
+        print: deep_canvas_marks::print::frame(
+            &look.print,
+            map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32,
+            t,
+            false,
+        ),
     };
     scene.set_cutaway(cutaway);
     Ok(scene)
