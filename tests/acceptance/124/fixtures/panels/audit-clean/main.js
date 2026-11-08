@@ -1,8 +1,7 @@
 // Issue #124's clean audit panel (tests/acceptance/124/README.md, Fixtures): everything the UI check audits, done
 // right, with the marks of ../audit-marks/main.js put right. An icon-only button named "Close", a text button that
 // needs no name of its own, and a line of words.
-import { View, div, svg } from "gpui-kit";
-import { v_flex, Button } from "gpui-base";
+import { View, div, svg, v_flex, Button } from "@deepbuild/panel";
 import { SAVE } from "./words.js";
 
 export default class AuditClean extends View {
