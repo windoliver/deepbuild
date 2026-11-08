@@ -453,6 +453,8 @@ impl Replica {
                 center: vec![center],
                 ..Layout::shipped("needs-you")
             };
+            // #124's wrong rows exist in an env-plants build only (#1662), as the plant that selects them does.
+            #[cfg(feature = "env-plants")]
             deep_app::views::plant_row(match plant {
                 Some(Plant::RowLabelPastFrame) => Some(deep_app::views::RowPlant::PastFrame),
                 Some(Plant::RowBranchCutOff) => Some(deep_app::views::RowPlant::CutOff),
