@@ -117,6 +117,20 @@ try {
     if (!reply.result?.process) throw Error(`BLOCKED: hub.health reports no process readings: ${JSON.stringify(reply.error ?? reply.result)}`);
     return reply.result.process;
   };
+  /**
+   * A reading once the hub has settled from the last round, its queued hooks handled: what it holds, not what a hook
+   * in hand holds for a moment. Two readings 500 ms apart that agree on open files and children, or the last in 40 s.
+   */
+  const settled = async () => {
+    let prev = await reading();
+    for (const t0 = Date.now(); Date.now() - t0 < 40_000;) {
+      await sleep(500);
+      const next = await reading();
+      if (next.openFiles === prev.openFiles && next.children === prev.children) return next;
+      prev = next;
+    }
+    return prev;
+  };
 
   let seq = BigInt(Date.now()) * 1_000_000n;
   const fire = async (session, event, extra = {}) => {
@@ -146,13 +160,11 @@ try {
     await round(n++);
     if (Date.now() < nextSample) continue;
     // Read between rounds, with no hook connection of a round still open.
-    await sleep(200);
-    last = await reading();
+    last = await settled();
     if (!baseline && Date.now() - start >= duration / 8) baseline = last;
     nextSample = Date.now() + sample;
   }
-  await sleep(200);
-  last = await reading();
+  last = await settled();
   baseline ??= last;
   const reasons = METRICS.filter((m) => last[m] > baseline[m] * (1 + GROWTH)).map((m) => `${m} grew from ${baseline[m]} to ${last[m]}, more than ${GROWTH * 100}% over its level after the first eighth of the run`);
   const verdict = reasons.length ? 'FAIL' : 'PASS';
