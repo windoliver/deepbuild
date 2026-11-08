@@ -64,6 +64,50 @@ impl Gpu3 {
         Ok((bytes, scene))
     }
 
+    /// #427: `doc` at `t` on a frame of `size`, its `mesh.asset@1` items read from `assets`: the
+    /// evaluated scene a diagnostic mode reads and draws, and the look it draws in.
+    pub fn evaluate(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        palette: &Palette,
+        size: [u16; 2],
+        assets: deep_canvas_scene3d::scene::Assets<'_>,
+    ) -> Result<(Scene, Look3), Unfit> {
+        let mut doc = doc.clone();
+        if let Some(d) = doc.as_object_mut() {
+            d.insert("size".into(), json!(size));
+        }
+        let look = Look3::from_roles(palette.clone());
+        let scene = deep_canvas_scene3d::scene::evaluate_with(&doc, t, &look, &mut self.labels, assets)
+            .map_err(|r| Unfit {
+                code: r.code,
+                path: r.path,
+            })?;
+        Ok((scene, look))
+    }
+
+    /// #427: an evaluated scene drawn offscreen in a diagnostic view: straight RGBA, rows
+    /// top-down, never on a live surface.
+    pub fn render(
+        &mut self,
+        scene: &Scene,
+        look: &Look3,
+        diag: &deep_scene3d_render::Diag,
+    ) -> Option<(Vec<u8>, deep_scene3d_render::DiagCounts)> {
+        let (mut bytes, counts) = deep_scene3d_render::draw_offscreen_diag(
+            &self.device,
+            &mut self.renderer,
+            scene,
+            look,
+            diag,
+        )?;
+        for p in bytes.as_chunks_mut::<4>().0 {
+            p.swap(0, 2);
+        }
+        Some((bytes, counts))
+    }
+
     /// #464: a 2D frame through the look's print finish on this machine's GPU: `base` (RGBA over
     /// the ground) and each separation's coverage (RGBA, its alpha) in, the printed RGBA out.
     pub fn print(
