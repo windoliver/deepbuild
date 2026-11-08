@@ -15,6 +15,9 @@ use crate::chrome;
 
 actions!(deepbuild, [OpenCommands]);
 
+/// How tall ⌘K's list grows before it scrolls.
+const LIST_HEIGHT: f32 = 320.;
+
 /// ⌘K opens the list wherever focus is in the app.
 pub fn init(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("cmd-k", OpenCommands, None)]);
@@ -95,6 +98,11 @@ pub enum Entry {
         name: String,
         action: String,
     },
+    /// A page the app ships, by its panel's name (#1454).
+    Shipped {
+        name: String,
+        panel: &'static str,
+    },
     Page {
         name: String,
         panel: PathBuf,
@@ -108,7 +116,9 @@ impl Entry {
     /// What ⌘K shows: a command's name, or `<page>: <value>`.
     pub fn name(&self) -> &str {
         match self {
-            Entry::Command { name, .. } | Entry::Page { name, .. } => name,
+            Entry::Command { name, .. }
+            | Entry::Page { name, .. }
+            | Entry::Shipped { name, .. } => name,
         }
     }
 
@@ -118,7 +128,7 @@ impl Entry {
             Entry::Page {
                 page, param, value, ..
             } => Some(json!({"name": page, "params": {param: value}})),
-            Entry::Command { .. } => None,
+            Entry::Command { .. } | Entry::Shipped { .. } => None,
         }
     }
 }
@@ -241,6 +251,12 @@ impl Palette {
         }
     }
 
+    /// What it lists from now on (#1454): the app learns its entries from the hub.
+    pub fn set_entries(&mut self, entries: Vec<Entry>, cx: &mut Context<Self>) {
+        self.entries = entries;
+        cx.notify();
+    }
+
     /// Shows it with an empty query, its input focused; `back` takes focus again once it hides.
     pub fn show(&mut self, back: FocusHandle, window: &mut Window, cx: &mut Context<Self>) {
         self.shown = true;
@@ -296,6 +312,7 @@ impl Render for Palette {
             .child(
                 div()
                     .w(px(480.))
+                    .flex_none()
                     .p_2()
                     .flex()
                     .flex_col()
@@ -305,13 +322,16 @@ impl Render for Palette {
                     .border_color(chrome.divider)
                     .rounded_md()
                     .text_color(chrome.ink_primary)
-                    .child(Input::new(&self.query))
+                    .child(div().flex_none().h(px(32.)).child(Input::new(&self.query)))
                     .child(
                         div()
                             .id("command-list")
                             .test_support()
                             .role(Role::ListBox)
                             .aria_label("Commands and pages")
+                            .flex_none()
+                            .max_h(px(LIST_HEIGHT))
+                            .overflow_y_scroll()
                             .flex()
                             .flex_col()
                             .children(ranked.into_iter().enumerate().map(|(at, entry)| {

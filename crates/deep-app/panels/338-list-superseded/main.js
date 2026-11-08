@@ -1,8 +1,6 @@
 // Issue #338, a planted fault: the view still lists an ask a newer one superseded. The kit
 // names it.
-import { View, div } from "gpui-kit";
-import { DockArea, v_flex } from "gpui-base";
-import { needs_you } from "deepbuild";
+import { View, div, DockArea, v_flex, needs_you } from "@deepbuild/panel";
 
 class NeedsYou extends View {
   init() {

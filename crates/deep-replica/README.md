@@ -11,6 +11,7 @@ The replica (#338): a headless copy of the app on GPUI's virtual clock that chec
 - One binary root per `[[bin]]` in `Cargo.toml`: `src/main.rs`, `src/live.rs`, `src/deep_drive.rs`, `src/canvas.rs`.
 - Tests: `headless.rs` and `card_size.rs` at the crate root; `tests/drive.rs` drives `deep-drive`; blind acceptance suites stay in tests/acceptance/326 and 327.
 - App views and state belong in deep-app; the replica only drives and reads them.
+- A view draws the same tree here as in the app (#1454): a fixture supplies the record and the virtual clock, and nothing else. `deep-replica --window <w>x<h>` opens another size, such as the app's `960x640`, and `--panel-kit <dir>` runs `panel@1` for `deep install`.
 
 ## What it may import
 
