@@ -169,6 +169,7 @@ impl Host {
 impl Drop for Host {
     fn drop(&mut self) {
         let _ = self.child.kill();
+        // blocking call: reaps the panel host it just killed; panel-check is headless, with no window to freeze.
         let _ = self.child.wait();
     }
 }
