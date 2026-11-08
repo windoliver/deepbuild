@@ -440,7 +440,9 @@ pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<
         Some(Value::Object(items)) => items.clone(),
         _ => Map::new(),
     };
-    evaluated(items, program, state)
+    let mut items = evaluated(items, program, state);
+    crate::held::apply(doc, program, state, &mut items);
+    items
 }
 
 /// [`items`] of only the items a field names, each as [`items`] gives it: every other evaluated
@@ -466,7 +468,7 @@ pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Ma
 }
 
 /// `items` with each one's slots and fields written, as [`items`] evaluates them.
-fn evaluated(
+pub(crate) fn evaluated(
     mut items: Map<String, Value>,
     program: &Program,
     state: &State,
