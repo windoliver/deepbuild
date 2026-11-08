@@ -1162,6 +1162,8 @@ fn composite<'s>(
             Some(part) => painted(&source, &part, p.zoom as f32),
             None => source,
         };
+        // What the layer drew so far keeps its texts' readings.
+        p.texts.append(&mut layer.texts);
         layer = sub(p);
         put(&mut layer.ctx, backdrop.clone());
         let outer = &marks[start].scopes[..at];
@@ -1214,9 +1216,24 @@ fn fit_paint(frame: &scene::Frame, texts: &mut Map<String, Value>) -> Result<(),
         let Some(mut bounds) = texts.get(item).and_then(|t| four(&t["bounds"])) else {
             continue;
         };
-        if let Some(copy) = texts.remove(&format!("{item}#drop")) {
+        if let Some(mut copy) = texts.remove(&format!("{item}#drop")) {
             if let Some(b) = four(&copy["bounds"]) {
                 bounds = union(bounds, b);
+            }
+            // The copy's glyphs in the text's own frame: moved by where the copy sits from it.
+            let at = marks.iter().find_map(|d| match &d.mark {
+                Mark::Text { item: i, origin: o, .. } if *i == format!("{item}#drop") => Some(*o),
+                _ => None,
+            });
+            if let (Some(o), Some(list)) = (at, copy["glyphs"].as_array_mut()) {
+                let d = [o[0] - origin[0], o[1] - origin[1]];
+                for g in list.iter_mut() {
+                    for (k, axis) in [("x", 0), ("y", 1)] {
+                        if let Some(v) = g[k].as_f64() {
+                            g[k] = json!(v + d[axis]);
+                        }
+                    }
+                }
             }
             texts[item]["drop"] = json!({"glyphs": copy["glyphs"]});
         }
