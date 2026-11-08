@@ -262,6 +262,13 @@ export class AskTasks {
     return { ...read[0]!, readings: read };
   }
 
+  /** A work item by its ID among the test work source's readings (#66), with every reading on it; only tests set DEEP_HUB_TEST_WORK. */
+  async workItem(id: string): Promise<WorkItem | undefined> {
+    const readings = await this.json<WorkItem>(this.o.work, 'readings');
+    const item = readings.find((r) => r.source_id === id);
+    return item ? { ...item, readings } : undefined;
+  }
+
   /** Each session's definitions still being locked. */
   private readonly locking = new Map<string, Promise<void>>();
   /** The task a prompt opened: task.created under the thread, then its handed definition locked, off the hook's path. */

@@ -49,7 +49,7 @@ fn base(extra: Value) -> Value {
 }
 
 fn entry(t: i64, seq: i64, value: Value) -> Entry {
-    Entry { t, seq, control: "go".into(), value }
+    Entry { t, seq, control: "go".into(), value, player: 1 }
 }
 
 fn close(got: &[f64], want: &[f64]) {

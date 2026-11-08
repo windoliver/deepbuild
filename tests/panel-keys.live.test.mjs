@@ -20,9 +20,7 @@ const open = async (tree, which = 'check') => {
   const { command } = record[which];
   const dir = mkdtempSync(join(tmpdir(), 'deep-358-regress-'));
   writeFileSync(join(dir, 'gpui-shell.json'), JSON.stringify({ id: 'dev.deepbuild.regress', name: 'Regress', version: '1.0.0', entry: 'main.js' }));
-  writeFileSync(join(dir, 'main.js'), `import { View, div } from "gpui-kit";
-import { v_flex, InputState, Input } from "gpui-base";
-import { rebuild_count, fold } from "deepbuild";
+  writeFileSync(join(dir, 'main.js'), `import { View, div, v_flex, InputState, Input, rebuild_count, fold } from "@deepbuild/panel";
 const row = (k) => div().id(k).h(20).child(k);
 const keys = (from, to) => Array.from({ length: to - from }, (_, i) => "r" + (from + i));
 export default class P extends View {

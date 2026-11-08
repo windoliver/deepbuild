@@ -1,0 +1,35 @@
+# AC3 blind redraft on the base, commit 9d31efdb: cargo test --locked -p deep-replica --test acceptance_1425_ac3
+# Both tests fail because the surface doesn't exist: there is no crates/deep-app/panel-catalog.json.
+     Running ../../tests/acceptance/1425/ac3-redraft/ac3.rs (target/debug/deps/acceptance_1425_ac3-f008d0e36fbe9734)
+thread 'main' panicked at crates/deep-replica/../../tests/acceptance/1425/ac3-redraft/ac3.rs:66:37:
+no catalog at <checkout>/crates/deep-replica/../../crates/deep-app/panel-catalog.json: No such file or directory (os error 2)
+test a panel using a component off the catalog is refused at pack check and at load, naming the component and the closest catalog name #1425.229fbfbb ... FAILED
+thread 'main' panicked at crates/deep-replica/../../tests/acceptance/1425/ac3-redraft/ac3.rs:66:37:
+no catalog at <checkout>/crates/deep-replica/../../crates/deep-app/panel-catalog.json: No such file or directory (os error 2)
+test every catalog name renders in a replica in light and dark #1425.229fbfbb ... FAILED
+test result: FAILED. 0 passed; 2 failed
+
+# The same binary at the base with a temporary catalog, written for this run and removed afterwards (not committed):
+# {"components":[{"name":"Button"},{"name":"Carousel"},{"name":"CarouselState"},{"name":"Input"}],"not_offered":[]}
+# Past the missing catalog, both fail because no module @deepbuild/panel resolves.
+
+thread 'main' panicked at crates/deep-replica/../../tests/acceptance/1425/ac3-redraft/ac3.rs:213:9:
+pack check refused the control panel, which uses the catalog's Button: Some("panel@1 refused this panel: it doesn't load: cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/control/main.js`")
+pack check's refusal of Buttonn doesn't name both Buttonn and the closest catalog name Button: "panel@1 refused this panel: it doesn't load: cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/planted/main.js`"
+the control panel, which uses the catalog's Button, didn't load: Some("cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/control/main.js`")
+the load's refusal of Buttonn doesn't name both Buttonn and the closest catalog name Button: "cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/planted/main.js`"
+test a panel using a component off the catalog is refused at pack check and at load, naming the component and the closest catalog name #1425.229fbfbb ... FAILED
+
+thread 'main' panicked at crates/deep-replica/../../tests/acceptance/1425/ac3-redraft/ac3.rs:239:9:
+8 of 8 draws (the catalog's names, in light and in dark) don't render:
+Button in light: mount_panel refused it: cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/light-Button/attempt-0/main.js`
+Carousel in light: mount_panel refused it: cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/light-Carousel/attempt-0/main.js`
+CarouselState in light: mount_panel refused it: cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/light-CarouselState/attempt-0/main.js`
+Input in light: mount_panel refused it: cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/light-Input/attempt-0/main.js`
+Button in dark: mount_panel refused it: cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/dark-Button/attempt-0/main.js`
+Carousel in dark: mount_panel refused it: cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/dark-Carousel/attempt-0/main.js`
+CarouselState in dark: mount_panel refused it: cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/dark-CarouselState/attempt-0/main.js`
+Input in dark: mount_panel refused it: cannot resolve module `@deepbuild/panel` from `/private/tmp/da1425ac3-<pid>/dark-Input/attempt-0/main.js`
+test every catalog name renders in a replica in light and dark #1425.229fbfbb ... FAILED
+
+test result: FAILED. 0 passed; 2 failed

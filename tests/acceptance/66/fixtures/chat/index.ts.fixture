@@ -1,0 +1,49 @@
+// The test chat work source (#66): a chat app at api.chat.example, read through the hub's ctx.fetch (README). Its
+// scope is a channel; an item is a thread, its ID the thread's `ts`. Its deliveries are replies in the thread, the
+// send key kept beside each reply as its `key`. The thread's starter and anyone in it read outside but you.
+interface Answer { status: number; headers: Record<string, string>; body: string }
+interface Ctx { fetch(r: { method: string; path: string; headers?: Record<string, string>; body?: string }): Promise<Answer> }
+const parse = (a: Answer): any => JSON.parse(a.body);
+const who = (user: string) => ({ handle: user, role: user === 'you' ? 'owner' : 'outside' });
+
+export default function (deep: any): void {
+  deep.registerSource('ext.chat.threads', {
+    variant: 'stream',
+    host: 'api.chat.example',
+    quota: { per_minute: 600, per_day: 100_000 },
+    delivers: 'chat',
+    read(stream: { events: unknown[] }, cursor: string | null, limit: number) {
+      const start = cursor === null ? 0 : Number(cursor);
+      const events = stream.events.slice(start, start + limit);
+      return { events, cursor: String(start + events.length) };
+    },
+    async list(ctx: Ctx, q: { scope: string; since: string; cursor: string | null; limit: number }) {
+      const a = await ctx.fetch({ method: 'GET', path: `/channels/${q.scope}/threads?since=${encodeURIComponent(q.since)}` });
+      if (a.status !== 200) throw Error(`the chat app answered ${a.status}`);
+      return { items: parse(a).threads.map((t: any) => ({ id: t.ts, scope: q.scope, created: t.created, updated: t.updated, mention: false })), cursor: null };
+    },
+    async item(ctx: Ctx, q: { scope: string; id: string }) {
+      const a = await ctx.fetch({ method: 'GET', path: `/channels/${q.scope}/threads/${q.id}` });
+      if (a.status === 404) return { failed: 'not found', status: 404 };
+      if (a.status !== 200) return { failed: 'error', status: a.status };
+      const t = parse(a);
+      const link = `https://chat.example/${q.scope}/p${t.ts.replace('.', '')}`;
+      return {
+        events: [
+          { id: `${t.ts}@${t.updated}`, kind: 'item', at: t.created, marker: null, mention: false, data: { source_id: t.ts, link, title: t.text.slice(0, 80), body: t.text, criteria: [], authors: [who(t.user)], updated: t.updated } },
+          ...t.replies.map((r: any) => ({ id: `${t.ts}.r${r.id}`, kind: 'comment', at: r.at, marker: r.key, mention: false, data: { source_id: `${t.ts}.r${r.id}`, link, title: t.text.slice(0, 80), body: r.text || '-', criteria: [], authors: [who(r.user)], updated: r.at } })),
+        ],
+      };
+    },
+    async deliver(ctx: Ctx, d: { scope: string; id: string; key: string; text: string }) {
+      const a = await ctx.fetch({ method: 'POST', path: `/channels/${d.scope}/threads/${d.id}/replies`, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: d.text, key: d.key }) });
+      if (a.status === 200) return { outcome: 'sent' };
+      throw Error(`the chat app answered ${a.status}`);
+    },
+    async find(ctx: Ctx, d: { scope: string; id: string; key: string }) {
+      const a = await ctx.fetch({ method: 'GET', path: `/channels/${d.scope}/threads/${d.id}` });
+      if (a.status !== 200) throw Error(`the chat app answered ${a.status}`);
+      return parse(a).replies.some((r: any) => r.key === d.key);
+    },
+  });
+}
