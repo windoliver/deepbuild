@@ -69,6 +69,13 @@ pub fn parse(text: &str) -> Vec<File> {
             });
         }
     }
+    // Root files first, then nested folders, then `.github`, then your home's: the order a repo reads in.
+    files.sort_by_key(|f| match f.file.as_str() {
+        p if p.starts_with('~') => 3,
+        p if p.starts_with(".github") => 2,
+        p if p.contains('/') => 1,
+        _ => 0,
+    });
     files
 }
 
@@ -80,13 +87,19 @@ mod tests {
     fn reads_each_file_and_each_rule_with_its_enforcer() {
         let page = r#"# rules
 
+- .github/copilot-instructions.md <!-- deep:rule-file {"file":".github/copilot-instructions.md","tokens":5} -->
+- Prefer named exports <!-- deep:claim {"id":"d","known":"repo","scope":"all","enforcer":{"kind":"text"},"tokens":4} -->
 - AGENTS.md <!-- deep:rule-file {"file":"AGENTS.md","tokens":12} -->
 - never force-push <!-- deep:claim {"id":"a","known":"repo","scope":"all","enforcer":{"kind":"guard","name":"no-force-push"},"tokens":4} -->
 - Run the linter <!-- deep:claim {"id":"b","known":"repo","scope":"all","enforcer":{"kind":"text"},"tokens":3,"held":"doc:x"} -->
 - a wiki claim <!-- deep:claim {"id":"c","known":"you"} -->
 "#;
         let files = parse(page);
-        assert_eq!(files.len(), 1);
+        assert_eq!(files.len(), 2);
+        assert_eq!(
+            files[0].file, "AGENTS.md",
+            "the root file comes before .github's"
+        );
         assert_eq!(files[0].tokens, 12);
         assert_eq!(
             files[0].rules.len(),
