@@ -43,6 +43,57 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/149-redraft-ac5
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
   ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/'];
 /**
+ * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
+ * in the worktrees and affected.mjs's node --test reports held on 2026-11-07. affected.mjs runs them with --slow and for
+ * a change that adds or edits them, and leaves them otherwise INCONCLUSIVE, never PASS; the release preflight runs them
+ * (docs/parallel-proof.md, section 7a). A file leaves the list once its run is back under two minutes.
+ */
+export const slow = [
+  'packages/conformance/src/slots/environment.test.ts', 'packages/hub/test/loop-starters.test.ts',
+  'packages/hub/test/loop-transcript.test.ts', 'packages/pi/test/guards.test.ts',
+  'tests/acceptance/1002/cli.test.ts', 'tests/acceptance/1002/screens.test.ts',
+  'tests/acceptance/1002/twins.test.ts', 'tests/acceptance/1015/claude.test.ts',
+  'tests/acceptance/1017/floor.test.ts', 'tests/acceptance/1017/placement.test.ts',
+  'tests/acceptance/1017/toolchains.test.ts', 'tests/acceptance/1113/before.test.mjs',
+  'tests/acceptance/1114/lanes.test.mjs', 'tests/acceptance/1117/proofs.test.mjs',
+  'tests/acceptance/112/eval.test.ts', 'tests/acceptance/1162/present.test.ts',
+  'tests/acceptance/1162/query.test.ts', 'tests/acceptance/1297/convex-sun.test.ts',
+  'tests/acceptance/138/release.test.ts', 'tests/acceptance/138/shipped.test.ts',
+  'tests/acceptance/139/apisurface.test.ts', 'tests/acceptance/140/gpu/features.test.ts',
+  'tests/acceptance/149/taste.test.ts', 'tests/acceptance/16/address.test.ts',
+  'tests/acceptance/16/hotpath-ac18-redraft.test.ts', 'tests/acceptance/185/kit.test.ts',
+  'tests/acceptance/185/redraft/kit-behavior-redraft.test.ts', 'tests/acceptance/19/doctor/contract.test.ts',
+  'tests/acceptance/200/fillers.test.ts', 'tests/acceptance/200/gpu.test.ts', 'tests/acceptance/200/listing.test.ts',
+  'tests/acceptance/200/module.test.ts', 'tests/acceptance/200/opening.test.ts',
+  'tests/acceptance/262/retention.test.ts', 'tests/acceptance/27/desktop-redraft-2/desktop.test.ts',
+  'tests/acceptance/27/outcomes-redraft/outcomes.test.ts', 'tests/acceptance/27/waits.test.ts',
+  'tests/acceptance/30/claims.test.ts', 'tests/acceptance/30/mask.test.ts', 'tests/acceptance/31/assertion.test.ts',
+  'tests/acceptance/31/base-runs.test.ts', 'tests/acceptance/31/snapshot.test.ts',
+  'tests/acceptance/314/kits.test.ts', 'tests/acceptance/315/failopen.test.ts',
+  'tests/acceptance/316/corpus.test.ts', 'tests/acceptance/326/setup/click.test.ts',
+  'tests/acceptance/340/app/authority.test.ts', 'tests/acceptance/372/frame.test.ts',
+  'tests/acceptance/379/perf-lane.test.ts', 'tests/acceptance/402/backpressure.test.ts',
+  'tests/acceptance/412/listing.test.ts', 'tests/acceptance/415/navgraph.test.ts',
+  'tests/acceptance/417/state.test.ts', 'tests/acceptance/419/velocity-seek.test.ts',
+  'tests/acceptance/42/doctor.test.ts', 'tests/acceptance/422/showpiece-fixture.test.ts',
+  'tests/acceptance/424/picks.test.ts', 'tests/acceptance/425/redraft/taste.test.ts',
+  'tests/acceptance/48/harness.test.mjs', 'tests/acceptance/484/forest.test.ts',
+  'tests/acceptance/674/default.test.ts', 'tests/acceptance/674/document.test.ts',
+  'tests/acceptance/674/nearest.test.ts', 'tests/acceptance/674/session.test.ts',
+  'tests/acceptance/824/cycles.test.ts', 'tests/acceptance/85/hub/network.test.ts',
+  'tests/acceptance/855/hash.test.ts', 'tests/acceptance/86/concurrent.test.ts',
+  'tests/acceptance/910/ac1-issue-link.test.mjs', 'tests/acceptance/910/ac2-renamed-heading.test.mjs',
+  'tests/acceptance/910/ac3-offline.test.mjs', 'tests/acceptance/965/background.test.ts',
+  'tests/acceptance/965/grace.test.ts', 'tests/acceptance/965/starts.test.ts', 'tests/acceptance/992/agree.test.ts',
+  'tests/live-instancers.test.ts', 'tests/scene3d-interface.test.ts'
+];
+/**
+ * Folders and files the alone block runs with nothing beside them, not even another shard: #16's and #315's files start
+ * real hubs and deep-hook and time their sockets to 2 and 50 ms, and #236's read the system's one sandbox log stream
+ * (docs/parallel-proof.md, section 7).
+ */
+export const exclusive = ['tests/acceptance/16/', 'tests/acceptance/315/', 'tests/acceptance/236/'];
+/**
  * Vitest files run by hand, as their READMEs say: #685's proof checks need Lean 4.35 and Kani 0.68 installed, and
  * minutes; #666's, #668's and #669's live checkpoints and #18's live sessions start real Claude Code sessions on your plan, so
  * only the release preflight runs them (releaseLanes, below). #112's live eval replays 20 real tasks you export from
