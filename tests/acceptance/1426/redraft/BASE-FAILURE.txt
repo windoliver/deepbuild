@@ -1,0 +1,79 @@
+# #1426 redraft: the tagged tests at the base, c12a65bbe9c0fa26a677b2fd65e12146b3a24016, where nothing of #1426 is implemented.
+# Run 2026-11-08T01:29Z on macOS 27.2 (Apple silicon), node v24.22.2, from the repo root:
+#   node --test tests/acceptance/1426/redraft/reverts.test.mjs tests/acceptance/1426/redraft/scope.test.mjs
+# Exit 1. Each test fails for a missing surface: AC2 finds no carried-patch table in the README; the refusal test finds
+# no dated refusal and the pull request still called open; the design test finds "the only patch" and no gpui-pre named.
+# The self-tests (wrong.test.mjs) pass at the same commit: 33 of 33.
+
+✖ #1426.eb2029f7 each row's test passes as the tree stands and fails with that row's change reverted, for the sRGB layer tag, the exact gradient mode, the BGRA surface and the surface reports (0.500209ms)
+✖ #1426.4ef6dcfa (Scope) vendor/gpui-pre-apple/upstream/README.md records zed's refusal of zed-industries/zed#66114, with the link, the date October 28, 2026 and a word saying it was refused, and no longer calls the pull request open (1.623083ms)
+✖ #1426.4ef6dcfa (Scope) the design's toolkit Decided row no longer calls rquickjs the only patch and names the vendored GPUI patches (2.111125ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 46.308791
+
+✖ failing tests:
+
+test at tests/acceptance/1426/redraft/reverts.test.mjs:12:1
+✖ #1426.eb2029f7 each row's test passes as the tree stands and fails with that row's change reverted, for the sRGB layer tag, the exact gradient mode, the BGRA surface and the surface reports (0.500209ms)
+  Error: FAIL:
+  vendor/gpui-pre-apple/upstream/README.md has no carried-patch table under "## Carried patches" with the columns Behavior | Issue | Files | Test | Budget
+      at verdict (file://<repo>/tests/acceptance/1426/redraft/common.mjs:58:27)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1426/redraft/reverts.test.mjs:13:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at tests/acceptance/1426/redraft/scope.test.mjs:16:1
+✖ #1426.4ef6dcfa (Scope) vendor/gpui-pre-apple/upstream/README.md records zed's refusal of zed-industries/zed#66114, with the link, the date October 28, 2026 and a word saying it was refused, and no longer calls the pull request open (1.623083ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   'no paragraph linking https://github.com/zed-industries/zed/pull/66114 gives the date of the refusal, October 28, 2026',
+  +   `the README still calls the pull request open: "So the pull request is the owner's to open, from their fork; The pull request is open and ready for review from the owner's fork, with the CLA signed: https://github.com/zed-industries/zed/pull/66114 "`
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1426/redraft/scope.test.mjs:17:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'no paragraph linking https://github.com/zed-industries/zed/pull/66114 gives the date of the refusal, October 28, 2026', `the README still calls the pull request open: "So the pull request is the owner's to open, from their fork; The pull request is open and ready for review from the owner's fork, with the CLA signed: https://github.com/zed-industries/zed/pull/66114 "` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1426/redraft/scope.test.mjs:20:1
+✖ #1426.4ef6dcfa (Scope) the design's toolkit Decided row no longer calls rquickjs the only patch and names the vendored GPUI patches (2.111125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   'the toolkit\'s Decided row still calls one patch the only one: "...k: gpui-kit and gpui-shell stay upstream at one commit, and the only patch, rquickjs to that same commit, sits in `.cargo/config.toml` outside every crate manifest. The replica, `d..."',
+  +   "the toolkit's Decided row doesn't name the vendored GPUI patches (gpui-pre or gpui-pre-apple, as vendor/ holds them)"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/1426/redraft/scope.test.mjs:21:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'the toolkit\'s Decided row still calls one patch the only one: "...k: gpui-kit and gpui-shell stay upstream at one commit, and the only patch, rquickjs to that same commit, sits in `.cargo/config.toml` outside every crate manifest. The replica, `d..."', "the toolkit's Decided row doesn't name the vendored GPUI patches (gpui-pre or gpui-pre-apple, as vendor/ holds them)" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
