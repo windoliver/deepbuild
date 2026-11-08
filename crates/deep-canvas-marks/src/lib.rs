@@ -36,3 +36,4 @@ pub mod relations;
 pub mod runs;
 pub mod scene;
 pub mod story;
+pub mod terrain;

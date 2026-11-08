@@ -295,7 +295,7 @@ fn doc(value: Option<&Value>) -> Option<Map<String, Value>> {
 /// module's) and R1's mark sets, axes and scales (the data module's).
 fn drawn_here(kind: &Value) -> bool {
     let name = kind.as_str().and_then(|k| k.split('@').next());
-    matches!(name, Some("vector" | "marks" | "axis" | "scale"))
+    matches!(name, Some("vector" | "marks" | "axis" | "scale" | "tiles.terrain"))
 }
 
 /// Each imported `vector@1` item by ID (#398).
@@ -321,6 +321,23 @@ fn check(
             !(i.code == "module_missing" && (drawn_here(&i.actual) || effects))
         })
         .collect();
+    // #467: each terrain recipe expands here into its mark set, its choice fixed by its seed.
+    let mut expansions = Vec::new();
+    for (id, item) in doc.get("items").and_then(Value::as_object).into_iter().flatten() {
+        if item.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND) {
+            continue;
+        }
+        match deep_canvas_marks::terrain::expand(id, item) {
+            Ok((name, derived)) => expansions.push(json!({"instance": id, "derived": {name: derived}})),
+            Err(r) => issues.push(deep_canvas::document::Issue::error(
+                r.code,
+                id,
+                r.path,
+                Value::Null,
+                "the terrain recipe can't expand as its params say",
+            )),
+        }
+    }
     let (found, vectors) = deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), twin);
     issues.extend(found);
     // #406: a quote's raw bytes against its source's, and a formula's numbers.
@@ -367,7 +384,9 @@ fn check(
     if let (true, Some(look)) = (ok, look) {
         let mut drawn = doc.clone();
         if let Some(Value::Object(items)) = doc.get("items") {
-            let items = deep_canvas_vector::lower_items(items, &vectors, Default::default());
+            let mut items = deep_canvas_vector::lower_items(items, &vectors, Default::default());
+            // A terrain draws as the atlas set it expands into, which marks2d doesn't check.
+            items.retain(|_, i| i.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND));
             // #399: graphs draw as marks2d's items, and labels place where the view draws them.
             let items = match graphs::lower(doc, &items, &vectors, Default::default()) {
                 Ok((mut items, _)) => {
@@ -414,6 +433,7 @@ fn check(
         "numbers": numbers,
         "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
         "lowered": result.lowered,
+        "expansions": expansions,
     });
     (answer, vectors)
 }
