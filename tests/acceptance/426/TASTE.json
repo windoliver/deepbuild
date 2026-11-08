@@ -1,0 +1,14 @@
+{
+  "issue": 426,
+  "criterion": "#426.45886847",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), validating at the owner Tao Feng's request in the session (\"validate for me\"); the owner had recorded looks_right on the same four shots before main was merged in (8648dba9, e8630950, ff45fff9, c16f69d5)",
+  "when": "2026-11-08T01:10:00Z",
+  "screenshots": {
+    "product-gradient.png": "0036cc83c306508c4fcda8b3b32e1af2028e738e2f82a2fee468afeae5af9b99",
+    "backdrop-ground.png": "ddc274684e5d76476dafde6a52967c8a3b2e97a4bbe6f6ca61d8efbb9fd08e7e",
+    "blurred-background.png": "b447173333d6be9888d7bdf4c29e5cbe65a210afc933b66f0090a8301ff40593",
+    "background-fog.png": "ef79fee5cdd5ade849d92697bf0dc50882a8133b6f90e871523a6754fbe46c7a"
+  },
+  "note": "Redrawn after merging main (#464, #431, #1173 renderer changes moved the bytes); the pictures read as before and sampled pixels match their fixtures: the gradient 51 to 63 with a white highlight, the backdrop's uniform sky band and red box, the blur's smooth warm-to-blue background behind a sharper step, and the fog's red sky (231, 90, 90) with the near sphere at (202, 89, 118).Each picture draws what its fixture asks. Product: a glossy sphere on the dark gradient, with the studio's horizon in its reflection. Backdrop: the grid HDR's lower half spreads out as a floor converging under the box; the flat dark band above is the HDR's uniform upper half, and the box has no shadow because this shot turns the catcher off. Blur: the warm/blue step is a smooth gradient behind the sphere, while the sphere's reflection keeps the step sharper. Fog: the near sphere (about 52 m) fades toward the red sky behind it, the far one (about 1000 m) has gone into the background, and the blue below the horizon shows at the bottom. These are test patterns: the call is that the renderer does what each criterion says, not a judgement on product art."
+}

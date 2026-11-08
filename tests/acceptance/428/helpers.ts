@@ -13,8 +13,9 @@ import { fileURLToPath } from 'node:url';
 import { crc32, deflateSync } from 'node:zlib';
 import { afterAll, afterEach, beforeAll, beforeEach, expect } from 'vitest';
 import {
-  applyDir, decodePng, deg, gltfMaterial, imageBytes, list, nodeName, quad, readGltf, sampleReference, traceable, unit, worlds,
-  type Gltf, type Image, type JsonObject, type JsonValue, type Ortho, type Rgb, type SunLight, type Texture, type Tri, type V3,
+  applyDir, decodePng, deg, gltfMaterial, imageBytes, list, nodeName, orthoPoint, quad, readGltf, sampleReference, trace, traceable, unit,
+  worlds, type Gltf, type Image, type JsonObject, type JsonValue, type Ortho, type Rgb, type SunLight, type Texture, type Traced, type Tri,
+  type V3,
 } from './reference.ts';
 
 export type { JsonObject, JsonValue };
@@ -569,13 +570,29 @@ export function sampleLights(g: Gltf, sv: SampleView): SunLight[] {
   expect(out.length, 'the file has a light').toBeGreaterThan(0);
   return out;
 }
+/** A pixel's corners (just inside it, as `sampleReference`'s copy test takes them) and the four positions of the standard
+ * 4× MSAA pattern, as fractions of the pixel. */
+const PIXEL_POINTS: [number, number][] = [[0.02, 0.02], [0.98, 0.02], [0.02, 0.98], [0.98, 0.98], [0.375, 0.125], [0.875, 0.375], [0.125, 0.625], [0.625, 0.875]];
+/**
+ * Whether the triangle the pixel's centre sees is the one every point of `PIXEL_POINTS` sees. At 4× MSAA a pixel where
+ * two triangles meet keeps samples of both, and the one that doesn't hold the centre is shaded at the centre all the same,
+ * from its attributes extrapolated past its edges (#1173); a reference taken at the centre can't hold such a pixel to 1%.
+ */
+function oneTriangleAt(tr: Traced, view: Ortho, x: number, y: number): boolean {
+  const d: V3 = [0, 0, -1];
+  const seen = (px: number, py: number): Tri | undefined =>
+    trace(tr, orthoPoint(view, px, py, 1000), d, (h) => h.tri.node < 0 || h.front || tr.materials.get(h.tri.material)!.doubleSided)?.tri;
+  const centre = seen(x + 0.5, y + 0.5);
+  return PIXEL_POINTS.every(([fx, fy]) => seen(x + fx, y + fy) === centre);
+}
 export interface SampleRun { failures: string[]; judged: Map<number, number>; linear: Linear; final: Image; ids: Ids; out: string }
 /**
  * Draws the sample (with `imports`), and holds every judged pixel 2 px inside its node to the CPU reference within 1%
  * per channel where the reference's channel is at least 0.02 (a white Lambertian square to the sun reads 1). Each
- * failure names the material.
+ * failure names the material. With `oneTriangle` (AC1 only, by the owner's approved proposal on #1173), a pixel is
+ * judged only where one triangle lies under all of it (`oneTriangleAt`).
  */
-export function checkSample(bin: string, out: string, f: Fetched, sv: SampleView, planted?: GpuPlanted): { run: SampleRun; reply: JsonObject } {
+export function checkSample(bin: string, out: string, f: Fetched, sv: SampleView, planted?: GpuPlanted, oneTriangle = false): { run: SampleRun; reply: JsonObject } {
   const doc = writeJson(out, `sample-${f.sample.name}`, sampleDoc(f, sv));
   const [reply] = runGpu(bin, out, [view3dCall({ doc, look: PLAIN_LOOK, size: sv.view.size, targets: ['final', 'linear', 'ids'], imports: true, assets: f.assets, uris: f.uris, licenses: f.licenses })], planted);
   const frame = frameAt(framesOf(reply!, f.sample.name), 0, f.sample.name);
@@ -593,7 +610,8 @@ export function checkSample(bin: string, out: string, f: Fetched, sv: SampleView
   const pickOf = (node: number): string => `${ASSET}#${nodeName(g, node)}`;
   const wanted: [number, number][] = [];
   for (let y = 0; y < sv.view.size[1]; y++) for (let x = 0; x < sv.view.size[0]; x++) { const id = ids.at(x, y); if (id && id.startsWith(`${ASSET}#`) && insideAt(ids, id, x, y, 2)) wanted.push([x, y]); }
-  const ref = sampleReference(tr, { view: sv.view, lights: sampleLights(g, sv), backdrop: sv.backdrop?.tris ?? [], backdropColor: sv.backdrop?.color ?? (() => [0, 0, 0]), textures, judged: new Set(sv.judged) }, wanted);
+  const kept = oneTriangle ? wanted.filter(([x, y]) => oneTriangleAt(tr, sv.view, x, y)) : wanted;
+  const ref = sampleReference(tr, { view: sv.view, lights: sampleLights(g, sv), backdrop: sv.backdrop?.tris ?? [], backdropColor: sv.backdrop?.color ?? (() => [0, 0, 0]), textures, judged: new Set(sv.judged) }, kept);
   const bad = new Map<number, { n: number; worst: string; off: number }>();
   const judged = new Map<number, number>();
   for (const p of ref) {

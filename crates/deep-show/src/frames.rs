@@ -1048,3 +1048,124 @@ fn debug_digest(values: &[Val]) -> Value {
     }
     json!(deep_canvas::schedule::sha256_hex(texts.concat().as_bytes()))
 }
+
+#[cfg(test)]
+mod story_tests {
+    use deep_canvas::registry::{BuildSet, Registry};
+    use deep_canvas::schedule::{default_view, Options, Scheduler, Session};
+    use deep_canvas_marks::modules::{tokens, Drawing};
+    use deep_canvas_marks::scene::Mark;
+    use serde_json::{json, Value};
+
+    const SECOND: i64 = 705_600_000;
+
+    fn numbers(v: &[i32]) -> Value {
+        let bytes: Vec<u8> = v.iter().flat_map(|x| x.to_le_bytes()).collect();
+        json!({"dtype": "i32", "len": v.len(), "data": deep_canvas::base64::encode(&bytes)})
+    }
+
+    fn text(source: Value, order: &str) -> Value {
+        json!({"id": order, "kind": "text@1", "name": order, "order": order, "layer": "a",
+               "params": {"text": {"counter": {"source": source, "tabular": true,
+                                               "format": {"group": "none"}}},
+                          "size": 13, "box": {"w": 80, "h": 20}, "widest": "888888"}})
+    }
+
+    /// A race and a revealed line whose readers aren't touched as `at` and `to` move: labels
+    /// through `rows_of`, counters on both anchors and on a driver, and a dot on the head.
+    fn story() -> Value {
+        let key = |at: &str, v: i32, after: i32| {
+            json!({"target": at, "type": "f32", "keys": {
+                "k0": {"t": "0s", "value": v, "interp": "linear"},
+                "k1": {"t": "2s", "value": after, "interp": "linear"}}})
+        };
+        json!({
+            "format": 1, "profile": "board", "title": "Story", "description": "d",
+            "size": [320, 200], "transport": {"span": "2s"},
+            "layers": {"a": {"writer": "agent:t", "title": "A", "order": "a1"}},
+            "data": {"goal": {"value": 100, "source": "story"}, "share": {"value": 0, "source": "story"},
+                     "shown": {"value": 0, "source": "story"}},
+            "items": {
+                "bars": {"id": "bars", "kind": "marks@1", "name": "Bars", "order": "a0", "layer": "a",
+                         "params": {"mark": "point", "n": 2, "key": "key",
+                                    "columns": {"year": numbers(&[2000, 2002]),
+                                                "key": {"dtype": "str", "len": 2, "data": ["a", "a"]},
+                                                "value": numbers(&[10, 30])},
+                                    "transforms": [{"periods": {"by": "year", "at": 2000}}],
+                                    "encode": {"x": {"column": "value"}, "y": 10}}},
+                "labels": {"id": "labels", "kind": "marks@1", "name": "Labels", "order": "a1",
+                           "layer": "a",
+                           "params": {"mark": "text", "rows_of": "bars",
+                                      "encode": {"x": 10, "y": 40, "text": {"column": "value"}}}},
+                "line": {"id": "line", "kind": "marks@1", "name": "Line", "order": "a2", "layer": "a",
+                         "params": {"mark": "path", "n": 2, "key": "year",
+                                    "columns": {"year": numbers(&[0, 2]), "value": numbers(&[100, 140])},
+                                    "transforms": [{"reveal": {"by": "year", "to": 0}}],
+                                    "encode": {"x": {"column": "value"}, "y": 50}}},
+                "dot": {"id": "dot", "kind": "circle@1", "name": "Dot", "order": "a3", "layer": "a",
+                        "params": {"center": [0, 0], "r": 2, "paint": {"fill": {"role": "ink"}}},
+                        "at": {"pos": [0, 0, 0], "anchor": "line#head"}},
+                "p": text(json!("items/bars#period/by"), "p"),
+                "q": text(json!("items/line#head/value"), "q"),
+                "r": text(json!("climb"), "r")
+            },
+            "channels": {
+                "at": key("items/bars/params/transforms/0/periods/at", 2000, 2002),
+                "to": key("items/line/params/transforms/0/reveal/to", 0, 2),
+                "share": key("data/share", 0, 1)
+            },
+            "drivers": {"climb": {"target": "data/shown", "expr": "goal * share",
+                                  "vars": {"goal": "data/goal", "share": "data/share"}}}
+        })
+    }
+
+    /// In a live session, what each reader of the rows shows at `t`, frame after frame: the
+    /// operators of these items see no change of their own, so a stale value would stay.
+    #[test]
+    fn a_session_shows_what_the_rows_hold_at_t_in_every_reader() {
+        let mut registry = Registry::new(BuildSet::R2);
+        for m in crate::modules(BuildSet::R2) {
+            registry = registry.with(m);
+        }
+        let sealed = registry.seal().expect("seals");
+        let look = tokens(&crate::hub::shipped_look().light);
+        let mut s = Scheduler::new(&sealed, Options::default());
+        let doc = story();
+        let mut live = Session::new(0, look);
+        live.load(&mut s, &doc);
+        for (t, labels, year, head, count, dot) in [
+            (0, "10", "2000", "100", "0", 100.0),
+            (SECOND / 2, "15", "2000", "110", "25", 110.0),
+            (SECOND, "20", "2000", "120", "50", 120.0),
+            (2 * SECOND, "30", "2002", "140", "100", 140.0),
+        ] {
+            live.frame(&mut s, t, &default_view(&doc));
+            let refused: Vec<_> = live.report.issues.iter().map(|i| (i.code, &i.path)).collect();
+            assert!(refused.is_empty(), "at {t}: {refused:?}");
+            let drawing = live
+                .value(&s, "marks2d.frame", None)
+                .and_then(|v| v.as_typed::<Drawing>())
+                .expect("a drawing");
+            let shown = |item: &str| {
+                let marks = drawing.frame.layers.iter().flat_map(|l| l.marks.iter());
+                marks
+                    .filter_map(|d| match &d.mark {
+                        Mark::Text { item: i, spec, .. } if i == item => Some(spec.text.clone()),
+                        _ => None,
+                    })
+                    .next()
+                    .unwrap_or_else(|| panic!("{item} draws at {t}"))
+            };
+            let mut marks = drawing.frame.layers.iter().flat_map(|l| l.marks.iter());
+            let at_dot = marks.find_map(|d| match &d.mark {
+                Mark::Circle { item, center, .. } if item == "dot" => Some(center[0]),
+                _ => None,
+            });
+            assert_eq!(shown("labels#a"), labels, "a label through rows_of at {t}");
+            assert_eq!(shown("p"), year, "a counter on #period at {t}");
+            assert_eq!(shown("q"), head, "a counter on #head at {t}");
+            assert_eq!(shown("r"), count, "a counter on a driver at {t}");
+            assert_eq!(at_dot, Some(dot), "an item on #head at {t}");
+        }
+    }
+}

@@ -299,11 +299,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
     if targets.iter().any(|t| {
         !matches!(
             t.as_str(),
-            "final" | "linear" | "ids" | "pre_tone" | "dirt" | "scene"
+            "final" | "linear" | "ids" | "pre_tone" | "dirt" | "scene" | "backdrop"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt and scene",
+            "targets are final, linear, ids, pre_tone, dirt, scene and backdrop",
         ));
     }
     let export = match call["class"].as_str() {
@@ -906,6 +906,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     // A document that names packs draws as the check lowers it, the call's packs installed
     // first (#429).
     let packs = install(&args.packs)?;
+    // A material operator bound where it can't run is refused before anything draws (#431).
+    let broken = deep_canvas_effects::module::binding_refusals(&args.doc);
+    if !broken.is_empty() {
+        return Err(json!({"code": "refused", "issues": broken}));
+    }
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
         Some(lowered(&args.doc, &packs)?)
@@ -949,6 +954,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if args.cull_on_cpu {
         session3::cull_on_cpu(app);
     }
+    // The core targets the document's operators read, built only then (#431); the planted core
+    // builds both for every frame.
+    let builds_all = app.planted == Some(Planted::BuildsUnreadTargets);
+    let want = deep_scene3d_render::targets::Want {
+        velocity: builds_all || deep_canvas_effects::module::reads_core(&args.doc, "velocity"),
+        emission: builds_all || deep_canvas_effects::module::reads_core(&args.doc, "emission"),
+    };
+    session3::core_targets(app, want)?;
     let opening = opening.elapsed();
     let mut build_ms = None;
     let (ui, fx) = (opened.ui.clone(), opened.fx.clone());
@@ -979,7 +992,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut strokes = false;
     // Held slots, each with the frame whose present releases it.
     let mut held: Vec<(u64, usize)> = Vec::new();
-    let wants_targets = ["linear", "ids", "pre_tone"]
+    let wants_targets = ["linear", "ids", "pre_tone", "backdrop"]
         .iter()
         .any(|t| args.targets.contains(*t));
     // The bloom's lens dirt (#418): a PNG the assets name, its red channel ÷ 255, or seeded, made
@@ -1035,6 +1048,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     let mut settle: Vec<(f64, Part)> = Vec::new();
     let mut settled_on: Option<Scene> = None;
+    // The scene the session drew last, which #431's planted velocity target reads.
+    let mut last_drawn: Option<Arc<Scene>> = None;
     let mut hover: Option<String> = None;
     let mut viewer_selection: Vec<String> = Vec::new();
     let result = (|| -> Result<(), Value> {
@@ -1042,6 +1057,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         let mut left_out: Vec<String> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
         for n in frame_order(args.from, args.frames, &args.seeks) {
+            let frame_started = std::time::Instant::now();
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
             for (k, (frame, writer, ops)) in args.patches.iter().enumerate() {
@@ -1217,6 +1233,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             {
                 let mut fx = lock(&fx);
                 fx.settings = settings;
+            }
+            if args.look.drawn.is_some() {
+                let assets = Map::new();
+                *lock(&opened.drawn) =
+                    crate::drawn::frame3(&args.doc, &args.look, &assets, &scene, app.planted)?;
             }
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
@@ -1419,6 +1440,38 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 sc.motion = Some(Arc::new(motion));
                 moving = Arc::new(sc);
             }
+            // The core's velocity target (#431): the evaluations at t ± s/2 an operator reads,
+            // never an earlier frame, the shutter the look's or 180° without one; the planted
+            // target reads the scene the session drew last instead.
+            if want.velocity {
+                let s = args
+                    .look
+                    .blur
+                    .as_ref()
+                    .map_or(0.5 / fps, |b| b.shutter_s(fps));
+                let half = (s * FLICKS_PER_SECOND as f64 / 2.0).round() as i64;
+                let previous = last_drawn
+                    .as_ref()
+                    .filter(|_| app.planted == Some(Planted::VelocityFromPreviousFrame));
+                let (open, close) = match previous {
+                    Some(prev) => ((**prev).clone(), (*scene).clone()),
+                    None => (
+                        at_time(t - half, &mut labels)?,
+                        at_time(t + half, &mut labels)?,
+                    ),
+                };
+                let (motion, _) = blur::motion(
+                    &scene,
+                    &open,
+                    &close,
+                    blur::Pairing::Shipped,
+                    &Default::default(),
+                );
+                let mut sc = (*moving).clone();
+                sc.velocity = Some(Arc::new(motion));
+                moving = Arc::new(sc);
+            }
+            last_drawn = Some(scene.clone());
             let noise_from_frame = app.planted == Some(Planted::SoftNoiseFromFrame);
             let sub_scene = |k: usize| -> Arc<Scene> {
                 let mut sc = if timed.is_empty() {
@@ -1509,6 +1562,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     let _ = ui.latch();
                 }
             }
+            // A frame's CPU: its evaluation, up to handing the scene to the render side.
+            let cpu_ms = frame_started.elapsed().as_secs_f64() * 1e3;
             let mut drawn = session3::draw(
                 app,
                 &opened,
@@ -1523,6 +1578,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 read_targets || overlay,
                 shows && n == args.from,
             )?;
+            // The frame's wall time, from its start (before a seek's restore) until its pixels
+            // are read back (#252).
+            let wall_ms = frame_started.elapsed().as_secs_f64() * 1e3;
             let plain0 = drawn.bytes.clone();
             if settling_now {
                 if settle.len() < n_all as usize {
@@ -1610,6 +1668,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let mut frame = Map::new();
             frame.insert("frame".into(), json!(n));
             frame.insert("settled".into(), json!(settled));
+            // What each stepped operator's carried output holds as this frame drew (#252).
+            let fx2 = fx.clone();
+            let carried = app.worker.call(move |_| lock(&fx2).docops.as_ref().map(|o| o.carried()));
+            if let Some(c) = carried.filter(|c| c.as_object().is_some_and(|m| !m.is_empty())) {
+                frame.insert("carried".into(), c);
+            }
+            if args.timings {
+                frame.insert("wall_ms".into(), json!(wall_ms));
+            }
             frame.insert("samples".into(), samples_report);
             if !notices.is_empty() {
                 frame.insert("notices".into(), json!(notices));
@@ -1654,6 +1721,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 if let (Some(bgra), true) = (&scene_bytes, args.targets.contains("scene")) {
                     frame.insert("scene".into(), json!(write_final(out, bgra, size)?));
                 }
+                // The opaque scene's copy, each mip a file of its own (#431).
+                if let (Some(levels), true) = (&drawn.backdrop, args.targets.contains("backdrop")) {
+                    let mut rows = Vec::new();
+                    for (size, texels) in levels {
+                        rows.push(json!({"size": size, "file": write_named(out, texels, "f32")?}));
+                    }
+                    if let Some(first) = rows.first().cloned() {
+                        frame.insert("backdrop".into(), json!({"format": "rgba16float", "size": first["size"], "file": first["file"], "levels": rows}));
+                    }
+                }
                 if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
                     frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));
                 }
@@ -1674,16 +1751,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         })?;
                         let mut m = serde_json::Map::new();
                         for k in &keys {
-                            m.insert(
-                                k.clone(),
-                                crate::opframe::read_one(
-                                    &device,
-                                    ops,
-                                    &Default::default(),
-                                    k,
-                                    &dir,
-                                )?,
-                            );
+                            let mut r =
+                                crate::opframe::read_one(&device, ops, &Default::default(), k, &dir)?;
+                            // The class its writer computes, which a golden compares it under (#252).
+                            let item = k.split_once('.').map_or(k.as_str(), |(i, _)| i);
+                            if let (Some(o), Some(c)) = (r.as_object_mut(), ops.class_of(item)) {
+                                o.insert("class".into(), json!(c.name()));
+                            }
+                            m.insert(k.clone(), r);
                         }
                         Ok(Value::Object(m))
                     })?;
@@ -1827,6 +1902,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             if let Some((gpu_ms, passes)) = &drawn.timing {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
+                frame.insert("cpu_ms".into(), json!(cpu_ms));
                 frame.insert("passes_ms".into(), json!(passes));
             }
             if !clicks.is_empty() {
@@ -1862,6 +1938,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             p.overlays.clear();
         }
     }
+    let (msaa, render_targets) = session3::render_targets(app);
     session3::close(app);
     // An over-cap document is refused, its imports still reported: the import comes before the
     // count it makes (#423).
@@ -1924,10 +2001,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "internal_scale": if below { args.surface.scale } else { 1.0 },
         "upscale": if below { args.surface.upscale.name() } else { "none" },
         "sharpen": args.surface.sharpen,
-        "size_px": size, "internal_px": internal,
+        "size_px": size, "internal_px": internal, "msaa": msaa,
     });
     let mut reply = json!({
         "frames": frames, "passes": passes, "status": status_report, "surface": drew,
+        "render_targets": render_targets,
         "layers": layers_report(&args.doc, &args.hidden),
     });
     if !worlds.is_empty() {

@@ -31,6 +31,9 @@ const QUIET_MS = 24 * 3_600_000;
  * each 30 s while it watches the session. A hub started since reads the same from the record.
  */
 export const WAITING_QUIET_MS = 300_000;
+/** What a session's row says of the MCP servers and skills it loaded (#148): the older set after a sync, until its own evidence shows the current one. */
+export const OLDER_SET = 'Runs the older set:';
+export const NEWER_SET = 'Runs the current set:';
 /** The most tool calls a finished turn lists; the rest are counted on one line. */
 const CALLS_SHOWN = 20;
 
@@ -134,6 +137,13 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const codex = rows.filter((r) => r.agent === 'codex');
   const readings = await rowReadings(query, codex.map((r) => r.id), now, elapsed);
   for (const row of codex) if (readings.has(row.id)) row.readings = readings.get(row.id)!;
+  // The newest older-or-current set reading of each session: an older one stays on its row (#148).
+  const sets = (await query(`SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE '${OLDER_SET}%' OR json_extract(data, '$.reading') LIKE '${NEWER_SET}%') ORDER BY log_pos`)) as { session_id: string; text: string }[];
+  const newest = new Map(sets.map((r) => [r.session_id, r.text]));
+  for (const row of rows) {
+    const text = newest.get(row.id);
+    if (text?.startsWith(OLDER_SET)) row.readings = [...(row.readings ?? []), text];
+  }
   return rows;
 }
 

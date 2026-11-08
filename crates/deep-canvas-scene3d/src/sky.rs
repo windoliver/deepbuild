@@ -340,6 +340,11 @@ pub fn parse(
     if sky.background_ground.is_some() && !sky.shows_environment() {
         return Err(bad("background_ground"));
     }
+    // The froxel grid (#175) scatters light rather than mixing in a color, so it can't take
+    // background fog (#426): refused naming the sky's fog.
+    if sky.fog == Fog::Background && params.get("froxels").is_some_and(|v| !v.is_null()) {
+        return Err(bad("fog"));
+    }
     if matches!(sky.background, Background::Environment) && sky.environment.is_none() {
         return Err(bad("background"));
     }
