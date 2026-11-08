@@ -430,6 +430,22 @@
           "spec": "0.0.0",
           "why": "Issue #30: a claim's checks run through the command check kind, hermetically through host@1, and its closed run records are what the claim's verdict is made from."
         },
+        "@deepbuild/checks-numbers": {
+          "spec": "0.0.0",
+          "why": "Issue #1537: the numbers check kind (#87), held in the hub's kind table and run on every claim that states a number with the query behind it."
+        },
+        "@deepbuild/checks-review": {
+          "spec": "0.0.0",
+          "why": "Issue #1537: the review check kind (#87), held in the hub's kind table and run on every claim that opens or updates a pull request; its independence rule decides whether a review counts."
+        },
+        "@deepbuild/checks-work": {
+          "spec": "0.0.0",
+          "why": "Issue #1537: the service, data, document and message check kinds (#68), held in the hub's kind table where a definition's drafted check names one."
+        },
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #1537: the check.kind@1 spec, context and result types the hub's kind table holds, and #67's state-source@1 item and source types its workspaces pin; type imports only."
+        },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
@@ -485,6 +501,10 @@
         "@deepbuild/wiki": {
           "spec": "0.0.0",
           "why": "Issue #356: setup writes what it learned as the wiki's claims and pages, and keeps your edits to them through the wiki's own entry."
+        },
+        "@deepbuild/workspaces": {
+          "spec": "0.0.0",
+          "why": "Issue #67: the state sources a workspace's touches read, a reading's digest and diff, and a workspace's own git work, which the hub pins in the record and re-runs on drift."
         },
         "better-sqlite3": {
           "spec": "13.0.3",
@@ -549,6 +569,14 @@
         "@deepbuild/verdicts": {
           "spec": "0.0.0",
           "why": "Issue #87: the run record and claim check a review job's run is written as."
+        }
+      }
+    },
+    "packages/checks-work/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #68: the check.kind@1 slot's fill, context and result types, and the kit types and Finding each work kind's own kit is judged with by the one kit runner."
         }
       }
     },
@@ -1481,6 +1509,18 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #355: the wiki's claims are learned changes in the record, whose quotes, scope and rollback the core checks; sources are read through record.resolve and kept with record.keep."
+        }
+      }
+    },
+    "packages/workspaces/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #67: the state-source@1 fill and its item, diff, change, plan and undo types each shipped source is held to by its kit; type imports only."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #67: canonical JSON and SHA-256, so a reading's digest is the same bytes whoever takes it."
         }
       }
     },
