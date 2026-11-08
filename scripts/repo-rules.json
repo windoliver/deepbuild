@@ -518,6 +518,10 @@
     },
     "packages/otlp/package.json": {
       "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Refactor of the facts path: readFacts, the one entry the receiver reads Claude Code's tool kinds and model families through, never a path into the repo's adapters/ folder."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #42: the record the receiver appends tool.span and request.cost events to, and reads a session's and a task's cost from."
@@ -1150,6 +1154,10 @@
     },
     "packages/runner/package.json": {
       "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Refactor of the facts path: readFacts, the one entry the runner reads each agent's facts through (its launch, billing and stop causes), never a path into the repo's adapters/ folder."
+        },
         "@deepbuild/asks": {
           "spec": "0.0.0",
           "why": "Issue #159: the window, first-reading and smoke-test asks a job raises while it waits, through the asks core."

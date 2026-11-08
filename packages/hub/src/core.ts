@@ -11,7 +11,7 @@ import { Numbers } from './numbers.js';
 import { availableParallelism, homedir, loadavg, networkInterfaces } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ADAPTERS, shipped } from '@deepbuild/adapters';
+import { ADAPTERS, readFacts, shipped } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
 import { AskRefused, duration, openAsks, subjectKey, type Asks, type Delivery, type Resolver } from '@deepbuild/asks';
 import { openLedger, type BudgetInput, type Ledger } from '@deepbuild/budget';
@@ -169,7 +169,7 @@ const HOLDS_NO_PROMPT = new Set(['pi', 'paseo']);
 /** The commands that take effect only once the OS confirms you (#19), as `you.confirm` names them. */
 /** The sign-in command each agent's facts name, by the agent's name as a task would say it (#84). */
 function signInCommands(): Record<string, string> {
-  return (JSON.parse(readFileSync(new URL('../../../adapters/sign-in.json', import.meta.url), 'utf8')) as { commands: Record<string, string> }).commands;
+  return readFacts<{ commands: Record<string, string> }>('sign-in.json').commands;
 }
 const AUTHORITY = new Set(['deep off', 'deep on', 'deep hub stop', 'deep hub use', 'deep setup --undo']);
 const REQUEST = Buffer.from('{"v":1,"agent":');
