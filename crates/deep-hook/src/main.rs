@@ -1021,8 +1021,11 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
 /// O_NOFOLLOW, which std doesn't name: opening a symlink fails rather than following it.
 #[cfg(target_os = "macos")]
 const NOFOLLOW: i32 = 0x0100;
-#[cfg(target_os = "linux")]
+/// Linux numbers it per architecture: 0o400000 on x86, 0o100000 on Arm and AArch64.
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "x86")))]
 const NOFOLLOW: i32 = 0o400000;
+#[cfg(all(target_os = "linux", any(target_arch = "aarch64", target_arch = "arm")))]
+const NOFOLLOW: i32 = 0o100000;
 
 /// DEEP_HOOK_TEST_SPOOL_STALL in a debug build: spool only this many bytes of the line, then wait to be killed.
 #[cfg(debug_assertions)]
@@ -1900,7 +1903,10 @@ mod tests {
     fn a_line_written_to_a_spool_moved_aside_is_written_again_to_the_new_one() {
         let folder = std::env::temp_dir().join(format!("dh315-append-{}", std::process::id()));
         let _ = fs::remove_dir_all(&folder);
-        fs::create_dir_all(&folder).unwrap();
+        // 0700 whatever the umask: the product refuses a spool folder others can write (0775 under the Spark's umask).
+        std::os::unix::fs::DirBuilderExt::mode(&mut fs::DirBuilder::new(), 0o700)
+            .create(&folder)
+            .unwrap();
         let live = folder.join("spool.jsonl");
         let moved = folder.join("replay-1.jsonl");
         // The hub moves the file aside, reads it and removes it while this write holds it open.
