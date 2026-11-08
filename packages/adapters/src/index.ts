@@ -111,8 +111,15 @@ export function registry(): AdapterRegistry {
   };
 }
 
-const ROOT = new URL('../../../', import.meta.url);
-const readFacts = (file: string): JsonValue => JSON.parse(readFileSync(new URL(`adapters/${file}`, ROOT), 'utf8')) as JsonValue;
+const FACTS = new URL('../../../adapters/', import.meta.url);
+/**
+ * A shipped facts file by its name in the repo's adapters/ folder, such as `codex.facts.json` or `loops.facts.json`.
+ * Every package reads the agents' facts through here, so one place decides where they live (tests/facts-entry.test.mjs).
+ */
+export function readFacts<T = JsonValue>(file: string): T {
+  if (!/^[a-z][a-z0-9-]*(?:\.facts)?\.json$/.test(file)) throw Error(`${JSON.stringify(file)} is not a facts file in adapters/`);
+  return JSON.parse(readFileSync(new URL(file, FACTS), 'utf8')) as T;
+}
 
 /** The shipped adapters, each its facts file plus the parts that aren't data, named by the facts' agent field. */
 export function shipped(): AdapterRegistry {
