@@ -119,6 +119,11 @@ export interface HookMeta {
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.
    */
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
+  /**
+   * The hunks an edit's PostToolUse reports (#352): one per run of changed lines, its context and its common head and
+   * tail taken off, in order down the file. Numbers only: no line's text leaves the parser.
+   */
+  hunks?: Hunk[];
   /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
   pr?: string;
   /** A shell call that ran, with what it printed, read against the repo's outside resources (#342). */
@@ -132,6 +137,8 @@ export interface HookMeta {
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: 'subagent' | 'command'; call: string; what: string }
     | { monitor: string; what: string; command: string; timeout: number | null } | { stopped: string };
 }
+/** One run of an edit's changed lines (#352): where it starts once the runs above it are applied, the lines it removes and adds there, and the new lines it changed. */
+export interface Hunk { oldStart: number; oldLines: number; newLines: number; changed: number[] }
 /** The effect classes no "proceed" covers (#321). */
 export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']);
 /** What the event loop hands the core of a PreToolUse it holds for the gate: the call as a person reads it, its effect classes and MCP tool. */
@@ -156,7 +163,7 @@ export interface Gated {
   label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string;
   /** The push, PR and merge defaults this call meets (#84), each with what it does; `merge` is what a merge names. */
   named?: { rule: string; effect: 'push' | 'pr' | 'merge' }[];
-  merge?: { head?: string; pr?: string; auto?: boolean; disable?: boolean };
+  merge?: { head?: string; pr?: string; auto?: boolean; disable?: boolean; blind?: boolean };
   /** A question card's questions (#84), sorted as a stop's question is. */
   card?: Record<string, unknown>[];
   /** A computer-use step: allowed only on what its session leases (#332). */

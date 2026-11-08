@@ -46,7 +46,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.health', ['app', 'cli']], ['health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
-  ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
+  ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['race.start', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
   // A run of a destructive command undone from the copy staged before it ran (#347).
@@ -334,7 +334,7 @@ function mergeNamed(meta: HookMeta, data: Obj): NonNullable<Gated['merge']> {
   if (read !== undefined) {
     const part = (name: string) => new RegExp(`\\b${name}=(\\S+)`).exec(read)?.[1];
     const [pr, head] = [part('pr'), part('head')];
-    return { ...(pr ? { pr } : {}), ...(head ? { head } : {}), ...(/ auto\b/.test(read) ? { auto: true } : {}), ...(/ disable\b/.test(read) ? { disable: true } : {}) };
+    return { ...(pr ? { pr } : {}), ...(head ? { head } : {}), ...(/ auto\b/.test(read) ? { auto: true } : {}), ...(/ disable\b/.test(read) ? { disable: true } : {}), ...(/ blind\b/.test(read) ? { blind: true } : {}) };
   }
   const input = isObj(meta.call?.input) ? meta.call.input : {};
   const pr = input.pullNumber ?? input.pull_number;
@@ -808,6 +808,8 @@ class Hub {
       const words: [string, string[]][] = [['git push', ['push-needs-ask']], ['gh pr create', ['pr-needs-ask']], ['gh pr merge', ['merge-needs-ask', 'merge-names-head']]];
       matched = words.filter(([w]) => String(data.command ?? '').includes(w)).flatMap(([, rules]) => rules);
     }
+    // The planted wrong program for #1523 holds every call to the programs the new forms run, as a push.
+    if (this.plant === 'holds-every-program' && /^\s*(?:jj|gt|sl|glab|git[\s-]town|gh\s+api)\b/.test(String(data.command ?? ''))) matched = [...matched, 'push-needs-ask'];
     const shell = Object.entries(NAMED_RULES).flatMap(([rule, effect]) => (matched.includes(rule) ? [{ rule, effect }] : []));
     const tool = Object.entries(NAMED_RULES).flatMap(([rule, effect]) => (effect === data.effect ? [{ rule, effect }] : []));
     return [...shell, ...tool.filter((t) => !shell.some((s) => s.rule === t.rule))].filter((n) => blocks(n.rule));
