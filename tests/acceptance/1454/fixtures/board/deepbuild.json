@@ -1,0 +1,9 @@
+{
+  "id": "test/board",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["record"] },
+  "actions": ["ext.board.refresh"],
+  "panels": [{ "name": "ext.board.view", "area": "sidebar" }],
+  "requires": { "preview": ["deep.registerView", "deep.registerAction"] }
+}

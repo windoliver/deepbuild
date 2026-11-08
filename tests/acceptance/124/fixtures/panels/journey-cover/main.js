@@ -8,8 +8,7 @@
 // filled BANNER, an orange nothing else in the app draws, so a screenshot shows where it lies.
 //
 // The twin, ../journey-cover-twin/main.js, is this file with COVERED set to false and nothing else changed.
-import { View, div } from "gpui-kit";
-import { v_flex, Button } from "gpui-base";
+import { View, div, v_flex, Button } from "@deepbuild/panel";
 
 const COVERED = true;
 const BANNER = "#e8590c";

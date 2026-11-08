@@ -82,6 +82,10 @@ export interface HookMeta {
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
   payloadWriter?: string;
+  /** The person whose credential the hook's connection presented (#1337), set by the event loop alone; none for the owner. */
+  person?: string;
+  /** Only the actor-from-payload plant reads it. */
+  payloadActor?: string;
   /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
   denied?: string;
   /** Set by the server on a PreToolUse its guard entries blocked: the entries, by name, for a PostToolUse that shows it ran anyway (#1033). */
@@ -119,6 +123,11 @@ export interface HookMeta {
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.
    */
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
+  /**
+   * The hunks an edit's PostToolUse reports (#352): one per run of changed lines, its context and its common head and
+   * tail taken off, in order down the file. Numbers only: no line's text leaves the parser.
+   */
+  hunks?: Hunk[];
   /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
   pr?: string;
   /** A shell call that ran, with what it printed, read against the repo's outside resources (#342). */
@@ -132,6 +141,8 @@ export interface HookMeta {
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: 'subagent' | 'command'; call: string; what: string }
     | { monitor: string; what: string; command: string; timeout: number | null } | { stopped: string };
 }
+/** One run of an edit's changed lines (#352): where it starts once the runs above it are applied, the lines it removes and adds there, and the new lines it changed. */
+export interface Hunk { oldStart: number; oldLines: number; newLines: number; changed: number[] }
 /** The effect classes no "proceed" covers (#321). */
 export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']);
 /** What the event loop hands the core of a PreToolUse it holds for the gate: the call as a person reads it, its effect classes and MCP tool. */

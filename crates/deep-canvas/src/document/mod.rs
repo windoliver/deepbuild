@@ -95,6 +95,10 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "worlds",
     "brief",
     "checks",
+    // The media module's strips and the positional voices placed on items (#427; Strip and
+    // track, Emitter), read by the media module.
+    "strips",
+    "emitters",
 ];
 
 /// An item's keys (Item and kind), in this slice.

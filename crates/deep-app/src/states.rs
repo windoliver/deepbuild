@@ -294,6 +294,20 @@ pub struct Table {
     asks: Vec<Value>,
     /// Each reading's newest value and the time it is as of, in ms (#1172).
     values: HashMap<String, (f64, u64)>,
+    /// Each start's facts from its `start.started` (#1348): the run's approval ask, the issue, the branch and
+    /// the repo, by start; and the session each start became, from its `start.session`.
+    starts: HashMap<String, Start>,
+    started: HashMap<String, String>,
+}
+
+/// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
+/// names a session's page shows.
+#[derive(Clone, Debug, Default)]
+struct Start {
+    ask: String,
+    issue: Option<u64>,
+    branch: String,
+    repo: String,
 }
 
 /// What a session's state is read from: of its own events, only the newest of each kind it reads, and each claim's
@@ -331,6 +345,8 @@ struct Session {
     readings: Vec<String>,
     /// How long each check's clean runs took, shortest first.
     took: HashMap<String, Vec<u64>>,
+    /// Its newest run's failure when that run failed (#1348): what it gave, its trace included, else its assertion.
+    failure: Option<String>,
 }
 
 impl Table {
@@ -357,6 +373,25 @@ impl Table {
             {
                 let as_of = data["as_of"].as_u64().unwrap_or(0);
                 self.values.insert(reading.to_owned(), (value, as_of));
+            }
+        }
+        if kind == "start.started" {
+            let data = &event["data"];
+            let text = |key: &str| data[key].as_str().unwrap_or_default().to_owned();
+            self.starts.insert(
+                text("run"),
+                Start {
+                    ask: text("ask"),
+                    issue: data["issue"].as_u64(),
+                    branch: text("branch"),
+                    repo: text("repo"),
+                },
+            );
+        }
+        if kind == "start.session" {
+            let data = &event["data"];
+            if let (Some(run), Some(session)) = (data["run"].as_str(), data["session"].as_str()) {
+                self.started.insert(session.to_owned(), run.to_owned());
             }
         }
         if kind == "task.created" {
@@ -490,6 +525,59 @@ impl Table {
             .and_then(|reading| reading.deadline)
             .or_else(|| ask["data"]["deadline"].as_u64())
     }
+
+    /// The failure of the session's newest run, when it failed (#1348).
+    pub fn failure(&self, session: &str) -> Option<&str> {
+        self.sessions.get(session)?.failure.as_deref()
+    }
+
+    /// The real names a session's page shows of a session a work run started (#1348): the session, and its start's
+    /// issue, branch and repo. None for a session no start names.
+    pub fn names(&self, session: &str) -> Vec<String> {
+        let Some(start) = self
+            .started
+            .get(session)
+            .and_then(|run| self.starts.get(run))
+        else {
+            return Vec::new();
+        };
+        let mut names = vec![format!("Session {session}")];
+        names.extend(start.issue.map(|issue| format!("Issue #{issue}")));
+        names.extend((!start.branch.is_empty()).then(|| format!("Branch {}", start.branch)));
+        names.extend((!start.repo.is_empty()).then(|| format!("Repo {}", start.repo)));
+        names
+    }
+
+    /// Each work run whose every session has stopped (#1348): none queued, working, waiting on its checks or sent
+    /// back to try again. A run is its approval's ask, with its sessions in the order they started.
+    pub fn ended_runs(&self) -> Vec<(String, Vec<String>)> {
+        let mut runs: Vec<(String, Vec<String>)> = Vec::new();
+        for session in &self.order {
+            let Some(start) = self
+                .started
+                .get(session)
+                .and_then(|run| self.starts.get(run))
+            else {
+                continue;
+            };
+            match runs.iter_mut().find(|(ask, _)| *ask == start.ask) {
+                Some((_, sessions)) => sessions.push(session.clone()),
+                None => runs.push((start.ask.clone(), vec![session.clone()])),
+            }
+        }
+        runs.retain(|(_, sessions)| {
+            sessions.iter().all(|session| {
+                !matches!(
+                    self.state(session),
+                    State::Queued
+                        | State::Working
+                        | State::SaysDone { .. }
+                        | State::SentBack { .. }
+                )
+            })
+        });
+        runs
+    }
 }
 
 impl Session {
@@ -574,7 +662,13 @@ impl Session {
                     took(&mut self.took, &check, at, *finished);
                 }
             }
+            "run.finished" if data["outcome"] == "failed" => {
+                self.failure = ["actual", "assertion", "check"]
+                    .iter()
+                    .find_map(|key| text(&data[*key]).filter(|text| !text.is_empty()));
+            }
             "run.finished" if data["outcome"] == "passed" => {
+                self.failure = None;
                 let run = data["run"].to_string();
                 let at = event["ts"].as_u64();
                 self.passed.entry(run.clone()).or_default().push(at);

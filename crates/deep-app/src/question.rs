@@ -370,6 +370,10 @@ impl Controller {
             Row::Text(self.model.kind.name().to_owned()),
             Row::Text(self.model.question.clone()),
         ];
+        // #1348's planted card line, in a test build only.
+        if crate::plain::planted("card-line-pr") {
+            rows.push(Row::Text(crate::plain::PLANTED_PR_LINE.to_owned()));
+        }
         if let Some(receipt) = &self.receipt {
             rows.push(Row::Text(format!("Answered: {}", receipt.says)));
             rows.push(Row::Undo);

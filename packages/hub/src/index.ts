@@ -9,9 +9,10 @@ import { confirmed, gatesCommand, useCommand } from './authority.js';
 import { backupCommand, restoreCommand } from './backup.js';
 import { envCommand } from './env.js';
 import { guardCommand } from './guards.js';
-import { inboxCommand } from './inbox.js';
+import { inboxCommand, raceCommand } from './inbox.js';
 import { startCommand } from './start-command.js';
 import { workspaceCommand } from './workspace-command.js';
+import { fixCommand } from './fix-command.js';
 import { installCommand } from './install.js';
 import { memoryCommand } from './memory.js';
 import { rulesCommand } from './rules.js';
@@ -24,7 +25,7 @@ import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.
 
 export { startCommand };
 export { gateCommand } from './gate-command.js';
-export { workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, memoryCommand, relationItems, rulesCommand, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
+export { fixCommand, workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, raceCommand, memoryCommand, relationItems, rulesCommand, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { numbersCommand, statusCommand } from './status.js';
 export { showCommand } from './show.js';
 export { kindsCommand } from './canvas.js';
