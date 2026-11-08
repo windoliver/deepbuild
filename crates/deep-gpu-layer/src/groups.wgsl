@@ -46,6 +46,30 @@ fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
     if ((m.flags & 1u) != 0u && s.a > 0.0) {
         s = vec4<f32>(decode(clamp(s.rgb / s.a, vec3<f32>(0.0), vec3<f32>(1.0))) * s.a, s.a);
     }
+    // A matte: the source's coverage, its alpha or its luma in linear light or on encoded values.
+    if ((m.flags & 16u) != 0u) {
+        let c = textureLoad(cover, ix, 0);
+        var coverage = c.a;
+        if ((m.flags & 64u) == 0u && c.a > 0.0) {
+            let u = clamp(c.rgb / c.a, vec3<f32>(0.0), vec3<f32>(1.0));
+            let layer_linear = (m.flags & 256u) != 0u;
+            let want_encoded = (m.flags & 32u) != 0u;
+            var v = u;
+            if (want_encoded && layer_linear) {
+                v = encode(u);
+            } else if (!want_encoded && !layer_linear) {
+                v = decode(u);
+            }
+            coverage = dot(v, vec3<f32>(0.2126, 0.7152, 0.0722)) * c.a;
+        } else if ((m.flags & 64u) == 0u) {
+            coverage = 0.0;
+        }
+        if ((m.flags & 128u) != 0u) {
+            coverage = 1.0 - coverage;
+        }
+        let t = s * coverage;
+        return t + b * (1.0 - t.a);
+    }
     if ((m.flags & 2u) != 0u) {
         return mix(b, s, textureLoad(cover, ix, 0).a * m.alpha);
     }

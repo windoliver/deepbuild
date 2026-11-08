@@ -14,7 +14,7 @@ use deep_canvas_effects::emit::Options as EmitOptions;
 use deep_canvas_effects::fx::Named;
 use deep_canvas_effects::graph::COLLECTION;
 use deep_canvas_effects::module::{pass_graph, target_reads, TargetRead};
-use deep_canvas_marks::scene::{Blend, Drawn, Effect, Fill, GroupPass, Mark, Scope};
+use deep_canvas_marks::scene::{Blend, Drawn, Effect, Fill, GroupPass, Mark, MatteMode, Scope};
 use deep_effects_render::compile::compile_with;
 use deep_effects_render::docops::{item_seed, DocOps, Profiled};
 use deep_effects_render::runner::{Frame, LINEAR};
@@ -68,8 +68,9 @@ impl Clock {
 
 /// Whether the group scope `s` needs the GPU layer.
 fn wants(s: &Scope) -> bool {
-    matches!(s, Scope::Opacity { blend, effect, .. }
-        if effect.is_some() || blend.is_some_and(Blend::gpu_only))
+    matches!(s, Scope::Matte { .. })
+        || matches!(s, Scope::Opacity { blend, effect, .. }
+            if effect.is_some() || blend.is_some_and(Blend::gpu_only))
 }
 
 /// Whether any of `marks` draws inside a group only the GPU layer composites.
@@ -86,13 +87,22 @@ fn ids(marks: &[Drawn]) -> BTreeSet<String> {
             continue;
         };
         for s in &d.scopes[..=last] {
-            if matches!(s, Scope::Opacity { .. }) {
+            if matches!(s, Scope::Opacity { .. } | Scope::Matte { .. }) {
                 out.insert(s.item().to_string());
             }
         }
     }
     out
 }
+
+/// A matte composite's flags in the compositor's shader (`groups.wgsl`): the source's coverage
+/// scales the marks; from its alpha rather than its luma; luma on encoded values; turned over;
+/// and the layer composites in linear light.
+const MATTE: u32 = 16;
+const MATTE_ENCODED: u32 = 32;
+const MATTE_ALPHA: u32 = 64;
+const MATTE_INVERTED: u32 = 128;
+const MATTE_LINEAR_LAYER: u32 = 256;
 
 /// The internal mode of a composite that replaces the target: [`blend::MODES`] ends before it.
 const REPLACE: u32 = 28;
@@ -296,6 +306,8 @@ struct Mix<'a> {
     mode: u32,
     alpha: f32,
     decode: bool,
+    /// #495: the flags of a matte composite (`MATTE_*`), `cover` its source's pixels; 0 for none.
+    matte: u32,
     /// `source` holds straight colors.
     straight: bool,
     dancing: bool,
@@ -313,6 +325,7 @@ impl<'a> Mix<'a> {
             mode: 0,
             alpha: 1.0,
             decode: false,
+            matte: 0,
             straight: false,
             dancing: false,
             seed: 0,
@@ -651,7 +664,8 @@ impl Groups {
         encoder.copy_texture_to_texture(into.as_image_copy(), copy.as_image_copy(), whole(size));
         let back = copy.create_view(&Default::default());
         let flags = u32::from(m.decode)
-            | (u32::from(m.cover.is_some()) << 1)
+            | (u32::from(m.cover.is_some() && m.matte == 0) << 1)
+            | m.matte
             | (u32::from(m.dancing) << 2)
             | (u32::from(m.straight) << 3);
         let mut words = Vec::with_capacity(32);
@@ -718,7 +732,9 @@ impl Groups {
                 .iter()
                 .position(|d| !d.scopes.iter().any(|s| s.item() == group))
                 .map_or(marks.len(), |n| start + n);
-            if late(x.planted, &marks[start].scopes[k]) {
+            if matches!(marks[start].scopes[k], Scope::Matte { .. }) {
+                self.matte(x, &marks[start..end], k, into)?;
+            } else if late(x.planted, &marks[start].scopes[k]) {
                 // Its children draw now; its passes wait for the layer's end.
                 let inside: Vec<Drawn> = marks[start..end].iter().map(|d| without(d, k)).collect();
                 if !backdrop_of(&marks[start].scopes[k]) {
@@ -846,6 +862,7 @@ impl Groups {
             mode: number.unwrap_or(0),
             alpha: *alpha as f32,
             decode: false,
+            matte: 0,
             straight: false,
             dancing: effect.as_deref().is_some_and(|e| e.dancing),
             seed: item_seed(x.clock.seed, item),
@@ -864,6 +881,60 @@ impl Groups {
         }
         self.composite(x.device, into, m, x.size);
         self.give(&children);
+        Ok(())
+    }
+
+    /// #495: one matte's run of marks, whose scope is at `k`: the marks drawn into a target of
+    /// their own, the source into another, and the first laid over `into` through the second's
+    /// coverage, in the space the layer composites in.
+    fn matte(
+        &mut self,
+        x: &mut Run<'_>,
+        run: &[Drawn],
+        k: usize,
+        into: &wgpu::Texture,
+    ) -> Result<(), Value> {
+        let Scope::Matte {
+            source,
+            mode,
+            encoded,
+            ..
+        } = &run[0].scopes[k]
+        else {
+            return Err(refused("bad_input", "a matte scope is a matte's"));
+        };
+        let inside: Vec<Drawn> = run.iter().map(|d| without(d, k)).collect();
+        let bounds = union(&inside);
+        let children = self.take(x.device, x.size, ACC);
+        x.around.push(into.clone());
+        let drawn = self.marks(x, &inside, &children);
+        x.around.pop();
+        drawn?;
+        let cover = self.take(x.device, x.size, ACC);
+        self.marks(x, source, &cover)?;
+        let (view, coverage) = (
+            children.create_view(&Default::default()),
+            cover.create_view(&Default::default()),
+        );
+        let inverted = matches!(mode, MatteMode::AlphaInverted | MatteMode::LumaInverted);
+        let alpha = matches!(mode, MatteMode::Alpha | MatteMode::AlphaInverted);
+        let m = Mix {
+            cover: Some(&coverage),
+            matte: MATTE
+                | if *encoded { MATTE_ENCODED } else { 0 }
+                | if alpha { MATTE_ALPHA } else { 0 }
+                | if inverted { MATTE_INVERTED } else { 0 }
+                | if x.space == Space::Linear {
+                    MATTE_LINEAR_LAYER
+                } else {
+                    0
+                },
+            rect: px(bounds, 0.0, x.size),
+            ..Mix::over(&view, x.size)
+        };
+        self.composite(x.device, into, m, x.size);
+        self.give(&children);
+        self.give(&cover);
         Ok(())
     }
 
