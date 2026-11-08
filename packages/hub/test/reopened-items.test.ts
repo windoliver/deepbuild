@@ -28,7 +28,7 @@ const asksForT = (events: readonly Ev[], since = 0): Ev[] => events.filter((e) =
  * Opens PR 21, then makes one stop per entry of `resolved` (who resolved T at it, null: unresolved), calling `between`
  * after each. `deadline`: the exception asks' deadline in your settings, in place of the world's.
  */
-async function play(resolved: (string | null)[], between?: (n: number, events: Ev[], w: World, hub: Hub) => Promise<void>, deadline?: string): Promise<{ ref: string; stops: { since: number; events: Ev[] }[] }> {
+async function play(resolved: (string | null)[], between?: (n: number, events: Ev[], w: World, hub: Hub) => Promise<void>, deadline?: string): Promise<{ ref: string; hub: Hub; stops: { since: number; events: Ev[] }[] }> {
   const w = makeWorld({ drafts: [DRAFT], readings: [ISSUE], answers: answers(resolved[0]!), files: EXPIRED.files });
   if (deadline) {
     const config = JSON.parse(readFileSync(join(w.root, 'config.json'), 'utf8')) as { asks: { deadline: Record<string, string> } };
@@ -61,7 +61,7 @@ async function play(resolved: (string | null)[], between?: (n: number, events: E
     stops.push({ since, events });
     await between?.(n, events, w, hub);
   }
-  return { ref, stops };
+  return { ref, hub, stops };
 }
 
 describe('#1633 review rounds: a reopened review note and its ask', () => {
@@ -119,5 +119,20 @@ describe('#1633 review rounds: a reopened review note and its ask', () => {
     expect(asksForT(first!.events), 'the agent\'s own resolution raises no accept ask').toEqual([]);
     expect(isOpen(second!.events, item), 'unresolved, it is still open').toBe(true);
     expect(asksForT(second!.events, second!.since).length, 'none is open for it and you never answered one, so its accept ask is raised now').toBe(1);
+  }, 900_000);
+
+  it('that note\'s accept ask, once it passed its deadline unanswered, is not raised again while the note stays open', async () => {
+    let defaulted = 0;
+    const { hub } = await play([YOU_GH, null, null], async (n, events, _w, hub) => {
+      if (n !== 1) return;
+      const [ask] = asksForT(events);
+      expect(ask, `the second stop raised an accept ask for ${T.id}`).toBeDefined();
+      const all = await settle(hub, (e) => e.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 150_000);
+      expect(all.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 'the ask defaults at its deadline').toBe(true);
+      defaulted = await lastPos(hub);
+    }, '1m');
+    // An ask is raised apart from the claim: give one the time it would take to land.
+    const last = await settle(hub, () => false, 5000);
+    expect(asksForT(last, defaulted), 'nothing changed about the open note, so the same question never reaches you twice').toEqual([]);
   }, 900_000);
 });

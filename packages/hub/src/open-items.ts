@@ -127,8 +127,9 @@ export class OpenItems {
       const note = f.from === 'review_thread' && !f.resolved_by;
       const asked = was && (!was.open || (note && was.resolved_by)) ? await this.asked(item) : undefined;
       const again = was && !was.open && ((!was.by?.startsWith('your answer') && !asked?.closed) || this.o.plant === 'reopens-every-item') ? was.closing : null;
-      // Opened again, or open with no ask yet, it reaches you through its ask only when none is open for it and you never answered one.
-      const ask = !was || ((again !== null || was.open) && asked !== undefined && !asked.open && !asked.answered);
+      // Opened again, it reaches you through its ask only when none is open for it and you never answered one; open, only
+      // when it never had one.
+      const ask = !was || (asked !== undefined && (again !== null ? !asked.open && !asked.answered : was.open && !asked.any));
       // Raised again while open, it is the same record; one whose thread the session resolved since is revised, naming who did.
       if (was && !again && !(f.resolved_by && was.open && was.resolved_by !== f.resolved_by)) {
         if (ask && note) this.raiseAccept(c, item, f.text);
@@ -218,11 +219,11 @@ export class OpenItems {
     const ts = this.o.now();
     await this.o.append(core, { v: replaces ? 4 : 2, id: ulid(ts), kind: 'open_item.opened', ts, data: { task_ref: task, text: f.text.slice(0, 8192), item, from: f.from, ...(f.resolved_by ? { resolved_by: f.resolved_by.slice(0, 256) } : {}), ...(replaces ? { replaces } : {}) } });
   }
-  /** The item's asks: whether one is open, whether you answered one, and whether you closed it through one, accepting or waiving it. */
-  private async asked(item: string): Promise<{ open: boolean; answered: boolean; closed: boolean }> {
+  /** The item's asks: whether it had any, whether one is open, whether you answered one, and whether you closed it through one, accepting or waiving it. */
+  private async asked(item: string): Promise<{ any: boolean; open: boolean; answered: boolean; closed: boolean }> {
     const rows = (await this.o.raw(`SELECT status, answer FROM asks WHERE key = ?`, [waiverKey(item)])) as { status: string; answer: string | null }[];
     const answered = rows.filter((r) => r.status === 'answered' || r.status === 'decided');
-    return { open: rows.some((r) => r.status === 'open' || r.status === 'later'), answered: answered.length > 0, closed: answered.some((r) => r.answer === '"accept"' || r.answer === '"waive"') };
+    return { any: rows.length > 0, open: rows.some((r) => r.status === 'open' || r.status === 'later'), answered: answered.length > 0, closed: answered.some((r) => r.answer === '"accept"' || r.answer === '"waive"') };
   }
   private async closed(core: Connection, task: string, item: string, text: string, by: string): Promise<void> {
     const ts = this.o.now();
