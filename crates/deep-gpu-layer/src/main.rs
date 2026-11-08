@@ -150,6 +150,8 @@ pub enum Planted {
     FlareFixedGhosts,
     /// #465: the flare built as if nothing covered its light.
     FlareIgnoresOcclusion,
+    /// #166: the water's foam carried from frame to frame as simulation state.
+    WaterFoamKeepsState,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -377,6 +379,7 @@ impl Planted {
             "slow_gpu_frame" => Planted::SlowGpuFrame,
             "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
+            "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,

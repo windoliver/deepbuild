@@ -752,6 +752,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             // #465: the planar part it mirrors in; the sweep leaves it unset, since the fixture
             // holds no planar part.
             p("mirror", "{strength, blur: px, plane: named part}", "px", Value::Null, S, Value::Null, Value::Null),
+            // #166: water on a plate's part; the sweep leaves it unset, as it does the mirror.
+            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold}, wake: {item, span} | none}", "m", Value::Null, S, Value::Null, Value::Null),
             p(
                 "pattern",
                 "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",
