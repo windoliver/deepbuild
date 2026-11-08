@@ -96,6 +96,8 @@ test-scatter = ["dep:deep-canvas-test-modules"]
 # number (the #488 acceptance README: The test canvas modules).
 test-tick = ["dep:deep-canvas-test-modules"]
 test-frame-cache = ["dep:deep-canvas-test-modules"]
+# Issue #497: a module stepping at its item's step_rate into a held array.
+test-held = ["dep:deep-canvas-test-modules"]
 # Issue #388: test builds that leave look, or text, out of the build set's list; the seal
 # refuses each at startup, naming the module.
 test-leave-out-look = []

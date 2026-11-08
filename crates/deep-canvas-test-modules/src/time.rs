@@ -62,6 +62,49 @@ pub fn tick() -> Module {
     }
 }
 
+/// The step `test.held@1` sets: its first item's `step_rate`, which the check holds to a
+/// whole-flick step.
+fn held_step(doc: &serde_json::Value) -> Option<i64> {
+    let items = doc.get("items")?.as_object()?;
+    let item = items.values().find(|i| of_kind(i, "test.held@1"))?;
+    let hz = item.get("params")?.get("step_rate")?.as_f64()?;
+    deep_canvas::time::step_length(hz).ok()
+}
+
+fn register_held(r: &mut Registrar) {
+    let rate = deep_canvas::kinds::Param {
+        name: "step_rate",
+        ty: deep_canvas::kinds::ParamType::F32,
+        unit: "Hz",
+        default: serde_json::json!(60),
+        min: Some(1.0),
+        max: Some(705_600_000.0),
+        minor: 0,
+        module: "",
+        operator: "",
+    };
+    r.kind(kind("test", "held", vec![box_param(), rate]), &[], "rect@1");
+    r.array("test.held.index", "i64", "document", "time", "simulate");
+    r.carried("checkpoint", "test.held.state", 64);
+    r.operator("step", "simulate", &[], &["test.held.index"])
+        .steps_at(FRAME, held_step)
+        .applies(|doc, _, _| has_kind(doc, "test.held@1"))
+        .run(|v| {
+            let index = as_i64(v.carried("test.held.index")).map_or(0, |k| k + 1);
+            v.note_step(index, 0);
+            v.write("test.held.index", Val::typed(index))
+        });
+}
+
+/// `test.held` 1.0.0 (the #497 acceptance README): steps at its item's `step_rate`, writing
+/// each step's index k into the held array `test.held.index`, checkpointed as `test.tick`.
+pub fn held() -> Module {
+    Module {
+        manifest: manifest("test.held", &[]),
+        register: register_held,
+    }
+}
+
 fn register_cache(r: &mut Registrar) {
     r.kind(kind("test", "cache", vec![box_param()]), &[], "rect@1");
     r.contribution(
