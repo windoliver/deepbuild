@@ -1,0 +1,12 @@
+{
+  "issue": 344,
+  "criterion": "#344.10e389aa",
+  "verdict": "looks_right",
+  "who": "Claude (agent), on the owner Tao Feng's instruction in the session: \"validate for me\"",
+  "when": "2026-11-08T01:09:45Z",
+  "screenshots": {
+    "rules-page.png": "5244f5b4e22d213f5a8c80b347c4c72e80cea93aeb09630e49d4067075f913f9",
+    "rules-page-text-only.png": "65207683084174aa0f8585d0144d33b5aa94059c2e0aeb5e9f834f4311a73651"
+  },
+  "note": "Delegated call. Both pictures show every rule with its file, scope, enforcer and tokens under column heads; never force-push reads guard no-force-push, and never rebase published branches reads text only. The app frame's working/queued mismatch for the same session is outside this page."
+}

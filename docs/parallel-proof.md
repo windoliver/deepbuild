@@ -110,6 +110,16 @@ The `alone` block in `lanes.mjs` exists for three different reasons, and each ge
 
 A folder moves only when its sole reason is the binary rewrite, and only after its wrong program fails in the parallel block, before it leaves `alone`. Roughly 70–80 acceptance files spawn `cargo` themselves. An acceptance test is never edited by the agent fixing the tooling, so each needs a blind redraft (AGENTS.md, Proof) before it can read `DEEP_BIN_DIR`. Those are separate small blind jobs; T4 lands the mechanism and moves only the folders whose files need no redraft or whose redraft has merged.
 
+### 7a. Shards, exclusive folders and slow files in `affected.mjs` (owner decision, 2026-11-07)
+
+Measured over the last 80 merged PRs on 2026-11-07, `affected.mjs` took about 3.3 hours a PR on the Mac, at the fastest run recorded for each file. Three quarters of that was the `alone` block: a median PR selects 389 of its 1,047 files, run one at a time. The owner decided, to bring the average PR under 10 minutes, that until T4 and the blind redrafts land:
+
+- **Shards.** The alone block's folders run side by side, each in a shard: a fixed-path workspace, `~/deepbuild-shards/<k>/`, holding the worktree's exact tree written in place by the bays' rule (section 4), its own `target/` kept across runs, and the worktree's `node_modules/` and package builds cloned copy-on-write each use. A folder still runs one file at a time, and only in one shard at once, so its files and its builds never meet another's: a sibling's cargo build rewrites `target/debug/<bin>` only in the shard it runs in. The shards run beside the parallel block, holding one test grant between them, and `DEEP_SHARDS` sets how many, half the cores by default. A shard is taken, new or reused, only while the disk holds 5 GB for it above #1017's 30 GB floor, since its tests' builds grow it; with none, the block runs in the worktree as before. A new shard's first builds compile the workspace crates its tests build at its own path: deep-hook and deep-show took 2.4 minutes and 3.4 GB, the whole workspace about 3.5 minutes and 6 GB.
+- **Exclusive folders.** The folders whose reason is the machine itself, `lanes.mjs`'s `exclusive` list (#16's and #315's socket timing, #236's sandbox log stream), run after the shards, one at a time, in the worktree, with nothing beside them.
+- **Slow files.** `lanes.mjs`'s `slow` list names the files whose fastest recorded run took over two minutes. `affected.mjs` leaves them, as it leaves the timed ones, unless `--slow` or the change adds or edits the file, and an unrun slow file makes the run INCONCLUSIVE, never PASS (invariant 2). The release preflight runs them all, and so does the budget window's schedule.
+
+The trust a shard gives up is a bay's: it carries its `target/` from run to run, so its build is only as good as cargo's fingerprints. Lint scripts that build nothing run under no throttle grant, since in the build class they waited up to 30 minutes behind a neighbour's cargo build and ran nothing.
+
 ## 8. Remote lanes
 
 `scripts/lane-remote.mjs --host spark-ts <lane>` (T7) runs a lane for a Mac session on the Spark:
