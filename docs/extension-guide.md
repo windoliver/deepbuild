@@ -25,6 +25,30 @@ To build one, copy the folder, write `packageDigest` of it into `deepbuild.json`
 
 Put them in `tests/`, each file named `*.test.ts` or `*.test.mjs`. A file's default export is an object of named tests, each an async function given `t`: `t.call(action, input)` calls one of the package's actions as the app would and returns its output, `t.read(source)` reads one of its polled sources through the hub, and `t.now()` is the hub's clock. A test fails by throwing; `node:assert` works. DeepBuild runs them in the package's sandbox on recorded source calls and a clock it controls, never live.
 
+## A panel's module
+
+A panel imports only `@deepbuild/panel`, DeepBuild's own module, by name: `import { View, div, v_flex } from "@deepbuild/panel"`, as `panel/main.js` does. It never names the toolkit under it, so a change of toolkit breaks no plug-in. A panel that imports the toolkit, or a name off the list below, is refused at install and again at load, naming the file and line, and for a name off the list the closest name on it. The list is checked in at `crates/deep-app/panel-catalog.json`, with every component the toolkit has that isn't offered and why.
+
+- `View`: The class a panel's views extend: init(props, cx), render(cx).
+- `div`: A box element, styled by chained calls such as .p(8), .bg(color) and .child(x).
+- `svg`: An element drawing an SVG path or file, sized and colored like a div.
+- `PathBuilder`: Builds a vector path: move_to, line_to, curve_to, then fill or stroke it.
+- `Background`: A background beyond a plain color, such as a gradient, for .bg(…).
+- `h_flex`: A box laying its children out in a row.
+- `v_flex`: A box laying its children out in a column.
+- `DockArea`: The app's dock: DockArea.register_panel(slot, View) puts a view in a slot.
+- `Canvas`: DeepBuild's canvas: new Canvas(scene, color?) draws a CanvasScene's items.
+- `CanvasScene`: The items a Canvas draws, by ID, kept across renders: scene.set(id, values).
+- `InputState`: The text an Input holds, kept across renders: InputState.new({ placeholder }).
+- `needs_you`, `quotes`: the data the app serves a panel, as plain values.
+
+Its components, each with its props:
+
+- `Button`: `id`: string, given to Button.new(id); `child`: its label: text or an element; `on_click`: (event, window, cx) => void, called on your click. For example `Button.new("ok").child("OK")`.
+- `Input`: `state`: an InputState, given to Input.new(state), holding the text you type. For example `Input.new(InputState.new({ placeholder: "Name" })).w(160)`.
+
+A component whose script runs per frame, such as a table drawing each cell or a list drawing each row through a callback, is never offered: a panel's rows are data.
+
 ## A first plug-in
 
 Most plug-ins need few methods. Start with these 13, in this order.
@@ -218,6 +242,38 @@ An agent adapter: it maps the agent's hooks, delivers answers by the routes its 
 |---|---|---|
 | `name` | string, `^[a-z][a-z0-9-]*$` | yes |
 | `adapter` | object | yes |
+
+### `deep.registerStateSource`
+
+Arrives in R2 · preview · `d1:c058219725adc036392edfdede34b6f708551a262e0d146b5676bc45a1870025`
+
+State outside a repo that a workspace keeps: read() returns its items, compare(item, expected) the difference from what was expected, and undo(change) a plan to undo a change, or that it cannot.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9-]*$` | yes |
+
+### `deep.registerChannel`
+
+Arrives in R2 · preview · `d1:66787a5f380797186a662ff1c377a2025405af03d301b8e3dd64c66592bb37bb`
+
+A way to reach you, such as your phone, a chat app or email: deliver({ summary, link, thread_key }) says delivered, stalled or timed out, and receive() gives an answer with its proof, which the hub checks and decides what it counts as.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9-]*$` | yes |
+| `channel` | object | yes |
+
+### `deep.channel.fetch`
+
+Arrives in R2 · preview · `d1:2ee78dc93e151a8ca07d3d5623dddd159f5f0dcdee2c3f22083b582632a6675e`
+
+A channel's one call to its own service: a GET or POST to a path on the host the channel was granted, answered through the hub.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `call` | string | yes |
+| `request` | object | yes |
 
 ### `deep.registerRoute`
 
@@ -421,3 +477,5 @@ Each kind of thing a package registers fills a slot: its interface with a frozen
 | `deep.registerRoute` | - | `route@1` | many | `route@1` | `no-status`, `answers-any-method`, `get-changes-state` | R1 |
 | `deep.registerIndex` | - | `index@1` | one | `index@1` | `keeps-dropped-source`, `sourceless-hit`, `stale-after-upsert`, `rebuild-is-a-no-op` | R1 |
 | `deep.registerAction` | - | `action@1` | many | `action@1` | `declares-write`, `input-not-a-schema`, `output-not-json` | R2 |
+| `deep.registerChannel` | - | `channel@1` | many | `channel@1` | `delivered-without-ack`, `signed-without-signature` | R2 |
+| `deep.registerStateSource` | - | `state-source@1` | many | `state-source@1` | `undo-fails`, `first-read-kept`, `compare-sees-nothing` | R2 |

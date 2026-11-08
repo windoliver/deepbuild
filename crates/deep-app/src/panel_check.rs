@@ -146,12 +146,22 @@ impl Host {
     }
 
     /// One invalidation: the tree's text and the host's nanoseconds.
-    pub(crate) fn update(&mut self) -> Result<(String, u64), String> {
-        self.send(json!({ "cmd": "invalidate" }))?;
+    pub(crate) fn update(&mut self) -> Result<(Node, u64), String> {
+        let (tree, nanos) = self.tree("invalidate")?;
+        Ok((
+            tree,
+            nanos.ok_or("the panel host sent a tree with no scriptNs")?,
+        ))
+    }
+
+    /// The host's tree after `cmd`, and the script's time when it sent one: the one place the app reads gpui-shell's
+    /// text of a panel's snapshot (#1425), so no other code knows that format.
+    pub(crate) fn tree(&mut self, cmd: &str) -> Result<(Node, Option<u64>), String> {
+        self.send(json!({ "cmd": cmd }))?;
         let reply = self.reply()?;
-        match (reply["tree"].as_str(), reply["scriptNs"].as_u64()) {
-            (Some(tree), Some(nanos)) => Ok((tree.to_owned(), nanos)),
-            _ => Err(format!("the panel failed: {}", reply["error"])),
+        match reply["tree"].as_str() {
+            Some(text) => Ok((parse(text)?, reply["scriptNs"].as_u64())),
+            None => Err(format!("the panel failed: {}", reply["error"])),
         }
     }
 }
@@ -562,8 +572,7 @@ fn run_check(args: &[String]) -> Result<i32, String> {
         let mut host = Host::start(&host_path, &panel, serving)?;
         host_pid.set(Some(host.pid));
         for update in 0..updates {
-            let (text, _) = host.update()?;
-            let tree = parse(&text)?;
+            let (tree, _) = host.update()?;
             if let Some(kind) = unknown_element(&tree) {
                 held.found
                     .push(json!({ "kind": "unknown_element", "update": update, "element": kind }));
@@ -861,8 +870,7 @@ fn run_bench(args: &[String]) -> Result<(), String> {
         let mut tree = None;
         for _ in 0..updates {
             let started = Instant::now();
-            let (text, nanos) = host.update()?;
-            let held = parse(&text)?;
+            let (held, nanos) = host.update()?;
             let elapsed = started.elapsed().as_nanos() as u64;
             script.push(nanos);
             ipc.push(elapsed.saturating_sub(nanos));
