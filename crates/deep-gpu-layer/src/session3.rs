@@ -38,6 +38,10 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         status_before_upscale: p == Some(Planted::StatusBeforeUpscale),
         status_without_depth: p == Some(Planted::StatusWithoutDepth),
         winding_ignores_determinant: p == Some(Planted::WindingIgnoresDeterminant),
+        flare: deep_scene3d_render::flare::Planted {
+            fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
+            ignores_occlusion: p == Some(Planted::FlareIgnoresOcclusion),
+        },
         ties_by_submission: p == Some(Planted::TiesBySubmission),
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
         status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
