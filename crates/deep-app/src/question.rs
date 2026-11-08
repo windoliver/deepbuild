@@ -164,7 +164,7 @@ impl Row {
 /// nothing, is drawn as its escape (`\x1b`, `\u{202e}`) in the card's own font; the record keeps the characters. The
 /// joiners U+200C and U+200D and the variation selectors stay: they shape emoji and scripts. `deep inbox` marks the
 /// same set (packages/hub/src/visible.ts).
-pub fn visible(text: &str) -> String {
+pub(crate) fn visible(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         match c {
@@ -1346,5 +1346,47 @@ mod tests {
             !lines.contains(&"Also answered: Question B?".to_owned()),
             "the receipt is B's own: {lines:?}"
         );
+    }
+
+    /// #1510: the card marks the set `deep inbox` marks, each character in place; joiners and selectors stay.
+    #[test]
+    fn visible_marks_each_control_direction_and_invisible_character() {
+        let marked = [
+            (0x00, 0x1f),
+            (0x7f, 0x9f),
+            (0x61c, 0x61c),
+            (0x200b, 0x200b),
+            (0x200e, 0x200f),
+            (0x2028, 0x202e),
+            (0x2060, 0x2064),
+            (0x2066, 0x206f),
+            (0xfeff, 0xfeff),
+            (0xfff9, 0xfffb),
+            (0xe0000, 0xe007f),
+        ];
+        for (from, to) in marked {
+            for n in from..=to {
+                let c = char::from_u32(n).unwrap();
+                let escape = match c {
+                    '\n' => "\\n".to_owned(),
+                    '\r' => "\\r".to_owned(),
+                    '\t' => "\\t".to_owned(),
+                    _ if n < 0x100 => format!("\\x{n:02x}"),
+                    _ => format!("\\u{{{n:x}}}"),
+                };
+                assert_eq!(
+                    visible(&format!("a{c}b")),
+                    format!("a{escape}b"),
+                    "U+{n:04X}"
+                );
+            }
+        }
+        for n in [
+            0x20, 0x7e, 0xa0, 0x61b, 0x200c, 0x200d, 0x2027, 0x202f, 0x2065, 0xfe0f, 0xfffc,
+            0xe0080,
+        ] {
+            let c = char::from_u32(n).unwrap().to_string();
+            assert_eq!(visible(&c), c, "U+{n:04X}");
+        }
     }
 }

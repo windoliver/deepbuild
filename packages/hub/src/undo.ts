@@ -3,7 +3,6 @@
 import { readFileSync } from 'node:fs';
 import { call, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
-import { visible } from './visible.js';
 
 const USAGE = 'Usage: deep undo staged:<id>';
 
@@ -26,7 +25,6 @@ export async function undoCommand(args: readonly string[]): Promise<number> {
     return reply.error.code === 'handle_syntax' ? 2 : 1;
   }
   const put = [...reply.result.folders as string[], ...reply.result.files as string[]];
-  // The paths are the run's, chosen by its call: printed through `visible` (#1510).
-  process.stdout.write(`${visible(`${String(reply.result.staged)} undone: ${put.join(', ')} hold again what they held before the run`)}\n`);
+  process.stdout.write(`${String(reply.result.staged)} undone: ${put.join(', ')} hold again what they held before the run\n`);
   return 0;
 }
