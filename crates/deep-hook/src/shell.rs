@@ -1938,6 +1938,12 @@ impl Reader {
             })
             .collect();
         let looked_up = looked_up || first.looked_up || args.iter().any(|a| a.looked_up);
+        // A program the line computes may be an interpreter: `"$PY" -c '…'` holds what its words hold.
+        if first.text.is_none() {
+            for text in args.iter().filter_map(|a| a.text.as_deref()) {
+                held.extend(holds(text, &ctx.home, cwd.as_deref()));
+            }
+        }
         self.runs.push(Run {
             unread: (first.text.is_none() && !cfg!(feature = "plant-computed-misses"))
                 .then_some(Unread::Program)
