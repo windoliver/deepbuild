@@ -10,7 +10,7 @@ thread '<unknown>' (2524199) has overflowed its stack
 fatal runtime error: stack overflow, aborting
 error: test failed, to rerun pass `-p deep-canvas --lib`
 Caused by:
-  process didn't exit successfully: `/home/jing/deepbuild/.claude/worktrees/determined-lewin-bc0143/target/debug/deps/deep_canvas-a26bdb700a551842 'expr::tests::a_long_chain_is_refused_before_it_binds'` (signal: 6, SIGABRT: process abort signal)
+  process didn't exit successfully: `<checkout>/target/debug/deps/deep_canvas-a26bdb700a551842 'expr::tests::a_long_chain_is_refused_before_it_binds'` (signal: 6, SIGABRT: process abort signal)
 test expr::tests::a_refusal_reads_no_further_than_it_needs ... FAILED
 thread 'expr::tests::a_refusal_reads_no_further_than_it_needs' (2524949) panicked at crates/deep-canvas/src/expr.rs:2622:9:
 `(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1$`: unexpected `$`
