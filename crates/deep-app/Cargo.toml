@@ -23,6 +23,9 @@ plant-walks-events = []
 plant-spike-window = ["spike"]
 plant-handle-rows = []
 plant-tab-text = []
+# Issue #1408: the wrong programs a test selects with DEEP_HUB_PLANT, read only in a build with this feature. A release
+# build refuses it.
+env-plants = []
 # Issue #124's wrong session rows, in no shipped build: deep-drive turns one on when it's planted, for the UI check.
 plant-row = []
 # Issue #1172: #337's spike window, in no shipped build: the suites that keep its proof build it, through the dev

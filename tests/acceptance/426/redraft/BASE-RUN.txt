@@ -1,0 +1,11 @@
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/426/redraft --no-file-parallelism --testTimeout=3600000` runs unleased
+
+ RUN  v5.0.5 <base export of c12a65bb>/tests/acceptance/426/redraft
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  10:27:44
+   Duration  450.55s (tests 100%)
+
+exit 0
