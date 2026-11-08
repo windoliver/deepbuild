@@ -37,3 +37,12 @@ ac3-planted.test.ts (AC3 #1662.9ac71651)
     At the base the plant is always on (deep-replica's [dependencies] turn plant-row on, and #124's helper builds
     deep-drive with --features env-plants), so on the Mac this test is expected to pass at the base: AC3 is a "still"
     criterion (README, Criterion 3).
+
+Redraft of ac3-planted.test.ts (November 7, 2026), blind, after a dispute from the Mac run (macOS 14.7.7 arm64, head
+020d1a29, target/mac/1662/3-vitest.txt): ac1 3/3 and ac2 3/3 passed there; ac3 failed only at its last assertion,
+"and nothing else matched "planted" in that file: expected 13 to be 2". Its two per-plant assertions (each #124 planted
+test present once, status "passed") had passed. What was wrong: vitest's JSON report lists every test of the file under
+`-t planted`, the 11 the filter left out with status "skipped" (seen in a Linux run of the same command), so the raw
+count was the reporter's shape, not an extra planted test. The assertion now requires that no other test of the file
+ran (a status other than skipped/pending/todo/disabled), naming any that did. Nothing else in the test changed. On
+Linux the redrafted test still skips as INCONCLUSIVE; tsc exit 0.

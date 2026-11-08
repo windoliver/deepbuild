@@ -41,6 +41,9 @@ describe(`${AC3} #124's UI check still fails on both planted rows (RowLabelPastF
       const [a] = found as [Assertion];
       expect(a.status, `the UI check fails on ${plant} as #124 expects; its test says: ${redact((a.failureMessages ?? []).join('\n').slice(0, 1200))}`).toBe('passed');
     }
-    expect(results.length, 'and nothing else matched "planted" in that file').toBe(PLANTED.length);
+    // The JSON report lists every test of the file, the ones `-t planted` left out as skipped; only what ran counts.
+    const NOT_RUN = new Set(['skipped', 'pending', 'todo', 'disabled']);
+    const others = results.filter((a) => !NOT_RUN.has(a.status) && !PLANTED.some((p) => a.fullName.includes(p.title)));
+    expect(others.map((a) => `${a.status}: ${a.fullName}`), 'and no other test of that file ran under -t planted').toEqual([]);
   }, RUN_MS + 60_000);
 });
