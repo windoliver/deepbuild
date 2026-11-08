@@ -1,8 +1,9 @@
- 13:23:23 up 7 days, 17:36,  2 users,  load average: 15.47, 13.29, 9.84
-✔ a merge base whose real check workload's time report has no CPU line is refused as missing, never PASS (660.786478ms)
-✔ a checkout whose real check workload reports no CPU reading is refused as missing, never PASS (676.479508ms)
-✖ a trivial base check read as 0.00 0.00 CPU still gives the fixture its own PASS, not missing base cpuMs (488.139036ms)
-✖ a warm base check read as 0.00 0.00 CPU still gives the fixture its own FAIL for a regression, not missing base cpuMs (499.455975ms)
+base d4ed7be7bab7
+ 14:40:33 up 7 days, 18:53,  3 users,  load average: 64.51, 44.81, 29.96
+✔ a merge base whose real check workload's time report has no CPU line is refused as missing, never PASS (814.398055ms)
+✔ a checkout whose real check workload reports no CPU reading is refused as missing, never PASS (936.384695ms)
+✖ a trivial base check read as 0.00 0.00 CPU still gives the fixture its own PASS, not missing base cpuMs (530.005871ms)
+✖ a warm base check read as 0.00 0.00 CPU still gives the fixture its own FAIL for a regression, not missing base cpuMs (810.050042ms)
 ℹ tests 4
 ℹ suites 0
 ℹ pass 2
@@ -10,14 +11,14 @@
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 1421.486918
+ℹ duration_ms 435284.015798
 
 ✖ failing tests:
 
 test at tests/acceptance/1421/zero-cpu-base.test.mjs:16:1
-✖ a trivial base check read as 0.00 0.00 CPU still gives the fixture its own PASS, not missing base cpuMs (488.139036ms)
+✖ a trivial base check read as 0.00 0.00 CPU still gives the fixture its own PASS, not missing base cpuMs (530.005871ms)
   AssertionError [ERR_ASSERTION]: RUN perf
-  perf: base copy /tmp/deep-1421-9UrwX8/cache/deepbuild-perf/spark-c89f-bc0f7ad06870/base/copy: wrote 77 files, deleted 0; rewrote what the last run left with other bytes: nothing
+  perf: base copy /tmp/deep-1421-xFY6wl/cache/deepbuild-perf/spark-c89f-be4134c439de/base/copy: wrote 88 files, deleted 0; rewrote what the last run left with other bytes: nothing
   FAIL perf: preflight: missing base cpuMs
     Fix: Restore the regressed budget; budgets are frozen once they reach main.
   
@@ -28,16 +29,16 @@ test at tests/acceptance/1421/zero-cpu-base.test.mjs:16:1
       at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
     generatedMessage: false,
     code: 'ERR_ASSERTION',
-    actual: 'RUN perf\nperf: base copy /tmp/deep-1421-9UrwX8/cache/deepbuild-perf/spark-c89f-bc0f7ad06870/base/copy: wrote 77 files, deleted 0; rewrote what the last run left with other bytes: nothing\nFAIL perf: preflight: missing base cpuMs\n  Fix: Restore the regressed budget; budgets are frozen once they reach main.\n',
+    actual: 'RUN perf\nperf: base copy /tmp/deep-1421-xFY6wl/cache/deepbuild-perf/spark-c89f-be4134c439de/base/copy: wrote 88 files, deleted 0; rewrote what the last run left with other bytes: nothing\nFAIL perf: preflight: missing base cpuMs\n  Fix: Restore the regressed budget; budgets are frozen once they reach main.\n',
     expected: /missing (?:base )?cpuMs/,
     operator: 'doesNotMatch',
     diff: 'simple'
   }
 
 test at tests/acceptance/1421/zero-cpu-base.test.mjs:28:1
-✖ a warm base check read as 0.00 0.00 CPU still gives the fixture its own FAIL for a regression, not missing base cpuMs (499.455975ms)
+✖ a warm base check read as 0.00 0.00 CPU still gives the fixture its own FAIL for a regression, not missing base cpuMs (810.050042ms)
   AssertionError [ERR_ASSERTION]: RUN perf
-  perf: base copy /tmp/deep-1421-gJJCfo/cache/deepbuild-perf/spark-c89f-faa6f0480559/base/copy: wrote 77 files, deleted 0; rewrote what the last run left with other bytes: nothing
+  perf: base copy /tmp/deep-1421-XR4ZbZ/cache/deepbuild-perf/spark-c89f-bc1056de2946/base/copy: wrote 88 files, deleted 0; rewrote what the last run left with other bytes: nothing
   FAIL perf: preflight: missing base cpuMs
     Fix: Restore the regressed budget; budgets are frozen once they reach main.
   
@@ -50,7 +51,7 @@ test at tests/acceptance/1421/zero-cpu-base.test.mjs:28:1
       at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
     generatedMessage: false,
     code: 'ERR_ASSERTION',
-    actual: 'RUN perf\nperf: base copy /tmp/deep-1421-gJJCfo/cache/deepbuild-perf/spark-c89f-faa6f0480559/base/copy: wrote 77 files, deleted 0; rewrote what the last run left with other bytes: nothing\nFAIL perf: preflight: missing base cpuMs\n  Fix: Restore the regressed budget; budgets are frozen once they reach main.\n',
+    actual: 'RUN perf\nperf: base copy /tmp/deep-1421-XR4ZbZ/cache/deepbuild-perf/spark-c89f-bc1056de2946/base/copy: wrote 88 files, deleted 0; rewrote what the last run left with other bytes: nothing\nFAIL perf: preflight: missing base cpuMs\n  Fix: Restore the regressed budget; budgets are frozen once they reach main.\n',
     expected: /missing (?:base )?cpuMs/,
     operator: 'doesNotMatch',
     diff: 'simple'
