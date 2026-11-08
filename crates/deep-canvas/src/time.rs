@@ -56,6 +56,22 @@ pub fn sample_length(hz: u32) -> Result<i64, String> {
     Ok(FLICKS_PER_SECOND / i64::from(hz))
 }
 
+/// The whole-flick step of a stepping module at `hz` (issue #497: 705,600,000 ÷ r), or why
+/// there is none: 85 Hz has no whole-flick step.
+pub fn step_length(hz: f64) -> Result<i64, String> {
+    if !(hz.is_finite() && hz >= 1.0 && hz.fract() == 0.0 && hz <= f64::from(u32::MAX)) {
+        return Err(format!("step rate {hz} Hz is not a whole number of hertz"));
+    }
+    let r = hz as i64;
+    if FLICKS_PER_SECOND % r != 0 {
+        return Err(format!(
+            "step rate {r} Hz has no whole-flick step ({} flicks)",
+            fraction(i128::from(FLICKS_PER_SECOND), i128::from(r))
+        ));
+    }
+    Ok(FLICKS_PER_SECOND / r)
+}
+
 /// `n ÷ d` as text with its fraction, for a refusal: `5512.5`.
 fn fraction(n: i128, d: i128) -> String {
     let whole = n / d;
