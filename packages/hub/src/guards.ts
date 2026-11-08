@@ -51,6 +51,26 @@ export async function blocksCall(dir: string, deepHook: string, command: string)
   return said.includes(true);
 }
 
+/**
+ * The guard entries in `<dir>/rules.json` that name a rule they enforce (`proofs.<name>.rule`, #344) and pass their check
+ * now: deep-hook's matcher denies the planted call and allows the twin. An entry that fails, or that can't be checked, is
+ * left out, so its rule reads text only.
+ */
+export async function provenGuards(dir: string, deepHook: string): Promise<{ name: string; rule: string }[]> {
+  let read: { entries?: Obj; proofs?: Obj; classes?: Obj };
+  try { read = JSON.parse(readFileSync(join(dir, 'rules.json'), 'utf8')) as typeof read; } catch { return []; }
+  const out: { name: string; rule: string }[] = [];
+  for (const [name, proof] of Object.entries(read.proofs ?? {})) {
+    const entry = read.entries?.[name];
+    if (!isObj(entry) || !isObj(proof) || typeof proof.rule !== 'string' || !isCall(proof.planted) || !isCall(proof.twin)) continue;
+    const classes = read.classes ?? {};
+    const denied = await matches(deepHook, entry, proof.planted, classes).catch(() => false);
+    const allowed = denied && !(await matches(deepHook, entry, proof.twin, classes).catch(() => true));
+    if (allowed) out.push({ name, rule: proof.rule });
+  }
+  return out;
+}
+
 export type Added = { status: 'installed'; names: string[] } | { status: 'refused'; reason: string };
 
 /**

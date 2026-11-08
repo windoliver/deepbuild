@@ -1,4 +1,4 @@
-//! `deep-replica (--view <needs-you|sidebar|session|terminal-colors> | --first-screen) --out <dir> [--appearance <light|dark>]
+//! `deep-replica (--view <needs-you|sidebar|session|terminal-colors|rules> | --first-screen) --out <dir> [--appearance <light|dark>]
 //! [--bound <file>] [--selected-row <n>] [--focused-row <n>]`: the
 //! replica. Opens the app's shell headless at the reference window on gpui's virtual clock, draws
 //! the view over the fixture record as macOS would in that appearance (light when none is given),
@@ -42,7 +42,8 @@ mod replica {
         let mut cx = deep_replica::headless_context();
         phase("context and init");
         let first = view == deep_replica::FIRST_SCREEN;
-        if first {
+        // The first screen and the rules page (#344) draw this HOME's own record and pages, never the fixture.
+        if first || view == deep_replica::RULES_PAGE {
             // A launch reads this home's hub, when one answers; a setup that stopped left none.
             let root = deep_app::hub::root();
             match deep_app::record::RecordReader::open_folded(

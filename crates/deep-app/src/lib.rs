@@ -34,6 +34,7 @@ pub mod panel_tree;
 pub mod panel_values;
 pub mod question;
 pub mod record;
+pub mod rules;
 pub mod setup;
 pub mod show;
 pub mod shown;
