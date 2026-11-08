@@ -228,7 +228,8 @@ export const checks = [
     // files (#315), and #666's checkpoint through it: they build it and time it to 50 ms.
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...[...alone, ...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone],
-    ['cargo', 'test', '--workspace', '--locked'],
+    // Every target runs, so the record holds each test's state and a run elsewhere can be compared test by test (#1121).
+    ['cargo', 'test', '--workspace', '--locked', '--no-fail-fast'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
     // tests spend plan usage, and #246's check that change against its own base.
     [process.execPath, '--test', 'tests/*.test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
@@ -540,14 +541,44 @@ export function cargoPlatform(listed, { lane, tree, platform, mac }) {
     : [{ id: 'cargo test', state: 'INCONCLUSIVE', message: `ran on ${platform}, not the Mac's platform, so it says nothing of the macOS branch` }] };
 }
 
+/**
+ * The cargo test arguments that select only the libtest targets a command runs: a `harness = false` test target ignores
+ * `--list` and runs its whole test, so it is left out, and its tests reach the reference from the run's own results.
+ * Null when the workspace can't be read.
+ */
+function libtestTargets(args, cwd) {
+  const meta = spawnSync('cargo', ['metadata', '--no-deps', '--format-version', '1', '--offline'], { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
+  if (meta.status !== 0) return null;
+  const picked = args.flatMap((arg, i) => (['-p', '--package'].includes(args[i - 1]) ? [arg] : []));
+  const tests = [], kinds = new Set(), customs = new Set();
+  for (const { name, manifest_path: manifest, targets = [] } of JSON.parse(meta.stdout).packages) {
+    if (picked.length && !picked.includes(name)) continue;
+    let text = '';
+    try { text = readFileSync(manifest, 'utf8'); } catch {}
+    const custom = new Set(text.split(/^\[\[test\]\]/m).slice(1).filter((block) => /^harness\s*=\s*false/m.test(block.split(/^\[/m)[0]))
+      .map((block) => block.match(/^name\s*=\s*"([^"]+)"/m)?.[1]));
+    // A target that needs features the run doesn't enable is never built, and naming it is an error.
+    const runs = targets.filter((target) => !target['required-features']?.length);
+    for (const { kind } of runs) kind.forEach((k) => kinds.add(k));
+    custom.forEach((target) => customs.add(target));
+    tests.push(...runs.filter(({ kind }) => kind.includes('test')).map(({ name: target }) => target));
+  }
+  const lib = [...kinds].some((kind) => kind.endsWith('lib') || kind === 'proc-macro');
+  // `--test <name>` picks that name in every package, so a name any package gives a custom harness is left out whole.
+  return ['--no-fail-fast', ...lib ? ['--lib'] : [], ...kinds.has('bin') ? ['--bins'] : [], ...[...new Set(tests)].filter((target) => !customs.has(target)).flatMap((target) => ['--test', target])];
+}
+
 /** The tests a cargo test command lists with `-- --list`, by cargoList, under the throttle; null when the listing fails. */
 function cargoListed(args, cwd) {
+  const own = args.includes('--') ? args.slice(0, args.indexOf('--')) : args, rest = args.includes('--') ? args.slice(args.indexOf('--')) : ['--'];
+  const targets = libtestTargets(own, cwd);
+  if (!targets) return null;
   const directory = mkdtempSync(join(tmpdir(), 'deep-cargo-list-')), log = join(directory, 'output');
   try {
     const descriptor = openSync(log, 'w', 0o600);
     let result;
     try {
-      result = spawnSync(process.execPath, [throttle, 'build', '--wait', '30', '--', leaseScript, 'cargo', ...args, ...(args.includes('--') ? [] : ['--']), '--list'], { cwd, stdio: ['ignore', descriptor, descriptor] });
+      result = spawnSync(process.execPath, [throttle, 'build', '--wait', '30', '--', leaseScript, 'cargo', ...own.filter((arg) => arg !== '--no-fail-fast'), ...targets, ...rest, '--list'], { cwd, stdio: ['ignore', descriptor, descriptor] });
     } finally {
       closeSync(descriptor);
     }
@@ -747,10 +778,10 @@ export function runLanes(lanes, { cwd = root } = {}) {
         found = { state: result.error ? 'BLOCKED' : state ?? 'FAIL', error: rest ?? error };
       }
       if (stands(found, failure)) failure = found;
-      // A listing that fails after a failed run adds nothing: the run's own failure already stands.
+      // The run's own tests join the list: a `harness = false` target's tests are known only from its run.
       if (command === 'cargo' && args[0] === 'test' && listedCargo !== null) {
         const listing = cargoListed(args, cwd);
-        if (listing || result.status === 0) listedCargo = listing && [...listedCargo ?? [], ...listing];
+        listedCargo = listing && [...new Set([...listedCargo ?? [], ...listing, ...run.tests.map(({ id }) => id).filter((id) => id.includes(' › '))])];
       }
     }
     // The Mac's cargo tests are the reference list; a run elsewhere lists the tests it lacks and is never PASS.
