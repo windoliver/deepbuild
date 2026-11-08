@@ -536,7 +536,7 @@ class LocalSupervisor implements Supervisor {
   private async launch(spec: StartSpec, leases: { kind: string; key: string }[]): Promise<Started> {
     if (process.platform !== 'darwin' && process.platform !== 'linux') throw Error(`no platform sandbox backend for ${process.platform} yet; nothing runs outside one`);
     const cwd = real(spec.cwd);
-    const sandboxed = this.options.plant !== 'sandbox-left-to-caller';
+    const sandboxed = this.options.plant !== 'sandbox-left-to-caller' && spec.own_sandbox !== true;
     const token = spec.env?.DEEP_RUN_TOKEN ?? randomBytes(24).toString('base64url');
     // Each lease's key in the variable it names; the leases come in the order they were asked for.
     const keys = Object.fromEntries((spec.leases ?? []).flatMap((want, i) => (want.env ? [[want.env, leases[i]!.key]] : [])));

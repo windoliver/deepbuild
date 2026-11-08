@@ -83,3 +83,25 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   for (const o of (reply.result.offers ?? []) as Offer[]) process.stdout.write(`${o.offer}  offered  ${o.session}  save \`${o.command}\` as a decision for ${o.scope}  (deep inbox save ${o.offer})\n`);
   return 0;
 }
+
+/** `deep race <issue>` (#352): a race you start on an issue, from your own terminal; exit 0 started, 2 a usage error, 3 the hub unreached, 1 refused. */
+export async function raceCommand(args: readonly string[]): Promise<number> {
+  if (args.length !== 1 || !/^[1-9][0-9]*$/.test(args[0]!)) {
+    process.stderr.write('Usage: deep race <issue number>\n');
+    return 2;
+  }
+  let reply: Reply;
+  try {
+    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+    reply = await call(hubAddress().path, token, 'race.start', { issue: Number(args[0]) }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+  } catch (error) {
+    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}; no race started\n`);
+    return 3;
+  }
+  if ('error' in reply) {
+    process.stderr.write(`${reply.error.remediation}\n`);
+    return 1;
+  }
+  process.stdout.write(`A race on issue #${args[0]} started: its sessions settle on the first PASS.\n`);
+  return 0;
+}

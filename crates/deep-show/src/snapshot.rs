@@ -53,9 +53,92 @@ pub struct Drawn {
     runs: BTreeMap<String, Arc<Run>>,
     /// Each animated text's units as `[lift, opacity]`, one per glyph.
     animated: BTreeMap<String, Vec<[f64; 2]>>,
+    /// #493: a 2D film's camera, from the document's units to its own pixels, where a shot
+    /// moves it; the legend stays where it is.
+    pub view: Option<Affine>,
 }
 
 impl Drawn {
+    /// #493: this draw list through a camera, with or without its status marks and legend, or
+    /// those alone.
+    pub fn part(&self, view: Option<Affine>, marks: bool, status: bool) -> Drawn {
+        // The items a status mark draws are left out of the sides: their status draws once.
+        let bound: std::collections::BTreeSet<&str> = self.status.marks.iter().map(|m| m.mark.item.as_str()).collect();
+        let mut frame = self.frame.clone();
+        if !status {
+            for layer in &mut frame.layers {
+                if layer.marks.iter().any(|m| bound.contains(m.mark.item().split('#').next().unwrap_or_default())) {
+                    let kept: Vec<_> = layer
+                        .marks
+                        .iter()
+                        .filter(|m| !bound.contains(m.mark.item().split('#').next().unwrap_or_default()))
+                        .cloned()
+                        .collect();
+                    layer.marks = kept.into_iter().collect();
+                }
+            }
+        }
+        Drawn {
+            frame: if marks {
+                frame
+            } else {
+                scene::Frame { size: self.frame.size, ground: self.frame.ground, layers: Vec::new() }
+            },
+            boxes: if marks { self.boxes.clone() } else { Vec::new() },
+            status: if status { self.status.clone() } else { Arc::new(StatusDrawing::default()) },
+            images: self.images.clone(),
+            runs: self.runs.clone(),
+            animated: self.animated.clone(),
+            view,
+        }
+    }
+
+    /// #493: each text's glyphs as drawn, in document units: each glyph's origin after its
+    /// animators lift it, and its opacity.
+    pub fn glyphs(&self) -> Map<String, Value> {
+        let mut out = Map::new();
+        for drawn in self.frame.layers.iter().flat_map(|l| &l.marks) {
+            let Mark::Text { item, spec, origin, .. } = &drawn.mark else { continue };
+            let Some(run) = self.runs.get(item).filter(|r| r.spec == *spec) else { continue };
+            let units = self.animated.get(item);
+            let glyphs: Vec<Value> = run
+                .shaped
+                .glyphs
+                .iter()
+                .enumerate()
+                .map(|(k, g)| {
+                    let [lift, opacity] = units.and_then(|u| u.get(k)).copied().unwrap_or([0.0, 1.0]);
+                    json!({"x": origin[0] + f64::from(g.x), "y": origin[1] + f64::from(g.y) + lift,
+                           "opacity": opacity.clamp(0.0, 1.0)})
+                })
+                .collect();
+            out.insert(item.clone(), Value::Array(glyphs));
+        }
+        out
+    }
+
+    /// #464: the same draw list with only the marks whose item `keep` takes: a print look's base
+    /// frame without its inks, or one ink's coverage.
+    pub fn only(&self, keep: impl Fn(&str) -> bool) -> Drawn {
+        let mut frame = self.frame.clone();
+        for l in &mut frame.layers {
+            l.marks = (&l.marks)
+                .into_iter()
+                .filter(|m| keep(m.mark.item()))
+                .cloned()
+                .collect();
+        }
+        Drawn {
+            frame,
+            boxes: self.boxes.clone(),
+            status: self.status.clone(),
+            images: self.images.clone(),
+            runs: self.runs.clone(),
+            animated: self.animated.clone(),
+            view: self.view,
+        }
+    }
+
     /// Each item's box in the document's units, from its marks, in draw order.
     pub fn boxes(&self) -> Vec<(String, [f64; 4])> {
         let mut out: Vec<(String, [f64; 4])> = Vec::new();
@@ -323,6 +406,7 @@ impl Renderer {
             images,
             runs: BTreeMap::new(),
             animated: BTreeMap::new(),
+            view: None,
         })
     }
 
@@ -346,6 +430,7 @@ impl Renderer {
                 images: BTreeMap::new(),
                 runs: BTreeMap::new(),
                 animated: BTreeMap::new(),
+                view: None,
             });
         };
         Ok(Drawn {
@@ -355,6 +440,7 @@ impl Renderer {
             images: decode_all(&drawing.frame, evidence)?,
             runs: drawing.runs.clone(),
             animated: drawing.animated.clone(),
+            view: None,
         })
     }
 
@@ -385,7 +471,8 @@ impl Renderer {
             ctx.set_paint(color(g));
             ctx.fill_rect(&Rect::new(0.0, 0.0, f64::from(size[0]), f64::from(size[1])));
         }
-        let at = Affine::scale(drawn.scale(size));
+        let screen = Affine::scale(drawn.scale(size));
+        let at = screen * drawn.view.unwrap_or(Affine::IDENTITY);
         // The scopes each mark draws inside (#373): scissors, soft masks and group opacity.
         let mut scopes = Scopes::new(false);
         let marks: Vec<&scene::Drawn> = drawn
@@ -441,6 +528,7 @@ impl Renderer {
             self.status_mark(&mut ctx, &s.mark, at);
         }
         for e in &drawn.status.legend {
+            let at = screen;
             ctx.set_transform(at);
             ctx.set_paint(color(e.color));
             ctx.fill_path(&rect_path(e.swatch, 2.0));
@@ -815,6 +903,12 @@ impl Renderer {
 pub fn entry(sha: &str, drawn: &Drawn, size: [u16; 2]) -> Value {
     let scale = drawn.scale(size);
     let px = |b: [f64; 4]| json!(b.map(|v| v * scale));
+    // A mark's box through the film's camera (#493), as it draws.
+    let viewed = |b: [f64; 4]| {
+        let Some(v) = drawn.view else { return px(b) };
+        let r = v.transform_rect_bbox(Rect::new(b[0], b[1], b[0] + b[2], b[1] + b[3]));
+        px([r.x0, r.y0, r.width(), r.height()])
+    };
     let text = |t: &str| (!t.is_empty()).then(|| t.to_string());
     let marks: Vec<Value> = drawn
         .status
@@ -822,8 +916,8 @@ pub fn entry(sha: &str, drawn: &Drawn, size: [u16; 2]) -> Value {
         .iter()
         .map(|m| {
             json!({"item": m.mark.item, "binding": m.mark.binding, "state": m.mark.state,
-                   "color": m.mark.color, "bounds": px(m.mark.bounds),
-                   "glyph": text(&m.mark.glyph), "word": text(m.mark.word), "label": px(m.label)})
+                   "color": m.mark.color, "bounds": viewed(m.mark.bounds),
+                   "glyph": text(&m.mark.glyph), "word": text(m.mark.word), "label": viewed(m.label)})
         })
         .collect();
     let legend: Vec<Value> = drawn

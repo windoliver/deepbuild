@@ -31,9 +31,13 @@
 //!   uncommitted edits to tracked files: a hard reset, a path checkout or restore, a forced switch, `rm` or
 //!   `worktree remove`, `read-tree -u --reset`, `checkout-index -f`, or `--abort` or `--skip` of a merge, rebase,
 //!   cherry-pick, revert or am), `drop-stash`
-//!   (`git stash drop` or `clear`), or one that needs your authority (#321): `push` (`git push`), `pr` (`gh pr create`, #84), `merge` (`gh pr merge` or `gh api` on a pull request's merge endpoint), `dispatch` (what `dispatch:workflow` reads),
-//!   `send` (`gh pr comment`, `gh issue comment`, `gh pr review`, or a `gh api` POST of a comment, a review
-//!   comment's reply or a review) or `delete` (`gh repo delete`,
+//!   (`git stash drop` or `clear`), or one that needs your authority (#321): `push` (`git push`, `jj git push`,
+//!   `sl push`, `gt submit` and its stack forms, and git town's `propose`, `ship` and `sync`, #1523), `pr` (`gh pr
+//!   create`, #84, `glab mr create`, `gt submit`, `git town propose`, `sl pr submit`), `merge` (`gh pr merge`, `gh
+//!   api` other than a GET on a pull request's merge endpoint, `gh api graphql` with `mergePullRequest` or
+//!   `enablePullRequestAutoMerge`, `glab mr merge`, `gt merge`, `git town ship`), `dispatch` (what
+//!   `dispatch:workflow` reads), `send` (`gh pr comment`, `gh issue comment`, `gh issue create`, `gh pr review`, or a
+//!   `gh api` POST of a comment, a review comment's reply or a review) or `delete` (`gh repo delete`,
 //!   `gh release delete`, `gh issue delete`).
 //! - `counts:<class>`: the tool counts as `read`, `change`, `send` or `destructive`, by the classes rules.json
 //!   holds; a tool they don't list counts as change, and one whose name starts with `delete_` as destructive.
@@ -42,8 +46,9 @@
 //!
 //! A call the reader couldn't read whole meets every entry it may be one of (#1097): a run whose program the line
 //! computes meets a `run:` entry whose argument globs its arguments fit and an `effect:` class whose words they fit,
-//! and a run nested past what the reader reads meets every entry. Its hit says what couldn't be read, so a block
-//! entry denies it and a watch or warn entry records it with that reason. An unread run never lowers a match.
+//! and a run nested past what the reader reads meets every entry, as does a shell or an interpreter whose program
+//! comes from a pipe the line doesn't say or is a value it computes (`curl … | sh`, `eval "$X"`, #1503). Its hit says
+//! what couldn't be read, so a block entry denies it and a watch or warn entry records it with that reason. An unread run never lowers a match.
 //!
 //! deep-hook reads rules.json as unreadable when an entry's `match` isn't one of these, so an entry newer than
 //! deep-hook never fails open.
@@ -106,9 +111,13 @@ const HUB_UNIT: &str = "deepbuild-hub";
 
 /// Whether `line` holds `key`, in any case, with no letter, digit, `_`, `-`, `.` or `/` against either end of it.
 fn holds_word(line: &str, key: &str) -> bool {
+    words_at(&line.to_lowercase(), &key.to_lowercase()).next().is_some()
+}
+
+/// Where `line` holds `key` as a whole word, in its case, as `holds_word` reads one.
+fn words_at<'a>(line: &'a str, key: &'a str) -> impl Iterator<Item = usize> + 'a {
     let word = |c: char| c.is_alphanumeric() || matches!(c, '_' | '-' | '.' | '/');
-    let (line, key) = (line.to_lowercase(), key.to_lowercase());
-    line.match_indices(&key).any(|(at, _)| {
+    line.match_indices(key).map(|(at, _)| at).filter(move |&at| {
         !line[..at].chars().next_back().is_some_and(word)
             && !line[at + key.len()..].chars().next().is_some_and(word)
     })
@@ -187,6 +196,9 @@ impl Call {
                 Some(c) => Some(c.join(p)),
                 None => None,
             }));
+            // What an interpreter's inline program holds, it may read or write (#1503).
+            writes.extend(run.held.iter().cloned());
+            reads.extend(run.held.iter().cloned());
             by.0.resize(writes.len(), Some((k, false)));
             by.1.resize(reads.len(), Some((k, false)));
         }
@@ -205,6 +217,10 @@ impl Call {
 
     /// Whether `pattern` reads this call, or may: what the reader couldn't read of it may be what `pattern` names.
     pub fn matches(&self, pattern: &str) -> Option<Hit> {
+        // The planted wrong program for #1407: a matcher that panics on every call.
+        if cfg!(feature = "plant-matcher-panic") {
+            panic!("planted: the matcher panics (#1407)");
+        }
         self.reads_whole(pattern).or_else(|| self.may_be(pattern))
     }
 
@@ -212,7 +228,7 @@ impl Call {
     fn may_be(&self, pattern: &str) -> Option<Hit> {
         let (kind, rest) = pattern.split_once(':')?;
         let fits = |run: &&Run| match run.unread {
-            Some(Unread::Depth) => true,
+            Some(Unread::Depth | Unread::Piped | Unread::Computed) => true,
             Some(Unread::Program) if kind == "run" => {
                 let wanted: Vec<&str> = rest.split_whitespace().skip(1).collect();
                 args_match(run, &wanted)
@@ -236,14 +252,21 @@ impl Call {
                 "it nests past what the reader reads, a depth of {} shells, substitutions or evals",
                 shell::DEPTH
             ),
-            _ => {
+            unread => {
                 let line = self.command.as_deref().unwrap_or_default();
                 let cut = line.char_indices().nth(LINE).map_or(line.len(), |(k, _)| k);
                 let more = if cut < line.len() { "…" } else { "" };
-                format!(
-                    "the line computes the program it runs, in {}{more}",
-                    &line[..cut]
-                )
+                let what = match unread {
+                    Some(Unread::Piped) => format!(
+                        "{} reads its program from a pipe or a file whose text the line doesn't say",
+                        run.program
+                    ),
+                    Some(Unread::Computed) => {
+                        format!("the program {} runs is a value the line computes", run.program)
+                    }
+                    _ => "the line computes the program it runs".to_string(),
+                };
+                format!("{what}, in {}{more}", &line[..cut])
             }
         };
         Some(Hit {
@@ -499,6 +522,10 @@ impl Call {
                 let top = rest.components().next()?;
                 let folder = root.join(top);
                 let mkdir = by.is_some_and(|(r, _)| self.runs[r].is("mkdir"));
+                // A path an inline program holds may be any string in it, not a folder it makes.
+                if by.is_some_and(|(r, _)| self.runs[r].held.contains(w)) {
+                    return None;
+                }
                 // A file written at the top is not a folder; a folder already there is not new.
                 (rest.components().count() > 1 || mkdir)
                     .then_some(folder)
@@ -725,14 +752,19 @@ fn has_effect(run: &Run, class: &str) -> bool {
         "unknown-reach-delete" => unknown_reach(run),
         "discard-edits" => discards(run),
         "drop-stash" => drops_stash(run),
-        "push" => run.is("git") && git_rest(run).first().map(String::as_str) == Some("push"),
-        "pr" => gh(run, &[&["pr", "create"]]),
-        "merge" => gh(run, &[&["pr", "merge"]]) || merge_endpoint(run).is_some(),
+        "push" => pushes(run),
+        "pr" => opens_pr(run),
+        "merge" => merges(run),
         "dispatch" => dispatch(run).is_some(),
         "send" => {
             gh(
                 run,
-                &[&["pr", "comment"], &["issue", "comment"], &["pr", "review"]],
+                &[
+                    &["pr", "comment"],
+                    &["issue", "comment"],
+                    &["issue", "create"],
+                    &["pr", "review"],
+                ],
             ) || posts_comment(run)
         }
         "delete" => gh(
@@ -762,9 +794,12 @@ fn programs(class: &str) -> &'static [&'static str] {
             "docker", "podman", "docker-compose", "brew", "systemctl", "launchctl", "pm2",
         ],
         "unknown-reach-delete" => &["rm", "unlink", "shred", "srm", "find", "git", "rsync"],
-        "push" | "discard-edits" | "drop-stash" => &["git"],
+        "push" => &["git", "jj", "sl", "gt", "git-town"],
+        "pr" => &["gh", "glab", "gt", "git", "git-town", "sl"],
+        "merge" => &["gh", "glab", "gt", "git", "git-town"],
+        "discard-edits" | "drop-stash" => &["git"],
         "dispatch" => &["gh", "curl", "wget"],
-        "pr" | "merge" | "send" | "delete" => &["gh"],
+        "send" | "delete" => &["gh"],
         _ => &[],
     }
 }
@@ -957,18 +992,7 @@ fn posts_comment(run: &Run) -> bool {
     if !run.is("gh") || plain.first() != Some(&"api") {
         return false;
     }
-    let method = words.iter().enumerate().find_map(|(k, w)| match *w {
-        "-X" | "--method" => words.get(k + 1).copied(),
-        _ => w
-            .strip_prefix("--method=")
-            .or(w.strip_prefix("-X"))
-            .filter(|m| !m.is_empty() && !m.starts_with('-')),
-    });
-    let posts = match method {
-        Some(m) => m.eq_ignore_ascii_case("POST"),
-        None => !fields(&words).is_empty() || words.contains(&"--input"),
-    };
-    posts
+    api_method(&words) == "POST"
         && plain[1..].iter().any(|w| {
             let path = w
                 .trim_start_matches("https://api.github.com")
@@ -984,23 +1008,175 @@ fn posts_comment(run: &Run) -> bool {
         })
 }
 
+/// The method of a `gh api` call: the one `--method` or `-X` names, or POST once a field or `--input` makes gh post,
+/// else GET.
+fn api_method(words: &[&str]) -> String {
+    let method = words.iter().enumerate().find_map(|(k, w)| match *w {
+        "-X" | "--method" => words.get(k + 1).copied(),
+        _ => w
+            .strip_prefix("--method=")
+            .or(w.strip_prefix("-X"))
+            .filter(|m| !m.is_empty() && !m.starts_with('-')),
+    });
+    match method {
+        Some(m) => m.to_uppercase(),
+        None if !fields(words).is_empty() || words.contains(&"--input") => "POST".into(),
+        None => "GET".into(),
+    }
+}
+
+/// A run's subcommand and what follows it, past the global options its program takes before one: git's, jj's,
+/// sl's, gt's, glab's and git town's. `git town` reads as git-town.
+fn sub(run: &Run) -> (&'static str, Vec<&str>) {
+    const TOOLS: &[(&str, &[&str])] = &[
+        ("git", GIT_VALUED),
+        ("jj", &["-R", "--repository", "--at-op", "--at-operation", "--config", "--config-toml", "--config-file", "--color"]),
+        ("sl", &["-R", "--repository", "--cwd", "--config", "--configfile", "--color", "--pager", "--encoding", "--encodingmode"]),
+        ("gt", &["--cwd"]),
+        ("glab", &["-R", "--repo"]),
+        ("git-town", &[]),
+    ];
+    let Some((name, valued)) = TOOLS.iter().find(|(name, _)| run.is(name)) else {
+        return ("", Vec::new());
+    };
+    let rest = past(&run.words(), valued);
+    match (*name, rest.first()) {
+        ("git", Some(&"town")) => ("git-town", rest[1..].to_vec()),
+        _ => (name, rest),
+    }
+}
+
+/// A push by any of the tools that push: `git push`, `jj git push`, `sl push`, `gt submit` and its stack forms, and
+/// git town's commands that push.
+fn pushes(run: &Run) -> bool {
+    match sub(run) {
+        ("git", rest) => rest.first() == Some(&"push"),
+        ("jj", rest) => rest.starts_with(&["git", "push"]),
+        ("sl", rest) => rest.first() == Some(&"push"),
+        _ => submits(run) || town(run, &["propose", "new-pull-request", "ship", "sync"]),
+    }
+}
+
+/// What opens a pull request: `gh pr create`, `glab mr create`, `gt submit`, `git town propose`, `sl pr submit`.
+fn opens_pr(run: &Run) -> bool {
+    gh(run, &[&["pr", "create"]])
+        || submits(run)
+        || town(run, &["propose", "new-pull-request"])
+        || match sub(run) {
+            ("glab", rest) => rest.starts_with(&["mr", "create"]) || rest.starts_with(&["mr", "new"]),
+            ("sl", rest) => rest.starts_with(&["pr", "submit"]),
+            _ => false,
+        }
+}
+
+/// `gt submit` and its stack forms, which push the stack's branches and open or update their pull requests.
+fn submits(run: &Run) -> bool {
+    let ("gt", rest) = sub(run) else { return false };
+    let submit = |w: Option<&&str>| matches!(w, Some(&"submit" | &"s"));
+    submit(rest.first())
+        || rest.first() == Some(&"ss")
+        || matches!(
+            rest.first(),
+            Some(&"stack" | &"upstack" | &"us" | &"downstack" | &"ds" | &"branch" | &"b")
+        ) && submit(rest.get(1))
+}
+
+/// A git town command among `commands`, as `git town <command>` or `git-town <command>`.
+fn town(run: &Run, commands: &[&str]) -> bool {
+    matches!(sub(run), ("git-town", rest) if rest.first().is_some_and(|c| commands.contains(c)))
+}
+
+/// A merge by any of the tools that merge, and a GraphQL mutation that merges or arms one.
+fn merges(run: &Run) -> bool {
+    gh(run, &[&["pr", "merge"]])
+        || merge_endpoint(run).is_some_and(|_| api_method(&run.words()) != "GET")
+        || glab_merge_endpoint(run).is_some_and(|_| api_method(&run.words()) != "GET")
+        || graphql_merge(run).is_some()
+        || gt_merge(run)
+        || town(run, &["ship"])
+        || matches!(sub(run), ("glab", rest) if rest.starts_with(&["mr", "merge"]) || rest.starts_with(&["mr", "accept"]))
+}
+
+/// The word of `glab api` naming a merge request's merge endpoint, `projects/<id>/merge_requests/<n>/merge`.
+fn glab_merge_endpoint(run: &Run) -> Option<&str> {
+    let ("glab", rest) = sub(run) else { return None };
+    if rest.first() != Some(&"api") {
+        return None;
+    }
+    rest[1..].iter().copied().find(|w| {
+        let parts: Vec<&str> = w.trim_matches('/').split('/').collect();
+        parts.len() >= 3
+            && parts[parts.len() - 1] == "merge"
+            && parts[parts.len() - 3] == "merge_requests"
+            && parts[parts.len() - 2].parse::<u64>().is_ok()
+    })
+}
+
+fn gt_merge(run: &Run) -> bool {
+    matches!(sub(run), ("gt", rest) if rest.first() == Some(&"merge"))
+}
+
+/// The mutations of a `gh api graphql` call that merge, arm (auto-merge or the merge queue) or disarm a merge.
+const MUTATIONS: &[&str] = &[
+    "mergePullRequest", "enablePullRequestAutoMerge", "enqueuePullRequest", "disablePullRequestAutoMerge", "dequeuePullRequest",
+];
+const ARMS: &[&str] = &["enablePullRequestAutoMerge", "enqueuePullRequest"];
+const DISARMS: &[&str] = &["disablePullRequestAutoMerge", "dequeuePullRequest"];
+
+/// The query of a `gh api graphql` call that merges, arms or disarms a merge, with its fields. A mutation's name
+/// anywhere in it counts, a comment's too, so none hides behind a `#`. A query deep-hook can't read, from a file
+/// (`@`), `--input`, a variable or none at all, is a merge with no head: the empty query.
+fn graphql_merge(run: &Run) -> Option<(String, Vec<(String, String)>)> {
+    let words = run.words();
+    let at = api_at(run, &words)?;
+    if !words[at..].contains(&"graphql") {
+        return None;
+    }
+    let fields = fields(&words);
+    let query = fields.iter().find(|(k, _)| k == "query").map(|(_, v)| v.clone());
+    let Some(query) = query.filter(|q| !q.is_empty() && !q.starts_with('@') && !q.starts_with('$')) else {
+        return Some((String::new(), fields));
+    };
+    MUTATIONS.iter().any(|m| holds_word(&query, m)).then_some((query, fields))
+}
+
+/// A GraphQL argument's literal value for `name`, or the field a `$variable` in its place names; none unless the
+/// query names it exactly once, as one merge's input does. A `$name` is a variable, not the argument.
+fn graphql_value(query: &str, fields: &[(String, String)], name: &str) -> Option<String> {
+    let args: Vec<usize> = words_at(query, name).filter(|&at| !query[..at].ends_with('$')).collect();
+    let [at] = args[..] else { return None };
+    let rest = query[at + name.len()..].trim_start().strip_prefix(':')?.trim_start();
+    if let Some(var) = rest.strip_prefix('$') {
+        // gh keeps the last field of a name; one given twice names no head.
+        let var: String = var.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+        let values: Vec<&String> = fields.iter().filter(|(k, _)| *k == var).map(|(_, v)| v).collect();
+        let [value] = values[..] else { return None };
+        return Some(value.clone());
+    }
+    let value = rest.strip_prefix('"')?;
+    value.find('"').map(|end| value[..end].to_string())
+}
+
 fn gh(run: &Run, subs: &[&[&str]]) -> bool {
     let words = run.words();
     let plain = plain(&words);
     run.is("gh") && subs.iter().any(|s| plain.len() >= 2 && plain[..2] == **s)
 }
 
-/// The word of `gh api` naming a pull request's merge endpoint, `repos/<owner>/<repo>/pulls/<n>/merge`.
-fn merge_endpoint<'a>(run: &'a Run) -> Option<&'a str> {
+/// Where a `gh api` call's words past `api` start, gh's own options before it skipped; none for another call.
+fn api_at(run: &Run, words: &[&str]) -> Option<usize> {
     if !run.is("gh") {
         return None;
     }
-    let words = run.words();
     let at = words.iter().position(|w| !w.starts_with('-'))?;
-    if words[at] != "api" {
-        return None;
-    }
-    words[at + 1..].iter().copied().find(|w| {
+    (words[at] == "api").then_some(at + 1)
+}
+
+/// The word of `gh api` naming a pull request's merge endpoint, `repos/<owner>/<repo>/pulls/<n>/merge`.
+fn merge_endpoint(run: &Run) -> Option<&str> {
+    let words = run.words();
+    let at = api_at(run, &words)?;
+    words[at..].iter().copied().find(|w| {
         let parts: Vec<&str> = w.trim_matches('/').split('/').collect();
         parts.len() >= 3
             && parts[parts.len() - 1] == "merge"
@@ -1009,8 +1185,9 @@ fn merge_endpoint<'a>(run: &'a Run) -> Option<&'a str> {
     })
 }
 
-/// What a merge names, as the hub reads it from the entry's note (#84): `merge pr=12 head=<sha> auto disable`, each
-/// part only when the call has it. One commit, for `--match-head-commit` or the API's `sha` field.
+/// What a merge names, as the hub reads it from the entry's note (#84): `merge pr=12 head=<sha> auto disable blind`,
+/// each part only when the call has it. One commit, for `--match-head-commit`, the API's `sha` field, GraphQL's
+/// `expectedHeadOid` or `glab mr merge --sha`; `blind` for `gt merge` and `git town ship`, which can't name one.
 fn merge_read(run: &Run) -> String {
     let words = run.words();
     let value = |flag: &str| {
@@ -1018,13 +1195,35 @@ fn merge_read(run: &Run) -> String {
             w.strip_prefix(&format!("{flag}=")).or_else(|| (*w == flag).then(|| words.get(k + 1).copied()).flatten())
         })
     };
-    let field = words.iter().find_map(|w| w.strip_prefix("sha="));
-    let api = merge_endpoint(run);
-    let pr = match api {
-        Some(path) => path.trim_matches('/').rsplit('/').nth(1),
-        None => plain(&words).get(2).copied(),
+    let (sub_name, rest) = sub(run);
+    let mut disable = words.contains(&"--disable-auto");
+    let (pr, head, auto) = if let Some(path) = merge_endpoint(run) {
+        let pr = path.trim_matches('/').rsplit('/').nth(1).map(str::to_string);
+        (pr, words.iter().find_map(|w| w.strip_prefix("sha=")).map(str::to_string), false)
+    } else if let Some((query, fields)) = graphql_merge(run) {
+        // A head covers one merge: a query that holds more than one names none.
+        let one = MUTATIONS.iter().map(|m| words_at(&query, m).count()).sum::<usize>() == 1;
+        let any = |names: &[&str]| names.iter().any(|m| holds_word(&query, m));
+        // A query that disarms and also merges or arms is read as the merge, since `disable` alone skips the head rule.
+        if any(DISARMS) && !any(ARMS) && !holds_word(&query, "mergePullRequest") {
+            disable = true;
+        }
+        // A head only a comment names is none: the argument must be there with the comments taken out too.
+        let bare: String = query.lines().map(|l| l.split('#').next().unwrap_or("")).collect::<Vec<_>>().join("\n");
+        let head = graphql_value(&query, &fields, "expectedHeadOid").filter(|_| one && holds_word(&bare, "expectedHeadOid"));
+        (graphql_value(&query, &fields, "pullRequestId"), head, any(ARMS))
+    } else if let Some(path) = glab_merge_endpoint(run) {
+        let pr = path.trim_matches('/').rsplit('/').nth(1).map(str::to_string);
+        (pr, words.iter().find_map(|w| w.strip_prefix("sha=")).map(str::to_string), false)
+    } else if sub_name == "glab" {
+        (plain(&rest).get(2).map(|p| p.to_string()), value("--sha").map(str::to_string), false)
+    } else {
+        let pr = plain(&words).get(2).map(|p| p.to_string());
+        (pr, value("--match-head-commit").map(str::to_string), false)
     };
-    let head = if api.is_some() { field } else { value("--match-head-commit") };
+    if gt_merge(run) || town(run, &["ship"]) {
+        return "merge blind".into();
+    }
     let mut read = String::from("merge");
     if let Some(pr) = pr {
         read.push_str(&format!(" pr={pr}"));
@@ -1032,10 +1231,10 @@ fn merge_read(run: &Run) -> String {
     if let Some(head) = head {
         read.push_str(&format!(" head={head}"));
     }
-    if words.contains(&"--auto") {
+    if auto || words.contains(&"--auto") {
         read.push_str(" auto");
     }
-    if words.contains(&"--disable-auto") {
+    if disable {
         read.push_str(" disable");
     }
     read
@@ -1254,7 +1453,7 @@ fn dispatch(run: &Run) -> Option<String> {
     None
 }
 
-/// `gh api`'s fields: `-f`/`-F`/`--field`/`--raw-field` k=v.
+/// `gh api`'s fields: `-f`/`-F`/`--field`/`--raw-field` k=v, the short flags joined to their value too (`-fk=v`).
 fn fields(words: &[&str]) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for (k, w) in words.iter().enumerate() {
@@ -1262,7 +1461,8 @@ fn fields(words: &[&str]) -> Vec<(String, String)> {
             "-f" | "-F" | "--field" | "--raw-field" => words.get(k + 1).copied(),
             _ => w
                 .strip_prefix("--field=")
-                .or(w.strip_prefix("--raw-field=")),
+                .or(w.strip_prefix("--raw-field="))
+                .or_else(|| w.strip_prefix("-f").or(w.strip_prefix("-F")).filter(|v| v.contains('='))),
         };
         if let Some((key, v)) = value.and_then(|v| v.split_once('=')) {
             out.push((key.to_string(), v.to_string()));
@@ -1325,33 +1525,23 @@ fn from_endpoint(url: &str, pairs: &[(String, String)]) -> String {
     line
 }
 
+/// git's global options that take a value.
+const GIT_VALUED: &[&str] = &[
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env", "--super-prefix",
+];
+
+/// The words past the leading options, skipping the value of each option in `valued`.
+fn past<'a>(words: &[&'a str], valued: &[&str]) -> Vec<&'a str> {
+    let mut k = 0;
+    while k < words.len() && words[k].starts_with('-') {
+        k += if valued.contains(&words[k]) { 2 } else { 1 };
+    }
+    words[k.min(words.len())..].to_vec()
+}
+
 /// git's subcommand and what follows it, past its global options.
 fn git_rest(run: &Run) -> Vec<String> {
-    let words = run.words();
-    let mut k = 0;
-    while k < words.len() {
-        let w = words[k];
-        if matches!(
-            w,
-            "-C" | "-c"
-                | "--git-dir"
-                | "--work-tree"
-                | "--namespace"
-                | "--exec-path"
-                | "--config-env"
-                | "--super-prefix"
-        ) {
-            k += 2;
-        } else if w.starts_with('-') {
-            k += 1;
-        } else {
-            break;
-        }
-    }
-    words[k.min(words.len())..]
-        .iter()
-        .map(|w| w.to_string())
-        .collect()
+    past(&run.words(), GIT_VALUED).iter().map(|w| w.to_string()).collect()
 }
 
 fn stash_unnamed(run: &Run) -> bool {
@@ -1817,6 +2007,111 @@ mod tests {
     }
 
     #[test]
+    fn push_pr_and_merge_read_every_tools_spelling() {
+        let has = |line: &str, class: &str| bash(line).matches(&format!("effect:{class}")).is_some();
+        let q = "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"PR_1\", expectedHeadOid: \"abc1234\"}) { clientMutationId } }'";
+        for (line, classes) in [
+            ("jj git push --bookmark main", &["push"][..]),
+            ("jj -R ../shop git push", &["push"]),
+            ("sl push --to main", &["push"]),
+            ("gt submit --stack", &["push", "pr"]),
+            ("gt ss", &["push", "pr"]),
+            ("gt stack submit", &["push", "pr"]),
+            ("git town propose", &["push", "pr"]),
+            ("git-town sync", &["push"]),
+            ("git town ship", &["push", "merge"]),
+            ("sl pr submit", &["pr"]),
+            ("glab mr create --fill", &["pr"]),
+            ("glab mr merge 3", &["merge"]),
+            ("gt merge", &["merge"]),
+            (q, &["merge"]),
+            ("gh api -X PUT repos/acme/shop/pulls/3/merge", &["merge"]),
+            ("gh issue create -t x", &["send"]),
+        ] {
+            for class in ["push", "pr", "merge", "send"] {
+                assert_eq!(has(line, class), classes.contains(&class), "{line} as {class}");
+            }
+        }
+        for line in [
+            "jj log",
+            "jj git fetch",
+            "jj describe -m 'git push'",
+            "gt log",
+            "git town status",
+            "sl log",
+            "glab mr view 3",
+            "gh api repos/acme/shop/pulls/3",
+            "gh api repos/acme/shop/pulls/3/merge",
+            "gh api --method GET repos/acme/shop/pulls/3/merge",
+            "gh api graphql -f query='{ repository(owner: \"a\", name: \"b\") { id } }'",
+        ] {
+            for class in ["push", "pr", "merge", "send"] {
+                assert!(!has(line, class), "{line} as {class}");
+            }
+        }
+        let read = |line: &str| bash(line).matches("effect:merge").unwrap().detail.unwrap();
+        assert_eq!(read(q), "merge pr=PR_1 head=abc1234");
+        assert_eq!(
+            read("gh api graphql -f query='mutation($h: GitObjectID) { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_1\", expectedHeadOid: $h}) { clientMutationId } }' -f h=abc1234"),
+            "merge pr=PR_1 head=abc1234 auto"
+        );
+        assert_eq!(
+            read("gh api graphql -f query='mutation($expectedHeadOid: GitObjectID!) { mergePullRequest(input: {pullRequestId: \"PR_1\", expectedHeadOid: $expectedHeadOid}) { clientMutationId } }' -f expectedHeadOid=abc1234"),
+            "merge pr=PR_1 head=abc1234"
+        );
+        let two = "gh api graphql -f query='mutation { a: mergePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: \"abc1234\"}) { clientMutationId } b: mergePullRequest(input: {pullRequestId: \"B\"}) { clientMutationId } }'";
+        assert!(!read(two).contains("head="), "two merges name no one head");
+        let commented = "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"A\" # expectedHeadOid: \"abc1234\"\n}) { clientMutationId } }'";
+        assert!(!read(commented).contains("head="), "a comment names no head");
+        let hidden = "gh api graphql -f query='mutation { addComment(input: {subjectId: \"I\", body: \"#\"}) { clientMutationId } m: mergePullRequest(input: {pullRequestId: \"A\"}) { clientMutationId } }'";
+        assert!(has(hidden, "merge"), "a `#` in a string hides no merge");
+        assert_eq!(
+            read("gh api graphql -f query='mutation { disablePullRequestAutoMerge(input: {pullRequestId: \"PR_1\"}) { clientMutationId } }'"),
+            "merge pr=PR_1 disable"
+        );
+        assert_eq!(
+            read("gh api graphql -f query='mutation { mergePullRequest(input: {clientMutationId: \"\u{130}\u{130}\", pullRequestId: \"A\", expectedHeadOid: \"abc1234\"}) { clientMutationId } }'"),
+            "merge pr=A head=abc1234"
+        );
+        assert_eq!(read("glab mr merge 3 --sha abc1234"), "merge pr=3 head=abc1234");
+        // Review round at 642a592e: gh's options before `graphql`, a query deep-hook can't read, the merge queue,
+        // GitLab's REST merge, a disarm that also merges, a variable given twice, and global options before a push.
+        let m = "mutation { mergePullRequest(input: {pullRequestId: \"A\"}) { clientMutationId } }";
+        for line in [
+            format!("gh api -X POST graphql -f query='{m}'"),
+            format!("gh api --hostname ghe.example.com graphql -f query='{m}'"),
+            format!("gh api -H 'X-Github-Next-Global-ID: 1' graphql -f query='{m}'"),
+            format!("gh api graphql -fquery='{m}'"),
+            "gh api graphql -F query=@merge.graphql".into(),
+            "gh api graphql --input body.json".into(),
+            "gh api graphql -f query=\"$Q\"".into(),
+            "gh api graphql -f query='mutation { enqueuePullRequest(input: {pullRequestId: \"A\"}) { clientMutationId } }'".into(),
+            "glab api -X PUT projects/1/merge_requests/3/merge".into(),
+        ] {
+            assert!(has(&line, "merge"), "{line} as merge");
+        }
+        assert!(!has("glab api projects/1/merge_requests/3/merge", "merge"), "a GET of the endpoint");
+        assert!(has("sl --color never push --to main", "push"));
+        assert!(has("jj --config-toml 'x=1' git push", "push"));
+        let both = "gh api graphql -f query='mutation { d: disablePullRequestAutoMerge(input: {pullRequestId: \"A\"}) { clientMutationId } m: mergePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: \"abc1234\"}) { clientMutationId } }'";
+        assert_eq!(read(both), "merge", "disarming and merging at once is a merge with no head and no disable");
+        let twice = "gh api graphql -f query='mutation($h: GitObjectID) { mergePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: $h}) { clientMutationId } }' -f h=abc1234 -F h=def5678";
+        assert_eq!(read(twice), "merge pr=A", "a variable given twice names no head");
+        assert_eq!(
+            read("gh api graphql -f query='mutation { enqueuePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: \"abc1234\"}) { clientMutationId } }'"),
+            "merge pr=A head=abc1234 auto"
+        );
+        assert_eq!(read("gh api graphql -f query='mutation { dequeuePullRequest(input: {id: \"A\"}) { clientMutationId } }'"), "merge disable");
+        assert_eq!(read("glab api -X PUT projects/1/merge_requests/3/merge -f sha=abc1234"), "merge pr=3 head=abc1234");
+        assert_eq!(read("gh api graphql -F query=@merge.graphql"), "merge");
+        assert_eq!(read("gt merge"), "merge blind");
+        assert_eq!(read("git town ship"), "merge blind");
+        let unread = bash("\"$(printf jj)\" git push").matches("unread:push").unwrap();
+        assert!(unread.detail.unwrap().contains("printf jj"));
+        assert!(bash("\"$(printf gh)\" issue create -t x").matches("effect:send").is_some());
+    }
+
+    #[test]
     fn a_folder_made_at_the_checkouts_top_is_new() {
         let repo = std::env::temp_dir().join(format!("dh317-top-{}", std::process::id()));
         fs::create_dir_all(repo.join(".git")).unwrap();
@@ -1838,7 +2133,10 @@ mod tests {
             call("echo x > notes.md && mkdir src/a"),
             call("mkdir src/b"),
         );
+        // #1503: a string in an inline program is a path it may reach, not a folder it makes.
+        let held = call("python3 -c \"print(10/2); print('https://example.com/a/b')\"");
         fs::remove_dir_all(&repo).unwrap();
+        assert!(!held, "an inline program's strings make no folder");
         assert!(made, "mkdir of a new folder at the top is recorded");
         assert!(
             !file,

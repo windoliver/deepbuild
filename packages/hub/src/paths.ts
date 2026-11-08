@@ -14,31 +14,70 @@ export function nameWorkspace(folder: string, id: string | undefined): void {
   else workspaces.set(folder, id);
   repos.clear();
 }
+/** The forge repos of the projects people share on this hub (#1337), as `host/owner/name`. */
+const shared = new Set<string>();
+/** Names the forge repos people share: a clone of one reads as that project, by its forge identity. */
+export function shareProjects(forges: Iterable<string>): void {
+  shared.clear();
+  for (const forge of forges) shared.add(forge);
+  repos.clear();
+}
+/** A shared project's ID, from its forge identity: its name and a digest of `host/owner/name`, so every clone reads as one. */
+export const projectIdOf = (forge: string): string => `${basename(forge).replace(/[^0-9A-Za-z]/g, '')}${createHash('sha256').update(forge).digest('hex').slice(0, 8)}`;
+/** A remote's URL as `host/owner/name`, lowercase and without `.git`: the same for its HTTPS and SSH spellings. */
+export function forgeIdentity(url: string): string | undefined {
+  const m = /^(?:[a-z+]+:\/\/)?(?:[^@/\s]+@)?([^/:\s]+)(?::\d+)?[:/]+(.+?)(?:\.git)?\/*$/i.exec(url.trim());
+  if (!m || !m[2]!.includes('/')) return undefined;
+  return `${m[1]}/${m[2]}`.toLowerCase();
+}
+/** The main checkout a folder is in: the folder holding `.git`, a worktree's main checkout for a worktree; undefined outside git. */
+function checkoutOf(cwd: string): string | undefined {
+  for (let dir = cwd; ; dir = dirname(dir)) {
+    const git = join(dir, '.git');
+    try {
+      if (statSync(git).isDirectory()) return dir;
+      // A worktree's .git names its folder under the main checkout's .git/worktrees.
+      const gitdir = resolve(dir, /^gitdir:\s*(.+)$/m.exec(readFileSync(git, 'utf8'))?.[1]?.trim() ?? '');
+      return /[\\/]worktrees[\\/][^\\/]+$/.test(gitdir) ? dirname(dirname(dirname(gitdir))) : dir;
+    } catch { /* not here: look further up */ }
+    if (dirname(dir) === dir) return undefined;
+  }
+}
+/** The forge identity of the repo a folder is in, from its `origin` remote; undefined with none. */
+export function forgeOf(cwd: string): string | undefined {
+  const checkout = checkoutOf(cwd);
+  if (!checkout) return undefined;
+  let config: string;
+  try {
+    const git = join(checkout, '.git');
+    config = readFileSync(statSync(git).isDirectory() ? join(git, 'config') : join(resolve(checkout, /^gitdir:\s*(.+)$/m.exec(readFileSync(git, 'utf8'))?.[1]?.trim() ?? ''), 'config'), 'utf8');
+  } catch {
+    return undefined;
+  }
+  let origin = false;
+  for (const line of config.split('\n')) {
+    const section = /^\s*\[([^\]]*)\]/.exec(line);
+    if (section) origin = /^remote\s+"origin"$/.test(section[1]!.trim());
+    const url = origin ? /^\s*url\s*=\s*(.+?)\s*$/.exec(line) : null;
+    if (url) return forgeIdentity(url[1]!);
+  }
+  return undefined;
+}
 /**
  * The repo a folder is in, as a decision's scope names it (`repo:<id>`, #23): its main checkout's folder name and a
- * digest of its path, the same from every worktree of it. Undefined outside a git repo. Read once per folder.
+ * digest of its path, the same from every worktree of it. A clone of a project people share reads as that project, by
+ * its forge identity (#1337); one with no remote keeps its path. Undefined outside a git repo. Read once per folder.
  */
 export function repoOf(cwd: string): string | undefined {
   if (!cwd) return undefined;
   if (repos.has(cwd)) return repos.get(cwd);
-  let found: string | undefined;
-  for (let dir = cwd; ; dir = dirname(dir)) {
-    const git = join(dir, '.git');
-    try {
-      if (statSync(git).isDirectory()) found = dir;
-      else {
-        // A worktree's .git names its folder under the main checkout's .git/worktrees.
-        const gitdir = resolve(dir, /^gitdir:\s*(.+)$/m.exec(readFileSync(git, 'utf8'))?.[1]?.trim() ?? '');
-        found = /[\\/]worktrees[\\/][^\\/]+$/.test(gitdir) ? dirname(dirname(dirname(gitdir))) : dir;
-      }
-    } catch { /* not here: look further up */ }
-    if (found || dirname(dir) === dir) break;
-  }
+  const found = checkoutOf(cwd);
   let id: string | undefined;
   if (found) {
     let real = found;
     try { real = realpathSync(found); } catch { /* as found */ }
-    id = workspaces.get(real) ?? `${basename(real).replace(/[^0-9A-Za-z]/g, '')}${createHash('sha256').update(real).digest('hex').slice(0, 8)}`;
+    const forge = shared.size ? forgeOf(found) : undefined;
+    id = workspaces.get(real) ?? (forge && shared.has(forge) ? projectIdOf(forge) : undefined) ?? `${basename(real).replace(/[^0-9A-Za-z]/g, '')}${createHash('sha256').update(real).digest('hex').slice(0, 8)}`;
   }
   repos.set(cwd, id);
   return id;

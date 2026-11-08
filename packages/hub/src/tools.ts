@@ -76,10 +76,11 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
     rev: maybe({ type: 'integer', description: 'With no document or patch, render back this revision of the document; null for the current one.' }),
   }),
   deep_drive: object({
-    call: { type: 'string', enum: ['launch', 'act', 'wait_for', 'see', 'screenshot', 'record', 'expect', 'close'] },
+    call: { type: 'string', enum: ['launch', 'act', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },
     replica: maybe(str('The replica, as launch answered it; null only for launch.', HANDLE('replica'))),
     launch: maybe(object({
       from: oneOf(['fixture', 'record_copy', 'empty'], 'null for fixture.'),
+      fixture: maybe(str('A record fixture, by its absolute path, read when from is fixture; null for the default one.')),
       panel: maybe(str('A panel package, by its absolute path, mounted in the sidebar.')),
       size: PAIR,
       scale: maybe(INT),
@@ -88,6 +89,10 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
       locale: maybe(str()),
       clock: oneOf(['virtual', 'real']),
       packs: maybe({ type: 'array', items: str('name@version') }),
+      device: maybe(object({
+        system_bar: maybe({ ...INT, description: 'Points of system bar over the window\'s top edge.' }),
+        keyboard: maybe({ ...INT, description: 'Points of on-screen keyboard over the bottom edge while a text input has focus.' }),
+      })),
     })),
     locator: maybe({ ...LOCATOR, description: 'The call\'s target: what act clicks, types into or scrolls, what expect, wait_for and see look at; null to type or press into the focused element.' }),
     act: maybe(object({
