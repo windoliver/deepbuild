@@ -1,0 +1,17 @@
+{
+  "words": {
+    "issue": "task",
+    "PR": "change to look at",
+    "pull request": "change to look at",
+    "commit": "saved change",
+    "branch": "draft",
+    "worktree": "copy",
+    "repo": "project",
+    "repository": "project",
+    "landed": "finished",
+    "merged": "finished",
+    "verdict": "result",
+    "session": "agent at work",
+    "claim": "says done"
+  }
+}

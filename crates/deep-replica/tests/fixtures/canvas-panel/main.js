@@ -1,6 +1,5 @@
 // A panel that draws one canvas item, "script-line", on a 200 by 100 point canvas, for tests/drive.rs.
-import { View, div } from "gpui-kit";
-import { Canvas, CanvasScene } from "gpui-component";
+import { View, div, Canvas, CanvasScene } from "@deepbuild/panel";
 
 export default class Panel extends View {
   init() {
