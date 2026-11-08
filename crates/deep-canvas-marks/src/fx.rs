@@ -148,17 +148,6 @@ pub enum Mode {
     Add,
 }
 
-impl Mode {
-    pub fn name(self) -> &'static str {
-        match self {
-            Mode::Normal => "normal",
-            Mode::Multiply => "multiply",
-            Mode::Screen => "screen",
-            Mode::Add => "add",
-        }
-    }
-}
-
 /// `drop {offset, role, opacity, blur, mode}`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Drop {
@@ -458,49 +447,6 @@ impl Fx {
         }
         Ok(fx)
     }
-
-    /// Whether any layer needs the item's coverage target (a drop without blur is a plain copy).
-    pub fn needs_coverage(&self) -> bool {
-        self.inner.is_some()
-            || self.glow.is_some()
-            || self.bevel.is_some()
-            || self.satin.is_some()
-            || self.drop.as_ref().is_some_and(|d| d.blur > 0.0)
-    }
-
-    /// How far past the coverage an outer layer reaches, in px: the box the item's bounds and its
-    /// fit check grow to.
-    pub fn reach(&self) -> [f64; 4] {
-        // [left, top, right, bottom]
-        let mut r = [0.0f64; 4];
-        let mut grow = |l: f64, t: f64, rt: f64, b: f64| {
-            r[0] = r[0].max(l);
-            r[1] = r[1].max(t);
-            r[2] = r[2].max(rt);
-            r[3] = r[3].max(b);
-        };
-        if let Some(d) = &self.drop {
-            let [x, y] = d.offset;
-            grow(
-                d.blur - x.min(0.0),
-                d.blur - y.min(0.0),
-                d.blur + x.max(0.0),
-                d.blur + y.max(0.0),
-            );
-        }
-        if let Some(g) = self.glow.as_ref().filter(|g| !g.inner) {
-            grow(g.size, g.size, g.size, g.size);
-        }
-        if let Some(b) = self
-            .bevel
-            .as_ref()
-            .filter(|b| b.shape != Shape::Inner)
-        {
-            let s = b.size + b.soften;
-            grow(s, s, s, s);
-        }
-        r
-    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -793,30 +739,6 @@ impl Fx {
         }
         out
     }
-}
-
-/// One layer composited over `dst` (straight sRGB-encoded color and alpha, 0..1) in its mode.
-pub fn composite(dst: &mut [f32; 4], color: [f32; 3], alpha: f32, mode: Mode) {
-    if alpha <= 0.0 {
-        return;
-    }
-    let da = dst[3];
-    let mut out = [0.0f32; 4];
-    let oa = alpha + da * (1.0 - alpha);
-    for c in 0..3 {
-        let (s, d) = (color[c], dst[c]);
-        // The blend where both are present, then source-over by the separable formula.
-        let mixed = match mode {
-            Mode::Normal => s,
-            Mode::Multiply => s * d,
-            Mode::Screen => s + d - s * d,
-            Mode::Add => (s + d).min(1.0),
-        };
-        let premul = alpha * (1.0 - da) * s + alpha * da * mixed + (1.0 - alpha) * da * d;
-        out[c] = if oa > 0.0 { premul / oa } else { 0.0 };
-    }
-    out[3] = oa;
-    *dst = out;
 }
 
 #[cfg(test)]
