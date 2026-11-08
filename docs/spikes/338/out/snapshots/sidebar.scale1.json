@@ -31,7 +31,7 @@
       },
       {
         "role": "button",
-        "name": "Session 1 · 01MCBH57",
+        "name": "40 asks need you",
         "value": null,
         "bounds": [
           8,
@@ -43,7 +43,7 @@
       },
       {
         "role": "button",
-        "name": "Session 2 · 01MCBH58",
+        "name": "Agents: MCP servers and skills",
         "value": null,
         "bounds": [
           8,
@@ -55,7 +55,7 @@
       },
       {
         "role": "button",
-        "name": "Session 3 · 01MCBH59",
+        "name": "! Session 01MCBH57 · needs you",
         "value": null,
         "bounds": [
           8,
@@ -67,7 +67,7 @@
       },
       {
         "role": "button",
-        "name": "Session 4 · 01MCBH5A",
+        "name": "! Session 01MCBH58 · needs you",
         "value": null,
         "bounds": [
           8,
@@ -79,7 +79,7 @@
       },
       {
         "role": "button",
-        "name": "Session 5 · 01MCBH5B",
+        "name": "! Session 01MCBH59 · needs you",
         "value": null,
         "bounds": [
           8,
@@ -91,7 +91,7 @@
       },
       {
         "role": "button",
-        "name": "Session 6 · 01MCBH5C",
+        "name": "! Session 01MCBH5A · needs you",
         "value": null,
         "bounds": [
           8,
@@ -103,11 +103,35 @@
       },
       {
         "role": "button",
-        "name": "Session 7 · 01MCBH5D",
+        "name": "! Session 01MCBH5B · needs you",
         "value": null,
         "bounds": [
           8,
           184,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "! Session 01MCBH5C · needs you",
+        "value": null,
+        "bounds": [
+          8,
+          208,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "! Session 01MCBH5D · needs you",
+        "value": null,
+        "bounds": [
+          8,
+          232,
           244,
           24
         ],
@@ -139,7 +163,7 @@
       },
       {
         "role": "label",
-        "name": "40 asks open · virtual clock 1800000000000",
+        "name": "! Session 01MCBH57 · needs you",
         "value": null,
         "bounds": [
           268,

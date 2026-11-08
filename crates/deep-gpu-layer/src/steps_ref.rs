@@ -888,7 +888,7 @@ fn gpu(
 ) -> Result<(Vec<u8>, Vec<[f64; 4]>), String> {
     use wgpu::util::DeviceExt as _;
     let d = &device.device;
-    let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
     let runner = Runner::new(d, c.clone(), TARGET);
     let mut textures = Vec::new();
     for name in &c.checked.textures {
