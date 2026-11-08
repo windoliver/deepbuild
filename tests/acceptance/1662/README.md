@@ -68,7 +68,9 @@ npx vitest run --root tests/acceptance/124 --no-file-parallelism ac7-ui-check.te
 
 Both tests must pass there: each expects the UI check's claim `FAIL` with one finding naming the planted row in each of
 the four renders, checked against the render's own snapshot and PNG. `ac3-planted.test.ts` runs exactly that command
-(with `--reporter=json`) and requires both tests present and `passed`, quoting their failure messages otherwise; off macOS
+(with `--reporter=json`) and requires both tests present and `passed`, quoting their failure messages otherwise, and that
+no other test of the file ran (vitest's JSON report lists every test of the file, the ones `-t planted` left out as
+`skipped`; only a status other than skipped/pending/todo counts as run); off macOS
 it calls `ctx.skip` with an INCONCLUSIVE note, so a Linux run reports it skipped, not passed. #124's `requireMacos` makes
 the two tests themselves INCONCLUSIVE off macOS the same way.
 
