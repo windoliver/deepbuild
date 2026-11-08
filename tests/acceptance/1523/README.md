@@ -20,6 +20,23 @@ Written first, blind, by a job that never saw an implementation of #1523. Source
 
 The implementing agent does not edit these files (AGENTS.md, Proof). A dispute goes to a blind redraft of this job.
 
+### The second model (blind redraft, 2026-11-07)
+
+Main's #1537 landed after the base commit: every claim whose session has a pull request gets a `review` check run by a
+second model. The base's world had none, so the delivered thread's PR stop (`helpers.ts`, `delivered`) came back
+"open as Part of its issue, with review still unmet", and AC5 (`head.test.ts`) and AC6 (`auto.test.ts`) failed on any
+tree holding main (the implementer's evidence: `docs/evidence/1523/main-sendback.txt`, the same failure on pure main).
+The redraft, by a job that read only the issue, the design, this README, `helpers.ts` and tests/acceptance/1537's
+fake-reviewer setup, gives the world a second model as #1537's suite does: `fixtures/fake-reviewer.pl` (copied from
+tests/acceptance/1537, with `fixtures/rubric.md`) is installed as `claude` in `<tmp>/bin`, first on the runner's login
+PATH (`runner.login_path` in `~/.deepbuild/config.json`), beside a made-up Claude Code sign-in
+(`~/.claude/.credentials.json`) and the wiki's review rubric (`~/.deepbuild/wiki/review-rubric.md`). It answers every
+review clean (no findings), so the review check is met by a second model's answer, never by the test's word, and the
+PR-opening stop is not sent back. The runner starts no job before the account's first window reading, so `delivered`
+first reports the five-hour window with room (`windows.report`, 5% used, as #1537's suite does); without it the
+review stays BLOCKED, "no second model is free". The criteria, their IDs and the tests' text are unchanged. The fake makes no network
+call; "no model, no `claude` binary" below still holds for the real ones.
+
 ## How to run
 
 With Node 24.22 (`.node-version`) first on `PATH` and the Rust toolchain:
@@ -185,6 +202,8 @@ Each `describe` and test name starts with its criterion's number and ID, `#1523.
   `free.test.ts` (AC3), `unreadable.test.ts` (AC4), `head.test.ts` (AC5), `auto.test.ts` (AC6), `proceed.test.ts`
   (AC7), `hubdown.test.ts` (AC8).
 - `fixtures/agent.mjs`: one session's Claude Code, as far as its hooks go. From #84's guard suite (#321's).
+- `fixtures/fake-reviewer.pl`, `fixtures/rubric.md`: the second model and its rubric (The second model). From
+  tests/acceptance/1537.
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the run on the base commit, trimmed to each test's failing assertion, and what wasn't run.
 
