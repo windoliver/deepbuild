@@ -63,6 +63,17 @@ export interface FloorInput {
 export type FloorResult = { ok: true } | { ok: false; action: 'send_back' | 'INVALID'; findings: Finding[]; claim: string };
 export type FloorPlant = 'run-happened-only' | 'leaves-to-done-gate' | 'no-deliverable-check' | 'no-read-check';
 
+/**
+ * A run as the agent typed it: deep-hook rewrites a heavy command into `deep lease [kinds] -- <command>`, or through
+ * `/bin/sh -c '<command>'` when it isn't one plain command (#1015), and the record keeps the rewritten one.
+ */
+function typed(command: string): string {
+  const leased = /^deep lease (?:[\w-]+ )*-- (.*)$/s.exec(command);
+  if (!leased) return command;
+  const sh = /^\/bin\/sh -c '((?:[^']|'\\'')*)'$/s.exec(leased[1]!);
+  return sh ? sh[1]!.replace(/'\\''/g, "'") : leased[1]!;
+}
+
 /** A repo-relative path inside the checkout, or null for one that leaves it. */
 function inside(checkout: string, path: string): string | null {
   if (isAbsolute(path)) return null;
@@ -120,8 +131,9 @@ export function validityGate(input: ValidityInput, plant?: FloorPlant): Finding[
     }
   }
   const cites = [...input.claim.message.matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
+  const runs = session.ran.map((r) => ({ ...r, command: typed(r.command) }));
   for (const cite of new Set(cites)) {
-    const run = session.ran.find((r) => cite === r.command || cite.startsWith(`${r.command} `));
+    const run = runs.find((r) => cite === r.command || cite.startsWith(`${r.command} `));
     if (run) {
       const mask = plant === 'run-happened-only' ? null : maskOf(checkout, run.command);
       if (mask !== null) found.push({ kind: 'masked_exit', ref: run.command, mask, why: `the run \`${run.command}\` it cites proves nothing: exit status masked by \`${mask}\`` });
