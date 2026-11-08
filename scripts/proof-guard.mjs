@@ -34,7 +34,9 @@ const budgetsIn = (text) => {
   const start = (text ?? '').indexOf('\n## Carried patches\n');
   if (start < 0) return null;
   const [section] = text.slice(start + 1).split(/\n#{1,2} /);
-  return section.split('\n').flatMap((line) => /\|\s*(\d+) over\b[^|]*\|\s*$/.exec(line)?.[1] ?? []).join();
+  const rows = section.split('\n').filter((line) => line.startsWith('|')).map((line) => line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim()));
+  const budget = rows[0]?.indexOf('Budget') ?? -1;
+  return rows.slice(2).flatMap((cells) => /^(\d+) over\b/.exec(cells[budget] ?? '')?.[1] ?? []).join();
 };
 
 // The files the merge base's runner configs name by path from the config's folder, resolved as vite
