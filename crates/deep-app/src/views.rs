@@ -59,6 +59,8 @@ const AGENTS_TICK: Duration = Duration::from_secs(2);
 /// The diff lines the Agents page shows of each file, and the width a line is cut to, in points.
 const DIFF_LINES: usize = 8;
 const DIFF_WIDTH: f32 = 1060.;
+/// The most lines a sidebar row's problem draws under it (#1348): its one plain line, or a planted trace's.
+const PROBLEM_LINES: usize = 16;
 
 /// What the views draw over a fixture record: the inbox projection at a log position on the virtual clock. The
 /// replica, the live capture and the registry checks set it before opening the shell; the app sets none, so its
@@ -547,6 +549,11 @@ struct Record {
     readings: Vec<Vec<String>>,
     /// When each of the first session's open asks defaults, in event order: on a session's page only.
     deadlines: Vec<u64>,
+    /// Each sidebar row's problem in plain words (#1348): what happened, then what happens next.
+    problems: Vec<Option<String>>,
+    /// What a session's page shows by its real names (#1348): the session, its issue and branch, and its newest
+    /// run's failure whole, its trace included. On a session's page only.
+    details: Vec<String>,
 }
 
 /// What the sidebar draws: every session, in the order each first appears, with its task's title and its state.
@@ -623,12 +630,48 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
             .collect(),
         _ => Vec::new(),
     };
+    let problems = match kind {
+        Kind::Sidebar => sessions
+            .iter()
+            .map(|(session, ..)| {
+                let problem = crate::plain::problem(&table, session);
+                let problem = problem.map(|(happened, next)| format!("{happened} {next}"));
+                // The planted page shows the failure's trace in the row, in a test build only.
+                match table.failure(session) {
+                    Some(failure) if crate::plain::planted("page-shows-trace") => {
+                        Some([problem.unwrap_or_default(), failure.to_owned()].join("\n"))
+                    }
+                    _ => problem,
+                }
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let details = match (kind, sessions.first()) {
+        (Kind::Session, Some((session, ..))) => {
+            let mut details = table.names(session);
+            details.extend(
+                table
+                    .failure(session)
+                    .into_iter()
+                    .flat_map(str::lines)
+                    .map(str::to_owned),
+            );
+            if crate::plain::planted("session-page-line-pr") {
+                details.push(crate::plain::PLANTED_PR_LINE.to_owned());
+            }
+            details
+        }
+        _ => Vec::new(),
+    };
     Record {
         open,
         sessions,
         rows,
         readings,
         deadlines,
+        problems,
+        details,
     }
 }
 
@@ -815,7 +858,7 @@ impl Render for Shipped {
                             cx.notify();
                         }
                     }))
-                    .child(title("sidebar-title", "Sessions"))
+                    .child(title("sidebar-title", "Tasks"))
                     // The window's count, which shows Needs you; a fixture's view draws the record alone.
                     .children(decorations.is_none().then(|| {
                         label("sidebar-count", count_line())
@@ -842,6 +885,20 @@ impl Render for Shipped {
                             let text = format!("{task} · {words}");
                             // Its readings beside it (#990), a line each under the row, quieter than its state.
                             let readings = record.readings.get(index).cloned().unwrap_or_default();
+                            // Its problem in plain words (#1348), a line under the row, each line its own node.
+                            let problem: Vec<String> = record
+                                .problems
+                                .get(index)
+                                .cloned()
+                                .flatten()
+                                .map(|problem| {
+                                    problem
+                                        .lines()
+                                        .take(PROBLEM_LINES)
+                                        .map(str::to_owned)
+                                        .collect()
+                                })
+                                .unwrap_or_default();
                             // The ring is always laid out, so focus moving never shifts a row; it shows on the
                             // focused row alone.
                             let ring = if focused.as_ref() == Some(session) {
@@ -887,8 +944,17 @@ impl Render for Shipped {
                                         cx.notify();
                                     }
                                 }));
-                            div().flex().flex_col().child(row).children(
-                                readings.into_iter().enumerate().map(|(n, reading)| {
+                            div()
+                                .flex()
+                                .flex_col()
+                                .child(row)
+                                .children(problem.into_iter().enumerate().map(|(n, line)| {
+                                    label(("sidebar-problem", index * PROBLEM_LINES + n), line)
+                                        .h_auto()
+                                        .pl_4()
+                                        .text_color(chrome.ink_secondary)
+                                }))
+                                .children(readings.into_iter().enumerate().map(|(n, reading)| {
                                     // A reading wider than the sidebar ends in an ellipsis; its
                                     // accessibility label keeps the whole of it. A block, not the
                                     // label's flex row, so the text is laid out to the row's width
@@ -900,8 +966,7 @@ impl Render for Shipped {
                                         .pl_4()
                                         .text_color(chrome.ink_secondary)
                                         .truncate()
-                                }),
-                            )
+                                }))
                         },
                     ))
             }
@@ -1029,7 +1094,14 @@ impl Render for Shipped {
                         }))
                 });
                 let grid = terminal.map(|tab| terminal_view(tab, chrome));
+                // What the page shows by its real names, and the newest failure whole (#1348).
+                let details = record
+                    .details
+                    .iter()
+                    .enumerate()
+                    .map(|(n, line)| label(("session-detail", n), line.clone()).h_auto());
                 page.child(title("session-title", task.clone()))
+                    .children(details)
                     // The return card: what came back from the session's last stop, with the
                     // values bound to its runs' assertions (#629).
                     .child(

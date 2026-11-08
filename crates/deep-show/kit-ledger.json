@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "d2841ad780b80bcd61ed427f99babcd3cbcf981a27b8d4755828c076a5ec93f8",
+    "digest": "05eb78285554ed6b6d3671aaa6a6c6787ccac5849ba3f75c58660ecc7af3fc9f",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -82,7 +82,7 @@
   },
   "graph": {
     "version": "1.0.0",
-    "digest": "42cebb9cb1568a4ae30c1e1163bb021d0efd2393630840e50167520dc92c646c",
+    "digest": "840570cf1f3a314adfeb0cb2d42b736e0590426d107bf6e231ab3c0535256415",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -159,6 +159,18 @@
       "catalog": "PASS"
     }
   },
+  "media": {
+    "version": "1.0.0",
+    "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+    "verdict": "PASS",
+    "parts": {
+      "fixtures": "PASS",
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "schedule": "PASS",
+      "catalog": "PASS"
+    }
+  },
   "motion": {
     "version": "1.0.0",
     "digest": "def0784a75255943cbe31d9b104fc00297447171a92b0b229cb139b5949d3663",
@@ -205,7 +217,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "fcdf1b2abbf2926d953c9ccda14d8d10e2e9fa83806d3400c832a38607579193",
+    "digest": "dd0dd9bb9712565feb0635f87a7e920dbfeb8d36078382378d524b1d9a34211c",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
