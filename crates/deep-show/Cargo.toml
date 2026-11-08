@@ -50,6 +50,8 @@ test-leave-out-data = []
 test-leave-out-motion = []
 test-ease-in-motion = []
 test-ease-renumbered = []
+# Issue #493: the planted layout that registers camera@1 in the scene3d module, not the core.
+test-camera-in-scene3d = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
 # deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
 # test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
@@ -197,6 +199,9 @@ test-rules-shared = ["dep:deep-canvas-test-modules"]
 test-rules-isolated = ["dep:deep-canvas-test-modules"]
 test-registries-load = ["dep:deep-canvas-test-modules"]
 test-leave-out-effects = []
+# #308: the full set without the input module, and the test control kind test.dial.
+test-leave-out-input = []
+test-control-kind = []
 test-steps-in-effects = []
 
 [dependencies]
@@ -210,6 +215,8 @@ deep-canvas-sheet = { path = "../deep-canvas-sheet" }
 deep-canvas-cells = { path = "../deep-canvas-cells" }
 deep-canvas-vector = { path = "../deep-canvas-vector" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+# Issue #308: the input module, controls and control@1, in the full build set.
+deep-canvas-input = { path = "../deep-canvas-input" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
