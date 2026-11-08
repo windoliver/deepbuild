@@ -15,10 +15,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use deep_canvas_marks::data;
 use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Planted, Record, Rgb};
 use deep_canvas_marks::scene::{Blend, Drawn, Scope};
+use deep_canvas_marks::story;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
     bez, brush, image, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas, Scopes,
@@ -58,6 +60,84 @@ pub struct Request {
     pub write: deep_canvas_vector::Write,
     /// #399: `false` draws the whole frame without antialiasing.
     pub antialias: bool,
+    /// #496's wrong programs on a text's glyphs, and its build that snaps a driven weight to the
+    /// nearest static face.
+    pub text_plant: deep_canvas_marks::animator::Plant,
+    pub snaps_weight: bool,
+}
+
+/// What a text's per-glyph layout reads at a frame (#496): the document, its evaluated items,
+/// the frame's time and record, and the wrong program planted.
+pub(crate) struct Anim {
+    doc: Map<String, Value>,
+    items: Map<String, Value>,
+    t: i64,
+    record: Record,
+    locale: String,
+    plant: deep_canvas_marks::animator::Plant,
+    snaps_weight: bool,
+    /// The look's roles, which a glyph's color and stroke props name.
+    palette: scene::Palette,
+}
+
+/// The host a text's layout asks for shaped strings and a counter's other strings.
+struct Host<'a> {
+    label: &'a deep_text_gpui::Label,
+    anim: &'a Anim,
+    id: &'a str,
+}
+
+impl deep_canvas_marks::animator::Host for Host<'_> {
+    fn shape(&mut self, text: &str) -> Arc<deep_text::Shaped> {
+        deep_text_gpui::shape(&deep_text_gpui::Label {
+            text: text.to_string(),
+            ..self.label.clone()
+        })
+    }
+
+    fn counter_text(&mut self, value: f64) -> Result<Option<String>, scene::Refused> {
+        let Some(mut item) = self.anim.items.get(self.id).cloned() else {
+            return Ok(None);
+        };
+        let source = item
+            .pointer("/params/text/counter/source")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if let Some(name) = source.strip_prefix("data/") {
+            if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
+                let data = params.entry("data").or_insert_with(|| json!({}));
+                if let Some(d) = data.as_object_mut() {
+                    d.insert(name.to_string(), json!(value));
+                }
+            }
+        }
+        let shown = scene::text_at(
+            &self.anim.doc,
+            &self.anim.items,
+            self.id,
+            &item,
+            &self.anim.record,
+            &self.anim.locale,
+        )?;
+        Ok(shown.map(|s| s.text))
+    }
+}
+
+/// A glyph's outline in its own frame, as `texts` reports it (#496).
+fn outline_row(g: &deep_text::Glyph) -> Value {
+    use deep_text::outlines::Cmd;
+    let cmds: Vec<Value> = deep_text::outlines::outline_of(g)
+        .into_iter()
+        .map(|c| match c {
+            Cmd::Move(p) => json!(["M", p[0], p[1]]),
+            Cmd::Line(p) => json!(["L", p[0], p[1]]),
+            Cmd::Quad(a, p) => json!(["Q", a[0], a[1], p[0], p[1]]),
+            Cmd::Cubic(a, b, p) => json!(["C", a[0], a[1], b[0], b[1], p[0], p[1]]),
+            Cmd::Close => json!(["Z"]),
+        })
+        .collect();
+    Value::Array(cmds)
 }
 
 /// The Vello CPU version Cargo.lock holds, which every answer names (a test holds it to the lock).
@@ -139,8 +219,26 @@ pub(crate) trait Glyphs: Canvas {
         resources: &mut Resources,
         font: &FontData,
         size: f32,
+        coords: &[i16],
         glyph: vello_cpu::Glyph,
     );
+
+    /// #496: a glyph's outline stroked `width` px wide in the current paint.
+    fn glyph_stroke(
+        &mut self,
+        resources: &mut Resources,
+        font: &FontData,
+        size: f32,
+        coords: &[i16],
+        glyph: vello_cpu::Glyph,
+        width: f64,
+    );
+
+    /// #496: opens a layer blurred by `radius` px, closed by `pop_layer`; false where this canvas
+    /// can't blur, and nothing was opened.
+    fn push_blur(&mut self, _radius: f32) -> bool {
+        false
+    }
 }
 
 impl Glyphs for RenderContext {
@@ -149,13 +247,39 @@ impl Glyphs for RenderContext {
         resources: &mut Resources,
         font: &FontData,
         size: f32,
+        coords: &[i16],
         glyph: vello_cpu::Glyph,
     ) {
         let run = self.glyph_run(resources, font);
         let _ = run
             .font_size(size)
             .hint(false)
+            .normalized_coords(coords)
             .fill_glyphs(std::iter::once(glyph));
+    }
+
+    fn glyph_stroke(
+        &mut self,
+        resources: &mut Resources,
+        font: &FontData,
+        size: f32,
+        coords: &[i16],
+        glyph: vello_cpu::Glyph,
+        width: f64,
+    ) {
+        self.set_stroke(stroke(width));
+        let run = self.glyph_run(resources, font);
+        let _ = run
+            .font_size(size)
+            .hint(false)
+            .normalized_coords(coords)
+            .stroke_glyphs(std::iter::once(glyph));
+    }
+
+    fn push_blur(&mut self, radius: f32) -> bool {
+        use vello_cpu::filter_effects::{Filter, FilterFunction};
+        self.push_filter_layer(Filter::from_function(FilterFunction::Blur { radius }));
+        true
     }
 }
 
@@ -190,6 +314,8 @@ fn ring(ctx: &mut impl Canvas, b: [f64; 4], radius: f64, width: f64) {
 /// One drawing of a document's view.
 pub(crate) struct Painter<'a, C> {
     pub(crate) ctx: C,
+    /// #496: what a text's per-glyph layout reads; `None` where no frame's evaluation is at hand.
+    anim: Option<Arc<Anim>>,
     resources: Resources,
     store: Option<&'a std::path::Path>,
     scopes: Scopes,
@@ -252,6 +378,7 @@ impl<C: Glyphs> Painter<'_, C> {
     pub(crate) fn on(ctx: C) -> Self {
         Painter {
             ctx,
+            anim: None,
             resources: Resources::new(),
             store: None,
             scopes: Scopes::new(false),
@@ -269,9 +396,10 @@ impl<C: Glyphs> Painter<'_, C> {
     ) -> Result<(), Value> {
         for drawn in marks {
             // A backdrop group's children only shape its coverage, on the GPU layer.
-            let shapes_coverage = drawn.scopes.iter().any(|s| {
-                matches!(s, Scope::Opacity { effect: Some(e), .. } if e.backdrop)
-            });
+            let shapes_coverage = drawn
+                .scopes
+                .iter()
+                .any(|s| matches!(s, Scope::Opacity { effect: Some(e), .. } if e.backdrop));
             if shapes_coverage {
                 continue;
             }
@@ -305,8 +433,100 @@ impl<C: Glyphs> Painter<'_, C> {
                 x: g.x + origin[0] as f32,
                 y: g.y + origin[1] as f32,
             };
-            self.ctx.glyph(&mut self.resources, &g.font, g.size, glyph);
-            out.push(glyph_row(g, role, lang));
+            self.ctx
+                .glyph(&mut self.resources, &g.font, g.size, &g.coords, glyph);
+            let mut row = glyph_row(g, role, lang);
+            // #496: the glyph's advance, outline and place, upright and unclipped here.
+            let e = origin[0] + f64::from(g.x);
+            let f = origin[1] + f64::from(g.y);
+            row["advance"] = json!(g.advance);
+            row["outline"] = outline_row(g);
+            row["transform"] = json!([1.0, 0.0, 0.0, 1.0, e, f]);
+            row["clip"] = Value::Null;
+            out.push(row);
+        }
+        out
+    }
+
+    /// #496: a text's glyphs as its animators, curve and roll place them, each drawn through its
+    /// own transform, in its cell while it rolls.
+    fn placed(
+        &mut self,
+        laid: &deep_canvas_marks::animator::Laid,
+        (role, color): (Option<&str>, Rgb),
+        (runs, lang): (&[scene::TextRun], Option<&str>),
+    ) -> Vec<Value> {
+        let mut out = Vec::with_capacity(laid.glyphs.len());
+        let base = self.ctx.transform();
+        for p in &laid.glyphs {
+            let g = &p.glyph;
+            let (role, color) = scene::run_paint(runs, g.grapheme, role, color);
+            let palette = self.anim.as_ref().map(|a| &a.palette);
+            let role_rgb = |name: &str| palette.and_then(|p| p.get(name)).copied();
+            let mut color = color;
+            if let Some((name, f)) = &p.paint.color {
+                if let Some(to) = role_rgb(name) {
+                    color = deep_canvas_marks::paint::rgb_of(deep_canvas_marks::paint::oklab_mix(
+                        color, to, *f,
+                    ));
+                }
+            }
+            let adjust = deep_canvas_marks::paint::Adjust {
+                hue: p.paint.hue,
+                saturation: p.paint.saturation,
+                brightness: p.paint.brightness,
+                ..Default::default()
+            };
+            let color = adjust.rgb(color);
+            if let Some(c) = p.clip {
+                self.ctx.push_clip_rect(&rect(c));
+            }
+            let faded = p.opacity < 1.0;
+            if faded {
+                self.ctx
+                    .push_layer(None, None, Some(p.opacity as f32), None);
+            }
+            let blurred =
+                p.paint.blur > 0.0 && self.ctx.push_blur((p.paint.blur * self.zoom) as f32);
+            self.ctx.set_paint(solid(color));
+            self.ctx.set_transform(base * Affine::new(p.transform));
+            let glyph = vello_cpu::Glyph {
+                id: g.id,
+                x: 0.0,
+                y: 0.0,
+            };
+            self.ctx
+                .glyph(&mut self.resources, &g.font, g.size, &g.coords, glyph);
+            if let Some((name, width)) = &p.paint.stroke {
+                if let (Some(rgb), true) = (role_rgb(name), *width > 0.0) {
+                    self.ctx.set_paint(solid(adjust.rgb(rgb)));
+                    self.ctx.glyph_stroke(
+                        &mut self.resources,
+                        &g.font,
+                        g.size,
+                        &g.coords,
+                        glyph,
+                        *width,
+                    );
+                }
+            }
+            self.ctx.set_transform(base);
+            if blurred {
+                self.ctx.pop_layer();
+            }
+            if faded {
+                self.ctx.pop_layer();
+            }
+            if p.clip.is_some() {
+                self.ctx.pop_clip();
+            }
+            let mut row = glyph_row(g, role, lang);
+            row["advance"] = json!(g.advance);
+            row["outline"] = outline_row(g);
+            row["transform"] = json!(p.transform);
+            row["clip"] = json!(p.clip);
+            row["opacity"] = json!(p.opacity);
+            out.push(row);
         }
         out
     }
@@ -375,13 +595,55 @@ impl<C: Glyphs> Painter<'_, C> {
                 color,
                 runs,
             } => {
-                let label = label_of(spec)
+                let mut label = label_of(spec)
                     .ok_or_else(|| refused("bad_font", &format!("items/{item}/params/font")))?;
+                // #496's planted build: a driven weight drawn on the nearest static face.
+                if self.anim.as_ref().is_some_and(|a| a.snaps_weight) {
+                    label.family = deep_text::fonts::static_of(label.family);
+                }
                 let shaped = if self.spans_apart && !runs.is_empty() {
                     std::sync::Arc::new(shaped_apart(&label, runs))
                 } else {
                     deep_text_gpui::shape(&label)
                 };
+                let anim = self.anim.clone();
+                let params = anim
+                    .as_ref()
+                    .filter(|_| !item.contains('#'))
+                    .and_then(|a| a.items.get(item.as_str()))
+                    .and_then(|i| i.get("params"))
+                    .and_then(Value::as_object)
+                    .filter(|p| deep_canvas_marks::animator::animated(p));
+                if let (Some(a), Some(params)) = (anim.as_deref(), params) {
+                    let input = deep_canvas_marks::animator::Input {
+                        id: item,
+                        params,
+                        run: &shaped,
+                        origin: *origin,
+                        t: a.t,
+                        doc: &a.doc,
+                        items: &a.items,
+                        bound: spec.bound,
+                        plant: a.plant,
+                    };
+                    let mut host = Host {
+                        label: &label,
+                        anim: a,
+                        id: item,
+                    };
+                    let laid = deep_canvas_marks::animator::lay_out(&input, &mut host)
+                        .map_err(|r| refused(r.code, &r.path))?;
+                    let glyphs = self.placed(
+                        &laid,
+                        (role.as_deref(), *color),
+                        (runs, spec.lang.as_deref()),
+                    );
+                    self.texts.insert(
+                        item.clone(),
+                        json!({"shown": shaped.shown, "glyphs": glyphs, "coverage": laid.coverage}),
+                    );
+                    return Ok(());
+                }
                 let glyphs = self.glyphs(
                     &shaped,
                     *origin,
@@ -393,8 +655,10 @@ impl<C: Glyphs> Painter<'_, C> {
                     .split_once('#')
                     .is_some_and(|(set, _)| self.text_sets.iter().any(|s| s == set));
                 if !item.contains('#') || row_of_set {
-                    self.texts
-                        .insert(item.clone(), json!({"shown": shaped.shown, "glyphs": glyphs}));
+                    self.texts.insert(
+                        item.clone(),
+                        json!({"shown": shaped.shown, "glyphs": glyphs}),
+                    );
                 }
             }
             Mark::Image {
@@ -516,6 +780,100 @@ pub fn label_board(
     crate::graphs::board(doc, &items, &graphs, &under)
 }
 
+/// #496: the items whose weight a driver or a channel writes.
+fn driven_weights(doc: &Map<String, Value>) -> Vec<String> {
+    let mut out = Vec::new();
+    for section in ["drivers", "channels"] {
+        for d in doc
+            .get(section)
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            let target = d.1.get("target").and_then(Value::as_str).unwrap_or("");
+            if let Some(id) = target
+                .strip_prefix("items/")
+                .and_then(|r| r.strip_suffix("/params/weight"))
+            {
+                out.push(id.to_string());
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// #496, at check: every weight a driven text takes on the document's frames, rounded to a
+/// whole unit, is shaped once and kept in the shaped-run cache, so playing shapes nothing. Once
+/// per document per process.
+pub(crate) fn preshape(req: &Request) {
+    use std::collections::HashSet;
+    use std::hash::{Hash, Hasher};
+    use std::sync::{LazyLock, Mutex};
+    static SEEN: LazyLock<Mutex<HashSet<u64>>> = LazyLock::new(Mutex::default);
+    let driven = driven_weights(&req.doc);
+    if driven.is_empty() {
+        return;
+    }
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    serde_json::to_string(&req.doc)
+        .unwrap_or_default()
+        .hash(&mut h);
+    (req.snaps_weight, req.view.theme as u8).hash(&mut h);
+    if !SEEN
+        .lock()
+        .map(|mut s| s.insert(h.finish()))
+        .unwrap_or(false)
+    {
+        return;
+    }
+    let transport = req.doc.get("transport").cloned().unwrap_or(Value::Null);
+    let (p, q) = deep_canvas::document::frame_rate_of(&transport).unwrap_or((60, 1));
+    let doc = Value::Object(req.doc.clone());
+    let Some(span) = transport
+        .get("span")
+        .and_then(|s| deep_canvas::document::duration(&doc, s).ok())
+    else {
+        return;
+    };
+    let frame = 705_600_000 * i64::from(q) / i64::from(p.max(1));
+    let ty = crate::type_of(&req.look, req.view.theme);
+    let mut weights: HashSet<(String, u16)> = HashSet::new();
+    for k in 0..=span / frame.max(1) {
+        let Ok((items, _)) = items_at(
+            &req.doc,
+            k * frame,
+            &req.vectors,
+            req.write,
+            Default::default(),
+        ) else {
+            return;
+        };
+        for id in &driven {
+            let Some(params) = items
+                .get(id)
+                .and_then(|i| i.get("params"))
+                .and_then(Value::as_object)
+            else {
+                continue;
+            };
+            let Ok(spec) = scene::text_spec_in(id, params, None, ty) else {
+                continue;
+            };
+            if !weights.insert((id.clone(), spec.weight)) {
+                continue;
+            }
+            if let Some(mut label) = label_of(&spec) {
+                if req.snaps_weight {
+                    label.family = deep_text::fonts::static_of(label.family);
+                }
+                deep_text_gpui::shape(&label);
+            }
+        }
+    }
+}
+
 /// Draws a `raster` request and writes its PNG.
 pub fn answer(req: Request) -> Value {
     match draw(&req) {
@@ -578,6 +936,21 @@ fn draw(req: &Request) -> Result<Value, Value> {
     };
     let mut p = Painter {
         ctx: new_ctx(),
+        anim: Some(Arc::new(Anim {
+            doc: req.doc.clone(),
+            items: items.clone(),
+            t: req.t,
+            record: record.clone(),
+            locale: req
+                .doc
+                .get("locale")
+                .and_then(Value::as_str)
+                .unwrap_or("en")
+                .to_string(),
+            plant: req.text_plant,
+            snaps_weight: req.snaps_weight,
+            palette: palette.clone(),
+        })),
         resources: Resources::new(),
         store: req.store.as_deref(),
         scopes: Scopes::new(req.encoded_luma),
@@ -716,6 +1089,7 @@ fn composite<'s>(
         store: p.store,
         zoom: p.zoom,
         spans_apart: p.spans_apart,
+        anim: p.anim.clone(),
         ..Painter::on(new_ctx())
     };
     let render = |q: &mut Painter<'s, RenderContext>| {
@@ -822,12 +1196,48 @@ fn any_roles(value: &Value, palette: &mut scene::Palette) {
 
 /// An item's outline at `t` as subpaths of verbs and points in u, its offset applied, with its
 /// box and box points (#221).
+/// The time a set's periods take to mix its rows for this t, alone (#167 AC7).
+fn mix_ms(id: &str, item: &Value) -> Result<f64, scene::Refused> {
+    let path = format!("items/{id}/params");
+    let params = scene::object_or_empty(item.get("params"));
+    let base = || data::base_rows(id, item, &Default::default());
+    let Some(compiled) = story::compiled(id, params, &path, base)? else {
+        return Ok(0.0);
+    };
+    let at = story::at_of(params, &compiled.periods, &path)?;
+    let start = std::time::Instant::now();
+    std::hint::black_box(compiled.periods.at(&compiled.rows, at));
+    Ok(start.elapsed().as_secs_f64() * 1e3)
+}
+
+/// The time standing takes to rank every period of `doc`'s mark sets, alone (#167 AC7).
+pub fn rank_ms(doc: &Map<String, Value>) -> Result<f64, scene::Refused> {
+    let mut total = 0.0;
+    for (id, item) in scene::object_or_empty(doc.get("items")) {
+        let path = format!("items/{id}/params");
+        let params = scene::object_or_empty(item.get("params"));
+        if item["kind"] != "marks@1" || !params.contains_key("transforms") {
+            continue;
+        }
+        let list = story::listed(params, &path)?;
+        if let [("periods", spec, at), ("standing", rank, rank_at), ..] = list.as_slice() {
+            let rows = data::base_rows(id, item, &Default::default())?;
+            let mut periods = story::Periods::compile(&rows, spec, at)?;
+            let start = std::time::Instant::now();
+            periods.rank(&rows, rank, rank_at)?;
+            total += start.elapsed().as_secs_f64() * 1e3;
+        }
+    }
+    Ok(total)
+}
+
 pub fn geometry(
     doc: &Map<String, Value>,
     item: &str,
     t: i64,
     vectors: &crate::Vectors,
     router: deep_canvas_graph::view::Router,
+    (look, timing): (Option<&Look>, bool),
 ) -> Value {
     let run = || -> Result<Value, Value> {
         let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
@@ -844,6 +1254,7 @@ pub fn geometry(
         any_roles(&Value::Object(doc.clone()), &mut palette);
         // And those of the items a vector draws as.
         any_roles(&Value::Object(items.clone()), &mut palette);
+        palette.extend(look.iter().flat_map(|l| l.light.clone()));
         let frame = scene::frame(doc, &items, &palette, &Record::default(), 1.0)
             .map_err(|r| refused(r.code, &r.path))?;
         let mut subpaths: Vec<Value> = Vec::new();
@@ -882,6 +1293,26 @@ pub fn geometry(
             }
         }
         let mut answer = json!({"ok": true, "subpaths": subpaths});
+        // A data item at t (#167): a mark set's rows, a scale's domain, an axis's ticks.
+        let story = |r: scene::Refused| refused(r.code, &r.path);
+        if let Some(found) = items.get(item) {
+            match found["kind"].as_str() {
+                Some("marks@1") => {
+                    answer["rows"] =
+                        data::rows_report(item, found, &items, &palette).map_err(story)?;
+                    if timing {
+                        answer["timing"] = json!({"mix_ms": mix_ms(item, found).map_err(story)?});
+                    }
+                }
+                Some("scale@1") => {
+                    answer["domain"] = data::domain_report(item, found, &items).map_err(story)?
+                }
+                Some("axis@1") => {
+                    answer["ticks"] = data::ticks_report(item, found, &items).map_err(story)?
+                }
+                _ => {}
+            }
+        }
         // Its evaluated box at t, geometry only, and the nine box points on it (#221).
         if let Some(b) = crate::place::box_of(doc, &placed, vectors, item) {
             let points: Map<String, Value> = deep_canvas_marks::relations::POINTS
