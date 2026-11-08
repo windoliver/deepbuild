@@ -539,7 +539,8 @@ fn budget_check(
     if over.is_empty() {
         return;
     }
-    // Each operator's share of the CPU, and the costliest by name (#1417).
+    // Each operator's share of the CPU, and the costliest by name when the CPU is past its cap
+    // (#1417).
     let operators: Map<String, Value> = e
         .by_op
         .iter()
@@ -548,6 +549,7 @@ fn budget_check(
         .collect();
     let costliest = e
         .costliest_op()
+        .filter(|_| limits.cpu_ms.is_some_and(|c| e.cpu_ms > c))
         .map(|(key, ms)| format!("; the costliest operator is {key} at {ms:.3} ms"))
         .unwrap_or_default();
     let mut issue = Issue::envelope(
@@ -679,12 +681,15 @@ fn recheck_by(
             .and_then(Value::as_object)
             .is_none_or(Map::is_empty)
     });
-    // The budget estimate sums the whole document, so a build whose modules cost needs it whole;
+    // The budget estimate sums the whole document, so a build whose modules cost needs it whole,
+    // as does a document with a budget class in a build whose operators declare costs (#1417);
     // a document that names packs expands at check, so a patch to it re-expands whole.
     let packed = member(doc, "packs")
         .and_then(Value::as_array)
         .is_some_and(|p| !p.is_empty());
-    if !maps_empty || sealed.has_costs() || packed {
+    let budgeted =
+        crate::budget::of(doc).is_some() && sealed.ops.iter().any(|o| o.op.cost.is_some());
+    if !maps_empty || sealed.has_costs() || budgeted || packed {
         return None;
     }
     let items = member(doc, "items")?.as_object()?;

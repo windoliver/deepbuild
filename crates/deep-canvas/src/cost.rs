@@ -619,6 +619,74 @@ mod tests {
     }
 
     #[test]
+    fn a_patch_that_adds_a_costly_item_is_checked_against_the_whole_documents_budget() {
+        let mut sized = tick();
+        sized.manifest.name = "sized".into();
+        sized.manifest.feature = "sized".into();
+        sized.manifest.implements = "sized@1".into();
+        sized.register = register_sized;
+        let sealed = Registry::new(BuildSet::Core)
+            .with(sized)
+            .seal()
+            .expect("seals");
+        let over =
+            |issues: &[crate::document::Issue]| issues.iter().any(|i| i.code == "over_budget");
+        // One item of 1.5 ms fits a data view's 2 ms; a second makes 3 ms, which doesn't.
+        let mut before = board(0, false);
+        before["budget"] = json!({"class": "data_view"});
+        before["items"]["m"]["params"]["rows"] = json!(3);
+        let prev = crate::document::check_in(&before, &sealed).issues;
+        assert!(!over(&prev));
+        let mut after = before.clone();
+        after["items"]["s0"] =
+            json!({"kind": "rect@1", "params": {"box": [0, 0, 1, 1], "rows": 3}});
+        assert!(over(&crate::document::check_in(&after, &sealed).issues));
+        let changed = std::collections::BTreeSet::from(["s0".to_string()]);
+        let rechecked = crate::document::recheck(&after, &prev, &changed, &sealed);
+        assert!(rechecked.is_none_or(|issues| over(&issues)));
+    }
+
+    #[test]
+    fn a_refusal_names_the_costliest_operator_only_when_the_cpu_is_past_its_cap() {
+        let mut sized = tick();
+        sized.manifest.name = "sized".into();
+        sized.manifest.feature = "sized".into();
+        sized.manifest.implements = "sized@1".into();
+        sized.register = register_sized;
+        let sealed = Registry::new(BuildSet::Core)
+            .with(sized)
+            .seal()
+            .expect("seals");
+        let refusal = |rows: f64, bytes: f64| {
+            let coefficients = Coefficients {
+                fingerprint: Value::Null,
+                build: Value::Null,
+                terms: BTreeMap::from([(
+                    "sized.work".to_string(),
+                    Terms {
+                        bytes_per_item: bytes,
+                        ..Terms::default()
+                    },
+                )]),
+            };
+            let mut doc = board(0, false);
+            doc["budget"] = json!({"class": "data_view"});
+            doc["items"]["m"]["params"]["rows"] = json!(rows);
+            let issues = crate::document::check_costed(&doc, &sealed, &coefficients).issues;
+            issues
+                .into_iter()
+                .find(|i| i.code == "over_budget")
+                .expect("refused")
+        };
+        // 5 ms of CPU: the operator that spent it is named.
+        assert!(refusal(10.0, 0.0)
+            .what
+            .contains("the costliest operator is sized.work"));
+        // Past only its GPU memory, at 0.5 ms of CPU: no operator's CPU is to blame.
+        assert!(!refusal(1.0, 1e9).what.contains("costliest operator"));
+    }
+
+    #[test]
     fn a_file_from_a_build_that_isnt_optimized_is_refused_naming_its_profile() {
         let file = |build: &str| format!(r#"{{"fingerprint": {{}}, {build} "terms": {{}}}}"#);
         let dev = Coefficients::read(&file(
