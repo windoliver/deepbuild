@@ -43,17 +43,21 @@ pub const HASH: &str = "fn deep_hash1(x: u32) -> u32 {
 /// The seeded noise step `noise@1`, as `deep_canvas::steps::noise2` writes it in f64 (`fbm@1`
 /// is its octaves written out, its octave count being a literal): written into a module only
 /// when one of its steps uses it.
-pub const NOISE: &str = "fn deep_corner2(hs: u32, c: vec2<i32>, period: u32, d: vec2<f32>) -> f32 {
+pub const NOISE: &str = "fn deep_corner2(hs: u32, c: vec2<i32>, period: vec2<u32>, d: vec2<f32>) -> f32 {
     var q = c;
-    if period > 0u {
-        let pp = i32(period);
-        q = ((q % pp) + pp) % pp;
+    if period.x > 0u {
+        let pp = i32(period.x);
+        q.x = ((q.x % pp) + pp) % pp;
+    }
+    if period.y > 0u {
+        let pp = i32(period.y);
+        q.y = ((q.y % pp) + pp) % pp;
     }
     let h = deep_hash1(deep_hash1(hs ^ u32(q.x)) ^ u32(q.y));
     let g = vec2<f32>(f32(h & 65535u), f32(h >> 16u)) * (1.0 / 32768.0) - 1.0;
     return dot(g, d);
 }
-fn deep_noise2(p: vec2<f32>, seed: u32, period: u32) -> f32 {
+fn deep_noise2(p: vec2<f32>, seed: u32, period: vec2<u32>) -> f32 {
     let i = floor(p);
     let f = p - i;
     let c = vec2<i32>(i);
@@ -84,10 +88,145 @@ pub const SAMPLE3D: &str = "fn deep_sample3d(t: texture_3d<f32>, uvw: vec3<f32>)
 }
 ";
 
+/// `cells@1` (#431), as `deep_canvas::steps::cells` writes it in f64: p in 2D (z = 0, n = 2)
+/// or 3D, its 9 or 27 cells in the CPU's order.
+pub const CELLS: &str = "struct DeepCells { f1: f32, f2: f32, id: u32, center: vec3<f32> };
+fn deep_cells(p: vec3<f32>, n: u32, seed: u32, jitter: f32, metric: u32, period: vec3<u32>) -> DeepCells {
+    let b = vec3<i32>(floor(p));
+    var o = DeepCells(3.4e38, 3.4e38, 0u, vec3<f32>(0.0));
+    let count = select(9u, 27u, n == 3u);
+    for (var k = 0u; k < count; k++) {
+        var c = b + vec3<i32>(i32(k % 3u) - 1, i32((k / 3u) % 3u) - 1, select(0, i32(k / 9u) - 1, n == 3u));
+        var h = deep_hash1(seed);
+        for (var a = 0u; a < n; a++) {
+            var x = c[a];
+            if period[a] > 0u {
+                let pp = i32(period[a]);
+                x = ((x % pp) + pp) % pp;
+            }
+            h = deep_hash1(h ^ u32(x));
+        }
+        var at = vec3<f32>(0.0);
+        var d = vec3<f32>(0.0);
+        for (var a = 0u; a < n; a++) {
+            let r = f32(deep_hash1(h ^ (0x9e3779b9u * (a + 1u))) >> 8u) * 5.9604645e-8;
+            at[a] = f32(c[a]) + 0.5 + jitter * (r - 0.5);
+            d[a] = p[a] - at[a];
+        }
+        var dist = sqrt(dot(d, d));
+        if metric == 1u {
+            dist = abs(d.x) + abs(d.y) + abs(d.z);
+        } else if metric == 2u {
+            dist = max(abs(d.x), max(abs(d.y), abs(d.z)));
+        }
+        if dist < o.f1 {
+            o.f2 = o.f1;
+            o.f1 = dist;
+            o.id = h;
+            o.center = at;
+        } else if dist < o.f2 {
+            o.f2 = dist;
+        }
+    }
+    return o;
+}
+";
+
+/// `homography@1` (#431): square to quad in closed form (Heckbert 1989), as
+/// `deep_canvas::steps::homography` writes it, in WGSL's column-major order.
+pub const HOMOGRAPHY: &str = "fn deep_homography(q0: vec2<f32>, q1: vec2<f32>, q2: vec2<f32>, q3: vec2<f32>) -> mat3x3<f32> {
+    let s = q0 - q1 + q2 - q3;
+    let d1 = q1 - q2;
+    let d2 = q3 - q2;
+    let den = d1.x * d2.y - d2.x * d1.y;
+    var g = 0.0;
+    var h = 0.0;
+    if den != 0.0 {
+        g = (s.x * d2.y - d2.x * s.y) / den;
+        h = (d1.x * s.y - s.x * d1.y) / den;
+    }
+    return mat3x3<f32>(
+        vec3<f32>(q1.x - q0.x + g * q1.x, q1.y - q0.y + g * q1.y, g),
+        vec3<f32>(q3.x - q0.x + h * q3.x, q3.y - q0.y + h * q3.y, h),
+        vec3<f32>(q0.x, q0.y, 1.0),
+    );
+}
+";
+
+/// `to_hsl@1`, `from_hsl@1` and `adjust@1` (#431), as `deep_canvas::steps` writes them; hue in
+/// turns.
+pub const COLOR: &str = "fn deep_to_hsl(c: vec3<f32>) -> vec3<f32> {
+    let hi = max(c.r, max(c.g, c.b));
+    let lo = min(c.r, min(c.g, c.b));
+    let l = (hi + lo) * 0.5;
+    let d = hi - lo;
+    if d == 0.0 {
+        return vec3<f32>(0.0, 0.0, l);
+    }
+    var h = (c.r - c.g) / d + 4.0;
+    if hi == c.r {
+        h = (c.g - c.b) / d;
+        h = h - 6.0 * floor(h / 6.0);
+    } else if hi == c.g {
+        h = (c.b - c.r) / d + 2.0;
+    }
+    return vec3<f32>(h / 6.0, d / (1.0 - abs(2.0 * l - 1.0)), l);
+}
+fn deep_from_hsl(c: vec3<f32>) -> vec3<f32> {
+    let chroma = (1.0 - abs(2.0 * c.z - 1.0)) * c.y;
+    let t0 = vec3<f32>(0.0, 8.0, 4.0) + (c.x - floor(c.x)) * 12.0;
+    let t = t0 - 12.0 * floor(t0 / 12.0);
+    return c.z - chroma * 0.5 * clamp(min(t - 3.0, 9.0 - t), vec3<f32>(-1.0), vec3<f32>(1.0));
+}
+fn deep_oklab(c: vec3<f32>) -> vec3<f32> {
+    let lms = vec3<f32>(
+        0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b,
+        0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b,
+        0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b,
+    );
+    let r = sign(lms) * pow(abs(lms), vec3<f32>(1.0 / 3.0));
+    return vec3<f32>(
+        0.2104542553 * r.x + 0.7936177850 * r.y - 0.0040720468 * r.z,
+        1.9779984951 * r.x - 2.4285922050 * r.y + 0.4505937099 * r.z,
+        0.0259040371 * r.x + 0.7827717662 * r.y - 0.8086757660 * r.z,
+    );
+}
+fn deep_from_oklab(c: vec3<f32>) -> vec3<f32> {
+    let l = c.x + 0.3963377922 * c.y + 0.2158037581 * c.z;
+    let m = c.x - 0.1055613423 * c.y - 0.0638541748 * c.z;
+    let s = c.x - 0.0894841821 * c.y - 1.2914855379 * c.z;
+    let q = vec3<f32>(l * l * l, m * m * m, s * s * s);
+    return vec3<f32>(
+        4.0767416613 * q.x - 3.3077115904 * q.y + 0.2309699287 * q.z,
+        -1.2684380041 * q.x + 2.6097574007 * q.y - 0.3413193963 * q.z,
+        -0.0041960865 * q.x - 0.7034186145 * q.y + 1.7076147009 * q.z,
+    );
+}
+fn deep_adjust(mode: u32, c: vec3<f32>, x: f32) -> vec3<f32> {
+    let p = max(c, vec3<f32>(0.0));
+    switch mode {
+        case 0u: { return c * exp2(x); }
+        case 1u: { return 0.18 * pow(p / 0.18, vec3<f32>(x)); }
+        case 2u: { return pow(p, vec3<f32>(1.0 / x)); }
+        case 3u, 4u: {
+            let lab = deep_oklab(p);
+            var ab = lab.yz * x;
+            if mode == 3u {
+                let r = radians(x);
+                ab = vec2<f32>(lab.y * cos(r) - lab.z * sin(r), lab.y * sin(r) + lab.z * cos(r));
+            }
+            return max(deep_from_oklab(vec3<f32>(lab.x, ab)), vec3<f32>(0.0));
+        }
+        case 5u: { return c * x; }
+        default: { return c + (1.0 - clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)) - c) * x; }
+    }
+}
+";
+
 /// Whether any step, in any body, is a seeded noise step.
 fn uses_noise(steps: &std::collections::BTreeMap<String, Step>) -> bool {
     steps.values().any(|s| {
-        matches!(s.op.as_str(), "noise@1" | "fbm@1")
+        matches!(s.op.as_str(), "noise@1" | "fbm@1" | "noise3@1" | "cells@1")
             || s.body.as_ref().is_some_and(|b| uses_noise(&b.steps))
     })
 }
@@ -399,6 +538,81 @@ impl W<'_> {
             }
             return;
         }
+        if name == "cells" {
+            // Its ports, each a value of its own: f1, f2, id and center.
+            if !self.globals.contains("fn deep_cells") {
+                self.globals.push_str(CELLS);
+            }
+            let f = crate::check::seeded_fields(s).expect("checked");
+            let (jitter, metric) = crate::check::cell_fields(s).expect("checked");
+            let (p, n) = match self.arg_ty(s, "p") {
+                Ty::V(_, 3) => (self.arg_as(s, "p", &Ty::V(Sc::F32, 3)), 3),
+                _ => (
+                    format!(
+                        "vec3<f32>({}, 0.0)",
+                        self.arg_as(s, "p", &Ty::V(Sc::F32, 2))
+                    ),
+                    2,
+                ),
+            };
+            let seed = self.arg_as(s, "seed", &Ty::U32);
+            let all = ident(id);
+            self.line(&format!(
+                "let {all}: DeepCells = deep_cells({p}, {n}u, {seed}, {}, {}u, vec3<u32>({}u, {}u, {}u));",
+                lit(&serde_json::json!(jitter), &Ty::F32),
+                metric.code(),
+                f.period[0],
+                f.period[1],
+                f.period[2]
+            ));
+            let center = if n == 3 { "center" } else { "center.xy" };
+            for (port, ty, field) in [
+                ("f1", "f32", "f1"),
+                ("f2", "f32", "f2"),
+                ("id", "u32", "id"),
+                (
+                    "center",
+                    if n == 3 { "vec3<f32>" } else { "vec2<f32>" },
+                    center,
+                ),
+            ] {
+                self.line(&format!(
+                    "let {}: {ty} = {all}.{field};",
+                    ident(&key(id, Some(port)))
+                ));
+            }
+            return;
+        }
+        if name == "spline" {
+            // The piece x falls in, from the points' x in the table's last four slots, then the
+            // piece's cubic by Horner, x clamped into the points' span.
+            let points = s.fields.get("points").cloned().unwrap_or(Value::Null);
+            let n = points.as_array().map_or(2, Vec::len).max(2);
+            let tb = format!("inputs.{}", crate::graph::spline_input(&points));
+            let knot = |j: String| format!("{tb}[16u + ({j}) / 4u][({j}) % 4u]");
+            let v = ident(id);
+            let x = self.arg_as(s, "x", &Ty::F32);
+            self.line(&format!(
+                "let {v}_x: f32 = clamp({x}, {}, {});",
+                knot("0u".into()),
+                knot(format!("{}u", n - 1))
+            ));
+            self.line(&format!("var {v}_k: u32 = 0u;"));
+            self.line(&format!(
+                "for (var j = 1u; j < {}u; j++) {{ if {v}_x >= {} {{ {v}_k = j; }} }}",
+                n - 1,
+                knot("j".into())
+            ));
+            self.line(&format!("let {v}_c: vec4<f32> = {tb}[{v}_k];"));
+            self.line(&format!(
+                "let {v}_t: f32 = {v}_x - {};",
+                knot(format!("{v}_k"))
+            ));
+            self.line(&format!(
+                "let {v}: f32 = {v}_c.x + {v}_t * ({v}_c.y + {v}_t * ({v}_c.z + {v}_t * {v}_c.w));"
+            ));
+            return;
+        }
         let out = self.ty(id);
         let ow = out.wgsl();
         let un = |w: &Self, f: &str| format!("{f}({})", w.arg_as(s, "x", &out));
@@ -658,22 +872,26 @@ impl W<'_> {
                 let f = crate::check::seeded_fields(s).expect("checked");
                 let p = self.arg_as(s, "p", &Ty::V(Sc::F32, 2));
                 let seed = self.arg_as(s, "seed", &Ty::U32);
+                let per2 = |per: [u32; 3]| format!("vec2<u32>({}u, {}u)", per[0], per[1]);
                 if name == "noise" {
-                    format!("deep_noise2({p}, {seed}, {}u)", f.period)
+                    format!("deep_noise2({p}, {seed}, {})", per2(f.period))
                 } else {
                     // Each octave written out: k at p × lacunarity^k, seed + k, weight gain^k.
                     let (mut terms, mut amp, mut scale, mut per, mut norm) =
                         (Vec::new(), 1.0, 1.0, f.period, 0.0);
                     for k in 0..f.octaves {
+                        // #431's planted fbm wraps only its first octave on the period.
+                        let wraps = k == 0 || !self.options.period_first_octave;
                         terms.push(format!(
-                            "{} * deep_noise2({p} * {}, {seed} + {k}u, {per}u)",
+                            "{} * deep_noise2({p} * {}, {seed} + {k}u, {})",
                             lit(&serde_json::json!(amp), &Ty::F32),
                             lit(&serde_json::json!(scale), &Ty::F32),
+                            per2(if wraps { per } else { [0; 3] }),
                         ));
                         norm += amp;
                         amp *= f.gain;
                         scale *= f.lacunarity;
-                        per = per.wrapping_mul(f.lacunarity as u32);
+                        per = per.map(|x| x.wrapping_mul(f.lacunarity as u32));
                     }
                     format!(
                         "({}) / {}",
@@ -682,6 +900,89 @@ impl W<'_> {
                     )
                 }
             }
+            "noise3" => {
+                let f = crate::check::seeded_fields(s).expect("checked");
+                let p = self.arg_as(s, "p", &Ty::V(Sc::F32, 2));
+                let seed = self.arg_as(s, "seed", &Ty::U32);
+                let lanes: Vec<String> = (0..3u32)
+                    .map(|k| {
+                        format!(
+                            "deep_noise2({p}, {seed} + {}u, vec2<u32>({}u, {}u))",
+                            0x9e37_79b9u32.wrapping_mul(k),
+                            f.period[0],
+                            f.period[1]
+                        )
+                    })
+                    .collect();
+                format!("vec3<f32>({})", lanes.join(", "))
+            }
+            "homography" => {
+                if !self.globals.contains("fn deep_homography") {
+                    self.globals.push_str(HOMOGRAPHY);
+                }
+                let corners: Vec<String> = match s.fields.get("quad") {
+                    Some(q) => crate::check::quad_of(q)
+                        .expect("checked")
+                        .iter()
+                        .map(|c| {
+                            format!(
+                                "vec2<f32>({}, {})",
+                                lit(&serde_json::json!(c[0]), &Ty::F32),
+                                lit(&serde_json::json!(c[1]), &Ty::F32)
+                            )
+                        })
+                        .collect(),
+                    None => {
+                        let a = match s.args.get("quad") {
+                            Some(Arg::Ref(q, None)) if self.c.op.inputs.contains_key(q) => {
+                                format!("inputs.{q}")
+                            }
+                            _ => self.raw(s, "quad"),
+                        };
+                        (0..4).map(|k| format!("({a})[{k}].xy")).collect()
+                    }
+                };
+                format!("deep_homography({})", corners.join(", "))
+            }
+            "to_hsl" | "from_hsl" | "adjust" => {
+                if !self.globals.contains("fn deep_to_hsl") {
+                    self.globals.push_str(COLOR);
+                }
+                if name == "adjust" {
+                    let mode = s.fields.get("mode").and_then(Value::as_str).unwrap_or("");
+                    let k = deep_canvas::steps::ADJUST_MODES
+                        .iter()
+                        .position(|m| *m == mode)
+                        .unwrap_or(0);
+                    format!(
+                        "deep_adjust({k}u, {}, {})",
+                        self.arg_as(s, "rgb", &Ty::V(Sc::F32, 3)),
+                        self.arg_as(s, "x", &Ty::F32)
+                    )
+                } else {
+                    let port = if name == "to_hsl" { "rgb" } else { "hsl" };
+                    format!("deep_{name}({})", self.arg_as(s, port, &Ty::V(Sc::F32, 3)))
+                }
+            }
+            "sample_grad" if self.options.sample_grad_implicit => format!(
+                "textureSample({}, smp, {})",
+                self.raw(s, "tex"),
+                self.arg_as(s, "uv", &Ty::V(Sc::F32, 2))
+            ),
+            "sample_grad" => format!(
+                "textureSampleGrad({}, smp, {}, {}, {})",
+                self.raw(s, "tex"),
+                self.arg_as(s, "uv", &Ty::V(Sc::F32, 2)),
+                self.arg_as(s, "dx", &Ty::V(Sc::F32, 2)),
+                self.arg_as(s, "dy", &Ty::V(Sc::F32, 2))
+            ),
+            // The opaque scene's copy a see-through part reads: the input the check derives.
+            "backdrop" => format!(
+                "textureSampleLevel({}, smp, {}, {})",
+                input_ident(crate::graph::BACKDROP_INPUT),
+                self.arg_as(s, "uv", &Ty::V(Sc::F32, 2)),
+                self.arg_as(s, "lod", &Ty::F32)
+            ),
             "rand" => format!(
                 "f32(deep_hash1({}) >> 8u) * 5.9604645e-8",
                 self.arg_as(s, "key", &Ty::U32)
@@ -881,6 +1182,7 @@ impl W<'_> {
                     self.indent += 1;
                 }
             }
+
             let names: Vec<String> = body.accumulate.iter().map(|(n, _, _)| n.clone()).collect();
             self.accs.push((id.to_string(), names));
             let order = self.c.body_order.get(id).cloned().unwrap_or_default();
@@ -937,6 +1239,11 @@ pub struct Options {
     pub index_wraps: bool,
     /// The planted indirect dispatch with no guard against its count (#484).
     pub no_count_guard: bool,
+    /// #431's planted `sample_grad`, which takes the implicit derivatives of uv and ignores the
+    /// gradients given.
+    pub sample_grad_implicit: bool,
+    /// #431's planted fbm, which wraps only its first octave on the period.
+    pub period_first_octave: bool,
 }
 
 /// The inputs' uniform, the sampler and the texture and storage bindings, in binding order.

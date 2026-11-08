@@ -1,0 +1,95 @@
+{
+  "status": {
+    "state": "done",
+    "result": "INVALID",
+    "why": "#1327.73a69977 \"A new suite with a `lane.json` runs alone, and the guard passes with no tag on its commit\" has no test that ran on the base: tests/acceptance/1327/landed.test.mjs ran no test on the base: uncounted untraced program git; tests/acceptance/1327/merge-base.test.mjs ran no test on the base: uncounted untraced program git; tests/acceptance/1327/new-suite.test.mjs ran no test on the base: uncounted untraced program git; tests/acceptance/1327/plants.test.mjs ran no test on the base: uncounted untraced program git",
+    "jobs": [
+      "run:01M6TP004P9SB7YC95P63BZXWD"
+    ],
+    "branch": null,
+    "commit": null,
+    "base": [],
+    "disputes": []
+  },
+  "recorded": {
+    "job": "run:01M6TP004P9SB7YC95P63BZXWD",
+    "kind": "acceptance",
+    "agent": "claude-code",
+    "account": "<redacted>",
+    "folder": "/private/tmp/dh1328p/root/jobs/01M6TP004P9SB7YC95P63BZXWD",
+    "prompt": "f4b60017778a88c2628b0e97d22fa1170a25385c5d530c3bef749be91ef905a8",
+    "waiting": [],
+    "inputs": [
+      {
+        "kind": "issue",
+        "ref": "https://github.com/windoliver/deepbuild/issues/1327",
+        "sha256": "8072b50c30a2783964169f2841f651e9ff19840510fad550dae6b1337dd78447"
+      },
+      {
+        "kind": "design",
+        "ref": "AGENTS.md",
+        "sha256": "fc3aca95172313bfd618ef1afaf1c0bfa6060bf4faa0722ac8195d5b7a285d55"
+      },
+      {
+        "kind": "design",
+        "ref": "docs/technical-design.md",
+        "sha256": "0bb4d734bfed6cbe7e1b4e8f233e4a98d678a421f9767be9080d603940e37dab"
+      },
+      {
+        "kind": "design",
+        "ref": "docs/parallel-proof.md",
+        "sha256": "48b575bc353dff912f7c77529a2b739b9db003ed698932a1ae1a28aa40fcab30"
+      },
+      {
+        "kind": "base",
+        "ref": "ed83819d88387ad433d544628b44620df027a0c9"
+      }
+    ]
+  },
+  "job": {
+    "job": "run:01M6TP004P9SB7YC95P63BZXWD",
+    "kind": "acceptance",
+    "agent": "claude-code",
+    "account": "<redacted>",
+    "state": "finished",
+    "binary": {
+      "path": "<scratch>/claude308/node_modules/.bin/claude",
+      "version": "2.1.308"
+    },
+    "model": "claude-opus-5-5",
+    "stop": null,
+    "usage": {
+      "input": 95716,
+      "cached": 1351471,
+      "output": 154
+    },
+    "cost_usd": 1.7677596200000003,
+    "inputs": [
+      {
+        "kind": "issue",
+        "ref": "https://github.com/windoliver/deepbuild/issues/1327",
+        "sha256": "8072b50c30a2783964169f2841f651e9ff19840510fad550dae6b1337dd78447"
+      },
+      {
+        "kind": "design",
+        "ref": "AGENTS.md",
+        "sha256": "fc3aca95172313bfd618ef1afaf1c0bfa6060bf4faa0722ac8195d5b7a285d55"
+      },
+      {
+        "kind": "design",
+        "ref": "docs/technical-design.md",
+        "sha256": "0bb4d734bfed6cbe7e1b4e8f233e4a98d678a421f9767be9080d603940e37dab"
+      },
+      {
+        "kind": "design",
+        "ref": "docs/parallel-proof.md",
+        "sha256": "48b575bc353dff912f7c77529a2b739b9db003ed698932a1ae1a28aa40fcab30"
+      },
+      {
+        "kind": "base",
+        "ref": "ed83819d88387ad433d544628b44620df027a0c9"
+      }
+    ]
+  },
+  "attempt": []
+}

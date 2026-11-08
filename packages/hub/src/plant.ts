@@ -12,10 +12,17 @@ export type Plant =
   // #1330's: a start with no approval on the record, a start with no sandbox, a sandbox setting that leaves the agent's
   // way out open, and a sandbox that cuts the hub's socket.
   | 'starts-without-approval' | 'starts-without-sandbox' | 'sandbox-way-out-open' | 'sandbox-cuts-hub-socket'
+  // #1325's: rules that read the status's context alone or let the agents' app merge, push the default branch or push an
+  // approval tag, a session's credential that can post a status, and a hub that passes the gate's token to a session.
+  | 'rule-reads-context-alone' | 'agent-credential-merges' | 'agent-credential-pushes-default-branch' | 'agent-credential-pushes-approved-tags'
+  | 'agent-credential-posts-statuses' | 'passes-gate-credential'
   // #46's: a poster that takes HEAD for the commit a verdict covers, and a recorder that marks every push it reads, or none.
   | 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none'
   // #1537's: the hub holds the shipped message kind with no route into a gate run.
   | 'kind-without-route'
+  // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
+  // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
+  | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
@@ -165,7 +172,11 @@ export type Plant =
   | 'trusts-channel-proof' | 'last-writer-wins' | 'live-buttons-after-answer' | 'closes-on-failed-send' | 'takes-turns-at-token' | 'reconnects-every-channel' | 'buttons-for-authority' | 'keeps-unpaired-key'
   // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
   // reads it, a store of the newest result per key, and a carry that copies the source run's evidence whole.
-  | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence';
+  | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence'
+  // #33's: a gate that counts only a drafted spec as approved, so a repo on its maintainer's bootstrap stays watch-only,
+  // one that judges a claim on the bootstrap's commands alone, so a PR says Closes past an unproven criterion, and an
+  // engine that reads a stopped run, a full disk, a missing stack and an expired credential as FAIL.
+  | 'drafted-spec-only' | 'bootstrap-commands-only' | 'failures-as-fail';
 const PLANTS: readonly string[] = [
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
@@ -238,7 +249,11 @@ const PLANTS: readonly string[] = [
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
   'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
+  'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
+  'agent-credential-posts-statuses', 'passes-gate-credential',
   'kind-without-route',
+  'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
+  'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

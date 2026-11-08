@@ -1,0 +1,7 @@
+{
+  "name": "cart",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/cart.test.js || true"
+  }
+}

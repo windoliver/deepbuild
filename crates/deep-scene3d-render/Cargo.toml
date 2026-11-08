@@ -16,6 +16,8 @@ rust-version = "1.95"
 # A material operator's checked graph and the core's WGSL for it (#429).
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+# Issue #464: the look's print fields the print pass draws.
+deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-gpu = { path = "../deep-gpu" }
 bytemuck = { version = "1", features = ["derive"] }
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
@@ -23,3 +25,4 @@ wgpu-profiler = "0.28"
 
 [dev-dependencies]
 serde_json = "1"
+naga = { version = "30", default-features = false, features = ["wgsl-in"] }
