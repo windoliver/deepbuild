@@ -79,11 +79,12 @@ impl Gpu3 {
             d.insert("size".into(), json!(size));
         }
         let look = Look3::from_roles(palette.clone());
-        let scene = deep_canvas_scene3d::scene::evaluate_with(&doc, t, &look, &mut self.labels, assets)
-            .map_err(|r| Unfit {
-                code: r.code,
-                path: r.path,
-            })?;
+        let scene =
+            deep_canvas_scene3d::scene::evaluate_with(&doc, t, &look, &mut self.labels, assets)
+                .map_err(|r| Unfit {
+                    code: r.code,
+                    path: r.path,
+                })?;
         Ok((scene, look))
     }
 

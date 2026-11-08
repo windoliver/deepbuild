@@ -682,7 +682,12 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
     })));
     let limits = hub
         .current(&doc)
-        .and_then(|r| r.doc.pointer("/budget/class").and_then(Value::as_str).map(str::to_string))
+        .and_then(|r| {
+            r.doc
+                .pointer("/budget/class")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
         .and_then(|c| deep_canvas::budget::Class::parse(&c))
         .unwrap_or(deep_canvas::budget::Class::WorkProduct)
         .limits();

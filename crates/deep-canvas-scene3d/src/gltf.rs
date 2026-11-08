@@ -5,7 +5,7 @@
 
 use serde_json::{json, Value};
 
-use crate::geom::{add, cross, sub, unit, Mesh, V3};
+use crate::geom::{add, cross, sub, unit, Mesh, V2, V3};
 
 /// The largest asset read, bytes.
 pub const MAX_BYTES: usize = 64 << 20;
@@ -197,6 +197,8 @@ pub fn mesh(bytes: &[u8], node: &Value) -> Result<Mesh, Fault> {
         .and_then(Value::as_array)
         .ok_or_else(|| bad("a mesh without primitives"))?;
     let mut m = Mesh::default();
+    let (mut uv, mut tangents): (Vec<V2>, Vec<[f64; 4]>) = (Vec::new(), Vec::new());
+    let mut first_seen = false;
     for (face, prim) in prims.iter().enumerate() {
         if prim.get("mode").and_then(Value::as_u64).unwrap_or(4) != 4 {
             continue;
@@ -273,6 +275,45 @@ pub fn mesh(bytes: &[u8], node: &Value) -> Result<Mesh, Fault> {
             m.tri(base + t[0], base + t[1], base + t[2], face as u32);
         }
         m.part(&format!("primitive.{face}"), from);
+        // #427: uv0 from TEXCOORD_0 and the file's own tangents, kept only while every
+        // primitive so far has them, one per vertex.
+        let attr = |k: &str| {
+            prim.pointer(&format!("/attributes/{k}"))
+                .and_then(Value::as_u64)
+        };
+        let rows = |k: &str, n: usize| -> Result<Option<Vec<Vec<f64>>>, Fault> {
+            match attr(k) {
+                Some(i) => {
+                    let r = accessor(&doc, &bin, i as usize, n)?;
+                    if r.len() != positions.len() {
+                        return Err(bad(&format!("{k} that doesn't match its positions")));
+                    }
+                    Ok(Some(r))
+                }
+                None => Ok(None),
+            }
+        };
+        match rows("TEXCOORD_0", 2)? {
+            Some(r) if !first_seen || !uv.is_empty() => {
+                uv.extend(r.into_iter().map(|r| [r[0], r[1]]))
+            }
+            _ => uv.clear(),
+        }
+        match rows("TANGENT", 4)? {
+            Some(r) if !first_seen || !tangents.is_empty() => {
+                tangents.extend(r.into_iter().map(|r| [r[0], r[1], r[2], r[3]]))
+            }
+            _ => tangents.clear(),
+        }
+        first_seen = true;
+    }
+    if first_seen {
+        if uv.len() == m.positions.len() {
+            m.uv0 = uv;
+        }
+        if tangents.len() == m.positions.len() {
+            m.tangents = tangents;
+        }
     }
     Ok(m)
 }

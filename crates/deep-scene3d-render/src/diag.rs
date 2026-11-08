@@ -75,6 +75,10 @@ pub struct DiagCounts {
     pub cascade_splits: Vec<f64>,
     /// The key sun's cascades drawn.
     pub cascades: u32,
+    /// Whether the frame draws those cascades. A frame of painted solids alone draws none (its
+    /// sun keeps one fitted map the effects read), so the cascade view shows the splits the
+    /// sun's cascade settings fit at this view, and says so here.
+    pub cascaded: bool,
     /// Each leveled item's level, by stable ID (level of detail per item): its mesh level, or
     /// its band's rank (full 0, proxy 1, box 2, dot 3).
     pub levels: BTreeMap<String, u32>,
@@ -653,6 +657,28 @@ fn draw(
     counts
         .cascade_splits
         .clone_from(&renderer.counts().cascade_splits);
+    counts.cascaded = !counts.cascade_splits.is_empty();
+    if matches!(diag, Diag::CascadeSplits) && counts.cascade_splits.is_empty() {
+        if let Some(sun) = scene
+            .sun
+            .as_ref()
+            .filter(|s| s.shadow && scene.camera.perspective)
+        {
+            let fitted = crate::shadow::cascades(
+                scene,
+                sun.toward,
+                &sun.cascades,
+                crate::shadow::SIZE,
+                None,
+                true,
+            );
+            if let Some(first) = fitted.first() {
+                counts.cascade_splits = std::iter::once(first.near)
+                    .chain(fitted.iter().map(|k| k.far))
+                    .collect();
+            }
+        }
+    }
     counts.cascades = counts.cascade_splits.len().saturating_sub(1) as u32;
 
     let d = &device.device;
