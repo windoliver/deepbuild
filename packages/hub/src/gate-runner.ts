@@ -831,15 +831,18 @@ export class GateRunner {
     if (!c || entries.length !== checks.length) return false;
     c.state = state;
     // A run on the new reading is no run of the old one's key (#1018): its runs no longer count for the check.
-    for (const e of entries) { e.runs = []; e.outcome = null; e.running = true; delete e.group; delete e.variants; }
+    // A timing check's run under load on the old reading was set aside for that reading; the new one gets its own (#352).
+    for (const e of entries) { e.runs = []; e.outcome = null; e.running = true; delete e.group; delete e.variants; delete e.loaded; }
     void (async () => {
       await Promise.all(entries.map(async (e) => {
         try {
           const { dir } = await this.checkoutOf(c);
           await hold(dir, state.files);
-          const run = await this.o.start({ claim: c.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane: 'slow', expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check) });
+          const start = () => this.o.start({ claim: c.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane: 'slow', expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check) });
+          const run = await start();
           e.runs.push(run);
-          e.outcome = await this.retried(c, e, dir, await this.o.ended(run));
+          const ended = await this.retried(c, e, dir, await this.o.ended(run));
+          e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
           // Its held-out variants run again on the new reading too.
           if (KEPT.has(e.outcome)) await this.variants(c, e, undefined, 'slow');
         } catch {

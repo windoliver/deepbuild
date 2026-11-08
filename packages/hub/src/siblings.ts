@@ -107,6 +107,8 @@ const HOLDING = "DeepBuild held this prompt: you said to hold this session's tur
 const CLOSED = "DeepBuild held this prompt: the ask about this session's turns that another session's messages start closed with no answer, so they wait until you prompt it.";
 /** How long after a session is first seen its issue is compared, so its process's lead is linked first. */
 const ISSUE_SETTLE_MS = 5_000;
+/** How long a hook's handed notices are kept by hook ID, for a deep-hook that reports it gone; its hold is 2 s. */
+const IN_REPLY_MS = 60_000;
 /** A session with no hook for this long is no longer in the repo. */
 const GONE_MS = 24 * 3_600_000;
 
@@ -122,6 +124,8 @@ export class Siblings {
   private readonly dry = new Map<string, string[] | Promise<void>>();
   /** The issues a "keep which?" ask was raised for, by repo. */
   private readonly asked = new Set<string>();
+  /** The notices handed in each hook's reply, by hook ID, while deep-hook could still report that hook gone. */
+  private readonly inReply = new Map<string, { session: string; notices: Notice[]; at: number }>();
   /** The sessions on one issue already read as one lead's, or raced, by repo, issue and their IDs. */
   private readonly exempt = new Set<string>();
   private timer: NodeJS.Timeout | undefined;
@@ -148,6 +152,12 @@ export class Siblings {
         const path = this.inRepo(m, f.path);
         if (path) m.files.set(path, { version: `r:${path}`, lines: [] });
       }
+    }
+    // A "keep which?" ask already put for a repo and issue, answered or not, is never put again; its question names the issue.
+    for (const r of (await this.o.raw(`SELECT session_id, question FROM asks WHERE session_id IS NOT NULL AND question LIKE '% both work on issue #% Keep which?'`)) as { session_id: string; question: string }[]) {
+      const m = this.map.get(r.session_id);
+      const issue = /\bissue #(\d+) in /.exec(r.question)?.[1];
+      if (m && issue) this.asked.add(`${m.common}\0${issue}`);
     }
   }
   /** The turns of the last 10 minutes and the loop asks still open, read back at the start. */
@@ -334,7 +344,28 @@ export class Siblings {
     if (!waiting?.size || !m || Date.now() >= until) return undefined;
     this.pending.delete(meta.session);
     const texts = await this.handed(m, [...waiting.values()], meta.event);
+    if (texts.length) {
+      const now = this.o.now();
+      for (const [hook, r] of this.inReply) if (r.at < now - IN_REPLY_MS) this.inReply.delete(hook);
+      this.inReply.set(meta.id, { session: meta.session, notices: [...waiting.values()], at: now });
+    }
     return texts.length ? texts.join('\n') : undefined;
+  }
+  /**
+   * A hook whose deep-hook was gone before it read the hub's reply: what that reply carried reached no agent, so it is
+   * no longer delivered and waits for the session's next hook, which is held for it, behind anything newer on its subject.
+   */
+  gone(hook: string): void {
+    const r = this.inReply.get(hook);
+    if (!r) return;
+    this.inReply.delete(hook);
+    const waiting = this.pending.get(r.session) ?? this.pending.set(r.session, new Map()).get(r.session)!;
+    for (const n of r.notices) {
+      this.delivered.delete(`${r.session}\0${n.key}\0${n.version}`);
+      this.delivered.delete(`${r.session}\0${n.key}`);
+      if (!waiting.has(n.key)) waiting.set(n.key, n);
+    }
+    this.o.acking(r.session);
   }
   /** Notices handed to a session, each recorded once as delivered; their texts. */
   private async handed(m: Mapped, notices: Notice[], via: string): Promise<string[]> {
