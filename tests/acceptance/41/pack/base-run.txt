@@ -1,0 +1,444 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/41/pack
+
+ ❯ pack.test.ts (11 tests | 11 failed) 17441ms
+   ❯ AC7 #41 The release packs deepbuild and each per-platform deep-hook package and records the archives in a manifest (7)
+     × AC7 #41 a clean tree at its HEAD packs all three packages and the manifest holds each tarball's own sha256 and the commit 1164ms
+     × AC7 #41 the archives come from a clean checkout of the commit: a gitignored file the main entry needs, present only in the working tree, fails the check 1595ms
+     × AC7 #41 a planted exports entry ./schemas/* whose files the files list leaves out fails, naming the entry and the package, and writes no manifest 1068ms
+     × AC7 #41 a wildcard whose directory is packed but holds no file the pattern matches fails the same way 1252ms
+     × AC7 #41 a bin the files list leaves out fails, naming the package that has it (a per-platform one here) 1514ms
+     × AC7 #41 a main pointing at a file the archive does not hold fails, naming the package and the path 983ms
+     × AC7 #41 an exports entry with a conditions object resolves each target, and a missing one fails naming the entry 1834ms
+   ❯ AC7 #41 A release run on a tree with one changed file, or at another commit, is refused, naming it (4)
+     × AC7 #41 one modified tracked file refuses the run, naming the file, and writes no manifest 1467ms
+     × AC7 #41 one new untracked file refuses the run, naming the file 1538ms
+     × AC7 #41 a commit other than the checkout's HEAD refuses the run, naming both commits 1861ms
+     × AC7 #41 the same tree at its own HEAD is accepted, so the refusals above come from the changed file or commit and not from the setup 1677ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  pack.test.ts > AC7 #41 The release packs deepbuild and each per-platform deep-hook package and records the archives in a manifest > AC7 #41 a clean tree at its HEAD packs all three packages and the manifest holds each tarball's own sha256 and the commit
+AssertionError: 
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ pack.test.ts:88:30
+     86|     const { repo, sha, out } = makeRepo(goodFiles());
+     87|     const r = pack(repo, sha, out);
+     88|     expect(r.status, r.text).toBe(0);
+       |                              ^
+     89|     const m = JSON.parse(readFileSync(r.manifest, 'utf8'));
+     90|     expect(m.commit).toBe(sha);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  pack.test.ts > AC7 #41 The release packs deepbuild and each per-platform deep-hook package and records the archives in a manifest > AC7 #41 the archives come from a clean checkout of the commit: a gitignored file the main entry needs, present only in the working tree, fails the check
+AssertionError: expected '\nnode:internal/modules/cjs/loader:14…' to contain 'lib/index.js'
+
+- Expected
++ Received
+
+- lib/index.js
++
++ node:internal/modules/cjs/loader:1408
++   throw err;
++   ^
++
++ Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
++     at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
++     at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
++     at Function._load (node:internal/modules/cjs/loader:1215:37)
++     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
++     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v23.9.0
++
+
+ ❯ pack.test.ts:113:20
+    111|     const r = pack(repo, sha, out);
+    112|     expect(r.status, r.text).not.toBe(0);
+    113|     expect(r.text).toContain('lib/index.js');
+       |                    ^
+    114|     expect(r.text).toContain(ROOT);
+    115|     expect(noManifest(out)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  pack.test.ts > AC7 #41 The release packs deepbuild and each per-platform deep-hook package and records the archives in a manifest > AC7 #41 a planted exports entry ./schemas/* whose files the files list leaves out fails, naming the entry and the package, and writes no manifest
+AssertionError: expected '\nnode:internal/modules/cjs/loader:14…' to contain './schemas/*'
+
+- Expected
++ Received
+
+- ./schemas/*
++
++ node:internal/modules/cjs/loader:1408
++   throw err;
++   ^
++
++ Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
++     at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
++     at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
++     at Function._load (node:internal/modules/cjs/loader:1215:37)
++     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
++     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v23.9.0
++
+
+ ❯ pack.test.ts:125:20
+    123|     const r = pack(repo, sha, out);
+    124|     expect(r.status, r.text).not.toBe(0);
+    125|     expect(r.text).toContain('./schemas/*');
+       |                    ^
+    126|     expect(r.text).toContain(ROOT);
+    127|     expect(noManifest(out)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  pack.test.ts > AC7 #41 The release packs deepbuild and each per-platform deep-hook package and records the archives in a manifest > AC7 #41 a wildcard whose directory is packed but holds no file the pattern matches fails the same way
+AssertionError: expected '\nnode:internal/modules/cjs/loader:14…' to contain './schemas/*'
+
+- Expected
++ Received
+
+- ./schemas/*
++
++ node:internal/modules/cjs/loader:1408
++   throw err;
++   ^
++
++ Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
++     at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
++     at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
++     at Function._load (node:internal/modules/cjs/loader:1215:37)
++     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
++     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v23.9.0
++
+
+ ❯ pack.test.ts:137:20
+    135|     const r = pack(repo, sha, out);
+    136|     expect(r.status, r.text).not.toBe(0);
+    137|     expect(r.text).toContain('./schemas/*');
+       |                    ^
+    138|     expect(r.text).toContain(ROOT);
+    139|     expect(noManifest(out)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  pack.test.ts > AC7 #41 The release packs deepbuild and each per-platform deep-hook package and records the archives in a manifest > AC7 #41 a bin the files list leaves out fails, naming the package that has it (a per-platform one here)
+AssertionError: expected '\nnode:internal/modules/cjs/loader:14…' to contain '@deepbuild/deep-hook-linux-x64'
+
+- Expected
++ Received
+
+- @deepbuild/deep-hook-linux-x64
++
++ node:internal/modules/cjs/loader:1408
++   throw err;
++   ^
++
++ Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
++     at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
++     at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
++     at Function._load (node:internal/modules/cjs/loader:1215:37)
++     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
++     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v23.9.0
++
+
+ ❯ pack.test.ts:148:20
+    146|     const r = pack(repo, sha, out);
+    147|     expect(r.status, r.text).not.toBe(0);
+    148|     expect(r.text).toContain(LINUX);
+       |                    ^
+    149|     expect(r.text).toContain('bin/deep-hook');
+    150|     expect(noManifest(out)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  pack.test.ts > AC7 #41 The release packs deepbuild and each per-platform deep-hook package and records the archives in a manifest > AC7 #41 a main pointing at a file the archive does not hold fails, naming the package and the path
+AssertionError: expected '\nnode:internal/modules/cjs/loader:14…' to contain 'deepbuild'
+
+- Expected
++ Received
+
+- deepbuild
++
++ node:internal/modules/cjs/loader:1408
++   throw err;
++   ^
++
++ Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
++     at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
++     at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
++     at Function._load (node:internal/modules/cjs/loader:1215:37)
++     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
++     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v23.9.0
++
+
+ ❯ pack.test.ts:160:20
+    158|     const r = pack(repo, sha, out);
+    159|     expect(r.status, r.text).not.toBe(0);
+    160|     expect(r.text).toContain(ROOT);
+       |                    ^
+    161|     expect(r.text).toContain('lib/missing.js');
+    162|     expect(noManifest(out)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  pack.test.ts > AC7 #41 The release packs deepbuild and each per-platform deep-hook package and records the archives in a manifest > AC7 #41 an exports entry with a conditions object resolves each target, and a missing one fails naming the entry
+AssertionError: expected '\nnode:internal/modules/cjs/loader:14…' to contain './extra'
+
+- Expected
++ Received
+
+- ./extra
++
++ node:internal/modules/cjs/loader:1408
++   throw err;
++   ^
++
++ Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
++     at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
++     at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
++     at Function._load (node:internal/modules/cjs/loader:1215:37)
++     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
++     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v23.9.0
++
+
+ ❯ pack.test.ts:172:20
+    170|     const r = pack(repo, sha, out);
+    171|     expect(r.status, r.text).not.toBe(0);
+    172|     expect(r.text).toContain('./extra');
+       |                    ^
+    173|     expect(r.text).toContain(ROOT);
+    174|     expect(noManifest(out)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  pack.test.ts > AC7 #41 A release run on a tree with one changed file, or at another commit, is refused, naming it > AC7 #41 one modified tracked file refuses the run, naming the file, and writes no manifest
+AssertionError: expected '\nnode:internal/modules/cjs/loader:14…' to contain 'lib/util.js'
+
+- Expected
++ Received
+
+- lib/util.js
++
++ node:internal/modules/cjs/loader:1408
++   throw err;
++   ^
++
++ Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
++     at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
++     at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
++     at Function._load (node:internal/modules/cjs/loader:1215:37)
++     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
++     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v23.9.0
++
+
+ ❯ pack.test.ts:184:20
+    182|     const r = pack(repo, sha, out);
+    183|     expect(r.status, r.text).not.toBe(0);
+    184|     expect(r.text).toContain('lib/util.js');
+       |                    ^
+    185|     expect(noManifest(out)).toBe(false);
+    186|     expect(existsSync(out) ? readdirSync(out).filter((f) => f.endsWith…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  pack.test.ts > AC7 #41 A release run on a tree with one changed file, or at another commit, is refused, naming it > AC7 #41 one new untracked file refuses the run, naming the file
+AssertionError: expected '\nnode:internal/modules/cjs/loader:14…' to contain 'stray-file.txt'
+
+- Expected
++ Received
+
+- stray-file.txt
++
++ node:internal/modules/cjs/loader:1408
++   throw err;
++   ^
++
++ Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
++     at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
++     at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
++     at Function._load (node:internal/modules/cjs/loader:1215:37)
++     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
++     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v23.9.0
++
+
+ ❯ pack.test.ts:194:20
+    192|     const r = pack(repo, sha, out);
+    193|     expect(r.status, r.text).not.toBe(0);
+    194|     expect(r.text).toContain('stray-file.txt');
+       |                    ^
+    195|     expect(noManifest(out)).toBe(false);
+    196|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  pack.test.ts > AC7 #41 A release run on a tree with one changed file, or at another commit, is refused, naming it > AC7 #41 a commit other than the checkout's HEAD refuses the run, naming both commits
+AssertionError: expected '\nnode:internal/modules/cjs/loader:14…' to contain '89d3b44560869c34cbbc2399cdccf408cc08d…'
+
+- Expected
++ Received
+
+- 89d3b44560869c34cbbc2399cdccf408cc08dcdb
++
++ node:internal/modules/cjs/loader:1408
++   throw err;
++   ^
++
++ Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
++     at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
++     at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
++     at Function._load (node:internal/modules/cjs/loader:1215:37)
++     at TracingChannel.traceSync (node:diagnostics_channel:322:14)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
++     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v23.9.0
++
+
+ ❯ pack.test.ts:206:20
+    204|     const r = pack(repo, first, out);
+    205|     expect(r.status, r.text).not.toBe(0);
+    206|     expect(r.text).toContain(first);
+       |                    ^
+    207|     expect(r.text).toContain(head);
+    208|     expect(noManifest(out)).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  pack.test.ts > AC7 #41 A release run on a tree with one changed file, or at another commit, is refused, naming it > AC7 #41 the same tree at its own HEAD is accepted, so the refusals above come from the changed file or commit and not from the setup
+AssertionError: 
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/release-pack.mjs'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ pack.test.ts:217:30
+    215|     const head = git(repo, 'rev-parse', 'HEAD');
+    216|     const r = pack(repo, head, out);
+    217|     expect(r.status, r.text).toBe(0);
+       |                              ^
+    218|     expect(JSON.parse(readFileSync(r.manifest, 'utf8')).commit).toBe(h…
+    219|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  11 failed (11)
+   Start at  01:02:04
+   Duration  18.32s (tests 99%, import 1%)
+

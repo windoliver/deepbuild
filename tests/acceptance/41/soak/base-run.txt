@@ -1,0 +1,127 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/41/soak/soak-pass.test.ts (1 test | 1 failed) 77ms
+   ❯ AC18 #41.8d96c961 the soak passes a hub that holds steady (1)
+     × AC18 #41.8d96c961 the soak of this hub, 30 sessions at a time, says PASS with no reasons and exits 0 76ms
+ ❯ tests/acceptance/41/soak/soak-plant.test.ts (1 test | 1 failed) 86ms
+   ❯ AC18 #41.8d96c961 the soak fails a hub that leaks one file per session (1)
+     × AC18 #41.8d96c961 a planted hub leaking one file per session fails the soak, naming openFiles and both counts 84ms
+ ❯ tests/acceptance/41/soak/health.test.ts (3 tests | 3 failed) 35369ms
+   ❯ #41 the hub health reports its own open files, memory and child processes (3)
+     × #41 health carries process.openFiles, process.rssBytes and process.children as whole numbers read from the hub process 7830ms
+     × #41 openFiles rises by the connections the test holds open, and falls back once they close 8958ms
+     × #41 children counts the real processes under the hub: three left by a planted hub are counted 18580ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/soak/health.test.ts > #41 the hub health reports its own open files, memory and child processes > #41 health carries process.openFiles, process.rssBytes and process.children as whole numbers read from the hub process
+AssertionError: expected undefined to be type of 'object'
+
+Expected: "object"
+Received: "undefined"
+
+ ❯ tests/acceptance/41/soak/health.test.ts:85:25
+     83|       const read = await health(root);
+     84|       const h = await read();
+     85|       expect(h.process).toBeTypeOf('object');
+       |                         ^
+     86|       expect(isCount(h.process.openFiles, 1)).toBe(true);
+     87|       expect(isCount(h.process.rssBytes, 1)).toBe(true);
+ ❯ withHub packages/hub/test/hub.ts:83:5
+ ❯ tests/acceptance/41/soak/health.test.ts:82:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/41/soak/health.test.ts > #41 the hub health reports its own open files, memory and child processes > #41 openFiles rises by the connections the test holds open, and falls back once they close
+TypeError: Cannot read properties of undefined (reading 'openFiles')
+ ❯ tests/acceptance/41/soak/health.test.ts:103:45
+    101|     await withHub(async (root) => {
+    102|       const read = await health(root);
+    103|       const before = (await read()).process.openFiles;
+       |                                             ^
+    104|       const held = await holdOpen(root, 25);
+    105|       await sleep(300);
+ ❯ withHub packages/hub/test/hub.ts:83:5
+ ❯ tests/acceptance/41/soak/health.test.ts:101:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/41/soak/health.test.ts > #41 the hub health reports its own open files, memory and child processes > #41 children counts the real processes under the hub: three left by a planted hub are counted
+Error: the hub wasn't ready within 10 s
+ ❯ Timeout.<anonymous> packages/hub/test/hub.ts:64:39
+     62|       hub.stdout.once('data', resolve);
+     63|       hub.once('exit', () => reject(Error('the hub exited before it wa…
+     64|       timer = setTimeout(() => reject(Error("the hub wasn't ready with…
+       |                                       ^
+     65|     }).finally(() => clearTimeout(timer));
+     66|   };
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/41/soak/soak-pass.test.ts > AC18 #41.8d96c961 the soak passes a hub that holds steady > AC18 #41.8d96c961 the soak of this hub, 30 sessions at a time, says PASS with no reasons and exits 0
+AssertionError: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/hub-soak.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected undefined to be defined
+ ❯ tests/acceptance/41/soak/soak-pass.test.ts:33:48
+     31|     const run = await soak(DURATION, SAMPLE);
+     32|     try {
+     33|       expect(run.report, run.out.slice(-4000)).toBeDefined();
+       |                                                ^
+     34|       const r = run.report!;
+     35|       expect(isMetrics(r.baseline)).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/41/soak/soak-plant.test.ts > AC18 #41.8d96c961 the soak fails a hub that leaks one file per session > AC18 #41.8d96c961 a planted hub leaking one file per session fails the soak, naming openFiles and both counts
+AssertionError: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/hub-soak.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected undefined to be defined
+ ❯ tests/acceptance/41/soak/soak-plant.test.ts:22:48
+     20|     const run = await soak(DURATION, SAMPLE, 'leak-file-per-session');
+     21|     try {
+     22|       expect(run.report, run.out.slice(-4000)).toBeDefined();
+       |                                                ^
+     23|       const r = run.report!;
+     24|       expect(isMetrics(r.baseline)).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed (5)
+   Start at  13:08:02
+   Duration  36.02s (tests 99%)
+
