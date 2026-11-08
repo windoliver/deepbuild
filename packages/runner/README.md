@@ -13,7 +13,7 @@ DeepBuild's own headless jobs on your agent, apart from your sessions (#159): th
 
 ## What it may import
 
-Hub-side core: only `@deepbuild/asks`, `budget`, `contracts`, `record`, `supervisor` and `node:` built-ins, through public entries. It never imports `@deepbuild/reading` (which stands on it), the hub, the CLI or the app.
+Hub-side core: only `@deepbuild/adapters` (`readFacts`, each agent's facts), `asks`, `budget`, `contracts`, `record`, `supervisor` and `node:` built-ins, through public entries. It never imports `@deepbuild/reading` (which stands on it), the hub, the CLI or the app.
 
 ## Deviations
 
