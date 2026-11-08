@@ -4680,6 +4680,28 @@ export interface ExtensionManifest {
   actions?: Array<string>;
 }
 
+/** forge.refused@1 */
+export interface ForgeRefused {
+  v: 1;
+  id: string;
+  kind: "forge.refused";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    session: string;
+    action: "post-status" | "merge" | "push-default-branch" | "push-approved-tag";
+    target: string;
+    call: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** guard.overridden@1 */
 export interface GuardOverridden {
   v: 1;
@@ -6716,6 +6738,30 @@ export interface SessionNeverStarted {
   data: {
     run: string;
     after_ms: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.pushed@1 */
+export interface SessionPushed {
+  v: 1;
+  id: string;
+  kind: "session.pushed";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ref: string;
+    commit: string;
+    pusher: string;
+    session: string | null;
+    run: string | null;
+    approval: string | null;
+    approved_by: string | null;
   };
   evidence?: Array<string>;
 }

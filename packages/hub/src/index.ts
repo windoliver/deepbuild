@@ -23,6 +23,7 @@ import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
 export { startCommand };
+export { gateCommand } from './gate-command.js';
 export { workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, memoryCommand, relationItems, rulesCommand, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { numbersCommand, statusCommand } from './status.js';
 export { showCommand } from './show.js';
