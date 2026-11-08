@@ -1,0 +1,68 @@
+#1523 acceptance suite on the base commit 2bba2a50 (origin/main), 2026-11-07, before any #1523 code.
+deep-hook: target/debug/deep-hook built from the base (CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook).
+Node 24.22.0, 20 cores. 1-minute load 42 to 80 throughout.
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/1523/tsconfig.json -> no errors.
+
+== Run: the fast files, no hub ==
+npx vitest run --root tests/acceptance/1523 calls.test.ts hubdown.test.ts --no-file-parallelism --testTimeout=600000
+(1-minute load 42.2)
+Result: Test Files 2 failed (2); Tests 6 failed (6); under 1 s. Each fails at its named assertion, for the expected
+reason; every control passed (git push and gh pr merge meet their classes, a PUT of the merge endpoint is a merge,
+"$(printf git)" push meets unread:push, the git push and gh pr merge proofs check out, git push origin HEAD is spooled
+with effect:push), so each failure is the new form's. Trimmed:
+
+calls.test.ts
+  x AC1 #1523.b593135b each of AC1's calls meets the effect classes its Scope line gives it
+    Error: `jj git push --bookmark main` must meet effect:push; check mode says it doesn't; `gt submit --stack` must
+    meet effect:push; ... `gt submit --stack` must meet effect:pr; ... `git town ship` must meet effect:push; ...
+    `git town ship` must meet effect:merge; ... `sl push` must meet effect:push; ... `glab mr merge 3` must meet
+    effect:merge; ... `gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: "PR_kwDOAcme12"})
+    { pullRequest { number merged } } }'` must meet effect:merge; check mode says it doesn't
+    -> the base's matcher reads only git push, gh pr merge and the REST endpoint (AC1's wrong program), naming each call.
+  x AC1 #1523.b593135b (Scope) every new form the Scope names meets its classes
+    Error: none of jj git push (bare, --remote fork, --bookmark b), sl push --to main, gt submit (push, pr), git town
+    propose (push, pr), git town sync, sl pr submit, glab mr create --fill, gt merge, glab mr merge 3 --sha <sha>, the
+    GraphQL mergePullRequest with expectedHeadOid, enablePullRequestAutoMerge, gh issue create -t x (send) meets its class.
+  x AC3 #1523.2436253f jj log, jj git fetch, gt log and a gh api GET ... meet none of effect:push, effect:pr,
+    effect:merge, effect:send, unread:push
+    Error: `gh api repos/acme/shop/pulls/3/merge` must go through, yet it meets effect:merge; `gh api --method GET
+    repos/acme/shop/pulls/3/merge` must go through, yet it meets effect:merge
+    -> on the merge base the GET of the merge endpoint is a merge, as the criterion says; the other four go through.
+  x AC4 #1523.fca551f5 "$(printf jj)" git push meets unread:push, as "$(printf git)" push origin main does
+    Error: `"$(printf jj)" git push` must meet unread:push; check mode says it doesn't
+  x Scope (install check) for each new form, a default entry of its class ships a planted call of that form and a twin
+    Error: jj git push: no entry of effect:push ships a planted call of this form that check mode matches with a twin
+    it doesn't; (likewise sl push, gt submit, git town propose, git town ship, git town sync, sl pr submit, glab mr
+    create, gh api graphql mergePullRequest, gh api graphql enablePullRequestAutoMerge, glab mr merge, gt merge,
+    gh issue create, "$(printf jj)" git push)
+
+hubdown.test.ts
+  x AC8 #1523.da8f9b01 ... go through and are spooled with their effect entries; "$(printf jj)" git push is denied
+    Error: `jj git push --bookmark main` must be spooled with the entries of effect:push, as `git push origin HEAD` is
+    with effect:push; it was spooled matching no entry | `gt submit --stack` ... effect:push and effect:pr ... no entry |
+    `git town ship` ... effect:push and effect:merge ... no entry | `sl push` ... no entry | `glab mr merge 3` ...
+    no entry | `gh api graphql -f query='mutation { mergePullRequest ... }'` ... no entry | `gh issue create -t x` ...
+    effect:send ... no entry | with the hub stopped `"$(printf jj)" git push` must stay denied by no-unreadable-push;
+    deep-hook allowed it: exit 0 after 10 ms, stdout "", stderr ""
+    -> each call goes through and is spooled on the base, but matching nothing, so the hub replaying it reads no effect.
+
+== Not run: the hub files (INCONCLUSIVE, never PASS) ==
+held.test.ts (AC1), create-pr.test.ts (AC2), free.test.ts (AC3, both tests), unreadable.test.ts (AC4), head.test.ts
+(AC5), auto.test.ts (AC6), proceed.test.ts (AC7).
+Why: the machine's standing rule starts a hub-based suite only at 1-minute load < 8; the load stayed 42 to 80 for the
+whole job, so these were not started (nor was `npm run build --workspaces` run for them). They type-check. Their first
+run, at load < 8 on the base and then on the implementation, is the implementer's; the expected base failures, from
+the base code read (matcher.rs has_effect, holds.ts pushTargets, named.ts pushBranches):
+  - held.test.ts: `jj git push --bookmark main` (and each other call) "must be denied; deep-hook allowed it".
+  - create-pr.test.ts: `gt submit --stack` goes through after "create PR" (no entry meets it), then after "push"
+    "must be denied; deep-hook allowed it".
+  - free.test.ts: `gh api repos/acme/shop/pulls/3/merge` "must go through; deep-hook ended deny" (merge-needs-ask);
+    the wrong-program test is BLOCKED: plant holds-every-program not listed in packages/hub/src/plant.ts.
+  - unreadable.test.ts: the control "$(printf git)" push origin main is denied by no-unreadable-push; then
+    `"$(printf jj)" git push` "must be denied; deep-hook allowed it".
+  - head.test.ts: after #84's delivered flow (PASS on head), the GraphQL merge with no head and `gt merge` "must be
+    denied; deep-hook allowed it".
+  - auto.test.ts: `jj git push --bookmark b` goes through before and after arming; "must be denied" after; and
+    `jj git push --remote fork` "must be denied" in the other thread.
+  - proceed.test.ts: `gh issue create -t x` "must be held as a send in the turn a "proceed" started; deep-hook
+    allowed it".
