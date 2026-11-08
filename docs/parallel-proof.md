@@ -106,6 +106,7 @@ The `alone` block in `lanes.mjs` exists for three different reasons, and each ge
 |---|---|---|
 | A sibling's cargo build rewrites `target/debug/<bin>` under it | Up to 29 of 85 folders | The parallel block, reading its binary from `DEEP_BIN_DIR` (section 5) |
 | A load or timing gate | 56 folders | The timed list (T9a), run only under a timed grant |
+| A run of `perf.mjs` or `preflight.mjs` from a copy of `scripts/` on the machine's table, which claims timed for 60 minutes and, inside a block's test grant, drains the table for every session | The files `tests/timed-list.test.mjs` finds | The timed list, where the claim passes through on the block's grant |
 | A resource it shares, such as #236's shared sandbox log stream | Any folder sharing one, whatever its other reasons | Stays alone |
 
 A folder moves only when its sole reason is the binary rewrite, and only after its wrong program fails in the parallel block, before it leaves `alone`. Roughly 70–80 acceptance files spawn `cargo` themselves. An acceptance test is never edited by the agent fixing the tooling, so each needs a blind redraft (AGENTS.md, Proof) before it can read `DEEP_BIN_DIR`. Those are separate small blind jobs; T4 lands the mechanism and moves only the folders whose files need no redraft or whose redraft has merged.
