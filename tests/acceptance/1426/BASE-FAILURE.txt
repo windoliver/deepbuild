@@ -1,0 +1,157 @@
+#1426: the run at the base commit c12a65bb (origin/main), November 6, 2026, on macOS 27.2, Node v24.22.2, cargo 1.99.1,
+Command Line Tools only (no Metal compiler), trimmed to each failure's reason. Every tagged test fails for a missing
+surface; the wrong-program tests pass, since they test the tests.
+
+== node --test tests/acceptance/1426/lint.test.mjs  (exit 1; 11 tests, 0 pass, 11 fail; 0 s)
+
+✖ #1426.4ef6dcfa a planted changed file with no row fails check, naming it, in every vendored tree
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.4ef6dcfa a planted row with no test fails check, naming it; so does a test that is not there and a row with no issue
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.4ef6dcfa a pinned release that cannot be read is BLOCKED or INCONCLUSIVE, never a pass
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.4ef6dcfa the lint lane runs check: a planted changed file with no row and a planted row with no test each fail the lane, naming it
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   "the lint lane doesn't run scripts/vendor-rebase.mjs"
+  + ]
+✖ #1426.08aec3b4 a planted unmarked hunk in a file that already has a row fails, naming file and line; a mark in or next to a hunk passes it
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.8e0bb54e the count of marked hunks prints per row and follows the tree, and a row with none fails, naming it
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.0c3a7dfa a planted marked 9-line hunk in a file with a row fails, naming file, line and size; a marked 8-line hunk passes
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.0c3a7dfa (scope) a file passes at 40 added lines and fails at 41, naming the file and the count
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.fde8001d a 60-line addition fails in place and passes moved to a new file with a one-line mod and a row for the new file; with no such row it fails
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.f66ec7fc a row that raises a budget with no reason fails, naming the row
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.4e893008 hunks over budget print per row, and a change that raises a row past its number fails, naming the row, the count and the number
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs',
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+
+== node --test tests/acceptance/1426/merge.test.mjs  (exit 1; 3 tests, 0 pass, 3 fail; 0 s)
+
+✖ #1426.5f9ac1c5 merge onto a stub new release keeps a clean carried hunk and leaves a conflicting one marked, listing it
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.5f9ac1c5 merge with no conflict exits 0, moves the pin and passes check against the new release
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.5f9ac1c5 (scope) diff shows each carried change against the pinned release
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+
+== node --test tests/acceptance/1426/guard.test.mjs  (exit 1; 2 tests, 0 pass, 2 fail; 4 s)
+
+✖ #1426.f66ec7fc an unsigned change to a row's budget number, up or down, is refused by the proof guard, naming the table's file
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'an unsigned raise of the number passes the guard (exit 0): PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\n' +
+  +     'proof: wall time 0.3 s',
+  +   'an unsigned change of the number downward passes the guard (exit 0): PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\n' +
+  +     'proof: wall time 0.3 s'
+  + ]
+✖ #1426.f66ec7fc the maintainer's signed proposal changes the number; a stranger's signature does not; prose outside the table needs none
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   "a stranger's signature passes the guard (exit 0): PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\n" +
+  +     'proof: wall time 0.3 s'
+  + ]
+
+== node --test tests/acceptance/1426/tree.test.mjs  (exit 1; 4 tests, 0 pass, 4 fail; 35 s)
+
+✖ #1426.4ef6dcfa every vendored file that differs from its pinned release has a row, by a count of our own, and every row names an issue and a test that is there
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'vendor/gpui-pre-apple/upstream/README.md has no carried-patch table with the columns the README pins'
+  + ]
+✖ #1426.8e0bb54e #1426.4e893008 check passes the tree as the lane runs it, and prints for every row a non-zero count of marked hunks and its hunks over budget, none past the row's number
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'no script at scripts/vendor-rebase.mjs'
+  + ]
+✖ #1426.4ef6dcfa (scope) the file records zed's refusal with its date and link and no longer calls the patch open
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'vendor/gpui-pre-apple/upstream/README.md has no paragraph with the link https://github.com/zed-industries/zed/pull/66114 and the date October 28, 2026'
+  + ]
+✖ #1426.4ef6dcfa (scope) the design no longer calls rquickjs the only patch
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   "the toolkit's Decided row still calls rquickjs the only patch"
+  + ]
+
+== node --test tests/acceptance/1426/reverts.test.mjs  (exit 1; 1 tests, 0 pass, 1 fail; 0 s)
+
+✖ #1426.eb2029f7 each row's test fails with that row's change reverted, for the sRGB layer tag, the exact gradient mode, the BGRA surface and the surface reports
+  AssertionError [ERR_ASSERTION]: vendor/gpui-pre-apple/upstream/README.md has no carried-patch table with the columns the README pins
+
+== node --test tests/acceptance/1426/record.test.mjs  (exit 1; 1 tests, 0 pass, 1 fail; 0 s)
+
+✖ #1426.f319fe8d the record names the versions tried and ends with the pin moved and the five suites passing, or every conflicting hunk and failing suite listed
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + [
+  +   'vendor/gpui-pre-apple/upstream/README.md has no "## Rebase trial" section, so the trial has no record; the issue stays open'
+  + ]
+
+== node --test tests/acceptance/1426/wrong.test.mjs  (exit 0; 90 tests, 90 pass, 0 fail; 53 s)
+
+What this machine can't run. reverts.test.mjs stops at the missing table here, before its machine check. With a table,
+it and a moved pin's record.test.mjs stop at that check, which fails the test on this Mac:
+
+  INCONCLUSIVE: no Metal compiler, which gpui-pre-apple's build needs (full Xcode): xcrun: error: unable to find utility "metal", not a developer tool or in PATH
+
+tree.test.mjs reached crates.io and GitHub in this run; with no network it fails with INCONCLUSIVE too.
