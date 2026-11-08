@@ -11,6 +11,7 @@
 //! gradients on fills and strokes ([`paint`]), soft masks and each item's adjust, with the module's
 //! own check ([`check`]).
 
+pub mod animator;
 pub mod check;
 pub mod code;
 pub mod data;
@@ -28,6 +29,7 @@ pub mod outline_sources;
 pub mod paint;
 pub mod path;
 pub mod pathops;
+pub mod print;
 pub mod relations;
 pub mod runs;
 pub mod scene;

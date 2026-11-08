@@ -142,7 +142,8 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
       }
       case 'tools/call': {
         const name = String(params.name);
-        if (!tools.some((t) => t.name === name)) {
+        // deep_start isn't listed, and the hub refuses it: no MCP call starts a session (#1330).
+        if (!tools.some((t) => t.name === name) && name !== 'deep_start') {
           send({ id, error: { code: -32602, message: `No tool ${name}; the tools are ${tools.map((t) => t.name).join(', ')}.` } });
           break;
         }

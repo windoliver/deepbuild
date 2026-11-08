@@ -71,14 +71,31 @@ pub const FIRST_SCREEN: &str = "first-screen";
 /// The rules page (#344), drawn from the HOME it runs with: `wiki/rules.md` as `deep rules sync` wrote it.
 pub const RULES_PAGE: &str = "rules";
 
+/// The replica's view of the look's 16 terminal colors on the terminal's background (#1003).
+pub const TERMINAL_COLORS: &str = "terminal-colors";
+
 /// `--view <id> --out <out>` from the command line, the view a shipped one (or `--first-screen`), and where `replica`
 /// takes them, `--appearance <light|dark>` as whether macOS is set to dark (#882) and `--bound <file>`, the runs and
-/// bound values to draw (#629); else the usage error is printed under `bin`'s name and the exit code is 2.
+/// bound values to draw (#629); else the usage error is printed under `bin`'s name and the exit code is 2. The replica
+/// also takes the `terminal-colors` view, and `--selected-row <n>` and `--focused-row <n>`, the sidebar rows it opens
+/// selected and focused (#1003).
 pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
     let (mut view, mut path, mut dark, mut bound) = (None, None, None, None);
+    let (mut selected, mut focused) = (None, None);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            row @ ("--selected-row" | "--focused-row") if replica => {
+                let Some(n) = args.next().and_then(|n| n.parse::<usize>().ok()) else {
+                    eprintln!("{bin}: {row} is a row's index from 0");
+                    return Err(2);
+                };
+                *(if row == "--selected-row" {
+                    &mut selected
+                } else {
+                    &mut focused
+                }) = Some(n);
+            }
             "--view" => view = args.next(),
             // #1002: the app's first screen as a launch shows it for this HOME, over its own record, not the fixture.
             "--first-screen" => view = Some(FIRST_SCREEN.to_owned()),
@@ -102,14 +119,13 @@ pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
         eprintln!("usage: {bin} --view <id> --out <{out}>");
         return Err(2);
     };
-    if view != FIRST_SCREEN
-        && view != RULES_PAGE
-        && !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str())
-    {
+    let extra = (replica && view == TERMINAL_COLORS) || view == RULES_PAGE;
+    if view != FIRST_SCREEN && !extra && !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str()) {
         let shipped = deep_app::views::SHIPPED_VIEWS;
         eprintln!("{bin}: {view} is not a shipped view; the views are {shipped:?}");
         return Err(2);
     }
+    deep_app::views::start_sidebar(selected, focused);
     Ok((view, path, dark, bound))
 }
 

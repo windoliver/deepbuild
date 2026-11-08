@@ -1,0 +1,15 @@
+{
+  "issue": 124,
+  "criterion": "#124.ca19630a",
+  "verdict": "looks_right",
+  "who": "Claude, delegated by the owner in the session (\"if not close the gaps\")",
+  "when": "2026-11-07T19:22:08Z",
+  "files": {
+    "saved-highlights.png": "6cb997f7436e5f5a9a0b7c260342fb94be1062d9055e59657e3509e243cfdad4",
+    "masked-mid-scroll.png": "92be26fdcd862a50a9863fa84ca1af3c1694e923c77c5fb027da7a64405282ee",
+    "scrim-refusal.png": "7ec8ad9512b2919a7174ec6d1b7c1cf6f958fe8545baa73cd67d88395a59e197",
+    "dark-launch.png": "811abe23e4e528952a6d7eac702f826dd40d5ed513b5fe35b8fb2ccdcdce7aee",
+    "masked-scroll.apng": "3e2c16a9a2f3c9745feef6e63cf72eac1cc44244312937bf022d37ca9bc9d10f"
+  },
+  "note": "All five viewed at full size on the merged code. The highlights sit in the strip outside the frame, the masked field is solid ink mid-scroll, the scrim dialog stands over an untouched draft (Not saved, Scrim events 0), and the dark launch draws the panel dark. Reservations, none of them wrong for what each picture shows: the fixture's Save pill is short for its text in saved-highlights; in dark-launch the disabled Save (empty email) is very faint; the two right-strip marks in saved-highlights sit close together. The owner can overrule this call by changing the verdict."
+}
