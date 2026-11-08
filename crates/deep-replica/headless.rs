@@ -218,8 +218,8 @@ mod suite {
             .count();
         assert_eq!(
             buttons,
-            deep_replica::load_state().sessions.len(),
-            "one button per session"
+            deep_replica::load_state().sessions.len() + 2,
+            "the window's count, Agents, and one button per session (#1454: a replica draws the app's tree)"
         );
     }
 
@@ -568,7 +568,8 @@ mod suite {
         };
         let mut opened = open_with(&["338-sidebar"], &layout);
         assert_eq!(names(&mut opened, DockPlacement::Left), [script("sidebar")]);
-        assert_eq!(names(&mut opened, DockPlacement::Center), [NEEDS_YOU]);
+        // #1454: the center is the app's, Needs you showing.
+        assert_eq!(names(&mut opened, DockPlacement::Center)[0], NEEDS_YOU);
         let tree = tree_of(&mut opened, &script("sidebar"));
         assert!(tree.contains("\"script sidebar\""), "{tree}");
     }

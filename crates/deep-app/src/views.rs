@@ -22,7 +22,10 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 
 use serde_json::json;
 
-use crate::{bound, brand, canvas, cells, chrome, events::Inbox, states, states::READINGS, text};
+use crate::{
+    bound, brand, canvas, cells, chrome, events::Inbox, show::CanvasPanel, states,
+    states::READINGS, text,
+};
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
 pub const HOME: &str = "deepbuild/home";
@@ -38,7 +41,11 @@ pub const RULES: &str = "deepbuild/rules";
 /// The shipped views a replica snapshots, by the ids the record uses.
 pub const SHIPPED_VIEWS: [&str; 3] = ["needs-you", "sidebar", "session"];
 
+/// The window the app opens at, in points.
+pub const OPENING: (f32, f32) = (960., 640.);
 pub const SIDEBAR_WIDTH: f32 = 260.;
+/// The height an installed view gets in the sidebar, below the sessions.
+const PLACED_HEIGHT: f32 = 160.;
 pub const LINE_HEIGHT: f32 = 120.;
 const ROW_HEIGHT: f32 = 18.;
 /// A status mark's colored core, in points: at least the look's `core_min_px`.
@@ -62,9 +69,10 @@ const DIFF_WIDTH: f32 = 1060.;
 /// The most lines a sidebar row's problem draws under it (#1348): its one plain line, or a planted trace's.
 const PROBLEM_LINES: usize = 16;
 
-/// What the views draw over a fixture record: the inbox projection at a log position on the virtual clock. The
-/// replica, the live capture and the registry checks set it before opening the shell; the app sets none, so its
-/// views draw the hub's record through the one reader.
+/// What a replica's fixture panels read through `deepbuild.needs_you`, and its virtual clock: the inbox projection at
+/// a log position. The replica, the live capture and the registry checks set it before opening the shell. No view
+/// reads it: every view draws the record through the one reader, with the same tree in the app and in a replica
+/// (#1454). `held` stays here alone because the hub records no event for a hold yet.
 #[derive(Clone, Debug)]
 pub struct AppState {
     pub inbox: Inbox,
@@ -75,15 +83,15 @@ pub struct AppState {
 
 thread_local! {
     static STATE: RefCell<Option<Rc<AppState>>> = const { RefCell::new(None) };
+    /// The virtual clock, where one runs (a replica).
+    static CLOCK: Cell<Option<u64>> = const { Cell::new(None) };
 }
 
+/// A replica's state and clock. Its record stands for a machine that's set up, whatever this HOME holds.
 pub fn set_state(state: AppState) {
+    CLOCK.with(|clock| clock.set(Some(state.now)));
+    crate::setup::assume_finished();
     STATE.with(|cell| *cell.borrow_mut() = Some(Rc::new(state)));
-}
-
-/// The state the views draw; set it before the first frame.
-pub fn state() -> Rc<AppState> {
-    current_state().expect("deep_app::views::set_state runs before a view is drawn")
 }
 
 pub fn current_state() -> Option<Rc<AppState>> {
@@ -155,6 +163,72 @@ thread_local! {
     static POPPED: Cell<Option<Kind>> = const { Cell::new(None) };
     /// The shell's dock, which a click shows a panel in.
     static DOCK: RefCell<Option<WeakEntity<DockArea>>> = const { RefCell::new(None) };
+    /// The views you installed that draw inside a shipped view, by area (#1454).
+    static PLACED: RefCell<Vec<(String, AnyView)>> = const { RefCell::new(Vec::new()) };
+    /// The app's canvas panel, on a session's page (#1454).
+    static CANVAS: RefCell<Option<Entity<CanvasPanel>>> = const { RefCell::new(None) };
+}
+
+/// Gives a session's page the canvas panel.
+pub fn set_canvas(panel: Entity<CanvasPanel>) {
+    CANVAS.with(|canvas| *canvas.borrow_mut() = Some(panel));
+}
+
+/// Puts an installed view in its area: the sidebar, home or the line draw it inside them, and a tab is the center's.
+pub fn place(area: &str, view: AnyView, window: &mut Window, cx: &mut App) {
+    if area == "tab" {
+        add_tab(view, window, cx);
+    } else {
+        PLACED.with(|placed| placed.borrow_mut().push((area.to_owned(), view)));
+    }
+}
+
+/// The views placed in `area`, each clipped to a box of its own.
+fn placed(area: &str) -> Vec<AnyView> {
+    PLACED.with(|placed| {
+        placed
+            .borrow()
+            .iter()
+            .filter(|(of, _)| of == area)
+            .map(|(_, view)| view.clone())
+            .collect()
+    })
+}
+
+/// A box a placed view can't draw out of.
+fn placed_box(view: AnyView) -> Div {
+    div()
+        .relative()
+        .overflow_hidden()
+        .w_full()
+        .flex_none()
+        .h(px(PLACED_HEIGHT))
+        .child(view)
+}
+
+/// A new tab in the center holding `view`, which the slot's later pages replace.
+fn add_tab(view: AnyView, window: &mut Window, cx: &mut App) {
+    let Some(dock) = DOCK.with(|dock| dock.borrow().as_ref().and_then(WeakEntity::upgrade)) else {
+        return;
+    };
+    let slot = cx.new(|cx| Slot {
+        view: Some(view),
+        focus_handle: cx.focus_handle(),
+        page: true,
+    });
+    SLOT.with(|current| *current.borrow_mut() = Some(slot.downgrade()));
+    dock.update(cx, |dock, cx| {
+        dock.add_panel(slot, DockPlacement::Center, None, window, cx)
+    });
+}
+
+/// A page from ⌘K in the page region: the tab that holds pages, made if none is there yet (#1454).
+pub fn open_page(view: AnyView, window: &mut Window, cx: &mut App) {
+    if !fill_slot(view.clone(), cx) {
+        add_tab(view, window, cx);
+    }
+    show(EXTENSION, window, cx);
+    window.refresh();
 }
 
 /// The session a page's Terminal tab shows, and what the hub's canvas core last gave for it.
@@ -330,6 +404,12 @@ impl Shipped {
     }
 }
 
+/// Shows a shipped panel in the center, for ⌘K.
+pub fn show_panel(name: &str, window: &mut Window, cx: &mut App) {
+    show(name, window, cx);
+    window.refresh();
+}
+
 /// Shows the panel named `name` in the shell's center.
 fn show(name: &str, window: &mut Window, cx: &mut App) {
     let Some(dock) = DOCK.with(|dock| dock.borrow().as_ref().and_then(WeakEntity::upgrade)) else {
@@ -404,6 +484,7 @@ pub fn register_views(cx: &mut App) {
         let slot = cx.new(|cx| Slot {
             view: NEXT_EXTENSION.with(|next| next.borrow_mut().take()),
             focus_handle: cx.focus_handle(),
+            page: false,
         });
         SLOT.with(|current| *current.borrow_mut() = Some(slot.downgrade()));
         Arc::new(slot)
@@ -465,6 +546,8 @@ pub fn shipped(kind: Kind, cx: &mut App) -> AnyView {
 pub struct Slot {
     view: Option<AnyView>,
     focus_handle: FocusHandle,
+    /// Whether it fills the page region, where a view sits inset as a shipped page does.
+    page: bool,
 }
 
 impl Panel for Slot {
@@ -487,6 +570,7 @@ impl Render for Slot {
             .size_full()
             .relative()
             .overflow_hidden()
+            .when(self.page, |slot| slot.p_2())
             .child(
                 canvas(
                     |bounds, _, _| SLOT_BOUNDS.with(|slot| slot.set(Some(bounds))),
@@ -538,8 +622,8 @@ fn title(
 /// what that view shows: its open asks, its sessions with their task's title and state, and the deadlines of the
 /// first session's asks.
 struct Record {
-    /// Open asks, oldest first: `(handle, session, question)`.
-    open: Vec<(String, String, String)>,
+    /// Open asks, oldest first: `(handle, session, question, status)`.
+    open: Vec<(String, String, String, String)>,
     /// The sessions the view shows, in the order each first appears, with its task's title and its state: every
     /// one for the sidebar, the first for a session's page and its line, none for the others.
     sessions: Vec<(String, String, states::State)>,
@@ -573,13 +657,18 @@ fn record(kind: Kind) -> Record {
 
 /// What the view `kind` draws of `view`.
 fn read(view: &crate::record::View, kind: Kind) -> Record {
-    let open: Vec<(String, String, String)> = view
+    let open: Vec<(String, String, String, String)> = view
         .inbox
         .iter()
         .filter(|row| row["status"] != "closed")
         .map(|row| {
             let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
-            (text("ask"), text("session"), text("question"))
+            (
+                text("ask"),
+                text("session"),
+                text("question"),
+                text("status"),
+            )
         })
         .collect();
     let table = view.table();
@@ -604,7 +693,7 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
         (Kind::Session, Some((first, ..))) => {
             let mine: Vec<&String> = open
                 .iter()
-                .filter(|(_, of, _)| of == first)
+                .filter(|(_, of, ..)| of == first)
                 .map(|(handle, ..)| handle)
                 .collect();
             table
@@ -682,14 +771,11 @@ fn first(record: &Record) -> (String, String, states::State) {
 
 /// The virtual clock's time where one runs (the replica), else the system's.
 pub fn now() -> u64 {
-    current_state().map_or_else(
-        || {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |since| since.as_millis() as u64)
-        },
-        |state| state.now,
-    )
+    CLOCK.with(Cell::get).unwrap_or_else(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis() as u64)
+    })
 }
 
 /// A session's status mark and words, one accessibility node named by what it shows: the mark's core, a square of
@@ -807,10 +893,8 @@ fn bound_panel(chrome: &chrome::Chrome) -> Option<Stateful<Div>> {
 impl Render for Shipped {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
-        let decorations = current_state();
-        // While setup hasn't finished, the count says so, never a number of asks (#1002). A view drawn over a fixture
-        // state draws the fixture, whatever this machine's HOME holds.
-        let unfinished = decorations.is_none().then(crate::setup::count).flatten();
+        // While setup hasn't finished, the count says so, never a number of asks (#1002).
+        let unfinished = crate::setup::count();
         let record = record(self.kind);
         let reach = crate::notify::reach();
         let now = now();
@@ -859,18 +943,18 @@ impl Render for Shipped {
                         }
                     }))
                     .child(title("sidebar-title", "Tasks"))
-                    // The window's count, which shows Needs you; a fixture's view draws the record alone.
-                    .children(decorations.is_none().then(|| {
+                    // The window's count, which shows Needs you.
+                    .child(
                         label("sidebar-count", count_line())
                             .role(Role::Button)
                             .h(px(24.))
                             .px_1()
                             .rounded_sm()
                             .hover(|style| style.bg(chrome.hover))
-                            .on_click(|_, window, cx| show(NEEDS_YOU, window, cx))
-                    }))
+                            .on_click(|_, window, cx| show(NEEDS_YOU, window, cx)),
+                    )
                     // Each agent's MCP servers and skills (#148).
-                    .children(decorations.is_none().then(|| {
+                    .child(
                         label("sidebar-agents", "Agents")
                             .role(Role::Button)
                             .aria_label("Agents: MCP servers and skills")
@@ -878,8 +962,9 @@ impl Render for Shipped {
                             .px_1()
                             .rounded_sm()
                             .hover(|style| style.bg(chrome.hover))
-                            .on_click(|_, window, cx| show(AGENTS, window, cx))
-                    }))
+                            .on_click(|_, window, cx| show(AGENTS, window, cx)),
+                    )
+                    .children(placed("sidebar").into_iter().map(placed_box))
                     .children(record.sessions.iter().zip(&record.rows).enumerate().map(
                         |(index, ((session, task, _), (words, entry)))| {
                             let text = format!("{task} · {words}");
@@ -998,37 +1083,21 @@ impl Render for Shipped {
                             .or_else(|| self.setting_up.is_none().then(crate::setup::reason)?)
                             .map(|line| label("set-up-reason", line).h_auto().py_1()),
                     ),
-                None => page.child(title("home-title", "Home")).child(label(
-                    "home-needs-you",
-                    reach.count(format!("{open} asks need you")),
-                )),
+                None => page
+                    .child(title("home-title", "Home"))
+                    .child(label(
+                        "home-needs-you",
+                        reach.count(format!("{open} asks need you")),
+                    ))
+                    .children(placed("home").into_iter().map(placed_box)),
             },
             Kind::NeedsYou if unfinished.is_some() => page
                 .child(title("needs-you-title", "Needs you"))
                 .child(label("needs-you-setup", unfinished.unwrap_or_default())),
             Kind::NeedsYou => {
                 page.child(title("needs-you-title", "Needs you"))
-                    .children((decorations.is_none() && !self.popped).then(|| {
-                        label("needs-you-pop-out", "Pop out")
-                            .role(Role::Button)
-                            .aria_label("Pop out Needs you")
-                            .self_start()
-                            .px_1()
-                            .rounded_sm()
-                            .text_color(chrome.ink_secondary)
-                            .hover(|style| style.bg(chrome.hover))
-                            .on_click(|_, _, cx| pop_out(Kind::NeedsYou, cx))
-                    }))
                     .children(record.open.iter().enumerate().map(
-                        |(index, (handle, _, question))| {
-                            let has = |list: fn(&AppState) -> &Vec<String>| {
-                                decorations
-                                    .as_ref()
-                                    .is_some_and(|state| list(state).contains(handle))
-                            };
-                            let held = decorations.as_ref().is_some_and(|state| {
-                                state.held.as_deref() == Some(handle.as_str())
-                            });
+                        |(index, (handle, _, question, status))| {
                             let ask = handle.clone();
                             // The planted row shows the handle.
                             let text = if cfg!(feature = "plant-handle-rows") {
@@ -1049,22 +1118,32 @@ impl Render for Shipped {
                                 .on_click(move |_, window, cx| {
                                     crate::card::present_ask(&ask, window, cx)
                                 })
-                                .when(has(|state| &state.inbox.folded), |row| {
+                                .when(status == "folded", |row| {
                                     row.pl_4().text_color(chrome.ink_secondary)
                                 })
-                                .when(has(|state| &state.inbox.later), |row| {
-                                    row.text_color(chrome.ink_tertiary)
-                                })
-                                .when(held, |row| row.italic())
+                                .when(status == "later", |row| row.text_color(chrome.ink_tertiary))
+                                .when(status == "held", |row| row.italic())
                         },
                     ))
+                    // Below the rows, so a screen reader and a keyboard reach the asks first.
+                    .children((!self.popped).then(|| {
+                        label("needs-you-pop-out", "Pop out")
+                            .role(Role::Button)
+                            .aria_label("Pop out Needs you")
+                            .self_start()
+                            .px_1()
+                            .rounded_sm()
+                            .text_color(chrome.ink_secondary)
+                            .hover(|style| style.bg(chrome.hover))
+                            .on_click(|_, _, cx| pop_out(Kind::NeedsYou, cx))
+                    }))
             }
             Kind::Session => {
                 let (session, task, state) = first(&record);
                 let mine = record
                     .open
                     .iter()
-                    .filter(|(_, of, _)| *of == session)
+                    .filter(|(_, of, ..)| *of == session)
                     .count();
                 let hours: Vec<f64> = record
                     .deadlines
@@ -1080,7 +1159,7 @@ impl Render for Shipped {
                     ..text::Label::new(mine.to_string())
                 };
                 let terminal = self.terminal.as_ref().filter(|tab| tab.session == session);
-                let tab = (decorations.is_none() && !session.is_empty()).then(|| {
+                let tab = (!session.is_empty()).then(|| {
                     let session = session.clone();
                     label("session-terminal", "Terminal")
                         .role(Role::Button)
@@ -1094,6 +1173,14 @@ impl Render for Shipped {
                         }))
                 });
                 let grid = terminal.map(|tab| terminal_view(tab, chrome));
+                // The session's canvas, in the place of its deadlines' line (#1454).
+                let figure = CANVAS
+                    .with(|canvas| canvas.borrow().clone())
+                    .filter(|panel| panel.read(cx).shows(&session));
+                if let Some(panel) = &figure {
+                    panel.update(cx, |panel, _| panel.show_session(&session));
+                }
+                let chart = terminal.is_none() && figure.is_none();
                 // What the page shows by its real names, and the newest failure whole (#1348).
                 let details = record
                     .details
@@ -1117,7 +1204,8 @@ impl Render for Shipped {
                     )
                     .children(tab)
                     .children(grid)
-                    .when(terminal.is_none(), |page| {
+                    .children(figure.map(|panel| div().flex_1().min_h_0().w_full().child(panel)))
+                    .when(chart, |page| {
                         page.child(
                             div()
                                 .w(px(600.))
@@ -1202,6 +1290,7 @@ impl Render for Shipped {
                             div()
                                 .id("set-up-working")
                                 .test_support()
+                                .role(Role::Label)
                                 .aria_label(SETTING_UP)
                                 .child(SETTING_UP)
                         }))
@@ -1209,6 +1298,7 @@ impl Render for Shipped {
                             div()
                                 .id("set-up-said")
                                 .test_support()
+                                .role(Role::Label)
                                 .aria_label(line.to_owned())
                                 .max_w(px(560.))
                                 .text_center()
@@ -1222,6 +1312,7 @@ impl Render for Shipped {
                                     div()
                                         .id("set-up-reason")
                                         .test_support()
+                                        .role(Role::Label)
                                         .aria_label(line.clone())
                                         // A long path in the reason wraps inside the window, so its fix stays in view.
                                         .max_w(px(560.))
@@ -1333,11 +1424,13 @@ impl Render for Shipped {
             Kind::Line => {
                 // The session's line: from its task to where it stands now.
                 let (_, task, state) = first(&record);
-                page.bg(chrome.raised).child(status(
-                    "line-status",
-                    &state,
-                    format!("{task} · {}", state.text(now)),
-                ))
+                page.bg(chrome.raised)
+                    .child(status(
+                        "line-status",
+                        &state,
+                        format!("{task} · {}", state.text(now)),
+                    ))
+                    .children(placed("line"))
             }
         }
     }
@@ -1798,11 +1891,10 @@ pub struct Layout {
 }
 
 impl Layout {
-    /// The shipped shell with `needs-you`, `session` or `home` in the center; `sidebar`, the
-    /// replica's view of the sidebar, shows home beside it. Any other name is a mistake, not a
-    /// view.
+    /// The app's shell with `needs-you`, `session` or `home` showing, so a replica draws the app's tree (#1454);
+    /// `sidebar`, the replica's view of the sidebar, shows home beside it. Any other name is a mistake, not a view.
     pub fn shipped(view: &str) -> Self {
-        let center = match view {
+        let active = match view {
             "needs-you" => NEEDS_YOU,
             "session" => SESSION,
             "home" | "sidebar" => HOME,
@@ -1811,18 +1903,19 @@ impl Layout {
                 panic!("{other} is not a shipped view; the shipped views are {SHIPPED_VIEWS:?} and home")
             }
         };
+        let center: Vec<String> = [NEEDS_YOU, SESSION, HOME, AGENTS].map(str::to_owned).into();
         Self {
             sidebar: SIDEBAR.into(),
-            center: vec![center.into()],
-            active: 0,
+            active: center.iter().position(|name| name == active).unwrap_or(0),
+            center,
             line: LINE.into(),
         }
     }
 
-    /// The app's shell (#1172): Needs you and the session's page in the center, with the welcome pane first while
-    /// setup hasn't finished, or a mounted panel's view first.
+    /// The app's shell (#1172): Needs you, the session's page, home and Agents in the center, with the welcome pane first
+    /// while setup hasn't finished, or a mounted panel's view first.
     pub fn app(panel: bool) -> Self {
-        let mut center = vec![NEEDS_YOU.to_owned(), SESSION.to_owned(), AGENTS.to_owned()];
+        let mut center: Vec<String> = [NEEDS_YOU, SESSION, HOME, AGENTS].map(str::to_owned).into();
         if panel {
             center.insert(0, EXTENSION.into());
         } else if crate::setup::needed() {
@@ -1973,11 +2066,15 @@ mod tests {
     }
 
     #[std::prelude::v1::test]
-    fn a_shipped_view_fills_the_center_and_the_sidebar_view_shows_home() {
-        assert_eq!(Layout::shipped("needs-you").center, [NEEDS_YOU]);
-        assert_eq!(Layout::shipped("session").center, [SESSION]);
-        assert_eq!(Layout::shipped("sidebar").center, [HOME]);
-        assert_eq!(Layout::shipped("home").center, [HOME]);
+    fn a_shipped_view_shows_in_the_apps_center_and_the_sidebar_view_shows_home() {
+        let showing = |view| {
+            let layout = Layout::shipped(view);
+            layout.center[layout.active].clone()
+        };
+        assert_eq!(showing("needs-you"), NEEDS_YOU);
+        assert_eq!(showing("session"), SESSION);
+        assert_eq!(showing("sidebar"), HOME);
+        assert_eq!(showing("home"), HOME);
     }
 
     #[std::prelude::v1::test]
