@@ -1,0 +1,16 @@
+{
+  "issue": 495,
+  "criterion": "#495.984de463",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), asked by the owner Tao Feng in the #495 session to make this call",
+  "when": "2026-11-08T07:27:10Z",
+  "screenshots": {
+    "echo-8-copies.png": "ef1b5c1d63051fc85434044d892acb54fecee5bfe7082cb59446b3b6a87817f0",
+    "echo-8-copies.apng": "7511a6165f06ddb5d2068a880c9d6d7cf0a525d441c3e797c6f2ea858f7849c9",
+    "matte-linear.png": "ad75c31f7758c7665e61ada8f48fd151c98edf1e2082ea6adcee87629914c60e",
+    "matte-encoded.png": "64e4e3264bb9ee8018900a1cdce63a3bdd1955aba7edd5b23a13ae0bed8b1385",
+    "flip-group.png": "7e23e7df9e136417430364e7138e3199a4473326145b6660ef52d06976799abc",
+    "flip-group.apng": "6454e014032216385dcbc0c5ad999f89f2da006a61a7d940eb5f2bdef7b8bd40"
+  },
+  "note": "Checked by pixel values, not by eye alone. Echo: 9 bars (the item and 8 copies) 16 px apart at opacities 1, 0.5 … 0.004; the newest bar is in frame on all 48 recorded frames. Matte: coverage 55/255 (0.216) linear and 128/255 (0.502) encoded. Flip: one child or none on every frame, c0, c2, none, c1 for 12 frames each, as its keys say. The owner can overturn this by setting verdict to looks_wrong."
+}
