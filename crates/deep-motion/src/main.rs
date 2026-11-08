@@ -310,9 +310,12 @@ fn eval_line(input: &Map<String, Value>) -> Value {
             .iter()
             .enumerate()
             .map(|(c, (id, s))| {
-                let value = match s.value.as_slice() {
-                    [one] => json!(one),
-                    many => json!(many),
+                // #494: a path channel's value as path@1's columns.
+                let path = motion.channels.get(c).and_then(|ch| ch.path.as_ref());
+                let value = match (path, s.value.as_slice()) {
+                    (Some(p), run) => deep_canvas_motion::morph::value_of(&deep_canvas_motion::morph::unflat(run, &p.structure)),
+                    (None, [one]) => json!(one),
+                    (None, many) => json!(many),
                 };
                 let mut out = json!({"value": value, "iterations": s.iterations});
                 // #417's follows come after the channels in the frame; only #489's report more.
