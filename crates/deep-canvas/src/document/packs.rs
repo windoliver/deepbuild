@@ -2643,6 +2643,15 @@ const MAX_SUM: f64 = 256.0;
 
 impl Expr {
     fn parse(text: &str) -> Result<Expr, String> {
+        match Expr::parse_capped(text) {
+            Err(e) if e.contains(CAPPED) && !could_be_expression(text) => {
+                Err("isn't an expression".into())
+            }
+            parsed => parsed,
+        }
+    }
+
+    fn parse_capped(text: &str) -> Result<Expr, String> {
         let tokens = tokenize(text)?;
         let mut p = Parser {
             tokens,
@@ -2868,42 +2877,129 @@ const MAX_TOKENS: usize = 1024;
 
 fn tokenize(text: &str) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
+    for t in Tokens::of(text) {
         if out.len() == MAX_TOKENS {
             return Err(format!("runs past the cap of {MAX_TOKENS} tokens"));
         }
-        let c = chars[i];
-        let next = chars.get(i + 1).copied();
-        if c.is_whitespace() {
+        out.push(t?);
+    }
+    Ok(out)
+}
+
+/// A text's tokens, one at a time.
+struct Tokens {
+    chars: Vec<char>,
+    i: usize,
+}
+
+impl Tokens {
+    fn of(text: &str) -> Tokens {
+        Tokens {
+            chars: text.chars().collect(),
+            i: 0,
+        }
+    }
+}
+
+impl Iterator for Tokens {
+    type Item = Result<String, String>;
+
+    fn next(&mut self) -> Option<Result<String, String>> {
+        let chars = &self.chars;
+        let mut i = self.i;
+        while chars.get(i).is_some_and(|c| c.is_whitespace()) {
             i += 1;
-        } else if c.is_ascii_digit() || (c == '.' && next.is_some_and(|d| d.is_ascii_digit())) {
-            let start = i;
+        }
+        let c = *chars.get(i)?;
+        let next = chars.get(i + 1).copied();
+        let start = i;
+        let t = if c.is_ascii_digit() || (c == '.' && next.is_some_and(|d| d.is_ascii_digit())) {
             while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
                 i += 1;
             }
-            out.push(chars[start..i].iter().collect());
+            Ok(chars[start..i].iter().collect())
         } else if c.is_ascii_alphabetic() || c == '_' {
-            let start = i;
             while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
                 i += 1;
             }
-            out.push(chars[start..i].iter().collect());
+            Ok(chars[start..i].iter().collect())
         } else if let Some(two) = next
             .map(|d| format!("{c}{d}"))
             .filter(|t| ["==", "!=", "<=", ">=", "&&", "||"].contains(&t.as_str()))
         {
-            out.push(two);
             i += 2;
+            Ok(two)
         } else if "+-*/%(),[].?:<>!".contains(c) {
-            out.push(c.to_string());
             i += 1;
+            Ok(c.to_string())
         } else {
-            return Err(format!("unexpected `{c}`"));
-        }
+            i = chars.len();
+            Err(format!("unexpected `{c}`"))
+        };
+        self.i = i;
+        Some(t)
     }
-    Ok(out)
+}
+
+/// Whether `text` could be an expression, read flat in one pass: an operand after each
+/// operator, open brackets closed in order, nothing left over. It reads more than the grammar
+/// does, never less, so text a cap stops is refused only when the grammar might read it.
+fn could_be_expression(text: &str) -> bool {
+    let mut open: Vec<char> = Vec::new();
+    // Whether the next token must be an operand.
+    let mut operand = true;
+    let mut tokens = Tokens::of(text).peekable();
+    while let Some(t) = tokens.next() {
+        let Ok(t) = t else { return false };
+        let name = well_named_member(&t);
+        operand = match (operand, t.as_str()) {
+            (true, "-" | "!") => true,
+            (true, "(") => {
+                open.push(')');
+                true
+            }
+            (true, _) if name => {
+                if matches!(tokens.peek(), Some(Ok(p)) if p == "(") {
+                    tokens.next();
+                    open.push(')');
+                    if matches!(tokens.peek(), Some(Ok(p)) if p == ")") {
+                        tokens.next();
+                        open.pop();
+                        false
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            }
+            (true, _) => {
+                if t.parse::<f64>().is_err() {
+                    return false;
+                }
+                false
+            }
+            (false, ")" | "]") => {
+                if open.pop() != t.chars().next() {
+                    return false;
+                }
+                false
+            }
+            (false, "[") => {
+                open.push(']');
+                true
+            }
+            (false, ".") => match tokens.next() {
+                Some(Ok(m)) if well_named_member(&m) => false,
+                _ => return false,
+            },
+            (false, ",") if open.last() == Some(&')') => true,
+            (false, "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" | ">=")
+            | (false, "&&" | "||" | "?" | ":") => true,
+            _ => return false,
+        };
+    }
+    !operand && open.is_empty()
 }
 
 struct Parser {
@@ -3196,6 +3292,21 @@ mod tests {
             let repeat = json!({"repeat": {"count": text, "as": "j", "of": "j"}});
             let e = Template::of(&repeat).eval(&scope()).unwrap_err();
             assert!(e.contains("past the cap of"), "{e}");
+        }
+    }
+
+    #[test]
+    fn long_text_that_is_no_expression_stays_a_literal() {
+        // A cap refuses only text that could be an expression; past it, text is still a literal.
+        let texts = [
+            format!("M 0 0 {}", "L 10.5 20.25 ".repeat(400)),
+            "The quick brown fox jumps over the lazy dog, again. ".repeat(120),
+            "-".repeat(70),
+            format!("{}see note{}", "(".repeat(70), ")".repeat(70)),
+        ];
+        for text in texts {
+            let got = Template::of(&json!(text)).eval(&scope());
+            assert_eq!(got, Ok(json!(text)), "{}", &text[..40]);
         }
     }
 

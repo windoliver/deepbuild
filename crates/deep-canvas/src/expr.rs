@@ -859,7 +859,7 @@ impl Parser<'_> {
             // `table` and `ease` name a pack's entry as `<pack>.<name>`.
             if (name == "table" || name == "ease") && args.is_empty() {
                 if let Some(n) = self.dotted()? {
-                    args.push(self.node(P::Name(n))?);
+                    args.push(P::Name(n));
                     if self.eat(",") {
                         continue;
                     }
@@ -882,7 +882,7 @@ impl Parser<'_> {
     }
 
     /// A name with dots (`physics.drag`), if the next tokens are one followed by `,` or `)`. Each
-    /// part counts as a node while it reads, and is given back if it isn't one.
+    /// part counts as a node while it reads, and the name as one node once it is one.
     fn dotted(&mut self) -> Result<Option<String>, Refusal> {
         let (save, nodes) = (self.at, self.nodes);
         let mut out = String::new();
@@ -898,6 +898,7 @@ impl Parser<'_> {
             break;
         }
         if !out.is_empty() && !out.ends_with('.') && (self.sym(",") || self.sym(")")) {
+            self.nodes = nodes + 1;
             return Ok(Some(out));
         }
         (self.at, self.nodes) = (save, nodes);
@@ -2752,5 +2753,21 @@ mod tests {
         let deep = format!("{}$", "(".repeat(65));
         let e = Expr::compile(&deep, &Nothing, 512).unwrap_err();
         assert!(e.why.contains("the cap of 64 levels"), "{e}");
+    }
+
+    struct OneTable;
+    impl Resolve for OneTable {
+        fn table(&self, name: &str) -> Option<Table> {
+            let t = Table::new(vec![0.0, 1.0], vec![0.0, 1.0], crate::table::Mode::Linear);
+            (name == "p.t").then(|| t.unwrap())
+        }
+    }
+
+    #[test]
+    fn a_dotted_table_name_counts_once() {
+        // 171 tables of x take 3 · 171 − 1 = 512 nodes bound: at the cap, so they compile.
+        let text = vec!["table(p.t, x)"; 171].join(" + ");
+        let e = Expr::compile(&text, &OneTable, 512).unwrap();
+        assert_eq!(e.size, 512);
     }
 }
