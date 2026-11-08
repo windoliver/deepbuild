@@ -55,6 +55,6 @@ export function atBase(path) {
 /** The judge's lines as a test's outcome: any FAIL fails; otherwise any INCONCLUSIVE fails as INCONCLUSIVE; none passes. */
 export function verdict(lines) {
   const fails = lines.filter((line) => !/^INCONCLUSIVE\b/.test(line));
-  if (fails.length) throw new Error(`FAIL:\n${fails.join('\n')}${lines.length > fails.length ? `\n${lines.filter((line) => !fails.includes(line)).join('\n')}` : ''}`);
+  if (fails.length) throw Object.assign(new Error(`FAIL:\n${fails.join('\n')}${lines.length > fails.length ? `\n${lines.filter((line) => !fails.includes(line)).join('\n')}` : ''}`), { code: 'ERR_ASSERTION' });
   if (lines.length) throw new Error(`INCONCLUSIVE:\n${lines.join('\n')}`);
 }
