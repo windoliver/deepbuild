@@ -72,6 +72,8 @@ pub fn panel_dir(name: &str) -> PathBuf {
 
 /// The view name `--first-screen` stands for: the app's first screen, Home, drawn for the HOME it runs with.
 pub const FIRST_SCREEN: &str = "first-screen";
+/// The rules page (#344), drawn from the HOME it runs with: `wiki/rules.md` as `deep rules sync` wrote it.
+pub const RULES_PAGE: &str = "rules";
 
 /// The replica's view of the look's 16 terminal colors on the terminal's background (#1003).
 pub const TERMINAL_COLORS: &str = "terminal-colors";
@@ -121,7 +123,7 @@ pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
         eprintln!("usage: {bin} --view <id> --out <{out}>");
         return Err(2);
     };
-    let extra = replica && view == TERMINAL_COLORS;
+    let extra = (replica && view == TERMINAL_COLORS) || view == RULES_PAGE;
     if view != FIRST_SCREEN && !extra && !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str()) {
         let shipped = deep_app::views::SHIPPED_VIEWS;
         eprintln!("{bin}: {view} is not a shipped view; the views are {shipped:?}");
