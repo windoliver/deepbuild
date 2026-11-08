@@ -54,27 +54,35 @@ function planFor(source: string, does: string, changes: string[], targets: Targe
   const undo = /^effect\.(push|pr|merge)$/.test(source) ? 'Revert it with a new commit' : null;
   return { steps: [{ does: does.slice(0, 8192), changes: changes.length ? changes.map((c) => c.slice(0, 8192)) : ['what the call touches'], undo, public: undo !== null, cost: 0, ...(targets.length ? { targets } : {}) }], diff: key({ source, does, changes }) };
 }
-/** A `git push`'s words up to the end of its command, git's own flags before `push` skipped. */
-const GIT_PUSH = /\bgit(?:\s+(?:-[cC]\s+\S+|-\S+))*\s+push\b([^;&|)\n]*)/g;
-const VALUED = new Set(['-o', '--push-option', '--receive-pack', '--exec']);
+/**
+ * A push's words up to the end of its command, each tool's own flags before its push skipped: git's, jj's, sl's, and
+ * gt's and git town's commands that push (#1523).
+ */
+const PUSH = /\b(?:(git)(?:\s+(?:-[cC]\s+\S+|-\S+))*\s+push|(jj)(?:\s+-\S+(?:\s+\S+)?)*?\s+git\s+push|(sl)(?:\s+-\S+(?:\s+\S+)?)*?\s+push|gt\s+(?:submit|ss?|(?:stack|upstack|downstack|us|ds|branch|b)\s+(?:submit|s))|git[\s-]town\s+(?:propose|new-pull-request|ship|sync))\b([^;&|)\n]*)/g;
+const VALUED = { git: new Set(['-o', '--push-option', '--receive-pack', '--exec']), sl: new Set(['--to', '-t', '-r', '--rev', '-B', '--bookmark']) };
 /** How long a held push waits for its session's transcript, well inside the gate's hold. */
 const ARCHIVE_WAIT_MS = 2000;
 /**
  * Where a line's pushes go (#1098): each names its remote or URL, the first word after `push` that isn't a flag or
- * `--repo`'s, and a push that names none goes to git's default, origin. A value the line computes is kept as written,
+ * `--repo`'s, and a push that names none goes to git's default, origin. jj names its remote by `--remote`, sl's
+ * default is `default`, and gt and git town push to origin (#1523). A value the line computes is kept as written,
  * so it reads unknown on the card.
  */
 export function pushTargets(line: string): Target[] {
-  const refs = [...line.matchAll(GIT_PUSH)].map(([, rest]) => {
+  const refs = [...line.matchAll(PUSH)].map(([, git, jj, sl, rest]) => {
     const words = (rest ?? '').trim().split(/\s+/).map((w) => w.replace(/^["']|["']$/g, '')).filter(Boolean);
+    if (!git && !sl) {
+      const at = words.findIndex((w) => w === '--remote' || w.startsWith('--remote='));
+      return !jj || at < 0 ? 'origin' : words[at]!.startsWith('--remote=') ? words[at]!.slice('--remote='.length) : (words[at + 1] ?? 'origin');
+    }
     for (let at = 0; at < words.length; at++) {
       const word = words[at]!;
-      if (word === '--repo') return words[at + 1] ?? 'origin';
-      if (word.startsWith('--repo=')) return word.slice('--repo='.length);
-      if (VALUED.has(word)) at++;
+      if (git && word === '--repo') return words[at + 1] ?? 'origin';
+      if (git && word.startsWith('--repo=')) return word.slice('--repo='.length);
+      if (VALUED[git ? 'git' : 'sl'].has(word)) at++;
       else if (!word.startsWith('-')) return word;
     }
-    return 'origin';
+    return sl ? 'default' : 'origin';
   });
   return [...new Set(refs)].map((ref): Target => ({ kind: 'remote', ref }));
 }
@@ -226,26 +234,36 @@ export class Holds {
     const named = await this.named(sessions);
     const every = this.o.plant === 'ask-covers-every-effect' && named.size > 0;
     const unpinned = this.o.plant === 'auto-merge-unpinned';
+    // A call with more than one effect no request names, as `git town ship` pushes and merges, is one ask naming each.
+    const open: { rule: string; effect: Named }[] = [];
     for (const { rule, effect } of call.named!) {
       if (rule === 'merge-names-head' || every || named.has(effect)) continue;
       const offer = await this.askOf(this.offerKey(effect, sessions[0]!));
       if (offer?.decision === 'allow') continue;
       if (offer) return `DeepBuild denied this (guard ${rule}): ${await this.waiting(`ask:${offer.id}`, call.label)}`;
+      open.push({ rule, effect });
+    }
+    if (open.length) {
+      const [{ rule, effect }] = open as [{ rule: string; effect: Named }];
+      const does = [...new Set(open.map((o) => DOES[o.effect]!))].join(' and ');
       const source = `effect.${effect}`;
       const k = key({ source, sessions: sessions[0], call: call.label });
       const asked = await this.askOf(k);
-      if (asked?.decision === 'allow') continue;
-      const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
-        `Run \`${call.label}\`? It ${DOES[effect]!}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${DOES[effect]!}`, [call.label], effect === 'push' ? pushTargets(call.label) : []));
-      return `DeepBuild denied this (guard ${rule}): no request you typed in this thread names it. ${await this.waiting(handle, call.label)}`;
+      if (asked?.decision !== 'allow') {
+        const handle = asked ? `ask:${asked.id}` : await this.raise(meta.session, meta.agent, meta.cwd, source, k,
+          `Run \`${call.label}\`? It ${does}, and no request in this thread names that.`, ANSWERS[effect]!, planFor(source, `Run \`${call.label}\`, which ${does}`, [call.label], open.some((o) => o.effect === 'push') ? pushTargets(call.label) : []));
+        return `DeepBuild denied this (guard ${rule}): no request you typed in this thread names it. ${await this.waiting(handle, call.label)}`;
+      }
     }
     if (every) return undefined;
     const rule = 'merge-names-head';
     if (call.named!.some((n) => n.rule === rule) && !call.merge?.disable && !(unpinned && call.merge?.auto)) {
       const pass = await this.passed(sessions);
+      // gt merge and git town ship merge whatever the head is by then: authority for one commit can't cover them.
+      if (call.merge?.blind) return `DeepBuild denied this (guard ${rule}): merge authority covers one head commit, and \`${call.label}\` can't name one. Merge with gh pr merge --match-head-commit ${pass ?? "<the commit the claim's PASS is pinned to>"}, which merges only that commit.`;
       if (!pass) return `DeepBuild denied this (guard ${rule}): merge authority covers one head commit, and no claim in this thread has a PASS yet.`;
       const head = call.merge?.head;
-      if (!head || head.length < 7 || !pass.startsWith(head)) return `DeepBuild denied this (guard ${rule}): merge authority covers one head commit, and this call names ${head ?? 'none'}. Name ${pass}, the commit the claim's PASS is pinned to: --match-head-commit for gh pr merge, sha for the API and the MCP tool.`;
+      if (!head || head.length < 7 || !pass.startsWith(head)) return `DeepBuild denied this (guard ${rule}): merge authority covers one head commit, and this call names ${head ?? 'none'}. Name ${pass}, the commit the claim's PASS is pinned to: --match-head-commit for gh pr merge, --sha for glab mr merge, expectedHeadOid for GraphQL, sha for the API and the MCP tool.`;
     }
     const pr = call.merge?.pr ?? '';
     if (call.merge?.auto && !unpinned) await this.o.reading(meta.session, meta.agent, `Merge of pull request ${pr} armed with --auto on branch ${await this.branch(meta.cwd)}`);
@@ -256,7 +274,7 @@ export class Holds {
         const current = await this.branch(meta.cwd);
         const input = meta.call?.input ?? {};
         const targets = typeof input.branch === 'string' ? [input.branch] : pushBranches(String(input.command ?? ''), current);
-        for (const [number, branch] of armed) if (targets.includes(branch)) return `DeepBuild denied this (guard ${rule}): a merge of pull request ${number} armed with --auto is pending, so \`${call.label}\` to ${branch} would change what it merges. Run gh pr merge --disable-auto ${number} first; the new head needs its own verdict.`;
+        for (const [number, branch] of armed) if (targets.includes(branch) || targets.includes('*')) return `DeepBuild denied this (guard ${rule}): a merge of pull request ${number} armed with --auto is pending, so \`${call.label}\` to ${branch} would change what it merges. Run gh pr merge --disable-auto ${number} first; the new head needs its own verdict.`;
       }
     }
     return undefined;

@@ -1,0 +1,76 @@
+#1426 table redraft: the run at the base commit db917989 (main of November 7, 2026), on macOS (Darwin 27.2.0), Node
+24.22.2, cargo 1.99.1, after npm ci and npm run build --workspaces, trimmed to each failure's reason. Every tagged test
+fails for a missing surface: no scripts/vendor-rebase.mjs, no lint lane running it, no carried-patch table, no record of
+the refusal, and the design still says "the only patch". The wrong-program tests pass, 60 of 60, since they test the
+tests.
+
+== node --test tests/acceptance/1426/redraft-table/lint.test.mjs  (exit 1; 11 tests, 0 pass, 11 fail)
+
+✖ #1426.4ef6dcfa a changed file with no row fails check naming it, in every tree under vendor/: nested, new, a manifest, gpui-pre-apple's own vendor/, quickjs-jit-runtime and unicode-17.0.0; with a row it passes
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.4ef6dcfa a row with no test (empty or a dash) and a row with no issue each fail check, naming the row
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.4ef6dcfa a tree whose pinned release can't be read is BLOCKED or INCONCLUSIVE, naming it, and never passes
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.4ef6dcfa the lint lane runs check: a planted changed file with no row and a planted row with no test each fail the lane as FAIL lint, naming it
+  + "the lint lane doesn't run scripts/vendor-rebase.mjs"
+
+✖ #1426.08aec3b4 an unmarked hunk in a file that has a row, added or rewritten, fails check naming file and line; a mark in it or one unchanged line from it passes
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.8e0bb54e check prints each row's count of marked hunks, a new marked hunk moves it, and a row with none prints 0 and fails, naming it
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.0c3a7dfa a marked 9-line hunk in a file with a row fails check naming file, line and size; 8 lines pass
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.0c3a7dfa (scope) a file with a row passes at 40 added lines and fails at 41, naming the file and the count
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.fde8001d a 60-line pure addition fails in place, passes moved to a new file with a one-line marked mod and a row for it, and fails with no row for the new file
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.f66ec7fc (lint half) a row that raises its budget with no reason ("1 over", "1 over:") fails check, naming the row; one with its reason passes
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.4e893008 check prints each row's hunks over budget; a second 9-line hunk in the row that allows 1 fails, naming the row, 2 and 1, even with another row's number spare; raised with a reason it passes
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+== node --test tests/acceptance/1426/redraft-table/merge.test.mjs  (exit 1; 3 tests, 0 pass, 3 fail)
+
+✖ #1426.5f9ac1c5 merge onto a stub gpui-pre 0.3.10 keeps the clean carried hunk, takes the release's far change, and leaves the conflicting hunk between markers with both sides, listing it alone at its line
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.5f9ac1c5 (scope) a merge with no conflict exits 0, moves the pin, keeps both carried hunks, and check passes the merged tree
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.5f9ac1c5 (scope) diff prints each carried line against its release and names no file that doesn't differ
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+== node --test tests/acceptance/1426/redraft-table/tree.test.mjs  (exit 1; 1 test, 0 pass, 1 fail; no network reached,
+   since the table's absence ends it before the fetch)
+
+✖ #1426.4ef6dcfa the real tree: every file that differs from its pinned release has a row; every row has an issue, a removal condition, a test its suite lists, marked hunks above 0 and hunks over budget within its number; the refusal and the design's line are recorded
+  + 'vendor/gpui-pre-apple/upstream/README.md has no table under ## Carried patches',
+  + "vendor/gpui-pre-apple/upstream/README.md has no paragraph recording zed-industries/zed#66114's refusal: its link, the word closed (or refused), and its date, October 28, 2026",
+  + 'vendor/gpui-pre-apple/upstream/README.md still says "The pull request is open"',
+  + 'docs/technical-design.md still says "the only patch":  script, with no fork: gpui-kit and gpui-shell stay upstream at one commit, and the only patch, rquickjs to that same commit, sits in `.cargo/config.toml` outside every crate',
+  + 'docs/technical-design.md names neither vendor/gpui-pre-apple/upstream/README.md nor the carried-patch table'
+
+== node --test tests/acceptance/1426/redraft-table/wrong.test.mjs  (exit 0; 60 tests, 60 pass, 0 fail; about 50 s)
+
+== The real-tree judge past the table, at the base (a dry run, not a test)
+
+With the base's vendor/ and docs/ copied out, a two-row table added to the copy's README, and the pinned releases
+fetched (crates.io gpui-pre 0.3.9 and gpui-pre-apple 0.3.9; longbridge/quickjs-jit at 96593cd, folder jit/ with the
+repository's LICENSE; unicode.org's three 17.0.0 files), the judge listed every file the base carries a change in that
+the two rows don't (both gpui manifests, headless_app_context.rs, color.rs, platform.rs, window.rs, shaders.metal,
+gpui-pre-apple's vendor/gpui/src/color.rs, quickjs-jit-runtime's Cargo.toml), found unicode-17.0.0 and quickjs's
+LICENSE equal to their releases, and counted 20 hunks and files over budget against the two rows' 3. One fetch of the
+quickjs-jit tarball failed with an HTTP/2 stream error before curl's retries took in every error; the judge read it as
+INCONCLUSIVE, naming the tree.
+
+<repo> is /Users/taofeng/dev/claude-worktrees/github-issue-1426-c1c7e4/agent-a339c86084aeca296.

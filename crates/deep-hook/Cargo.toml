@@ -32,3 +32,7 @@ plant-computed-misses = []
 env-plants = []
 # The planted wrong program for #1407: a matcher that panics on every call it matches.
 plant-matcher-panic = []
+# The planted wrong programs for #1503: a reader that counts an interpreter or a shell reading a pipe as unread even
+# when its program is the inline text (AC4), and one that counts every run fed from a pipe as unread (AC5).
+plant-any-pipe-unread = []
+plant-every-pipe-unread = []
