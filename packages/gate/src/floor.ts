@@ -130,7 +130,9 @@ export function validityGate(input: ValidityInput, plant?: FloorPlant): Finding[
       if (!existsSync(inside(checkout, d) ?? '\0')) found.push({ kind: 'deliverable', ref: d, why: `the deliverable ${d} the definition names doesn't exist in the claim's checkout` });
     }
   }
-  const cites = [...input.claim.message.matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
+  // Inline cites only: a fenced block is code shown, never a cite, and its backticks would pair with the next inline one.
+  const prose = input.claim.message.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n {0,3}\1[^\n]*|$)/gm, '');
+  const cites = [...prose.matchAll(/`([^`]+)`/g)].map((m) => m[1]!.trim()).filter(Boolean);
   const runs = session.ran.map((r) => ({ ...r, command: typed(r.command) }));
   for (const cite of new Set(cites)) {
     const run = runs.find((r) => cite === r.command || cite.startsWith(`${r.command} `));
