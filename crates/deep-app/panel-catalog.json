@@ -53,6 +53,16 @@
       "what": "The items a Canvas draws, by ID, kept across renders: scene.set(id, values)."
     },
     {
+      "name": "Button",
+      "from": "gpui-base",
+      "what": "A button: Button.new(id) with its label as a child and .on_click(handler), styled like a div."
+    },
+    {
+      "name": "Input",
+      "from": "gpui-base",
+      "what": "A text field: Input.new(state) over an InputState."
+    },
+    {
       "name": "InputState",
       "from": "gpui-base",
       "what": "The text an Input holds, kept across renders: InputState.new({ placeholder })."
@@ -60,22 +70,27 @@
   ],
   "components": [
     {
-      "name": "Button",
-      "from": "gpui-base",
+      "name": "Badge",
+      "from": "gpui-component",
       "props": {
-        "id": "string, given to Button.new(id)",
-        "child": "its label: text or an element",
-        "on_click": "(event, window, cx) => void, called on your click"
+        "count": "number, from .count(n)",
+        "max": "number, from .max(n), past which it shows n+",
+        "dot": "from .dot(), a dot instead of a count",
+        "color": "string, from .color(\"#rrggbb\")"
       },
-      "example": "Button.new(\"ok\").child(\"OK\")"
+      "example": "Badge.new().count(3)"
     },
     {
-      "name": "Input",
-      "from": "gpui-base",
+      "name": "Label",
+      "from": "gpui-component",
       "props": {
-        "state": "an InputState, given to Input.new(state), holding the text you type"
+        "text": "string, given to Label.new(text)",
+        "secondary": "string, from .secondary(text), muted text after it",
+        "masked": "boolean, from .masked(on)",
+        "on_click": "(event, window, cx) => void, called on your click",
+        "disabled": "boolean, from .disabled(on)"
       },
-      "example": "Input.new(InputState.new({ placeholder: \"Name\" })).w(160)"
+      "example": "Label.new(\"Name\")"
     }
   ],
   "not_offered": [
@@ -108,10 +123,6 @@
       "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
     },
     {
-      "name": "Badge",
-      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
-    },
-    {
       "name": "BarChart",
       "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
     },
@@ -122,6 +133,10 @@
     {
       "name": "Bubble",
       "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Button",
+      "reason": "The module's core serves its own Button, the one panels use, which keeps its id in the panel's tree; this second Button the toolkit registers is not offered, so a panel never has two."
     },
     {
       "name": "Calendar",
@@ -304,6 +319,10 @@
       "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
     },
     {
+      "name": "Input",
+      "reason": "The module's core serves its own Input, the one panels use, which keeps its id in the panel's tree; this second Input the toolkit registers is not offered, so a panel never has two."
+    },
+    {
       "name": "InputGroup",
       "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
     },
@@ -329,10 +348,6 @@
     },
     {
       "name": "Kbd",
-      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
-    },
-    {
-      "name": "Label",
       "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
     },
     {

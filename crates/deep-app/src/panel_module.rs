@@ -103,40 +103,51 @@ pub(crate) fn planted(plant: &str) -> bool {
     }
 }
 
-/// The module's source: each served name re-exported from the toolkit module that serves it.
+/// The module's source: each name on the catalog re-exported from the toolkit module that serves it. A panel that
+/// imports the module whole gets those names and no others. Only #1425's planted pack check, which lets a component
+/// whose script runs per frame through, is served those components too.
 fn source() -> &'static str {
     static SOURCE: OnceLock<String> = OnceLock::new();
-    SOURCE.get_or_init(|| {
-        let catalog = catalog();
-        let mut by_module: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-        let per_frame = catalog
-            .not_offered
-            .iter()
-            .filter_map(|(name, (_, from))| Some((name, from.as_ref()?)));
-        for (name, from) in catalog.offered.iter().chain(per_frame) {
-            by_module.entry(from).or_default().push(name);
-        }
-        let mut source = String::from(
-            "// Written by DeepBuild each time it loads this panel (#1425): @deepbuild/panel, the one module a panel imports.\n",
-        );
-        for (module, names) in by_module {
-            source.push_str(&format!(
-                "export {{ {} }} from \"{module}\";\n",
-                names.join(", ")
-            ));
-        }
-        source
-    })
+    static PLANTED: OnceLock<String> = OnceLock::new();
+    if planted("panel-per-frame-unchecked") {
+        PLANTED.get_or_init(|| write_source(true))
+    } else {
+        SOURCE.get_or_init(|| write_source(false))
+    }
+}
+
+fn write_source(per_frame: bool) -> String {
+    let catalog = catalog();
+    let mut by_module: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    let per_frame = catalog
+        .not_offered
+        .iter()
+        .filter(|_| per_frame)
+        .filter_map(|(name, (_, from))| Some((name, from.as_ref()?)));
+    for (name, from) in catalog.offered.iter().chain(per_frame) {
+        by_module.entry(from).or_default().push(name);
+    }
+    let mut source = String::from(
+        "// Written by DeepBuild each time it loads this panel (#1425): @deepbuild/panel, the one module a panel imports.\n",
+    );
+    for (module, names) in by_module {
+        source.push_str(&format!(
+            "export {{ {} }} from \"{module}\";\n",
+            names.join(", ")
+        ));
+    }
+    source
 }
 
 /// Writes the module under `dir`, where gpui-shell resolves `@deepbuild/panel`, unless it's there already.
 pub fn serve(dir: &Path) -> std::io::Result<()> {
     let path = dir.join(SERVED);
-    if std::fs::read_to_string(&path).is_ok_and(|text| text == source()) {
+    let source = source();
+    if std::fs::read_to_string(&path).is_ok_and(|text| text == source) {
         return Ok(());
     }
     std::fs::create_dir_all(path.parent().expect("the module's folder"))?;
-    std::fs::write(path, source())
+    std::fs::write(path, source)
 }
 
 /// Checks a panel's scripts: `Err` names the file and line of the first import no panel may make, and why.
@@ -160,12 +171,8 @@ pub fn check(dir: &Path) -> Result<(), String> {
             if specifier != MODULE {
                 continue;
             }
-            let Some(names) = import.names else {
-                return Err(format!(
-                    "{at} imports \"{MODULE}\" whole; import the names it uses, as import {{ View, div }} from \"{MODULE}\""
-                ));
-            };
-            for name in names {
+            // A panel that takes the module whole gets only what it serves, the catalog's names.
+            for name in import.names.unwrap_or_default() {
                 refuse_name(&at, &name, per_frame_checked)?;
             }
         }
@@ -229,7 +236,7 @@ fn scripts(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// One import a script makes: its specifier, its line, and for a statement the names it takes, or `None` when it
-/// takes the module whole (a namespace, a default import, `export *` or a dynamic import).
+/// takes the module whole (a namespace, `export *` or a dynamic import).
 #[derive(Debug, PartialEq)]
 struct Import {
     specifier: String,
@@ -409,6 +416,17 @@ mod tests {
                 source.matches(&format!(" {name},")).count()
                     + source.matches(&format!(" {name} }}")).count(),
                 1,
+                "{name} in {source}"
+            );
+        }
+        // A panel importing the module whole reaches nothing off the catalog.
+        for name in catalog()
+            .not_offered
+            .keys()
+            .filter(|name| !catalog().offered.contains_key(*name))
+        {
+            assert!(
+                !source.contains(&format!(" {name},")) && !source.contains(&format!(" {name} }}")),
                 "{name} in {source}"
             );
         }
