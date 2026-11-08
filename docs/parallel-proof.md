@@ -55,6 +55,44 @@ There is no fallback flag: rollback is reverting the PR.
 
 Bays are weaker than today's proof lane, and equal to today's perf kept copies. A temporary checkout cannot carry anything from a previous run; a bay carries its `target/` and `node_modules/`, guarded by the seal. The record binds the sources, not the target. This replaces #569's "runs on the merge base in a temporary checkout" for the base copy, and the record names the bay's seal check so the weaker trust is visible on every verdict that used it. `bays.mjs` joins the guard's list of the proof lanes' own code from its first PR.
 
+### Dependencies shared across worktrees: sccache, per machine
+
+Twenty worktrees on the Spark each build the workspace cold into their own `target/`. What they can share, and what they can't:
+
+- **Not a shared `CARGO_TARGET_DIR`.** One target directory for every worktree has the relocated target's flaw above, across branches: `target/debug/<bin>` is rewritten by whichever worktree built last, with `CARGO_MANIFEST_DIR` and `CARGO_BIN_EXE_*` pointing into it. `parity.mjs`, `agent-eval-run.mjs`, the `alone` block (section 7) and the 70–80 acceptance files that spawn `cargo` read `<worktree>/target/debug/<bin>`, which a shared target leaves empty; `DEEP_BIN_DIR` will cover a lane's own runs once T4 lands, and an acceptance file only once its blind redraft reads it. Cargo's target lock would also hold every worktree's build behind every other's, under the throttle. The preflight and the bays delete the variable for these reasons, and keep doing so.
+- **sccache as the machine's `rustc-wrapper`.** A dependency from the registry or a git source compiles to the same bytes in every worktree: same source, same flags, same toolchain. sccache keys each `rustc` call on those and writes the cached artifact into the worktree's own `target/`. The workspace's crates compile incrementally, which sccache passes through, so each worktree's own crates and binaries are built in place and found where everything above reads them; `DEEP_BIN_DIR`, the bays and the throttle are untouched. The setting is the machine's, in `~/.cargo/config.toml`, never the repository's `.cargo/config.toml`: a machine without sccache would fail every build, and the reference Mac's budgets stay unwrapped. The Spark has run this since 2026-11-07, re-applied after the 2026-11-02 disk cleanup removed the line with the cache.
+
+  ```toml
+  [build]
+  rustc-wrapper = "sccache"
+  ```
+
+  The cache, under `~/.cache/sccache`, is capped at 40 GiB in `~/.config/sccache/config` (sccache's own default is 10 GiB; the full dependency set in both the check and the codegen form needs more):
+
+  ```toml
+  [cache.disk]
+  size = 42949672960
+  ```
+
+- **The server is the machine's, so start it as the owner.** Cargo's `sccache` calls are clients of one server per machine, which the first client starts with its own environment and which then serves every later client from that environment's `HOME`. On 2026-11-07 a test's child with a temporary `HOME` under a session's scratchpad started it: the machine's server then kept its cache in that scratchpad at the 10 GiB default, with the owner's config and warm cache unread. A server reads its config only at start. So after editing the config, and after any session could have started one, the owner stops and restarts it from a login shell, kept alive so no child's environment replaces it:
+
+  ```
+  sccache --stop-server; SCCACHE_IDLE_TIMEOUT=0 sccache --start-server
+  ```
+
+- **What defeats a hit: `CARGO_TARGET_DIR` in the environment.** sccache hashes every `CARGO_*` variable the compile sees, and cargo passes that one through. A build whose environment names a target directory misses on every crate, even the same worktree rebuilding the same leaf crate into a second directory; the `--target-dir` flag, which cargo doesn't export, is harmless. In this repository `perf.mjs`, `benchmark.mjs`, `api-surface.mjs` and `budget-window.mjs` set the variable, so their cold builds never hit and never seed; the bays delete it, so theirs do. The machine's counter read 9 Rust hits in 1,802 compiles between 22:36 and 23:00 on 2026-11-07, under the scratchpad server above; how much of that is the variable and how much is cold builds nothing had seeded needs the server's log (`SCCACHE_LOG`), a reading not yet taken.
+- **Off where a build must be bare.** `RUSTC_WRAPPER=` (empty) in a child's environment is no wrapper, over the config, and `CARGO_BUILD_RUSTC_WRAPPER=` likewise; `tests/acceptance/1016` and `1017` set them for their cold builds. `594` is bare by pointing `CARGO_HOME` at an empty folder. `1117`–`1119` only delete the variable, so with the config in place their builds run under the wrapper, which changes how long a compile takes, never which crates compile, and their criteria count crates. cargo-mutants and cargo-semver-checks run under the wrapper like any build. Toggling the wrapper on a warm `deep-hook` build recompiled 0 units either way (a reading, 2026-11-07), so a warm worktree stays warm the day the setting lands.
+- **Readings** (Spark, 2026-11-07, `cargo test --no-run -p deep-text-gpui`, 876 crates, each build into an empty target; 1-minute load 37–58 throughout, so the wall times are readings against each other, never budgets). 532 of each build's compiles are cacheable; the other 129 are binaries, proc-macros and the workspace's incremental crates.
+
+  | Build | Target named by | Wall | Rust compiles from the cache |
+  |---|---|---|---|
+  | Two detached worktrees of one commit, the first then the second | in-tree `target/` | 73 s, then 56 s | 417 of 532 on the second |
+  | Three real worktrees on three branches, two lockfiles | `CARGO_TARGET_DIR` in the environment | 85, 101, 91 s | 0 of 532 on each |
+  | Two of those worktrees again, two branches, two lockfiles | `--target-dir` flag | 59 s, then 66 s | 411 of 532 on each |
+
+  The 121 misses with the flag are the workspace's and `vendor/` crates and what depends on them, whose path is in their metadata hash. The two lockfiles differed by 13 added packages outside this closure, so a branch's lockfile drift costs only the crates it changes. `cargo clippy --all-targets -p deep-hook` took 7–8 s with or without the cache: its two crates are the workspace's own, with nothing to take. A first worktree pays nothing measurable for the wrapper: without it the small builds took 7, 8 and 18 s, as with it.
+- **What stays.** Build scripts' runs, proc-macros, binaries, linking and the workspace's own crates are never cached, and they are most of what a cached build still pays. Each worktree still keeps its own `target/`, so section 9's rule on idle worktrees' targets still applies. The cache is itself what a disk cleanup may delete; the next build repopulates it, and a missing cache is never a failure.
+
 ## 5. Proof-run cost cuts inside one run
 
 Once bays exist, most of a proof run's cost is work it repeats:
@@ -83,6 +121,7 @@ Budgets refuse to count at a load above the core count, so two sessions proving 
 - **Inherited grants.** A held grant is exported as `DEEP_THROTTLE=<class>:<id>`. Descendants pass through for build and test. timed never passes through, unless an ancestor holds timed. `DEEP_THROTTLE` is verified against the lock table, a live holder pid and the holder's place in the requester's parent-pid chain, never trusted; a forged one is ignored and a fresh grant is requested.
 - **Drain.** A timed request stops new top-level grants, then waits for every holder outside its own chain to finish or to have a descendant blocked in a throttle wait. A bay-pair holder never counts as idle for a top-level timed request, and does for a nested one. Nested requests from current holders go before new top-level ones, so two chains that each hold a grant and each ask for timed both finish, in request order.
 - **Measured runs.** `preflight.mjs` and `perf.mjs` claim timed before their timers start and hold it to the end, so a measured time contains no throttle wait. perf's lock is taken only under timed and accepts a lock held by an ancestor (`DEEP_PERF_LOCK=<pid>`, verified like `DEEP_THROTTLE`).
+- **Tests that start a measured run.** A test that starts `perf.mjs` or `preflight.mjs` (or `tests/preflight.test.mjs`) from a copy of the whole `scripts/` folder, with the machine's own table, makes that request itself; inside an `affected.mjs` block it is nested under the block's test grant, and while it is pending no top-level grant on the machine starts, until the block's neighbours finish. Such a file is in `lanes.mjs`'s `timed` list, where the request passes through on the block's grant; `tests/takes-timed.test.mjs` finds them by reading the tree. A test with a HOME of its own has a table of its own, and a copy of `perf.mjs` with no `throttle.mjs` beside it takes no grant.
 - **#1015.** Once `deep lease` runs in this repository, a timed drain also waits on `deep lease` holders on the machine. Until then #1015 leaves commands under this script alone, so the two never meet.
 
 Each caller waits for its grant at most:
@@ -109,6 +148,16 @@ The `alone` block in `lanes.mjs` exists for three different reasons, and each ge
 | A resource it shares, such as #236's shared sandbox log stream | Any folder sharing one, whatever its other reasons | Stays alone |
 
 A folder moves only when its sole reason is the binary rewrite, and only after its wrong program fails in the parallel block, before it leaves `alone`. Roughly 70–80 acceptance files spawn `cargo` themselves. An acceptance test is never edited by the agent fixing the tooling, so each needs a blind redraft (AGENTS.md, Proof) before it can read `DEEP_BIN_DIR`. Those are separate small blind jobs; T4 lands the mechanism and moves only the folders whose files need no redraft or whose redraft has merged.
+
+### 7a. Shards, exclusive folders and slow files in `affected.mjs` (owner decision, 2026-11-07)
+
+Measured over the last 80 merged PRs on 2026-11-07, `affected.mjs` took about 3.3 hours a PR on the Mac, at the fastest run recorded for each file. Three quarters of that was the `alone` block: a median PR selects 389 of its 1,047 files, run one at a time. The owner decided, to bring the average PR under 10 minutes, that until T4 and the blind redrafts land:
+
+- **Shards.** The alone block's folders run side by side, each in a shard: a fixed-path workspace, `~/deepbuild-shards/<k>/`, holding the worktree's exact tree written in place by the bays' rule (section 4), its own `target/` kept across runs, and the worktree's `node_modules/` and package builds cloned copy-on-write each use. A folder still runs one file at a time, and only in one shard at once, so its files and its builds never meet another's: a sibling's cargo build rewrites `target/debug/<bin>` only in the shard it runs in. The shards run beside the parallel block, holding one test grant between them, and `DEEP_SHARDS` sets how many, half the cores by default. A shard is taken, new or reused, only while the disk holds 5 GB for it above #1017's 30 GB floor, since its tests' builds grow it; with none, the block runs in the worktree as before. A new shard's first builds compile the workspace crates its tests build at its own path: deep-hook and deep-show took 2.4 minutes and 3.4 GB, the whole workspace about 3.5 minutes and 6 GB.
+- **Exclusive folders.** The folders whose reason is the machine itself, `lanes.mjs`'s `exclusive` list (#16's and #315's socket timing, #236's sandbox log stream), run after the shards, one at a time, in the worktree, with nothing beside them.
+- **Slow files.** `lanes.mjs`'s `slow` list names the files whose fastest recorded run took over two minutes. `affected.mjs` leaves them, as it leaves the timed ones, unless `--slow` or the change adds or edits the file, and an unrun slow file makes the run INCONCLUSIVE, never PASS (invariant 2). The release preflight runs them all, and so does the budget window's schedule.
+
+The trust a shard gives up is a bay's: it carries its `target/` from run to run, so its build is only as good as cargo's fingerprints. Lint scripts that build nothing run under no throttle grant, since in the build class they waited up to 30 minutes behind a neighbour's cargo build and ran nothing.
 
 ## 8. Remote lanes
 

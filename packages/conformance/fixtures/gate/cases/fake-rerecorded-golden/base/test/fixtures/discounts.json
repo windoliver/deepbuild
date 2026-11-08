@@ -1,0 +1,12 @@
+[
+  {
+    "cents": 2000,
+    "percent": 10,
+    "price": 1800
+  },
+  {
+    "cents": 500,
+    "percent": 50,
+    "price": 250
+  }
+]
