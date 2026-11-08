@@ -192,7 +192,11 @@ fn circle(centre: V3, u: V3, v: V3, r: f64) -> Vec<(V3, V3)> {
 
 /// Two unit vectors perpendicular to `d` and to each other.
 fn basis(d: V3) -> (V3, V3) {
-    let up = if d[1].abs() < 0.9 { [0.0, 1.0, 0.0] } else { [1.0, 0.0, 0.0] };
+    let up = if d[1].abs() < 0.9 {
+        [0.0, 1.0, 0.0]
+    } else {
+        [1.0, 0.0, 0.0]
+    };
     let u = unit(cross(d, up));
     (u, cross(d, u))
 }
@@ -233,7 +237,12 @@ impl Hub<'_> {
         let built = module == "core"
             || self.startup.sealed.modules.iter().any(|m| m.name == module)
                 && (module == "scene3d"
-                    || self.startup.sealed.modules.iter().any(|m| m.name == "scene3d"));
+                    || self
+                        .startup
+                        .sealed
+                        .modules
+                        .iter()
+                        .any(|m| m.name == "scene3d"));
         if UNDRAWN.contains(&mode) || !built {
             return missing(module);
         }
@@ -261,7 +270,10 @@ impl Hub<'_> {
         reply["rev"] = json!(revision.rev);
         // A document with a 3D layer, or one that requires scene3d, such as one of glTF meshes.
         let three = deep_canvas_scene3d::scene::has_3d(&revision.drawn)
-            || revision.drawn.pointer("/requires/modules/scene3d").is_some();
+            || revision
+                .drawn
+                .pointer("/requires/modules/scene3d")
+                .is_some();
         let drawn = if three {
             match self.mode_3d(show, args, &revision.drawn, &mut reply) {
                 Ok(rows) => rows,
@@ -320,9 +332,9 @@ impl Hub<'_> {
             }
             r
         };
-        let size = show
-            .size
-            .unwrap_or_else(|| crate::snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0))));
+        let size = show.size.unwrap_or_else(|| {
+            crate::snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
+        });
         let evidence = self.scenario.evidence.clone();
         let read = move |sha: &str| crate::evidence::read(&evidence, sha);
         let palette = self.look.light.clone();
@@ -336,7 +348,12 @@ impl Hub<'_> {
         let planted = |p: Planted| self.scenario.planted == Some(p);
         let mut diag = view_of(mode);
         let read_out = match mode {
-            "bounds" => self.bounds_3d(&scene, doc, show.t, planted(Planted::BoundsAuthoredPosition)),
+            "bounds" => self.bounds_3d(
+                &scene,
+                doc,
+                show.t,
+                planted(Planted::BoundsAuthoredPosition),
+            ),
             "lights_cameras" => lights_cameras(&scene, doc, planted(Planted::LightsLocalPosition)),
             "uv_checker" => {
                 let fit = planted(Planted::CheckerFitsSurface);
@@ -350,7 +367,8 @@ impl Hub<'_> {
             "probes" => self.probes(&scene),
             "sound_sources" => sound_sources(doc, show.t)?,
             "deviation" => {
-                let (read_out, per_vertex, top) = self.deviation(&scene, args, planted(Planted::DeviationOneWay))?;
+                let (read_out, per_vertex, top) =
+                    self.deviation(&scene, args, planted(Planted::DeviationOneWay))?;
                 diag = Some(deep_scene3d_render::Diag::Deviation { per_vertex, top });
                 read_out
             }
@@ -360,8 +378,14 @@ impl Hub<'_> {
         // planted one keeps a document's until its item count changes).
         let mut boxes = scene.boxes();
         if planted(Planted::ModeIdsByCount) {
-            let count = doc.get("items").and_then(Value::as_object).map_or(0, Map::len);
-            let kept = self.mode_ids.entry(show.doc.clone()).or_insert((count, boxes.clone()));
+            let count = doc
+                .get("items")
+                .and_then(Value::as_object)
+                .map_or(0, Map::len);
+            let kept = self
+                .mode_ids
+                .entry(show.doc.clone())
+                .or_insert((count, boxes.clone()));
             if kept.0 != count {
                 *kept = (count, boxes.clone());
             }
@@ -376,7 +400,12 @@ impl Hub<'_> {
                     segments: read_out
                         .lines
                         .iter()
-                        .map(|(a, b)| Segment { a: *a, b: *b, wa: 1.5, wb: 1.5 })
+                        .map(|(a, b)| Segment {
+                            a: *a,
+                            b: *b,
+                            wa: 1.5,
+                            wb: 1.5,
+                        })
                         .collect(),
                     world: false,
                     color: ink,
@@ -390,7 +419,9 @@ impl Hub<'_> {
             });
         }
         let diag = diag.unwrap_or(deep_scene3d_render::Diag::Plain);
-        let gpu = self.gpu3().ok_or_else(|| refuse("unsupported_platform", json!({})))?;
+        let gpu = self
+            .gpu3()
+            .ok_or_else(|| refuse("unsupported_platform", json!({})))?;
         let (rgba, counts) = gpu
             .render(&scene, &look, &diag)
             .ok_or_else(|| refuse("unsupported_platform", json!({})))?;
@@ -398,18 +429,22 @@ impl Hub<'_> {
         let sha = crate::evidence::put(&self.scenario.evidence, &png)
             .map_err(|_| refuse("evidence_unwritable", json!({})))?;
         self.display_only.insert(sha.clone());
-        reply["snapshots"] = json!([{"sha256": sha, "w": size[0], "h": size[1], "display_only": true}]);
+        reply["snapshots"] =
+            json!([{"sha256": sha, "w": size[0], "h": size[1], "display_only": true}]);
         reply["visible"] = crate::snapshot::visible(boxes, 1.0, size);
         if let Some(r) = reply.as_object_mut() {
             r.extend(read_out.extra);
         }
         let mut rows = read_out.rows;
         match mode {
-            "overdraw" => rows.push(json!({"id": "frame", "what": "overdraw", "max": counts.max_overdraw})),
+            "overdraw" => {
+                rows.push(json!({"id": "frame", "what": "overdraw", "max": counts.max_overdraw}))
+            }
             "lights_per_cluster" => rows.push(json!({"id": "frame", "what": "lights_per_cluster",
                                                      "max": counts.max_lights_per_cluster})),
             "cascade_splits" => rows.push(json!({"id": "frame", "what": "cascade_splits",
-                                                 "splits_m": counts.cascade_splits})),
+                                                 "splits_m": counts.cascade_splits,
+                                                 "drawn_by_frame": counts.cascaded})),
             _ => {}
         }
         Ok(rows)
@@ -442,7 +477,8 @@ impl Hub<'_> {
                     pos = at;
                 }
                 out.lines.extend(box_edges(min, max));
-                out.rows.push(json!({"id": s.id, "what": "box", "pos": pos, "min": min, "max": max}));
+                out.rows
+                    .push(json!({"id": s.id, "what": "box", "pos": pos, "min": min, "max": max}));
             }
         }
         out
@@ -456,8 +492,10 @@ impl Hub<'_> {
             let data = crate::evidence::put(&self.scenario.evidence, &p.data).ok();
             let (u, v) = basis([0.0, 1.0, 0.0]);
             out.lines.extend(circle(p.pos, u, v, p.size[0] / 2.0));
-            out.rows.push(json!({"id": p.id, "what": "probe", "type": p.kind.name(), "pos": p.pos,
-                                 "size": p.size, "data": data}));
+            out.rows.push(
+                json!({"id": p.id, "what": "probe", "type": p.kind.name(), "pos": p.pos,
+                                 "size": p.size, "data": data}),
+            );
         }
         out
     }
@@ -470,7 +508,14 @@ impl Hub<'_> {
         scene: &Scene,
         args: &ModeArgs,
         one_way: bool,
-    ) -> Result<(Read, std::sync::Arc<std::collections::BTreeMap<String, Vec<f32>>>, f64), Value> {
+    ) -> Result<
+        (
+            Read,
+            std::sync::Arc<std::collections::BTreeMap<String, Vec<f32>>>,
+            f64,
+        ),
+        Value,
+    > {
         let refuse = |code: &str, extra: Value| {
             let mut r = json!({"outcome": "refused", "code": code, "mode": "deviation",
                                "snapshots": [], "drawn": []});
@@ -494,7 +539,11 @@ impl Hub<'_> {
             .find(|s| &s.id == item && s.mesh.is_some())
             .ok_or_else(|| refuse("ref_unresolved", json!({"path": format!("items/{item}")})))?;
         let mesh = solid.mesh.as_ref().expect("found with a mesh");
-        let item_pos: Vec<V3> = mesh.positions.iter().map(|p| apply(&solid.model, *p)).collect();
+        let item_pos: Vec<V3> = mesh
+            .positions
+            .iter()
+            .map(|p| apply(&solid.model, *p))
+            .collect();
         let ref_pos: Vec<V3> = reference_mesh
             .positions
             .iter()
@@ -523,8 +572,10 @@ impl Hub<'_> {
                    "from_reference": way(&d.from_reference), "worst": worst,
                    "legend": {"unit": "m", "top": d.largest_m}}),
         );
-        out.rows.push(json!({"id": item, "what": "deviation", "largest_m": d.largest_m,
-                             "mean_m": d.mean_m}));
+        out.rows.push(
+            json!({"id": item, "what": "deviation", "largest_m": d.largest_m,
+                             "mean_m": d.mean_m}),
+        );
         let per_vertex = std::sync::Arc::new(std::collections::BTreeMap::from([(
             item.clone(),
             d.per_vertex.iter().map(|x| *x as f32).collect::<Vec<f32>>(),
@@ -600,7 +651,11 @@ impl Hub<'_> {
 /// An item's authored `at.pos`, or the origin.
 fn authored_pos(doc: &Value, id: &str) -> V3 {
     let p = doc.pointer(&format!("/items/{id}/at/pos"));
-    [0, 1, 2].map(|k| p.and_then(|p| p.get(k)).and_then(Value::as_f64).unwrap_or(0.0))
+    [0, 1, 2].map(|k| {
+        p.and_then(|p| p.get(k))
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0)
+    })
 }
 
 /// Each light's range, cone and direction and the camera's frustum, by stable ID, at its world
@@ -610,7 +665,11 @@ fn lights_cameras(scene: &Scene, doc: &Value, local: bool) -> Read {
     let mut out = Read::default();
     for l in &scene.lights {
         // The planted reader: the light's own `at.pos`, its parent ignored.
-        let pos = if local { authored_pos(doc, &l.id) } else { l.pos };
+        let pos = if local {
+            authored_pos(doc, &l.id)
+        } else {
+            l.pos
+        };
         let kind = match l.kind {
             LightKind::Sun => "sun",
             LightKind::Point => "point",
@@ -621,7 +680,11 @@ fn lights_cameras(scene: &Scene, doc: &Value, local: bool) -> Read {
         match l.kind {
             LightKind::Sun => out.lines.push((pos, add(pos, mul(dir, 1.0)))),
             LightKind::Spot => {
-                let reach = if l.range.is_finite() && l.range > 0.0 { l.range.min(3.0) } else { 1.0 };
+                let reach = if l.range.is_finite() && l.range > 0.0 {
+                    l.range.min(3.0)
+                } else {
+                    1.0
+                };
                 let (u, v) = basis(dir);
                 for cos in [l.cone[0], l.cone[1]] {
                     let sin = (1.0 - cos * cos).max(0.0).sqrt();
@@ -630,12 +693,19 @@ fn lights_cameras(scene: &Scene, doc: &Value, local: bool) -> Read {
                     out.lines.extend(circle(centre, u, v, r));
                     for k in 0..4 {
                         let a = std::f64::consts::FRAC_PI_2 * k as f64;
-                        out.lines.push((pos, add(centre, add(mul(u, r * a.cos()), mul(v, r * a.sin())))));
+                        out.lines.push((
+                            pos,
+                            add(centre, add(mul(u, r * a.cos()), mul(v, r * a.sin()))),
+                        ));
                     }
                 }
             }
             _ => {
-                let r = if l.range.is_finite() && l.range > 0.0 { l.range.min(3.0) } else { 0.5 };
+                let r = if l.range.is_finite() && l.range > 0.0 {
+                    l.range.min(3.0)
+                } else {
+                    0.5
+                };
                 for (u, v) in [
                     ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
                     ([0.0, 1.0, 0.0], [0.0, 0.0, 1.0]),
@@ -652,15 +722,20 @@ fn lights_cameras(scene: &Scene, doc: &Value, local: bool) -> Read {
     let cam = &scene.camera;
     let [w, h] = cam.size;
     let near = cam.near.max(0.05);
-    let corners = |z: f64| [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]].map(|[x, y]| cam.unproject(x, y, z));
+    let corners =
+        |z: f64| [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]].map(|[x, y]| cam.unproject(x, y, z));
     let (a, b) = (corners(near), corners(near + 2.0));
     for k in 0..4 {
         out.lines.push((a[k], a[(k + 1) % 4]));
         out.lines.push((b[k], b[(k + 1) % 4]));
         out.lines.push((a[k], b[k]));
     }
-    let id = doc.get("camera").and_then(Value::as_str).unwrap_or("camera");
-    out.rows.push(json!({"id": id, "what": "camera", "pos": cam.eye, "forward": cam.forward}));
+    let id = doc
+        .get("camera")
+        .and_then(Value::as_str)
+        .unwrap_or("camera");
+    out.rows
+        .push(json!({"id": id, "what": "camera", "pos": cam.eye, "forward": cam.forward}));
     out
 }
 
@@ -684,8 +759,10 @@ fn uv_checker(scene: &Scene, fit: bool) -> Read {
         } else {
             [0, 1].map(|k| ((hi[k] - lo[k]) * PER_UNIT).round() as i64)
         };
-        out.rows.push(json!({"id": s.id, "what": "checker", "cells": cells, "per_unit": PER_UNIT as i64,
-                             "uv_min": lo, "uv_max": hi}));
+        out.rows.push(
+            json!({"id": s.id, "what": "checker", "cells": cells, "per_unit": PER_UNIT as i64,
+                             "uv_min": lo, "uv_max": hi}),
+        );
     }
     out
 }
@@ -716,7 +793,8 @@ fn normals(scene: &Scene, from_faces: bool) -> Read {
             let from = apply(&s.model, *p);
             let to = add(from, mul(turn_normal(&s.model, n), NORMAL_M));
             out.lines.push((from, to));
-            out.rows.push(json!({"id": s.id, "what": "normal", "vertex": k, "from": from, "to": to}));
+            out.rows
+                .push(json!({"id": s.id, "what": "normal", "vertex": k, "from": from, "to": to}));
         }
     }
     out
@@ -727,7 +805,11 @@ fn normals(scene: &Scene, from_faces: bool) -> Read {
 fn tangents(scene: &Scene) -> Read {
     let mut out = Read::default();
     for s in scene.layers.iter().flat_map(|l| &l.solids) {
-        let Some(m) = s.mesh.as_ref().filter(|m| !m.uv0.is_empty() || !m.tangents.is_empty()) else {
+        let Some(m) = s
+            .mesh
+            .as_ref()
+            .filter(|m| !m.uv0.is_empty() || !m.tangents.is_empty())
+        else {
             continue;
         };
         let n = m.positions.len();
@@ -735,7 +817,10 @@ fn tangents(scene: &Scene) -> Read {
         if m.tangents.is_empty() {
             for t in m.indices.chunks_exact(3) {
                 let [a, b, c] = [0, 1, 2].map(|k| t[k] as usize);
-                let (e1, e2) = (sub(m.positions[b], m.positions[a]), sub(m.positions[c], m.positions[a]));
+                let (e1, e2) = (
+                    sub(m.positions[b], m.positions[a]),
+                    sub(m.positions[c], m.positions[a]),
+                );
                 let (du1, dv1) = (m.uv0[b][0] - m.uv0[a][0], m.uv0[b][1] - m.uv0[a][1]);
                 let (du2, dv2) = (m.uv0[c][0] - m.uv0[a][0], m.uv0[c][1] - m.uv0[a][1]);
                 let det = du1 * dv2 - du2 * dv1;
@@ -758,15 +843,24 @@ fn tangents(scene: &Scene) -> Read {
                 None => {
                     // Gram–Schmidt against the normal; the handedness from the bitangent.
                     let t = unit(sub(tan[k], mul(normal, dot(normal, tan[k]))));
-                    (t, if dot(cross(normal, t), bit[k]) < 0.0 { -1 } else { 1 })
+                    (
+                        t,
+                        if dot(cross(normal, t), bit[k]) < 0.0 {
+                            -1
+                        } else {
+                            1
+                        },
+                    )
                 }
             };
             let world = unit(turn(&s.model, t));
             let from = apply(&s.model, m.positions[k]);
             let to = add(from, mul(world, NORMAL_M));
             out.lines.push((from, to));
-            out.rows.push(json!({"id": s.id, "what": "tangent", "vertex": k, "from": from, "to": to,
-                                 "tangent": world, "w": w}));
+            out.rows.push(
+                json!({"id": s.id, "what": "tangent", "vertex": k, "from": from, "to": to,
+                                 "tangent": world, "w": w}),
+            );
         }
     }
     out
@@ -774,9 +868,15 @@ fn tangents(scene: &Scene) -> Read {
 
 /// The transport's frame length in flicks, from its `frame_rate` (60/1 by default).
 fn frame_flicks(doc: &Value) -> i64 {
-    let rate = doc.pointer("/transport/frame_rate").and_then(Value::as_str).unwrap_or("60/1");
+    let rate = doc
+        .pointer("/transport/frame_rate")
+        .and_then(Value::as_str)
+        .unwrap_or("60/1");
     let (n, d) = rate.split_once('/').unwrap_or((rate, "1"));
-    let (n, d) = (n.trim().parse::<i64>().unwrap_or(60), d.trim().parse::<i64>().unwrap_or(1));
+    let (n, d) = (
+        n.trim().parse::<i64>().unwrap_or(60),
+        d.trim().parse::<i64>().unwrap_or(1),
+    );
     crate::shared::FLICKS * d / n.max(1)
 }
 
@@ -793,11 +893,15 @@ fn motion_paths(doc: &Value, args: &ModeArgs) -> Result<Read, Value> {
     }
     let frame = frame_flicks(doc);
     let at = |t: i64| -> Result<Vec<(String, V3)>, Value> {
-        let placed = deep_canvas_scene3d::scene::placed_at(doc, t)
-            .map_err(|r| refuse(r.code, &r.path))?;
-        Ok(placed.into_iter().map(|(id, _, w)| (id, origin(&w))).collect())
+        let placed =
+            deep_canvas_scene3d::scene::placed_at(doc, t).map_err(|r| refuse(r.code, &r.path))?;
+        Ok(placed
+            .into_iter()
+            .map(|(id, _, w)| (id, origin(&w)))
+            .collect())
     };
-    let pos_of = |placed: &[(String, V3)], id: &str| placed.iter().find(|(i, _)| i == id).map(|(_, p)| *p);
+    let pos_of =
+        |placed: &[(String, V3)], id: &str| placed.iter().find(|(i, _)| i == id).map(|(_, p)| *p);
     let mut times: Vec<i64> = Vec::new();
     let mut t = t0;
     while t <= t1 {
@@ -826,8 +930,17 @@ fn motion_paths(doc: &Value, args: &ModeArgs) -> Result<Read, Value> {
             .and_then(Value::as_object)
             .into_iter()
             .flat_map(|c| c.values())
-            .filter(|c| c.get("target").and_then(Value::as_str).is_some_and(|t| t.starts_with(&prefix)))
-            .flat_map(|c| c.get("keys").and_then(Value::as_object).into_iter().flat_map(|k| k.values()))
+            .filter(|c| {
+                c.get("target")
+                    .and_then(Value::as_str)
+                    .is_some_and(|t| t.starts_with(&prefix))
+            })
+            .flat_map(|c| {
+                c.get("keys")
+                    .and_then(Value::as_object)
+                    .into_iter()
+                    .flat_map(|k| k.values())
+            })
             .filter_map(|k| crate::hub::flicks(k.get("t")?.as_str()?))
             .filter(|t| (t0..=t1).contains(t))
             .collect();
@@ -835,33 +948,41 @@ fn motion_paths(doc: &Value, args: &ModeArgs) -> Result<Read, Value> {
         keys.dedup();
         let mut ticks = Vec::new();
         for t in keys {
-            let p = pos_of(&at(t)?, id).ok_or_else(|| refuse("ref_unresolved", &format!("items/{id}")))?;
+            let p = pos_of(&at(t)?, id)
+                .ok_or_else(|| refuse("ref_unresolved", &format!("items/{id}")))?;
             let (u, v) = ([0.06, 0.0, 0.0], [0.0, 0.0, 0.06]);
             out.lines.push((sub(p, u), add(p, u)));
             out.lines.push((sub(p, v), add(p, v)));
             ticks.push(json!({"t": t, "pos": p}));
         }
-        out.rows.push(json!({"id": id, "what": "path", "samples": samples, "ticks": ticks}));
+        out.rows
+            .push(json!({"id": id, "what": "path", "samples": samples, "ticks": ticks}));
     }
     Ok(out)
 }
 
 /// The hierarchy built for surface hits (the spatial index's, #421), its boxes down to `depth`.
 fn pick_hierarchy(doc: &Value, t: i64, depth: usize) -> Result<Read, Value> {
-    let index = deep_canvas_scene3d::spatial::Index::new(doc, t, Default::default()).map_err(|r| {
-        json!({"outcome": "refused", "code": r.code, "path": r.path, "mode": "pick_hierarchy",
+    let index =
+        deep_canvas_scene3d::spatial::Index::new(doc, t, Default::default()).map_err(|r| {
+            json!({"outcome": "refused", "code": r.code, "path": r.path, "mode": "pick_hierarchy",
                "snapshots": [], "drawn": []})
-    })?;
+        })?;
     let nodes = index.hierarchy();
     let mut out = Read::default();
     let leaves = nodes.iter().filter(|n| n.1).count();
     let deepest = nodes.iter().map(|n| n.0).max().unwrap_or(0);
     for (k, (d, leaf, b)) in nodes.iter().enumerate().filter(|(_, n)| n.0 <= depth) {
         out.lines.extend(box_edges(b.min, b.max));
-        out.rows.push(json!({"id": format!("node.{k:04}"), "what": "pick_box", "depth": d,
-                             "leaf": leaf, "min": b.min, "max": b.max}));
+        out.rows.push(
+            json!({"id": format!("node.{k:04}"), "what": "pick_box", "depth": d,
+                             "leaf": leaf, "min": b.min, "max": b.max}),
+        );
     }
-    out.extra.insert("hierarchy".into(), json!({"depth": deepest, "leaves": leaves}));
+    out.extra.insert(
+        "hierarchy".into(),
+        json!({"depth": deepest, "leaves": leaves}),
+    );
     Ok(out)
 }
 
@@ -881,11 +1002,18 @@ fn sound_sources(doc: &Value, t: i64) -> Result<Read, Value> {
             let centre = add(v.pos, mul(v.forward, reach * a.cos()));
             out.lines.extend(circle(centre, u, w, reach * a.sin()));
         }
-        let r = if v.range.is_finite() { v.range.min(5.0) } else { 5.0 };
-        out.lines.extend(circle(v.pos, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0], r));
-        out.rows.push(json!({"id": v.id, "what": "voice", "item": v.item, "pos": v.pos,
+        let r = if v.range.is_finite() {
+            v.range.min(5.0)
+        } else {
+            5.0
+        };
+        out.lines
+            .extend(circle(v.pos, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0], r));
+        out.rows.push(
+            json!({"id": v.id, "what": "voice", "item": v.item, "pos": v.pos,
                              "inner": v.inner, "outer": v.outer, "outer_gain": v.outer_gain,
-                             "range": v.range}));
+                             "range": v.range}),
+        );
     }
     Ok(out)
 }
