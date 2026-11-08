@@ -29,12 +29,14 @@ test('each wait on a process fails naming its line, and one with its reason pass
     '    let _ = child',
     '        .wait_with_output();',
     '    let _ = Command::new("deep").status(); // blocking call: headless, no window to freeze.',
+    '    let _ = std::process::Command::output(&mut command);',
     '}',
   ]);
   assert.equal(code, 1);
   assert.deepEqual(out.trim().split('\n').map((line) => line.split(': ').slice(0, 2).join(': ')), [
     'FAIL blocking call: crates/deep-app/src/view.rs:2:46',
     'FAIL blocking call: crates/deep-app/src/view.rs:6:9',
+    'FAIL blocking call: crates/deep-app/src/view.rs:8:27',
   ]);
 });
 
