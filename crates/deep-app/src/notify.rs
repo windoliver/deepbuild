@@ -382,6 +382,12 @@ pub fn notification_text(table: &Table, session: &str, now: u64) -> String {
     }
 }
 
+/// Whether a notification Notification Center still holds carries this ask's question, as the notification shows it:
+/// marked (#1510).
+pub fn carries(text: &str, question: &str) -> bool {
+    !question.is_empty() && text.contains(&crate::question::visible(question))
+}
+
 /// A notification's title: it names DeepBuild and the session's task.
 fn title(table: &Table, session: &str) -> String {
     format!("DeepBuild · {}", table.title(session))
@@ -499,6 +505,18 @@ mod tests {
         assert!(text.contains("Open invoice\\u{202e}txt.exe?"), "{text}");
         assert!(text.contains("If you don't answer: No\\u{202e},"), "{text}");
         assert!(!text.contains('\u{202e}'), "{text}");
+    }
+
+    #[test]
+    fn a_notification_the_app_finds_after_a_relaunch_still_carries_its_marked_question() {
+        // #1510: the posted text holds the marked question, so a relaunch that looks for the raw one withdraws it.
+        let question = "Deploy?\nThis restarts prod\u{202e}";
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
+            "question": question, "default": "no", "deadline": 1_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        let text = notification_text(&view(&[ask]).table(), "s1", 1_000);
+        assert!(carries(&text, question), "{text}");
+        assert!(!carries(&text, "Push?"), "{text}");
     }
 
     #[test]

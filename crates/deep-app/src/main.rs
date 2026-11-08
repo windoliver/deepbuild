@@ -1090,7 +1090,7 @@ mod notifications {
                             row["session"] == notification.session.as_str()
                                 && row["status"] != "closed"
                                 && row["question"].as_str().is_some_and(|question| {
-                                    !question.is_empty() && notification.text.contains(question)
+                                    notify::carries(&notification.text, question)
                                 })
                         })
                         .and_then(|row| row["ask"].as_str().map(str::to_owned));

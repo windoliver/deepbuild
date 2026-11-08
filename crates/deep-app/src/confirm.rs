@@ -6,12 +6,10 @@
 
 /// What the prompt says: the question and the option, so you confirm one answer, never a blank yes.
 pub fn reason(question: &str, option: &str) -> String {
-    // The OS draws its prompt from the record's text too, so it shows the card's marks (#1510).
+    // The OS draws its prompt from the record's text too, so it shows the card's marks (#1510), each whole: the text
+    // is cut before it is marked.
     let short = |text: &str, at: usize| {
-        crate::question::visible(text)
-            .chars()
-            .take(at)
-            .collect::<String>()
+        crate::question::visible(&text.chars().take(at).collect::<String>())
     };
     format!(
         "answer “{}” with “{}”",
@@ -29,6 +27,17 @@ mod tests {
         assert_eq!(
             reason("Push to main?", "Allow"),
             "answer “Push to main?” with “Allow”"
+        );
+    }
+
+    #[test]
+    fn a_long_question_is_cut_before_its_marks_so_none_is_cut_in_half() {
+        // #1510: a mark cut in half no longer names the character it stands for.
+        let question = format!("{}\u{202e}txt", "a".repeat(119));
+        let reason = reason(&question, "Allow");
+        assert!(
+            reason.contains(&format!("{}\\u{{202e}}”", "a".repeat(119))),
+            "{reason}"
         );
     }
 }
