@@ -37,7 +37,7 @@ const SHOTS = {
     push: { start: '0s', end: '2s', camera: 'cam', move: 'push', frame: { keep: ['hero'] } },
     orbit: { start: '2s', end: '4s', camera: 'cam', move: 'orbit', by: 60, target: [0, 0.6, 0], orbit: { azimuth: 35, elevation: 20, distance: 5 }, join: { glide: { span: '0.6s' } } },
     low: { start: '4s', end: '5.5s', camera: 'cam', move: 'hold', target: [0, 0.8, 0], orbit: { azimuth: -40, elevation: 5, distance: 4.5 } },
-    zoom: { start: '5.5s', end: '8s', camera: 'cam', move: 'log_zoom', by: 0.02, target: [0, 0.6, 0], orbit: { azimuth: 20, elevation: 30, distance: 60 } },
+    zoom: { start: '5.5s', end: '8s', camera: 'cam', move: 'log_zoom', by: 0.1, target: [0, 0.6, 0], orbit: { azimuth: 20, elevation: 30, distance: 60 } },
   },
   transitions: { k: { from: 'orbit', to: 'low', kind: 'cut' } },
 };
