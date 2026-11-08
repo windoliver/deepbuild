@@ -37,6 +37,7 @@ mod liveview;
 mod lod;
 mod marks2d;
 mod opframe;
+mod paintfx;
 mod parity;
 mod plugin;
 mod print2d;
@@ -91,6 +92,8 @@ pub enum Planted {
     BackdropReadsLaterItems,
     BackdropPastCoverage,
     BackdropReadsStatus,
+    /// #467 AC5's: a bevel lit from the side opposite its light.
+    BevelLitOpposite,
     VividLightAsLinearLight,
     DissolveReadsPlayback,
     PassLinearIn2d,
@@ -325,6 +328,7 @@ impl Planted {
             "backdrop_reads_later_items" => Planted::BackdropReadsLaterItems,
             "backdrop_past_coverage" => Planted::BackdropPastCoverage,
             "backdrop_reads_status" => Planted::BackdropReadsStatus,
+            "bevel_lit_opposite" => Planted::BevelLitOpposite,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,
