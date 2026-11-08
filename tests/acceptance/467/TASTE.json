@@ -1,0 +1,18 @@
+{
+  "issue": 467,
+  "criterion": "#467.16dd5c0a",
+  "verdict": "looks_right",
+  "who": "Claude, delegated by the owner in the session",
+  "when": "2026-11-08T01:07:23Z",
+  "screenshots": {
+    "text-drop.png": "49cf6915e349d5391c2a935d650530896f6e061cbff75563d9f577738c6bb6f5",
+    "text-glow.png": "83f2dd9fe8f3d9f64778ec1a94e74d529e0e5eb4b6dfff0079b2984739e876ab",
+    "text-inner-shade.png": "3466b7e9e0f84d448a7248c12b158b89f30d61664a11f3b5105fc68abb2c1dd5",
+    "text-bevel.png": "0d6b54425c380790ea17cd08fbd083c6b2610f646f0cf5c32816121f691d1cd6",
+    "text-satin.png": "aa7110073a841848e3de8124a111f731c5f933864f39e995a4757aef8d33934e",
+    "y-sort.png": "c19ac6996011b0e6b04caba281f3d41a0b0bd263ca30037267e78d6f2b245aa2",
+    "parallax-clouds.png": "2aa78577da512b60b9f53c973b404ccfadbd9d461764b1515b32025eb9e55831",
+    "parallax-bands.apng": "c5a45815d4de63ffef50e3c0721e8d6223296ed9ce8885085bb89d7bb01ad617"
+  },
+  "note": "Viewed every still, and read pixels where a part was faint. Drop: the red copy sits 6 px down and right under the title, the same glyph run. Inner shade: the upper-left edges of each letter darken (the look light at 135 degrees) and the lower-right keep the title blue. Bevel: lit rims on the upper left, shaded lower right. Satin: a soft darkening inside the letters only. y sort at 2.5 s: back to front b, d, c, a, and e under f, as foot y, order key, then ID give. Parallax clouds: the cloud group repeats 170 u apart over the hills. Reservations: the glow card barely shows, since the fixture look screens a pale amber glow over cream paper, so the paper lightens only from (244, 236, 216) to about (247, 240, 223) beside the letters; it is drawn and falls off, but reads weakly. Satin at opacity 0.5 in multiply is subtle on dark type. The recording was not played back frame by frame; its loop is held by the AC6 checks."
+}
