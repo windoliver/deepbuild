@@ -88,8 +88,13 @@ pub struct Glyph {
     pub id: u32,
     pub x: f32,
     pub y: f32,
+    /// #496: the glyph's advance as shaped, in logical pixels.
+    pub advance: f32,
     /// The grapheme cluster (UAX #29) of the shown text the glyph belongs to.
     pub grapheme: usize,
+    /// #496: the face's normalized variation coordinates (F2Dot14 bits) the glyph was shaped at,
+    /// empty for a static face; outlines and rasters read the glyph at them.
+    pub coords: Arc<[i16]>,
 }
 
 /// A shaped text: its glyphs and the box they take.
@@ -222,6 +227,12 @@ impl Shaper {
                 };
                 let font = run.run().font().clone();
                 let size = run.run().font_size();
+                let coords: Arc<[i16]> = run
+                    .run()
+                    .normalized_coords()
+                    .iter()
+                    .map(|c| c.to_bits())
+                    .collect();
                 // The run's clusters in the order its glyphs are drawn, each with its glyphs.
                 let clusters = run.run().visual_clusters().flat_map(|c| {
                     let first = c.text_range().start;
@@ -234,7 +245,9 @@ impl Shaper {
                         id: glyph.id,
                         x: glyph.x,
                         y: glyph.y,
+                        advance: glyph.advance,
                         grapheme: grapheme(byte),
+                        coords: coords.clone(),
                     });
                 }
             }
