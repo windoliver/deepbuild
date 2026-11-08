@@ -689,6 +689,9 @@ pub struct Scene {
     pub mirror: Option<crate::mirror::Mirror>,
     /// The view's flare (#465; Effect: flare): the first `effect@1` of kind flare.
     pub flare: Option<Arc<crate::flare::Flare>>,
+    /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
+    /// in item order. They draw nothing in the look.
+    pub probes: Vec<crate::probe::Probe>,
 }
 
 impl Scene {
@@ -2174,6 +2177,7 @@ pub(crate) fn evaluate_compiled(
     let mut instancers: Vec<(usize, String)> = Vec::new();
     let mut cutaway = None;
     let mut flare: Option<Arc<crate::flare::Flare>> = None;
+    let mut probe_items: Vec<crate::probe::Wanted> = Vec::new();
     // The IES tables the lights name (#446).
     let mut tables: Vec<Arc<crate::ies::Distribution>> = Vec::new();
     for layer_id in &order {
@@ -2622,6 +2626,11 @@ pub(crate) fn evaluate_compiled(
                     )?);
                 }
                 "cutaway@1" => {}
+                // #427: a probe draws nothing; its capture is made once the lights are read.
+                "light.probe@1" => {
+                    let pos = origin(&world(&items, id));
+                    probe_items.push(crate::probe::read(id, params, pos, &path)?);
+                }
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -2822,6 +2831,7 @@ pub(crate) fn evaluate_compiled(
         return refused("out_of_range", "budget/puffs");
     }
     crate::sets::compile(map, &mut lights, &mut layers)?;
+    let probes = probes(map, probe_items, &lights, &layers, sky.as_ref())?;
     // #149: a drawing look lights its marks from its own light, with no Light item.
     if let (None, true, Some(l)) = (&sun, lights.is_empty(), drawn_light(look)) {
         sun = Some(l);
@@ -2858,10 +2868,50 @@ pub(crate) fn evaluate_compiled(
         ),
         mirror: None,
         flare,
+        probes,
     };
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
     Ok(scene)
+}
+
+/// The document's light probes, each captured or baked from what it sees (#427). Figures and
+/// data views refuse probes, and `budget.probes` caps each type (reflection 8, irradiance 4).
+fn probes(
+    map: &Map<String, Value>,
+    wanted: Vec<crate::probe::Wanted>,
+    lights: &[crate::light::Light],
+    layers: &[Layer3],
+    sky: Option<&crate::sky::Sky>,
+) -> Result<Vec<crate::probe::Probe>, Refused> {
+    use crate::probe::{ProbeKind, MAX_IRRADIANCE, MAX_REFLECTION};
+    let Some(first) = wanted.first() else {
+        return Ok(Vec::new());
+    };
+    if matches!(
+        map.get("profile").and_then(Value::as_str),
+        Some("figure" | "view" | "chart" | "sheet" | "cells")
+    ) {
+        return refused("out_of_range", format!("items/{}/kind", first.id));
+    }
+    for (kind, name, most) in [
+        (ProbeKind::Reflection, "reflection", MAX_REFLECTION),
+        (ProbeKind::Irradiance, "irradiance", MAX_IRRADIANCE),
+    ] {
+        let cap = map
+            .get("budget")
+            .and_then(|b| b.pointer(&format!("/probes/{name}")))
+            .and_then(Value::as_u64)
+            .map_or(most, |c| (c as usize).min(most));
+        if wanted.iter().filter(|w| w.kind == kind).count() > cap {
+            return refused("out_of_range", format!("budget/probes/{name}"));
+        }
+    }
+    let around = crate::probe::Surroundings::of(layers, sky.map(|s| s.ambient));
+    Ok(wanted
+        .into_iter()
+        .map(|w| crate::probe::capture(w, lights, &around))
+        .collect())
 }
 
 /// Whether `id` and each of its parents are visible (Item: `visible`, inherited).

@@ -1780,6 +1780,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         out.push(deep_canvas_scene3d::building::module());
         // Issue #453: the loop's check kinds, geometry.shading first.
         out.push(deep_canvas_loop::module());
+        // Issue #427: the media module's strips and emitters, read as data.
+        out.push(deep_canvas_scene3d::emitters::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
