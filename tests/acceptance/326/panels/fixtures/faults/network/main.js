@@ -2,7 +2,7 @@
 // host the test listens on; the test writes that listener's port over __PORT__ and counts the
 // connections it gets. panel@1 refuses it with a message that says "network", and no connection
 // ever arrives.
-import { View, div } from "gpui-kit";
+import { View, div } from "@deepbuild/panel";
 
 export default class Network extends View {
   init() {
