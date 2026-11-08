@@ -3,7 +3,7 @@
 // points across and from 40 to 960 down, over the card's rect and past it (README, The card and
 // the slot). panel@1 refuses it with a message that says "draw", and no pixel outside its slot
 // changes.
-import { View, div } from "gpui-kit";
+import { View, div } from "@deepbuild/panel";
 
 export default class Draw extends View {
   render() {

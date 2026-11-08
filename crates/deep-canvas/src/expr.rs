@@ -130,6 +130,9 @@ pub enum Planted {
     SincAsSinOverX,
     /// noise's and fbm's interval forms from 8 samples of the range, their least and greatest.
     NoiseFormSamples8,
+    /// #493: every function's interval form from its point values at the range's ends, each
+    /// rounded to nearest rather than outward.
+    RoundsToNearest,
 }
 
 impl Planted {
@@ -140,6 +143,7 @@ impl Planted {
             "table_form_samples_8" => Planted::TableFormSamples8,
             "sinc_as_sin_over_x" => Planted::SincAsSinOverX,
             "noise_form_samples_8" => Planted::NoiseFormSamples8,
+            "rounds_to_nearest" => Planted::RoundsToNearest,
             _ => return None,
         })
     }
@@ -1987,6 +1991,13 @@ fn range(n: &Node, cx: &mut Cx<'_, B>) -> B {
                     Iv::point(ops::sin(x.lo)).hull(Iv::point(ops::sin(x.hi)))
                 }),
                 (Some(Planted::SincAsSinOverX), Fun::Sinc) => bmap1(a[0], |x| iv::sin(x).div(x)),
+                (Some(Planted::RoundsToNearest), _) if a.len() == 1 => {
+                    let f = *f;
+                    bmap1(a[0], |x| {
+                        let at = |p: f64| Iv::point(call(f, &[V::S(p)]).num());
+                        at(x.lo).hull(at(x.hi))
+                    })
+                }
                 (Some(Planted::NoiseFormSamples8), Fun::Noise | Fun::Fbm) => {
                     let mut pa = [V::S(0.0); ARGS];
                     for (slot, b) in pa.iter_mut().zip(a) {
