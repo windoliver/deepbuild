@@ -123,21 +123,22 @@ export class OpenItems {
       // Raised again after evidence closed it, it opens again, citing that closing; one your answer closed stays
       // closed, as does one you accepted or waived through its ask while evidence held it closed. The planted wrong
       // program opens again whatever closed it.
-      const asked = was && !was.open ? await this.asked(item) : undefined;
+      // A review note unresolved, whose item stood open since the session's own account resolved its thread, raised no ask then.
+      const note = f.from === 'review_thread' && !f.resolved_by;
+      const asked = was && (!was.open || (note && was.resolved_by)) ? await this.asked(item) : undefined;
       const again = was && !was.open && ((!was.by?.startsWith('your answer') && !asked?.closed) || this.o.plant === 'reopens-every-item') ? was.closing : null;
+      // Opened again, or open with no ask yet, it reaches you through its ask only when none is open for it and you never answered one.
+      const ask = !was || ((again !== null || was.open) && asked !== undefined && !asked.open && !asked.answered);
       // Raised again while open, it is the same record; one whose thread the session resolved since is revised, naming who did.
-      if (was && !again && !(f.resolved_by && was.open && was.resolved_by !== f.resolved_by)) continue;
+      if (was && !again && !(f.resolved_by && was.open && was.resolved_by !== f.resolved_by)) {
+        if (ask && note) this.raiseAccept(c, item, f.text);
+        continue;
+      }
       // The same error as one you waived, its run-to-run values aside, stays closed by that waiver.
       if (!was && waived.has(this.shapeOf(f.text))) continue;
       await this.opened(core, c.task, item, f, again);
-      // Opened again, it reaches you through its ask again only when none is open for it and you never answered one.
-      const ask = !was || (again !== null && !asked?.open && !asked?.answered);
       if (ask && f.from === 'section' && f.section && UNVERIFIED.has(f.section)) await this.askWaiver(c, item, f.text);
-      // A review note on the PR keeps it from Closes until it is fixed or you accept it (#87). Its ask is raised
-      // apart from the claim, so no verdict waits on the ask's resolver.
-      if (ask && f.from === 'review_thread' && !f.resolved_by) {
-        void this.askAccept(c, item, f.text).catch((error: unknown) => process.stderr.write(`deep hub: the ask for review note ${item} was not raised: ${error instanceof Error ? error.message : String(error)}\n`));
-      }
+      if (ask && note) this.raiseAccept(c, item, f.text);
     }
     for (const x of closes) if (standing.get(x.item)?.open) await this.closed(core, c.task, x.item, x.text, x.by);
     // The planted wrong program takes the agent's "completed" as closing its item.
@@ -237,6 +238,13 @@ export class OpenItems {
   private askWaiver(c: ClaimRead, item: string, text: string): Promise<void> {
     const question = `Close this open item of ${c.task} without evidence, as a waiver? The agent's final message left it: “${text.slice(0, 2000)}”`;
     return this.ask(c, item, question, { id: 'waive', label: 'Waive it: close it without evidence' });
+  }
+  /**
+   * A review note on the PR keeps it from Closes until it is fixed or you accept it (#87). Its ask is raised apart from
+   * the claim, so no verdict waits on the ask's resolver.
+   */
+  private raiseAccept(c: ClaimRead, item: string, text: string): void {
+    void this.askAccept(c, item, text).catch((error: unknown) => process.stderr.write(`deep hub: the ask for review note ${item} was not raised: ${error instanceof Error ? error.message : String(error)}\n`));
   }
   /** The ask a review note reaches you through (#87): accept it as it stands, closing its item, or keep it open. */
   private askAccept(c: ClaimRead, item: string, text: string): Promise<void> {

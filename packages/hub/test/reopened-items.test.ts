@@ -110,4 +110,14 @@ describe('#1633 review rounds: a reopened review note and its ask', () => {
     const open = raised.filter((a) => !third.events.some((e) => e.subject === `ask:${a.id}` && /^ask\.(answered|defaulted|cancelled|moot|superseded|escalated)$/.test(e.kind)));
     expect(open.length, `none is open for T and you never answered one, so its reopened note gets one new accept ask: ${listed(raised)}`).toBe(1);
   }, 900_000);
+
+  it('a note open since the session\'s own account resolved its thread gets its accept ask once the thread is unresolved', async () => {
+    const { ref, stops } = await play([YOU_GH, null]);
+    const [first, second] = stops;
+    const item = itemsOf(first!.events, ref).find(namesT)!;
+    expect(item, `the first stop opens ${T.id}'s item, naming who resolved it`).toBeDefined();
+    expect(asksForT(first!.events), 'the agent\'s own resolution raises no accept ask').toEqual([]);
+    expect(isOpen(second!.events, item), 'unresolved, it is still open').toBe(true);
+    expect(asksForT(second!.events, second!.since).length, 'none is open for it and you never answered one, so its accept ask is raised now').toBe(1);
+  }, 900_000);
 });
