@@ -2,9 +2,7 @@
 // 240 x 400 point button at the center of the panel; a click there opens a modal whose content is
 // a 1400 x 900 point magenta block, larger than the window, so wherever the host places it, it
 // reaches the question card's rect unless the host keeps it off.
-import { View, div } from "gpui-kit";
-import { v_flex } from "gpui-base";
-import { Dialog } from "gpui-component";
+import { View, div, v_flex, Dialog } from "@deepbuild/panel";
 
 export default class DialogFixture extends View {
   render() {

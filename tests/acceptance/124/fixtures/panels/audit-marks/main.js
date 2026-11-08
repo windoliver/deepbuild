@@ -1,7 +1,6 @@
 // Issue #124's marked audit panel (tests/acceptance/124/README.md, Fixtures): ../audit-clean/main.js with two wrongs
 // the UI check must name: the icon-only button has no accessible name, and the line of words is a raw string key.
-import { View, div, svg } from "gpui-kit";
-import { v_flex, Button } from "gpui-base";
+import { View, div, svg, v_flex, Button } from "@deepbuild/panel";
 
 export default class AuditMarks extends View {
   render(cx) {
