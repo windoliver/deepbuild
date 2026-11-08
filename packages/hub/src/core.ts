@@ -46,7 +46,7 @@ import { opensOf, Questions, type Sorted } from './questions.js';
 import { couldDo, reachOf, struck, type Reach, type ReachTool } from './could-do.js';
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
-import { coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
+import { SLASH_COMMAND, coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { cachedRuleFiles, creditOf, handleOf as ruleHandle, pageLines, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, setOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
@@ -650,6 +650,8 @@ export class Core {
   private readonly carried = new Map<string, Note[]>();
   /** Each Codex session's turn its last hook named, so a turn no prompt hook started is seen at its first hook. */
   private readonly turnsStarted = new Map<string, string>();
+  /** Each session's turn whose compaction a PreCompact opened and no PostCompact has closed yet (#1022). */
+  private readonly compacting = new Map<string, string>();
   /**
    * Each session's messages typed mid-turn not yet acknowledged, with the task each opened, and all those of its
    * current turn: the queue the chat line shows (#340).
@@ -1377,9 +1379,10 @@ export class Core {
     await this.queue(() => this.appendReading(session.id, session.agent, `${NEWER_SET} its process started after the sync its row named, so it loads the MCP servers and skills synced since.`));
   }
   /** A session.reading for the session, appended as the core. */
-  private appendReading(session: string, agent: string, reading: string): Promise<void> {
+  private appendReading(session: string, agent: string, reading: string, hook?: string): Promise<void> {
     const ts = this.now();
-    return this.append(this.connection('core', { session, agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading } });
+    const id = hook && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(hook) ? hook : ulid(ts);
+    return this.append(this.connection('core', { session, agent }), { v: 1, id, kind: 'session.reading', ts, data: { reading } });
   }
 
   // ---- Hooks.
@@ -2279,6 +2282,9 @@ export class Core {
     const turn = meta.fields?.turn_id;
     // A subagent's hooks carry its own turn; no prompt of the root's stands behind them.
     if (!turn || meta.fields?.agent_id) return;
+    // A compaction, /compact's own turn included, and a slash command are no prompt (#1022): they open no ask, and
+    // leave the turn unstarted, so a continuation that compacts first still opens its own at its next hook.
+    if (meta.event === 'PreCompact' || meta.event === 'PostCompact' || meta.event === SLASH_COMMAND) return;
     const started = this.turnsStarted.get(session.id);
     this.turnsStarted.set(session.id, turn);
     if (meta.event === 'UserPromptSubmit' || meta.event === 'SessionStart' || started === undefined || started === turn) return;
@@ -2535,7 +2541,13 @@ export class Core {
     for (const [call, c] of live.calls) if (c.ended !== undefined && now - c.ended > CALL_GRACE) live.calls.delete(call);
     // A turn you interrupted (#39) has no stop to say so: it ends here, with no claim.
     if (verified && meta.event === 'Interrupt') { state = 'finished'; void this.attention(meta.session, meta.agent, 'finished'); }
-    if (verified && meta.reading) void this.appendReading(meta.session, meta.agent, meta.reading).catch(() => undefined);
+    // A compaction is one event (#1022): a PreCompact of the turn whose compaction is still open is the same one again.
+    const turn = meta.fields?.turn_id ?? '';
+    const again = meta.event === 'PreCompact' && this.compacting.get(meta.session) === turn;
+    if (meta.event === 'PreCompact') this.compacting.set(meta.session, turn);
+    else if (meta.event === 'PostCompact' || meta.event === 'SessionEnd') this.compacting.delete(meta.session);
+    // Kept under the hook's own ID, so the copy deep-hook spooled when the hub was late is known at its replay.
+    if (verified && meta.reading && !again) void this.appendReading(meta.session, meta.agent, meta.reading, meta.id).catch(() => undefined);
     // The record reads these states from the hook events themselves; only unknown, below, is the core's to append.
     // A person's status question changes none: answered from the record it runs no model, and let through (an
     // answer waiting, or DeepBuild off) it shows its state at its next hook, as the record's row does.

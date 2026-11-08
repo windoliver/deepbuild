@@ -19,6 +19,13 @@ const TOOL_KINDS = ['shell', 'read', 'edit', 'write', 'search', 'fetch', 'mcp', 
 const FROM = ['person', 'scheduled', 'subagent', 'session', 'continuation', 'unknown'];
 const ASKS = ['tool', 'plan', 'question', 'mode'];
 const ATTENTION = ['working', 'waiting', 'finished'];
+/**
+ * The hub's moment for a Codex slash command that fires UserPromptSubmit (#1022): the command isn't a prompt you typed,
+ * so a reader keyed on the prompt's moment (a turn's start, its ask, the continue's count) passes it by.
+ */
+export const SLASH_COMMAND = 'SlashCommand';
+/** Codex's own slash commands, which Codex runs itself: never words for the model. */
+const CODEX_COMMAND = /^\/(compact|review|init|new|clear|undo|diff|status|model|permissions|approvals|mention|mcp|goal|plan|resume|fork|rename|logout|quit|exit|feedback)(?=\s|$)/;
 const SEQ_WHY = 'seq is when the hook started, in ns since the Unix epoch, as a canonical decimal string from 0 to 9223372036854775807: digits only, no sign, no leading zero, never a JSON number.';
 const MAX_MS = 9_007_199_254_740_991n;
 
@@ -276,7 +283,14 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     case 'session.end':
       data = { reason: str(payload.reason) || 'other' };
       break;
-    case 'user.ask':
+    case 'user.ask': {
+      // A Codex slash command is no prompt (#1022): a reading naming it, which opens no ask and bounds no turn.
+      const command = name === 'codex' ? CODEX_COMMAND.exec(str(payload.prompt).trim())?.[0] : undefined;
+      if (command) {
+        meta.event = SLASH_COMMAND;
+        meta.reading = `${request.event}: the slash command ${command}`;
+        return { kind: 'hook', drafts: [], meta };
+      }
       // Where the prompt came from is the core's to read, from the transcript entry it joins to.
       data = { msg: 0, text: scrub(str(mapped.text ?? payload.prompt)), tasks: [], from: FROM.includes(str(mapped.from)) ? mapped.from : 'unknown' };
       fill = 'msg';
@@ -285,6 +299,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         v = 2;
       }
       break;
+    }
     case 'tool.before':
     case 'tool.after': {
       // A tool's kind, command and paths are read from its call, which the facts map on PreToolUse.
