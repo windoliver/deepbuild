@@ -535,15 +535,27 @@ fn budget_check(
     if over.is_empty() {
         return;
     }
+    // Each operator's share of the CPU, and the costliest by name (#1417).
+    let operators: Map<String, Value> = e
+        .by_op
+        .iter()
+        .filter(|(_, ms)| *ms > 0.0)
+        .map(|(key, ms)| (key.clone(), json!(ms)))
+        .collect();
+    let costliest = e
+        .costliest_op()
+        .map(|(key, ms)| format!("; the costliest operator is {key} at {ms:.3} ms"))
+        .unwrap_or_default();
     let mut issue = Issue::envelope(
         "over_budget",
         "budget".into(),
         json!({
             "cpu_ms": e.cpu_ms, "gpu_ms": e.gpu_ms, "gpu_mb": e.gpu_mb,
+            "operators": operators,
             "fingerprint": coefficients.fingerprint,
         }),
         &format!(
-            "the document's estimate per frame passes its {} class: {}",
+            "the document's estimate per frame passes its {} class: {}{costliest}",
             class.name(),
             over.join(", ")
         ),
@@ -1994,7 +2006,8 @@ fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Iss
         }
         let target = fields.get("target").and_then(Value::as_str);
         let placed = target.is_some_and(|t| placements.is_some_and(|p| p.contains_key(t)));
-        let known = target.is_some_and(|t| t == "document" || expansions.iter().any(|e| e.instance == t));
+        let known =
+            target.is_some_and(|t| t == "document" || expansions.iter().any(|e| e.instance == t));
         if !known && !placed {
             bad(
                 "ref_unresolved",
