@@ -1,0 +1,110 @@
+# #1523's call list through `deep-hook check`, each against the shipped push, PR, merge and send defaults
+
+## Merge base 2bba2a50 (its deep-hook and its default-rules.json)
+
+jj git push --bookmark main
+    -> goes through (no entry met)
+gt submit --stack
+    -> goes through (no entry met)
+git town ship
+    -> goes through (no entry met)
+sl push
+    -> goes through (no entry met)
+glab mr merge 3
+    -> goes through (no entry met)
+gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: "PR_kwDOA"}) { clientMutationId } }'
+    -> goes through (no entry met)
+gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: "PR_kwDOA", expectedHeadOid: "0123abc"}) { clientMutationId } }'
+    -> goes through (no entry met)
+gt merge
+    -> goes through (no entry met)
+jj git push --bookmark b
+    -> goes through (no entry met)
+jj git push --remote fork
+    -> goes through (no entry met)
+gh issue create -t x
+    -> goes through (no entry met)
+"$(printf jj)" git push
+    -> goes through (no entry met)
+jj log
+    -> goes through (no entry met)
+jj git fetch
+    -> goes through (no entry met)
+gt log
+    -> goes through (no entry met)
+gh api repos/acme/shop/pulls/3
+    -> goes through (no entry met)
+gh api repos/acme/shop/pulls/3/merge
+    -> merge-needs-ask; merge-names-head
+git push origin main
+    -> push-needs-ask
+gh pr merge 12 --match-head-commit 0123abc
+    -> merge-needs-ask; merge-names-head
+
+## This change (2bba2a50 + working tree)
+
+jj git push --bookmark main
+    -> push-needs-ask
+gt submit --stack
+    -> push-needs-ask; pr-needs-ask
+git town ship
+    -> push-needs-ask; merge-needs-ask; merge-names-head
+sl push
+    -> push-needs-ask
+glab mr merge 3
+    -> merge-needs-ask; merge-names-head
+gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: "PR_kwDOA"}) { clientMutationId } }'
+    -> merge-needs-ask; merge-names-head
+gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: "PR_kwDOA", expectedHeadOid: "0123abc"}) { clientMutationId } }'
+    -> merge-needs-ask; merge-names-head
+gt merge
+    -> merge-needs-ask; merge-names-head
+jj git push --bookmark b
+    -> push-needs-ask
+jj git push --remote fork
+    -> push-needs-ask
+gh issue create -t x
+    -> authority-send
+"$(printf jj)" git push
+    -> no-unreadable-push; push-needs-ask
+jj log
+    -> goes through (no entry met)
+jj git fetch
+    -> goes through (no entry met)
+gt log
+    -> goes through (no entry met)
+gh api repos/acme/shop/pulls/3
+    -> goes through (no entry met)
+gh api repos/acme/shop/pulls/3/merge
+    -> goes through (no entry met)
+git push origin main
+    -> push-needs-ask
+gh pr merge 12 --match-head-commit 0123abc
+    -> merge-needs-ask; merge-names-head
+
+## Review round at 642a592e, fixed in 31f5f7aa (its deep-hook and its default-rules.json)
+
+gh api -X POST graphql -f query='mutation { mergePullRequest(input: {pullRequestId: "PR_kwDOA"}) { clientMutationId } }'
+    -> authority-merge; merge-needs-ask; merge-names-head
+gh api graphql -F query=@merge.graphql
+    -> authority-merge; merge-needs-ask; merge-names-head
+gh api graphql --input body.json
+    -> authority-merge; merge-needs-ask; merge-names-head
+gh api graphql -f query='mutation { enqueuePullRequest(input: {pullRequestId: "PR_kwDOA"}) { clientMutationId } }'
+    -> authority-merge; merge-needs-ask; merge-names-head
+gh api graphql -f query='mutation { dequeuePullRequest(input: {id: "PR_kwDOA"}) { clientMutationId } }'
+    -> authority-merge; merge-needs-ask; merge-names-head
+gh api graphql -f query='mutation { d: disablePullRequestAutoMerge(input: {pullRequestId: "PR_kwDOA"}) { clientMutationId } m: mergePullRequest(input: {pullRequestId: "PR_kwDOA"}) { clientMutationId } }'
+    -> authority-merge; merge-needs-ask; merge-names-head
+glab api -X PUT projects/1/merge_requests/3/merge -f sha=0123abc
+    -> authority-merge; merge-needs-ask; merge-names-head
+glab api projects/1/merge_requests/3/merge
+    -> goes through (no entry met)
+jj --config-toml 'x=1' git push
+    -> authority-push; push-needs-ask
+sl --color never push --to main
+    -> authority-push; push-needs-ask
+jj git push -r main
+    -> authority-push; push-needs-ask
+git push origin main
+    -> authority-push; push-needs-ask

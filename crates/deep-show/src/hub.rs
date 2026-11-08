@@ -282,6 +282,20 @@ pub enum Planted {
     CullByCenter,
     /// #421: a node's hierarchy bounds union only its direct children's own bounds.
     BoundsChildrenOnly,
+    /// #427: a mode's render-back draws on the live view's surface, asking its clock for a frame.
+    ModeDrawsLiveSurface,
+    /// #427: a mode's visible table is kept per document until its item count changes.
+    ModeIdsByCount,
+    /// #427: bounds reads each item's authored position, not its evaluated one at t.
+    BoundsAuthoredPosition,
+    /// #427: lights and cameras reads a light's local position, ignoring its parent.
+    LightsLocalPosition,
+    /// #427: the UV checker fits 8 × 8 cells to each surface's uv0 extent.
+    CheckerFitsSurface,
+    /// #427: deviation measures only from the reference to the item's surface.
+    DeviationOneWay,
+    /// #427: normals draws each vertex's line along a face normal of a face using it.
+    NormalsFromFaces,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -477,7 +491,7 @@ pub enum Call {
     /// #411: deep_query, and deep.canvas.read for a check plug-in.
     SceneQuery(Box<crate::query::Query>),
     /// #411: a deep_show or deep show call in a diagnostic mode; #412: from its readings' cursor.
-    Mode(Box<Show>, String, usize),
+    Mode(Box<Show>, Box<crate::modes::ModeArgs>),
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #140: the network seam's conformance suite.
@@ -755,9 +769,14 @@ pub struct Eval {
     pub clean: bool,
     pub perturb: Option<String>,
     pub pixels: bool,
+    /// #493: the film block, each camera's pose, a reduced-motion cut's dissolve, each parallax
+    /// group's offset and each text's glyphs.
+    pub film: bool,
     pub size: Option<[u16; 2]>,
     /// #855: each node's Debug text digest beside its result, a diagnostic only.
     pub debug_text: bool,
+    /// #497: document arrays to answer as the frame read them.
+    pub arrays: Vec<String>,
 }
 
 pub struct Scenario {
@@ -876,6 +895,8 @@ pub struct Hub<'a> {
     /// run took, each display only, which no check reads.
     pub look_def: Option<Value>,
     pub display_only: BTreeSet<String>,
+    /// #427's planted `mode_ids_by_count`: each document's mode visible table, by item count.
+    pub mode_ids: BTreeMap<String, (usize, Vec<(String, [f64; 4])>)>,
     pub renderer: Renderer,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
@@ -1031,6 +1052,7 @@ impl<'a> Hub<'a> {
             look: shipped_look(),
             look_def: None,
             display_only: BTreeSet::new(),
+            mode_ids: BTreeMap::new(),
             renderer: Renderer::new(),
             sched,
             sessions: BTreeMap::new(),
@@ -1229,6 +1251,9 @@ impl<'a> Hub<'a> {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
         let palette = self.look.light.clone();
+        // #493: a shot writes the camera's pose the 3D frame is drawn through.
+        let posed = crate::film::posed(doc, t);
+        let doc = posed.as_ref().unwrap_or(doc);
         let gpu = self.gpu3().ok_or(())?;
         gpu.draw(doc, t, &palette, size)
             .map(|(rgba, scene)| (rgba, size, scene.boxes()))
@@ -1493,9 +1518,9 @@ impl<'a> Hub<'a> {
         }
         let mut reply = match call {
             Call::Show(show) => self.show_call(show),
-            Call::Mode(show, mode, cursor) => {
+            Call::Mode(show, args) => {
                 self.vias.insert(show.doc.clone(), show.via.clone());
-                self.mode_show(show, mode, *cursor)
+                self.mode_show(show, args)
             }
             Call::Patch(p) => self.patch(p, None, self.now),
             Call::Read { doc, via } => self.read(doc, via.as_ref()),

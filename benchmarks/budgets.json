@@ -1245,6 +1245,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #37 first measurement: the merge base has no journey runner. One process opens the supervisor and an evidence store and runs a three-step browser journey (a navigation, a click and an expect, then an end-state check) through the journey check kind against a small Node page that env-local starts, five runs after a warm-up, and prints the medians of Playwright's own time, what the runner adds beyond it and the evidence one run stores; p50 includes Node's start and the browser's launch. The issue's 20 MB and 10% stay in tests/acceptance/37/redraft-ac16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "panel-module-load",
+      "command": [
+        "node",
+        "benchmarks/panel-module.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1425 first measurement: at the merge base a panel imports the toolkit itself and loads with no module check. One process loads each of the 12 panels in crates/deep-app/panels through `deep-panel-host run`, which runs the app's loader (the module check, then @deepbuild/panel written where gpui-shell resolves it), and updates each 20 times; p50 includes Node's and the binary's start. The issue's 4 ms per update and 1 ms the check may add to a load stay in tests/acceptance/1425/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

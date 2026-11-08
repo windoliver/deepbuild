@@ -23,6 +23,8 @@ export type Plant =
   // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
   // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
   | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
+  // #1337's: a hub that takes an event's actor from its payload, and a person's reads without the scope filter.
+  | 'actor-from-payload' | 'reads-unfiltered'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
@@ -40,6 +42,8 @@ export type Plant =
   // #84's defaults: an ask naming any effect covers all, every prompt counts whatever its `from`, the hub reads the
   // command line as text, and `--auto` needs no commit and holds no branch.
   | 'ask-covers-every-effect' | 'reads-every-from' | 'defaults-match-text' | 'auto-merge-unpinned'
+  // #1523's: a matcher that reads the program, not what it does, so every call to jj, gt, sl, glab, git town or gh api is held.
+  | 'holds-every-program'
   // #84's sorter: a proceed with no record, an ask keyed from a question's words, a send-back a question should hold,
   // a hold on every ask, a proceed that drops what fails, a task sent back naming no tool, a switch only recorded, a link to an agent's URL.
   | 'proceed-unrecorded' | 'keys-ask-from-words' | 'sends-back-held-stop' | 'holds-every-ask' | 'proceed-alone' | 'sends-back-no-tool' | 'records-switch-only' | 'link-from-agent-url'
@@ -242,7 +246,7 @@ const PLANTS: readonly string[] = [
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
-  'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned',
+  'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned', 'holds-every-program',
   'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
@@ -252,6 +256,7 @@ const PLANTS: readonly string[] = [
   'kind-without-route',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
+  'actor-from-payload', 'reads-unfiltered',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

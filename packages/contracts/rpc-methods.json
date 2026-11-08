@@ -24,6 +24,24 @@
     "called_by": "deep inbox answer"
   },
   {
+    "method": "views.installed",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1454"
+  },
+  {
+    "method": "command.run",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1454"
+  },
+  {
+    "method": "ask.confirm",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1454"
+  },
+  {
     "method": "inbox.read",
     "since": "R1",
     "stability": "stable",

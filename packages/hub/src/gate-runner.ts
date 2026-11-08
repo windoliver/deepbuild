@@ -47,6 +47,8 @@ export interface ClaimCheck {
   commit?: string;
   /** The clean runs it needs (#1018), one when absent; its held-out variants, each file by its digest in the store. */
   runs?: number; held_out?: { files: Record<string, string> }[];
+  /** A timing check (#352): a run that fails while the machine's load is past its core count is rerun alone once. */
+  timing?: boolean;
 }
 /**
  * What a workspace claim's checks read (#67): the digests its verdict pins, the reading each check's checkout holds
@@ -95,6 +97,8 @@ export interface GateOptions {
   stoodIn(r: { task: string; req: string; surface: Surface; hash: string }): Promise<void>;
   /** Whether the store still keeps every piece of evidence named: a run whose evidence is pruned never carries (#1018). */
   kept?(evidence: string[]): Promise<boolean>;
+  /** The machine's 1-minute load and the cores it is read against, for a timing check's failed run (#352); a runner without it reruns nothing. */
+  load?(): { load: number; cores: number };
   plant?: Plant | undefined;
 }
 /**
@@ -140,7 +144,13 @@ interface Entry {
   group?: string; baseFrom?: Source; variants?: string[]; waiting?: boolean; newer?: string;
   /** The readings its carry records (#1018), written after its verdict so the verdict never waits on them. */
   readings?: Promise<void>;
+  /** A timing check's run that failed under load (#352): it counts as nothing, and its rerun alone decides. */
+  loaded?: { run: string; load: number; cores: number };
 }
+/** How often a timing check's rerun reads the load again while it waits for the machine to come back under its cores. */
+const LOAD_POLL_MS = 1_000;
+/** How long that rerun waits at most: past it the check is left short of a counted run, INCONCLUSIVE, never passed. */
+const LOAD_WAIT_MS = 30 * 60_000;
 /** A slow check held in its place: what holds it (background work, a due wake-up or cron job, or a prompt within the grace window) and its record. */
 interface Held { entry: Entry; why: 'background' | 'due' | 'grace'; record: HeldRecord }
 interface Claim { claim: string; session: string; task: string; cwd: string; base: string; snapshot: string; tree: string | undefined; checkout: Promise<TempCheckout> | null; requirements: ClaimRequirement[]; entries: Map<string, Entry>; repo: Promise<string>; installs: Promise<string>; names: Promise<string>; state?: StatePin | undefined; changes?: Changes }
@@ -355,13 +365,17 @@ export class GateRunner {
   private async runOwn(c: Claim, e: Entry, dir: string, lane: 'fast' | 'slow', expected: number | null, ran?: (run: string) => void): Promise<void> {
     const stem = await this.stemOf(c, e, null);
     const key: RunKey = { check: e.check.check, stem, dir, claim: c.claim, session: sessionOf(c.session), base: false, withheld: false };
-    const shared = !this.onStack(e, dir);
+    // A timing check's result is the machine's load's as much as its files', so its runs land on no key and never carry (#352).
+    const shared = !this.onStack(e, dir) && !e.check.timing;
     const own = (async () => {
-      const run = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane, expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check), ...(shared ? { key } : {}) });
+      const start = () => this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane, expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check), ...(shared ? { key } : {}) });
+      const run = await start();
       e.runs.push(run);
       ran?.(run);
-      e.outcome = await this.retried(c, e, dir, await this.o.ended(run));
-      const id = this.keyOf.get(run);
+      // A journey's uncounted run gets its one more (#580); a timing check's failure under load, its run alone (#352).
+      const ended = await this.retried(c, e, dir, await this.o.ended(run));
+      e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
+      const id = this.keyOf.get(e.runs.at(-1)!);
       if (id) e.group = id;
       if (KEPT.has(e.outcome)) await this.variants(c, e, id, lane);
     })();
@@ -495,7 +509,9 @@ export class GateRunner {
     for (const e of c.entries.values()) {
       if (e.base && e.baseFrom && e.baseFrom.claim !== c.claim) carried.push(`${e.check.check} carried its base run ${e.baseFrom.run} from ${e.baseFrom.claim} in ${e.baseFrom.session}`);
     }
-    const reasons = [...(v.outcome === 'INVALID' ? whys : []), ...v.reasons, ...owns, ...carried];
+    // The run under load stays attached to the verdict, with its reading (#352).
+    const loaded = [...c.entries.values()].flatMap((e) => (e.loaded ? [`${e.check.check}'s ${e.loaded.run} failed at a load of ${e.loaded.load} on ${e.loaded.cores} cores and counts as neither a pass nor a failure; its rerun alone decides`] : []));
+    const reasons = [...(v.outcome === 'INVALID' ? whys : []), ...v.reasons, ...owns, ...carried, ...loaded];
     return reasons.length === v.reasons.length ? v : { ...v, reasons };
   }
   /**
@@ -510,8 +526,10 @@ export class GateRunner {
     const readers = this.o.plant === 'counts-shared-run-per-claim' && e.group ? [...this.claims.values()].flat().filter((x) => [...x.entries.values()].some((y) => y.group === e.group)).length : 1;
     const runs: RecordedRun[] = [];
     for (const s of [...on, ...loose]) {
-      const r = this.records.get(s.run);
-      if (!r) continue;
+      const recorded = this.records.get(s.run);
+      if (!recorded) continue;
+      // A timing check's run under load counts as neither a pass nor a failure (#352).
+      const r = e.loaded?.run === s.run ? { ...recorded, outcome: 'uncounted' as const } : recorded;
       if (s.claim !== c.claim) carried.push(`${e.check.check} carried ${s.withheld ? "a held-out variant's verdict, " : ''}${s.run} from ${s.claim} in ${s.session}`);
       const shown = s.withheld && !(this.o.plant === 'carry-copies-evidence' && s.claim !== c.claim) ? withheld(r) : r;
       for (let i = 0; i < (on.includes(s) ? readers : 1); i++) runs.push(i ? { ...shown, run: `${shown.run}x${i}` } : shown);
@@ -813,15 +831,18 @@ export class GateRunner {
     if (!c || entries.length !== checks.length) return false;
     c.state = state;
     // A run on the new reading is no run of the old one's key (#1018): its runs no longer count for the check.
-    for (const e of entries) { e.runs = []; e.outcome = null; e.running = true; delete e.group; delete e.variants; }
+    // A timing check's run under load on the old reading was set aside for that reading; the new one gets its own (#352).
+    for (const e of entries) { e.runs = []; e.outcome = null; e.running = true; delete e.group; delete e.variants; delete e.loaded; }
     void (async () => {
       await Promise.all(entries.map(async (e) => {
         try {
           const { dir } = await this.checkoutOf(c);
           await hold(dir, state.files);
-          const run = await this.o.start({ claim: c.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane: 'slow', expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check) });
+          const start = () => this.o.start({ claim: c.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd: dir, lane: 'slow', expected_ms: null, deadline_ms: e.check.deadline_ms ?? null, ...(e.check.references ? { references: e.check.references } : {}), ...stackOf(c, e.check) });
+          const run = await start();
           e.runs.push(run);
-          e.outcome = await this.retried(c, e, dir, await this.o.ended(run));
+          const ended = await this.retried(c, e, dir, await this.o.ended(run));
+          e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
           // Its held-out variants run again on the new reading too.
           if (KEPT.has(e.outcome)) await this.variants(c, e, undefined, 'slow');
         } catch {
@@ -1058,11 +1079,14 @@ export class GateRunner {
         const begun = new Promise<void>((done) => { started = done; });
         const own = pinned ? (async () => {
           try {
-            const id = await this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...stackOf(c, e.check) });
+            const start = () => this.o.start({ claim: e.claim, check: e.check.check, approved: e.check.approved, command: e.check.command, commit: e.commit, cwd, lane: 'slow', expected_ms: expected, deadline_ms: e.check.deadline_ms ?? null, ...stackOf(c, e.check) });
+            const id = await start();
             e.runs.push(id);
             started();
-            e.outcome = await this.retried(c, e, cwd, await this.o.ended(id));
-            if (e.outcome === 'passed' || e.outcome === 'failed') this.pinned.set(`${e.commit}\0${e.check.check}`, { run: id, outcome: e.outcome });
+            const ended = await this.retried(c, e, cwd, await this.o.ended(id));
+            e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
+            // A later claim on that commit gets the run that decided: the rerun alone, when the first ran under load (#352).
+            if (e.outcome === 'passed' || e.outcome === 'failed') this.pinned.set(`${e.commit}\0${e.check.check}`, { run: e.runs.at(-1)!, outcome: e.outcome });
           } finally {
             await this.o.checkouts().ended(pinned, token).catch(() => undefined);
           }
@@ -1091,6 +1115,29 @@ export class GateRunner {
         this.cleanup(c);
       }
     }
+  }
+  /**
+   * A timing check's run that failed while the machine's load was past its core count (#352, as runTiming keeps it):
+   * recorded with the load, counted as nothing, and rerun alone once the load is back under the cores; that run's
+   * outcome decides; one the load never let run in 30 minutes leaves the check uncounted. Only its first such run is
+   * set aside. Any other outcome is the run's own.
+   */
+  private async alone(e: Entry, run: string, outcome: string, again: () => Promise<string>): Promise<string> {
+    const machine = this.o.load;
+    if (!e.check.timing || outcome !== 'failed' || e.loaded || !machine) return outcome;
+    const { load, cores } = machine();
+    if (!(load > cores)) return outcome;
+    e.loaded = { run, load, cores };
+    const ts = this.o.now();
+    await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'run.under_load', ts, subject: run, data: { run, check: e.check.check, claim: e.claim, under_load: true, load, cores } });
+    for (const until = this.o.now() + LOAD_WAIT_MS; machine().load > cores;) {
+      if (this.o.stopping()) return 'stopped';
+      if (this.o.now() >= until) return 'uncounted';
+      await new Promise((done) => setTimeout(done, LOAD_POLL_MS));
+    }
+    const rerun = await again();
+    e.runs.push(rerun);
+    return this.o.ended(rerun);
   }
   private async staleRun(session: string, run: string, e: Entry): Promise<void> {
     const ts = this.o.now();
