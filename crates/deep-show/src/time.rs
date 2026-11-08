@@ -330,12 +330,16 @@ impl Hub<'_> {
     }
 
     /// `eval`'s and `time`'s `t`: a flick count as it is, or a literal resolved against the
-    /// document's current revision, its frame rate and its markers.
+    /// document's current revision, its frame rate and its markers; a shared document's current
+    /// document too, as `deep export` opens a stored one (#41).
     pub(crate) fn resolve_time(&self, doc: &str, t: &EvalTime) -> Result<i64, &'static str> {
         match t {
             EvalTime::Flicks(t) => Ok(*t),
             EvalTime::Literal(text) => {
-                let doc = self.current(doc).map(|r| &r.doc).ok_or("no_revision")?;
+                let doc = match self.current(doc) {
+                    Some(row) => &row.doc,
+                    None => &self.shared.get(doc).ok_or("no_revision")?.doc,
+                };
                 let time = Time::parse(text).map_err(|r| r.code)?;
                 time.resolve(&context_of(doc)).map_err(|r| r.code)
             }

@@ -1,0 +1,25 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/41/compat
+
+ ❯ compat.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  compat.test.ts [ compat.test.ts ]
+Error: Cannot find module '../../../../packages/hub/src/compat.js' imported from <checkout>/tests/acceptance/41/compat/compat.test.ts
+ ❯ compat.test.ts:25:1
+     23| import { join } from 'node:path';
+     24| import { describe, expect, it } from 'vitest';
+     25| import { checkCompat, guardedCall } from '../../../../packages/hub/src…
+       | ^
+     26| import { withHub } from '../../../../packages/hub/test/hub.js';
+     27|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  01:11:51
+   Duration  1.04s (worker 100%)
+
