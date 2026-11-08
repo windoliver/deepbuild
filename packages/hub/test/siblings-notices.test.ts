@@ -283,3 +283,54 @@ it('a loop ask naming a sender another loop ask holds leaves that hold to its ow
   expect(await held('b')).toContain('held');
   siblings.stop();
 });
+
+it("a notice handed in a hook's reply whose deep-hook was gone is handed again at the session's next hook", async () => {
+  const { wa, wb } = world();
+  const kinds: string[] = [];
+  const siblings = new Siblings(options({ append: async (_s, _a, e) => { kinds.push(String((e as { kind: string }).kind)); } }));
+  // b edits src/cart.js.
+  const pre = hook('b', wb, 'PreToolUse', 'b1');
+  await siblings.hook(pre.drafts, pre.meta);
+  const after = post('b', wb, 'b1', [patch(1, 1, [' l1', '-l2', '+L2', ' l3'])]);
+  await siblings.hook(after.drafts, after.meta);
+  // a's tool call is told, in a reply its deep-hook had already given up on: what no hook carried is handed again.
+  const first = hook('a', wa, 'PreToolUse', 'a1');
+  await siblings.hook(first.drafts, first.meta);
+  const told = await siblings.deliver(first.meta, until());
+  expect(told).toContain('src/cart.js');
+  siblings.gone(first.meta.id);
+  const next = hook('a', wa, 'PreToolUse', 'a2');
+  await siblings.hook(next.drafts, next.meta);
+  expect(await siblings.deliver(next.meta, until()), 'handed again at the next hook').toBe(told);
+  expect(kinds.filter((k) => k === 'notice.delivered'), 'each hand-off is in the record').toHaveLength(2);
+  siblings.stop();
+});
+
+it('after a restart, a "keep which?" ask you answered is not asked again for the same pair', async () => {
+  const { wa } = world();
+  const root = join(wa, '..');
+  const wc = join(root, 'wc');
+  git(join(root, 'repo'), 'worktree', 'add', '-q', '-b', 'c/issue-7', wc);
+  let skew = 0;
+  const asked: string[] = [];
+  const fresh = (asks: object[]) => new Siblings(options({
+    now: () => Date.now() + skew,
+    ask: async (_s, _a, _c, _source, ask) => { asked.push(String(ask.question)); return 'ask:11'; },
+    raw: async (query) => (query.includes('FROM sessions') ? [{ id: 'a', agent: 'claude-code', worktree: wa, last_seen: Date.now() }, { id: 'c', agent: 'codex', worktree: wc, last_seen: Date.now() }]
+      : query.includes('Keep which') ? asks : []),
+  }));
+  // Before the restart: a and c both on issue 7, asked once.
+  const one = fresh([]);
+  for (const [s, w] of [['a', wa], ['c', wc]] as const) { const h = hook(s, w, 'PreToolUse', `${s}1`); await one.hook(h.drafts, h.meta); }
+  skew = 6_000;
+  await new Promise((done) => setTimeout(done, 5_400));
+  expect(asked, 'the pair is asked once').toHaveLength(1);
+  one.stop();
+  // After it: the record holds that ask, answered; the map is read back; the same question is never put again.
+  const two = fresh([{ session_id: 'a', status: 'answered', answer: 'keep-both', question: asked[0] }]);
+  await two.restore();
+  skew = 12_000;
+  await new Promise((done) => setTimeout(done, 5_400));
+  expect(asked, 'never the same question twice').toHaveLength(1);
+  two.stop();
+}, 20_000);
