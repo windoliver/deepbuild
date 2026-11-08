@@ -682,13 +682,21 @@ fn recheck_by(
             .is_none_or(Map::is_empty)
     });
     // The budget estimate sums the whole document, so a build whose modules cost needs it whole,
-    // as does a document with a budget class in a build whose operators declare costs (#1417);
-    // a document that names packs expands at check, so a patch to it re-expands whole.
+    // as does a document with a budget class holding an item an operator declares a cost on
+    // (#1417); a document that names packs expands at check, so a patch to it re-expands whole.
     let packed = member(doc, "packs")
         .and_then(Value::as_array)
         .is_some_and(|p| !p.is_empty());
-    let budgeted =
-        crate::budget::of(doc).is_some() && sealed.ops.iter().any(|o| o.op.cost.is_some());
+    let budgeted = crate::budget::of(doc).is_some()
+        && member(doc, "items")
+            .and_then(Value::as_object)
+            .is_some_and(|items| {
+                sealed.ops.iter().filter(|o| o.op.cost.is_some()).any(|o| {
+                    items
+                        .iter()
+                        .any(|(id, item)| o.op.applies.is_none_or(|a| a(doc, id, item)))
+                })
+            });
     if !maps_empty || sealed.has_costs() || budgeted || packed {
         return None;
     }
