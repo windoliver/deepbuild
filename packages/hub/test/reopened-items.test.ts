@@ -135,4 +135,20 @@ describe('#1633 review rounds: a reopened review note and its ask', () => {
     const last = await settle(hub, () => false, 5000);
     expect(asksForT(last, defaulted), 'nothing changed about the open note, so the same question never reaches you twice').toEqual([]);
   }, 900_000);
+
+  it('a note whose ask you answered "keep it open" opens again when its thread is unresolved after a reviewer resolved it, with no new ask', async () => {
+    let kept = 0;
+    const { ref, stops } = await play([null, REVIEWER, null], async (n, events, w, hub) => {
+      if (n !== 0) return;
+      const [ask] = asksForT(events);
+      expect(ask, `the first stop raised an accept ask for ${T.id}`).toBeDefined();
+      expect((await answer(w, ask!, 'keep')).code, 'deep inbox answer … keep counts').toBe(0);
+      await settle(hub, (all) => all.some((e) => e.kind === 'ask.answered' && e.subject === `ask:${ask!.id}`), 60_000);
+      kept = await lastPos(hub);
+    });
+    const third = stops.at(-1)!;
+    const item = itemsOf(third.events, ref).find(namesT)!;
+    expect(isOpen(third.events, item), 'a reviewer closed it, so unresolved again it opens again').toBe(true);
+    expect(asksForT(third.events, kept), 'you answered its ask, so the same question never reaches you twice').toEqual([]);
+  }, 900_000);
 });
