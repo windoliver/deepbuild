@@ -1,0 +1,737 @@
+#70 acceptance tests at the base commit c12a65bb, in the two Lima VMs, November 6, 2026. Both aarch64, Node 24.22.0, the
+workspaces, deep-hook and the supervisor's helper built, `~/deepbuild` unmodified but for tests/acceptance/70.
+
+  deep-ubuntu: Ubuntu 26.04.1 LTS, kernel 7.0, ext4 root, kernel.apparmor_restrict_unprivileged_userns=1, no allowance added
+  deep-fedora: Fedora 45 Cloud, kernel 7.2, btrfs root
+
+Each file ran alone with --no-file-parallelism, one at a time in each VM, from `limactl shell`, which gives a real login
+session (session-*.scope, class user); the double fork reached PID 1 there on both. vitest's exit status follows each run.
+No run had an unhandled error. `tsc -p tests/acceptance/70/tsconfig.json` exits 0 on both. Nothing was left behind: no
+polkit rule, no unit, no temp folder, in either VM. Home paths below are redacted to <home>.
+
+One provisioning step was needed and isn't in the repo: neither VM had a Secret Service `login` collection, so
+`secret-tool store` failed. A throwaway gnome-keyring was started once in each VM through `systemd-run --user`, with a
+generated password on stdin, never stored. The transient unit ended and the daemon lives on, owning org.freedesktop.secrets;
+store and lookup still worked after the last run. A reboot needs it again (README: What each VM needs).
+
+Both distributions read the same, test for test.
+
+| Criterion | deep-ubuntu | deep-fedora | The failing line |
+|---|---|---|---|
+| AC1 #70.3a94aeb5 (2 tests) | BLOCKED | BLOCKED | no opt-in: "BLOCKED: this test starts real sessions on your plan"; with it: "BLOCKED: claude isn't runnable on PATH" and the same for codex |
+| AC2 #70.eb5a58a0 main | failed, expected | failed, expected | the refusal itself holds (exit 3, ask open); the control fails: "the same answer typed by you, polkit confirming you, exits 0: exit 3 ... the hub can't ask linux to confirm you yet" |
+| AC2 wrong program | failed, expected | failed, expected | "expected 'AC2 #70.eb5a58a0 the refusal names th...' to match /ask ask:.../": with no polkit path the plant's answer can't count, so the run stops short of naming the ask |
+| AC3 #70.18ce54cd | failed, expected | failed, expected | "deep install, polkit confirming you, must install and load the package ... exit 3 ... the hub can't ask linux to confirm you yet"; `deep secret` doesn't exist behind it |
+| AC4 #70.ef8d1e25 main + 2 wrong programs | PASSED at the base, 11 of 11 runs | PASSED at the base, 11 of 11 runs | none: merged in PR #987; both wrong programs fail the suite as they should |
+| AC5 #70.7f24fc90 main + wrong program | PASSED at the base | PASSED at the base | none: `deep-hook clone` has no Linux path, so everything can't stage; `stages-without-copy` still fails it, naming the command |
+| AC6 #70.6c040d74 | BLOCKED | BLOCKED | "BLOCKED: no Linux reference machine is configured", by design, on any program |
+| AC7 #70.b6da6dea, 2 origins | failed, expected | failed, expected | the cancelled ask stays open; then "must reach polkit ...; the boundary saw no ask: ... the hub can't ask linux to confirm you yet" |
+| AC7 wrong program, 2 origins | PASSED | PASSED | none: `answer-on-peer-check` counts the answer and the scenario fails naming the ask, as the test requires |
+| AC7 real polkitd | failed, expected | failed, expected | the rule's NO leaves the ask open; "the real polkitd saying yes exits 0 ...: exit 3 ... the hub can't ask linux to confirm you yet" |
+| AC8 #70.047e3c2e main | failed, expected | failed, expected | "terminal.open refused: ... The hub serves no method terminal.open." |
+| AC8 wrong program | failed, expected | failed, expected | "expected 'BLOCKED: the hub's service didn't s...' not to match": the plant kept-in-service-cgroup doesn't exist yet, so the hub refuses to start |
+
+AC4 at the base. Ten runs of sandbox.test.ts, then one more in the full run, on each distribution: all exit 0. The Fedora
+flake known at the base (packages/supervisor/src/bubblewrap.test.ts: ERR_CRYPTO_HASH_FINALIZED, a sandbox.denied missing
+when `wait` returns) did not show here: this suite calls sandboxSuite and never starts a run through the supervisor.
+
+What the base can't reach, and how it was read instead. These were throwaway twins in each VM's copy only, removed after,
+with no line of an implementation kept. Both distributions read the same.
+
+- AC2 and AC7, whole. The stub given through the base's own DEEP_HUB_TEST_CONFIRM, the `--allow-user-interaction` assert
+  taken out of the twin: AC2's two tests and AC7's four passed, including the systemd-run and double-fork origins,
+  counted-once, and answer-inside-session failing naming the ask. This exercises the scenarios, not polkit.
+- AC3, past `deep install`. A fake `deep secret` of about 30 lines against the real Secret Service and a real pseudo-terminal:
+  clean, the test passed. Each leak failed it, naming where: echo on ("what the terminal showed"), a base64 copy in a file,
+  a URL-encoded value in hub.log (each naming the path), and a kept copy ("keeps a copy of its own").
+- AC8's kept half. At the base a run.start run's five tracked processes sit in .../app.slice/deepbuild-hub.service and it
+  died at `systemctl --user restart`, the wrong program the criterion names. As the control, a process under
+  `systemd-run --user --scope` (.../app.slice/dh70-twin.scope) lived through the same restart.
+
+Not exercised by anything yet: AC8's terminal half past terminal.open, its wrong-program assertions, the real-polkitd YES
+path, and a real password at a real polkit prompt. The first three need the implementation.
+
+####################################################################################################
+# Ubuntu 26.04.1 LTS (deep-ubuntu): the full output
+####################################################################################################
+
+=== environment
+Ubuntu 26.04.1 LTS, kernel 7.0.0-38-generic, aarch64, root fs ext2/ext3, /tmp tmpfs, /dev/shm tmpfs, node v24.22.0, base c12a65bb
+kernel.apparmor_restrict_unprivileged_userns = 1
+=== tsc
+tsc exit=0
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/budgets.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ❯ tests/acceptance/70/budgets.test.ts (1 test | 1 failed) 3ms
+   ❯ AC6 #70.6c040d74 The same hook, hub and CLI budgets as macOS, measured on the Linux reference machine (1)
+     × AC6 #70.6c040d74 is BLOCKED until a Linux reference machine is named: nothing here can read PASS 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/70/budgets.test.ts > AC6 #70.6c040d74 The same hook, hub and CLI budgets as macOS, measured on the Linux reference machine > AC6 #70.6c040d74 is BLOCKED until a Linux reference machine is named: nothing here can read PASS
+Error: AC6 #70.6c040d74 BLOCKED: no Linux reference machine is configured, so hook-startup, deep-hook-overhead, deep-hook-fail-open, deep-hook-guards, hub-cold-start, hub-round-trip, hub-idle, deep-inbox-30d, deep-status-30, deep-doctor have no machine to count on; name one in the design and in scripts/benchmark.mjs, then redraft this test blind
+ ❯ tests/acceptance/70/budgets.test.ts:17:11
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  19:51:17
+   Duration  202ms (import 52%, transform 44%, tests 2%, worker 2%)
+
+vitest exit=1
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/sandbox.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ✓ tests/acceptance/70/sandbox.test.ts (3 tests) 49ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  19:51:17
+   Duration  256ms (import 38%, transform 35%, tests 25%, worker 1%)
+
+vitest exit=0
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/staging.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ✓ tests/acceptance/70/staging.test.ts (2 tests) 6088ms
+   ✓ AC5 #70.7f24fc90 On a filesystem without copy-on-write, a destructive command whose reach can't be known becomes an ask (2)
+     ✓ AC5 #70.7f24fc90 on tmpfs, `rm -rf build/*` and the agent-written `bash wipe.sh` each become an authority ask that says their reach is unknown, nothing is staged and build/ keeps its files 3068ms
+     ✓ AC5 #70.7f24fc90 (wrong program) a hub that records a staging it can't have made (stages-without-copy) lets the command through and fails, naming it 3019ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  19:51:17
+   Duration  6.32s (tests 97%, transform 1%, import 1%)
+
+vitest exit=0
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/secret.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ❯ tests/acceptance/70/secret.test.ts (1 test | 1 failed) 2507ms
+   ❯ AC3 #70.18ce54cd A secret entered through the CLI lands in the Secret Service and never in a file or a log (1)
+     × AC3 #70.18ce54cd with the prompt cancelled nothing lands; once polkit confirms you the value typed into deep secret add lands in the real Secret Service, comes back through the hub, and no file, log, terminal or process listing holds it 2506ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/70/secret.test.ts > AC3 #70.18ce54cd A secret entered through the CLI lands in the Secret Service and never in a file or a log > AC3 #70.18ce54cd with the prompt cancelled nothing lands; once polkit confirms you the value typed into deep secret add lands in the real Secret Service, comes back through the hub, and no file, log, terminal or process listing holds it
+Error: AC3 #70.18ce54cd deep install, polkit confirming you, must install and load the package that names the secret: exit 3, stdout "Source: /tmp/dh70-5X6UwM/vault\n  test/vault@1.0.0, digest d1:4029c5a727f728a57511fade4867e9337ef09fbf14e1f908e6073b8514ac3d39, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: none\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n", stderr "Nothing was installed: the OS didn't confirm you (the hub can't ask linux to confirm you yet).\n"
+ ❯ installVault tests/acceptance/70/secret.test.ts:58:35
+     56|   confirmWith(h, 'cancelled');
+     57|   // Not BLOCKED: `deep install` counts only once polkit confirms you,…
+     58|   if (installed.code !== 0) throw Error(`${AC3} deep install, polkit c…
+       |                                   ^
+     59| }
+     60|
+ ❯ tests/acceptance/70/secret.test.ts:105:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  19:51:24
+   Duration  2.73s (tests 94%, import 3%, transform 3%)
+
+vitest exit=1
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/restart.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ❯ tests/acceptance/70/restart.test.ts (2 tests | 2 failed) 19641ms
+   ❯ AC8 #70.047e3c2e systemctl --user restart of the hub's service leaves a hosted terminal's program and a kept run running, and the hub reattaches both (2)
+     × AC8 #70.047e3c2e each runs in a user scope of its own outside the service's cgroup, the same processes run on through the restart, and the new hub reattaches both 2362ms
+     × AC8 #70.047e3c2e (wrong program) a unit whose kept processes stay in its cgroup (kept-in-service-cgroup) loses them at the restart and fails, naming the terminal 17278ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/70/restart.test.ts > AC8 #70.047e3c2e systemctl --user restart of the hub's service leaves a hosted terminal's program and a kept run running, and the hub reattaches both > AC8 #70.047e3c2e each runs in a user scope of its own outside the service's cgroup, the same processes run on through the restart, and the new hub reattaches both
+Error: terminal.open refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method terminal.open.","path":"/method","actual":"terminal.open","evidence":[]}
+ ❯ Conn.call tests/acceptance/70/helpers.ts:349:33
+    347|     const reply = await this.wait((l) => l.id === id && ('result' in l…
+    348|     if (!reply) throw Error(`no reply to ${method} within ${timeoutMs}…
+    349|     if ('error' in reply) throw Error(`${method} refused: ${JSON.strin…
+       |                                 ^
+    350|     return reply.result as Line;
+    351|   }
+ ❯ call tests/acceptance/70/helpers.ts:359:12
+ ❯ scenario tests/acceptance/70/restart.test.ts:61:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/70/restart.test.ts > AC8 #70.047e3c2e systemctl --user restart of the hub's service leaves a hosted terminal's program and a kept run running, and the hub reattaches both > AC8 #70.047e3c2e (wrong program) a unit whose kept processes stay in its cgroup (kept-in-service-cgroup) loses them at the restart and fails, naming the terminal
+AssertionError: the planted program must start and run: expected 'BLOCKED: the hub\'s service didn\'t s…' not to match /BLOCKED|INCONCLUSIVE/
+
+- Expected:
+/BLOCKED|INCONCLUSIVE/
+
++ Received:
+"BLOCKED: the hub's service didn't start with DEEP_HUB_PLANT=kept-in-service-cgroup: exit 3, stdout \"\", stderr \"deep hub start: no hub answered at unix:/tmp/dh70-9amOrm/h/.deepbuild/hub.sock within 15 s; see /tmp/dh70-9amOrm/h/.deepbuild/logs/hub.log\\n\"; systemd says × deepbuild-hub.service - DeepBuild hub
+     Loaded: loaded (<home>/.config/systemd/user/deepbuild-hub.service; enabled; preset: enabled)
+    Drop-In: <home>/.config/systemd/user/deepbuild-hub.service.d
+             └─dh70.conf
+     Active: failed (Result: exit-code) since Fri 2026-11-06 19:51:31 PST; 15s ago
+   Duration: 87ms
+ Invocation: d67f58c833bd463bbeb0177c490362b5
+    Process: 34279 ExecStart=/usr/local/bin/node <home>/deepbuild/packages/cli/dist/main.js hub run (code=exited, status=1/FAILURE)
+   Main PID: 34279 (code=exited, status=1/FAILURE)
+   Mem peak: 36.7M
+        CPU: 105ms
+
+Nov 06 19:51:31 lima-deep-ubuntu systemd[1960]: deepbuild-hub.service: Scheduled restart job, restart counter is at 5.
+Nov 06 19:51:31 lima-deep-ubuntu systemd[1960]: deepbuild-hub.service: Start request repeated too quickly.
+Nov 06 19:51:31 lima-deep-ubuntu systemd[1960]: deepbuild-hub.service: Failed with result 'exit-code'.
+Nov 06 19:51:31 lima-deep-ubuntu systemd[1960]: Failed to start deepbuild-hub.service - DeepBuild hub.
+"
+
+ ❯ notBlocked tests/acceptance/70/helpers.ts:619:110
+    617| }
+    618| /** A plant must start and run: a BLOCKED or INCONCLUSIVE run is not i…
+    619| export const notBlocked = (message: string) => expect(message, 'the pl…
+       |                                                                                                              ^
+    620|
+ ❯ tests/acceptance/70/restart.test.ts:129:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  19:51:27
+   Duration  19.81s (tests 99%)
+
+vitest exit=1
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/answers.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ❯ tests/acceptance/70/answers.test.ts (7 tests | 5 failed) 26072ms
+   ❯ AC2 #70.eb5a58a0 An answer typed from inside an agent's process tree is refused (2)
+     × AC2 #70.eb5a58a0 `deep inbox answer`, run by the agent's Bash tool on Linux, is refused with exit 3 naming the session and the ask, even with polkit confirming you, and the same answer typed by you counts once 3185ms
+     × AC2 #70.eb5a58a0 (wrong program) a hub that lets a deep command inside an agent's process tree answer as you (answer-inside-session) fails, naming the ask 3060ms
+   ❯ AC7 #70.b6da6dea An authority answer from a process that left the agent's tree counts only once polkit confirms you (5)
+     × AC7 #70.b6da6dea typed from systemd-run --user, with the polkit prompt cancelled the ask stays open and exits 3; once polkit confirms you it counts once 3159ms
+     × AC7 #70.b6da6dea typed from a double fork PID 1 adopted, with the polkit prompt cancelled the ask stays open and exits 3; once polkit confirms you it counts once 4108ms
+     ✓ AC7 #70.b6da6dea (wrong program) a CLI that counts the answer from systemd-run --user because the peer check found no agent above it (answer-on-peer-check) fails, naming the ask 3083ms
+     ✓ AC7 #70.b6da6dea (wrong program) a CLI that counts the answer from a double fork PID 1 adopted because the peer check found no agent above it (answer-on-peer-check) fails, naming the ask 4137ms
+     × AC7 #70.b6da6dea on the real polkitd, nothing stubbed but the prompt, which a rule answers: a no leaves the ask open and a yes counts it once 5339ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/70/answers.test.ts > AC2 #70.eb5a58a0 An answer typed from inside an agent's process tree is refused > AC2 #70.eb5a58a0 `deep inbox answer`, run by the agent's Bash tool on Linux, is refused with exit 3 naming the session and the ask, even with polkit confirming you, and the same answer typed by you counts once
+AssertionError: AC2 #70.eb5a58a0 the same answer typed by you, polkit confirming you, exits 0: exit 3, stdout "", stderr "ask:01M6T24HM34DHHHY4DAC07NX2Q stays open: the OS didn't confirm you (the hub can't ask linux to confirm you yet). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.\n": expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ insideTheTree tests/acceptance/70/answers.test.ts:41:110
+     39|   // The same answer, typed by you, counts: what refused it was the pe…
+     40|   const yours = await deep(w.h, ['inbox', 'answer', handle, 'decline']…
+     41|   expect(yours.code, `${AC2} the same answer typed by you, polkit conf…
+       |                                                                                                              ^
+     42|   await expectCountedOnce(w.hub, handle, 'decline', 'typed by you');
+     43| }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/70/answers.test.ts > AC2 #70.eb5a58a0 An answer typed from inside an agent's process tree is refused > AC2 #70.eb5a58a0 (wrong program) a hub that lets a deep command inside an agent's process tree answer as you (answer-inside-session) fails, naming the ask
+AssertionError: expected 'AC2 #70.eb5a58a0 the refusal names th…' to match /ask ask:[0-9A-Za-z]+ \(answered decli…/
+
+- Expected:
+/ask ask:[0-9A-Za-z]+ \(answered decline by deep inbox answer, run inside agent session/
+
++ Received:
+"AC2 #70.eb5a58a0 the refusal names the agent's session: exit 3, stdout \"\", stderr \"ask:01M6T24MQNVBSKE0TJVWBVJDAE stays open: the OS didn't confirm you (the hub can't ask linux to confirm you yet). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.\\n\": expected 'ask:01M6T24MQNVBSKE0TJVWBVJDAE stays …' to contain 'af8ed610-5119-48ab-9ac3-a1e738a01573'"
+
+ ❯ tests/acceptance/70/answers.test.ts:74:21
+     72|     const message = await failure(() => insideTheTree('answer-inside-s…
+     73|     notBlocked(message);
+     74|     expect(message).toMatch(/ask ask:[0-9A-Za-z]+ \(answered decline b…
+       |                     ^
+     75|   }, 600_000);
+     76| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/70/answers.test.ts > AC7 #70.b6da6dea An authority answer from a process that left the agent's tree counts only once polkit confirms you > AC7 #70.b6da6dea typed from systemd-run --user, with the polkit prompt cancelled the ask stays open and exits 3; once polkit confirms you it counts once
+AssertionError: AC7 #70.b6da6dea an answer the peer check finds no agent above must reach polkit, the only thing that can make it count; the boundary saw no ask: exit 3, stdout "", stderr "ask:01M6T24QQ7PY8KBVKR2QGD2EEG stays open: the OS didn't confirm you (the hub can't ask linux to confirm you yet). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.\n": expected 0 to be greater than 0
+ ❯ outsideTheTree tests/acceptance/70/answers.test.ts:57:194
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/70/answers.test.ts > AC7 #70.b6da6dea An authority answer from a process that left the agent's tree counts only once polkit confirms you > AC7 #70.b6da6dea typed from a double fork PID 1 adopted, with the polkit prompt cancelled the ask stays open and exits 3; once polkit confirms you it counts once
+AssertionError: AC7 #70.b6da6dea an answer the peer check finds no agent above must reach polkit, the only thing that can make it count; the boundary saw no ask: exit 3, stdout "", stderr "ask:01M6T24TSTY9CSGV5041TR4FT9 stays open: the OS didn't confirm you (the hub can't ask linux to confirm you yet). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.\n": expected 0 to be greater than 0
+ ❯ outsideTheTree tests/acceptance/70/answers.test.ts:57:194
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/70/answers.test.ts > AC7 #70.b6da6dea An authority answer from a process that left the agent's tree counts only once polkit confirms you > AC7 #70.b6da6dea on the real polkitd, nothing stubbed but the prompt, which a rule answers: a no leaves the ask open and a yes counts it once
+AssertionError: AC7 #70.b6da6dea the real polkitd saying yes exits 0: the hub must reach it, with an action it knows and this process as the subject: exit 3, stdout "", stderr "ask:01M6T255W0SM8PVV413YCZC1DT stays open: the OS didn't confirm you (the hub can't ask linux to confirm you yet). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.\n": expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ tests/acceptance/70/answers.test.ts:97:163
+     95|     await polkitAnswers('YES');
+     96|     const yes = await doubleForked(w, answer);
+     97|     expect(yes.code, `${AC7} the real polkitd saying yes exits 0: the …
+       |                                                                                                                                                                   ^
+     98|     await expectCountedOnce(w.hub, handle, 'decline', 'through the rea…
+     99|   }, 600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 2 passed (7)
+   Start at  19:51:47
+   Duration  26.22s (tests 100%)
+
+vitest exit=1
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/e2e.live.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ❯ tests/acceptance/70/e2e.live.test.ts (2 tests | 2 failed) 2ms
+   ❯ AC1 #70.3a94aeb5 The R1 end-to-end suite passes on Ubuntu LTS and Fedora with Claude Code and Codex (2)
+     × AC1 #70.3a94aeb5 (live) on this distribution, every live lane of the release preflight passes with real Claude Code sessions 2ms
+     × AC1 #70.3a94aeb5 (live) on this distribution, #48's live sessions with real Codex pass 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/70/e2e.live.test.ts > AC1 #70.3a94aeb5 The R1 end-to-end suite passes on Ubuntu LTS and Fedora with Claude Code and Codex > AC1 #70.3a94aeb5 (live) on this distribution, every live lane of the release preflight passes with real Claude Code sessions
+Error: AC1 #70.3a94aeb5 BLOCKED: this test starts real sessions on your plan; run it by hand with DEEP_HARNESS_LIVE=1, signed in, in each VM
+ ❯ requireLive tests/acceptance/70/e2e.live.test.ts:21:52
+     19|
+     20| function requireLive(agent: string): void {
+     21|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error(`${AC1} BLOCK…
+       |                                                    ^
+     22|   requireLinux();
+     23|   const version = spawnSync(agent, ['--version'], { encoding: 'utf8', …
+ ❯ tests/acceptance/70/e2e.live.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/70/e2e.live.test.ts > AC1 #70.3a94aeb5 The R1 end-to-end suite passes on Ubuntu LTS and Fedora with Claude Code and Codex > AC1 #70.3a94aeb5 (live) on this distribution, #48's live sessions with real Codex pass
+Error: AC1 #70.3a94aeb5 BLOCKED: this test starts real sessions on your plan; run it by hand with DEEP_HARNESS_LIVE=1, signed in, in each VM
+ ❯ requireLive tests/acceptance/70/e2e.live.test.ts:21:52
+     19|
+     20| function requireLive(agent: string): void {
+     21|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error(`${AC1} BLOCK…
+       |                                                    ^
+     22|   requireLinux();
+     23|   const version = spawnSync(agent, ['--version'], { encoding: 'utf8', …
+ ❯ tests/acceptance/70/e2e.live.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  19:52:13
+   Duration  150ms (import 49%, transform 47%, tests 2%, worker 2%)
+
+vitest exit=1
+
+=== AC4 repeat 1 of 5
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+vitest exit=0
+
+=== AC4 repeat 2 of 5
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+vitest exit=0
+
+=== AC4 repeat 3 of 5
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+vitest exit=0
+
+=== AC4 repeat 4 of 5
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+vitest exit=0
+
+=== AC4 repeat 5 of 5
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+vitest exit=0
+
+=== AC1, the opt-in set with no sign-in
+     × AC1 #70.3a94aeb5 (live) on this distribution, every live lane of the release preflight passes with real Claude Code sessions 3ms
+     × AC1 #70.3a94aeb5 (live) on this distribution, #48's live sessions with real Codex pass 1ms
+Error: AC1 #70.3a94aeb5 BLOCKED: claude isn't runnable on PATH: spawnSync claude ENOENT
+Error: AC1 #70.3a94aeb5 BLOCKED: codex isn't runnable on PATH: spawnSync codex ENOENT
+      Tests  2 failed (2)
+vitest exit=1
+
+=== left behind
+0
+0
+0
+
+####################################################################################################
+# Fedora 45 (deep-fedora): the full output
+####################################################################################################
+
+=== environment
+Fedora Linux 45 (Cloud Edition), kernel 7.2.11-300.fc45.aarch64, aarch64, root fs btrfs, /tmp tmpfs, /dev/shm tmpfs, node v24.22.0, base c12a65bb
+=== tsc
+tsc exit=0
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/budgets.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ❯ tests/acceptance/70/budgets.test.ts (1 test | 1 failed) 3ms
+   ❯ AC6 #70.6c040d74 The same hook, hub and CLI budgets as macOS, measured on the Linux reference machine (1)
+     × AC6 #70.6c040d74 is BLOCKED until a Linux reference machine is named: nothing here can read PASS 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/70/budgets.test.ts > AC6 #70.6c040d74 The same hook, hub and CLI budgets as macOS, measured on the Linux reference machine > AC6 #70.6c040d74 is BLOCKED until a Linux reference machine is named: nothing here can read PASS
+Error: AC6 #70.6c040d74 BLOCKED: no Linux reference machine is configured, so hook-startup, deep-hook-overhead, deep-hook-fail-open, deep-hook-guards, hub-cold-start, hub-round-trip, hub-idle, deep-inbox-30d, deep-status-30, deep-doctor have no machine to count on; name one in the design and in scripts/benchmark.mjs, then redraft this test blind
+ ❯ tests/acceptance/70/budgets.test.ts:17:11
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  19:51:17
+   Duration  212ms (import 49%, transform 47%, tests 2%, worker 2%)
+
+vitest exit=1
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/sandbox.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ✓ tests/acceptance/70/sandbox.test.ts (3 tests) 42ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  19:51:17
+   Duration  256ms (transform 39%, import 38%, tests 22%, worker 1%)
+
+vitest exit=0
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/staging.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ✓ tests/acceptance/70/staging.test.ts (2 tests) 6165ms
+   ✓ AC5 #70.7f24fc90 On a filesystem without copy-on-write, a destructive command whose reach can't be known becomes an ask (2)
+     ✓ AC5 #70.7f24fc90 on tmpfs, `rm -rf build/*` and the agent-written `bash wipe.sh` each become an authority ask that says their reach is unknown, nothing is staged and build/ keeps its files 2950ms
+     ✓ AC5 #70.7f24fc90 (wrong program) a hub that records a staging it can't have made (stages-without-copy) lets the command through and fails, naming it 3214ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  19:51:18
+   Duration  6.55s (tests 95%, transform 3%, import 1%)
+
+vitest exit=0
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/secret.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ❯ tests/acceptance/70/secret.test.ts (1 test | 1 failed) 2543ms
+   ❯ AC3 #70.18ce54cd A secret entered through the CLI lands in the Secret Service and never in a file or a log (1)
+     × AC3 #70.18ce54cd with the prompt cancelled nothing lands; once polkit confirms you the value typed into deep secret add lands in the real Secret Service, comes back through the hub, and no file, log, terminal or process listing holds it 2542ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/70/secret.test.ts > AC3 #70.18ce54cd A secret entered through the CLI lands in the Secret Service and never in a file or a log > AC3 #70.18ce54cd with the prompt cancelled nothing lands; once polkit confirms you the value typed into deep secret add lands in the real Secret Service, comes back through the hub, and no file, log, terminal or process listing holds it
+Error: AC3 #70.18ce54cd deep install, polkit confirming you, must install and load the package that names the secret: exit 3, stdout "Source: /tmp/dh70-5DRYIA/vault\n  test/vault@1.0.0, digest d1:4029c5a727f728a57511fade4867e9337ef09fbf14e1f908e6073b8514ac3d39, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: none\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n", stderr "Nothing was installed: the OS didn't confirm you (the hub can't ask linux to confirm you yet).\n"
+ ❯ installVault tests/acceptance/70/secret.test.ts:58:35
+     56|   confirmWith(h, 'cancelled');
+     57|   // Not BLOCKED: `deep install` counts only once polkit confirms you,…
+     58|   if (installed.code !== 0) throw Error(`${AC3} deep install, polkit c…
+       |                                   ^
+     59| }
+     60|
+ ❯ tests/acceptance/70/secret.test.ts:105:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  19:51:24
+   Duration  2.77s (tests 94%, import 3%, transform 3%)
+
+vitest exit=1
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/restart.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ❯ tests/acceptance/70/restart.test.ts (2 tests | 2 failed) 19628ms
+   ❯ AC8 #70.047e3c2e systemctl --user restart of the hub's service leaves a hosted terminal's program and a kept run running, and the hub reattaches both (2)
+     × AC8 #70.047e3c2e each runs in a user scope of its own outside the service's cgroup, the same processes run on through the restart, and the new hub reattaches both 2364ms
+     × AC8 #70.047e3c2e (wrong program) a unit whose kept processes stay in its cgroup (kept-in-service-cgroup) loses them at the restart and fails, naming the terminal 17263ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/70/restart.test.ts > AC8 #70.047e3c2e systemctl --user restart of the hub's service leaves a hosted terminal's program and a kept run running, and the hub reattaches both > AC8 #70.047e3c2e each runs in a user scope of its own outside the service's cgroup, the same processes run on through the restart, and the new hub reattaches both
+Error: terminal.open refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method terminal.open.","path":"/method","actual":"terminal.open","evidence":[]}
+ ❯ Conn.call tests/acceptance/70/helpers.ts:349:33
+    347|     const reply = await this.wait((l) => l.id === id && ('result' in l…
+    348|     if (!reply) throw Error(`no reply to ${method} within ${timeoutMs}…
+    349|     if ('error' in reply) throw Error(`${method} refused: ${JSON.strin…
+       |                                 ^
+    350|     return reply.result as Line;
+    351|   }
+ ❯ call tests/acceptance/70/helpers.ts:359:12
+ ❯ scenario tests/acceptance/70/restart.test.ts:61:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/70/restart.test.ts > AC8 #70.047e3c2e systemctl --user restart of the hub's service leaves a hosted terminal's program and a kept run running, and the hub reattaches both > AC8 #70.047e3c2e (wrong program) a unit whose kept processes stay in its cgroup (kept-in-service-cgroup) loses them at the restart and fails, naming the terminal
+AssertionError: the planted program must start and run: expected 'BLOCKED: the hub\'s service didn\'t s…' not to match /BLOCKED|INCONCLUSIVE/
+
+- Expected:
+/BLOCKED|INCONCLUSIVE/
+
++ Received:
+"BLOCKED: the hub's service didn't start with DEEP_HUB_PLANT=kept-in-service-cgroup: exit 3, stdout \"\", stderr \"deep hub start: no hub answered at unix:/tmp/dh70-oyb0dE/h/.deepbuild/hub.sock within 15 s; see /tmp/dh70-oyb0dE/h/.deepbuild/logs/hub.log\\n\"; systemd says × deepbuild-hub.service - DeepBuild hub
+     Loaded: loaded (<home>/.config/systemd/user/deepbuild-hub.service; enabled; preset: disabled)
+    Drop-In: /usr/lib/systemd/user/service.d
+             └─10-timeout-abort.conf
+             <home>/.config/systemd/user/deepbuild-hub.service.d
+             └─dh70.conf
+     Active: failed (Result: start-limit-hit) since Fri 2026-11-06 19:51:32 PST; 15s ago
+   Duration: 92ms
+ Invocation: 6a751d33802643409a9793eb621fc261
+    Process: 20398 ExecStart=/usr/local/bin/node <home>/deepbuild/packages/cli/dist/main.js hub run (code=exited, status=1/FAILURE)
+   Main PID: 20398 (code=exited, status=1/FAILURE)
+   Mem peak: 36.4M
+        CPU: 108ms
+
+Nov 06 19:51:32 lima-deep-fedora systemd[1367]: deepbuild-hub.service: Scheduled restart job, restart counter is at 5.
+Nov 06 19:51:32 lima-deep-fedora systemd[1367]: deepbuild-hub.service: Start request repeated too quickly.
+Nov 06 19:51:32 lima-deep-fedora systemd[1367]: deepbuild-hub.service: Failed with result 'start-limit-hit'.
+Nov 06 19:51:32 lima-deep-fedora systemd[1367]: Failed to start deepbuild-hub.service - DeepBuild hub.
+"
+
+ ❯ notBlocked tests/acceptance/70/helpers.ts:619:110
+    617| }
+    618| /** A plant must start and run: a BLOCKED or INCONCLUSIVE run is not i…
+    619| export const notBlocked = (message: string) => expect(message, 'the pl…
+       |                                                                                                              ^
+    620|
+ ❯ tests/acceptance/70/restart.test.ts:129:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  19:51:27
+   Duration  19.80s (tests 99%)
+
+vitest exit=1
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/answers.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ❯ tests/acceptance/70/answers.test.ts (7 tests | 5 failed) 26281ms
+   ❯ AC2 #70.eb5a58a0 An answer typed from inside an agent's process tree is refused (2)
+     × AC2 #70.eb5a58a0 `deep inbox answer`, run by the agent's Bash tool on Linux, is refused with exit 3 naming the session and the ask, even with polkit confirming you, and the same answer typed by you counts once 3205ms
+     × AC2 #70.eb5a58a0 (wrong program) a hub that lets a deep command inside an agent's process tree answer as you (answer-inside-session) fails, naming the ask 3091ms
+   ❯ AC7 #70.b6da6dea An authority answer from a process that left the agent's tree counts only once polkit confirms you (5)
+     × AC7 #70.b6da6dea typed from systemd-run --user, with the polkit prompt cancelled the ask stays open and exits 3; once polkit confirms you it counts once 3176ms
+     × AC7 #70.b6da6dea typed from a double fork PID 1 adopted, with the polkit prompt cancelled the ask stays open and exits 3; once polkit confirms you it counts once 4124ms
+     ✓ AC7 #70.b6da6dea (wrong program) a CLI that counts the answer from systemd-run --user because the peer check found no agent above it (answer-on-peer-check) fails, naming the ask 3139ms
+     ✓ AC7 #70.b6da6dea (wrong program) a CLI that counts the answer from a double fork PID 1 adopted because the peer check found no agent above it (answer-on-peer-check) fails, naming the ask 4131ms
+     × AC7 #70.b6da6dea on the real polkitd, nothing stubbed but the prompt, which a rule answers: a no leaves the ask open and a yes counts it once 5413ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/70/answers.test.ts > AC2 #70.eb5a58a0 An answer typed from inside an agent's process tree is refused > AC2 #70.eb5a58a0 `deep inbox answer`, run by the agent's Bash tool on Linux, is refused with exit 3 naming the session and the ask, even with polkit confirming you, and the same answer typed by you counts once
+AssertionError: AC2 #70.eb5a58a0 the same answer typed by you, polkit confirming you, exits 0: exit 3, stdout "", stderr "ask:01M6T24J1D36CHX9MEQFBR73J2 stays open: the OS didn't confirm you (the hub can't ask linux to confirm you yet). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.\n": expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ insideTheTree tests/acceptance/70/answers.test.ts:41:110
+     39|   // The same answer, typed by you, counts: what refused it was the pe…
+     40|   const yours = await deep(w.h, ['inbox', 'answer', handle, 'decline']…
+     41|   expect(yours.code, `${AC2} the same answer typed by you, polkit conf…
+       |                                                                                                              ^
+     42|   await expectCountedOnce(w.hub, handle, 'decline', 'typed by you');
+     43| }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/70/answers.test.ts > AC2 #70.eb5a58a0 An answer typed from inside an agent's process tree is refused > AC2 #70.eb5a58a0 (wrong program) a hub that lets a deep command inside an agent's process tree answer as you (answer-inside-session) fails, naming the ask
+AssertionError: expected 'AC2 #70.eb5a58a0 the refusal names th…' to match /ask ask:[0-9A-Za-z]+ \(answered decli…/
+
+- Expected:
+/ask ask:[0-9A-Za-z]+ \(answered decline by deep inbox answer, run inside agent session/
+
++ Received:
+"AC2 #70.eb5a58a0 the refusal names the agent's session: exit 3, stdout \"\", stderr \"ask:01M6T24N5HYZDVZJM3VPZY58PZ stays open: the OS didn't confirm you (the hub can't ask linux to confirm you yet). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.\\n\": expected 'ask:01M6T24N5HYZDVZJM3VPZY58PZ stays …' to contain 'de41a4a3-5c2f-43e0-ac87-537c6096af4b'"
+
+ ❯ tests/acceptance/70/answers.test.ts:74:21
+     72|     const message = await failure(() => insideTheTree('answer-inside-s…
+     73|     notBlocked(message);
+     74|     expect(message).toMatch(/ask ask:[0-9A-Za-z]+ \(answered decline b…
+       |                     ^
+     75|   }, 600_000);
+     76| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/70/answers.test.ts > AC7 #70.b6da6dea An authority answer from a process that left the agent's tree counts only once polkit confirms you > AC7 #70.b6da6dea typed from systemd-run --user, with the polkit prompt cancelled the ask stays open and exits 3; once polkit confirms you it counts once
+AssertionError: AC7 #70.b6da6dea an answer the peer check finds no agent above must reach polkit, the only thing that can make it count; the boundary saw no ask: exit 3, stdout "", stderr "ask:01M6T24R6981P49JW39QV3GZ9R stays open: the OS didn't confirm you (the hub can't ask linux to confirm you yet). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.\n": expected 0 to be greater than 0
+ ❯ outsideTheTree tests/acceptance/70/answers.test.ts:57:194
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/70/answers.test.ts > AC7 #70.b6da6dea An authority answer from a process that left the agent's tree counts only once polkit confirms you > AC7 #70.b6da6dea typed from a double fork PID 1 adopted, with the polkit prompt cancelled the ask stays open and exits 3; once polkit confirms you it counts once
+AssertionError: AC7 #70.b6da6dea an answer the peer check finds no agent above must reach polkit, the only thing that can make it count; the boundary saw no ask: exit 3, stdout "", stderr "ask:01M6T24V99MAE5V8RJRJY2JSHK stays open: the OS didn't confirm you (the hub can't ask linux to confirm you yet). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.\n": expected 0 to be greater than 0
+ ❯ outsideTheTree tests/acceptance/70/answers.test.ts:57:194
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/70/answers.test.ts > AC7 #70.b6da6dea An authority answer from a process that left the agent's tree counts only once polkit confirms you > AC7 #70.b6da6dea on the real polkitd, nothing stubbed but the prompt, which a rule answers: a no leaves the ask open and a yes counts it once
+AssertionError: AC7 #70.b6da6dea the real polkitd saying yes exits 0: the hub must reach it, with an action it knows and this process as the subject: exit 3, stdout "", stderr "ask:01M6T256DNC3SJ8MSFEDWFKWC9 stays open: the OS didn't confirm you (the hub can't ask linux to confirm you yet). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.\n": expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ tests/acceptance/70/answers.test.ts:97:163
+     95|     await polkitAnswers('YES');
+     96|     const yes = await doubleForked(w, answer);
+     97|     expect(yes.code, `${AC7} the real polkitd saying yes exits 0: the …
+       |                                                                                                                                                                   ^
+     98|     await expectCountedOnce(w.hub, handle, 'decline', 'through the rea…
+     99|   }, 600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 2 passed (7)
+   Start at  19:51:47
+   Duration  26.47s (tests 99%)
+
+vitest exit=1
+
+=== node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/70/e2e.live.test.ts
+
+ RUN  v5.0.5 <home>/deepbuild
+
+ ❯ tests/acceptance/70/e2e.live.test.ts (2 tests | 2 failed) 3ms
+   ❯ AC1 #70.3a94aeb5 The R1 end-to-end suite passes on Ubuntu LTS and Fedora with Claude Code and Codex (2)
+     × AC1 #70.3a94aeb5 (live) on this distribution, every live lane of the release preflight passes with real Claude Code sessions 2ms
+     × AC1 #70.3a94aeb5 (live) on this distribution, #48's live sessions with real Codex pass 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/70/e2e.live.test.ts > AC1 #70.3a94aeb5 The R1 end-to-end suite passes on Ubuntu LTS and Fedora with Claude Code and Codex > AC1 #70.3a94aeb5 (live) on this distribution, every live lane of the release preflight passes with real Claude Code sessions
+Error: AC1 #70.3a94aeb5 BLOCKED: this test starts real sessions on your plan; run it by hand with DEEP_HARNESS_LIVE=1, signed in, in each VM
+ ❯ requireLive tests/acceptance/70/e2e.live.test.ts:21:52
+     19|
+     20| function requireLive(agent: string): void {
+     21|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error(`${AC1} BLOCK…
+       |                                                    ^
+     22|   requireLinux();
+     23|   const version = spawnSync(agent, ['--version'], { encoding: 'utf8', …
+ ❯ tests/acceptance/70/e2e.live.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/70/e2e.live.test.ts > AC1 #70.3a94aeb5 The R1 end-to-end suite passes on Ubuntu LTS and Fedora with Claude Code and Codex > AC1 #70.3a94aeb5 (live) on this distribution, #48's live sessions with real Codex pass
+Error: AC1 #70.3a94aeb5 BLOCKED: this test starts real sessions on your plan; run it by hand with DEEP_HARNESS_LIVE=1, signed in, in each VM
+ ❯ requireLive tests/acceptance/70/e2e.live.test.ts:21:52
+     19|
+     20| function requireLive(agent: string): void {
+     21|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error(`${AC1} BLOCK…
+       |                                                    ^
+     22|   requireLinux();
+     23|   const version = spawnSync(agent, ['--version'], { encoding: 'utf8', …
+ ❯ tests/acceptance/70/e2e.live.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  19:52:14
+   Duration  165ms (transform 49%, import 47%, tests 2%, worker 1%)
+
+vitest exit=1
+
+=== AC4 repeat 1 of 5
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+vitest exit=0
+
+=== AC4 repeat 2 of 5
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+vitest exit=0
+
+=== AC4 repeat 3 of 5
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+vitest exit=0
+
+=== AC4 repeat 4 of 5
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+vitest exit=0
+
+=== AC4 repeat 5 of 5
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+vitest exit=0
+
+=== AC1, the opt-in set with no sign-in
+     × AC1 #70.3a94aeb5 (live) on this distribution, every live lane of the release preflight passes with real Claude Code sessions 3ms
+     × AC1 #70.3a94aeb5 (live) on this distribution, #48's live sessions with real Codex pass 1ms
+Error: AC1 #70.3a94aeb5 BLOCKED: claude isn't runnable on PATH: spawnSync claude ENOENT
+Error: AC1 #70.3a94aeb5 BLOCKED: codex isn't runnable on PATH: spawnSync codex ENOENT
+      Tests  2 failed (2)
+vitest exit=1
+
+=== left behind
+0
+0
+0

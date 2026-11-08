@@ -179,7 +179,7 @@ async function updateCheck(): Promise<number> {
 // setup's steps without asking. The hub's modules load only then, so a set-up home starts as fast as before (#24's
 // budget). deep env with --root names a dev hub and acts on it alone (#331), or is a usage error, so it sets nothing up
 // in the home.
-const yours = ['status', 'inbox', 'off', 'on', 'env', 'install', 'guard', 'memory'];
+const yours = ['status', 'inbox', 'secret', 'off', 'on', 'env', 'install', 'guard', 'memory'];
 const devHub = args[0] === 'env' && args.includes('--root');
 const installed = join(homedir(), '.deepbuild');
 const unfinished = !existsSync(join(installed, 'setup-finished.json')) && (!existsSync(installed) || existsSync(join(installed, 'setup-stopped.json')));
@@ -218,6 +218,9 @@ if (args.length === 0 || (args.length === 1 && ['--help', '-h', 'help'].includes
 } else if (args[0] === 'inbox') {
   const { inboxCommand } = await import('@deepbuild/hub');
   process.exitCode = await inboxCommand(args.slice(1));
+} else if (args[0] === 'secret') {
+  const { secretCommand } = await import('@deepbuild/hub');
+  process.exitCode = await secretCommand(args.slice(1));
 } else if (args[0] === 'race') {
   const { raceCommand } = await import('@deepbuild/hub');
   process.exitCode = await raceCommand(args.slice(1));

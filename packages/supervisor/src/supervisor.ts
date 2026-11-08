@@ -9,7 +9,7 @@
 // for one recorded with the run token, the token read back from its environment.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, closeSync, createReadStream, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { availableParallelism, constants, homedir, totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
@@ -342,10 +342,12 @@ class LocalSupervisor implements Supervisor {
 
   /**
    * What a Linux run's sandbox parent writes, one JSON line each: a refusal, recorded as a sandbox.denied for the run
-   * once, or the program's own end, given to `exited`. Resolves once the parent is gone and the pipe with it.
+   * once, or the program's own end, given to `exited` once every refusal before it is on the record. Resolves once
+   * the parent is gone, the pipe with it, and what it refused is recorded.
    */
   private readDenials(run: string, stream: NodeJS.ReadableStream, exited: (code: number | null, signal: NodeJS.Signals | null) => void): Promise<void> {
     let buffer = '';
+    let recorded = Promise.resolve();
     return new Promise((resolve) => {
       stream.setEncoding('utf8').on('data', (chunk: string) => {
         buffer += chunk;
@@ -357,16 +359,18 @@ class LocalSupervisor implements Supervisor {
           try { said = JSON.parse(line) as typeof said; } catch { continue; }
           if ('exit' in said) {
             const name = Object.entries(constants.signals).find(([, n]) => n === said.signal)?.[0] as NodeJS.Signals | undefined;
-            exited(typeof said.exit === 'number' ? said.exit : null, typeof said.exit === 'number' ? null : name ?? null);
+            const code = typeof said.exit === 'number' ? said.exit : null;
+            recorded = recorded.then(() => exited(code, code === null ? name ?? null : null));
             continue;
           }
           if (typeof said.operation !== 'string' || typeof said.target !== 'string') continue;
           const seen = `${run} ${said.operation} ${said.target}`;
           if (this.denied.has(seen)) continue;
           this.denied.add(seen);
-          void this.recordDenial(run, said.operation, said.target || '(none)').catch(() => undefined);
+          const { operation, target } = said;
+          recorded = recorded.then(() => this.recordDenial(run, operation, target || '(none)')).catch(() => undefined);
         }
-      }).on('error', () => undefined).on('close', resolve);
+      }).on('error', () => undefined).on('close', () => void recorded.then(resolve));
     });
   }
 
@@ -580,13 +584,25 @@ class LocalSupervisor implements Supervisor {
     if (this.options.crash === 'start-recorded') process.kill(process.pid, 'SIGKILL');
     // On Linux the sandbox's parent process writes each refusal it makes to its fourth descriptor (bubblewrap.ts).
     const denials = sandboxed && process.platform === 'linux';
-    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe', ...(denials ? ['pipe' as const] : [])] });
+    // A run kept past the hub under a systemd service stops the service's restart from reaching it: its processes sit
+    // in a user scope of their own, systemd-run execing the sandbox in place so the PID stays the one tracked, and its
+    // output goes to files, which outlive the hub as a pipe to it wouldn't. Refusals still come by pipe, so one made
+    // while no hub reads it is enforced but not recorded.
+    const service = spec.keep === true && process.platform === 'linux' && process.env.INVOCATION_ID !== undefined ? this.options.kept : undefined;
+    const name = spec.run.replace(':', '-');
+    const scope = service !== undefined && this.options.plant !== 'kept-in-service-cgroup' ? ['/usr/bin/systemd-run', '--user', '--scope', '--quiet', '--collect', `--unit=deep-${name}`] : [];
+    const argv = [...scope, ...launch.argv];
+    if (service !== undefined) mkdirSync(service, { recursive: true, mode: 0o700 });
+    const outputs = service === undefined ? undefined : ['stdout', 'stderr'].map((stream) => join(service, `${name}.${stream}`)) as [string, string];
+    const files = outputs?.map((file) => openSync(file, 'a', 0o600));
+    const child = spawn(argv[0]!, argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', files?.[0] ?? 'pipe', files?.[1] ?? 'pipe', ...(denials ? ['pipe' as const] : [])] });
+    files?.forEach((fd) => closeSync(fd));
     r.child = child;
     // A process that exits before reading all of its input is no error of the supervisor's.
     child.stdin?.on('error', () => undefined);
     const hashes = { stdout: sha256Stream(), stderr: sha256Stream() };
-    child.stdout!.on('data', (chunk: Buffer) => { hashes.stdout.update(chunk); spec.output?.stdout(chunk); });
-    child.stderr!.on('data', (chunk: Buffer) => { hashes.stderr.update(chunk); spec.output?.stderr(chunk); });
+    child.stdout?.on('data', (chunk: Buffer) => { hashes.stdout.update(chunk); spec.output?.stdout(chunk); });
+    child.stderr?.on('data', (chunk: Buffer) => { hashes.stderr.update(chunk); spec.output?.stderr(chunk); });
     const drain = () => setTimeout(() => setImmediate(() => { child.stdout?.destroy(); child.stderr?.destroy(); }), DRAIN_MS).unref();
     child.on('exit', () => {
       if (r.state === 'running') r.state = 'exited';
@@ -596,14 +612,20 @@ class LocalSupervisor implements Supervisor {
     });
     let settle: (exit: Exit) => void = () => undefined;
     r.exit = new Promise((resolve) => { settle = resolve; });
-    const ended = (code: number | null, signal: NodeJS.Signals | null) => settle({ run: spec.run, code, signal, evidence: { stdout: hashes.stdout.digest(), stderr: hashes.stderr.digest() } });
+    const ended = (code: number | null, signal: NodeJS.Signals | null) => {
+      const digests = outputs ? Promise.all(outputs.map(sha256File)) : Promise.resolve([hashes.stdout.digest(), hashes.stderr.digest()]);
+      void digests.then(([stdout, stderr]) => settle({ run: spec.run, code, signal, evidence: { stdout: stdout!, stderr: stderr! } }));
+    };
     child.on('error', () => ended(null, null));
     if (denials) {
       // The run ends when the program does, as its sandbox's parent reports it: bwrap's own process may go earlier,
       // on the signal that stops the run, or later, after the leftovers the parent reaps. Without that report, when
       // the parent went with the program, bwrap's end is the run's.
-      const parentGone = this.readDenials(spec.run, child.stdio[3] as NodeJS.ReadableStream, (code, signal) => { if (r.state === 'running') r.state = 'exited'; ended(code, signal); drain(); });
-      child.on('close', (code, signal) => void parentGone.then(() => ended(code, signal)));
+      // The report can be read before the program's last output is, so the digests wait for both pipes, which `drain`
+      // closes in time if a background process still holds them.
+      const output = Promise.all([child.stdout, child.stderr].flatMap((pipe) => (pipe ? [new Promise((done) => { pipe.once('close', done); })] : [])));
+      const parentGone = this.readDenials(spec.run, child.stdio[3] as NodeJS.ReadableStream, (code, signal) => { if (r.state === 'running') r.state = 'exited'; drain(); void output.then(() => ended(code, signal)); });
+      child.on('close', (code, signal) => void parentGone.then(() => output).then(() => ended(code, signal)));
     } else child.on('close', ended);
     const pid = child.pid;
     if (pid === undefined) {
@@ -684,6 +706,13 @@ class LocalSupervisor implements Supervisor {
     // Its process group at once, as the group's own members see a group signal; then each proven process outside it.
     if (r.pgid !== undefined && proven.some((p) => p.pgid === r.pgid)) try { process.kill(-r.pgid, signal); } catch { /* gone */ }
     for (const p of proven) if (p.pgid !== r.pgid) try { process.kill(p.pid, signal); } catch { /* gone */ }
+  }
+
+  async lives(run: string): Promise<boolean> {
+    const r = this.runs.get(run);
+    if (!r) return false;
+    await this.scanOnce().catch(() => undefined);
+    return (await this.provable(r)).length > 0;
   }
 
   wait(run: string): Promise<Exit> {
@@ -935,6 +964,14 @@ class LocalSupervisor implements Supervisor {
     await Promise.allSettled([...this.runs.values()].map((r) => r.egress?.close()));
     if (this.log?.pid) try { process.kill(this.log.pid, 'SIGTERM'); } catch { /* gone */ }
   }
+}
+
+/** The SHA-256 of a kept run's output file. */
+function sha256File(file: string): Promise<string> {
+  return new Promise((done, fail) => {
+    const hash = createHash('sha256');
+    createReadStream(file).on('data', (chunk) => hash.update(chunk)).on('error', fail).on('end', () => done(hash.digest('hex')));
+  });
 }
 
 /** An incremental SHA-256 whose digest can be read, once, when its stream ends. */
