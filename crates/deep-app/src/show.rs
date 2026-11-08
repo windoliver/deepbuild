@@ -5,6 +5,9 @@
 //! panel's rect, outlines an agent's layer with its session's name, and draws the question card's slot last, which
 //! nothing covers. What it drew is what it reports: one entry per presented revision.
 //!
+//! Issue #1454: the real window's panel follows the hub every 100 ms, as the hub expects of an open app ([`follow`]), and
+//! a session's page shows that session's revisions, fitted to the page.
+//!
 //! Issue #995: after each presented revision the panel keeps only the pictures a shown revision uses. One it painted
 //! is also freed from the GPU's atlas the next time it draws, as deep-show's own viewer frees its replaced picture.
 
@@ -22,7 +25,7 @@ const OUTLINE_PX: f32 = 1.;
 const NAME_TAB: f32 = 18.;
 
 /// One layer as the panel composes it: its panel's bounds, its picture and the name its outline shows.
-type Composed = (Bounds<Pixels>, Option<Arc<RenderImage>>, Option<String>);
+type Composed = ([f32; 4], Option<Arc<RenderImage>>, Option<String>);
 
 /// One layer on a panel, as the hub presented it.
 #[derive(Clone, Debug)]
@@ -43,6 +46,8 @@ pub struct Presented {
     pub rev: u64,
     pub rect: [f32; 4],
     pub layers: Vec<Layer>,
+    /// The session that drew it, none when it's yours.
+    pub session: Option<String>,
 }
 
 impl Presented {
@@ -79,6 +84,7 @@ impl Presented {
             rev: v["rev"].as_u64()?,
             rect: <[f32; 4]>::try_from(rect.as_slice()).ok()?,
             layers,
+            session: v["session"].as_str().map(str::to_string),
         })
     }
 
@@ -135,6 +141,8 @@ struct Picture {
 pub struct CanvasPanel {
     evidence: PathBuf,
     shown: Vec<Presented>,
+    /// The session whose page shows the panel; with none, every revision draws.
+    session: Option<String>,
     pictures: Vec<Picture>,
     /// Painted pictures no shown revision uses any more, freed from the GPU the next time the panel draws.
     unused: Vec<Arc<RenderImage>>,
@@ -145,9 +153,20 @@ impl CanvasPanel {
         CanvasPanel {
             evidence,
             shown: Vec::new(),
+            session: None,
             pictures: Vec::new(),
             unused: Vec::new(),
         }
+    }
+
+    /// Whether `session` has anything to show, as its page asks.
+    pub fn shows(&self, session: &str) -> bool {
+        self.shown.iter().any(|p| of(p, session))
+    }
+
+    /// The session whose page draws the panel.
+    pub fn show_session(&mut self, session: &str) {
+        self.session = Some(session.to_owned());
     }
 
     /// Takes one presented revision: its panel now shows it, replacing what it showed before, and the panel lets go of
@@ -166,7 +185,8 @@ impl CanvasPanel {
                 }
             }
         }
-        self.shown.retain(|s| s.rect != p.rect);
+        self.shown
+            .retain(|s| s.rect != p.rect || s.session != p.session);
         self.shown.push(p);
         let shown = &self.shown;
         let used = |sha: &str| {
@@ -192,6 +212,47 @@ impl CanvasPanel {
     }
 }
 
+/// Whether a session's page shows `p`: its own revisions, and yours.
+fn of(p: &Presented, session: &str) -> bool {
+    p.session.as_deref().is_none_or(|drew| drew == session)
+}
+
+/// Takes what the hub presents every 100 ms, off the main thread, for as long as the app runs. A hub that isn't
+/// answering is tried again each second, and the window redraws with each revision.
+pub fn follow(panel: Entity<CanvasPanel>, cx: &mut App) {
+    cx.spawn(async move |cx| {
+        let mut hub: Option<Presentations> = None;
+        loop {
+            let wait = if hub.is_some() { 100 } else { 1000 };
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(wait))
+                .await;
+            let (kept, took) = cx
+                .background_spawn(async move {
+                    let root = crate::hub::root();
+                    let token = root.join("control.token");
+                    let mut hub =
+                        hub.or_else(|| Presentations::open(&crate::hub::address(), &token).ok());
+                    let took = hub.as_mut().map(Presentations::take);
+                    (hub, took)
+                })
+                .await;
+            hub = kept;
+            match took {
+                Some(Ok(presented)) if !presented.is_empty() => cx.update(|cx| {
+                    panel.update(cx, |panel, _| {
+                        presented.into_iter().for_each(|p| panel.present(p))
+                    });
+                    cx.refresh_windows();
+                }),
+                Some(Err(_)) => hub = None,
+                _ => {}
+            }
+        }
+    })
+    .detach();
+}
+
 /// A PNG from the evidence store as the BGRA picture GPUI paints.
 fn picture(evidence: &Path, sha: &str) -> Option<Arc<RenderImage>> {
     let bytes = std::fs::read(evidence.join(&sha[..2]).join(&sha[2..])).ok()?;
@@ -204,10 +265,15 @@ fn picture(evidence: &Path, sha: &str) -> Option<Arc<RenderImage>> {
     Some(Arc::new(RenderImage::new([image::Frame::new(rgba)])))
 }
 
-fn bounds(r: [f32; 4]) -> Bounds<Pixels> {
+/// A panel's rect inside `area`: at its place from `area`'s corner, shrunk to fit when `area` is smaller, never grown.
+fn bounds(r: [f32; 4], area: Bounds<Pixels>) -> Bounds<Pixels> {
+    let (w, h) = (f32::from(area.size.width), f32::from(area.size.height));
+    let fit = (w / (r[0] + r[2]).max(1.))
+        .min(h / (r[1] + r[3]).max(1.))
+        .min(1.);
     Bounds {
-        origin: point(px(r[0]), px(r[1])),
-        size: size(px(r[2]), px(r[3])),
+        origin: area.origin + point(px(r[0] * fit), px(r[1] * fit)),
+        size: size(px(r[2] * fit), px(r[3] * fit)),
     }
 }
 
@@ -217,13 +283,17 @@ impl Render for CanvasPanel {
             let _ = window.drop_image(image);
         }
         let mut layers: Vec<Composed> = Vec::new();
-        for p in &self.shown {
+        let drawn = self
+            .shown
+            .iter()
+            .filter(|p| self.session.as_deref().is_none_or(|session| of(p, session)));
+        for p in drawn {
             for l in &p.layers {
                 let name = (l.band == "agent" && l.outline)
                     .then(|| l.name.clone())
                     .flatten();
                 layers.push((
-                    bounds(p.rect),
+                    p.rect,
                     l.picture.as_deref().and_then(|s| self.image(s)),
                     name,
                 ));
@@ -246,8 +316,9 @@ impl Render for CanvasPanel {
                         deep_text_gpui::prepare(label, window.scale_factor());
                     }
                 },
-                move |_, _, window, _| {
-                    for (panel, picture, name) in &layers {
+                move |area, _, window, _| {
+                    for (rect, picture, name) in &layers {
+                        let panel = &bounds(*rect, area);
                         window.with_content_mask(Some(ContentMask { bounds: *panel }), |w| {
                             if let Some(picture) = picture {
                                 let _ = w.paint_image(
