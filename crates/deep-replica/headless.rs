@@ -218,8 +218,8 @@ mod suite {
             .count();
         assert_eq!(
             buttons,
-            deep_replica::load_state().sessions.len() + 1,
-            "the window's count, and one button per session (#1454: a replica draws the app's tree)"
+            deep_replica::load_state().sessions.len() + 2,
+            "the window's count, Agents, and one button per session (#1454: a replica draws the app's tree)"
         );
     }
 
