@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "ffcd648c9522bd4b512b2c1a6fd62cd07a3a67473f9ec8f8ad927c1ec44368ac",
+  "set_digest": "05eb78285554ed6b6d3671aaa6a6c6787ccac5849ba3f75c58660ecc7af3fc9f",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -149,6 +149,35 @@
         "state": "canonical"
       }
     },
+    "input@1": {
+      "digest": "e65249671ed96cf758617d3f9e202cfd7401bf7c1ed804b4d410c90df61e325e",
+      "reference": "input",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "input",
+      "implementation": {
+        "name": "input",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
     "look@1": {
       "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
       "reference": "look",
@@ -230,6 +259,35 @@
       "module": "marks2d",
       "implementation": {
         "name": "marks2d",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "media@1": {
+      "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+      "reference": "media",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "media",
+      "implementation": {
+        "name": "media",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
@@ -335,7 +393,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "06336effe820630c6b21b7c10341baaacb5ab1c23bf396f4c2dccceeb7e5d937",
+      "digest": "dd0dd9bb9712565feb0635f87a7e920dbfeb8d36078382378d524b1d9a34211c",
       "reference": "scene3d",
       "kit": [
         "fixtures",
