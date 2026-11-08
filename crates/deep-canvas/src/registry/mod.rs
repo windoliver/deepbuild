@@ -1120,6 +1120,9 @@ pub enum Fault {
     /// Declares `ease@1` in the motion module instead of the core (#490): the core declares
     /// none, so a build without motion has no eases.
     EaseInMotion,
+    /// Registers `camera@1` in the scene3d module instead of the core (#493), so a build
+    /// without scene3d has no camera.
+    CameraInScene3d,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
@@ -1289,6 +1292,8 @@ pub struct Sealed {
     /// How the document check names close names: `NoCloseNames` and `CloseBySpelling` are the
     /// planted checks (#412); `None` is the right one.
     pub close_fault: Option<Fault>,
+    /// The planted layout that registers `camera@1` in scene3d (#493).
+    pub camera_in_scene3d: bool,
     /// Each entry of `outline.source@1` the build's modules fill, with the module and its Rust
     /// (#443), sorted by module then entry.
     pub outlines: Vec<SealedOutline>,
@@ -1514,10 +1519,22 @@ impl Sealed {
             .map(|m| m.name.as_str())
     }
 
+    /// Whether this build's set names the design module `module` and this build left it out
+    /// (#308: a control kind in a full build without the input module).
+    pub(crate) fn lacks(&self, module: &str) -> bool {
+        KNOWN_MODULES
+            .iter()
+            .any(|(name, set)| *name == module && *set <= self.build_set)
+            && !self.has(module)
+    }
+
     /// The canvas module a kind's family belongs to when this build lacks it: a registered
     /// kind's module, or a design-named module whose kind family this is.
     pub(crate) fn missing_for_kind(&self, kind_name: &str) -> Option<String> {
         let full = kind_name.split('@').next().unwrap_or(kind_name);
+        if self.camera_in_scene3d && full == "camera" && !self.has("scene3d") {
+            return Some("scene3d".into());
+        }
         for m in &self.modules {
             if m.shapes.kinds.iter().any(|k| k.entry.is(full)) {
                 return self.left_out_kinds.get(full).cloned();
@@ -2963,6 +2980,7 @@ impl Registry {
             close_fault: self
                 .fault
                 .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
+            camera_in_scene3d: self.fault == Some(Fault::CameraInScene3d),
             outlines,
             costs: self
                 .costs

@@ -210,6 +210,28 @@ pub enum Planted {
     RampSumsPerFrame,
     /// #492: a `then: lag` hitstop that matches in parent time.
     HitstopMatchesParentTime,
+    /// #493: a log zoom that eases the view width, not its logarithm.
+    LogZoomEasesWidth,
+    /// #493: framing that bounds the kept items from 30 samples a second.
+    FramerSamples30Hz,
+    /// #493: framing that fits the frames' samples, never refusing a bound it can't settle.
+    FramerFitsSamples,
+    /// #493: a lens zoom that eases the field of view in degrees.
+    LensZoomEasesFovDegrees,
+    /// #493: a lens zoom that dollies at its starting field of view.
+    LensZoomDollies,
+    /// #493: a whip that eases each half in and out.
+    WhipEasesHalves,
+    /// #493: a shake drawing a new random offset each frame.
+    ShakeFreshPerFrame,
+    /// #493: a shot that writes roll 0 whatever its roll.
+    ShotWritesRoll0,
+    /// #493: a pan that turns right whatever its angle.
+    PanIgnoresAngle,
+    /// #493: a match cut's incoming shot framed by its keep, ignoring the match.
+    MatchFramerIgnoresMatch,
+    /// #493: a kick drawing a fresh random offset each frame.
+    KickFreshPerFrame,
 }
 
 impl Planted {
@@ -323,6 +345,8 @@ pub struct Program {
     /// The mark sets whose rows come from occurrence lists.
     pub(crate) rows: Vec<crate::rows::RowList>,
     pub options: Options,
+    /// #493: the document's shots and their transitions, compiled at check.
+    pub shots: Option<Arc<crate::shots::Plan>>,
 }
 
 /// What one evaluation fills, sized by [`Program::state`] and reused frame after frame.
@@ -450,6 +474,7 @@ impl Program {
             rows: Vec::new(),
             options,
             motion: motion.clone(),
+            shots: None,
         };
         // Only a document with frames is laid out; it is refused here only when a key glides
         // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
@@ -681,6 +706,8 @@ impl Program {
                 program.base[field.slot] = v;
             }
         }
+        // #493: the shots read the compiled program: their framing bounds its writers' forms.
+        program.shots = crate::shots::Plan::compile(doc, &program)?.map(Arc::new);
         Ok(program)
     }
 
@@ -2366,11 +2393,44 @@ impl Program {
         let span = self.motion.transport.span.map_or(f64::INFINITY, |s| {
             s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
         });
+        self.core_bound_in(core, Iv::new(0.0, span))
+    }
+
+    /// #493: what slot `s` holds over the document times `time` (seconds), from its writer's
+    /// interval form: a core driver's over that time, a lone channel's whole bound, or the base
+    /// where nothing writes it; `None` where no form bounds it (another writer, or a channel the
+    /// forms don't settle). A driver's form may be unbounded there: a pole the caller refuses.
+    pub fn slot_bound_over(&self, s: usize, time: Iv) -> Option<Iv> {
+        if let Some((_, ops)) = self.drivers.iter().rev().find(|(slot, _)| *slot == s) {
+            return match ops.as_slice() {
+                [Op::Core(i)] => Some(self.core_bound_in(&self.cores[*i], time)),
+                _ => None,
+            };
+        }
+        (!self.writes(s..s + 1)).then(|| Iv::point(self.base[s]))
+    }
+
+    /// #493: the key times of the channels that write slot `s`, where a channel's monotone
+    /// segments reach their extremes.
+    pub fn slot_key_times(&self, s: usize) -> Vec<i64> {
+        self.channels
+            .iter()
+            .zip(&self.motion.channels)
+            .filter(|((slot, width), _)| (*slot..slot + width).contains(&s))
+            .flat_map(|(_, c)| c.curve.keys.iter().map(|k| k.t))
+            .collect()
+    }
+
+    /// A core driver's bound with time over `time`.
+    fn core_bound_in(&self, core: &Core, time: Iv) -> Iv {
+        let span = self.motion.transport.span.map_or(f64::INFINITY, |s| {
+            s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
+        });
         let vars: Vec<Iv> = core
             .inputs
             .iter()
             .map(|input| match input {
-                CoreInput::Time => Iv::new(0.0, span),
+                CoreInput::Time => time,
                 CoreInput::Control { range, .. } => Iv::new(range.0, range.1),
                 CoreInput::Slot(s) => self.slot_bound(*s),
                 CoreInput::World(..) | CoreInput::Rate(_) => Iv::ENTIRE,

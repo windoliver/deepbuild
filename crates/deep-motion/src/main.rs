@@ -17,7 +17,8 @@ use deep_canvas_motion::eval::{frame_with, position, Validity};
 use deep_canvas_motion::follow::Source;
 use deep_canvas_motion::input::Entry;
 use deep_canvas_motion::insert::insert;
-use deep_canvas_motion::program::{track_hash, Boxes, Layout, Options, Planted, Program};
+use deep_canvas_motion::program::{track_hash, Boxes, Layout, Options, Planted, Program, State};
+use deep_canvas_motion::shots::{bounds_at, project, At};
 use serde_json::{json, Map, Value};
 
 /// #491: the canvas's auto layout (deep-canvas-marks, through its one shaper), which a frame's
@@ -70,6 +71,17 @@ fn planted_of(v: Option<&Value>) -> Option<Planted> {
             "unkeyed_resets_to_base" => Planted::UnkeyedResetsToBase,
             "ramp_sums_per_frame" => Planted::RampSumsPerFrame,
             "hitstop_matches_parent_time" => Planted::HitstopMatchesParentTime,
+            "log_zoom_eases_width" => Planted::LogZoomEasesWidth,
+            "framer_samples_30hz" => Planted::FramerSamples30Hz,
+            "framer_fits_samples" => Planted::FramerFitsSamples,
+            "lens_zoom_eases_fov_degrees" => Planted::LensZoomEasesFovDegrees,
+            "lens_zoom_dollies" => Planted::LensZoomDollies,
+            "whip_eases_halves" => Planted::WhipEasesHalves,
+            "shake_fresh_per_frame" => Planted::ShakeFreshPerFrame,
+            "shot_writes_roll_0" => Planted::ShotWritesRoll0,
+            "pan_ignores_angle" => Planted::PanIgnoresAngle,
+            "match_framer_ignores_match" => Planted::MatchFramerIgnoresMatch,
+            "kick_fresh_per_frame" => Planted::KickFreshPerFrame,
             _ => return None,
         },
         Some(_) => return None,
@@ -261,6 +273,10 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         return json!({"ok": true, "frames": frames});
     }
     let shows_track = input.contains_key("input");
+    let film = match film_of(input, &program) {
+        Some(film) => film,
+        None => return bad_input(),
+    };
     let mut frames = Vec::with_capacity(times.len());
     let mut degenerate: Vec<Value> = Vec::new();
     let mut previous: Option<i64> = None;
@@ -379,7 +395,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
             "channels": channels,
             "constraints": constraints,
             "placements": placements,
-            "cameras": f.cameras.iter().map(|(id, target)| (id.clone(), json!({"target": target}))).collect::<Map<String, Value>>(),
+            "cameras": cameras_json(&program, &state, &f.cameras, f.doc_t, &film),
             "valid_until": f.valid_until,
         });
         if let Some(track) = &track {
@@ -393,6 +409,9 @@ fn eval_line(input: &Map<String, Value>) -> Value {
             let notice = json!({"code": "look_at_degenerate", "constraint": id, "t": f.t});
             frame["notices"].as_array_mut().map(|n| n.push(notice.clone())).unwrap_or_else(|| frame["notices"] = json!([notice.clone()]));
             degenerate.push(notice);
+        }
+        if !film.project.is_empty() {
+            frame["projected"] = projected_json(doc, &program, &state, f.doc_t, &film);
         }
         // #491: each laid-out item's box at this time, where the document lays any out.
         if let Some(boxes) = program.boxes(f.doc_t).filter(|b| !b.is_empty()) {
@@ -418,6 +437,18 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         .map(|c| json!({"id": c.id, "from": c.from, "to": c.to, "t": c.at}))
         .collect();
     let mut answer = json!({"ok": true, "order": program.order_names, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash});
+    // #493: each shot's one framed pose and the kept items' union it fit.
+    if let Some(plan) = program.shots.as_ref().filter(|p| !p.shots.is_empty()) {
+        answer["shots"] = plan
+            .shots
+            .iter()
+            .map(|s| {
+                let union = s.union.map_or(Value::Null, |u| json!({"lo": u[0], "hi": u[1]}));
+                (s.id.clone(), json!({"framed": s.framed.to_json(Some(&s.id)), "union": union}))
+            })
+            .collect::<Map<String, Value>>()
+            .into();
+    }
     // #491: the notices the check raised, such as literal_time_with_tempo_map.
     if !motion.notices.is_empty() || !degenerate.is_empty() {
         answer["notices"] = json!(motion.notices.iter().chain(&degenerate).collect::<Vec<_>>());
@@ -435,6 +466,96 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         answer["bounds"] = json!({"channels": group(channels), "drivers": group(drivers)});
     }
     answer
+}
+
+/// #493: what an eval line asks of its cameras: the items it projects, the look's motion blur
+/// and indexed target, the view's reduced motion and the planted program.
+struct Film {
+    project: Vec<String>,
+    blur: Option<(f64, u32)>,
+    indexed: Option<f64>,
+    reduced: bool,
+    planted: Planted,
+}
+
+fn film_of(input: &Map<String, Value>, program: &Program) -> Option<Film> {
+    let project = match input.get("project") {
+        None => Vec::new(),
+        Some(Value::Array(ids)) => ids.iter().map(|v| v.as_str().map(str::to_string)).collect::<Option<_>>()?,
+        Some(_) => return None,
+    };
+    let look = input.get("look").filter(|l| l.is_object());
+    let blur = look.and_then(|l| l.get("motion_blur")).map(|b| {
+        (
+            b.get("shutter_angle").and_then(Value::as_f64).unwrap_or(180.0),
+            b.get("samples").and_then(Value::as_u64).unwrap_or(8) as u32,
+        )
+    });
+    let indexed = look.and_then(|l| l.pointer("/basis/indexed/size/0")).and_then(Value::as_f64);
+    Some(Film { project, blur, indexed, reduced: program.options.reduced_motion, planted: program.options.planted })
+}
+
+/// Each camera's pose at t, as the frame reports it (#493: the pose it is drawn through, its
+/// kick applied), and the sub-samples motion blur averages inside a declared move. A camera no
+/// timeline shot writes keeps a stage's target (#417).
+fn cameras_json(program: &Program, state: &State, stage: &[(String, [f64; 3])], t: i64, film: &Film) -> Map<String, Value> {
+    let Some(plan) = program.shots.as_ref() else {
+        return stage.iter().map(|(id, target)| (id.clone(), json!({"target": target}))).collect();
+    };
+    let keyed = |c: usize| plan.keyed_pose(c, program, state);
+    let at = At { reduced: film.reduced, planted: film.planted, indexed: film.indexed, keyed: &keyed };
+    stage
+        .iter()
+        .map(|(id, target)| {
+            let Some(c) = plan.camera(id).filter(|&c| plan.cameras[c].own.is_some() || plan.shot_at(c, t).is_some()) else {
+                return (id.clone(), json!({"target": target}));
+            };
+            let shown = plan.shown(c, t, &at);
+            let mut pose = shown.pose;
+            if shown.shot.is_none() {
+                let d = [target[0] - pose.target[0], target[1] - pose.target[1], target[2] - pose.target[2]];
+                pose.target = *target;
+                pose.position = [pose.position[0] + d[0], pose.position[1] + d[1], pose.position[2] + d[2]];
+            }
+            let name = shown.shot.map(|s| plan.shots[s].id.as_str());
+            let mut out = pose.to_json(name);
+            if let Some((angle, samples)) = film.blur {
+                let subs = plan.blur(c, t, &at, angle, samples);
+                if !subs.is_empty() {
+                    out["blur"] = subs
+                        .iter()
+                        .map(|(ts, s, p)| {
+                            let name = s.map(|s| plan.shots[s].id.as_str());
+                            json!({"t": ts, "shot": name, "pose": p.to_json(name)})
+                        })
+                        .collect::<Vec<_>>()
+                        .into();
+                }
+            }
+            (id.clone(), out)
+        })
+        .collect()
+}
+
+/// #493: each item the line projects, through the document camera's pose at t: the projection
+/// of its bounds' centre and the box of their corners, in px of the document's size.
+fn projected_json(doc: &Map<String, Value>, program: &Program, state: &State, t: i64, film: &Film) -> Value {
+    let Some(plan) = program.shots.as_ref() else { return json!({}) };
+    let Some(c) = doc.get("camera").and_then(Value::as_str).and_then(|id| plan.camera(id)) else {
+        return json!({});
+    };
+    let keyed = |c: usize| plan.keyed_pose(c, program, state);
+    let at = At { reduced: film.reduced, planted: film.planted, indexed: film.indexed, keyed: &keyed };
+    let projector = plan.shown(c, t, &at).pose.projector(plan.size);
+    film.project
+        .iter()
+        .filter_map(|id| {
+            let b = bounds_at(program, doc, state, id)?;
+            let (centre, bx) = project(&projector, &b, plan.size)?;
+            Some((id.clone(), json!({"center": centre, "box": bx})))
+        })
+        .collect::<Map<String, Value>>()
+        .into()
 }
 
 fn insert_line(input: &Map<String, Value>) -> Value {
