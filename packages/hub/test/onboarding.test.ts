@@ -195,6 +195,24 @@ esac
     deep(w.env, 'hub', 'start');
     expect(readFileSync(own(w.home), 'utf8')).toMatch(new RegExp(`^Environment=.*"HOME=${w.home}"`, 'm'));
   }, 60_000);
+  it.runIf(process.platform === 'linux')("starts through the real user manager from a home whose units it doesn't read", () => {
+    // The user manager reads units from its own home, never this one's: how every live lane's temporary home starts its hub.
+    const { env, home } = fresh();
+    const manager = { ...env, XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR, DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS };
+    const systemctl = (...args: string[]) => spawnSync('systemctl', ['--user', ...args], { env: manager, encoding: 'utf8' });
+    const state = systemctl('is-system-running');
+    if (state.error || !/^(running|degraded)/.test(state.stdout.trim())) throw Error(`BLOCKED: no running systemd --user here: ${state.stdout.trim() || state.error?.message}`);
+    if (systemctl('cat', 'deepbuild-hub.service').status === 0) throw Error('BLOCKED: this machine has a deepbuild-hub.service of its own; run this on a throwaway VM');
+    try {
+      const started = deep(manager, 'hub', 'start');
+      expect(started.status, started.stderr).toBe(0);
+      // systemd names the link in its own folder; it leads to this home's unit.
+      expect(realpathSync(systemctl('show', '--property=FragmentPath', '--value', 'deepbuild-hub.service').stdout.trim())).toBe(own(home));
+    } finally {
+      systemctl('disable', '--now', 'deepbuild-hub.service');
+      systemctl('daemon-reload');
+    }
+  }, 120_000);
 });
 
 describe('setup on a machine without what it needs', () => {
