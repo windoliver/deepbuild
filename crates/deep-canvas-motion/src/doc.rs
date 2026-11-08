@@ -394,6 +394,8 @@ pub enum DriverInput {
     Rate(String),
     /// `<remap>.active`, or with `true` `<remap>.progress`.
     Remap(String, bool),
+    /// `<module>.<name>`: a canvas module's array, such as one a stepping module writes (#497).
+    Array(String),
 }
 
 /// Each axis's `[min, max]`, `None` for an axis a limit leaves free.
@@ -1179,6 +1181,10 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
         }
         if let Some(r) = text.strip_suffix(".progress") {
             inputs.push((name.clone(), DriverInput::Remap(r.to_string(), true)));
+            continue;
+        }
+        if !text.contains('/') && text.contains('.') {
+            inputs.push((name.clone(), DriverInput::Array(text.clone())));
             continue;
         }
         vars.push((name.clone(), target_of(text, false, &vpath)?));
