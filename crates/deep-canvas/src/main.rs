@@ -75,7 +75,11 @@ fn parse_line(grammar: &str, input: &Map<String, Value>) -> Value {
                 Some(Value::String(u)) => u.as_str(),
                 _ => return bad_input(),
             };
-            let ctx = UnitContext::default();
+            let side = |i: usize| input.get("frame")?.get(i)?.as_u64().map(|v| v as u32);
+            let ctx = UnitContext {
+                frame: (side(0).unwrap_or(0), side(1).unwrap_or(0)),
+                ..UnitContext::default()
+            };
             match UnitLiteral::parse(text).and_then(|l| l.convert(unit, &ctx).map(|v| (l, v))) {
                 Ok((literal, value)) => accepted(
                     literal.print(),

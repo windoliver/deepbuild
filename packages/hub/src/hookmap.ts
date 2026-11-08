@@ -43,10 +43,12 @@ export function hubAdapters(): AdapterRegistry {
   const base = shipped();
   if (!folder) return base;
   const reg = emptyRegistry();
-  for (const file of readdirSync(folder).filter((f) => f.endsWith('.facts.json') && f !== 'mcp-servers.facts.json' && f !== 'loops.facts.json')) {
+  // A facts file for an agent with no shipped adapter (cursor's, opencode's) is data for other readers, as the
+  // MCP and loop facts are: it registers nothing.
+  for (const file of readdirSync(folder).filter((f) => f.endsWith('.facts.json'))) {
     const facts = JSON.parse(readFileSync(join(folder, file), 'utf8')) as JsonObject;
     const name = String(facts.agent);
-    reg.register(name, factsAdapter(facts, base.get(name) as Adapter));
+    if (base.names().includes(name)) reg.register(name, factsAdapter(facts, base.get(name) as Adapter));
   }
   return reg;
 }
@@ -192,7 +194,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     const providers = (registry().get(name).facts as JsonObject).providers;
     if (!isObj(providers) || !isObj(providers[provider])) {
       meta.watchOnly = true;
-      meta.paseo.lacks = `This session runs ${provider || 'an unnamed provider'} through paseo, which DeepBuild's paseo facts have no entry for, so it is watch-only: nothing is held, answered or sent for it. The facts it lacks: bridge (its pinned bridge version), permissions (its permission quirks), modelCheck (the check of the exact model before the first prompt) and timeouts.`;
+      meta.paseo.lacks = `This session runs ${provider || 'an unnamed provider'} through paseo, which DeepBuild's paseo facts have no entry for, so it is watch-only: nothing is held, answered or sent for it, while its fail_closed guard entries still deny. The facts it lacks: bridge (its pinned bridge version), permissions (its permission quirks), modelCheck (the check of the exact model before the first prompt) and timeouts.`;
     }
   }
   const tool = str(payload.tool_name);
@@ -202,7 +204,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   if ((event === 'PreToolUse' || event === 'PermissionRequest' || event === 'PostToolUse') && tool) {
     meta.call = { mode: str(payload.permission_mode), tool, input: isObj(payload.tool_input) ? payload.tool_input : {}, suggestions: Array.isArray(payload.permission_suggestions) ? payload.permission_suggestions : [] };
   }
-  // A session on a version its agent's facts don't cover has its holds and blocks watch-only. Only a reply that holds
+  // A session on a version its agent's facts don't cover has its holds and every block but the floor watch-only. Only a reply that holds
   // or blocks reads the version here; the core reads it for every other hook, off the acknowledgement's path.
   const replies = event === 'Stop' || event === 'PermissionRequest' || (event === 'PreToolUse' && request.matched.length > 0);
   // An agent whose transcript names no version says it in the payload.
@@ -280,6 +282,18 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         if (callKind === 'shell' && typeof call.command === 'string' && isPrCreate(call.command)) {
           const url = prUrlIn(typeof payload.tool_response === 'string' ? payload.tool_response : JSON.stringify(payload.tool_response ?? ''));
           if (url) meta.pr = url;
+        }
+        if (callKind === 'shell' && typeof call.command === 'string' && mapped.outcome !== 'failed') {
+          const response = payload.tool_response;
+          meta.ran = { command: call.command, stdout: typeof response === 'string' ? response : isObj(response) && typeof response.stdout === 'string' ? response.stdout : '' };
+          meta.ran.stdout = meta.ran.stdout.slice(0, 65_536);
+        }
+        // All a shell call printed, failed or not, where a started session's own sandbox says what it refused (#1330).
+        if (callKind === 'shell') {
+          const response = payload.tool_response;
+          const parts = typeof response === 'string' ? [response] : isObj(response) ? [response.stdout, response.stderr, response.output] : [];
+          const printed = [...parts, payload.error].filter((p): p is string => typeof p === 'string' && p !== '').join('\n').slice(0, 65_536);
+          if (printed) meta.printed = printed;
         }
       }
       const loop = loopFact(name, tool, event, payload, typeof data.command === 'string' ? data.command : scrub(str(at(payload, 'tool_input.description')) || tool));

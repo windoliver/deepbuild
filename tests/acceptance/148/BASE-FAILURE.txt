@@ -1,0 +1,49 @@
+#148 acceptance suite at the base, 9bdebdfb (main, 2026-11-07), before any implementation.
+
+Run once, in full, on this Mac (Mac17,10), with Claude Code 2.1.308, Codex 0.166.0-alpha.5.1 and pi 1.4.0 from
+~/.cache/deepbuild-agents/148, Node 24.22.0, after npm ci, npm run build --workspaces and cargo build -p deep-hook:
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/148 --no-file-parallelism --testTimeout=600000
+  Test Files  10 failed (10)
+       Tests  26 failed (26)
+    Duration  142.90s
+
+and `node node_modules/typescript/bin/tsc -p tests/acceptance/148/tsconfig.json` exits 0.
+
+Per criterion, where the base stops:
+
+AC1, AC2, AC3, AC4, AC5, AC6, AC7, AC9 (all four tests), AC11, AC12, AC13, AC14, AC16: each world is made (the three
+real agents run in the temp HOME, the hub starts, and in AC7, AC9 and AC16 the sessions' hooks reach it through
+deep-hook), then the first sync's plan is refused:
+  Error: agents.propose refused: {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method agents.propose.","path":"/method","actual":"agents.propose","evidence":[]}
+
+AC8: adapters/claude-code.facts.json doesn't name ~/.claude/skills (and adapters/opencode.facts.json doesn't exist):
+  AssertionError: adapters/claude-code.facts.json maps ~/.claude/skills among the folders its agent reads skills from: expected '{"schema":"adapter.facts@1","versions…' to contain '~/.claude/skills'
+
+AC10: no facts for OpenCode, so it can't be installed in the world:
+  AssertionError: adapters/opencode.facts.json exists: opencode's rules and folders live in its facts: expected undefined to be defined
+
+AC15: Codex's facts mark no field refused:
+  AssertionError: adapters/codex.facts.json marks env refused (for an HTTP server): expected false to be true
+
+AC17: INCONCLUSIVE, no check run's screenshots and no taste call:
+  AssertionError: INCONCLUSIVE: no check run's screenshots: DEEP148_SHOTS names no folder (README: The taste call); this is not a pass
+
+The six twins are BLOCKED: the base's hub lists none of the plants and refuses to start, for example
+  Error: BLOCKED: the hub with DEEP_HUB_PLANT=writes-before-parsing did not start: .../packages/hub/dist/plant.js:83
+  Error: DEEP_HUB_PLANT=writes-before-parsing names no planted program
+and the same for replaces-from-first-plan (AC12), copies-original-each-write (AC13), no-folder-flush (AC14),
+skips-entry-check (AC15) and restarts-without-answer (AC16).
+
+What ran before the base stopped, checked by hand in a throwaway probe (deleted): a world takes about 7 s to make; the
+warm-up `claude mcp list` writes Claude Code's first-run keys into ~/.claude.json and later runs don't change it; the
+hub starts on the installed root; a Claude Code session and a Codex session (its hooks run as children of a process
+named as Codex's app-server) each get a status.read row; an MCP call from a Claude Code session to a server nobody
+synced is allowed; `deep undo sync:<id>` is a usage error (exit 2) at the base. Nothing past agents.propose has run, so
+no check here has met a correct or a planted program; a helper fault past that point is a dispute for a blind redraft.
+
+The agents' own list commands were tried by hand in temp HOMEs (README: What was read): Codex 0.166.0-alpha.5.1's
+`codex mcp list --json` exits 1 on `env`, `args`, `cwd` or `bearer_token` under an HTTP server and on `url`,
+`http_headers`, `env_http_headers` or `bearer_token_env_var` under a stdio one, and ignores unknown keys; Claude Code
+2.1.308's `claude mcp list` lists an HTTP entry carrying `env`; `pi mcp list --json` connects to a stdio server from
+~/.pi/agent/mcp.json.

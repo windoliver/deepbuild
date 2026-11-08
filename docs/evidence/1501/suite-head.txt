@@ -1,0 +1,19 @@
+# tests/acceptance/1501 on head 314dc224 + doctor reading fix, Spark (Linux arm64), 2026-11-07T19:26:18-08:00, load 9.39
+
+```
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1501-3907b7/tests/acceptance/1501
+
+ ✓ listed.test.ts > AC3 #1501.37078b1d a session on a listed version behaves as it does on the merge base > AC3 a session on the newest listed Claude Code version, hub up: the floor denies, a block denies, a warn warns, a watch records, the stop is held, the staged delete is held for the gate 859ms
+ ✓ watch.test.ts > AC2 #1501.e184c432 in that session a matched watch entry is recorded and runs, a warn entry adds nothing, and a Stop isn't held; a hub that ends watch-only altogether holds the stop and fails > AC2 a session on Claude Code 9.9.9, hub up: watch recorded and run, warn adds nothing, a non-floor block runs, the stop isn't held 614ms
+ ✓ watch.test.ts > AC2 #1501.e184c432 in that session a matched watch entry is recorded and runs, a warn entry adds nothing, and a Stop isn't held; a hub that ends watch-only altogether holds the stop and fails > AC2 (wrong program) a hub that ends watch-only altogether (facts widened to list 9.9.9) holds the stop and fails 787ms
+ ✓ floor.test.ts > AC1 #1501.840c5fe8 with the hub up, in a session whose transcript names a version the facts don't list, an Edit of .deepbuild/done.yaml, a write of ~/.claude/settings.json, deep off and rm -rf "$X"/* are each denied, naming the guard > AC1 a session on Claude Code 9.9.9, hub up: the hub denies each of the four calls, naming a fail_closed guard with its reason 533ms
+ ✓ floor.test.ts > AC1 #1501.840c5fe8 with the hub up, in a session whose transcript names a version the facts don't list, an Edit of .deepbuild/done.yaml, a write of ~/.claude/settings.json, deep off and rm -rf "$X"/* are each denied, naming the guard > AC1 (scope) the health reading of a session on Claude Code 9.9.9 says the floor still holds 574ms
+ ✓ agree.test.ts > AC4 #1501.043ea69b with the hub stopped the same calls are denied as they are today, so hub up and hub down agree on the floor; a test fails naming the entry when they differ > AC4 every shipped fail_closed entry denies its call with the hub up (session on Claude Code 9.9.9) and with the hub stopped, naming the entry 939ms
+
+ Test Files  4 passed (4)
+      Tests  6 passed (6)
+   Start at  19:25:40
+   Duration  5.29s (tests 99%, import 1%)
+
+```

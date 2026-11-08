@@ -91,6 +91,84 @@ pub fn buffer(
     (device.device.create_buffer(&desc), None)
 }
 
+/// A `desc` texture laid out by rows in a private buffer of its own, and the size the device reports
+/// for it: where a target must cost what its declaration says, a device's tiled layout pads it past
+/// that, and a linear one doesn't. `None` off Metal, for a mipped texture, or past a row's alignment.
+pub fn linear_texture(
+    device: &Device,
+    desc: &wgpu::TextureDescriptor<'_>,
+) -> Option<(wgpu::Texture, u64)> {
+    if device.backend != Backend::Gpu
+        || desc.mip_level_count != 1
+        || desc.format != wgpu::TextureFormat::Rgba16Float
+    {
+        return None;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_metal::{
+            MTLBuffer as _, MTLDevice as _, MTLPixelFormat, MTLResource as _, MTLResourceOptions,
+            MTLStorageMode, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage,
+        };
+        let (w, h) = (desc.size.width as usize, desc.size.height as usize);
+        let row = w * 8;
+        let hal = unsafe { device.device.as_hal::<wgpu::hal::api::Metal>() }?;
+        let raw_device = hal.raw_device();
+        let align = raw_device.minimumLinearTextureAlignmentForPixelFormat(MTLPixelFormat::RGBA16Float);
+        if row % align != 0 {
+            return None;
+        }
+        let buffer = raw_device
+            .newBufferWithLength_options(row * h, MTLResourceOptions::StorageModePrivate)?;
+        let bytes = buffer.allocatedSize() as u64;
+        // SAFETY: the descriptor fits the buffer: `h` rows of `row` bytes, at the row alignment
+        // the device asked for, and the texture keeps the buffer alive.
+        let raw = unsafe {
+            let d = MTLTextureDescriptor::texture2DDescriptorWithPixelFormat_width_height_mipmapped(
+                MTLPixelFormat::RGBA16Float,
+                w,
+                h,
+                false,
+            );
+            d.setStorageMode(MTLStorageMode::Private);
+            d.setUsage(MTLTextureUsage::ShaderRead | MTLTextureUsage::RenderTarget);
+            buffer.newTextureWithDescriptor_offset_bytesPerRow(&d, 0, row)?
+        };
+        let extent = wgpu::hal::CopyExtent {
+            width: desc.size.width,
+            height: desc.size.height,
+            depth: 1,
+        };
+        // SAFETY: `raw` is the texture `desc` describes, and wgpu owns it from here on.
+        let hal = unsafe {
+            wgpu::hal::metal::Device::texture_from_raw(
+                raw,
+                desc.format,
+                MTLTextureType::Type2D,
+                1,
+                1,
+                extent,
+                None,
+            )
+        };
+        let texture = unsafe {
+            device
+                .device
+                .create_texture_from_hal::<wgpu::hal::api::Metal>(
+                    hal,
+                    desc,
+                    wgpu::TextureUses::UNINITIALIZED,
+                )
+        };
+        Some((texture, bytes))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = desc;
+        None
+    }
+}
+
 /// Runs `f`, which allocates on `device`, and the growth of the device's allocated size across it:
 /// what the device reports for the allocations `f` made, when nothing else allocates meanwhile.
 pub fn across<T>(device: &Device, f: impl FnOnce() -> T) -> (T, Option<u64>) {
