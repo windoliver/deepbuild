@@ -797,7 +797,12 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
         // outline's, and its glyph or word 4.5:1 in the theme's ink or ground (The status-color
         // rule; #1003).
         let (g, i) = (luminance(ground), luminance(ink));
-        let surfaces = surfaces(palette, alpha);
+        // The chrome's fills hold status only where status can show; a film played on its own is
+        // drawn on its ground alone (the status-color rule; #464).
+        let mut surfaces = surfaces(palette, alpha);
+        if at == Distance::WhereStatusShows {
+            surfaces.retain(|(on, _)| *on == "ground");
+        }
         for (state, color) in &status.colors {
             let c = luminance(*color);
             let held = |s: Rgb| {
@@ -949,8 +954,10 @@ fn chrome(
             }
         }
     }
-    // The focus ring reads on every fill, so a focused row shows beside a selected one (#1003).
-    if CHROME.iter().any(|r| color(r).is_some()) || color("focus").is_some() {
+    // The focus ring reads on every fill, so a focused row shows beside a selected one (#1003):
+    // the app's chrome, which a look holds wherever it's shown, not a film played on its own (#464).
+    let shown_in_chrome = status.is_some();
+    if shown_in_chrome && (CHROME.iter().any(|r| color(r).is_some()) || color("focus").is_some()) {
         let focus = color("focus").ok_or_else(|| Refusal::Bad(format!("roles/focus ({theme})")))?;
         for (on, surface) in &surfaces {
             let ratio = contrast(over(focus, *surface), *surface);

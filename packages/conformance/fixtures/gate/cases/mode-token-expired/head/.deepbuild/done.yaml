@@ -1,0 +1,11 @@
+claims:
+  done:
+    checks: [journey]
+checks:
+  journey: { type: journey, run: "node --test journeys/total.test.js", min_tests: 1 }
+environment:
+  up: "node src/server.mjs"
+  ports: [web]
+  ready: { http: "http://127.0.0.1:${web}/health", within: 20 }
+  credentials:
+    SHOP_TOKEN: { cli: ["node", "-e", "const t = JSON.parse(require('fs').readFileSync(require('os').homedir() + '/.shop/token.json', 'utf8')); if (t.expires < Date.now()) { console.error('shop: your token expired; run shop login'); process.exit(1); } console.log(t.token)"] }

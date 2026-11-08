@@ -81,6 +81,13 @@ fn fs(i: Out) -> @location(0) vec4<f32> {
     return vec4<f32>(v, i.z, 1.0);
 }
 
+// The core's velocity target (#431): the pixel's travel over the shutter in px, uncapped, for an
+// effect or operator to read.
+@fragment
+fn fs_target(i: Out) -> @location(0) vec4<f32> {
+    return vec4<f32>(to_px(i.c) - to_px(i.o), 0.0, 1.0);
+}
+
 // A pixel's travel, view depth and coverage; where nothing drew, the background's travel under
 // the camera's move, far away and uncovered.
 fn vel_at(p: vec2<i32>) -> vec4<f32> {

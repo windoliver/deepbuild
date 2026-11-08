@@ -53,25 +53,41 @@ impl Equirect {
         e
     }
 
-    /// Half the size, each pixel the mean of the four it covers (a single row or column halves
-    /// alone).
+    /// Half the size, each pixel the mean of the area it covers (#426): on an odd side each
+    /// covers a little over two source pixels, partly, so no row or column is dropped and the
+    /// level stays where its source was (the blurred background mirrors about its horizon).
     fn half(&self) -> Equirect {
         let [w, h] = self.size;
         let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
+        // Along one side of `n` pixels into `m`: each target's (source, weight) pairs.
+        let spans = |n: u32, m: u32| -> Vec<Vec<(usize, f32)>> {
+            let k = f64::from(n) / f64::from(m);
+            (0..m)
+                .map(|i| {
+                    let (a, b) = (f64::from(i) * k, f64::from(i + 1) * k);
+                    (a.floor() as u32..(b.ceil() as u32).min(n))
+                        .filter_map(|s| {
+                            let o = b.min(f64::from(s + 1)) - a.max(f64::from(s));
+                            (o > 0.0).then_some((s as usize, (o / k) as f32))
+                        })
+                        .collect()
+                })
+                .collect()
+        };
+        let (xs, ys) = (spans(w, nw), spans(h, nh));
         let mut rgb = Vec::with_capacity((nw * nh) as usize);
-        for y in 0..nh {
-            for x in 0..nw {
+        for ry in &ys {
+            for rx in &xs {
                 let mut c = [0f32; 3];
-                let mut n = 0f32;
-                for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
-                    let (sx, sy) = ((x * 2 + dx).min(w - 1), (y * 2 + dy).min(h - 1));
-                    let p = self.rgb[(sy * w + sx) as usize];
-                    for i in 0..3 {
-                        c[i] += p[i];
+                for &(sy, wy) in ry {
+                    for &(sx, wx) in rx {
+                        let p = self.rgb[sy * w as usize + sx];
+                        for i in 0..3 {
+                            c[i] += p[i] * wx * wy;
+                        }
                     }
-                    n += 1.0;
                 }
-                rgb.push(c.map(|v| v / n));
+                rgb.push(c);
             }
         }
         Equirect {
@@ -245,7 +261,9 @@ impl Prefilter {
     }
 
     /// Prefilters `source` into a cube of `size` px, keyed by `key`, on the GPU now: every mip,
-    /// or the first `filled` (the rest left black).
+    /// or the first `filled` (the rest left black). With `blur`, the background's own cube
+    /// (#426): one mip holding the lobe at exactly that roughness, at the size of the lighting
+    /// cube's mip at or below it, which lighting never reads and `builds` doesn't count.
     pub fn build(
         &mut self,
         device: &Device,
@@ -253,6 +271,7 @@ impl Prefilter {
         source: &Equirect,
         size: u32,
         filled: Option<u32>,
+        blur: Option<f32>,
     ) -> Cube {
         let d = &device.device;
         // The source with its mips, as half floats.
@@ -306,7 +325,10 @@ impl Prefilter {
             );
         }
         let src_view = src.create_view(&wgpu::TextureViewDescriptor::default());
-        let mips = mips(size);
+        let (mips, size) = match blur {
+            None => (mips(size), size),
+            Some(r) => (1, (size >> (r * (mips(size) - 1) as f32) as u32).max(1)),
+        };
         let filled = filled.unwrap_or(mips).min(mips);
         let cube = d.create_texture(&wgpu::TextureDescriptor {
             label: Some("scene3d env cube"),
@@ -329,17 +351,19 @@ impl Prefilter {
         let mut keep = Vec::new();
         for m in 0..mips {
             let px = (size >> m).max(1);
-            let rough = if mips > 1 {
-                m as f32 / (mips - 1) as f32
-            } else {
-                0.0
+            let rough = match blur {
+                Some(r) => r,
+                None if mips > 1 => m as f32 / (mips - 1) as f32,
+                None => 0.0,
             };
             for face in 0..6u32 {
                 if m >= filled {
                     continue;
                 }
+                // Lighting's lookups keep #422's level bias of 1; the background's take none,
+                // since a wider lookup widens the lobe it shows (#426).
                 let params = Params {
-                    at: [face, m, mips, SAMPLES],
+                    at: [face, m, u32::from(blur.is_none()), SAMPLES],
                     k: [
                         rough,
                         px as f32,
@@ -397,7 +421,7 @@ impl Prefilter {
         }
         device.queue.submit([encoder.finish()]);
         drop(keep);
-        self.builds += 1;
+        self.builds += u32::from(blur.is_none());
         Cube {
             key,
             view: cube.create_view(&wgpu::TextureViewDescriptor {
@@ -664,6 +688,33 @@ mod tests {
         assert!((irradiance(&c, [0.0, 1.0, 0.0])[0] - 1.0).abs() < 0.07);
         assert!(irradiance(&c, [0.0, -1.0, 0.0])[0].abs() < 0.07);
         assert!((irradiance(&c, [1.0, 0.0, 0.0])[0] - 0.5).abs() < 0.02);
+    }
+
+    #[test]
+    fn an_odd_level_halves_by_area_and_keeps_its_horizon() {
+        // A step at the horizon, 45 rows high: the 22-row half keeps its mean and mirrors.
+        let e = Equirect {
+            size: [4, 45],
+            rgb: (0..45 * 4)
+                .map(|i| match (i / 4).cmp(&22) {
+                    std::cmp::Ordering::Less => [1.0; 3],
+                    std::cmp::Ordering::Equal => [0.5; 3],
+                    std::cmp::Ordering::Greater => [0.0; 3],
+                })
+                .collect(),
+        };
+        let h = e.half();
+        assert_eq!(h.size, [2, 22]);
+        let mean = |e: &Equirect| e.rgb.iter().map(|c| c[0]).sum::<f32>() / e.rgb.len() as f32;
+        assert!((mean(&h) - 0.5).abs() < 1e-5, "mean {}", mean(&h));
+        for y in 0..11 {
+            let (a, b) = (h.rgb[y * 2][0], h.rgb[(21 - y) * 2][0]);
+            assert!(
+                (a + b - 1.0).abs() < 1e-5,
+                "rows {y} and {}: {a} + {b}",
+                21 - y
+            );
+        }
     }
 
     #[test]

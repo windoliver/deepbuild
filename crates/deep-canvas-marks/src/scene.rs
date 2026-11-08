@@ -220,6 +220,8 @@ pub struct Effect {
     pub dancing: bool,
     /// #149: the marks inside are a fill or a line's coverage, laid through this medium.
     pub medium: Option<Arc<deep_canvas_drawn::medium::Medium>>,
+    /// #467: the marks inside are an item's coverage, and this is the layer built from it.
+    pub paint: Option<Arc<crate::fx::Part>>,
 }
 
 /// A group's blend (Frame and group: blend modes): the 16 W3C modes and add, which Vello draws,
@@ -353,7 +355,12 @@ impl Effect {
                         },
                     };
                     let item = items.get(op).cloned();
-                    Ok(GroupPass { op: op.to_string(), item, params, grow })
+                    Ok(GroupPass {
+                        op: op.to_string(),
+                        item,
+                        params,
+                        grow,
+                    })
                 })
                 .collect::<Result<_, _>>()?,
             Some(_) => return refuse("bad_doc", path("passes")),
@@ -376,6 +383,7 @@ impl Effect {
             backdrop,
             dancing,
             medium: None,
+            paint: None,
         }))
     }
 }
@@ -436,6 +444,9 @@ impl Scope {
                     }
                     if let Some(m) = &e.medium {
                         k.text(&format!("{m:?}"));
+                    }
+                    if let Some(p) = &e.paint {
+                        k.text(&format!("{p:?}"));
                     }
                 }
             }
@@ -720,18 +731,24 @@ pub fn text_spec_in(
         Some(Value::String(lang)) => Some(lang.clone()),
         Some(_) => return refuse("bad_doc", format!("{path}/params/lang")),
     };
+    // #496: a weight a channel or driver writes arrives as a number, rounded to a whole unit;
+    // a weight no static face of the family has is set on its variable twin.
+    let weight = params
+        .get("weight")
+        .and_then(Value::as_f64)
+        .map(f64::round)
+        .filter(|w| (1.0..=1000.0).contains(w))
+        .map_or(400, |w| w as u16);
     Ok(TextSpec {
         text,
-        family: ty.family(&font),
+        family: ty
+            .family(&font)
+            .map(|f| deep_text::fonts::family_at(f, weight)),
         fallback: ty.fallback.clone(),
         lang,
         font,
         size: num(params.get("size")).unwrap_or(13.0),
-        weight: params
-            .get("weight")
-            .and_then(Value::as_u64)
-            .and_then(|w| u16::try_from(w).ok())
-            .unwrap_or(400),
+        weight,
         width: params.get("box").and_then(|b| num(b.get("w"))),
         max_lines: match params.get("max_lines") {
             None => None,
@@ -893,7 +910,12 @@ impl Drawn {
                     .width
                     .unwrap_or(spec.text.chars().count() as f64 * spec.size);
                 grown(
-                    [origin[0], origin[1] - spec.size, width, lines * spec.size * 2.0],
+                    [
+                        origin[0],
+                        origin[1] - spec.size,
+                        width,
+                        lines * spec.size * 2.0,
+                    ],
                     spec.size,
                 )
             }
@@ -901,7 +923,10 @@ impl Drawn {
         match self.clip {
             Some(c) => {
                 let (x0, y0) = (b[0].max(c[0]), b[1].max(c[1]));
-                let (x1, y1) = ((b[0] + b[2]).min(c[0] + c[2]), (b[1] + b[3]).min(c[1] + c[3]));
+                let (x1, y1) = (
+                    (b[0] + b[2]).min(c[0] + c[2]),
+                    (b[1] + b[3]).min(c[1] + c[3]),
+                );
                 [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
             }
             None => b,
@@ -2547,6 +2572,9 @@ pub enum Notation {
     Percent,
     /// A reading in seconds (or in ms with `unit: ms`) as 450 ms, 3.5 s, 2 min 05 s or 1 h 02 min.
     Duration,
+    /// #496: whole seconds as hours, minutes and seconds, each at least two digits, as a
+    /// countdown shows them: 8104 is 02:15:04.
+    Clock,
 }
 
 /// How a bound value or a counter shows its number (canvas primitives: Bound value, `format`).
@@ -2647,6 +2675,7 @@ impl Format {
             Some("compact") => Notation::Compact,
             Some("percent") => Notation::Percent,
             Some("duration") => Notation::Duration,
+            Some("clock") => Notation::Clock,
             Some(_) => return refuse("format_notation", format!("{path}/format/notation")),
         };
         if f.notation == Notation::Duration
@@ -2691,6 +2720,13 @@ impl Format {
             Notation::Percent => (self.digits(n.abs() * 100.0, self.precision), "%".into()),
             Notation::Compact => self.compact(n.abs()),
             Notation::Duration => (self.duration(n.abs()), String::new()),
+            Notation::Clock => {
+                let s = n.abs().floor() as u64;
+                (
+                    format!("{:02}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60),
+                    String::new(),
+                )
+            }
         };
         let sign = if n < 0.0 && body.chars().any(|c| c.is_ascii_digit() && c != '0') {
             "−"
@@ -2700,7 +2736,7 @@ impl Format {
             ""
         };
         let unit = match (&self.unit, self.notation) {
-            (_, Notation::Percent | Notation::Duration) => String::new(),
+            (_, Notation::Percent | Notation::Duration | Notation::Clock) => String::new(),
             (Some(u), _) if self.unit_raised => raised(u),
             (Some(u), _) if u == "%" || u == "°" => u.clone(),
             (Some(u), _) => format!(" {u}"),
@@ -2919,6 +2955,15 @@ fn evaluated_number(
 ) -> Result<Evaluated, Refused> {
     if let Some(found) = anchor_of(items, source)? {
         return Ok(found);
+    }
+    // #496: a data value by its path, as the frame evaluated it on the item, else as written.
+    if let Some(name) = source.strip_prefix("data/") {
+        let value = item.pointer(&format!("/params/data/{name}")).or_else(|| {
+            doc.get("data")?
+                .get(name)
+                .map(|d| d.get("value").unwrap_or(d))
+        });
+        return Ok(value.and_then(Value::as_f64).map(|v| (v, None)));
     }
     let target = doc
         .get("drivers")
@@ -3948,6 +3993,9 @@ pub fn frame_planted(
     zoom: f64,
     planted: Planted,
 ) -> Result<Frame, Refused> {
+    // #467: parallax groups moved to their offset at the record's time, repeats laid out.
+    let moved = crate::fields::apply(doc, items, record.pinned)?;
+    let items = moved.as_ref().unwrap_or(items);
     let bound = bound_texts(doc, items, record)?;
     frame_shown(
         doc,
@@ -4125,7 +4173,10 @@ fn isolated(item: &Value) -> bool {
 /// Whether `id` is a `backdrop: below` group no item names as its parent.
 fn childless_backdrop(id: &str, item: &Value, items: &Map<String, Value>) -> bool {
     item.get("kind").and_then(Value::as_str) == Some("group@1")
-        && item.get("params").and_then(|p| p.get("backdrop")).and_then(Value::as_str)
+        && item
+            .get("params")
+            .and_then(|p| p.get("backdrop"))
+            .and_then(Value::as_str)
             == Some("below")
         && !items
             .values()
@@ -4158,14 +4209,13 @@ fn ancestors(items: &Map<String, Value>, id: &str) -> Vec<String> {
 /// `id`'s rank among `items`: its z, or inside an isolated group that group's, then its chain.
 fn rank_of(items: &Map<String, Value>, id: &str, item: &Value) -> Rank {
     let node = |i: &str, it: &Value| {
-        (
-            band_of(it),
-            it.get("order")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string(),
-            i.to_string(),
-        )
+        let order = it.get("order").and_then(Value::as_str).unwrap_or("");
+        // #467: a `sort: y` group's child orders first by its sort anchor's y at t.
+        let order = match foot_key(items, i, it) {
+            Some(key) => format!("{key}\u{1}{order}"),
+            None => order.to_string(),
+        };
+        (band_of(it), order, i.to_string())
     };
     let mut z = z_of(item);
     let mut chain = Vec::new();
@@ -4178,6 +4228,42 @@ fn rank_of(items: &Map<String, Value>, id: &str, item: &Value) -> Rank {
     }
     chain.push(node(id, item));
     Rank { z, chain }
+}
+
+/// #467 (Frame and group: y sort): when `id`'s parent group sorts by y, the y of `id`'s sort
+/// anchor (the parent's `sort_anchor`, its foot by default) on its evaluated bounds, a group's
+/// the union of its descendants', as text that sorts as the number does.
+fn foot_key(items: &Map<String, Value>, id: &str, item: &Value) -> Option<String> {
+    let parent = items.get(item.get("parent")?.as_str()?)?;
+    let params = parent.get("params")?;
+    if params.get("sort").and_then(Value::as_str) != Some("y") {
+        return None;
+    }
+    let anchor = pair(params.get("sort_anchor")).unwrap_or([0.5, 1.0]);
+    let own = |it: &Value| {
+        let kind = it.get("kind").and_then(Value::as_str).unwrap_or_default();
+        let local = crate::relations::own_box(kind, object_or_empty(it.get("params")))?;
+        Some(crate::relations::placed(local, crate::relations::place_of(it, Some(local))))
+    };
+    let mut boxes: Vec<[f64; 4]> = own(item).into_iter().collect();
+    if item.get("kind").and_then(Value::as_str) == Some("group@1") {
+        for (cid, c) in items {
+            if ancestors(items, cid).iter().any(|a| a == id) {
+                boxes.extend(own(c));
+            }
+        }
+    }
+    let (y0, y1) = boxes.iter().fold((f64::MAX, f64::MIN), |(a, b), r| {
+        (a.min(r[1]), b.max(r[1] + r[3]))
+    });
+    if y0 > y1 {
+        return None;
+    }
+    let y = y0 + anchor[1] * (y1 - y0);
+    // f64 in total order as unsigned bits: negatives flipped whole, the rest with the sign set.
+    let bits = y.to_bits();
+    let ordered = if bits >> 63 == 1 { !bits } else { bits | (1 << 63) };
+    Some(format!("{ordered:016x}"))
 }
 
 /// Each item whose own z would lift it out of the isolated group it draws inside, with that
@@ -4826,6 +4912,18 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             .flat_map(|mark| shaded(id, mark, shade, &scopes, clip))
             .collect(),
     };
+    // #467: paint built from the item's coverage: a drop, a glow, an inner shade, bevel, satin.
+    let light = ctx
+        .ty
+        .drawn
+        .as_ref()
+        .and_then(|l| l.light.as_ref())
+        .map_or(crate::fx::Light::default(), |l| crate::fx::Light {
+            dir: l.dir,
+            elevation: l.elevation,
+        });
+    let fx = crate::fx::Fx::read(ctx.palette, paint, &paint_path, light)?;
+    let drawn_marks = with_fx(id, &fx, drawn_marks);
     Ok(Some(Placed {
         keys: Vec::new(),
         layer: layer.to_string(),
@@ -4834,6 +4932,147 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         after: drawn(after),
         drawn: drawn_marks,
     }))
+}
+
+/// `mark` in one color, every span of a text included.
+fn recolored(mark: &Mark, c: Rgb) -> Mark {
+    let mut m = mark.clone();
+    match &mut m {
+        Mark::Rect { fill, .. } => *fill = Fill::Solid(c),
+        Mark::Circle { color, .. } | Mark::Path { color, .. } => *color = c,
+        Mark::Shape { fill, stroke, .. } => {
+            fill.iter_mut().for_each(|(f, a)| {
+                *f = Fill::Solid(c);
+                *a = 1.0;
+            });
+            stroke.iter_mut().for_each(|l| {
+                l.paint = Fill::Solid(c);
+                l.opacity = 1.0;
+            });
+        }
+        Mark::Text {
+            color, runs, role, ..
+        } => {
+            *color = c;
+            *role = None;
+            runs.iter_mut().for_each(|r| r.color = c);
+        }
+        Mark::Image { .. } => {}
+    }
+    m
+}
+
+/// `mark` moved by `d` u, renamed `item`.
+fn moved(mark: &Mark, d: [f64; 2], name: &str) -> Mark {
+    let shift = |p: [f64; 2]| [p[0] + d[0], p[1] + d[1]];
+    let mut m = mark.clone();
+    match &mut m {
+        Mark::Rect { item, bounds, .. } | Mark::Image { item, bounds, .. } => {
+            *item = name.to_string();
+            bounds[0] += d[0];
+            bounds[1] += d[1];
+        }
+        Mark::Circle { item, center, .. } => {
+            *item = name.to_string();
+            *center = shift(*center);
+        }
+        Mark::Path { item, offset, .. } => {
+            *item = name.to_string();
+            *offset = shift(*offset);
+        }
+        Mark::Text { item, origin, .. } => {
+            *item = name.to_string();
+            *origin = shift(*origin);
+        }
+        Mark::Shape { item, verbs, .. } => {
+            *item = name.to_string();
+            for v in verbs.iter_mut() {
+                *v = match *v {
+                    Verb::Move(p) => Verb::Move(shift(p)),
+                    Verb::Line(p) => Verb::Line(shift(p)),
+                    Verb::Quad(a, b) => Verb::Quad(shift(a), shift(b)),
+                    Verb::Cubic(a, b, c) => Verb::Cubic(shift(a), shift(b), shift(c)),
+                    Verb::Close => Verb::Close,
+                };
+            }
+        }
+    }
+    m
+}
+
+/// #467: an item's marks with what its paint builds from their coverage (Paint: drop; Paint:
+/// shade, `kind: inner`; Paint: glow, bevel and satin). A drop without blur is the item's own
+/// marks once more, moved and in its role, under them: on text the same shaped run. Every other
+/// part draws the item's own marks as white coverage inside a scope whose effect builds the part
+/// from it, under the marks (a blurred drop, an outer glow) or over them.
+fn with_fx(id: &str, fx: &crate::fx::Fx, marks: Vec<Arc<Drawn>>) -> Vec<Arc<Drawn>> {
+    let parts = fx.parts();
+    if fx.drop.is_none() && parts.is_empty() {
+        return marks;
+    }
+    let own: Vec<Arc<Drawn>> = marks.iter().filter(|d| d.mark.item() == id).cloned().collect();
+    let layer = |part: crate::fx::Part| -> Vec<Arc<Drawn>> {
+        let name = format!("{id}#{}", part.name());
+        let blend = match part.mode() {
+            crate::fx::Mode::Normal => Blend::Normal,
+            crate::fx::Mode::Multiply => Blend::Multiply,
+            crate::fx::Mode::Screen => Blend::Screen,
+            crate::fx::Mode::Add => Blend::Add,
+        };
+        let scope = Scope::Opacity {
+            item: name.clone(),
+            alpha: 1.0,
+            blend: Some(blend),
+            effect: Some(Arc::new(Effect {
+                paint: Some(Arc::new(part)),
+                ..Effect::default()
+            })),
+        };
+        own.iter()
+            .map(|d| {
+                let mut scopes = d.scopes.clone();
+                scopes.push(scope.clone());
+                Arc::new(Drawn {
+                    mark: moved(&recolored(&d.mark, [255, 255, 255]), [0.0, 0.0], &name),
+                    clip: d.clip,
+                    scopes,
+                })
+            })
+            .collect()
+    };
+    let mut under = Vec::new();
+    let mut over = Vec::new();
+    if let Some(drop) = fx.drop.as_ref().filter(|d| d.blur == 0.0) {
+        let name = format!("{id}#drop");
+        let mut extra = Vec::new();
+        if drop.opacity < 1.0 || drop.mode == crate::fx::Mode::Multiply {
+            extra.push(Scope::Opacity {
+                item: name.clone(),
+                alpha: drop.opacity,
+                blend: (drop.mode == crate::fx::Mode::Multiply).then_some(Blend::Multiply),
+                effect: None,
+            });
+        }
+        for d in &own {
+            let mut scopes = d.scopes.clone();
+            scopes.extend(extra.iter().cloned());
+            under.push(Arc::new(Drawn {
+                mark: moved(&recolored(&d.mark, drop.color), drop.offset, &name),
+                clip: d.clip,
+                scopes,
+            }));
+        }
+    }
+    for part in parts {
+        if part.under() {
+            under.extend(layer(part));
+        } else {
+            over.extend(layer(part));
+        }
+    }
+    under.extend(marks);
+    under.extend(over);
+    under
 }
 
 /// A filled outline with its shade: the fill, then the shade (the shape less a copy of it moved

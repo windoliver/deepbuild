@@ -76,6 +76,8 @@ pub const TABLE: &[Def] = &[
     d("abs@1", X, 1.0, true, ALL),
     d("acos@1", X, 8.0, false, ALL),
     d("add@1", A, 1.0, true, ALL),
+    // A color adjustment (Item and kind: adjust) by `mode`, a literal, and its amount `x`.
+    d("adjust@1", &["rgb", "x"], 20.0, false, MATERIAL | PASS),
     d("all@1", X, 1.0, true, ALL),
     d("and@1", A, 1.0, true, ALL),
     d("any@1", X, 1.0, true, ALL),
@@ -88,10 +90,14 @@ pub const TABLE: &[Def] = &[
     d("atomic_min@1", W, 2.0, true, COMPUTE),
     d("atomic_or@1", W, 2.0, true, COMPUTE),
     d("atomic_xor@1", W, 2.0, true, COMPUTE),
+    // The copy of the opaque scene a see-through part's material operator reads (#431).
+    tex("backdrop@1", &["uv", "lod"], false, MATERIAL),
     d("bitcast@1", X, 0.0, true, ALL),
     d("blend@1", &["base", "over"], 20.0, false, MATERIAL | PASS),
     d("camera@1", NONE, 0.0, false, MATERIAL | PASS),
     d("ceil@1", X, 1.0, true, ALL),
+    // Cellular noise in 2D or 3D: its 9 or 27 cells' hashes and distances.
+    d("cells@1", NOISE, 180.0, false, ALL),
     d("clamp@1", &["x", "lo", "hi"], 2.0, true, ALL),
     d("compose@1", &["x", "y", "z", "w"], 0.0, true, ALL),
     d("const@1", NONE, 0.0, true, ALL),
@@ -115,10 +121,13 @@ pub const TABLE: &[Def] = &[
     d("first_trailing_bit@1", X, 1.0, true, ALL),
     d("floor@1", X, 1.0, true, ALL),
     d("fract@1", X, 1.0, false, ALL),
+    d("from_hsl@1", &["hsl"], 12.0, false, MATERIAL | PASS),
     d("fwidth@1", X, 2.0, false, MATERIAL | PASS),
     d("ge@1", A, 1.0, true, ALL),
     d("gt@1", A, 1.0, true, ALL),
     d("hash@1", &["a", "b", "c", "d"], 6.0, true, ALL),
+    // Square to quad in closed form, from the quad's four corners.
+    d("homography@1", &["quad"], 30.0, false, ALL),
     d("index@1", &["a", "i"], 1.0, true, ALL),
     d("inverse_sqrt@1", X, 4.0, false, ALL),
     d("le@1", A, 1.0, true, ALL),
@@ -135,6 +144,8 @@ pub const TABLE: &[Def] = &[
     d("mul@1", A, 1.0, true, ALL),
     d("ne@1", A, 1.0, true, ALL),
     d("neg@1", X, 1.0, true, ALL),
+    // Three decorrelated noise@1s: three octaves' weight.
+    d("noise3@1", NOISE, 540.0, false, ALL),
     // Gradient noise on the integer lattice hash: one octave.
     d("noise@1", NOISE, 180.0, false, ALL),
     // A geometry step: the surface's normal in `space` (object, world or view).
@@ -153,6 +164,7 @@ pub const TABLE: &[Def] = &[
     d("role@1", X, 0.0, false, MATERIAL | PASS),
     d("round@1", X, 1.0, true, ALL),
     tex("sample@1", &["tex", "uv", "lod"], false, ALL),
+    tex("sample_grad@1", &["tex", "uv", "dx", "dy"], false, ALL),
     d("screen_size@1", NONE, 0.0, false, MATERIAL | PASS),
     d("screen_uv@1", NONE, 1.0, false, MATERIAL | PASS),
     d("seed@1", NONE, 0.0, true, ALL),
@@ -163,11 +175,14 @@ pub const TABLE: &[Def] = &[
     d("sin@1", X, 8.0, false, ALL),
     d("size@1", &["tex"], 1.0, true, ALL),
     d("smoothstep@1", &["lo", "hi", "x"], 6.0, false, ALL),
+    // A monotone cubic through its points (a literal), from its table in the input buffer.
+    d("spline@1", X, 20.0, false, ALL),
     d("split@1", X, 0.0, true, ALL),
     d("sqrt@1", X, 4.0, false, ALL),
     d("sub@1", A, 1.0, true, ALL),
     d("t@1", NONE, 0.0, false, ALL),
     d("tan@1", X, 8.0, false, ALL),
+    d("to_hsl@1", &["rgb"], 12.0, false, MATERIAL | PASS),
     d("transpose@1", X, 4.0, false, ALL),
     d("trunc@1", X, 1.0, true, ALL),
     d("write@1", W, 1.0, true, COMPUTE),
@@ -493,7 +508,8 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
                 return Err(format!("{step}'s seed is a u32"));
             };
             let field = |k: &str, or: f64| env.get(k).and_then(Value::as_f64).unwrap_or(or);
-            let period = field("period", 0.0) as u32;
+            let period = period_of(env.get("period"));
+            let period = [period[0], period[1]];
             let at = [
                 p.first().copied().unwrap_or(0.0),
                 p.get(1).copied().unwrap_or(0.0),
@@ -510,6 +526,59 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
                     period,
                 )
             })
+        }
+        "noise3" | "cells" => {
+            let p = arg(0)?.lanes()?;
+            let U(seed) = arg(1)? else {
+                return Err(format!("{step}'s seed is a u32"));
+            };
+            let field = |k: &str, or: f64| env.get(k).and_then(Value::as_f64).unwrap_or(or);
+            let period = period_of(env.get("period"));
+            if name == "noise3" {
+                let period = [period[0], period[1]];
+                let at = [p[0], p.get(1).copied().unwrap_or(0.0)];
+                Vf(noise3(at, seed, period).to_vec())
+            } else {
+                let metric = env
+                    .get("metric")
+                    .and_then(Value::as_str)
+                    .unwrap_or("euclidean");
+                let metric = Metric::parse(metric).ok_or("cells' metric")?;
+                let c = cells(&p, seed, field("jitter", 1.0), metric, period);
+                match env.get("port").and_then(Value::as_str).unwrap_or("f1") {
+                    "f2" => F(c.f2),
+                    "id" => U(c.id),
+                    "center" => Vf(c.center),
+                    _ => F(c.f1),
+                }
+            }
+        }
+        "spline" => {
+            let pts = spline_points(env.get("points").unwrap_or(&Value::Null))?;
+            F(spline_at(&pts, &spline_table(&pts), arg(0)?.f()?))
+        }
+        "homography" => {
+            let q = arg(0)?.lanes()?;
+            if q.len() != 8 {
+                return Err("homography takes four corners".into());
+            }
+            let m = homography(std::array::from_fn(|k| [q[2 * k], q[2 * k + 1]]));
+            // Columns, as WGSL holds a matrix.
+            Mat((0..3).map(|c| (0..3).map(|r| m[r][c]).collect()).collect())
+        }
+        "to_hsl" | "from_hsl" | "adjust" => {
+            let c = <[f64; 3]>::try_from(arg(0)?.lanes()?)
+                .map_err(|_| format!("{step} takes an rgb"))?;
+            Vf(match name {
+                "to_hsl" => to_hsl(c),
+                "from_hsl" => from_hsl(c),
+                _ => adjust(
+                    env.get("mode").and_then(Value::as_str).unwrap_or(""),
+                    c,
+                    arg(1)?.f()?,
+                ),
+            }
+            .to_vec())
         }
         "compose" => Vf(a.iter().map(V::f).collect::<Result<_, _>>()?),
         "split" => arg(0)?,
@@ -605,7 +674,9 @@ fn base(step: &str, a: &[V], env: &Value, to: Option<&str>) -> Result<V, String>
             .and_then(|n| u32::try_from(n).ok())
             .ok_or_else(|| format!("{step} reads `{name}`, which its fixture's env lacks"))?),
         "t" => F(env.get("t").and_then(Value::as_f64).ok_or("t reads `t`")?),
-        "load" | "sample" | "size" => {
+        // The opaque scene's copy is the case's env `backdrop`, read as sample reads a texture.
+        "backdrop" => base("sample@1", &[env_v("backdrop")?, arg(0)?, arg(1)?], env, to)?,
+        "load" | "sample" | "sample_grad" | "size" => {
             let Tex(rows) = arg(0)? else {
                 return Err(format!("{step} reads a texture"));
             };
@@ -790,14 +861,19 @@ pub fn hash1(x: u32) -> u32 {
     (w >> 22) ^ w
 }
 
+/// A lattice coordinate wrapped into `period` cells, when the period is above 0.
+fn wrapped(c: i32, period: u32) -> i32 {
+    match i32::try_from(period) {
+        Ok(p) if p > 0 => c.rem_euclid(p),
+        _ => c,
+    }
+}
+
 /// One lattice corner of noise@1: its gradient, two lanes in [-1, 1) from the hash of the
-/// corner (wrapped into `period` cells when it is above 0) and the seed's hash `hs`, dotted with
-/// the offset `(dx, dy)` from the corner.
-fn corner(hs: u32, cx: i32, cy: i32, period: u32, dx: f64, dy: f64) -> f64 {
-    let (x, y) = match i32::try_from(period) {
-        Ok(p) if p > 0 => (cx.rem_euclid(p), cy.rem_euclid(p)),
-        _ => (cx, cy),
-    };
+/// corner (wrapped into each axis's `period` cells when it is above 0) and the seed's hash `hs`,
+/// dotted with the offset `(dx, dy)` from the corner.
+fn corner(hs: u32, cx: i32, cy: i32, period: [u32; 2], dx: f64, dy: f64) -> f64 {
+    let (x, y) = (wrapped(cx, period[0]), wrapped(cy, period[1]));
     let h = hash1(hash1(hs ^ x as u32) ^ y as u32);
     let gx = f64::from(h & 0xffff) / 32768.0 - 1.0;
     let gy = f64::from(h >> 16) / 32768.0 - 1.0;
@@ -805,9 +881,9 @@ fn corner(hs: u32, cx: i32, cy: i32, period: u32, dx: f64, dy: f64) -> f64 {
 }
 
 /// `noise@1`: 2D gradient noise on the integer lattice hash, about [-1, 1], 0 at every lattice
-/// point; with `period` above 0 it repeats every `period` cells on each axis. The effects
+/// point; with an axis's `period` above 0 it repeats every `period` cells along it. The effects
 /// module's WGSL writer and its f64 interpreter both write this function.
-pub fn noise2(p: [f64; 2], seed: u32, period: u32) -> f64 {
+pub fn noise2(p: [f64; 2], seed: u32, period: [u32; 2]) -> f64 {
     let (ix, iy) = (p[0].floor(), p[1].floor());
     let (fx, fy) = (p[0] - ix, p[1] - iy);
     let (cx, cy) = (ix as i32, iy as i32);
@@ -831,16 +907,329 @@ pub fn noise2(p: [f64; 2], seed: u32, period: u32) -> f64 {
 
 /// `fbm@1`: `octaves` of [`noise2`], octave k at `p × lacunarity^k` with seed `seed + k` and
 /// weight `gain^k`, over the sum of the weights; a period grows by the lacunarity each octave.
-pub fn fbm2(p: [f64; 2], seed: u32, octaves: u32, lacunarity: f64, gain: f64, period: u32) -> f64 {
+pub fn fbm2(
+    p: [f64; 2],
+    seed: u32,
+    octaves: u32,
+    lacunarity: f64,
+    gain: f64,
+    period: [u32; 2],
+) -> f64 {
     let (mut sum, mut amp, mut norm, mut q, mut per) = (0.0, 1.0, 0.0, p, period);
     for k in 0..octaves {
         sum += amp * noise2(q, seed.wrapping_add(k), per);
         norm += amp;
         amp *= gain;
         q = [q[0] * lacunarity, q[1] * lacunarity];
-        per = per.wrapping_mul(lacunarity as u32);
+        per = per.map(|x| x.wrapping_mul(lacunarity as u32));
     }
     sum / norm
+}
+
+/// A seeded step's period as one whole number of cells per axis: a number for every axis, or a
+/// list, one per axis of p (a missing axis repeats as the last given); 0 for none.
+pub fn period_of(v: Option<&Value>) -> [u32; 3] {
+    match v {
+        Some(Value::Array(a)) if !a.is_empty() => {
+            let at = |k: usize| a.get(k).or(a.last()).and_then(Value::as_u64).unwrap_or(0) as u32;
+            [at(0), at(1), at(2)]
+        }
+        Some(x) => [x.as_u64().unwrap_or(0) as u32; 3],
+        None => [0; 3],
+    }
+}
+
+/// The odd constant `noise3@1` steps its lanes' seeds by, and `cells@1` its feature lanes' keys.
+const GOLDEN: u32 = 0x9e37_79b9;
+
+/// `noise3@1`: three decorrelated [`noise2`]s at `p`, lane k seeded `seed + k × 0x9e3779b9`.
+pub fn noise3(p: [f64; 2], seed: u32, period: [u32; 2]) -> [f64; 3] {
+    std::array::from_fn(|k| noise2(p, seed.wrapping_add(GOLDEN.wrapping_mul(k as u32)), period))
+}
+
+/// A `cells@1` distance: `euclidean`, `manhattan` or `chebyshev`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Metric {
+    Euclidean,
+    Manhattan,
+    Chebyshev,
+}
+
+impl Metric {
+    pub fn parse(name: &str) -> Option<Metric> {
+        match name {
+            "euclidean" => Some(Metric::Euclidean),
+            "manhattan" => Some(Metric::Manhattan),
+            "chebyshev" => Some(Metric::Chebyshev),
+            _ => None,
+        }
+    }
+
+    /// Its number in the WGSL the effects module writes.
+    pub fn code(self) -> u32 {
+        self as u32
+    }
+
+    pub fn of(self, d: &[f64]) -> f64 {
+        match self {
+            Metric::Euclidean => crate::ops::sqrt(d.iter().map(|x| x * x).sum()),
+            Metric::Manhattan => d.iter().map(|x| x.abs()).sum(),
+            Metric::Chebyshev => d.iter().fold(0.0, |m, x| m.max(x.abs())),
+        }
+    }
+}
+
+/// What `cells@1` gives at a point: the distances to the nearest and second-nearest feature
+/// points, the nearest one's cell ID and its position.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cells {
+    pub f1: f64,
+    pub f2: f64,
+    pub id: u32,
+    pub center: Vec<f64>,
+}
+
+/// A lattice cell's ID: the fold of `hash@1` over the seed and its coordinates, each wrapped
+/// into its axis's `period` cells when that is above 0.
+fn cell_id(seed: u32, c: &[i32], period: [u32; 3]) -> u32 {
+    let mut h = hash1(seed);
+    for (a, x) in c.iter().enumerate() {
+        h = hash1(h ^ wrapped(*x, period[a]) as u32);
+    }
+    h
+}
+
+/// `cells@1`: cellular noise in 2D or 3D (p's length). Each lattice cell holds one feature point,
+/// at its center moved by `jitter` (0 to 1) times a seeded offset in [-0.5, 0.5) per axis; the
+/// search covers the 3 × 3 (or 3 × 3 × 3) cells around p's. With an axis's `period` above 0 it
+/// repeats every `period` cells along it.
+pub fn cells(p: &[f64], seed: u32, jitter: f64, metric: Metric, period: [u32; 3]) -> Cells {
+    let n = p.len().clamp(1, 3);
+    let base: Vec<i32> = p.iter().take(n).map(|x| x.floor() as i32).collect();
+    let mut best = Cells {
+        f1: f64::INFINITY,
+        f2: f64::INFINITY,
+        id: 0,
+        center: vec![0.0; n],
+    };
+    for k in 0..3usize.pow(n as u32) {
+        let c: Vec<i32> = (0..n)
+            .map(|a| base[a] + (k / 3usize.pow(a as u32) % 3) as i32 - 1)
+            .collect();
+        let id = cell_id(seed, &c, period);
+        let at: Vec<f64> = (0..n)
+            .map(|a| {
+                let r = f64::from(hash1(id ^ GOLDEN.wrapping_mul(a as u32 + 1)) >> 8)
+                    * 5.960_464_477_539_063e-8;
+                f64::from(c[a]) + 0.5 + jitter * (r - 0.5)
+            })
+            .collect();
+        let d: Vec<f64> = (0..n).map(|a| p[a] - at[a]).collect();
+        let dist = metric.of(&d);
+        if dist < best.f1 {
+            best.f2 = best.f1;
+            best.f1 = dist;
+            best.id = id;
+            best.center = at;
+        } else if dist < best.f2 {
+            best.f2 = dist;
+        }
+    }
+    best
+}
+
+/// The most points a `spline@1` takes, and the pieces its table holds.
+pub const SPLINE_POINTS: usize = 16;
+pub const SPLINE_PIECES: usize = SPLINE_POINTS - 1;
+
+/// A `spline@1`'s points, checked: 2 to 16 `[x, y]` pairs of finite numbers, x strictly rising.
+pub fn spline_points(v: &Value) -> Result<Vec<[f64; 2]>, String> {
+    let list = v.as_array().ok_or("points is a list of [x, y] pairs")?;
+    if list.len() > SPLINE_POINTS {
+        return Err(format!(
+            "a spline takes at most {SPLINE_POINTS} points, not {}",
+            list.len()
+        ));
+    }
+    if list.len() < 2 {
+        return Err("a spline takes at least 2 points".into());
+    }
+    let mut out: Vec<[f64; 2]> = Vec::with_capacity(list.len());
+    for (i, p) in list.iter().enumerate() {
+        let xy = p
+            .as_array()
+            .filter(|a| a.len() == 2)
+            .and_then(|a| Some([a[0].as_f64()?, a[1].as_f64()?]))
+            .filter(|xy| xy.iter().all(|x| x.is_finite()))
+            .ok_or_else(|| format!("point {i} is not an [x, y] pair of numbers"))?;
+        if out.last().is_some_and(|q| xy[0] <= q[0]) {
+            return Err(format!("point {i}'s x doesn't rise past the one before it"));
+        }
+        out.push(xy);
+    }
+    Ok(out)
+}
+
+/// The monotone cubic's slope at each point (Fritsch and Carlson's monotonicity conditions with
+/// Fritsch and Butland's interior slopes, as SciPy's PCHIP takes them): 0 at a local extremum
+/// or a flat secant, the weighted harmonic mean of the secants elsewhere, and the
+/// shape-preserving three-point formula at each end.
+pub fn spline_slopes(pts: &[[f64; 2]]) -> Vec<f64> {
+    let n = pts.len();
+    let h: Vec<f64> = pts.windows(2).map(|w| w[1][0] - w[0][0]).collect();
+    let m: Vec<f64> = pts
+        .windows(2)
+        .zip(&h)
+        .map(|(w, h)| (w[1][1] - w[0][1]) / h)
+        .collect();
+    if n == 2 {
+        return vec![m[0], m[0]];
+    }
+    let mut d = vec![0.0; n];
+    for k in 1..n - 1 {
+        let (a, b) = (m[k - 1], m[k]);
+        if a == 0.0 || b == 0.0 || a.signum() != b.signum() {
+            continue;
+        }
+        let (w1, w2) = (2.0 * h[k] + h[k - 1], h[k] + 2.0 * h[k - 1]);
+        d[k] = (w1 + w2) / (w1 / a + w2 / b);
+    }
+    let edge = |h0: f64, h1: f64, m0: f64, m1: f64| {
+        let e = ((2.0 * h0 + h1) * m0 - h0 * m1) / (h0 + h1);
+        if e.signum() != m0.signum() || m0 == 0.0 {
+            0.0
+        } else if m0.signum() != m1.signum() && e.abs() > 3.0 * m0.abs() {
+            3.0 * m0
+        } else {
+            e
+        }
+    };
+    d[0] = edge(h[0], h[1], m[0], m[1]);
+    d[n - 1] = edge(h[n - 2], h[n - 3], m[n - 2], m[n - 3]);
+    d
+}
+
+/// A `spline@1`'s table, built at check: each piece's four cubic coefficients `[a, b, c, d]`, its
+/// value `a + b t + c t² + d t³` at `t = x − x_k` from its first point.
+pub fn spline_table(pts: &[[f64; 2]]) -> Vec<[f64; 4]> {
+    let d = spline_slopes(pts);
+    pts.windows(2)
+        .enumerate()
+        .map(|(k, w)| {
+            let h = w[1][0] - w[0][0];
+            let m = (w[1][1] - w[0][1]) / h;
+            [
+                w[0][1],
+                d[k],
+                (3.0 * m - 2.0 * d[k] - d[k + 1]) / h,
+                (d[k] + d[k + 1] - 2.0 * m) / (h * h),
+            ]
+        })
+        .collect()
+}
+
+/// `spline@1` at `x`: its piece's cubic, x clamped into the points' span, so it holds its end
+/// values past either end.
+pub fn spline_at(pts: &[[f64; 2]], table: &[[f64; 4]], x: f64) -> f64 {
+    let (lo, hi) = (pts[0][0], pts[pts.len() - 1][0]);
+    let x = x.clamp(lo, hi);
+    let k = pts[1..pts.len() - 1].iter().filter(|p| p[0] <= x).count();
+    let [a, b, c, d] = table[k];
+    let t = x - pts[k][0];
+    a + t * (b + t * (c + t * d))
+}
+
+/// `homography@1`: the projective map that takes the unit square's corners (0, 0), (1, 0),
+/// (1, 1) and (0, 1) to the quad's four corners in order, in closed form (Heckbert 1989), as
+/// rows; a point maps as `M · (u, v, 1)` divided by its third lane.
+pub fn homography(q: [[f64; 2]; 4]) -> [[f64; 3]; 3] {
+    let [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = q;
+    let (sx, sy) = (x0 - x1 + x2 - x3, y0 - y1 + y2 - y3);
+    let (dx1, dx2, dy1, dy2) = (x1 - x2, x3 - x2, y1 - y2, y3 - y2);
+    let den = dx1 * dy2 - dx2 * dy1;
+    let (g, h) = if den == 0.0 {
+        (0.0, 0.0)
+    } else {
+        ((sx * dy2 - dx2 * sy) / den, (dx1 * sy - sx * dy1) / den)
+    };
+    [
+        [x1 - x0 + g * x1, x3 - x0 + h * x3, x0],
+        [y1 - y0 + g * y1, y3 - y0 + h * y3, y0],
+        [g, h, 1.0],
+    ]
+}
+
+/// `to_hsl@1`: hue in turns [0, 1), saturation and lightness, of an RGB.
+pub fn to_hsl(c: [f64; 3]) -> [f64; 3] {
+    let (hi, lo) = (c[0].max(c[1]).max(c[2]), c[0].min(c[1]).min(c[2]));
+    let l = (hi + lo) / 2.0;
+    let delta = hi - lo;
+    if delta == 0.0 {
+        return [0.0, 0.0, l];
+    }
+    let s = delta / (1.0 - (2.0 * l - 1.0).abs());
+    let h = if hi == c[0] {
+        ((c[1] - c[2]) / delta).rem_euclid(6.0)
+    } else if hi == c[1] {
+        (c[2] - c[0]) / delta + 2.0
+    } else {
+        (c[0] - c[1]) / delta + 4.0
+    };
+    [h / 6.0, s, l]
+}
+
+/// `from_hsl@1`: the RGB of a hue in turns, a saturation and a lightness.
+pub fn from_hsl(c: [f64; 3]) -> [f64; 3] {
+    let [h, s, l] = c;
+    let chroma = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    std::array::from_fn(|k| {
+        let n = [0.0, 8.0, 4.0][k];
+        let t = (n + h.rem_euclid(1.0) * 12.0).rem_euclid(12.0);
+        l - chroma / 2.0 * (t - 3.0).min(9.0 - t).clamp(-1.0, 1.0)
+    })
+}
+
+/// An `adjust@1` mode, as Item and kind: adjust applies it to linear light.
+pub const ADJUST_MODES: &[&str] = &[
+    "exposure",
+    "contrast",
+    "gamma",
+    "hue",
+    "saturation",
+    "brightness",
+    "invert",
+];
+
+/// `adjust@1` with `mode` by `x`: exposure scales by 2^x; contrast pivots at mid gray (0.18);
+/// gamma raises to 1 ÷ x; hue turns x degrees and saturation scales chroma by x, both in OKLab;
+/// brightness scales by x; invert mixes toward 1 − c by x.
+pub fn adjust(mode: &str, c: [f64; 3], x: f64) -> [f64; 3] {
+    let pos = c.map(|v| v.max(0.0));
+    match mode {
+        "exposure" => c.map(|v| v * crate::ops::pow(2.0, x)),
+        "contrast" => pos.map(|v| 0.18 * crate::ops::pow(v / 0.18, x)),
+        "gamma" => pos.map(|v| crate::ops::pow(v, 1.0 / x)),
+        "hue" | "saturation" => {
+            let lab = crate::color::linear_to_oklab(crate::color::LinearRgb {
+                r: pos[0],
+                g: pos[1],
+                b: pos[2],
+            });
+            let (a, b) = if mode == "hue" {
+                let r = x.to_radians();
+                (
+                    lab.a * crate::ops::cos(r) - lab.b * crate::ops::sin(r),
+                    lab.a * crate::ops::sin(r) + lab.b * crate::ops::cos(r),
+                )
+            } else {
+                (lab.a * x, lab.b * x)
+            };
+            let o = crate::color::oklab_to_linear(crate::color::Oklab { l: lab.l, a, b });
+            [o.r, o.g, o.b].map(|v| v.max(0.0))
+        }
+        "brightness" => c.map(|v| v * x),
+        _ => c.map(|v| v + (1.0 - v.clamp(0.0, 1.0) - v) * x),
+    }
 }
 
 /// A value moved by one: an integer by one (wrapping), a float by 1.0, a bool flipped, a list's
