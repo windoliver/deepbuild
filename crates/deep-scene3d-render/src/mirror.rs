@@ -20,10 +20,13 @@ const SOURCE: &str = include_str!("mirror.wgsl");
 pub struct Mirrorer {
     view: Box<Renderer>,
     layout: wgpu::BindGroupLayout,
-    pipeline: wgpu::RenderPipeline,
+    /// The overlay without and with #166's `reflection` target.
+    pipeline: [wgpu::RenderPipeline; 2],
     sampler: wgpu::Sampler,
     /// This frame's uniform and part IDs, set by [`Mirrorer::prepare`].
     frame: Option<(wgpu::Buffer, wgpu::Buffer)>,
+    /// How many parts the picture lays over this frame.
+    parts: usize,
 }
 
 /// The mirrored pass's size: half the frame's, rounded up.
@@ -75,32 +78,43 @@ impl Mirrorer {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(MIRROR_PASS),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
+        let pipeline = |reflection: bool| {
+            let targets = [
                 // Premultiplied: the picture × strength over the part × (1 − strength).
-                targets: &[Some(wgpu::ColorTargetState {
+                Some(wgpu::ColorTargetState {
                     format: LINEAR,
                     blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::COLOR,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+                }),
+                reflection.then_some(wgpu::ColorTargetState {
+                    format: crate::water::REFLECTION,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                }),
+            ];
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(MIRROR_PASS),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &module,
+                    entry_point: Some("vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: Default::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &module,
+                    entry_point: Some("fs"),
+                    compilation_options: Default::default(),
+                    targets: &targets[..1 + usize::from(reflection)],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let pipeline = [pipeline(false), pipeline(true)];
         let sampler = d.create_sampler(&wgpu::SamplerDescriptor {
             label: Some(MIRROR_PASS),
             mag_filter: wgpu::FilterMode::Linear,
@@ -115,6 +129,7 @@ impl Mirrorer {
             pipeline,
             sampler,
             frame: None,
+            parts: 0,
         }
     }
 
@@ -126,6 +141,7 @@ impl Mirrorer {
         mirror: &Mirror,
         look: &Look3,
         picks: &BTreeMap<String, u32>,
+        overlay: bool,
     ) {
         let size = half(scene.size);
         let view = deep_canvas_scene3d::mirror::view(scene, mirror, size);
@@ -134,8 +150,10 @@ impl Mirrorer {
             .parts
             .iter()
             .filter_map(|p| picks.get(p).copied())
+            .filter(|_| overlay)
             .collect();
         let count = ids.len();
+        self.parts = count;
         ids.push(0);
         let flip = [
             (2.0 * scene.camera.centre[0] / f64::from(scene.size[0])) as f32,
@@ -157,6 +175,11 @@ impl Mirrorer {
         self.frame = Some((uniform, parts));
     }
 
+    /// The mirrored picture, linear, at half the frame's size (#166's water reads it).
+    pub fn picture(&self) -> Option<wgpu::TextureView> {
+        self.view.linear().map(|(_, v)| v.clone())
+    }
+
     /// The mirrored view's passes up to its output, then the pass laying its picture over the
     /// parts in `linear`, by `ids`.
     pub fn jobs(
@@ -165,6 +188,7 @@ impl Mirrorer {
         slot: &wgpu::TextureView,
         linear: &wgpu::TextureView,
         ids: &wgpu::TextureView,
+        reflection: Option<wgpu::TextureView>,
         profiler: &Option<crate::Profiler>,
     ) -> Vec<(String, Job)> {
         let Some((uniform, parts)) = &self.frame else {
@@ -180,6 +204,10 @@ impl Mirrorer {
         let Some((_, picture)) = self.view.linear() else {
             return Vec::new();
         };
+        // #166: a water's own mirror lays no picture over parts; the water's pass reads it.
+        if self.parts == 0 {
+            return jobs;
+        }
         let bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(MIRROR_PASS),
             layout: &self.layout,
@@ -206,21 +234,39 @@ impl Mirrorer {
                 },
             ],
         });
-        let (pipeline, linear, profiler) =
-            (self.pipeline.clone(), linear.clone(), profiler.clone());
+        let pipeline = self.pipeline[usize::from(reflection.is_some())].clone();
+        let (linear, profiler) = (linear.clone(), profiler.clone());
         jobs.push((
             MIRROR_PASS.into(),
             Box::new(move |encoder| {
                 crate::timed(&profiler, MIRROR_PASS, encoder, |encoder, timestamps| {
-                    crate::full_pass(
-                        encoder,
-                        MIRROR_PASS,
-                        &linear,
-                        wgpu::LoadOp::Load,
-                        &pipeline,
-                        &bind,
-                        timestamps,
-                    )
+                    let ops = wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    };
+                    let mut colors = vec![Some(wgpu::RenderPassColorAttachment {
+                        view: &linear,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops,
+                    })];
+                    if let Some(r) = &reflection {
+                        colors.push(Some(wgpu::RenderPassColorAttachment {
+                            view: r,
+                            resolve_target: None,
+                            depth_slice: None,
+                            ops,
+                        }));
+                    }
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some(MIRROR_PASS),
+                        color_attachments: &colors,
+                        timestamp_writes: timestamps,
+                        ..Default::default()
+                    });
+                    pass.set_pipeline(&pipeline);
+                    pass.set_bind_group(0, &bind, &[]);
+                    pass.draw(0..3, 0..1);
                 })
             }),
         ));
