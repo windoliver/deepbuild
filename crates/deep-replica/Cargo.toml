@@ -85,6 +85,13 @@ name = "acceptance_326_panels_planted"
 path = "../../tests/acceptance/326/panels/planted.rs"
 harness = false
 
+# AC7's two planted hosts, redrafted blind: gpui-shell's own loader, so they load the fixtures
+# whatever the app's loader admits.
+[[test]]
+name = "acceptance_326_panels_planted_redraft"
+path = "../../tests/acceptance/326/panels/redraft-ac7/planted_redraft.rs"
+harness = false
+
 # Issue #326, criterion group "surfaces": notifications on the virtual clock and every row of States
 # people see on every surface, written blind in tests/acceptance/326/surfaces. No harness, as above.
 [[test]]
@@ -141,4 +148,19 @@ harness = false
 [[test]]
 name = "acceptance_994_window"
 path = "../../tests/acceptance/994/window.rs"
+harness = false
+
+# Issue #1425: the pack check and the load path refusing toolkit imports, names off the panel catalog and lists that
+# run script per frame, and every catalog name drawn in light and dark, written blind in tests/acceptance/1425. The
+# rest of the suite is in vitest there. No harness, as above.
+[[test]]
+name = "acceptance_1425"
+path = "../../tests/acceptance/1425/app/panels.rs"
+harness = false
+
+# Issue #1425 AC3, redrafted blind in tests/acceptance/1425/ac3-redraft: a component off the panel catalog is
+# refused at pack check and at load, and every catalog name renders in light and dark. No harness, as above.
+[[test]]
+name = "acceptance_1425_ac3"
+path = "../../tests/acceptance/1425/ac3-redraft/ac3.rs"
 harness = false
