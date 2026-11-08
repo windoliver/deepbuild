@@ -34,7 +34,7 @@ export function world(extra: { sessions?: Sess[] } = {}): World {
   writeFileSync(join(h.home, '.claude.json'), JSON.stringify({ oauthAccount: { accountUuid: ACCOUNT, emailAddress: 'a@example.invalid' } }));
   mkdirSync(join(h.home, '.claude'), { recursive: true });
   writeFileSync(join(h.home, '.claude', 'CLAUDE.md'), MEMORY);
-  writeFileSync(join(fx.repos.api, '.env.local'), `STRIPE_API_KEY=${CANARIES.stripe}\nSESSION_SECRET=${CANARIES.secret}\n`);
+  writeFileSync(join(fx.repos.api!, '.env.local'), `STRIPE_API_KEY=${CANARIES.stripe}\nSESSION_SECRET=${CANARIES.secret}\n`);
   for (const s of [...fx.sessions, ...(extra.sessions ?? [])]) writeSession(h.home, s);
   return { h, fx, work, wiki: join(rootOf(h.home), 'wiki') };
 }
@@ -104,7 +104,7 @@ export async function setupWithWindows(w: World, o: { env?: Record<string, strin
   await (await import('./setup19.ts')).cargoBuild();
   const win = windows(w.h.home, o.startPct);
   try {
-    const run = await deep(w.h.home, ['setup'], { env: o.env, timeoutMs: 300_000 });
+    const run = await deep(w.h.home, ['setup'], { ...(o.env ? { env: o.env } : {}), timeoutMs: 300_000 });
     await readsDone(w.h.home);
     return { run, tokens: (await win.stop()).tokens };
   } catch (e) { await win.stop(); throw e; }
