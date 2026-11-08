@@ -51,6 +51,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
  */
 export const slow = [
   'packages/conformance/src/slots/environment.test.ts', 'packages/hub/test/loop-starters.test.ts',
+  'packages/hub/test/reopened-items.test.ts', 'tests/acceptance/1633/reopened.test.ts',
   'packages/hub/test/loop-transcript.test.ts', 'packages/pi/test/guards.test.ts',
   'tests/acceptance/1002/cli.test.ts', 'tests/acceptance/1002/screens.test.ts',
   'tests/acceptance/1002/twins.test.ts', 'tests/acceptance/1015/claude.test.ts',
