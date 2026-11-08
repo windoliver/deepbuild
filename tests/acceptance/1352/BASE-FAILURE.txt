@@ -1,0 +1,98 @@
+# #1352 acceptance tests: the run on the base, and the planted fix
+
+## The base (6aa228ce, main, no implementation), in this checkout, November 8
+
+$ node --test tests/acceptance/1352/ac1-section.test.mjs tests/acceptance/1352/ac2-privacy-threats.test.mjs \
+    tests/acceptance/1352/ac3-agent-routes.test.mjs tests/acceptance/1352/ac5-taste-call.test.mjs
+(stack-trace and assertion-object lines dropped)
+
+All seven offline tests fail, each for its expected reason: the base has no heading naming the hub and the cloud, its
+Decided table has the base's 112 rows, the two old sentences are in docs/technical-design.md, no threats row names the
+web client with a passkey, and the privacy section is the base's.
+
+✖ failing tests:
+
+test at tests/acceptance/1352/ac1-section.test.mjs:19:1
+✖ #1352.4c4e63a7 criterion 1: the design holds one section, its heading naming the hub and the cloud, that answers each of the eight Scope decisions, with at least eight "Not taken" (18.8745ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading holding the words "hub" and "cloud" or "hosted", so it has no section for a hub of your own in the cloud
+
+test at tests/acceptance/1352/ac1-section.test.mjs:29:1
+✖ #1352.4c4e63a7 criterion 1: the Decided table has more rows than at 6aa228ce, and a new row links to the new section or names the hub and the cloud (1330.993459ms)
+  AssertionError [ERR_ASSERTION]: the Decided table has 112 rows, and had 112 at 6aa228ce: it gained none
+
+test at tests/acceptance/1352/ac2-privacy-threats.test.mjs:12:1
+✖ #1352.7a887cd4 criterion 2: a search of docs/ and README.md for "refuses any request carrying a browser origin" finds none of the sentences that held it at 6aa228ce (6061.53575ms)
+  AssertionError [ERR_ASSERTION]: the old wording is still there
+  + actual - expected
+  
+  + [
+  +   `docs/technical-design.md: "deep-hook's fast rules stay local, the hub still refuses any request carrying a browser origin, reads and the stream over the connection are bounded, and the threats table holds the connection's rows."`,
+  +   'docs/technical-design.md: "there is no http server for a ui, and the hub refuses any request carrying a browser origin, so no web page can reach it."'
+  + ]
+  - []
+  
+
+test at tests/acceptance/1352/ac2-privacy-threats.test.mjs:24:1
+✖ #1352.7a887cd4 criterion 2: the threats table has a row in which a web client reaches only the person's own hub over the authenticated connection with a passkey, and no row refuses every browser without it (4283.666916ms)
+  AssertionError [ERR_ASSERTION]: no row of the threats table holds all of /\bweb client\b/i, /\bown hub\b/i, /\bauthenticated connection\b/i, /\bpasskeys?\b/i; the rows naming a browser or a web client:
+  | Injected answers | An answer reaches an agent as an instruction, so answers come only from the CLI and the app. Both talk to the hub over its socket, which is readable only by you, with a new token each launch. There is no HTTP server for a UI, and the hub refuses any request carrying a browser Or
+  | Pages an agent made | An HTML file an agent delivers would open in your everyday browser with full network access. From R2, DeepBuild opens it inside a wrapper page it writes, whose policy blocks every network request and allows only inline scripts, styles and data URLs, in a sandboxed frame with 
+
+test at tests/acceptance/1352/ac2-privacy-threats.test.mjs:37:1
+✖ #1352.7a887cd4 criterion 2: the privacy section is changed from 6aa228ce and says that a hosted hub's work lives on that cloud machine: shown on the first screen before sign-up, encrypted at rest, and who can read it (616.608959ms)
+  AssertionError [ERR_ASSERTION]: the privacy section is the same as at 6aa228ce
+
+test at tests/acceptance/1352/ac3-agent-routes.test.mjs:20:1
+✖ #1352.fbaaa304 criterion 3: the new section gives each agent the design supports a line naming it with its route on a hosted machine (allowed, API key only, or not allowed) and a link to its provider's terms (67.208708ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading holding the words "hub" and "cloud" or "hosted", so it has no section for a hub of your own in the cloud
+
+test at tests/acceptance/1352/ac5-taste-call.test.mjs:14:1
+✖ #1352.28fd1eed criterion 5: docs/evidence/1352/taste-call.json records one person's taste call that the new section reads right, bound to its current text, with the others told and able to overrule it (68.325792ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading holding the words "hub" and "cloud" or "hosted", so it has no section for a hub of your own in the cloud
+ℹ tests 7
+ℹ pass 0
+ℹ fail 7
+
+The two live tests, run the same day with gh signed in (`node --test tests/acceptance/1352/*.live.test.mjs`), fail at
+the missing section before they read GitHub:
+
+✖ #1352.7a887cd4 criterion 2 (live): with the new section in the design, the doc lanes (catalogue drift, design links and names, public text) find nothing the change brings
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading holding the words "hub" and "cloud" or "hosted", so it has no section for a hub of your own in the cloud: the doc lanes have no new section to hold the design against
+✖ #1352.aaf4b26e criterion 4 (live): #1353 and #1354 each have a body link into the new section of docs/technical-design.md
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading holding the words "hub" and "cloud" or "hosted", so it has no section for a hub of your own in the cloud: the issues have no new section to link into
+
+## The planted fix and its mutants (a scratch clone, never this checkout)
+
+A `git clone` of this worktree into the session scratchpad at 6aa228ce, with the tests copied in. The planted design,
+written for the harness only: the two old sentences reworded (Socket roles' to "a web client reaches only its person's
+own hub", Injected answers' to "A web page reaches no hub but through the web client below."); a threats row "A browser
+reaching the hub" naming the web client, the person's own hub, the authenticated connection and a passkey; a clause
+added to Privacy's "Nothing leaves the machine" line with the cloud machine, first screen, sign-up, encrypted at rest
+and who can read it; `<a id="cloud-hub"></a>` and `## A hub of your own in the cloud, for people with no computer`
+before `<a id="security">`, with eight one-line decisions each ending "Not taken: …" and a table giving each of the six
+agents a route word and an https terms link; one Decided row linking `#cloud-hub`; and
+docs/evidence/1352/taste-call.json bound to the section's SHA-256.
+
+Planted fix: all seven offline tests pass. AC4 (live) fails, as it should today: #1353 links only to #scale, #privacy,
+#how-it-installs, and #1354 only to #security, #socket-roles-and-contract-versions, #states-people-see. With
+`<a id="privacy">` and `<a id="security">` added above the planted heading, AC4 passes on the live bodies, which
+exercises its pass path. The doc lanes test skipped there as `INCONCLUSIVE:` (packages/contracts/dist not built in the
+clone), so its pass path was not exercised for this issue; it is 1336's test with only the section rule changed, and
+1336's BASE-FAILURE.txt records its pass and mutant runs.
+
+Mutants of the planted fix, each failing the test named, at the assertion named:
+- one "Not taken" removed: AC1 section, "says "Not taken" 7 times".
+- the browser decision's words removed: AC1 section, "doesn't answer these decisions".
+- the heading without "cloud": AC1 section and AC3, "no heading holding the words" (the Decided test still passes,
+  since its new row names the hub and the cloud, as its rule allows).
+- the new Decided row removed: AC1 Decided, "has 112 rows, and had 112".
+- the new Decided row replaced with an unrelated one: AC1 Decided, "none of the Decided table's 1 new rows links".
+- the Injected answers sentence kept, wrapped over two lines: AC2 old wording, "the old wording is still there".
+- the threats row without "passkey": AC2 threats, "no row of the threats table holds all of".
+- the privacy section left as at the base: AC2 privacy, "the privacy section is the same as at 6aa228ce".
+- Copilot's row without a terms link: AC3, "doesn't write down these agents' routes".
+- no taste-call.json: AC5, "no taste call is recorded".
+- taste-call.json with another text's SHA-256: AC5, "isn't the section's text as it is now".
+
+Known limits: a keyword can sit in what was not taken rather than in the decision, a route word and a link can share one
+line for all six agents, and any https link counts as the provider's terms. Criterion 5's reader covers those.
