@@ -1,0 +1,32 @@
+
+ RUN  v5.0.5 /home/jing/deepbuild/.claude/worktrees/issue-1523-1eb658/tests/acceptance/1417
+
+stdout | planted.test.ts > #1417.b17a643a a planted layout that declares no cost > #1417.b17a643a fails the graph module's kit, naming graph.layout, while the shipped graph module passes it
+#1417.b17a643a: the kit's failures on the plant: [{"part":"","failure":{"code":"failed_case","module":"graph","part":"fixtures","case":"parity/graph/over_budget.board#codes"}},{"part":"fixtures","failure":{"code":"unexpected_codes","module":"graph","part":"fixtures","case":"parity/graph/over_budget.board#codes","fixture":"parity/graph/over_budget.board","extra":[],"missing":["over_budget"],"operators":{"cells.grid":0,"core.fields":0.000195,"core.transform":0.000592,"look.palette":0.00026,"look.finish":0,"motion.channels":0,"building.build":0,"building.shade":0,"core.world":0.0001614,"data.decimate":0,"data.scale":0,"graph.layout":0.010792,"record.salience":0,"scene3d.build":0,"scene3d.mark":0,"scene3d.rebuild":0,"scene3d.shade":0,"scene3d.stack":0,"sheet.place":0,"text.counter":0,"text.shape":0,"marks2d.place":0,"text.animate":0,"vector.paint":0,"marks2d.item":0,"marks2d.frame":0.011159239999999999}}},{"part":"fixtures","failure":{"code":"unexpected_codes","module":"graph","part":"fixtures","case":"parity/graph/over_budget.board#codes","fixture":"parity/graph/over_budget.board","extra":[],"missing":["over_budget"],"operators":{"cells.grid":0,"core.fields":0.000195,"core.transform":0.000592,"look.palette":0.00026,"look.finish":0,"motion.channels":0,"building.build":0,"building.shade":0,"core.world":0.0001614,"data.decimate":0,"data.scale":0,"graph.layout":0.010792,"record.salience":0,"scene3d.build":0,"scene3d.mark":0,"scene3d.rebuild":0,"scene3d.shade":0,"scene3d.stack":0,"sheet.place":0,"text.counter":0,"text.shape":0,"marks2d.place":0,"text.animate":0,"vector.paint":0,"marks2d.item":0,"marks2d.frame":0.011159239999999999}}}]
+
+ ✓ planted.test.ts > #1417.b17a643a a planted layout that declares no cost > #1417.b17a643a fails the graph module's kit, naming graph.layout, while the shipped graph module passes it 7362ms
+stdout | over-budget.test.ts > #1417.52357c9c a 100,000-node graph over its class > #1417.52357c9c is refused at check with over_budget, naming graph.layout and its estimate
+#1417.52357c9c: the refused graph: {"check":"document.validate","code":"over_budget","severity":"error","ids":["g"],"path":"budget","actual":{"cpu_ms":204.89967323507082,"gpu_ms":0,"gpu_mb":0,"operators":{"core.fields":0.000195,"core.transform":0.000592,"look.palette":0.00026,"core.world":0.0001614,"graph.layout":204.8873055950708,"marks2d.frame":0.011159239999999999},"fingerprint":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"macosBuild":"25G241"}},"what":"the document's estimate per frame passes its data_view class: CPU 204.900 ms past 2 ms; the costliest operator is graph.layout at 204.887 ms","fix":"Make the items cheaper, or fewer, so the frame fits its CPU budget."}
+
+stdout | over-budget.test.ts > #1417.52357c9c a 100,000-node graph over its class > #1417.52357c9c on main (the merge base) the same graph passes the check
+#1417.52357c9c: merge base f76eec87df22: outcome presented, issues []
+
+ ✓ over-budget.test.ts > #1417.52357c9c a 100,000-node graph over its class > #1417.52357c9c is refused at check with over_budget, naming graph.layout and its estimate 2828ms
+ ✓ over-budget.test.ts > #1417.52357c9c a 100,000-node graph over its class > #1417.52357c9c on main (the merge base) the same graph passes the check 4605ms
+stdout | estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 the estimate is within 2 times the measured layout time for 100, 1,000 and 10,000 nodes
+#1417.c04ec518: 100 nodes: estimate 0.0959 ms, measured 0.1001 ms (median of 0.106, 0.102, 0.098, 0.104, 0.094, 0.096), estimate/measured 0.958
+#1417.c04ec518: 1000 nodes: estimate 1.2650 ms, measured 1.2884 ms (median of 1.322, 1.271, 1.306, 1.282, 1.275, 1.295), estimate/measured 0.982
+#1417.c04ec518: 10000 nodes: estimate 16.5352 ms, measured 16.1490 ms (median of 17.240, 15.638, 16.925, 16.271, 16.027, 15.888), estimate/measured 1.024
+
+ ↓ estimate.test.ts > #1417.c04ec518 the layout's estimate against its measured time > #1417.c04ec518 the estimate is within 2 times the measured layout time for 100, 1,000 and 10,000 nodes 947ms [INCONCLUSIVE: the times are read only on a fit reference Mac (platform linux); this is not a pass]
+stdout | layered.test.ts > #1417.e58ee238 the layered fixture board > #1417.e58ee238 its layout is the base's, byte for byte
+#1417.e58ee238: the layered board's layout memory: {"build":[1,0,0.0,80.0],"plan":[0,0,12.0,0.0],"ship":[3,0,12.0,240.0],"test":[2,0,12.0,160.0]}
+
+ ✓ layered.test.ts > #1417.e58ee238 the layered fixture board > #1417.e58ee238 passes: the graph module's kit passes, every case on layered with it, and the board passes the check 1733ms
+ ✓ layered.test.ts > #1417.e58ee238 the layered fixture board > #1417.e58ee238 its layout is the base's, byte for byte 114ms
+
+ Test Files  4 passed (4)
+      Tests  5 passed | 1 skipped (6)
+   Start at  13:55:59
+   Duration  81.97s (tests 100%)
+
