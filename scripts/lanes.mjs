@@ -88,6 +88,9 @@ export const byHand = ['tests/acceptance/46/live.test.ts', 'tests/acceptance/685
  * `status === 'INCONCLUSIVE'`; those that gate on the load or a reference Mac through a helper of another name, as
  * #120's inconclusiveIfLoaded, #34's notReferenceMac, #104's judge, #25's judgeP95 and #906's mustBeHeld; and those
  * judging a wall-clock budget, named one by one. A rule by what a file imports marks 386 files, so none is used.
+ * Also those that start perf.mjs or preflight.mjs from a copy of the whole scripts/ folder on the machine's own table
+ * (tests/timed-list.test.mjs): each such run claims timed for 60 minutes, which inside a block's test grant drains
+ * the table for every session on the machine; under a timed grant the claim passes through.
  */
 export const timed = [
   'tests/acceptance/1018/budgets.test.ts', 'tests/acceptance/1018/redraft-ac6/budgets.test.ts', 'tests/acceptance/46/budgets.test.ts',
@@ -132,7 +135,9 @@ export const timed = [
   'tests/acceptance/401/budgets.test.ts', 'tests/acceptance/402/budgets.test.ts',
   'tests/acceptance/412/budgets.test.ts', 'tests/acceptance/417/budgets.test.ts',
   'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/489/budgets.test.ts',
-  'tests/acceptance/55/budgets.test.ts', 'tests/acceptance/65/budgets.test.ts', 'tests/acceptance/568/judge.test.mjs',
+  'tests/acceptance/55/budgets.test.ts', 'tests/acceptance/65/budgets.test.ts',
+  'tests/acceptance/568/fingerprint.test.mjs', 'tests/acceptance/568/judge.test.mjs', 'tests/acceptance/568/lane.test.mjs',
+  'tests/acceptance/583/perf-added-tests.test.mjs', 'tests/acceptance/724/', 'tests/preflight.test.mjs',
   'tests/acceptance/572/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
   'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/raised.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts',
   'tests/acceptance/68/budgets.test.ts', 'tests/acceptance/69/budgets.test.ts',
