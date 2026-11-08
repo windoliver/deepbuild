@@ -26,3 +26,10 @@ describe('a claim citing a run deep-hook leased', () => {
     expect(runFindings('`npm test` passes and `npm run lint` is clean.', ran('deep lease -- npm test'))).toEqual(['npm run lint']);
   });
 });
+
+describe('a claim with a fenced code block', () => {
+  it('reads no cite out of the fence, and still finds an inline cite of a run never made after it', () => {
+    const message = 'The fix:\n\n```js\nreturn totalCents - Math.round((totalCents * coupon.percent) / 100);\n```\n\n`npm test` passes; `npm run lint` is clean.';
+    expect(runFindings(message, ran('deep lease -- npm test'))).toEqual(['npm run lint']);
+  });
+});
