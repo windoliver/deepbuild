@@ -4,6 +4,9 @@
 // None of the new modes draws a status color, changes the revision or the live view's frame count, or can be cited as
 // evidence.
 //
+// The quiet rule for the new modes (the second test of this file) was swapped for its blind redraft,
+// paths-picks-redraft.test.ts (PATHS-PICKS-REDRAFT.md): its scene played, so the live view drew its animation.
+//
 // Motion paths: a box whose x runs 0 → 1 → 0 m over keys at 0, 0.5 and 2 s and whose z runs 0 → 1 m over 0 to 2 s,
 // linearly, at the transport's default 60 frames a second; selected over 0–2 s it gives 121 samples at k ÷ 60 s (k ×
 // 11,760,000 flicks), each at the position the test computes from the keys, and ticks at 0, 0.5 and 2 s. Pick
@@ -12,8 +15,8 @@
 // tangents, probes, sound sources, motion paths and the pick hierarchy, on one scene that has what each draws.
 import { describe, it } from 'vitest';
 import {
-  AC, type JsonObject, type V3, box, camera, channel, drew, far, fmt, gltf, meshAsset, mode, none, num, obj, objs, plate, quietProblems,
-  requireMetal, rowsOf, runShow, scenario, scene, seed, show, sun, useBuilds, useDir, vec3,
+  AC, type JsonObject, type V3, box, camera, channel, drew, far, fmt, mode, none, num, obj, objs,
+  requireMetal, rowsOf, runShow, scenario, scene, show, sun, useBuilds, useDir, vec3,
 } from './helpers.ts';
 
 const ID = AC[7];
@@ -63,30 +66,4 @@ describe(`${ID} motion paths and the pick hierarchy, and every new mode is displ
     if (two.length === 0 || two.some((r) => typeof r['depth'] !== 'number' || r['depth'] > 2)) p.push(`to depth 2 the pick hierarchy draws boxes at depths ${JSON.stringify(two.map((r) => r['depth']))}`);
     none(p, 'motion paths and the pick hierarchy');
   }, 1_800_000);
-
-  it(`${ID} deviation, normals, tangents, probes, sound sources, motion paths and the pick hierarchy draw no status color, touch neither the revision nor the live view, and can't be cited`, () => {
-    requireMetal();
-    const evidence = dir();
-    const flat = seed(evidence, gltf(plate(2, 2, 4, 4)));
-    const bulge = seed(evidence, gltf(plate(2, 2, 4, 4, (i, j) => (i === 1 && j === 1 ? 0.1 : 0))));
-    const doc = scene('Every new mode', {
-      cam: camera([0, 0.5, 0], 10),
-      mover: box([0, 0, 0], [0.3, 0.3, 0.3]),
-      ball: { kind: 'ball@1', params: { tessellation: 'uv', radius: 0.5, segments: 16 }, at: { pos: [-2, 0.5, 0] } },
-      bulge: meshAsset(bulge, [2, 0.5, 0]),
-      'probe.irr': { kind: 'light.probe@1', params: { type: 'irradiance', size: [4, 3, 4] }, at: { pos: [0, 1.5, -2] } },
-      bell: box([0, 1, 2], [0.3, 0.3, 0.3]),
-      ground: box([0, -0.25, 0], [10, 0.5, 8]),
-      key: sun(),
-    }, {
-      requires: { modules: { scene3d: '^1', media: '^1' } },
-      transport: { span: '2s' }, channels: { x: channel('items/mover/at/pos/0', X) },
-      strips: { chime: { synth: 'sine', freq: 440, span: '2s' } },
-      emitters: { 'voice.bell': { item: 'bell', src: 'chime', distance: { model: 'inverse', ref: 1, max: 12, rolloff: 1 }, cone: { inner: 40, outer: 100, outer_gain: 0.25 } } },
-    });
-    none(quietProblems(bin, evidence, doc, [
-      mode('deviation', { item: 'bulge', reference: flat }), mode('normals'), mode('tangents'), mode('probes'), mode('sound_sources'),
-      mode('motion_paths', { select: ['mover'], span: ['0s', '2s'] }), mode('pick_hierarchy', { depth: 3 }),
-    ]), 'the new modes');
-  }, 2_400_000);
 });
