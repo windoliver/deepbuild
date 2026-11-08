@@ -134,6 +134,14 @@ mod suite {
         let handle = cx.update(|cx| {
             gpui_kit::open_window(window_options(), cx, |window, cx| {
                 let panel = panel.map(|dir| {
+                    // The planted host is the toolkit alone: it serves a panel's @deepbuild/panel straight from the
+                    // toolkit's modules, with none of DeepBuild's checks.
+                    std::fs::create_dir_all(dir.join("@deepbuild")).unwrap();
+                    std::fs::write(
+                        dir.join("@deepbuild/panel.js"),
+                        "export { View, div } from \"gpui-kit\";\nexport { v_flex, Popup } from \"gpui-base\";\nexport { Command, CommandGroup, CommandItem, CommandState, Dialog, DropdownMenu, Notification, Popover, Tooltip } from \"gpui-component\";\n",
+                    )
+                    .unwrap();
                     runtime
                         .load_application(dir, "main.js")
                         .and_then(|loaded| runtime.mount_application(&loaded, window, cx))
