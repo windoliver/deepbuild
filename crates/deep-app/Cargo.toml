@@ -23,6 +23,9 @@ plant-walks-events = []
 plant-spike-window = ["spike"]
 plant-handle-rows = []
 plant-tab-text = []
+# Issue #41's wrong program, in no shipped build (tests/acceptance/41/app): an app that takes every hub hello as covering
+# it, so it calls methods the hub doesn't list.
+plant-calls-unlisted = []
 # Issue #1172: #337's spike window, in no shipped build: the suites that keep its proof build it, through the dev
 # dependency on this crate below.
 spike = []
