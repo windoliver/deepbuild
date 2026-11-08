@@ -9,10 +9,10 @@
 
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { accessSync, chmodSync, constants, existsSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { release, userInfo } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -194,8 +194,14 @@ export async function linuxWorld(id: string, o: { tmp: string; home: string; con
   return w;
 }
 
-/** Stops each test login, by PID: the user manager (SIGTERM starts its exit.target, stopping the hub's unit and every other), the keyring, then anything left in the manager's scope. */
+/**
+ * Stops each test login, by PID: the user manager (SIGTERM starts its exit.target, stopping the hub's unit and every
+ * other), the keyring, then anything left in the manager's scope, and waits for them; then removes its XDG_RUNTIME_DIR,
+ * leaving the rest of the temp folder removable by the suite's own cleanup. Every login is torn down before a failure
+ * is thrown.
+ */
 export async function linuxTeardown(): Promise<void> {
+  const failed: string[] = [];
   for (const w of worlds.splice(0)) {
     if (alive(w.manager)) try { process.kill(w.manager, 'SIGTERM'); } catch { /* gone */ }
     await until(() => !alive(w.manager), 30_000);
@@ -203,7 +209,22 @@ export async function linuxTeardown(): Promise<void> {
     await until(() => !alive(w.keyring), 5000);
     const left = [...scopePids(w.scope), w.manager, w.keyring].filter(alive);
     for (const pid of left) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+    if (!(await until(() => !left.some(alive), 10_000))) failed.push(`${w.id}: processes of the test's login still run after SIGKILL: ${left.filter(alive).join(', ')}`);
+    // With nothing of the login left to write there, the user manager's mode-000 folders (systemd's `inaccessible`
+    // nodes under XDG_RUNTIME_DIR) are made enterable and writable, as their owner, so the temp folder can go.
+    const tmp = dirname(w.run);
+    removable(tmp);
+    try { rmSync(w.run, { recursive: true, force: true }); } catch (error) { failed.push(`${w.id}: ${w.run} can't be removed: ${(error as Error).message}`); }
   }
+  if (failed.length) throw Error(`the test's Linux login wasn't torn down whole: ${failed.join('; ')}`);
+}
+/** Every folder under `dir`, `dir` included, made enterable and writable by its owner (u+rwx), before it is read; links are never followed. */
+function removable(dir: string): void {
+  try { if (!lstatSync(dir).isDirectory()) return; } catch { return; }
+  try { chmodSync(dir, 0o700); } catch { /* not ours to change: rmSync names it */ }
+  let names: string[] = [];
+  try { names = readdirSync(dir); } catch { return; }
+  for (const name of names) removable(join(dir, name));
 }
 /** Every PID in the scope's cgroup tree: all of them the test's manager's, so the test's own. */
 function scopePids(scope: string): number[] {

@@ -20,7 +20,8 @@ import {
 import { CHECK_PROCESS, harnessRunLinux, linuxHome, setUpLinux, sideWorldLinux } from './helpers.ts';
 import { distro, linuxTeardown, requireLinux, restated, sandboxWatch, sandboxedOrInvalid } from '../../668/linux/platform.ts';
 
-afterAll(async () => { await linuxTeardown(); await cleanup(); }, 180_000);
+// The login first (its manager stopped and waited for, its mode-000 folders made removable), then the suite's cleanup, which runs either way.
+afterAll(async () => { try { await linuxTeardown(); } finally { await cleanup(); } }, 180_000);
 
 const MINUTE = 60_000;
 function requireLive(id: string): string {
