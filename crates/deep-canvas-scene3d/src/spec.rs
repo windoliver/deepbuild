@@ -749,6 +749,9 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             unit("diffuse_roughness", 0.0, 0.0, 1.0),
             unit("retroreflection", 0.0, 0.0, 1.0),
             p("flakes", "{weight, size, tilt, color | base}", "m", Value::Null, S, Value::Null, json!({"weight": 1, "size": 0.001, "tilt": 15})),
+            // #465: the planar part it mirrors in; the sweep leaves it unset, since the fixture
+            // holds no planar part.
+            p("mirror", "{strength, blur: px, plane: named part}", "px", Value::Null, S, Value::Null, Value::Null),
             p(
                 "pattern",
                 "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",
@@ -963,6 +966,25 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             ],
             reads: None,
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
+        },
+        // #465: an Effect item; scene3d draws `kind: flare` (Effect: flare).
+        "effect@1" => Spec {
+            kind: "effect@1",
+            module: "scene3d",
+            params: vec![
+                p("kind", "flare", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p(
+                    "flare",
+                    "{from: lights | {emissive: EV100}, ghosts: u8 <= 8, streak: {count: 0 | 2 | 4 | 6, length: ratio, anamorphic}, halo: ratio, starburst: {blades: u8}, intensity, tint: role}",
+                    "",
+                    Value::Null,
+                    S,
+                    json!({"from": "lights", "ghosts": 4}),
+                    json!({"from": "lights", "ghosts": 6, "halo": 0.05}),
+                ),
+            ],
+            reads: None,
+            fixture: json!({"it": item("effect@1", json!({"kind": "flare", "flare": {"from": "lights", "ghosts": 4}}))}),
         },
         // #424: the cutaway and the instancer.
         "cutaway@1" => Spec {

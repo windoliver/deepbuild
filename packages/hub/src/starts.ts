@@ -6,12 +6,13 @@
 // tree, an MCP call or a plug-in, whatever it claims. The agent is the unmodified CLI in a terminal the hub hosts,
 // never typed into, its permission mode set at launch; with no first event in 60 s it ends as never started.
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, isAbsolute, join } from 'node:path';
 import type { JsonObject } from '@deepbuild/adapters';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { Asks } from '@deepbuild/asks';
+import { repoOf, revoke, sessionToken, type AppKey } from '@deepbuild/github';
 import { TERMINAL_PROTOCOL } from '@deepbuild/extension-host';
 import { HELPER, type Supervisor } from '@deepbuild/supervisor';
 import { parents } from './children.js';
@@ -36,7 +37,9 @@ const NONE: Sandbox = { sandboxed: false, walls: { writes: false, credentials: f
 /** A run you approved, as `start.approval` records it, and the ask whose yes makes it count. */
 interface Approval { ask: string; at: number; repo: string; issues: number[]; agents: string[]; homes: Record<string, string>; modes: Record<string, string>; at_once: number; plan_share: number; until: number | null; hosts: string[] }
 /** A start the hub made: its approval, its agent's process, the session its first hook named, and its sandbox. */
-interface Started { run: string; ask: string; agent: string; pid?: number; dir?: string; session?: string; sandbox: Sandbox; ended: boolean; timer?: NodeJS.Timeout }
+interface Started { run: string; ask: string; agent: string; pid?: number; dir?: string; session?: string; sandbox: Sandbox; ended: boolean; timer?: NodeJS.Timeout; worktree?: string; token?: string }
+/** A session's own forge credential while it lives, and the login GitHub records its pushes as. */
+interface Credential { token: string; login: string | null }
 export type StartResult = { status: 'started'; run: string; worktree: string; branch: string; agent: string; version: string; mode: string; sandbox: Sandbox } | { status: 'refused'; reason: string; bound: string };
 /** Who asks for a start: you in your terminal, by the process the CLI names; the core reads the rest from the connection. */
 export interface Caller { role: string; peer?: { pid: number; start: string }; session?: string | null }
@@ -58,7 +61,13 @@ export interface StartsOptions {
   agentAbove(peer: Caller['peer']): Promise<string | undefined>;
   /** The most used live plan window of the account an agent runs on in a home, in percent. */
   windowUsed(agent: string, home: string): number | undefined;
+  /** The forge's REST root, the agents' app a session's own credential comes from, and the gate's token (#1325). */
+  forge: string;
+  agentsApp(): AppKey | undefined;
+  gateToken(repo: string): Promise<string | undefined>;
 }
+/** The variables your own forge login reaches a process by: it stays the hub's, and never reaches a session (#1325). */
+const LOGINS = ['GH_TOKEN', 'GITHUB_TOKEN'];
 
 const exec = (file: string, args: string[], o: { cwd?: string; env?: NodeJS.ProcessEnv; timeout?: number } = {}): Promise<string> =>
   new Promise((done, fail) => execFile(file, args, { encoding: 'utf8', timeout: o.timeout ?? 30_000, ...o }, (error, stdout, stderr) => (error ? fail(Error(`${file} ${args.join(' ')}: ${String(stderr || error.message).trim()}`)) : done(stdout))));
@@ -67,6 +76,8 @@ const real = (p: string): string => { try { return realpathSync(p); } catch { re
 
 export class Starts {
   private readonly started = new Map<string, Started>();
+  /** The logins GitHub records the agents' app's pushes as. */
+  private readonly agentLogins = new Set<string>();
   constructor(private readonly o: StartsOptions) {}
 
   /** What the record holds of earlier starts: each session's run and sandbox, and which runs still hold a slot. */
@@ -75,16 +86,21 @@ export class Starts {
     for (const row of rows) {
       const d = JSON.parse(row.data) as Obj;
       const run = String(d.run);
-      if (row.kind === 'start.started') this.started.set(run, { run, ask: String(d.ask), agent: String(d.agent), sandbox: d.sandbox as Sandbox, ended: true });
+      if (row.kind === 'start.started') this.started.set(run, { run, ask: String(d.ask), agent: String(d.agent), sandbox: d.sandbox as Sandbox, ended: true, worktree: String(d.worktree) });
       const s = this.started.get(run);
       if (!s) continue;
       if (row.kind === 'start.session') s.session = String(d.session);
       if (row.kind === 'session.never_started') delete s.session;
     }
-    // A run the supervisor adopted still runs: it holds its slot until it ends.
+    // A run the supervisor adopted still runs: it holds its slot until it ends, and its credential ends with it. One
+    // that ended while the hub was down has its credential revoked now.
     for (const s of this.started.values()) {
+      s.dir = join(this.o.root, 'starts', letters(s.run));
+      const kept = this.keptCredential(s);
+      if (kept) { s.token = kept.token; if (kept.login) this.agentLogins.add(kept.login); }
       const status = await this.o.supervisor().status(s.run).catch(() => undefined);
-      if (status?.state === 'running') { s.ended = false; void this.o.supervisor().wait(s.run).then(() => { s.ended = true; }, () => { s.ended = true; }); }
+      if (status?.state === 'running') { s.ended = false; void this.o.supervisor().wait(s.run).then(() => { s.ended = true; this.endCredential(s); }, () => { s.ended = true; this.endCredential(s); }); }
+      else this.endCredential(s);
     }
   }
   close(): void {
@@ -252,10 +268,13 @@ export class Starts {
     const { sandbox, entry } = this.o.plant === 'starts-without-sandbox' ? { sandbox: NONE, entry: undefined } : this.sandboxOf(agent, found.version);
     const argv = this.argvOf(started, entry, mode, approval, prompt, tree.path);
     const env = this.envOf(started, home);
+    const forge = await this.credential(repo, env);
     this.trust(started, home, tree.path);
     const dir = join(this.o.root, 'starts', letters(run));
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const s: Started = { run, ask: approval.ask, agent, sandbox, ended: false, dir };
+    // Kept where a restarted hub finds it to revoke, under a folder the session's sandbox can't read.
+    if (forge) writeFileSync(join(dir, 'credential'), JSON.stringify(forge), { mode: 0o600 });
+    const s: Started = { run, ask: approval.ask, agent, sandbox, ended: false, dir, worktree: tree.path, ...(forge ? { token: forge.token } : {}) };
     this.started.set(run, s);
     const launched = await this.o.supervisor().start({
       run, argv: [HELPER, 'pty', dir, '120', '40', String(TERMINAL_PROTOCOL), this.o.lock, '-', found.path, ...argv],
@@ -263,10 +282,12 @@ export class Starts {
     }).catch((error: Error) => error);
     if (launched instanceof Error || launched.status !== 'started') {
       s.ended = true;
+      this.endCredential(s);
       return this.refused('version', `${agent} didn't start: ${launched instanceof Error ? launched.message : `held on ${launched.kind}`}.`, 'you', about);
     }
     s.pid = launched.pid;
-    void this.o.supervisor().wait(run).then(() => { s.ended = true; clearTimeout(s.timer); }, () => { s.ended = true; });
+    // The session's own credential ends with it: revoked as soon as its agent's process is gone.
+    void this.o.supervisor().wait(run).then(() => { s.ended = true; clearTimeout(s.timer); this.endCredential(s); }, () => { s.ended = true; this.endCredential(s); });
     await this.o.appendCore('start.started', { run, ask: approval.ask, repo, issue, agent, version: found.version, home, mode, worktree: tree.path, branch: tree.branch, base: tree.base, sandbox }, { subject: run });
     s.timer = setTimeout(() => void this.neverStarted(s).catch(() => undefined), FIRST_EVENT_MS);
     return { status: 'started', run, worktree: tree.path, branch: tree.branch, agent, version: found.version, mode, sandbox };
@@ -320,13 +341,94 @@ export class Starts {
   /** What a started session's own sandbox refused a shell call, as its output says: each recorded once per call and target. */
   async refusals(session: string, call: string | undefined, printed: string): Promise<void> {
     const s = this.runOf(session);
-    if (!s?.sandbox.sandboxed) return;
+    if (!s) return;
+    await this.forgeRefusals(s, session, call, printed);
+    if (!s.sandbox.sandboxed) return;
     const seen = new Set<string>();
     for (const { operation, target } of refusedIn(printed)) {
       if (seen.has(`${operation} ${target}`)) continue;
       seen.add(`${operation} ${target}`);
       await this.o.appendCore('sandbox.refused', { run: s.run, session, operation, target: target.slice(0, 8000), call: call ?? null }, { subject: s.run });
     }
+  }
+
+  /**
+   * What the forge refused a started session's credential, as the call's output says (#1325): a REST refusal's
+   * `documentation_url` naming the endpoint, and a push a ruleset refused (GH013). Its git and curl are
+   * a command's children, which no hook sees, so the output is where the record learns of them.
+   */
+  private async forgeRefusals(s: Started, session: string, call: string | undefined, printed: string): Promise<void> {
+    const found = forgeRefusedIn(printed);
+    if (!found.length) return;
+    const main = found.some((f) => f.ref?.startsWith('refs/heads/')) ? await this.defaultBranch(s) : undefined;
+    const seen = new Set<string>();
+    for (const f of found) {
+      const action = f.action ?? (f.ref === `refs/heads/${main}` ? 'push-default-branch' : f.ref!.startsWith('refs/tags/deep/approved/') ? 'push-approved-tag' : undefined);
+      if (!action || seen.has(`${action} ${f.target}`)) continue;
+      seen.add(`${action} ${f.target}`);
+      await this.o.appendCore('forge.refused', { run: s.run, session, action, target: f.target.slice(0, 8000), call: call ?? null }, { subject: s.run });
+    }
+  }
+  /** The default branch a started session's worktree came from, as its repo's origin names it. */
+  private async defaultBranch(s: Started): Promise<string | undefined> {
+    if (!s.worktree) return undefined;
+    const head = await exec('git', ['-C', s.worktree, 'symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']).catch(() => '');
+    return head.trim().replace(/^origin\//, '') || undefined;
+  }
+
+  // ---- The session's own forge credential (#1325).
+
+  /**
+   * In place of your login, which the environment loses here, a token of the agents' app for this repo alone, as
+   * GH_TOKEN: it can push branches, open PRs and comment, never post a status. None when your settings name no agents'
+   * app or the repo's origin isn't on GitHub; a mint the forge refuses starts the session with none, said on stderr.
+   */
+  private async credential(repo: string, env: Record<string, string>): Promise<Credential | undefined> {
+    const app = this.o.agentsApp();
+    const origin = await exec('git', ['-C', repo, 'remote', 'get-url', 'origin']).catch(() => '');
+    const slug = repoOf(origin.trim());
+    // The planted wrong program: the gate's own token in the session's environment.
+    if (this.o.plant === 'passes-gate-credential' && slug) { const gate = await this.o.gateToken(slug).catch(() => undefined); if (gate) env.DEEP_GATE_TOKEN = gate; }
+    if (!app || !slug) return undefined;
+    const made = await sessionToken(this.o.forge, app, slug, this.o.plant === 'agent-credential-posts-statuses').catch((error: Error) => error);
+    if (made instanceof Error) { process.stderr.write(`deep hub: no credential of the agents' app for ${slug}: ${made.message}\n`); return undefined; }
+    env.GH_TOKEN = made.token;
+    if (made.login) this.agentLogins.add(made.login);
+    return { token: made.token, login: made.login };
+  }
+  private keptCredential(s: Started): Credential | undefined {
+    try { return JSON.parse(readFileSync(join(s.dir!, 'credential'), 'utf8')) as Credential; } catch { return undefined; }
+  }
+  /** A session's credential revoked: the forge takes it no more. A revoke that fails leaves it to expire within the hour, said on stderr. */
+  private endCredential(s: Started): void {
+    const token = s.token;
+    if (!token) return;
+    delete s.token;
+    void revoke(this.o.forge, token).then(() => { if (s.dir) rmSync(join(s.dir, 'credential'), { force: true }); },
+      (error: Error) => process.stderr.write(`deep hub: ${s.run}'s forge credential wasn't revoked (${error.message}); it expires within the hour\n`));
+  }
+
+  /**
+   * A push GitHub recorded as the agents' app's (#1325): the session whose commit it carried, or the one live started
+   * session whose worktree holds it, and the person who approved that session's run. Its author and committer fields
+   * are never read: the record of who made the commit and of the run say who did it.
+   */
+  async pushed(change: { ref: string; commit: string; pusher: string | null }): Promise<void> {
+    if (!change.pusher || !this.agentLogins.has(change.pusher)) return;
+    const rows = (await this.o.raw(`SELECT session_id FROM commits WHERE sha = ? AND session_id IS NOT NULL`, [change.commit])) as { session_id: string }[];
+    let s = rows.map((r) => this.runOf(r.session_id)).find((x) => x !== undefined);
+    if (!s) {
+      const holding: Started[] = [];
+      for (const x of this.started.values()) {
+        if (x.ended || !x.session || !x.worktree) continue;
+        if (await exec('git', ['-C', x.worktree, 'cat-file', '-e', `${change.commit}^{commit}`]).then(() => true, () => false)) holding.push(x);
+      }
+      if (holding.length === 1) s = holding[0];
+    }
+    const [answer] = s ? (await this.o.raw(`SELECT actor FROM events WHERE kind = 'ask.answered' AND subject = ? ORDER BY log_pos LIMIT 1`, [s.ask])) as { actor: string }[] : [];
+    await this.o.appendCore('session.pushed', {
+      ref: change.ref, commit: change.commit, pusher: change.pusher, session: s?.session ?? null, run: s?.run ?? null, approval: s?.ask ?? null, approved_by: answer?.actor ?? null,
+    }, s ? { subject: s.run } : {});
   }
 
   // ---- The parts of a start.
@@ -391,7 +493,8 @@ export class Starts {
   /** The launch's arguments from the facts: mode, settings and sandbox filled, your words as the prompt's argument. */
   private argvOf(started: Obj, entry: Obj | undefined, mode: string, approval: Approval, prompt: string, worktree: string): string[] {
     const home = homedir();
-    const credentials = CREDENTIALS.map((c) => join(home, c));
+    // Your keys and other tools' sign-ins, and where the hub keeps sessions' own forge credentials.
+    const credentials = [...CREDENTIALS.map((c) => join(home, c)), join(this.o.root, 'starts')];
     const sockets = this.o.plant === 'sandbox-cuts-hub-socket' ? [] : [this.o.socket];
     const open = this.o.plant === 'sandbox-way-out-open';
     const modes = started.modes as Record<string, string>;
@@ -432,10 +535,10 @@ export class Starts {
     writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
     renameSync(tmp, file);
   }
-  /** Your login shell's environment minus what marks a nested session, with the account's home only when it isn't the default. */
+  /** Your login shell's environment minus what marks a nested session and your forge login, with the account's home only when it isn't the default. */
   private envOf(started: Obj, home: string): Record<string, string> {
     const env: Record<string, string> = {};
-    for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !(started.nested as string[]).includes(k) && k !== 'DEEP_RUN_TOKEN') env[k] = v;
+    for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !(started.nested as string[]).includes(k) && k !== 'DEEP_RUN_TOKEN' && !LOGINS.includes(k)) env[k] = v;
     env.PATH = this.o.loginPath();
     const variable = String(started.home);
     if (real(home) !== real(tilde(String(started.defaultHome)))) env[variable] = home;
@@ -454,5 +557,19 @@ export function refusedIn(text: string): { operation: string; target: string }[]
   for (const m of text.matchAll(/^(?:[^:\n]+: )?(\/[^:\n]+): Operation not permitted$/gm)) out.push({ operation: 'open', target: m[1]! });
   for (const m of text.matchAll(/connect EPERM (\S+:\d+)/g)) out.push({ operation: 'connect', target: m[1]! });
   for (const m of text.matchAll(/\bdeny(?:\(\d+\))? ((?:network|file)[\w*-]*) (\S+)/g)) out.push({ operation: m[1]!, target: m[2]! });
+  return out;
+}
+
+/**
+ * What a command's output says the forge refused (#1325): a REST refusal, by the endpoint its `documentation_url`
+ * names (a status, a merge), and a push a ruleset refused, by GitHub's GH013 line naming the ref.
+ */
+function forgeRefusedIn(text: string): { action?: 'post-status' | 'merge'; ref?: string; target: string }[] {
+  const out: { action?: 'post-status' | 'merge'; ref?: string; target: string }[] = [];
+  for (const m of text.matchAll(/"documentation_url"\s*:\s*"([^"]+)"/g)) {
+    if (/#create-a-commit-status\b/.test(m[1]!)) out.push({ action: 'post-status', target: m[1]! });
+    else if (/#merge-a-pull-request\b/.test(m[1]!)) out.push({ action: 'merge', target: m[1]! });
+  }
+  for (const m of text.matchAll(/GH013: Repository rule violations found for (refs\/\S+?)\.?(?:\s|$)/g)) out.push({ ref: m[1]!, target: m[1]! });
   return out;
 }
