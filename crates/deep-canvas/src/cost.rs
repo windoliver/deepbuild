@@ -221,9 +221,19 @@ pub struct Estimate {
     pub gpu_mb: f64,
     /// Each item's nanoseconds of CPU and GPU together, in item order.
     pub by_item: Vec<(String, f64)>,
+    /// Each frame operator's ms of CPU over the items it evaluates, by key, in plan order (#1417).
+    pub by_op: Vec<(String, f64)>,
 }
 
 impl Estimate {
+    /// The operator that costs the most, and its ms; ties by key.
+    pub fn costliest_op(&self) -> Option<&(String, f64)> {
+        self.by_op
+            .iter()
+            .filter(|(_, ms)| *ms > 0.0)
+            .min_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)))
+    }
+
     /// The `n` items that cost the most, the costliest first, ties by ID.
     pub fn top(&self, n: usize) -> Vec<String> {
         let mut list: Vec<&(String, f64)> =
@@ -332,7 +342,8 @@ fn item_ids_in<'d>(v: &'d Value, items: &Map<String, Value>, out: &mut Vec<&'d s
 /// items its own `applies` gives it (a document's operator over all of them) that the frame
 /// evaluates, while a check phase's operators run once at check and cost no frame; each pass over
 /// the frame and the items of its module's kinds; and the CPU each module's kinds register per
-/// item. GPU memory holds every item, moving or not.
+/// item. An operator that declares a cost (#1417) is charged it on each item on top of its terms.
+/// GPU memory holds every item, moving or not.
 pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Estimate {
     estimate_by(doc, sealed, coefficients, |entries, work| {
         vec![work(entries)]
@@ -407,7 +418,8 @@ pub(crate) fn estimate_by(
             k += 1;
             k - 1
         });
-        for i in 0..items.len() {
+        let mut op_ns = 0.0;
+        for (i, item) in items.values().enumerate() {
             if row.is_some_and(|k| !f.applies[i * item_ops.len() + k]) {
                 continue;
             }
@@ -416,11 +428,15 @@ pub(crate) fn estimate_by(
                 continue;
             }
             let c = f.counts[i];
-            let ns =
-                t.ns_per_item + t.ns_per_vertex * c.vertices + t.ns_per_frame_glyph() * c.glyphs;
+            let ns = t.ns_per_item
+                + t.ns_per_vertex * c.vertices
+                + t.ns_per_frame_glyph() * c.glyphs
+                + op.op.cost.map_or(0.0, |cost| cost(item) * 1e6);
             cpu_ns += ns;
+            op_ns += ns;
             by_item[i] += ns;
         }
+        out.by_op.push((op.key.clone(), op_ns / 1e6));
     }
     for m in &sealed.modules {
         let kinds: Vec<String> = m
@@ -555,6 +571,51 @@ mod tests {
         // Nothing moves: the frame that shows it evaluates every item.
         let still = estimate(&board(100, false), &sealed, &coefficients);
         assert_eq!(still.cpu_ms, 0.103);
+    }
+
+    fn register_sized(r: &mut Registrar) {
+        r.array("sized.out", "f64", "item", "geometry", "items");
+        r.operator("work", "items", &["core.fields"], &["sized.out"])
+            .applies(|_, _, item| item.pointer("/params/rows").is_some())
+            .cost(|item| {
+                item.pointer("/params/rows")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0)
+                    * 0.5
+            })
+            .run(|v| v.write("sized.out", Val::typed(0.0f64)));
+    }
+
+    #[test]
+    fn an_operator_that_declares_a_cost_is_charged_it_on_each_item_it_applies_to() {
+        let mut sized = tick();
+        sized.manifest.name = "sized".into();
+        sized.manifest.feature = "sized".into();
+        sized.manifest.implements = "sized@1".into();
+        sized.register = register_sized;
+        let sealed = Registry::new(BuildSet::Core)
+            .with(sized)
+            .seal()
+            .expect("seals");
+        let coefficients = Coefficients {
+            fingerprint: Value::Null,
+            build: Value::Null,
+            terms: BTreeMap::from([(
+                "sized.work".to_string(),
+                Terms {
+                    ns_per_item: 1000.0,
+                    ..Terms::default()
+                },
+            )]),
+        };
+        let mut doc = board(1, false);
+        doc["items"]["s0"]["params"]["rows"] = json!(4);
+        doc["items"]["m"]["params"]["rows"] = json!(10);
+        let e = estimate(&doc, &sealed, &coefficients);
+        // 2 ms and 5 ms declared, with 1 µs of terms on each of the two items it applies to.
+        assert_eq!(e.cpu_ms, 7.002);
+        assert_eq!(e.costliest_op(), Some(&("sized.work".to_string(), 7.002)));
+        assert_eq!(e.top(1), ["m"]);
     }
 
     #[test]
