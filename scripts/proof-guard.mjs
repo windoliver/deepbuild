@@ -27,6 +27,15 @@ const skipsIn = (text) => {
     return text;
   }
 };
+// A row of the carried-patch table may hold hunks over budget (#1426). The numbers it allows, in the table's order, are
+// guarded, so the count over budget falls or rises only by a signature; a README with no table yet guards none.
+const CARRIED_TABLE = 'vendor/gpui-pre-apple/upstream/README.md';
+const budgetsIn = (text) => {
+  const start = (text ?? '').indexOf('\n## Carried patches\n');
+  if (start < 0) return null;
+  const [section] = text.slice(start + 1).split(/\n#{1,2} /);
+  return section.split('\n').flatMap((line) => /\|\s*(\d+) over\b[^|]*\|\s*$/.exec(line)?.[1] ?? []).join();
+};
 
 // The files the merge base's runner configs name by path from the config's folder, resolved as vite
 // resolves them: those under the test paths, other than tests, named anywhere in a config, as
@@ -98,6 +107,7 @@ export function guard({ root, change, issue }, approvals, say) {
     if (lanesOnMain) for (const path of (commit.merge?.conflicts ?? []).filter(isCheck)) judge(checkEdit(path, ' in resolving a merge conflict'), path);
     // A conflict's resolution keeps either side's list, or it is an edit of its own.
     if (lanesOnMain && commit.merge?.conflicts.includes(SKIPS_FILE) && !commit.merge.parents.some((parent) => skipsIn(show(root, parent, SKIPS_FILE)) === skipsIn(show(root, commit.sha, SKIPS_FILE)))) judge({ detail: `${SKIPS_FILE}: the skips key changed in resolving a merge conflict` }, SKIPS_FILE);
+    if (lanesOnMain && commit.merge?.conflicts.includes(CARRIED_TABLE) && !commit.merge.parents.some((parent) => budgetsIn(show(root, parent, CARRIED_TABLE)) === budgetsIn(show(root, commit.sha, CARRIED_TABLE)))) judge({ detail: `${CARRIED_TABLE}: a budget number changed in resolving a merge conflict` }, CARRIED_TABLE);
     for (const file of commit.files) {
       if (commit.merge?.conflicts.includes(file.path)) continue;
       if (lanesOnMain && isCheck(file.path) && file.hunks.length) judge(checkEdit(file.path, ''), file.path);
@@ -121,6 +131,7 @@ export function guard({ root, change, issue }, approvals, say) {
       if (before === null) continue; // an added file removes nothing
       if (isTestFile(file.path)) for (const edit of testEdits(root, commit, file, before, relevant)) judge(edit, file.path, ...edit.test ? [named(file.path, edit.test)] : []);
       else if (underTestPaths(file.path)) for (const edit of fixtureEdits(root, commit, file, before, relevant)) judge(edit, file.path);
+      if (file.path === CARRIED_TABLE && budgetsIn(before) !== null && budgetsIn(before) !== budgetsIn(show(root, commit.sha, file.path))) judge({ detail: `${file.path}: a budget number in the carried-patch table changed` }, file.path);
       if (DECISIONS[file.path]) for (const edit of decisionEdits(file, before, show(root, commit.sha, file.path) ?? '')) judge(edit, file.path, `${file.path}:${edit.line}`);
     }
   }
