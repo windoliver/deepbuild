@@ -519,6 +519,8 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
             }
         });
     }
+    // #467: a looping document's parallax bands travel whole repeats.
+    issues.extend(crate::fields::loop_issues(doc, true));
     glyph_issues(items, &look.light_type, &mut issues);
     if look.dark_type != look.light_type {
         glyph_issues(items, &look.dark_type, &mut issues);

@@ -5,14 +5,34 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { exitCode } from './families.js';
+import { CORPUS, gateCheck, gateRun } from './gate.js';
 import { kits } from './kit.js';
 import { runKit } from './runner.js';
 import type { Fill } from './types.js';
 
-const USAGE = 'Usage: deep-conformance --help\n       deep-conformance run --fill <module> [--kit <name>]\n\nRuns the kit (adapter@1 by default) on the fill the module exports as default, headless.';
+const USAGE = 'Usage: deep-conformance --help\n       deep-conformance run --fill <module> [--kit <name>]\n       deep-conformance gate check [--corpus <dir>]\n       deep-conformance gate run [--corpus <dir>] [--case <id>]...\n\nRuns the kit (adapter@1 by default) on the fill the module exports as default, headless; `gate` checks the done gate\'s\ncorpus is complete, or plays its cases on the done gate this checkout builds.';
+
+/** `gate check` and `gate run`: the kit gate@1 on its corpus (#33). */
+async function gate(args: string[]): Promise<number> {
+  const [command, ...rest] = args;
+  let corpus = CORPUS;
+  const ids: string[] = [];
+  for (let i = 0; i < rest.length; i += 2) {
+    const value = rest[i + 1];
+    if (value === undefined || (rest[i] !== '--corpus' && (rest[i] !== '--case' || command !== 'run'))) { console.error(USAGE); return 2; }
+    if (rest[i] === '--corpus') corpus = resolve(value);
+    else ids.push(value);
+  }
+  const print = (line: string): void => { console.log(line); };
+  if (command === 'check') return gateCheck(corpus, print);
+  if (command === 'run') return gateRun(corpus, ids, print);
+  console.error(USAGE);
+  return 2;
+}
 
 async function main(args: string[]): Promise<number> {
   if (args.length === 0 || (args.length === 1 && args[0] === '--help')) { console.log(USAGE); return 0; }
+  if (args[0] === 'gate') return gate(args.slice(1));
   if (args[0] !== 'run') { console.error(`Unsupported command. ${USAGE}`); return 2; }
   const fillAt = args.indexOf('--fill');
   const kitAt = args.indexOf('--kit');
