@@ -64,6 +64,8 @@ export interface WikiOptions {
   pages?: readonly string[];
   /** A planted wrong program: checks only that each quote is at its source, never the claim's keys. */
   plant?: 'quote-present-only';
+  /** Lines another part of the hub keeps on a page beside its claims, written with it (#344: the rules page's rule lines). */
+  appendix?: (page: string) => string[];
 }
 
 /** The wiki writes as the core: the local-first rule within a session, the install rule at a repo or everywhere. */
@@ -252,6 +254,7 @@ export async function openWiki(o: WikiOptions): Promise<Wiki> {
       if (parsed.record.known === 'outside') n.outside++;
       counts.set(row.page, n);
     }
+    for (const [page, lines] of pages) lines.push(...(o.appendix?.(page) ?? []));
     // Each standing question, rewritten from its repo page's claims in force that answer it.
     for (const [page, lines] of [...pages]) {
       const repo = /^repos\/([^/]+)$/.exec(page)?.[1];

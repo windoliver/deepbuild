@@ -1,0 +1,9 @@
+claims:
+  done:
+    checks: [journey]
+checks:
+  journey: { type: journey, run: "node --test journeys/total.test.js", min_tests: 1 }
+environment:
+  up: "node $HOME/shop-env/server.mjs"
+  ports: [web]
+  ready: { http: "http://127.0.0.1:${web}/health", within: 20 }

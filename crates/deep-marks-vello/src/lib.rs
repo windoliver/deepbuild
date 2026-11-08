@@ -872,6 +872,12 @@ impl Scopes {
                     self.offscreen += 1;
                     Close::Layer
                 }
+                // A matte reads another item's pixels, which only the GPU layer's compositor takes.
+                Scope::Matte { .. } => {
+                    ctx.push_layer(None, None, None, None);
+                    self.offscreen += 1;
+                    Close::Layer
+                }
                 Scope::Shape { verbs, .. } => {
                     ctx.push_layer(Some(&bez(verbs, [0.0, 0.0], 1.0)), None, None, None);
                     self.offscreen += 1;

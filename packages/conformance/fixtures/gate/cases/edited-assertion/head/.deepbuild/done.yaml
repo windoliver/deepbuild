@@ -1,0 +1,5 @@
+claims:
+  done:
+    checks: [unit]
+checks:
+  unit: { type: command, run: "node --test test/discount.test.js", min_tests: 1 }

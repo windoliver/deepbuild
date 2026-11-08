@@ -1,0 +1,14 @@
+# DeepBuild's bootstrap spec (#33): the repo's existing typecheck and tests, written and approved by the
+# maintainer. Each task takes its definition of done from its issue's acceptance criteria until week 5's
+# drafted spec replaces this file.
+claims:
+  done:
+    checks: [typecheck, test]
+checks:
+  typecheck: { type: command, run: "node node_modules/typescript/bin/tsc --noEmit", deadline: 30m }
+  test: { type: command, run: "node node_modules/vitest/vitest.mjs run packages", min_tests: 1, deadline: 2h }
+# The package tests and the acceptance suites start hubs, sandboxes and git of their own, which the gate's sandbox
+# can't hold (macOS can't nest Seatbelt): they run as you, outside it, once their checkout is built.
+outside:
+  checks: [test, tests/acceptance/]
+  build: "npm run build --workspaces && cargo build --locked -q -p deep-hook"
