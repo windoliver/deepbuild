@@ -31,8 +31,14 @@ fn is_part(id: u32) -> bool {
     return false;
 }
 
+struct Laid {
+    @location(0) color: vec4<f32>,
+    // #166: the lookup alone, before its strength (view3d's `reflection` target).
+    @location(1) reflection: vec4<f32>,
+};
+
 @fragment
-fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
+fn fs(@builtin(position) at: vec4<f32>) -> Laid {
     let px = vec2<i32>(at.xy);
     if !is_part(textureLoad(ids, px, 0).r) {
         discard;
@@ -53,5 +59,5 @@ fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
         }
     }
     let s = params.flip.y;
-    return vec4<f32>(sum / weight * s, s);
+    return Laid(vec4<f32>(sum / weight * s, s), vec4<f32>(sum / weight, 1.0));
 }
