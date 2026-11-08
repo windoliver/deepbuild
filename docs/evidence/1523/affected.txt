@@ -1,0 +1,38 @@
+# #1523: node scripts/affected.mjs on the merged tree (7142d280 = branch + origin/main d6463b71), Spark, 2026-11-07
+
+Two runs. The first, under the shared HOME, got no test grant in 30 min: the Spark's throttle table
+(~/.deepbuild/throttle/table.json) held both test grants for other sessions' 1.5-hour runs (#1407, #1410) with three
+timed preflight requests queued; it reported 638 INCONCLUSIVE 'no test grant came within 30 min' and nothing else.
+The second ran under a fresh isolated HOME in this session's scratchpad (RUSTUP_HOME, CARGO_HOME, npm_config_cache,
+GH_CONFIG_DIR and GIT_CONFIG_GLOBAL pointed at the real ones), as docs/evidence/1117 did. Its summary:
+
+
+Load was 60-140 throughout (the whole run took 6.6 h; vitest's alone block alone 3.9 h). WIDE lines: none.
+INCONCLUSIVE/BLOCKED lines (341): macOS-only suites (GPUI/Metal, launchd, Secure Enclave), Docker images absent, no
+paseo CLI, cc without -fobjc-arc, and timings missed under load; each says so in its line (logs in the run's
+/tmp/deep-affected-X2oqJm, kept on the Spark).
+
+'1460 new': main's known-failures list (11 entries) names the reference Mac's failures, so on this Linux box nearly
+every platform-bound failure reads as new, as docs/evidence/1150 and 1239 record. Of the failing files, those in the
+areas this change touches were each run alone on the merged tree and then on pure origin/main (e4de8c94, no code of
+this branch), and fail there the same way:
+- tests/acceptance/965/starts.test.ts: pr-needs-ask holds its gh pr create (its typed task names no PR). Same on main.
+- tests/acceptance/84/guard/head-commit.test.ts, 84/guard/asked.test.ts, 1523/head.test.ts, 1523/auto.test.ts: the
+  PR-opening stop is sent back with 'review still unmet' (main's #1537 review check on every PR claim, no second model
+  in the fixture). head-commit and 1523/head reproduced on main: see main-sendback.txt.
+- tests/acceptance/304/defaults.test.ts and 304/modes.test.ts: push-needs-ask/merge-needs-ask hold the twin and the
+  watch-mode planted call ('no deadline for authority asks is declared'). Same two files, same messages, on main.
+- packages/hub/test/codex-hub, gate-stop, env-resources, background, monitor-ends, reading: timeouts and spool
+  'sync didn't finish within the hook's 50 ms' under load; none names a push, PR, merge or send rule.
+- crates: deep-hook lib 15/15; the cargo failures are deep-app acceptance_1141/_34 and deep-canvas (GPU, memory).
+
+Lint lane: clippy FAILED on crates/deep-hook/src/matcher.rs:1118 (needless_lifetimes on merge_endpoint): fixed in the
+commit after this evidence. cargo fmt --check: 28 diffs in deep-hook here against 14 on main with this box's rustfmt
+1.10.0-stable, which differs from main's formatter (main's own files don't pass it); the new code's hunks are listed
+below the summary in fmt-branch.txt. The other lint FAILs (canvas-lint, color literal, slots, guide, repo-rules
+secrets in other issues' fixtures) are main's: none names a file this change touches except repo-rules' size NOTE.
+
+Bench (node benchmarks/deep-hook.mjs guards, branch 22b50d6d, load 5-14):
+{"bench":"deep-hook","mode":"guards","matchP95Ms":-0.03260700000100769,"checkPlantedP95Ms":6.106490000001941,"checkTwinP95Ms":5.964715000001888}
+matching every guard entry adds ~0 ms at p95; deep-hook check on a planted call 6.1 ms, on its twin 6.0 ms, against
+the 10 ms hook budget; a Spark reading, not the reference Mac's.

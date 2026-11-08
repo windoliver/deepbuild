@@ -1,0 +1,22 @@
+Surface redraft (helpers.ts `useCanvas`), base run.
+Base commit: c469fe2e; the worktree is at 1ba8afd6, which adds only tests/acceptance/308 on top of it.
+No crates/deep-input exists in the working tree (`ls crates/deep-input`: No such file or directory), and
+`git show HEAD:Cargo.toml` names no deep-input workspace member (grep -c deep-input: 0).
+Date: 2026-11-08  cargo 1.99.1 (5f94df478 2026-08-27)  darwin-arm64
+
+Command (the build the redrafted `useCanvas` runs, with the env it sets), run once:
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-input --bin deep-input
+
+Output:
+error: package ID specification `deep-input` did not match any packages
+
+help: a package with a similar name exists: `deep-gpu`
+Exit code: 101
+
+Expected reason: the input module's proof binary doesn't exist at the base. Every test that calls `canvas.bin()`
+fails its first assertion, "the binary builds: cargo build --locked -p deep-input --bin deep-input", with this error.
+The deep-show tests are unchanged by the redraft; their base failures are those in ../BASE-FAILURE.txt.
+
+Typecheck: not run. node_modules doesn't exist in this worktree, so
+`node node_modules/typescript/bin/tsc --noEmit -p tests/acceptance/308/tsconfig.json` can't run here.
+The vitest suite was not run either (same reason; the build failure above is what each binary-driving test hits first).

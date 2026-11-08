@@ -53,6 +53,25 @@
         "subagent-stop.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/subagent-stop.command.input.schema.json",
         "user-prompt-submit.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/user-prompt-submit.command.input.schema.json"
       }
+    },
+    "0.166.0-alpha.5.1": {
+      "tag": "rust-v0.166.0-alpha.5.1",
+      "commit": "f79b26ccbb3116b052544666a181012fb45dc49b",
+      "files": {
+        "interrupt.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/interrupt.command.input.schema.json",
+        "model-request.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/model-request.command.input.schema.json",
+        "permission-request.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/permission-request.command.input.schema.json",
+        "post-compact.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/post-compact.command.input.schema.json",
+        "post-tool-use.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/post-tool-use.command.input.schema.json",
+        "pre-compact.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/pre-compact.command.input.schema.json",
+        "pre-tool-use.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/pre-tool-use.command.input.schema.json",
+        "session-end.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/session-end.command.input.schema.json",
+        "session-start.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/session-start.command.input.schema.json",
+        "stop.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/stop.command.input.schema.json",
+        "subagent-start.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/subagent-start.command.input.schema.json",
+        "subagent-stop.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/subagent-stop.command.input.schema.json",
+        "user-prompt-submit.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/hooks/schema/generated/user-prompt-submit.command.input.schema.json"
+      }
     }
   }
 }
