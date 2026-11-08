@@ -12,6 +12,7 @@ pub mod cull;
 pub mod env;
 mod glass;
 pub mod local;
+pub mod print;
 pub mod maps;
 mod mesh;
 mod motion;
@@ -20,6 +21,7 @@ mod op;
 pub mod shadow;
 pub mod status;
 pub mod surface;
+pub mod targets;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -101,6 +103,12 @@ pub use deep_canvas_scene3d::module::{CASCADE_PASS, CULL_PASS};
 pub struct Planted {
     /// Depth cleared to 1, compared less, with a finite far plane at 10 km.
     pub forward_z: bool,
+    /// #431: the emission target is the color target's excess over 1, never the emitted radiance.
+    pub emission_thresholds_color: bool,
+    /// #431: a material operator's `sample_grad` takes implicit derivatives.
+    pub sample_grad_implicit: bool,
+    /// #431: the opaque scene's copy is taken after the see-through parts draw.
+    pub backdrop_after_see_through: bool,
     /// The output pass encodes its result twice.
     pub encodes_twice: bool,
     /// The output pass writes the tone-mapped linear value unencoded.
@@ -242,6 +250,8 @@ pub struct PostFrame<'a> {
     pub light_clip: Option<[f64; 16]>,
     /// Each item's pick ID.
     pub picks: &'a BTreeMap<String, u32>,
+    /// The core's velocity and emission targets this frame, where something reads them (#431).
+    pub core: Vec<(&'static str, &'a wgpu::TextureView)>,
 }
 
 /// The GPU's pass timer (issue #380: frame GPU time, measured with wgpu-profiler).
@@ -1013,6 +1023,33 @@ pub(crate) fn extent([width, height]: [u32; 2]) -> wgpu::Extent3d {
 }
 
 /// A 2D texture of `size`: one layer, one mip, one sample.
+/// #464: one frame's print pass, recorded after the output into where the output would write.
+struct PrintStage {
+    device: wgpu::Device,
+    printer: Arc<Mutex<print::Printer>>,
+    params: print::Params,
+    source: wgpu::TextureView,
+    ids: wgpu::TextureView,
+    masks: Vec<u32>,
+    format: wgpu::TextureFormat,
+}
+
+impl PrintStage {
+    fn record(&self, encoder: &mut wgpu::CommandEncoder, into: &wgpu::TextureView) {
+        let coverage = print::Coverage::Ids(&self.ids, self.masks.clone());
+        self.printer.lock().unwrap_or_else(|e| e.into_inner()).record(
+            &self.device,
+            encoder,
+            &self.params,
+            &self.source,
+            &coverage,
+            into,
+            self.format,
+            None,
+        );
+    }
+}
+
 pub(crate) fn texture2d(
     d: &wgpu::Device,
     label: &str,
@@ -1433,6 +1470,8 @@ struct Batch {
     /// (#421: Object: see-through order).
     clear: Set,
     clear_draws: Vec<((Shape, u32), u8)>,
+    /// Each see-through draw's material operator key (#431), 0 for none, as `clear_draws`.
+    clear_ops: Vec<u64>,
     /// The resources and draws the bundle binds and records, as it was encoded, and this
     /// frame's, gathered in a buffer kept from frame to frame.
     key: Vec<u64>,
@@ -1558,6 +1597,8 @@ struct EnvState {
     stub: wgpu::TextureView,
     cube: Option<env::Cube>,
     to: Option<env::Cube>,
+    /// The blurred background's cubes (#426), from and to: one mip at the blur's roughness.
+    bg: [Option<env::Cube>; 2],
 }
 
 /// A camera as the effects read it: world to clip (column-major), the eye and the near plane.
@@ -1568,6 +1609,11 @@ pub struct Renderer {
     /// Motion blur by velocity (#419): its pipelines, and this frame's pass when it blurs.
     motion: motion::MotionPass,
     motion_frame: Option<motion::Frame>,
+    /// The core's velocity and emission targets (#431), built only while read, and this frame's
+    /// draws of them.
+    pub core: targets::Core,
+    velocity_frame: Option<motion::TargetFrame>,
+    emission_frame: Option<targets::EmissionFrame>,
     epoch: u64,
     /// The material maps' textures and bind groups (#423), and the look's default taps.
     maps: maps::Store,
@@ -1663,6 +1709,12 @@ pub struct Renderer {
     output_f32: wgpu::RenderPipeline,
     /// The finished frame (status::FINISHED), made when a frame has passes after the finish.
     finished: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
+    /// #464: the look's print finish for the frame being drawn (its fields, the frame's values,
+    /// the ground, each item's color for its separations), the pass, and the frame it reads.
+    print: Option<(Arc<deep_canvas_marks::print::Print>, deep_canvas_marks::print::Frame, [u8; 3])>,
+    print_colors: BTreeMap<String, [u8; 3]>,
+    printer: Option<Arc<Mutex<print::Printer>>>,
+    print_source: Option<(wgpu::TextureView, [u32; 2], wgpu::TextureFormat)>,
     /// The pass resolving the geometry pass's object IDs and depth (#1173), and the planted
     /// resolve_accumulates_frames' blend of the previous frame.
     resolve: wgpu::RenderPipeline,
@@ -1995,6 +2047,8 @@ fn lights_bind(
             wgpu::BindingResource::TextureView(&ies.view),
             wgpu::BindingResource::Sampler(&ies.sampler),
             grid.as_entire_binding(),
+            wgpu::BindingResource::TextureView(env.bg[0].as_ref().map_or(&env.stub, |c| &c.view)),
+            wgpu::BindingResource::TextureView(env.bg[1].as_ref().map_or(&env.stub, |c| &c.view)),
         ],
     )
 }
@@ -2231,6 +2285,54 @@ fn draw_pipeline(
         Some((fs, &targets)),
         Some(depth),
         cull,
+    )
+}
+
+/// A see-through part's material operator pipeline (#431): as a blend part draws, its
+/// premultiplied color over what's behind, depth-tested, writing no depth and no object ID.
+pub(crate) fn op_blend_pipeline(
+    d: &wgpu::Device,
+    samples: u32,
+    module: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    forward_z: bool,
+    after_resolve: bool,
+) -> wgpu::RenderPipeline {
+    // After the resolve it draws into the one-sample targets, as the late parts do (#1173).
+    let (samples, ids) = if after_resolve {
+        (1, IDS)
+    } else {
+        (samples, IDS_MS)
+    };
+    let depth = wgpu::DepthStencilState {
+        format: DEPTH,
+        depth_write_enabled: Some(false),
+        depth_compare: Some(if forward_z {
+            wgpu::CompareFunction::Less
+        } else {
+            wgpu::CompareFunction::GreaterEqual
+        }),
+        stencil: Default::default(),
+        bias: Default::default(),
+    };
+    let targets = [
+        target(LINEAR, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING)),
+        Some(wgpu::ColorTargetState {
+            format: ids,
+            blend: None,
+            write_mask: wgpu::ColorWrites::empty(),
+        }),
+    ];
+    culled(
+        d,
+        samples,
+        "scene3d material operator see-through",
+        Some(layout),
+        module,
+        ("mesh_vs", &mesh_buffers()),
+        Some(("op_mesh_fs", &targets)),
+        Some(depth),
+        None,
     )
 }
 
@@ -2471,6 +2573,9 @@ impl Renderer {
                 },
                 uniform(5, wgpu::ShaderStages::FRAGMENT),
                 cube_entry(6),
+                // The blurred background's own cubes (#426), from and to.
+                cube_entry(18),
+                cube_entry(19),
                 wgpu::BindGroupLayoutEntry {
                     binding: 7,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -2587,6 +2692,7 @@ impl Renderer {
             stub: env::Prefilter::stub(d),
             cube: None,
             to: None,
+            bg: [None, None],
         };
         let ies = local::Tables::new(d);
         let cluster_buffer = d.create_buffer(&wgpu::BufferDescriptor {
@@ -2948,6 +3054,10 @@ impl Renderer {
             output_pipeline,
             output_f32,
             finished: None,
+            print: None,
+            print_colors: BTreeMap::new(),
+            printer: None,
+            print_source: None,
             resolve,
             accumulate,
             compiled: 3,
@@ -2963,6 +3073,9 @@ impl Renderer {
             meshes: BTreeMap::new(),
             motion: motion::MotionPass::default(),
             motion_frame: None,
+            core: targets::Core::default(),
+            velocity_frame: None,
+            emission_frame: None,
             batches: BTreeMap::new(),
             atlas,
             picks: BTreeMap::new(),
@@ -3522,6 +3635,9 @@ impl Renderer {
         match wanted {
             None => {
                 rebuilt = self.env.cube.take().is_some() | self.env.to.take().is_some();
+                for slot in &mut self.env.bg {
+                    rebuilt |= slot.take().is_some();
+                }
             }
             Some((key, e)) => {
                 let sky = scene.sky.as_ref().expect("an environment is a sky's");
@@ -3538,7 +3654,7 @@ impl Renderer {
                     self.env.cube = Some(
                         self.env
                             .prefilter
-                            .build(device, key, &source, e.size, filled),
+                            .build(device, key, &source, e.size, filled, None),
                     );
                     rebuilt = true;
                 }
@@ -3546,9 +3662,30 @@ impl Renderer {
                 if self.env.to.as_ref().map(|c| c.key) != to_key {
                     self.env.to = e.mix.as_ref().zip(to_key).map(|((to, _), k)| {
                         let source = env::source(sky, to);
-                        self.env.prefilter.build(device, k, &source, e.size, None)
+                        self.env
+                            .prefilter
+                            .build(device, k, &source, e.size, None, None)
                     });
                     rebuilt = true;
+                }
+                // The blurred background's own cubes (#426): the lobe at exactly the blur's
+                // roughness, keyed by the environment's key and the blur, never lighting's.
+                let blur = sky.background_blur as f32;
+                let bg_keys = [Some(key), to_key].map(|k| {
+                    k.filter(|_| blur > 0.0)
+                        .map(|k| k ^ u64::from(blur.to_bits()).wrapping_mul(0x9e37_79b9_7f4a_7c15))
+                });
+                let froms = [Some(&e.from), e.mix.as_ref().map(|(to, _)| to)];
+                for ((slot, k), from) in self.env.bg.iter_mut().zip(bg_keys).zip(froms) {
+                    if slot.as_ref().map(|c| c.key) != k {
+                        *slot = k.zip(from).map(|(k, from)| {
+                            let source = env::source(sky, from);
+                            self.env
+                                .prefilter
+                                .build(device, k, &source, e.size, None, Some(blur))
+                        });
+                        rebuilt = true;
+                    }
                 }
                 let cube = self.env.cube.as_ref().expect("built above");
                 u.sh = cube.sh;
@@ -3563,7 +3700,7 @@ impl Renderer {
                     e.intensity as f32,
                     e.rotation.to_radians() as f32,
                 ];
-                u.bg[1] = sky.background_blur as f32 * last;
+                u.bg[1] = blur;
             }
         }
         if rebuilt {
@@ -3887,11 +4024,16 @@ impl Renderer {
                 &self.lights_layout,
                 &self.ao.shade_layout,
             ];
+            let options = deep_canvas_effects::emit::Options {
+                sample_grad_implicit: self.planted.sample_grad_implicit,
+                ..Default::default()
+            };
             let made = op::compile(
                 &device.device,
                 SHADER,
                 layouts,
                 self.planted.forward_z,
+                options,
                 self.families.samples,
                 o,
             );
@@ -4059,6 +4201,129 @@ impl Renderer {
             }
             _ => None,
         };
+        self.prepare_core(device, scene);
+    }
+
+    /// The core targets this frame reads (#431), made at the internal size, and their draws:
+    /// velocity from the scene's evaluations at t ± s/2 (no travel where it has none), emission
+    /// from every opaque solid's set.
+    fn prepare_core(&mut self, device: &Device, scene: &Scene) {
+        let Some((size, linear)) = self
+            .targets
+            .as_ref()
+            .map(|t| (t.size, t.linear_view.clone()))
+        else {
+            return;
+        };
+        self.core.ensure(&device.device, size);
+        self.velocity_frame = self.core.velocity.is_some().then(|| {
+            let still;
+            let motion = match &scene.velocity {
+                Some(m) => m.as_ref(),
+                None => {
+                    still = still_motion(scene);
+                    &still
+                }
+            };
+            self.motion
+                .target_frame(device, scene, motion, &self.meshes, size)
+        });
+        let draws: Vec<targets::EmissionDraw> = self
+            .order
+            .iter()
+            .filter_map(|id| self.batches.get(id))
+            .flat_map(|b| &b.solids)
+            .filter(|(_, set)| set.cull.is_none())
+            .filter_map(|((shape, maps, ..), set)| {
+                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
+                Some((
+                    mesh.vertices.clone(),
+                    mesh.indices.clone(),
+                    mesh.count,
+                    buffer.clone(),
+                    set.len(),
+                    self.maps.by_index(*maps & MAPS_INDEX).clone(),
+                ))
+            })
+            .collect();
+        let binds = [
+            self.frame_bind.clone(),
+            self.lights_bind.clone(),
+            self.ao.shade().clone(),
+        ];
+        let threshold = self.planted.emission_thresholds_color.then_some(&linear);
+        self.emission_frame = self.core.emission_frame(
+            device,
+            &self.scene_module,
+            &self.solid_layout,
+            binds,
+            draws,
+            threshold,
+        );
+    }
+
+    /// The core targets' draws, after the frame's geometry.
+    fn core_draws(&self) -> Option<CoreDraws> {
+        let t = self.targets.as_ref()?;
+        let velocity = self
+            .velocity_frame
+            .as_ref()
+            .zip(self.core.velocity.as_ref())
+            .map(|(f, v)| (f.clone(), v.view.clone()));
+        let emission = self
+            .emission_frame
+            .as_ref()
+            .zip(self.core.emission.as_ref())
+            .map(|(f, e)| (f.clone(), e.view.clone()));
+        (velocity.is_some() || emission.is_some()).then(|| CoreDraws {
+            velocity,
+            emission,
+            depth: t.depth_view.clone(),
+        })
+    }
+
+    /// The copy of the opaque scene that transmission and `backdrop` read (#431), as the last
+    /// frame took it: each mip's size and its texels as f32 RGBA, level 0 first; `None` while the
+    /// frame holds no copy.
+    pub fn read_backdrop(&self, device: &Device) -> Option<Vec<([u32; 2], Vec<u8>)>> {
+        let g = self.glass.as_ref()?;
+        (0..glass::levels(g.size))
+            .map(|k| {
+                let size = [(g.size[0] >> k).max(1), (g.size[1] >> k).max(1)];
+                let half = read_level(device, &g.texture, k, size, 8)?;
+                let floats = half
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
+                    .collect();
+                Some((size, floats))
+            })
+            .collect()
+    }
+
+    /// Every core target the renderer holds (#431): color and object ID, and velocity and emission
+    /// while read, each with its texture and its bytes (width × height × its texel's bytes).
+    pub fn target_rows(&self) -> Vec<(&'static str, &wgpu::Texture, u64)> {
+        let mut rows = Vec::new();
+        if let Some(t) = self.targets.as_ref() {
+            let px = u64::from(t.size[0]) * u64::from(t.size[1]);
+            rows.push(("color", &t.linear, px * 8));
+            rows.push(("object_id", &t.ids, px * 4));
+        }
+        for (name, target, bytes) in self.core.held() {
+            rows.push((name, &target.texture, bytes));
+        }
+        rows
+    }
+
+    /// A core target's view this frame, by its output's name (#431).
+    pub fn core_target(&self, name: &str) -> Option<&wgpu::TextureView> {
+        match name {
+            "velocity" => self.core.velocity.as_ref().map(|t| &t.view),
+            "emission" => self.core.emission.as_ref().map(|t| &t.view),
+            _ => None,
+        }
     }
 
     /// A solid's lobe table index above the adjust's, 0 without lobes, or `None` when its lobes
@@ -4094,6 +4359,8 @@ impl Renderer {
         // See-through parts reorder as the camera moves, so a frame holding one prepares whole;
         // so does one whose level of detail the view chooses (#425).
         if self.planted.encodes_every_frame
+            || self.core.want.velocity
+            || self.core.want.emission
             || leveled(scene)
             || self.order.len() != scene.layers.len()
             || self.batches.values().any(|b| !b.clear_draws.is_empty())
@@ -4345,6 +4612,18 @@ impl Renderer {
     /// The frame's uniforms, outlines and shadow, and its atlas pages.
     fn prepare_frame(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.counts = Counts::default();
+        // #464: the print finish this frame draws, and each solid's color its separations read.
+        self.print = (!look.print.is_identity())
+            .then(|| (look.print.clone(), scene.print, scene.ground));
+        self.print_colors = if look.print.separations.is_empty() {
+            BTreeMap::new()
+        } else {
+            scene
+                .layers
+                .iter()
+                .flat_map(|l| l.solids.iter().map(|s| (s.id.clone(), s.color)))
+                .collect()
+        };
         // Below internal scale 1 the targets are the internal size; px-sized marks shrink with
         // them, and the upscale returns the frame to `scene.size` (#386).
         self.size = scene.size;
@@ -4364,10 +4643,17 @@ impl Renderer {
             self.sheen_written = true;
         }
         // The opaque scene's copy, made while the scene holds a transmissive part (#428).
-        let glass = scene.layers.iter().flat_map(|l| &l.solids).any(transmits);
+        // A see-through part whose material operator reads the copy needs it too (#431).
+        let glass = scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.solids)
+            .any(|s| transmits(s) || s.op.as_ref().is_some_and(op::reads_backdrop));
         if glass != self.glass.as_ref().is_some_and(|g| g.size == internal) {
             self.glass = glass.then(|| glass::Glass::new(&device.device, internal));
             self.rebind_lights(device);
+            // A material operator that reads the copy binds the new one.
+            self.op_binds.clear();
         }
         let k = f64::from(internal[0]) / f64::from(scene.size[0].max(1));
         self.upload_pages(device, &scene.pages);
@@ -4640,7 +4926,9 @@ impl Renderer {
                 self.names.push(CLEAR_NAMES[k]);
             }
         }
-        let glass = self.clear_pipelines[usize::from(GLASS)].is_some();
+        // Blend and add parts draw after the opaque copy whenever there is one: for glass, or
+        // for a see-through part's material operator that reads it (#431).
+        let glass = self.clear_pipelines[usize::from(GLASS)].is_some() || self.glass.is_some();
         for k in [BLEND, ADD].map(usize::from) {
             if glass && self.clear_pipelines[k].is_some() && self.late_pipelines[k].is_none() {
                 self.late_pipelines[k] = Some(clear_pipeline(
@@ -4684,7 +4972,9 @@ impl Renderer {
                 None => self.mesh(device, s.shape),
             }
             let tie = self.ties.get(&s.id).copied().unwrap_or(0);
-            let op = self.material_op(device, s, clear(s));
+            // A see-through part blends through its material operator (#431); the other
+            // see-through kinds still refuse one.
+            let op = self.material_op(device, s, clear(s) && kind_of(s) != BLEND);
             let maps = match (&s.maps, &s.material) {
                 (Some(m), Some(_)) => self.maps.group(&device.device, &device.queue, m, taps),
                 _ => 0,
@@ -4696,13 +4986,28 @@ impl Renderer {
             ) {
                 let none = light::Maps::default();
                 let source = s.maps.as_deref().filter(|_| maps != 0).unwrap_or(&none);
+                // Its texture inputs (#431): images by hash, and the opaque scene's copy.
+                let views: Vec<wgpu::TextureView> = m
+                    .textures
+                    .iter()
+                    .map(|t| match t {
+                        op::TexIn::Asset(sha) => {
+                            self.maps.view_of(&device.device, &device.queue, sha)
+                        }
+                        op::TexIn::Backdrop => self
+                            .glass
+                            .as_ref()
+                            .map_or(self.glass_stub.clone(), |g| g.view.clone()),
+                    })
+                    .collect();
+                let refs: Vec<&wgpu::TextureView> = views.iter().collect();
                 let g = self.maps.bind_with(
                     &device.device,
                     &device.queue,
                     source,
                     taps,
                     &m.layout,
-                    m.entries(),
+                    m.entries(&refs),
                 );
                 self.op_binds.insert((op, maps), g);
             }
@@ -4810,7 +5115,13 @@ impl Renderer {
                 let depth = (0..3)
                     .map(|k| (c[k] - cam.eye[k]) * cam.forward[k])
                     .sum::<f64>();
-                see_through.push((depth + s.sort_bias, s, record, (slot.0 .0, slot.0 .1)));
+                see_through.push((
+                    depth + s.sort_bias,
+                    s,
+                    record,
+                    (slot.0 .0, slot.0 .1),
+                    slot.0 .2,
+                ));
                 slot.1 = u32::MAX;
                 continue;
             }
@@ -4841,9 +5152,11 @@ impl Renderer {
         see_through.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
         batch.clear.begin();
         batch.clear_draws.clear();
-        for (_, s, record, key) in &see_through {
+        batch.clear_ops.clear();
+        for (_, s, record, key, op) in &see_through {
             batch.clear.push(&s.id, bytemuck::bytes_of(record));
             batch.clear_draws.push((*key, kind_of(s)));
+            batch.clear_ops.push(*op);
         }
         batch.clear.finish(device, &mut next, &mut written);
         batch.solid_slots = slots;
@@ -5036,8 +5349,9 @@ impl Renderer {
     }
 
     /// With glass in the frame, its blend and add parts' draws with their pipelines, in layer
-    /// order then back to front (#428).
-    fn late_draws(&self) -> Vec<LateDraw> {
+    /// order then back to front (#428); a blend part with a material operator draws through it
+    /// (#431). Each says whether it reads the opaque scene's copy.
+    fn late_draws(&self) -> Vec<(LateDraw, bool)> {
         let mut draws = Vec::new();
         for id in &self.order {
             let batch = &self.batches[id];
@@ -5048,26 +5362,50 @@ impl Renderer {
                 if *kind != BLEND && *kind != ADD {
                     continue;
                 }
-                let (Some(mesh), Some(pipeline)) = (
-                    self.meshes.get(shape),
-                    &self.late_pipelines[usize::from(*kind)],
-                ) else {
+                let Some(mesh) = self.meshes.get(shape) else {
                     continue;
                 };
+                let op = batch.clear_ops.get(k).copied().unwrap_or(0);
+                let (pipeline, group, reads) = match self.see_through_op(op, *maps) {
+                    Some((m, g)) if *kind == BLEND => {
+                        (m.blend_late.clone(), g.clone(), m.reads_backdrop())
+                    }
+                    _ => match &self.late_pipelines[usize::from(*kind)] {
+                        Some(p) => (p.clone(), self.maps.by_index(*maps).clone(), false),
+                        None => continue,
+                    },
+                };
                 draws.push((
-                    pipeline.clone(),
                     (
-                        mesh.vertices.clone(),
-                        mesh.indices.clone(),
-                        mesh.count,
-                        buffer.clone(),
-                        k as u32,
-                        self.maps.by_index(*maps).clone(),
+                        pipeline,
+                        (
+                            mesh.vertices.clone(),
+                            mesh.indices.clone(),
+                            mesh.count,
+                            buffer.clone(),
+                            k as u32,
+                            group,
+                        ),
                     ),
+                    reads,
                 ));
             }
         }
         draws
+    }
+
+    /// A see-through part's material operator and its bind group, where it draws through one.
+    fn see_through_op(&self, op: u64, maps: u32) -> Option<(&op::MatOp, &wgpu::BindGroup)> {
+        if op == 0 {
+            return None;
+        }
+        match (
+            self.materials.get(&op),
+            self.op_binds.get(&(op, maps & MAPS_INDEX)),
+        ) {
+            (Some(Ok(m)), Some(g)) => Some((m, g)),
+            _ => None,
+        }
     }
 
     /// Every see-through draw of `kind` across the batches, in layer order then back to front.
@@ -5203,6 +5541,17 @@ impl Renderer {
                 } else {
                     &[usize::from(*kind)][..]
                 };
+                // A blend part with a material operator draws through it (#431).
+                let op = batch.clear_ops.get(k as usize).copied().unwrap_or(0);
+                if let (Some((m, g)), BLEND) = (self.see_through_op(op, *maps), *kind) {
+                    enc.set_bind_group(3, g, &[]);
+                    enc.set_pipeline(&m.blend);
+                    enc.set_vertex_buffer(0, mesh.vertices.slice(..));
+                    enc.set_vertex_buffer(1, buffer.slice(..));
+                    enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                    enc.draw_indexed(0..mesh.count, 0, k..k + 1);
+                    continue;
+                }
                 for &p in kinds {
                     let Some(pipeline) = &self.clear_pipelines[p] else {
                         continue;
@@ -5588,11 +5937,14 @@ impl Renderer {
             _ => None,
         };
         let staging = resolve.as_ref().map(|_| self.oit.staging.clone());
-        // Transmissive parts over the opaque scene's copy (#428).
+        // Transmissive parts over the opaque scene's copy (#428), and the see-through parts whose
+        // material operators read it (#431).
         let glass_draws = self.clear_kind_draws(GLASS);
+        let late = self.late_draws();
+        let readers = late.iter().any(|(_, reads)| *reads);
         let glass = match (&self.glass, &self.clear_pipelines[usize::from(GLASS)]) {
-            (Some(_), Some(pipeline)) if !glass_draws.is_empty() => Some((
-                self.late_draws(),
+            (Some(_), pipeline) if !glass_draws.is_empty() || readers => Some((
+                late,
                 pipeline.clone(),
                 [
                     self.frame_bind.clone(),
@@ -5603,7 +5955,9 @@ impl Renderer {
             )),
             _ => None,
         };
+        let copy_late = self.planted.backdrop_after_see_through;
         let glass_copy = glass.as_ref().and(self.glass.clone());
+        let core = self.core_draws();
         let linear_texture = t.linear.clone();
         let motion = self.motion_frame.take().map(|m| (m, t.linear.clone()));
         let geometry: Job = Box::new(move |encoder| {
@@ -5682,16 +6036,48 @@ impl Renderer {
                     encoder.copy_buffer_to_buffer(info, 0, staging, 0, 16);
                 }
             }
+            // The core's targets an effect or operator reads, from what the geometry left (#431).
+            if let Some(core) = &core {
+                core.record(encoder);
+            }
             if let (Some((late, pipeline, binds, draws)), Some(copy)) = (&glass, &glass_copy) {
                 timed(&profiler, glass::PASS, encoder, |encoder, timestamps| {
+                    // The planted copy is taken after the see-through parts that don't read it.
+                    if copy_late {
+                        let (readers, others): (Vec<_>, Vec<_>) =
+                            late.iter().cloned().partition(|(_, reads)| *reads);
+                        let others: Vec<LateDraw> = others.into_iter().map(|(d, _)| d).collect();
+                        let readers: Vec<LateDraw> = readers.into_iter().map(|(d, _)| d).collect();
+                        glass_pass(
+                            encoder,
+                            [&linear, &ids, &depth],
+                            pipeline.as_ref(),
+                            binds,
+                            draws,
+                            &others,
+                            timestamps,
+                        );
+                        copy.record(encoder, &linear_texture);
+                        glass_pass(
+                            encoder,
+                            [&linear, &ids, &depth],
+                            None,
+                            binds,
+                            &[],
+                            &readers,
+                            None,
+                        );
+                        return;
+                    }
                     copy.record(encoder, &linear_texture);
+                    let late: Vec<LateDraw> = late.iter().map(|(d, _)| d.clone()).collect();
                     glass_pass(
                         encoder,
                         [&linear, &ids, &depth],
-                        pipeline,
+                        pipeline.as_ref(),
                         binds,
                         draws,
-                        late,
+                        &late,
                         timestamps,
                     );
                 });
@@ -5748,6 +6134,10 @@ impl Renderer {
                 near: self.camera.2,
                 light_clip: self.shadow.clip,
                 picks: &self.picks,
+                core: ["velocity", "emission"]
+                    .into_iter()
+                    .filter_map(|n| Some((n, self.core_target(n)?)))
+                    .collect(),
             };
             let (more, source) = post.jobs(device, &frame);
             jobs.extend(more);
@@ -5769,6 +6159,13 @@ impl Renderer {
         let (target, pipeline) = match &finished {
             Some(f) => (f.clone(), self.output_f32.clone()),
             None => (framed.clone(), self.output_pipeline.clone()),
+        };
+        // #464: with a print finish, the output writes a frame of its own that the print pass
+        // reads, and the print pass writes where the output would have.
+        let printing = self.print_stage(device, size, finished.is_some());
+        let (target, printed_into) = match &printing {
+            Some(p) => (p.source.clone(), Some(target)),
+            None => (target, None),
         };
         let profiler = self.profiler.clone();
         let (busy, busy_slot) = (self.busy.clone(), slot.clone());
@@ -5803,7 +6200,10 @@ impl Renderer {
                     &bind,
                     timestamps,
                 )
-            })
+            });
+            if let (Some(p), Some(into)) = (&printing, &printed_into) {
+                p.record(encoder, into);
+            }
         });
         jobs.push((OUTPUT_PASS.into(), output));
         let mut after_jobs = match (after, finished) {
@@ -6017,6 +6417,63 @@ impl Renderer {
     }
 
     /// The finished frame's view at `size`, made or remade when the size changed.
+    /// #464: the print pass for this frame, when the look prints anything: the frame the output
+    /// writes for it at `size`, in the format the output would have written.
+    fn print_stage(&mut self, device: &Device, size: [u32; 2], finished: bool) -> Option<PrintStage> {
+        let (print, frame, ground) = self.print.clone()?;
+        let format = if finished { status::FINISHED } else { FORMAT };
+        if self
+            .print_source
+            .as_ref()
+            .is_none_or(|(_, s, f)| *s != size || *f != format)
+        {
+            let texture = deep_gpu::alloc::outside(|| {
+                texture2d(
+                    &device.device,
+                    "scene3d print source",
+                    size,
+                    format,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                )
+            });
+            self.print_source = Some((texture.create_view(&Default::default()), size, format));
+        }
+        let printer = self
+            .printer
+            .get_or_insert_with(|| Arc::new(Mutex::new(print::Printer::new(&device.device))))
+            .clone();
+        // Each object ID's separations: the bits of those whose ink is its surface's role color.
+        let top = self.picks.values().copied().max().unwrap_or(0) as usize;
+        let mut masks = vec![0u32; top + 1];
+        for (id, pick) in &self.picks {
+            if let Some(c) = self.print_colors.get(id) {
+                for (k, sep) in print.separations.iter().enumerate() {
+                    if sep.color == *c {
+                        masks[*pick as usize] |= 1 << k;
+                    }
+                }
+            }
+        }
+        let params = print::params(
+            &print,
+            &frame,
+            size,
+            print::Placed::default(),
+            ground,
+            true,
+            print::Planted::default(),
+        );
+        Some(PrintStage {
+            device: device.device.clone(),
+            printer,
+            params,
+            source: self.print_source.as_ref().expect("made above").0.clone(),
+            ids: self.targets.as_ref()?.ids_view.clone(),
+            masks,
+            format,
+        })
+    }
+
     fn finished(&mut self, device: &Device, size: [u32; 2]) -> wgpu::TextureView {
         if self.finished.as_ref().is_none_or(|(_, _, s)| *s != size) {
             let texture = deep_gpu::alloc::outside(|| {
@@ -6193,6 +6650,9 @@ impl Renderer {
             self.puff_draw().as_ref(),
             timestamps,
         );
+        if let Some(core) = self.core_draws() {
+            core.record(encoder);
+        }
     }
 
     /// The puffs' draw this frame, when it has any (#422).
@@ -6380,7 +6840,13 @@ impl Renderer {
 /// The look's tone map alone (#418's `tone` call), as the output pass runs it, over `input` (f32
 /// RGBA, rows top-down, `size` px) on `device`, with no exposure and no encode; the output in the
 /// same layout, or `None` on a backend with no pixels.
-pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Option<Vec<u8>> {
+pub fn tone(
+    device: &Device,
+    map: ToneMap,
+    grade: &deep_canvas_marks::finish::Grade,
+    input: &[f32],
+    size: [u32; 2],
+) -> Option<Vec<u8>> {
     let d = &device.device;
     let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("scene3d tone"),
@@ -6432,6 +6898,8 @@ pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Opt
         ToneMap::Agx { white, contrast } => (2, white, contrast),
         other => (other.code(), 16.29, 1.25),
     };
+    // #464: the grade inside the pass, as the output runs it: the white balance before the curve
+    // and the CDL after it.
     let uniform = ToneUniform {
         exposure: 1.0,
         map: code,
@@ -6439,16 +6907,14 @@ pub fn tone(device: &Device, map: ToneMap, input: &[f32], size: [u32; 2]) -> Opt
         contrast: contrast as f32,
         encode: 0,
         deband: 0.0,
-        saturation: 1.0,
-        graded: 0,
-        wb: [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-        ],
-        slope: [1.0; 4],
-        offset: [0.0; 4],
-        power: [1.0; 4],
+        saturation: grade.saturation as f32,
+        graded: u32::from(!grade.is_identity()),
+        wb: grade
+            .white_balance()
+            .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
+        slope: rgb4(grade.slope),
+        offset: rgb4(grade.offset),
+        power: rgb4(grade.power),
     };
     let buffer = d.create_buffer(&wgpu::BufferDescriptor {
         label: Some("scene3d tone"),
@@ -6514,6 +6980,17 @@ pub(crate) fn read_texture(
     size: [u32; 2],
     texel: u32,
 ) -> Option<Vec<u8>> {
+    read_level(device, texture, 0, size, texel)
+}
+
+/// Mip `level` of `texture`, `size` at that level, read back as tightly packed rows.
+pub(crate) fn read_level(
+    device: &Device,
+    texture: &wgpu::Texture,
+    level: u32,
+    size: [u32; 2],
+    texel: u32,
+) -> Option<Vec<u8>> {
     let row = size[0] * texel;
     let padded =
         row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
@@ -6522,7 +6999,7 @@ pub(crate) fn read_texture(
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture,
-                mip_level: 0,
+                mip_level: level,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
@@ -6757,10 +7234,54 @@ fn per_pixel_pass(
 /// The transmissive parts' pass (#428): each drawn over the targets the geometry pass wrote,
 /// reading the opaque scene's copy.
 #[allow(clippy::type_complexity)]
+/// A frame's draws of the core targets it reads (#431), each into its own view.
+struct CoreDraws {
+    velocity: Option<(motion::TargetFrame, wgpu::TextureView)>,
+    emission: Option<(targets::EmissionFrame, wgpu::TextureView)>,
+    depth: wgpu::TextureView,
+}
+
+impl CoreDraws {
+    fn record(&self, encoder: &mut wgpu::CommandEncoder) {
+        if let Some((f, view)) = &self.velocity {
+            f.record(encoder, view, &self.depth);
+        }
+        if let Some((f, view)) = &self.emission {
+            f.record(encoder, view, &self.depth);
+        }
+    }
+}
+
+/// A scene's evaluations with nothing moving: every solid and the camera where they are at t.
+fn still_motion(scene: &Scene) -> deep_canvas_scene3d::scene::Motion {
+    deep_canvas_scene3d::scene::Motion {
+        open: scene.camera.clone(),
+        close: scene.camera.clone(),
+        solids: scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.solids)
+            .map(|s| {
+                (
+                    s.id.clone(),
+                    deep_canvas_scene3d::scene::MotionSolid {
+                        open: s.model,
+                        close: s.model,
+                        meshes: None,
+                    },
+                )
+            })
+            .collect(),
+        taps: 2,
+        max_px: f64::MAX,
+        tile_px: 1,
+    }
+}
+
 fn glass_pass(
     encoder: &mut wgpu::CommandEncoder,
     [linear, ids, depth]: [&wgpu::TextureView; 3],
-    pipeline: &wgpu::RenderPipeline,
+    pipeline: Option<&wgpu::RenderPipeline>,
     binds: &[wgpu::BindGroup; 3],
     draws: &[(
         wgpu::Buffer,
@@ -6802,8 +7323,12 @@ fn glass_pass(
     for (i, b) in binds.iter().enumerate() {
         pass.set_bind_group(i as u32, b, &[]);
     }
-    pass.set_pipeline(pipeline);
-    for (vertices, indices, count, instances, k, maps) in draws {
+    if let Some(pipeline) = pipeline {
+        pass.set_pipeline(pipeline);
+    }
+    for (vertices, indices, count, instances, k, maps) in
+        draws.iter().filter(|_| pipeline.is_some())
+    {
         pass.set_bind_group(3, maps, &[]);
         pass.set_vertex_buffer(0, vertices.slice(..));
         pass.set_vertex_buffer(1, instances.slice(..));

@@ -52,6 +52,7 @@ struct Pipes {
 
 /// One draw of the velocity pass: the solid's vertices at t, t − s/2 and t + s/2 (owned where
 /// the pre-skins differ from t's), its indices and its instance.
+#[derive(Clone)]
 struct Draw {
     at: wgpu::Buffer,
     sides: Option<(Mesh, Mesh)>,
@@ -86,9 +87,23 @@ struct Targets {
     resolved_view: wgpu::TextureView,
 }
 
+/// The core's velocity target's format (#431): each pixel's travel in px, two half floats.
+pub const TARGET: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
+
+/// A frame's draw of the core's velocity target (#431): every solid at t, t − s/2 and t + s/2,
+/// against the frame's own depth, so only what shows writes its travel.
+#[derive(Clone)]
+pub struct TargetFrame {
+    pipe: wgpu::RenderPipeline,
+    bind: wgpu::BindGroup,
+    instances: wgpu::Buffer,
+    draws: Vec<Draw>,
+}
+
 #[derive(Default)]
 pub struct MotionPass {
     pipes: Option<Pipes>,
+    target: Option<wgpu::RenderPipeline>,
     targets: Option<Targets>,
     /// Pipelines this pass compiled, by name, for the frame's report.
     pub compiled: Vec<&'static str>,
@@ -181,6 +196,85 @@ fn texture(
     crate::texture2d(d, label, size, format, usage)
 }
 
+/// Every solid's velocity draw, and its instance: its rows at t, t − s/2 and t + s/2.
+fn draw_list(
+    device: &Device,
+    scene: &Scene,
+    motion: &Motion,
+    meshes: &std::collections::BTreeMap<Shape, Mesh>,
+) -> (Vec<Draw>, Vec<Instance>) {
+    let mut draws = Vec::new();
+    let mut instances: Vec<Instance> = Vec::new();
+    for s in scene.layers.iter().flat_map(|l| &l.solids) {
+        if s.cast_only || s.alpha <= 0.0 {
+            continue;
+        }
+        let (Some(m), Some(at)) = (meshes.get(&s.shape), motion.solids.get(&s.id)) else {
+            continue;
+        };
+        let sides = at
+            .meshes
+            .as_ref()
+            .map(|(o, c)| (Mesh::of(device, o), Mesh::of(device, c)));
+        let (t, o, c) = (rows(&s.model), rows(&at.open), rows(&at.close));
+        instances.push(Instance {
+            rows: [t[0], t[1], t[2], o[0], o[1], o[2], c[0], c[1], c[2]],
+        });
+        draws.push(Draw {
+            at: m.vertices.clone(),
+            sides,
+            indices: m.indices.clone(),
+            count: m.count,
+        });
+    }
+    // With nothing drawn the background still travels under the camera's move: one unused
+    // instance keeps the buffer bound.
+    if instances.is_empty() {
+        instances.push(Instance::zeroed());
+    }
+    (draws, instances)
+}
+
+/// The velocity passes' uniform for `scene` at `size`.
+fn uniform_of(
+    scene: &Scene,
+    motion: &Motion,
+    size: [u32; 2],
+    tile: u32,
+    tiles: [u32; 2],
+) -> Uniform {
+    let cam = &scene.camera;
+    let back = inverse(&clip_rows(cam, scene.jitter, size));
+    Uniform {
+        clip_t: clip(cam, scene.jitter, size),
+        clip_o: clip(&motion.open, scene.jitter, size),
+        clip_c: clip(&motion.close, scene.jitter, size),
+        sky_o: columns(&product(
+            &clip_rows(&motion.open, scene.jitter, size),
+            &back,
+        )),
+        sky_c: columns(&product(
+            &clip_rows(&motion.close, scene.jitter, size),
+            &back,
+        )),
+        fwd: [
+            cam.forward[0] as f32,
+            cam.forward[1] as f32,
+            cam.forward[2] as f32,
+            -(cam.forward[0] * cam.eye[0]
+                + cam.forward[1] * cam.eye[1]
+                + cam.forward[2] * cam.eye[2]) as f32,
+        ],
+        size: [
+            size[0] as f32,
+            size[1] as f32,
+            motion.taps.clamp(2, 64) as f32,
+            motion.max_px as f32,
+        ],
+        tile: [tile, tiles[0], tiles[1], 0],
+    }
+}
+
 impl MotionPass {
     fn pipes(&mut self, d: &wgpu::Device) -> &Pipes {
         if self.pipes.is_none() {
@@ -260,6 +354,108 @@ impl MotionPass {
         self.pipes.as_ref().expect("built above")
     }
 
+    /// The core velocity target's draw for `scene` at `size` (#431), from `motion`'s evaluations.
+    pub fn target_frame(
+        &mut self,
+        device: &Device,
+        scene: &Scene,
+        motion: &Motion,
+        meshes: &std::collections::BTreeMap<Shape, Mesh>,
+        size: [u32; 2],
+    ) -> TargetFrame {
+        let d = &device.device;
+        if self.target.is_none() {
+            let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("scene3d.velocity"),
+                source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+            });
+            let position = |slot| -> [wgpu::VertexAttribute; 1] {
+                [wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: slot,
+                }]
+            };
+            let (p0, p1, p2) = (position(0), position(1), position(2));
+            let vertex = |attributes| wgpu::VertexBufferLayout {
+                array_stride: (FLOATS * 4) as u64,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes,
+            };
+            self.target = Some(d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("scene3d.velocity"),
+                layout: None,
+                vertex: wgpu::VertexState {
+                    module: &module,
+                    entry_point: Some("vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[
+                        Some(vertex(&p0)),
+                        Some(vertex(&p1)),
+                        Some(vertex(&p2)),
+                        Some(wgpu::VertexBufferLayout {
+                            array_stride: std::mem::size_of::<Instance>() as u64,
+                            step_mode: wgpu::VertexStepMode::Instance,
+                            attributes: &INSTANCE,
+                        }),
+                    ],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &module,
+                    entry_point: Some("fs_target"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(TARGET.into())],
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                // The frame's own depth, read only: a surface writes where it shows. Its
+                // positions are the solids' at t by another vertex stage, so a few units of
+                // bias toward the eye (reversed Z: greater is nearer) keep its own depth's ties.
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: wgpu::TextureFormat::Depth32Float,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                    stencil: Default::default(),
+                    bias: wgpu::DepthBiasState {
+                        constant: 64,
+                        slope_scale: 1.0,
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: Default::default(),
+                multiview_mask: None,
+                cache: None,
+            }));
+            self.compiled.push("scene3d.velocity");
+        }
+        let pipe = self.target.clone().expect("built above");
+        let (draws, instances) = draw_list(device, scene, motion, meshes);
+        let uniform = uniform_of(scene, motion, size, 1, size);
+        let buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("scene3d.velocity uniform"),
+            contents: bytemuck::bytes_of(&uniform),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let instances = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("scene3d.velocity instances"),
+            contents: bytemuck::cast_slice(&instances),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scene3d.velocity"),
+            layout: &pipe.get_bind_group_layout(0),
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
+        TargetFrame {
+            pipe,
+            bind,
+            instances,
+            draws,
+        }
+    }
+
     /// The frame's velocity pass and resolve for `scene` drawn at `size`, its solids' meshes at t
     /// from `meshes`; `None` when the scene doesn't blur by velocity.
     pub fn prepare(
@@ -277,67 +473,10 @@ impl MotionPass {
             pipes.draw.clone(),
             [pipes.tile.clone(), pipes.near.clone(), pipes.gather.clone()],
         );
-        let mut draws = Vec::new();
-        let mut instances: Vec<Instance> = Vec::new();
-        for s in scene.layers.iter().flat_map(|l| &l.solids) {
-            if s.cast_only || s.alpha <= 0.0 {
-                continue;
-            }
-            let (Some(m), Some(at)) = (meshes.get(&s.shape), motion.solids.get(&s.id)) else {
-                continue;
-            };
-            let sides = at
-                .meshes
-                .as_ref()
-                .map(|(o, c)| (Mesh::of(device, o), Mesh::of(device, c)));
-            let (t, o, c) = (rows(&s.model), rows(&at.open), rows(&at.close));
-            instances.push(Instance {
-                rows: [t[0], t[1], t[2], o[0], o[1], o[2], c[0], c[1], c[2]],
-            });
-            draws.push(Draw {
-                at: m.vertices.clone(),
-                sides,
-                indices: m.indices.clone(),
-                count: m.count,
-            });
-        }
-        // With nothing drawn the background still travels under the camera's move: one unused
-        // instance keeps the buffer bound.
-        if instances.is_empty() {
-            instances.push(Instance::zeroed());
-        }
-        let cam = &scene.camera;
+        let (draws, instances) = draw_list(device, scene, motion, meshes);
         let tile = motion.tile_px.max(1);
         let tiles = [size[0].div_ceil(tile), size[1].div_ceil(tile)];
-        let back = inverse(&clip_rows(cam, scene.jitter, size));
-        let uniform = Uniform {
-            clip_t: clip(cam, scene.jitter, size),
-            clip_o: clip(&motion.open, scene.jitter, size),
-            clip_c: clip(&motion.close, scene.jitter, size),
-            sky_o: columns(&product(
-                &clip_rows(&motion.open, scene.jitter, size),
-                &back,
-            )),
-            sky_c: columns(&product(
-                &clip_rows(&motion.close, scene.jitter, size),
-                &back,
-            )),
-            fwd: [
-                cam.forward[0] as f32,
-                cam.forward[1] as f32,
-                cam.forward[2] as f32,
-                -(cam.forward[0] * cam.eye[0]
-                    + cam.forward[1] * cam.eye[1]
-                    + cam.forward[2] * cam.eye[2]) as f32,
-            ],
-            size: [
-                size[0] as f32,
-                size[1] as f32,
-                motion.taps.clamp(2, 64) as f32,
-                motion.max_px as f32,
-            ],
-            tile: [tile, tiles[0], tiles[1], 0],
-        };
+        let uniform = uniform_of(scene, motion, size, tile, tiles);
         let buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("scene3d.motion uniform"),
             contents: bytemuck::bytes_of(&uniform),
@@ -456,6 +595,52 @@ impl MotionPass {
             tiles,
             size,
         })
+    }
+}
+
+impl TargetFrame {
+    /// Draws the velocity target `view` against the frame's `depth`, cleared to no travel first.
+    pub fn record(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        depth: &wgpu::TextureView,
+    ) {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("scene3d.velocity"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            ..Default::default()
+        });
+        pass.set_pipeline(&self.pipe);
+        pass.set_bind_group(0, &self.bind, &[]);
+        pass.set_vertex_buffer(3, self.instances.slice(..));
+        for (k, dr) in self.draws.iter().enumerate() {
+            let (o, c) = match &dr.sides {
+                Some((o, c)) => (&o.vertices, &c.vertices),
+                None => (&dr.at, &dr.at),
+            };
+            pass.set_vertex_buffer(0, dr.at.slice(..));
+            pass.set_vertex_buffer(1, o.slice(..));
+            pass.set_vertex_buffer(2, c.slice(..));
+            pass.set_index_buffer(dr.indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..dr.count, 0, k as u32..k as u32 + 1);
+        }
     }
 }
 
