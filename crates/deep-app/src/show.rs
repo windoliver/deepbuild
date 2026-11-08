@@ -109,6 +109,7 @@ impl Presentations {
     pub fn open(socket: &Path, token_file: &Path) -> Result<Presentations, HubError> {
         let token = std::fs::read_to_string(token_file)?;
         let mut client = HubClient::connect(socket)?;
+        client.covers_app()?;
         client.hello_app(token.trim())?;
         Ok(Presentations { client })
     }

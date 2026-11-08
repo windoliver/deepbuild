@@ -179,9 +179,15 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   /** The budget the git and copy processes of the current call count against, where there is one. */
   const under = new AsyncLocalStorage<Work>();
   // The planted wrong program hands the hub's environment to every git it runs in a claim's repository.
-  const git = (cwd: string, args: string[], env: NodeJS.ProcessEnv = {}, input?: string): Promise<string> => runGit(cwd, args, env, input, under.getStore(), o.plant === 'git-inherits-env' && cwd !== o.store);
+  // The store is made by the first git work, not at open: a machine without git runs the hub, and only a check run says
+  // git is missing (#41). A failed attempt is tried again by the next.
+  let initing: Promise<unknown> | undefined;
+  const store = (): Promise<unknown> => (initing ??= existsSync(join(o.store, 'HEAD')) ? Promise.resolve() : runGit(o.store, ['init', '-q', '--bare', '.'], {}, undefined, undefined, false).catch((error: unknown) => { initing = undefined; throw error; }));
+  const git = async (cwd: string, args: string[], env: NodeJS.ProcessEnv = {}, input?: string): Promise<string> => {
+    await store();
+    return runGit(cwd, args, env, input, under.getStore(), o.plant === 'git-inherits-env' && cwd !== o.store);
+  };
   await mkdir(o.store, { recursive: true });
-  if (!existsSync(join(o.store, 'HEAD'))) await git(o.store, ['init', '-q', '--bare', '.']);
   await mkdir(o.root, { recursive: true });
   const root = await realpath(o.root);
   await Promise.all((await readdir(root)).map((name) => clear(join(root, name))));
