@@ -8553,6 +8553,29 @@ export interface WorkBroke {
   evidence?: Array<string>;
 }
 
+/** work.delivery@1 */
+export interface WorkDelivery {
+  v: 1;
+  id: string;
+  kind: "work.delivery";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    task_ref: string;
+    source: string;
+    thread: string;
+    phase: "recorded" | "asked" | "claimed" | "sent" | "tried" | "gone" | "refused" | "unknown";
+    detail: unknown;
+  };
+  evidence?: Array<string>;
+}
+
 /** work.item@1 */
 export interface WorkItem {
   source_id: string;
@@ -8580,6 +8603,26 @@ export interface WorkItemV2 {
     automated?: boolean;
   }>;
   updated: string;
+}
+
+/** work.read@1 */
+export interface WorkRead {
+  v: 1;
+  id: string;
+  kind: "work.read";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    source: string;
+    position: string | null;
+    state: unknown;
+  };
+  evidence?: Array<string>;
 }
 
 /** workspace.created@1 */

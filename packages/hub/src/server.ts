@@ -73,7 +73,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
   // `deep workspace` (#67), and the views of the projects you're in.
-  ['workspace.new', ['cli']], ['workspace.move', ['cli']], ['workspace.revert', ['cli']], ['workspace.diff', ['cli']], ['workspace.drift', ['cli']], ['project.views', ['app', 'cli']],
+  ['work.fix', ['cli']], ['workspace.new', ['cli']], ['workspace.move', ['cli']], ['workspace.revert', ['cli']], ['workspace.diff', ['cli']], ['workspace.drift', ['cli']], ['project.views', ['app', 'cli']],
   // The app API's views/shown and views/hidden (#262): the views the app shows, repeated every 5 s while shown.
   ['views.shown', ['app']], ['views.hidden', ['app']],
   // What macOS says of the app's notifications (#994), when the app connects and when it changes.
