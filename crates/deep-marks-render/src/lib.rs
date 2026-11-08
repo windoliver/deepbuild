@@ -308,7 +308,7 @@ fn check(
     doc: &Map<String, Value>,
     look: Option<&Look>,
     store: Option<&Path>,
-    (twin, distance_0_03): (Twin, bool),
+    (twin, distance_0_03, twin_parallax): (Twin, bool, bool),
 ) -> (Value, Vectors) {
     let result = deep_canvas::document::check(&Value::Object(doc.clone()));
     // This binary draws vector@1 and R1's mark sets, axes and scales itself, so their modules
@@ -390,7 +390,12 @@ fn check(
         // An issue on an item a vector draws as names the vector.
         // #417 AC9's wrong check compares against 0.03 in place of the look's status distance.
         let min = distance_0_03.then_some(0.03);
-        for mut issue in deep_canvas_marks::check::check(&drawn, look, min) {
+        // #467 AC6's wrong check compares a band's offsets without the repeat's modulo.
+        let unwrapped = twin_parallax;
+        let checked = deep_canvas_marks::check::check(&drawn, look, min);
+        let checked = checked.into_iter().filter(|i| !(unwrapped && i.code == "parallax_loop_jump"));
+        let planted = unwrapped.then(|| deep_canvas_marks::fields::loop_issues(doc, false));
+        for mut issue in checked.chain(planted.into_iter().flatten()) {
             for id in issue.ids.iter_mut() {
                 if let Some(v) = vectors.keys().find(|v| id.starts_with(&format!("{v}."))) {
                     *id = v.clone();
@@ -547,6 +552,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     }
     let skips = import_twin(input);
     let near = distance_0_03(input);
+    let unwrapped = input.get("planted").and_then(Value::as_str) == Some("parallax_without_modulo");
     let store_dir = store(input.get("store"))?;
     if command == "path" {
         let planted = match input.get("planted") {
@@ -580,7 +586,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
-            (skips, near),
+            (skips, near, unwrapped),
         );
         if let Some(refused) = refused_by_check(&checked) {
             return Some(Answer::Now(refused));
@@ -602,6 +608,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         if input.get("planted").is_some()
             && skips == Twin::Honest
             && !near
+            && !(unwrapped && command == "check")
             && !(straight && command == "geometry")
         {
             return None;
@@ -611,7 +618,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
-            (skips, near),
+            (skips, near, unwrapped),
         );
         let timing = input.get("timing") == Some(&Value::Bool(true));
         if command == "check" {
@@ -673,7 +680,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             Some(&look),
             store_dir.as_deref(),
-            (Twin::Honest, false),
+            (Twin::Honest, false, false),
         );
         if let Some(refusal) = refused_by_check(&checked) {
             return Some(Answer::Now(refusal));
@@ -815,7 +822,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &request.doc,
             Some(&request.look),
             request.store.as_deref(),
-            (skips, near),
+            (skips, near, unwrapped),
         );
         request.vectors = vectors;
         let mut answer = refused_by_check(&checked).unwrap_or_else(|| raster::answer(request));
