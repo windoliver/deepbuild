@@ -539,7 +539,9 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
         .filter(|row| row["status"] != "closed")
         .map(|row| {
             let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
-            (text("ask"), text("session"), text("question"))
+            // The row draws the question as the card does, its controls and direction marks shown (#1510).
+            let question = crate::question::visible(&text("question"));
+            (text("ask"), text("session"), question)
         })
         .collect();
     let table = view.table();
@@ -1768,5 +1770,18 @@ mod tests {
     #[should_panic(expected = "is not a shipped view")]
     fn a_name_that_is_not_a_shipped_view_is_refused() {
         Layout::shipped("needs_you");
+    }
+
+    #[std::prelude::v1::test]
+    fn a_needs_you_row_shows_a_direction_mark_as_the_card_does() {
+        // #1510: an override in the question would read the rest of the row backwards.
+        let mut view = crate::record::View::default();
+        view.apply(
+            serde_json::json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
+            "question": "Open invoice\u{202e}txt.exe?", "default": "no", "deadline": 1_000,
+            "options": [{"id": "no", "label": "No"}]}}),
+        );
+        let open = read(&view, Kind::NeedsYou).open;
+        assert_eq!(open[0].2, "Open invoice\\u{202e}txt.exe?");
     }
 }

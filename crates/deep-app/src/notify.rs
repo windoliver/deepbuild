@@ -396,6 +396,11 @@ fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
         .and_then(|options| options.iter().find(|option| option["id"] == default))
         .and_then(|option| option["label"].as_str())
         .unwrap_or(default);
+    // The ask's words as the card draws them, its controls and direction marks shown (#1510).
+    let (question, label) = (
+        crate::question::visible(data["question"].as_str().unwrap_or_default()),
+        crate::question::visible(label),
+    );
     // The undo of its default gives it a new deadline.
     let deadline = table.deadline(ask).unwrap_or(now);
     format!(
@@ -403,7 +408,7 @@ fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
         title(table, ask["session"].as_str().unwrap_or_default()),
         states::glyph(states::State::NeedsYou.entry()),
         states::State::NeedsYou.word(),
-        data["question"].as_str().unwrap_or_default(),
+        question,
         clock_time(deadline, now),
     )
 }
@@ -482,6 +487,18 @@ mod tests {
             text.ends_with(&format!("If you don't answer: No, at {want}.")),
             "{text}"
         );
+    }
+
+    #[test]
+    fn a_notification_shows_a_direction_mark_as_the_card_does() {
+        // #1510: an override in the question or the default's label would read the rest backwards.
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
+            "question": "Open invoice\u{202e}txt.exe?", "default": "no", "deadline": 1_000,
+            "options": [{"id": "no", "label": "No\u{202e}"}]}});
+        let text = notification_text(&view(&[ask]).table(), "s1", 1_000);
+        assert!(text.contains("Open invoice\\u{202e}txt.exe?"), "{text}");
+        assert!(text.contains("If you don't answer: No\\u{202e},"), "{text}");
+        assert!(!text.contains('\u{202e}'), "{text}");
     }
 
     #[test]
