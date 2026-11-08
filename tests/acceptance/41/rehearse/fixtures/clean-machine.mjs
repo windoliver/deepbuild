@@ -4,8 +4,10 @@
 // environment (below), runs in an empty folder `npx --yes deepbuild setup` and `npx --yes deepbuild --version`; installs
 // `deepbuild` into a fresh project (<work>/project) and runs its `deep --version` and `deep doctor --json`; reads back the
 // commands setup wrote into Claude Code's settings and hashes each deep-hook they name; measures the project's
-// node_modules. It writes everything to <work>/result.json, stops the registry and every hub the login service stand-in
-// started (by PID, all its own children), and exits 0 whatever DeepBuild did: the test judges the result.
+// node_modules. A command's program is read as a shell runs it: a leading `exec` skipped, then the first word,
+// single-quoted ('\'' a quote), double-quoted or bare. It writes everything to <work>/result.json, stops the registry and
+// every hub the login service stand-in started (by PID, all its own children), and exits 0 whatever DeepBuild did: the
+// test judges the result.
 //
 // The clean environment holds only: HOME; PATH = <work>/bin (the login service stand-ins), this node's own folder,
 // /usr/bin:/bin:/usr/sbin:/sbin; SHELL=/bin/sh; LC_ALL=C; TMPDIR=<work>/tmp; npm's registry (the loopback one) with audit,
@@ -98,7 +100,17 @@ try {
     else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, k);
   };
   try { walk(JSON.parse(result.settingsText ?? 'null')); } catch { /* unparsable: the test names it */ }
-  const first = (c) => { const s = c.trim(); const q = s[0]; if (q === "'" || q === '"') return s.slice(1, s.indexOf(q, 1)); return s.split(/\s+/)[0]; };
+  const first = (c) => {
+    const s = c.trim().replace(/^exec\s+/, '');
+    let word = '';
+    for (let i = 0; i < s.length && !/\s/.test(s[i]); i++) {
+      if (s[i] === "'") { const j = s.indexOf("'", i + 1); const end = j < 0 ? s.length : j; word += s.slice(i + 1, end); i = end; }
+      else if (s[i] === '"') { for (i++; i < s.length && s[i] !== '"'; i++) word += s[i] === '\\' && /["\\$`]/.test(s[i + 1] ?? '') ? s[++i] : s[i]; }
+      else if (s[i] === '\\') word += s[++i] ?? '';
+      else word += s[i];
+    }
+    return word;
+  };
   result.hooks = commands.map((command) => {
     const path = first(command);
     const real = existsSync(path) ? realpathSync(path) : null;
