@@ -281,6 +281,20 @@ impl<'a> Hub<'a> {
             "steps": report.steps.iter().map(|s| json!({"module": s.module, "t": s.t, "count": s.count, "read": s.read})).collect::<Vec<_>>(),
             "issues": report.issues.iter().map(issue_json).collect::<Vec<_>>(),
         });
+        if !e.arrays.is_empty() {
+            // #497: each named array as this frame read it.
+            let read: Map<String, Value> = e
+                .arrays
+                .iter()
+                .map(|name| {
+                    let v = evaluated.array(&self.sched, name);
+                    let n = v.as_ref().and_then(|v| v.as_typed::<i64>()).map(|n| json!(*n));
+                    let x = v.as_ref().and_then(|v| v.as_typed::<f64>()).map(|x| json!(*x));
+                    (name.clone(), n.or(x).unwrap_or(Value::Null))
+                })
+                .collect();
+            reply["arrays"] = Value::Object(read);
+        }
         if self.startup.test_build {
             reply["access"] = json!(report
                 .access
