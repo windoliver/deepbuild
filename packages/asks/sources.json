@@ -1088,6 +1088,42 @@
     }
   },
   {
+    "source": "acceptance.dispute",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "The dispute on tests/acceptance/42/widget.test.mjs in #42 can't settle by itself: no draft meets the base rule. The first draft is run:01K74G3A5C7E9G1J3M5P7R9T1V. Keep the test as it stands?",
+        "options": [
+          {
+            "id": "keep",
+            "label": "Keep the test as it stands",
+            "decision": "none"
+          },
+          {
+            "id": "hold",
+            "label": "Hold the issue out of its slot",
+            "decision": "none"
+          }
+        ],
+        "recommended": "keep",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "keep",
+        "provisional": false,
+        "owner": "you",
+        "key": "7d1f3a5c9e2b4d6f8a0c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d1f3a5c7e9b1d3f",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "guard.overridden",
     "kind": "exception",
     "fixture": {
@@ -1381,7 +1417,7 @@
     "fixture": {
       "ask": {
         "kind": "exception",
-        "question": "Close this open item of task:01K74FX2B4D6F8H0K2M4P6R8T0 without evidence, as a waiver? The agent's final message left it: “timeout after 5000 ms in /tmp/t-81f2 (pid 4242) at 12:00:01”",
+        "question": "Close this open item of task:01K74FX2B4D6F8H0K2M4P6R8T0 without evidence, as a waiver? The agent's final message left it: \u201ctimeout after 5000 ms in /tmp/t-81f2 (pid 4242) at 12:00:01\u201d",
         "options": [
           {
             "id": "waive",

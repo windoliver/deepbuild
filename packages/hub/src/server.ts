@@ -9,6 +9,7 @@ import { writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import { basename, dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { JUDGE_FAULTS } from '@deepbuild/gate';
 import type { HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
@@ -19,6 +20,7 @@ import { isPrCreate, isPrEdit } from './forge.js';
 import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
+import { cachedRuleFiles, callPaths, handleOf as ruleHandle, isRuleFile, noticesFor, noticeText, readHeld, repoRoot, RULE_EDITS, rulesInFile, rulesOf, type RuleFile, type RuleFileBefore } from './rules.js';
 import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { heavyDenial } from './heavy.js';
@@ -63,6 +65,10 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['wiki.build', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
   ['memory.list', ['cli']], ['memory.act', ['cli']],
+  // The rules page (#344): written from your rule files, a scope's reach before you save it, who a rule reached, a session's set.
+  ['rules.sync', ['app', 'cli']], ['rules.reach', ['app', 'cli']], ['rules.credit', ['app', 'cli']], ['session.rules', ['app', 'cli']],
+  // The blind acceptance job (#1328).
+  ['acceptance.start', ['cli']], ['acceptance.status', ['app', 'cli']], ['acceptance.dispute', ['cli']], ['acceptance.ended', ['cli']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['checks.kinds', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
@@ -328,7 +334,7 @@ function mergeNamed(meta: HookMeta, data: Obj): NonNullable<Gated['merge']> {
   if (read !== undefined) {
     const part = (name: string) => new RegExp(`\\b${name}=(\\S+)`).exec(read)?.[1];
     const [pr, head] = [part('pr'), part('head')];
-    return { ...(pr ? { pr } : {}), ...(head ? { head } : {}), ...(/ auto\b/.test(read) ? { auto: true } : {}), ...(/ disable\b/.test(read) ? { disable: true } : {}) };
+    return { ...(pr ? { pr } : {}), ...(head ? { head } : {}), ...(/ auto\b/.test(read) ? { auto: true } : {}), ...(/ disable\b/.test(read) ? { disable: true } : {}), ...(/ blind\b/.test(read) ? { blind: true } : {}) };
   }
   const input = isObj(meta.call?.input) ? meta.call.input : {};
   const pr = input.pullNumber ?? input.pull_number;
@@ -689,6 +695,9 @@ class Hub {
     if (this.cantRun.has(meta.agent)) Object.assign(meta, { watchOnly: true, cantRun: true });
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     let ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
+    // A rule you scoped to paths, at the session's first call inside its scope (#344): its words ride this reply.
+    const notice = meta.watchOnly ? undefined : this.rulesAt(meta, ruled);
+    if (notice) ruled = withWaits(ruled, meta.event, { context: notice });
     // The long waits (#120): each hook shows the waits its call's start or end, and takes the lines waiting for it.
     if (!meta.watchOnly) {
       const now = this.now();
@@ -799,6 +808,8 @@ class Hub {
       const words: [string, string[]][] = [['git push', ['push-needs-ask']], ['gh pr create', ['pr-needs-ask']], ['gh pr merge', ['merge-needs-ask', 'merge-names-head']]];
       matched = words.filter(([w]) => String(data.command ?? '').includes(w)).flatMap(([, rules]) => rules);
     }
+    // The planted wrong program for #1523 holds every call to the programs the new forms run, as a push.
+    if (this.plant === 'holds-every-program' && /^\s*(?:jj|gt|sl|glab|git[\s-]town|gh\s+api)\b/.test(String(data.command ?? ''))) matched = [...matched, 'push-needs-ask'];
     const shell = Object.entries(NAMED_RULES).flatMap(([rule, effect]) => (matched.includes(rule) ? [{ rule, effect }] : []));
     const tool = Object.entries(NAMED_RULES).flatMap(([rule, effect]) => (effect === data.effect ? [{ rule, effect }] : []));
     return [...shell, ...tool.filter((t) => !shell.some((s) => s.rule === t.rule))].filter((n) => blocks(n.rule));
@@ -875,6 +886,40 @@ class Hub {
       return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
     }
     conn.sock.end(ruled);
+  }
+
+  /** The scoped rules each session heard since its start, compaction or resume, by rule ID (#344). */
+  private rulesHeard = new Map<string, Set<string>>();
+  private ruleFiles = new Map<string, { at: number; files: RuleFile[] }>();
+  /**
+   * Your rules at a hook, read here so no call waits on the core (#344): a session's start, compaction or resume lets
+   * each scoped rule be heard once more; a PreToolUse inside a rule's scope carries it once, and an Edit or Write of a
+   * rule file has the file's rules read before it runs. Both go to the core on the hook's meta, to record.
+   */
+  private rulesAt(meta: HookMeta, ruled: string): string | undefined {
+    if (!meta.session || !['claude-code', 'claude', 'codex'].includes(meta.agent)) return undefined;
+    if (meta.event === 'SessionStart' || meta.event === 'SessionEnd') { this.rulesHeard.delete(meta.session); return undefined; }
+    if (meta.event !== 'PreToolUse' || !meta.call) return undefined;
+    const repo = repoRoot(meta.cwd);
+    const paths = repo ? callPaths(meta.call.input, meta.cwd, repo) : [];
+    if (!repo || !paths.length) return undefined;
+    try {
+      const files = cachedRuleFiles(this.ruleFiles, repo);
+      const before: RuleFileBefore[] = RULE_EDITS.has(meta.call.tool)
+        ? paths.filter(isRuleFile).map((file) => ({ file, scope: files.find((f) => f.file === file)?.scope ?? 'all', rules: rulesInFile(join(repo, file)) }))
+        : [];
+      if (before.length) this.ruleFiles.delete(repo);
+      // A call blocked before it runs hears nothing.
+      const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
+      const heard = this.rulesHeard.get(meta.session) ?? new Set<string>();
+      this.rulesHeard.set(meta.session, heard);
+      const notices = blocked ? [] : noticesFor(rulesOf({ files, typed: [], held: readHeld(this.root.dir), guards: [] }), paths, meta.agent, heard);
+      if (notices.length || before.length) meta.rules = { notices: notices.map(ruleHandle), ...(before.length ? { before } : {}) };
+      return notices.length ? noticeText(notices) : undefined;
+    } catch (error) {
+      process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`);
+      return undefined;
+    }
   }
 
   /**
@@ -981,8 +1026,10 @@ class Hub {
     }
     // A patch the adapter can't read is Codex's deny, with its reason and nothing else.
     if (meta.denied && !this.off) return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: meta.denied } }), stderr: '' });
-    // A session past its facts is watch-only: a matched entry is recorded, never a block.
-    if (meta.event !== 'PreToolUse' || meta.watchOnly || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
+    if (meta.event !== 'PreToolUse' || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
+    // A watch-only session (one past its facts, #1501) gets the reply every session gets under `deep off`: a matched
+    // entry is recorded, never a block, but the floor's, which deep-hook applies with no facts and no hub at all.
+    const watching = this.off || meta.watchOnly === true;
     const entries = this.rules();
     // The planted wrong program for #304's AC3 ignores what deep-hook matched and reads the command line as text.
     const matched = this.plant === 'matches-text'
@@ -992,18 +1039,18 @@ class Hub {
     const unread = (n: string) => this.plant === 'unknown-as-block' && /couldn't be read/.test(meta.notes?.[n] ?? '');
     const mode = (n: string): unknown => ((this.plant === 'warn-as-block' || unread(n)) && entries[n]?.mode === 'warn' ? 'block' : entries[n]?.mode);
     const words = (n: string): string => `${String(entries[n]!.reason)} ${String(entries[n]!.next_step)}${meta.notes?.[n] ? ` ${meta.notes[n]}` : ''} (guard ${n})`;
-    // With `deep off` only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
+    // Watch-only or off, only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
     // A destructive command is staged or asked about at the gate (#347, #1294), never blocked outright.
-    const decided = (n: string) => !this.off && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
-    const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
+    const decided = (n: string) => !watching && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
+    const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!watching || floor(n)));
     if (blocks.length) {
       meta.blockedBy = blocks;
       return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
     }
-    if (this.off) return EMPTY_REPLY;
+    if (watching) return EMPTY_REPLY;
     const warns = matched.filter((n) => mode(n) === 'warn');
     if (!warns.length || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return EMPTY_REPLY;
     const additionalContext = warns.map((n) => `DeepBuild warns: ${words(n)}`).join('\n');
@@ -1208,6 +1255,9 @@ function writeToken(root: Root): string {
  */
 export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
+  // The kit gate@1's fault for rows no commit reaches (#33): only the kit sets it, and a name it doesn't know stops the hub.
+  const fault = process.env.DEEP_HUB_TEST_JUDGE_FAULT;
+  if (fault && !(JUDGE_FAULTS as readonly string[]).includes(fault)) throw Error(`DEEP_HUB_TEST_JUDGE_FAULT=${fault} names no fault the kit plays`);
   plantedStart(plant);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.

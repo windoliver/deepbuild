@@ -334,9 +334,18 @@ export class AskTasks {
     const out = new Map<string, string>();
     let files: string[];
     try { files = (await readdir(join(cwd, folder))).filter((f) => f.endsWith('.test.ts')).sort(); } catch { return out; }
+    // A suite may keep its tags as named constants in a helper beside its tests (`export const AC1 = 'AC1 #n.<hash>'`):
+    // a test file that names the constant carries its tag (#33).
+    const tag = new RegExp(`#${issue}\\.[0-9a-f]{8}`, 'g');
+    const named = new Map<string, string[]>();
+    for (const helper of (await readdir(join(cwd, folder)).catch(() => [] as string[])).filter((f) => /\.[cm]?ts$/.test(f) && !f.endsWith('.test.ts'))) {
+      const text = await readFile(join(cwd, folder, helper), 'utf8').catch(() => '');
+      for (const [, name, , value] of text.matchAll(/export const (\w+) = (['"`])(.*?)\2/g)) { const tags = value!.match(tag); if (tags) named.set(name!, tags); }
+    }
     for (const file of files) {
       const text = await readFile(join(cwd, folder, file), 'utf8').catch(() => '');
-      for (const [tag] of text.matchAll(new RegExp(`#${issue}\\.[0-9a-f]{8}`, 'g'))) if (!out.has(tag)) out.set(tag, `${folder}/${file}`);
+      const tags = [...[...text.matchAll(tag)].map(([t]) => t), ...[...named].flatMap(([name, t]) => (new RegExp(`\\b${name}\\b`).test(text) ? t : []))];
+      for (const t of tags) if (!out.has(t)) out.set(t, `${folder}/${file}`);
     }
     return out;
   }

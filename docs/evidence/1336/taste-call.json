@@ -1,0 +1,13 @@
+{
+ "criterion": "#1336.28fd1eed",
+ "by": "you",
+ "who": "Claude, delegated by the owner in the session (\"close the gaps that we can close the issue\")",
+ "when": "2026-11-08T01:07:16Z",
+ "text": {
+  "file": "docs/technical-design.md",
+  "anchor": "project-hub",
+  "sha256": "7474ebcc9e90d2c7a9c128b49441dd07469975c6b92bc53f9a8269f0b5a6cc43"
+ },
+ "call": "reads_right",
+ "note": "Read whole against the issue's six Scope decisions: each is answered in one bullet with its own Not taken, in the design's plain register, and agrees with Socket roles, Privacy, Plan usage and Work runs. The five new Decided rows say the same in short, each with what reopens it. Two existing rows (Notices across teammates' machines, Fleets and teams) changed only 'team server' to 'the project's hub'. The others on the project are told on #1336 and can overrule this call."
+}

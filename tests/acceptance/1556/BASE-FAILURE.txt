@@ -1,0 +1,57 @@
+Base commit: c12a65bb (origin/main), Linux arm64, Node 24.22.0, cargo 1.99.1, November 6, 2026; npm ci and
+npm run build --workspaces done in the checkout; target/ warm. Load average 65-73 during the run. deep-replica was not
+built or run: it draws on macOS only.
+
+Command:
+  npx vitest run --root tests/acceptance/1556 --no-file-parallelism
+
+Result:
+  Test Files  2 failed | 1 passed (3)
+       Tests  3 failed | 13 passed (16)
+    Duration  107 s
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1556/tsconfig.json reports no errors.
+
+lint.test.ts  "#1556.3f28018e a planted Command::output in deep-app's UI code fails the lint lane, naming the line"
+  AssertionError: #1556 a planted Command::output in deep-app's UI code must fail the lint lane, naming the line
+  crates/deep-app/src/views.rs:1124; no lint command fails naming it (cargo fmt --all: exit 1; scripts/repo-rules.mjs:
+  exit 1; cargo clippy -p: exit 101; scripts/canvas-lint.mjs: exit 1; scripts/conformance-lint.mjs: exit 1;
+  scripts/slots-check.mjs: exit 1; canvas-closures closures: exit 0; drift: exit 0; record-reader-guard: exit 0;
+  color-literal-guard: exit 1; guide.mjs --check: exit 1)
+  The bug: the lane has no lint on blocking calls. The lane fails on main for unrelated reasons, which is why the
+  judge looks for the named line: cargo fmt --check (diffs in other files), repo-rules (deps and cards), canvas-lint,
+  conformance-lint and slots-check (ps -Awwo: ENOBUFS on this box), color-literal-guard (panel_check.rs,
+  panel_tree.rs) and guide.mjs --check. Clippy over deep-app (-p deep-app --no-deps) fails on Linux at
+  crates/deep-app/src/gpu_view.rs:12 (unused import), not at the plant; the plant compiled (no error[E....]).
+  Without --no-deps, clippy stops in deep-canvas (type_complexity at crates/deep-canvas/src/registry/core_lists.rs:860)
+  before deep-app is linted; that is why the run narrows it so.
+
+The two click tests are BLOCKED on this box, not run:
+
+click.test.ts  #1556.784e6b2f, #1556.ff055ca3
+  Error: BLOCKED: the app's window and its replica draw on macOS only; this is linux
+
+Expected at the base on macOS (not run here): both fail at the click surface, deep-replica exits 2,
+"deep-replica: unknown argument --click", and writes no frames.jsonl:
+  #1556 the Set up click through the replica (deep-replica --first-screen --click "Set up") must write
+  <tmp>/out/frames.jsonl, one line per frame drawn after the click: it wrote none (exit 2, ...)
+What the base's click would draw, nothing for 3 s, then the outcome, is the twin "blocking" below, which fails
+naming the frame within 100 ms.
+
+twins.test.ts passes at the base (13 tests), as it must:
+  (control right)                     passes judgeSlow and judgeFailing
+  (wrong program blocking)            first frame at >= 2900 ms; "... the window must draw a frame within 100 ms of
+                                      the click; its first frame after the click came at 30xx ms"
+  (wrong program late)                "... within 100 ms of the click ..."
+  (wrong program no-working)          "... must show it's working ..."
+  (wrong program draws-then-blocks)   "... the window drew no frame from 0 ms to 30xx ms after the click while setup ran"
+  (wrong program early-line)          "... must show it's working ..."
+  (wrong program drops-error)         "... must still show its one-line error ..."
+  (wrong program error-two-lines)     "... must show its error in one line ..."
+  (wrong program blocking, failing)   passes judgeFailing on purpose (criterion 2 is the error, not the timing)
+  (lint judge, synthetic)             clippy and script output naming the line pass; another line, <line>0, the file
+                                      only, exit 0 and cargo fmt's diff fail; a compile error at the line is INVALID
+  (grep-lint over the planted copy)   right passes; off-by-one, file-only, warns fail "... naming the line"
+  (control clippy)                    a clippy.toml disallowed-methods on std::process::Command::output in the copy
+                                      makes the lane's narrowed clippy fail naming views.rs:<line>: the narrowed run
+                                      reaches deep-app's code on this box despite main's gpu_view.rs error
