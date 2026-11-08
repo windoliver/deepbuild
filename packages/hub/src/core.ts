@@ -216,8 +216,8 @@ interface Session {
   results?: string[];
   /** The thread its ID joins: IDs rotated by `/clear`, `/compact` or a fork are one thread. */
   thread: string;
-  /** Ended by a SessionEnd whose reason is `clear`: its process goes on under a new ID (#1632). */
-  cleared?: boolean;
+  /** Ended by a SessionEnd whose reason is `clear`: the process, by PID and start time, that goes on under a new ID on its thread (#1632). */
+  cleared?: { pid: number; start: string; thread: string };
   read: number; turn: Turn | undefined; closed: Turn[]; reached: Set<string>;
   /** Calls whose hooks' events are on their way to the record, and how many: their turns wait for them. */
   pending: Map<string, number>;
@@ -1603,7 +1603,7 @@ export class Core {
       if (meta.event === 'SessionStart' && meta.agent === 'pi') session.ended = false;
       if (meta.event === 'SessionEnd') {
         this.sessionOver(session);
-        if (drafts.some((d) => d.kind === 'session.end' && d.data.reason === 'clear')) session.cleared = true;
+        if (drafts.some((d) => d.kind === 'session.end' && d.data.reason === 'clear')) session.cleared = { pid: session.pid, start: session.start, thread: session.thread };
       }
       // A replayed PreToolUse was let through late; its call has run, so it stamps nothing a later call could bind.
       if (verified && meta.stamp && !replayed) this.stamps.push({ session: session.id, tool: meta.stamp.tool, digest: meta.stamp.digest });
@@ -6522,6 +6522,10 @@ export class Core {
     if (plant === 'errors-without-actual') delete out.actual;
     return new Refused(out as Refusal);
   }
+  /** Whether a paseo plugin's token names this session (#55): a deep mcp bound by it is bound by no process. */
+  private byToken(session: string): boolean {
+    return [...this.binds.values()].includes(session);
+  }
   /**
    * A deep mcp whose session `/clear` rotated in its own process (#1632): a SessionEnd `clear`, then a live session of the
    * same process, by PID and start time, on its thread. Its calls then bind one by one by their own stamps, as an unbound
@@ -6530,12 +6534,15 @@ export class Core {
    */
   private async rebound(context: CallContext): Promise<CallContext> {
     const { session: id, parent } = context;
-    if (!id || !parent || this.sessions.get(id)?.ended === false) return context;
+    if (!id || !parent || this.byToken(id)) return context;
     const was = this.sessions.get(id);
+    // Still its own: live in this deep mcp's process. One resumed in another process since is no longer this one's.
+    if (was && !was.ended && was.pid === parent.pid && was.start === parent.start) return context;
     // Forgotten past ENDED_KEPT (#824): the record keeps its thread and how it ended.
     const [row] = was ? [] : (await this.record.raw(`SELECT s.thread_id AS thread, EXISTS (SELECT 1 FROM events WHERE kind = 'session.end' AND session_id = s.id AND json_extract(data, '$.reason') = 'clear') AS cleared FROM sessions s WHERE s.id = ?`, [id])) as { thread: string | null; cleared: number }[];
-    const thread = was ? was.thread : row?.thread ?? id;
-    if (!(was ? was.cleared && was.pid === parent.pid && was.start === parent.start : row?.cleared)) return context;
+    const cleared = was ? was.cleared : row?.cleared ? { ...parent, thread: row.thread ?? id } : undefined;
+    if (!cleared || cleared.pid !== parent.pid || cleared.start !== parent.start) return context;
+    const thread = cleared.thread;
     const rotated = [...this.sessions.values()].some((s) => !s.ended && s.id !== id && s.thread === thread && s.pid === parent.pid && s.start === parent.start);
     return rotated ? { ...context, session: null } : context;
   }
@@ -6547,9 +6554,12 @@ export class Core {
   private bind(tool: string, args: Obj, context: CallContext, required: boolean): string | undefined {
     const live = (id: string) => { const s = this.sessions.get(id); return s && !s.ended ? s : undefined; };
     if (context.session) {
-      if (live(context.session)) return context.session;
+      const own = live(context.session);
+      // A session resumed in another process since its deep mcp's hello is that process's now (#1632).
+      const elsewhere = own && context.parent && !this.byToken(own.id) && (own.pid !== context.parent.pid || own.start !== context.parent.start);
+      if (own && !elsewhere) return context.session;
       if (!required) return undefined;
-      throw refuse('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
+      throw refuse('unbound', '/params/tool', elsewhere ? `Session ${context.session} runs in another process now; this deep mcp acts for no session.` : `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
     }
     const parent = context.parent;
     const digest = sha256Hex(canonicalize(args as JsonValue));
