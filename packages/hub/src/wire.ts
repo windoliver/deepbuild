@@ -82,6 +82,10 @@ export interface HookMeta {
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
   payloadWriter?: string;
+  /** The person whose credential the hook's connection presented (#1337), set by the event loop alone; none for the owner. */
+  person?: string;
+  /** Only the actor-from-payload plant reads it. */
+  payloadActor?: string;
   /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
   denied?: string;
   /** Set by the server on a PreToolUse its guard entries blocked: the entries, by name, for a PostToolUse that shows it ran anyway (#1033). */
