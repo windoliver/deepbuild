@@ -116,6 +116,7 @@ pub fn stocks() -> Vec<Stock> {
 pub fn menu_bar_line() -> String {
     match setup::count().or_else(|| notify::reach().short()) {
         Some(line) => line.to_owned(),
+        None if record::older().is_some() => "Hub is older".to_owned(),
         None if !record::connected() => "No hub".to_owned(),
         None => views::count().to_string(),
     }

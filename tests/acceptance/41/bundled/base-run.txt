@@ -1,0 +1,66 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-41-97fa68/tests/acceptance/41/bundled
+
+ ❯ bundled.test.ts (2 tests | 2 failed) 34ms
+   ❯ AC20 #41.3f0c28ab the still export from an installed tree missing one bundled data file (2)
+     × AC20 #41.3f0c28ab with one bundled data file removed from the installed tree, the still export fails, naming that file's installed path and not the checkout's 32ms
+     × AC20 #41.3f0c28ab planted: an install that falls back to the checkout's copy passes the export with that file removed, and this test's judge fails it 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  bundled.test.ts > AC20 #41.3f0c28ab the still export from an installed tree missing one bundled data file > AC20 #41.3f0c28ab with one bundled data file removed from the installed tree, the still export fails, naming that file's installed path and not the checkout's
+AssertionError: scripts/install-prefix.mjs --prefix <temp> lays out the installed tree (exit 0); got exit 1:
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '~/dev/claude-worktrees/doneright/github-issue-41-97fa68/scripts/install-prefix.mjs'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.9.0: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ install bundled.test.ts:73:176
+     71|   const r = spawnSync(process.execPath, [INSTALL, '--prefix', prefix, …
+     72|   const said = `${r.stdout ?? ''}\n${r.stderr ?? ''}${r.error ? `\n${r…
+     73|   expect(r.status, `scripts/install-prefix.mjs --prefix <temp>${plant …
+       |                                                                                                                                                                                ^
+     74|   const tree = join(prefix, 'lib', 'node_modules', 'deepbuild');
+     75|   const deep = join(prefix, 'bin', 'deep');
+ ❯ bundled.test.ts:158:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  bundled.test.ts > AC20 #41.3f0c28ab the still export from an installed tree missing one bundled data file > AC20 #41.3f0c28ab planted: an install that falls back to the checkout's copy passes the export with that file removed, and this test's judge fails it
+AssertionError: the test above found a bundled data file the still export reads: expected undefined to be defined
+ ❯ bundled.test.ts:185:86
+    183|
+    184|   it(`${AC} planted: an install that falls back to the checkout's copy…
+    185|     expect(found, 'the test above found a bundled data file the still …
+       |                                                                                      ^
+    186|     const rel = found!;
+    187|     const { tree, deep } = install('checkout-fallback');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  22:49:30
+   Duration  168ms (tests 44%, transform 36%, import 16%, worker 4%)
+

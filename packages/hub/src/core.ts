@@ -4281,6 +4281,16 @@ export class Core {
    * carries its verdict line, first in a send-back's reason and beside any reply where the chat shows it (#83).
    */
   async hookReply(meta: HookMeta, until: number): Promise<{ context?: string; block?: string; message?: string }> {
+    // Only a hook whose reply is being built can be abandoned; once it is built, its ID is kept no longer (#41's soak).
+    this.replying.add(meta.id);
+    try {
+      return await this.buildReply(meta, until);
+    } finally {
+      this.replying.delete(meta.id);
+      this.abandoned.delete(meta.id);
+    }
+  }
+  private async buildReply(meta: HookMeta, until: number): Promise<{ context?: string; block?: string; message?: string }> {
     const own = !FOREIGN.has(meta.agent) && meta.session;
     // A tool call's reply carries a message typed mid-turn and the notices waiting for the session (#340, #352).
     if (own && (meta.event === 'PreToolUse' || meta.event === 'PostToolUse')) {
@@ -4857,9 +4867,11 @@ export class Core {
   }
   /** The hooks whose deep-hook let them through before reading the hub's reply, by event ID: none of them is held. */
   private readonly abandoned = new Set<string>();
+  /** The hooks whose reply the core is building, by event ID. */
+  private readonly replying = new Set<string>();
   /** A held hook whose deep-hook is gone: its stop hold ends at once and delivers nothing, and an answer its reply carried reads stalled. */
   hookGone(id: string, session: string): void {
-    this.abandoned.add(id);
+    if (this.replying.has(id)) this.abandoned.add(id);
     for (const wake of this.waiting.get(session) ?? []) wake();
     // What its reply carried never reached the agent (#906): stalled, unless a turn shows it, and it goes by the next route.
     for (const [ask, handed] of this.handed) if (handed.hook === id) void this.queue(() => this.unwoken(handed.session, ask)).catch(() => undefined);
@@ -5472,6 +5484,7 @@ export class Core {
       this.versioned.delete(id);
       this.miscalled.delete(id);
       this.firstPrompted.delete(id);
+      this.startChecked.delete(id);
       for (const reading of this.readings) if (reading.startsWith(`${id}\0`)) this.readings.delete(reading);
       // Its answers whose delivery timed out: only its next prompt reads for them, and the record keeps them undelivered.
       for (const [ask, session] of this.unread) if (session === id) this.unread.delete(ask);
