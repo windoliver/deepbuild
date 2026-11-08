@@ -13,5 +13,7 @@ publish = false
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+# #494: a path key's SVG `d`, read and flattened by the marks module's path reader.
+deep-canvas-marks = { path = "../deep-canvas-marks" }
 # float_roundtrip: a key's value reads back to the exact f64 its text names (#391 AC4 is 1 ulp).
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

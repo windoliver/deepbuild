@@ -46,7 +46,7 @@ import { opensOf, Questions, type Sorted } from './questions.js';
 import { couldDo, reachOf, struck, type Reach, type ReachTool } from './could-do.js';
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
-import { coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
+import { SLASH_COMMAND, coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { cachedRuleFiles, creditOf, handleOf as ruleHandle, pageLines, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, setOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
@@ -84,6 +84,7 @@ import { Stacks, type StackWant } from './stacks.js';
 import { Starts } from './starts.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
+import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
@@ -650,6 +651,8 @@ export class Core {
   private readonly carried = new Map<string, Note[]>();
   /** Each Codex session's turn its last hook named, so a turn no prompt hook started is seen at its first hook. */
   private readonly turnsStarted = new Map<string, string>();
+  /** Each session's turn whose compaction a PreCompact opened and no PostCompact has closed yet (#1022). */
+  private readonly compacting = new Map<string, string>();
   /**
    * Each session's messages typed mid-turn not yet acknowledged, with the task each opened, and all those of its
    * current turn: the queue the chat line shows (#340).
@@ -1113,6 +1116,8 @@ export class Core {
       if (!extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
       const load = await extensions.load(pkg);
       if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
+      // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
+      else await this.panelKits(pkg.id, true);
     }
     await this.replaySpool();
     // The replay is done: the extensions start, and each that can't is unloaded and named.
@@ -1388,9 +1393,10 @@ export class Core {
     await this.queue(() => this.appendReading(session.id, session.agent, `${NEWER_SET} its process started after the sync its row named, so it loads the MCP servers and skills synced since.`));
   }
   /** A session.reading for the session, appended as the core. */
-  private appendReading(session: string, agent: string, reading: string): Promise<void> {
+  private appendReading(session: string, agent: string, reading: string, hook?: string): Promise<void> {
     const ts = this.now();
-    return this.append(this.connection('core', { session, agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading } });
+    const id = hook && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(hook) ? hook : ulid(ts);
+    return this.append(this.connection('core', { session, agent }), { v: 1, id, kind: 'session.reading', ts, data: { reading } });
   }
 
   // ---- Hooks.
@@ -2293,6 +2299,9 @@ export class Core {
     const turn = meta.fields?.turn_id;
     // A subagent's hooks carry its own turn; no prompt of the root's stands behind them.
     if (!turn || meta.fields?.agent_id) return;
+    // A compaction, /compact's own turn included, and a slash command are no prompt (#1022): they open no ask, and
+    // leave the turn unstarted, so a continuation that compacts first still opens its own at its next hook.
+    if (meta.event === 'PreCompact' || meta.event === 'PostCompact' || meta.event === SLASH_COMMAND) return;
     const started = this.turnsStarted.get(session.id);
     this.turnsStarted.set(session.id, turn);
     if (meta.event === 'UserPromptSubmit' || meta.event === 'SessionStart' || started === undefined || started === turn) return;
@@ -2549,7 +2558,13 @@ export class Core {
     for (const [call, c] of live.calls) if (c.ended !== undefined && now - c.ended > CALL_GRACE) live.calls.delete(call);
     // A turn you interrupted (#39) has no stop to say so: it ends here, with no claim.
     if (verified && meta.event === 'Interrupt') { state = 'finished'; void this.attention(meta.session, meta.agent, 'finished'); }
-    if (verified && meta.reading) void this.appendReading(meta.session, meta.agent, meta.reading).catch(() => undefined);
+    // A compaction is one event (#1022): a PreCompact of the turn whose compaction is still open is the same one again.
+    const turn = meta.fields?.turn_id ?? '';
+    const again = meta.event === 'PreCompact' && this.compacting.get(meta.session) === turn;
+    if (meta.event === 'PreCompact') this.compacting.set(meta.session, turn);
+    else if (meta.event === 'PostCompact' || meta.event === 'SessionEnd') this.compacting.delete(meta.session);
+    // Kept under the hook's own ID, so the copy deep-hook spooled when the hub was late is known at its replay.
+    if (verified && meta.reading && !again) void this.appendReading(meta.session, meta.agent, meta.reading, meta.id).catch(() => undefined);
     // The record reads these states from the hook events themselves; only unknown, below, is the core's to append.
     // A person's status question changes none: answered from the record it runs no model, and let through (an
     // answer waiting, or DeepBuild off) it shows its state at its next hook, as the record's row does.
@@ -4280,6 +4295,16 @@ export class Core {
    * carries its verdict line, first in a send-back's reason and beside any reply where the chat shows it (#83).
    */
   async hookReply(meta: HookMeta, until: number): Promise<{ context?: string; block?: string; message?: string }> {
+    // Only a hook whose reply is being built can be abandoned; once it is built, its ID is kept no longer (#41's soak).
+    this.replying.add(meta.id);
+    try {
+      return await this.buildReply(meta, until);
+    } finally {
+      this.replying.delete(meta.id);
+      this.abandoned.delete(meta.id);
+    }
+  }
+  private async buildReply(meta: HookMeta, until: number): Promise<{ context?: string; block?: string; message?: string }> {
     const own = !FOREIGN.has(meta.agent) && meta.session;
     // A tool call's reply carries a message typed mid-turn and the notices waiting for the session (#340, #352).
     if (own && (meta.event === 'PreToolUse' || meta.event === 'PostToolUse')) {
@@ -4856,9 +4881,11 @@ export class Core {
   }
   /** The hooks whose deep-hook let them through before reading the hub's reply, by event ID: none of them is held. */
   private readonly abandoned = new Set<string>();
+  /** The hooks whose reply the core is building, by event ID. */
+  private readonly replying = new Set<string>();
   /** A held hook whose deep-hook is gone: its stop hold ends at once and delivers nothing, and an answer its reply carried reads stalled. */
   hookGone(id: string, session: string): void {
-    this.abandoned.add(id);
+    if (this.replying.has(id)) this.abandoned.add(id);
     for (const wake of this.waiting.get(session) ?? []) wake();
     // What its reply carried never reached the agent (#906): stalled, unless a turn shows it, and it goes by the next route.
     for (const [ask, handed] of this.handed) if (handed.hook === id) void this.queue(() => this.unwoken(handed.session, ask)).catch(() => undefined);
@@ -5471,6 +5498,7 @@ export class Core {
       this.versioned.delete(id);
       this.miscalled.delete(id);
       this.firstPrompted.delete(id);
+      this.startChecked.delete(id);
       for (const reading of this.readings) if (reading.startsWith(`${id}\0`)) this.readings.delete(reading);
       // Its answers whose delivery timed out: only its next prompt reads for them, and the record keeps them undelivered.
       for (const [ask, session] of this.unread) if (session === id) this.unread.delete(ask);
@@ -5575,6 +5603,9 @@ export class Core {
       case 'confirm.enroll': return this.enrollAgain(params, context);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
+      case 'ask.confirm': return this.confirmCard(params);
+      case 'views.installed': return { views: this.extensions?.installedViews() ?? [] };
+      case 'command.run': return this.runCommand(params);
       // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
       case 'status.read':
         this.replayLate();
@@ -5621,6 +5652,7 @@ export class Core {
       case 'canvas.messages': return this.canvasCall({ call: 'messages', session: String(params.session) });
       case 'canvas.user': return this.canvasUser(params, context);
       case 'canvas.drawn': return this.drawnBy(context);
+      case 'work.fix': return await this.workspaceCall(() => this.fixItem(String(params.id ?? ''), typeof params.cwd === 'string' ? params.cwd : homedir()));
       case 'workspace.new': return await this.workspaceCall(() => this.spaces.make(String(params.topic ?? ''), typeof params.folder === 'string' ? params.folder : undefined));
       case 'workspace.move': return await this.workspaceCall(() => this.spaces.move(String(params.id), String(params.folder)));
       case 'workspace.revert': return await this.workspaceCall(() => this.spaces.revert(String(params.id), String(params.commit)));
@@ -6231,7 +6263,8 @@ export class Core {
         const checked = await this.extensions.check(pkg);
         const load = checked.passed ? await this.extensions.load(pkg) : { status: 'refused' as const, reason: `it failed conformance: ${checked.reasons.join('; ')}` };
         plantedReload(this.options.plant);
-        return load.status === 'refused' ? { ...installed, not_loaded: load.reason } : installed;
+        const panels = load.status === 'refused' ? undefined : await this.panelKits(pkg.id);
+        return load.status === 'refused' ? { ...installed, not_loaded: load.reason } : panels ? { ...installed, not_loaded: panels } : installed;
       } catch (error) {
         return { ...installed, not_loaded: error instanceof Error ? error.message : String(error) };
       }
@@ -6240,11 +6273,45 @@ export class Core {
     }
   }
 
+  /** Each view's panel held to panel@1 (#1454), its verdict kept for the app: what failed, in words, or undefined. */
+  private async panelKits(id: string, unrun = false): Promise<string | undefined> {
+    const failed: string[] = [];
+    for (const view of this.extensions!.installedViews().filter((v) => v.extension === id && (!unrun || v.kit === null))) {
+      const { verdict, why } = await panelKit(view.folder);
+      this.extensions!.keepKit(id, { slot: 'panel@1', fill: view.name, verdict });
+      if (verdict !== 'PASS') failed.push(`${view.name} reads ${verdict} on panel@1: ${why}`);
+    }
+    return failed.length ? failed.join('; ') : undefined;
+  }
+
+  /** A view's ⌘K command, chosen in the app (#1454): the action its manifest declares, called as you. */
+  private async runCommand(params: Obj): Promise<Obj> {
+    const { action } = params;
+    const view = this.extensions?.installedViews().find((v) => v.commands.some((c) => c.action === action));
+    if (!view) throw new Refused(refusal('not_found', '/params/action', `No installed view runs ${String(action)}.`, action));
+    return { ...(await this.extensions!.callAction({ action: String(action), target: { handle: `ext:${view.extension}`, version: view.version }, input: {}, caller: this.connection('app') })) };
+  }
+
   /**
    * `deep off`, `deep on`, `deep hub stop`, `deep hub use` and `deep setup --undo` (#19): each takes effect only once
    * the OS confirms you, with a prompt naming the command. Run inside an agent's process tree it acts as that agent's
    * session, and no agent switches DeepBuild off; the peer check alone never makes one count.
    */
+  /**
+   * The OS confirming you for a press on the question card that wasn't hardware (#1454): one press, one prompt, naming
+   * the option's words the app sends and the ask the hub reads, and never cached. The app signs its answer only after this.
+   */
+  private async confirmCard(params: Obj): Promise<Obj> {
+    const { ask: handle, reason } = params;
+    if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>.', handle));
+    if (typeof reason !== 'string' || !reason) throw new Refused(refusal('required', '/params/reason', "Give the words the OS's prompt shows.", reason));
+    const [row] = (await this.record.raw("SELECT e.data AS data FROM events e WHERE e.id = ? AND e.kind = 'ask.created'", [handle.slice(4)])) as { data: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}.`, handle));
+    const why = await this.confirmer.you(reason.slice(0, 200), { handle, revision: await this.revisionOf(handle, JSON.parse(row.data) as { pinned_to?: { ref?: string } }) });
+    if (why) throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}).`, handle, true));
+    return { confirmed: handle };
+  }
+
   private async confirmCommand(params: Obj, context: CallContext): Promise<Obj> {
     const command = params.command;
     if (typeof command !== 'string' || !AUTHORITY.has(command)) throw new Refused(refusal('enum', '/params/command', `Name one of ${[...AUTHORITY].join(', ')}.`, command));
@@ -6420,6 +6487,8 @@ export class Core {
   private readonly worldFile = new WorldFile(process.env.DEEP_HUB_TEST_SHOW);
   /** Each presented revision for the app, in order; an app's `canvas.drawn` takes those after the last it took. */
   private readonly presented: Obj[] = [];
+  /** The documents deep_show has named, each on the app's canvas panel. */
+  private readonly shownDocs = new Set<string>();
   private readonly drawnUpTo = new Map<string, number>();
   /** When an app last took what was presented: an app that took it within the last 250 ms is open (it asks every 100 ms), and draws it. */
   private appSeen = 0;
@@ -6437,7 +6506,7 @@ export class Core {
       const d = JSON.parse(r.data) as Obj;
       if (typeof d.reading === 'string' && typeof d.value === 'number') record[d.reading] = { session: r.session, value: d.value, as_of: Number(d.as_of ?? 0) };
     }
-    return { sessions, record, file };
+    return { sessions, record, file, docs: [...this.shownDocs] };
   }
   private canvas(): Canvas {
     return (this.canvasCore ??= new Canvas(this.root.evidence));
@@ -6451,6 +6520,7 @@ export class Core {
    * session the peer check found, or as you: the writer is the binding's, never the payload's.
    */
   private async show(as: { session: string | null } | { you: true }, call: Obj): Promise<Obj> {
+    if (typeof call.doc === 'string') this.shownDocs.add(call.doc);
     // The planted hub stamps the writer the payload claims (#806's wrong program): a session whose thread it names.
     if (this.options.plant === 'deep-show-writer-from-payload' && 'session' in as && isObj(call.document) && typeof call.document.writer === 'string') {
       const claimed = [...this.sessions.values()].find((s) => `agent:${s.thread}` === (call.document as Obj).writer);
@@ -6511,7 +6581,7 @@ export class Core {
         hash, layer: String(p.layer), thread: writer.kind === 'agent' ? writer.id : null,
       } as JsonValue,
     });
-    this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers });
+    this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
   }
   /** `deep show` from the CLI: the peer check makes it the agent's whose process tree runs it, never by PID alone; else yours. */
   private async showCli(params: Obj, context: CallContext): Promise<Obj> {
@@ -6957,6 +7027,27 @@ export class Core {
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
   /** `deep workspace`'s calls (#67): a refusal says why, on the command's stderr. */
+  /**
+   * `deep fix <id>` (#66): the work item with that ID, from the work sources you switched on, opens its task as a prompt
+   * naming it would, whenever it was made; what done means locks from its readings, outside text waiting for your one
+   * answer, and a task with no repo lands in a workspace.
+   */
+  private async fixItem(id: string, cwd: string): Promise<{ task: string; link: string }> {
+    if (!id) throw Error('deep fix names a work item by its ID');
+    let item = await this.tasks.workItem(id);
+    if (!item && this.extensions) {
+      const task = await this.extensions.fix(this.connection('cli'), id);
+      const readings = (await this.extensions.workEvents(task.task_ref)).map((e) => ({ ...e.reading, authors: e.reading.authors.map((a) => ({ ...a })) }));
+      const main = readings.find((r) => r.source_id === task.id);
+      if (main) item = { ...main, readings };
+    }
+    if (!item) throw Error(`no work source you switched on holds ${id}`);
+    const at = this.now();
+    const task_ref = `task:${letters(item.source_id)}`;
+    const session = `fix${letters(item.source_id)}`;
+    await this.tasks.opened({ session, agent: 'claude-code', cwd, thread: `fix:${item.source_id}`, task_ref, text: `Fix ${id}`, prompt: `fix:${letters(id)}:${at}`, at, item });
+    return { task: task_ref, link: item.link };
+  }
   private async workspaceCall(call: () => Promise<object>): Promise<Obj> {
     try {
       return { ...await call() };

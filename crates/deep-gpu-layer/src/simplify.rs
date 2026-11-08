@@ -5,7 +5,9 @@
 //! error to grow by at least `growth`, and stops when a level saves less than `min_gain` or passes
 //! `max_error`; listed levels keep their own targets. No level's error is lower than the one before.
 //! The output is the input with the levels on its primitive (`extras.lod`), as `mesh.asset@1`
-//! reads them, written under `out` named by its SHA-256.
+//! reads them, written under `out` named by its SHA-256. #427: the reply's `measured_m` is each
+//! level's error as the probe measures it, the two-sided distance in m between the level's
+//! surface and the input's (`deep_canvas_scene3d::deviation`), 0 for the input.
 
 use meshopt::{SimplifyOptions, VertexDataAdapter};
 use serde_json::{json, Value};
@@ -137,6 +139,25 @@ fn run(out: &str, call: &Value) -> Result<Value, Value> {
         }
         Some(_) => return Err(bad("levels is auto or a list of {ratio, max_triangles}")),
     }
+    // #427: the probe's measured error per level, in m: the two-sided distance between the
+    // level's surface and the input's, over the input's positions as the glTF holds them.
+    let measured: Vec<f64> = levels
+        .iter()
+        .enumerate()
+        .map(|(k, (idx, _))| match k {
+            0 => 0.0,
+            _ => {
+                deep_canvas_scene3d::deviation::measure(
+                    &mesh.positions,
+                    idx,
+                    &mesh.positions,
+                    &input,
+                    false,
+                )
+                .largest_m
+            }
+        })
+        .collect();
     // The levels after the input, on the primitive, in one buffer of their own.
     let mut buffer = Vec::new();
     let mut entries = Vec::new();
@@ -173,6 +194,7 @@ fn run(out: &str, call: &Value) -> Result<Value, Value> {
         "sha256": sha,
         "levels": levels.iter().map(|(i, _)| json!({"triangles": i.len() / 3})).collect::<Vec<_>>(),
         "lod_errors": levels.iter().map(|(_, e)| e).collect::<Vec<_>>(),
+        "measured_m": measured,
     }))
 }
 

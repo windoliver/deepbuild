@@ -757,7 +757,7 @@ struct Reached {
 /// dispatched once over its elements.
 fn run_once(device: &Device, c: &Compiled, reached: &mut Reached) -> Result<(), String> {
     let d = &device.device;
-    let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
     let runner = Runner::new(d, c.clone(), LINEAR);
     if let Some(e) = pollster_block(scope.pop()) {
         return Err(e.to_string());

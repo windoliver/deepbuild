@@ -125,6 +125,7 @@ pub fn start(
 fn connect(socket: &Path, token_file: &Path) -> Result<HubClient, HubError> {
     let token = std::fs::read_to_string(token_file)?;
     let mut client = HubClient::connect(socket)?;
+    client.covers_app()?;
     client.hello_app(token.trim())?;
     Ok(client)
 }

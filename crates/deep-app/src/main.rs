@@ -6,6 +6,11 @@
 //!
 //! `deep-app --set-up` runs the first launch's Set up click with no window and prints its one line (#326).
 //!
+//! Issue #41, each with no window: `--hub-needs` prints the hub contract the app speaks and every method it calls as
+//! one JSON line; `--hub-check` connects to the running hub as the window does and says `hub ok`, or, when the hub's
+//! hello doesn't cover the app, prints the one screen naming the older side and its fix, having called nothing;
+//! `--check-for-updates` prints Check for updates' line.
+//!
 //! Issue #883: the window's app posts each ask to Notification Center and withdraws it once the
 //! record says it closed (`notifications`, below); macOS shows them only from the app bundle `scripts/app-bundle`
 //! builds. Issue #994: a second launch brings the first window forward and exits, and the notifier keeps trying a hub
@@ -63,7 +68,7 @@
 
 use std::{path::PathBuf, time::Instant};
 
-use deep_app::{init, menu_bar_line, mount_panel, views};
+use deep_app::{commands::Palette, init, menu_bar_line, mount_panel, show::CanvasPanel, views};
 use gpui_kit::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -83,6 +88,9 @@ enum Mode {
         chords: u64,
     },
     SetUp,
+    HubNeeds,
+    HubCheck,
+    CheckForUpdates,
     NotificationCenter,
     CaptureBug {
         store: PathBuf,
@@ -117,6 +125,41 @@ fn main() {
     }
     if mode == Mode::NotificationCenter {
         notification_center::print();
+        return;
+    }
+    if mode == Mode::HubNeeds {
+        let needs = serde_json::json!({ "contract": deep_app::hub::CONTRACT, "features": deep_app::hub::NEEDS });
+        println!("{needs}");
+        return;
+    }
+    if mode == Mode::HubCheck {
+        let mut reader = deep_app::record::RecordReader::unopened_folded(
+            &deep_app::hub::address(),
+            &deep_app::hub::root().join("control.token"),
+        );
+        match reader.check() {
+            Err(deep_app::hub::HubError::Older(screen)) => println!("{screen}"),
+            Err(
+                error @ (deep_app::hub::HubError::Io(_) | deep_app::hub::HubError::Protocol(_)),
+            ) => {
+                eprintln!(
+                    "deep-app: the hub at {} didn't answer: {error:?}",
+                    deep_app::hub::address().display()
+                );
+                std::process::exit(1);
+            }
+            // A hello that covers the app: the window's calls are made, whatever each returns.
+            reached => {
+                println!("hub ok: contract {}", deep_app::hub::CONTRACT);
+                if let Err(error) = reached {
+                    eprintln!("deep-app: the hub refused a call: {error:?}");
+                }
+            }
+        }
+        return;
+    }
+    if mode == Mode::CheckForUpdates {
+        println!("{}", deep_app::setup::check_for_updates());
         return;
     }
     if mode == Mode::SetUp {
@@ -176,10 +219,18 @@ fn main() {
         let runtime = deep_app::new_runtime().expect("panel runtime");
         // The window draws its own title bar, with the mark, so it owns the bar's drag.
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(size(px(960.), px(640.)), cx)),
+            window_bounds: Some(WindowBounds::centered(
+                size(px(views::OPENING.0), px(views::OPENING.1)),
+                cx,
+            )),
             ..gpui_kit::component::TitleBar::window_options()
         };
-        open_window(options, cx, move |window, cx| {
+        let opens = mode == Mode::Window && panel_dir.is_none();
+        let opener = deep_app::installed::opener(runtime.clone());
+        let mounts = runtime.clone();
+        let palette: std::rc::Rc<std::cell::RefCell<Option<Entity<Palette>>>> = Default::default();
+        let made = palette.clone();
+        let (window, _) = open_window(options, cx, move |window, cx| {
             let panel = panel_dir.as_ref().map(|dir| {
                 // A script panel reads its colors from the theme, so it holds the look's roles before one mounts.
                 deep_app::chrome::follow(window, cx);
@@ -228,12 +279,53 @@ fn main() {
                 if let Some(view) = panel {
                     views::place_extension(view);
                 }
-                cx.new(|cx| views::Shell::new(&layout, window, cx).with_title_bar())
+                let canvas = cx.new(|_| CanvasPanel::new(deep_app::hub::root().join("evidence")));
+                views::set_canvas(canvas.clone());
+                deep_app::show::follow(canvas, cx);
+                cx.new(|cx| {
+                    let mut shell = views::Shell::new(&layout, window, cx).with_title_bar();
+                    let palette = cx.new(|cx| {
+                        let mut palette = Palette::new(&[], Vec::new(), opener, window, cx);
+                        palette.set_entries(deep_app::installed::shipped_pages(), cx);
+                        palette
+                    });
+                    *made.borrow_mut() = Some(palette.clone());
+                    shell.set_commands(palette, window, cx);
+                    shell
+                })
             }
         })
         .expect("open window");
+        #[cfg(not(feature = "plant-spike-window"))]
+        if opens {
+            load_installed(window, palette, mounts, cx);
+        }
         cx.activate(true);
     });
+}
+
+/// Once the hub answers, the views you installed mount and ⌘K learns them, once (#1454).
+#[cfg(not(feature = "plant-spike-window"))]
+fn load_installed(
+    window: AnyWindowHandle,
+    palette: std::rc::Rc<std::cell::RefCell<Option<Entity<Palette>>>>,
+    runtime: std::rc::Rc<gpui_shell::ShellRuntime>,
+    cx: &mut App,
+) {
+    cx.spawn(async move |cx| {
+        while !deep_app::record::connected() {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(250))
+                .await;
+        }
+        let Some(palette) = palette.borrow().clone() else {
+            return;
+        };
+        let _ = window.update(cx, |_, window, cx| {
+            deep_app::installed::load(&palette, &runtime, window, cx)
+        });
+    })
+    .detach();
 }
 
 fn args() -> (Option<PathBuf>, Option<String>, Mode) {
@@ -272,6 +364,9 @@ fn args() -> (Option<PathBuf>, Option<String>, Mode) {
                 }
             }
             "--set-up" => mode = Mode::SetUp,
+            "--hub-needs" => mode = Mode::HubNeeds,
+            "--hub-check" => mode = Mode::HubCheck,
+            "--check-for-updates" => mode = Mode::CheckForUpdates,
             "--notification-center" => mode = Mode::NotificationCenter,
             "--capture-bug" => {
                 mode = Mode::CaptureBug {
@@ -509,7 +604,12 @@ mod trusted {
                             poster_started && tick > 10 + presses + 120
                         }
                     }
-                    Mode::PostForged { .. } | Mode::SetUp | Mode::NotificationCenter => {
+                    Mode::PostForged { .. }
+                    | Mode::SetUp
+                    | Mode::HubNeeds
+                    | Mode::HubCheck
+                    | Mode::CheckForUpdates
+                    | Mode::NotificationCenter => {
                         unreachable!("these modes have no window")
                     }
                     Mode::CaptureBug { .. } => unreachable!("the bug capture runs on its own"),
