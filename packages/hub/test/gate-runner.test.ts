@@ -116,4 +116,48 @@ describe('a check pinned to a commit of its own (#325)', () => {
     await stop('claim:B');
     expect(gate.outputOf('claim:B', 'pinned-timing')).toBe('alone');
   }, 30_000);
+
+  it("a drift rerun of a timing check that fails under load again is set aside and rerun alone again; the old run under load doesn't decide it", async () => {
+    const dir = repo();
+    const appended: EventInput[] = [];
+    const ends = new Map<string, (outcome: string) => void>();
+    let machine = { load: 9, cores: 4 };
+    const gate = runner(dir, appended, ends, { load: () => machine });
+    const pinned = { ...check, check: 'pinned-timing', commit: 'c1', timing: true };
+    const recorded = (run: string, outcome: 'passed' | 'failed', stdout: string) => gate.recorded(run, {
+      run, outcome, testsRun: 1, failures: [], evidence: [], read: [], mask: null, exit: outcome === 'passed' ? 0 : 1,
+      output: { stdout, stderr: '', sha256: { stdout: '', stderr: '' } }, attempts: [], seeded: [], contract: null,
+    } as unknown as RecordedRun);
+    const underLoad = () => appended.filter((e) => e.kind === 'run.under_load').map((e) => (e.data as { run: string }).run);
+    await gate.stop({ session: 'S', claim: 'claim:A', task: 'task:1', cwd: dir, base: 'b', requirements: [], checks: [pinned], stopAt: Date.now() });
+    gate.turnEnded('claim:A');
+    await until(() => ends.has('run1'));
+    recorded('run1', 'failed', 'under load');
+    ends.get('run1')!('failed');
+    await until(() => underLoad().length === 1);
+    machine = { load: 1, cores: 4 };
+    await until(() => ends.has('run2'));
+    recorded('run2', 'passed', 'alone');
+    ends.get('run2')!('passed');
+    await new Promise((r) => setTimeout(r, 200));
+    // The claim's state drifts and the check reruns, under load again.
+    machine = { load: 9, cores: 4 };
+    expect(gate.rerun('claim:A', ['pinned-timing'], { digests: [], files: {}, pinned: {} })).toBe(true);
+    await until(() => ends.has('run3'));
+    recorded('run3', 'failed', 'under load again');
+    ends.get('run3')!('failed');
+    for (let i = 0; i < 40 && underLoad().length < 2; i++) await new Promise((r) => setTimeout(r, 50));
+    expect(underLoad(), 'the new run under load is set aside like the first').toEqual(['run1', 'run3']);
+    expect(gate.verdictOf('claim:A')?.reasons.join('\n'), 'the reason names the new run, not the old one').toMatch(/run3 failed at a load/);
+    expect(gate.verdictOf('claim:A')?.reasons.join('\n')).not.toMatch(/run1 failed/);
+    machine = { load: 1, cores: 4 };
+    for (let i = 0; i < 100 && !ends.has('run4'); i++) await new Promise((r) => setTimeout(r, 50));
+    expect(ends.has('run4'), 'the rerun was rerun alone').toBe(true);
+    recorded('run4', 'passed', 'alone again');
+    ends.get('run4')!('passed');
+    await new Promise((r) => setTimeout(r, 200));
+    expect(gate.outputOf('claim:A', 'pinned-timing')).toBe('alone again');
+    // The rerun alone decides: the two runs under load count for nothing (the fixture's digest-less evidence keeps it INCONCLUSIVE here).
+    expect(gate.verdictOf('claim:A')?.checks.find((c) => c.check === 'pinned-timing')?.counted).toEqual(['run4']);
+  }, 30_000);
 });
