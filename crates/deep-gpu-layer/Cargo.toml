@@ -31,6 +31,7 @@ test-spike = []
 [dependencies]
 deep-gpu = { path = "../deep-gpu" }
 deep-canvas = { path = "../deep-canvas" }
+deep-canvas-drawn = { path = "../deep-canvas-drawn" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-text = { path = "../deep-text" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
@@ -53,6 +54,8 @@ deep-codecs = { path = "../deep-codecs" }
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-effects-render = { path = "../deep-effects-render" }
 wgpu-profiler = "0.28"
+# Issue #464: the indexed operator's class, computed from its module.
+naga = { version = "30", default-features = false, features = ["wgsl-in"] }
 deep-app = { path = "../deep-app" }
 deep-replica = { path = "../deep-replica" }
 bytemuck = { version = "1", features = ["derive"] }

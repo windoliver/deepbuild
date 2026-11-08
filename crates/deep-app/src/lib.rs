@@ -8,6 +8,10 @@
 //! Issue #1172: the shell is the app's window. #337's spike window is no part of the shipped binary: `spike` is built
 //! only for the suites that keep its proof, behind the feature of that name.
 
+// A release build refuses the planted programs' feature (#1408).
+#[cfg(all(feature = "env-plants", not(debug_assertions)))]
+compile_error!("the env-plants feature is for test builds only, never a release build");
+
 pub mod answer;
 pub mod arming;
 pub mod bound;
@@ -30,6 +34,7 @@ pub mod panel_tree;
 pub mod panel_values;
 pub mod question;
 pub mod record;
+pub mod rules;
 pub mod setup;
 pub mod show;
 pub mod shown;

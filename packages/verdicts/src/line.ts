@@ -32,6 +32,8 @@ export interface LineState {
   held?: { check: string; reason: string }[];
   /** The tests the claim's checks ran on its commit, as their reports counted them (#669); none shown when none were counted. */
   tests?: number;
+  /** The verdict's own smallest case and where it points: the cause when no requirement holds it, as a review's finding (#1537). */
+  cause?: { smallest: string | null; points_to: string | null };
 }
 /** Who takes the next step: the agent (a send-back), you (a PASS or something only you can clear) or DeepBuild (checks still to run). */
 type Owner = 'agent' | 'you' | 'DeepBuild';
@@ -71,7 +73,7 @@ function parts(s: LineState): Parts {
   let cause = '';
   let points = '';
   if (s.outcome === 'FAIL' || s.outcome === 'BLOCKED') {
-    const failing = s.requirements.find((r) => r.outcome === s.outcome && r.smallest) ?? s.requirements.find((r) => r.outcome === s.outcome);
+    const failing = s.requirements.find((r) => r.outcome === s.outcome && r.smallest) ?? s.requirements.find((r) => r.outcome === s.outcome) ?? s.cause;
     cause = failing?.smallest ?? '';
     points = failing?.points_to ?? '';
   }

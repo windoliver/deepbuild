@@ -1,0 +1,279 @@
+{
+ "family": "noise",
+ "subject": "Storm clouds over a ridge",
+ "look": {
+  "id": "drawn-noise-149-look"
+ },
+ "2d": {
+  "format": 1,
+  "id": "drawn-noise-149",
+  "profile": "figure",
+  "title": "Storm clouds over a ridge",
+  "description": "Storm clouds over a ridge: a #149 acceptance fixture in a 2D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "evolve": {
+    "target": "items/sky/params/paint/fill/noise/evolution",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 720,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "sky": {
+    "id": "sky",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "sky",
+    "order": "a0",
+    "params": {
+     "box": [
+      0,
+      0,
+      1920,
+      1080
+     ],
+     "paint": {
+      "fill": {
+       "noise": {
+        "kind": "fractal",
+        "scale": 220,
+        "aspect": 1.4,
+        "octaves": 6,
+        "roughness": 0.55,
+        "contrast": 1.2,
+        "brightness": 0,
+        "offset": [
+         40,
+         0
+        ],
+        "rotation": 12,
+        "evolution": 0,
+        "cycle": 2,
+        "stops": [
+         {
+          "at": 0,
+          "role": "indigo"
+         },
+         {
+          "at": 0.5,
+          "role": "muted"
+         },
+         {
+          "at": 1,
+          "role": "ground"
+         }
+        ],
+        "anchor": "world",
+        "seed": 21
+       }
+      }
+     }
+    }
+   },
+   "ridge": {
+    "id": "ridge",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "ridge",
+    "order": "a1",
+    "params": {
+     "d": "M 0 1080 L 0 820 C 480 660 960 900 1920 700 L 1920 1080 Z",
+     "paint": {
+      "fill": {
+       "role": "ink"
+      }
+     }
+    }
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "drawn-noise-149-3d",
+  "profile": "scene",
+  "title": "Storm clouds over a ridge",
+  "description": "Storm clouds over a ridge: a #149 acceptance fixture in a 3D drawing look.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "2s"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a1"
+   }
+  },
+  "channels": {
+   "evolve": {
+    "target": "items/sky/params/paint/fill/noise/evolution",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "2s",
+      "value": 720,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a0",
+    "params": {
+     "projection": "perspective",
+     "target": [
+      0,
+      0.6,
+      0
+     ],
+     "position": [
+      0,
+      1.6,
+      7
+     ],
+     "fov": 40,
+     "near": 0.1,
+     "far": 80
+    }
+   },
+   "sky": {
+    "id": "sky",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "sky",
+    "order": "a1",
+    "params": {
+     "size": [
+      14,
+      7,
+      0.1
+     ],
+     "paint": {
+      "fill": {
+       "noise": {
+        "kind": "fractal",
+        "scale": 220,
+        "aspect": 1.4,
+        "octaves": 6,
+        "roughness": 0.55,
+        "contrast": 1.2,
+        "brightness": 0,
+        "offset": [
+         40,
+         0
+        ],
+        "rotation": 12,
+        "evolution": 0,
+        "cycle": 2,
+        "stops": [
+         {
+          "at": 0,
+          "role": "indigo"
+         },
+         {
+          "at": 0.5,
+          "role": "muted"
+         },
+         {
+          "at": 1,
+          "role": "ground"
+         }
+        ],
+        "anchor": "world",
+        "seed": 21
+       }
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      2.5,
+      -4
+     ]
+    }
+   },
+   "ridge": {
+    "id": "ridge",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "ridge",
+    "order": "a2",
+    "params": {
+     "size": [
+      9,
+      1.6,
+      2
+     ],
+     "paint": {
+      "fill": {
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      -0.4,
+      0
+     ]
+    }
+   }
+  }
+ }
+}
