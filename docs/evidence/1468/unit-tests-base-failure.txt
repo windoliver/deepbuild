@@ -43,3 +43,13 @@ test expr::tests::a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_w
 thread 'expr::tests::a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows' (553073) panicked at crates/deep-canvas/src/expr.rs:2753:9:
 `((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((($`: unexpected `$`
 test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 267 filtered out; finished in 0.00s
+
+Review round 2's regressions, each run on bb126f47 with only its test added:
+test expr::tests::a_dotted_table_name_counts_once ... FAILED
+test document::packs::tests::long_text_that_is_no_expression_stays_a_literal ... FAILED
+thread 'expr::tests::a_dotted_table_name_counts_once' (792646) panicked at crates/deep-canvas/src/expr.rs:2769:54:
+called `Result::unwrap()` on an `Err` value: Refusal { call: "table(p.t, x) + … (171 terms)", why: "takes more than 1024 nodes as written, twice the cap of 512", missing: None }
+thread 'document::packs::tests::long_text_that_is_no_expression_stays_a_literal' (792645) panicked at crates/deep-canvas/src/document/packs.rs:3213:13:
+assertion `left == right` failed: M 0 0 L 10.5 20.25 L 10.5 20.25 L 10.5 2
+  left: Err("runs past the cap of 1024 tokens")
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 268 filtered out; finished in 0.00s
