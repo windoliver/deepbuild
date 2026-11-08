@@ -12,8 +12,7 @@ import { binaries, check, run, serve, sleep } from './acceptance/358/run.mjs';
 import { loadRecord } from './acceptance/358/validate.mjs';
 
 const area = [100, 100, 400, 300];
-const panel = (render, members = '') => `import { View, div } from "gpui-kit";
-import { Button } from "gpui-base";
+const panel = (render, members = '') => `import { View, div, Button } from "@deepbuild/panel";
 export default class P extends View {
   ${members}
   render() { return ${render}; }

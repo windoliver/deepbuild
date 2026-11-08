@@ -1,0 +1,85 @@
+// The test tracker work source (#66): a GitHub-like tracker at api.tracker.example, read through the hub's ctx.fetch
+// (README, The surface under test). Its scope is a repo, `acme/web`; an item's ID is `acme/web#<n>`. Each author's
+// role comes from the repo's collaborators list, never from the text: `admin` reads owner, any other collaborator
+// collaborator, anyone else outside. Its deliveries are comments carrying the send key as the marker
+// `<!-- deepbuild-send:<key> -->`, which the tracker keeps in the comment's body.
+// probe.json may plant a wrong reader: `repeat-cursor` gives `2` as every page's next cursor, so page 2 repeats it, and
+// `foreign-item` puts `acme/other#7` on its first page. `quota` overrides the declared quota.
+import { readFileSync } from 'node:fs';
+
+interface Probe { plant?: 'repeat-cursor' | 'foreign-item'; quota?: { per_minute: number; per_day: number } }
+interface Answer { status: number; headers: Record<string, string>; body: string }
+interface Ctx { fetch(r: { method: string; path: string; headers?: Record<string, string>; body?: string }): Promise<Answer> }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const MARK = /deepbuild-send:([^\s>]+)/;
+const parse = (a: Answer): any => JSON.parse(a.body);
+const nOf = (id: string): { repo: string; n: number } => { const m = /^([\w.-]+\/[\w.-]+)#(\d+)$/.exec(id); if (!m) throw Error(`not a tracker item: ${id}`); return { repo: m[1]!, n: Number(m[2]) }; };
+const criteriaOf = (body: string): string[] => {
+  const m = /^#+\s*acceptance criteria\s*$([\s\S]*?)(?=^#+\s|(?![\s\S]))/im.exec(body ?? '');
+  return m ? [...m[1]!.matchAll(/^\s*- \[[ xX]\] (.+)$/gm)].map(([, t]) => t!.trim()) : [];
+};
+
+export default function (deep: any): void {
+  deep.registerSource('ext.tracker.issues', {
+    variant: 'stream',
+    host: 'api.tracker.example',
+    quota: probe.quota ?? { per_minute: 600, per_day: 100_000 },
+    delivers: 'comment',
+    // source@1's read, for the kit's own stream at install: page by page from the cursor.
+    read(stream: { events: unknown[] }, cursor: string | null, limit: number) {
+      const start = cursor === null ? 0 : Number(cursor);
+      const events = stream.events.slice(start, start + limit);
+      return { events, cursor: String(start + events.length) };
+    },
+    async list(ctx: Ctx, q: { scope: string; since: string; cursor: string | null; limit: number }) {
+      const page = q.cursor === null ? 1 : Number(q.cursor);
+      const a = await ctx.fetch({ method: 'GET', path: `/repos/${q.scope}/issues?since=${encodeURIComponent(q.since)}&page=${page}&per_page=${q.limit}` });
+      if (a.status !== 200) throw Error(`the tracker answered ${a.status} to the list`);
+      const items = parse(a).map((i: any) => ({ id: `${i.repo}#${i.number}`, scope: i.repo, created: i.created_at, updated: i.updated_at, mention: i.mention === true }));
+      if (probe.plant === 'foreign-item' && page === 1) items.push({ id: 'acme/other#7', scope: 'acme/other', created: q.since, updated: q.since, mention: false });
+      const more = /rel="next"/.test(a.headers.link ?? '');
+      const next = probe.plant === 'repeat-cursor' ? '2' : more ? String(page + 1) : null;
+      return { items, cursor: next };
+    },
+    async item(ctx: Ctx, q: { scope: string; id: string }) {
+      const { repo, n } = nOf(q.id);
+      const a = await ctx.fetch({ method: 'GET', path: `/repos/${repo}/issues/${n}` });
+      if (a.status === 410) return { failed: 'deleted', status: 410 };
+      if (a.status === 404) return { failed: 'not found', status: 404 };
+      if (a.status === 403) return { failed: 'forbidden', status: 403 };
+      if (a.status !== 200) return { failed: 'error', status: a.status };
+      const issue = parse(a);
+      const comments = await ctx.fetch({ method: 'GET', path: `/repos/${repo}/issues/${n}/comments` });
+      if (comments.status !== 200) return { failed: 'error', status: comments.status };
+      const members = await ctx.fetch({ method: 'GET', path: `/repos/${repo}/collaborators` });
+      if (members.status !== 200) return { failed: 'error', status: members.status };
+      const roles = new Map<string, string>(parse(members).map((m: any) => [m.login, m.role_name === 'admin' ? 'owner' : 'collaborator']));
+      const author = (login: string) => ({ handle: login, role: roles.get(login) ?? 'outside' });
+      const events = [{
+        id: `${q.id}@${issue.updated_at}`, kind: 'item', at: issue.updated_at, marker: null, mention: false,
+        data: { source_id: q.id, link: issue.html_url, title: issue.title, body: issue.body, criteria: criteriaOf(issue.body), authors: [author(issue.user.login)], updated: issue.updated_at },
+      }];
+      for (const c of parse(comments)) {
+        events.push({
+          id: c.event, kind: 'comment', at: c.updated_at, marker: MARK.exec(c.body)?.[1] ?? null, mention: c.mention === true,
+          data: { source_id: `${q.id}.c${c.id}`, link: c.html_url, title: issue.title, body: c.body, criteria: [], authors: [author(c.user.login)], updated: c.updated_at },
+        } as any);
+      }
+      return { events };
+    },
+    async deliver(ctx: Ctx, d: { scope: string; id: string; key: string; text: string }) {
+      const { repo, n } = nOf(d.id);
+      const a = await ctx.fetch({ method: 'POST', path: `/repos/${repo}/issues/${n}/comments`, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body: `${d.text}\n\n<!-- deepbuild-send:${d.key} -->` }) });
+      if (a.status === 201) return { outcome: 'sent' };
+      if (a.status === 410) return { outcome: 'gone', why: 'the tracker answered 410: the issue was deleted' };
+      if (a.status === 403 && /locked/i.test(a.body)) return { outcome: 'gone', why: 'the conversation is locked' };
+      throw Error(`the tracker answered ${a.status}`);
+    },
+    async find(ctx: Ctx, d: { scope: string; id: string; key: string }) {
+      const { repo, n } = nOf(d.id);
+      const a = await ctx.fetch({ method: 'GET', path: `/repos/${repo}/issues/${n}/comments` });
+      if (a.status !== 200) throw Error(`the tracker answered ${a.status}`);
+      return parse(a).some((c: any) => MARK.exec(c.body)?.[1] === d.key);
+    },
+  });
+}

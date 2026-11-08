@@ -428,6 +428,8 @@ pub type Run = fn(&mut crate::schedule::View<'_>) -> Result<(), crate::schedule:
 /// Which items an operator per item has a node on: `(document, item ID, item)`; per document,
 /// whether the document has its node (`(document, "", null)`).
 pub type Applies = fn(&Value, &str, &Value) -> bool;
+/// A stepping operator's step length in flicks as the document sets it, or `None` (#497).
+pub type StepRate = fn(&Value) -> Option<i64>;
 
 /// What a per-item node's key holds of its item and document in place of the whole item and
 /// document (Content key: "each declared read"): `(document, item ID, item, planted)` to the
@@ -535,6 +537,9 @@ pub struct Operator {
     pub run: Option<Run>,
     /// A stepping operator's step length in flicks: it steps in simulate at every multiple of it.
     pub step: Option<i64>,
+    /// Where the document sets the step instead (issue #497: a module's `step_rate`), the step
+    /// length it reads from the document; `step` holds where it reads none.
+    pub rate: Option<StepRate>,
     /// It isn't thread-safe: its nodes run only on the scheduler's own thread (#857).
     pub serial: bool,
     /// Its determinism class (Determinism class): `exact` for CPU work and GPU work of integer
@@ -575,6 +580,13 @@ impl Operator {
         self.step = Some(flicks);
         self.per = Per::Document;
         self
+    }
+
+    /// Steps in simulate at the step `rate` reads from the document, every `flicks` where it
+    /// reads none, once per document.
+    pub fn steps_at(&mut self, flicks: i64, rate: StepRate) -> &mut Self {
+        self.rate = Some(rate);
+        self.steps(flicks)
     }
 
     /// Its determinism class, as its steps compute it: one of [`CLASSES`].
@@ -899,6 +911,7 @@ impl Registrar {
             applies: None,
             run: None,
             step: None,
+            rate: None,
             serial: false,
             determinism: "exact",
             keyed: None,
@@ -1504,6 +1517,15 @@ impl Sealed {
             .iter()
             .find(|m| m.shapes.kinds.iter().any(|k| k.entry.is(full_name)))
             .map(|m| m.name.as_str())
+    }
+
+    /// Whether this build's set names the design module `module` and this build left it out
+    /// (#308: a control kind in a full build without the input module).
+    pub(crate) fn lacks(&self, module: &str) -> bool {
+        KNOWN_MODULES
+            .iter()
+            .any(|(name, set)| *name == module && *set <= self.build_set)
+            && !self.has(module)
     }
 
     /// The canvas module a kind's family belongs to when this build lacks it: a registered

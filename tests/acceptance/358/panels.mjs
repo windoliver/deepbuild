@@ -34,7 +34,7 @@ export const CASES = {
 };
 
 export function panelSource(id, shape) {
-  return `import { View, div } from "gpui-kit";
+  return `import { View, div } from "@deepbuild/panel";
 
 const ESCAPE = "${shape.escape}";
 
@@ -62,7 +62,7 @@ export function writePanel(source, manifest) {
 // A panel that tries every way out it can name, each caught, then draws its computed text. Its reach goes to the
 // test's own listener and its program to a canary file, so a success is seen outside the panel.
 export function escapeArtist({ a, b, port, canary }) {
-  return `import { View, div } from "gpui-kit";
+  return `import { View, div } from "@deepbuild/panel";
 
 export default class Artist extends View {
   init(_props, cx) {
@@ -104,7 +104,7 @@ export const gitManifest = (port) => ({ id: 'com.example.panel358git', name: 'Gi
 
 // Draws a rectangle and computed text, and burns `iterations` of a loop in each render.
 export function burner({ a, b, iterations }) {
-  return `import { View, div } from "gpui-kit";
+  return `import { View, div } from "@deepbuild/panel";
 
 export default class Burner extends View {
   render() {
@@ -119,8 +119,7 @@ export default class Burner extends View {
 // Moves focus once from a timer no gesture started, and from a button; the button's press also tries again later,
 // on the same gesture, once you've moved away.
 export function focusPanel({ a, b }) {
-  return `import { View, div } from "gpui-kit";
-import { Button } from "gpui-base";
+  return `import { View, div, Button } from "@deepbuild/panel";
 
 export default class Focus extends View {
   init(_props, cx) {

@@ -394,6 +394,8 @@ pub enum DriverInput {
     Rate(String),
     /// `<remap>.active`, or with `true` `<remap>.progress`.
     Remap(String, bool),
+    /// `<module>.<name>`: a canvas module's array, such as one a stepping module writes (#497).
+    Array(String),
 }
 
 /// Each axis's `[min, max]`, `None` for an axis a limit leaves free.
@@ -1181,6 +1183,10 @@ fn driver_of(id: &str, d: &Map<String, Value>) -> Result<Driver, Refused> {
             inputs.push((name.clone(), DriverInput::Remap(r.to_string(), true)));
             continue;
         }
+        if !text.contains('/') && text.contains('.') {
+            inputs.push((name.clone(), DriverInput::Array(text.clone())));
+            continue;
+        }
         vars.push((name.clone(), target_of(text, false, &vpath)?));
     }
     vars.sort_by(|a, b| a.0.cmp(&b.0));
@@ -1429,6 +1435,12 @@ fn seconds_of(v: Option<&Value>, ctx: &Ctx, path: &str) -> Result<i64, Refused> 
         },
         v => time_of(v, ctx, path),
     }
+}
+
+/// A `follow` read on its own, its times in seconds or time literals at 60 fps: the input
+/// module's smoothing and the channels it feeds read their model here (#308).
+pub fn follow_spec(f: &Map<String, Value>, path: &str) -> Result<follow::Spec, Refused> {
+    follow_spec_of(f, &Ctx::of((60, 1)), path)
 }
 
 /// A follow channel's `follow` on held keys or a control's value (#489): its source, its model

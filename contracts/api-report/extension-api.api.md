@@ -82,6 +82,13 @@ export interface Deep {
         terminal: string;
         from: number;
     }): Promise<unknown>;
+    "work.fetch"(params: {
+        call: string;
+        request: {
+            method: "GET" | "POST";
+            path: string;
+        };
+    }): Promise<unknown>;
     call(params: {
         name: string;
         input: {

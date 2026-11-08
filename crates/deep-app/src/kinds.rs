@@ -662,8 +662,8 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
     }
     let repo = project_of(events, &session);
     let words = match repo {
-        Some(repo) => format!("Saved for this repo ({repo})"),
-        None => "Saved for this session".to_owned(),
+        Some(repo) => format!("Saved for this project ({repo})"),
+        None => "Saved for this task".to_owned(),
     };
     let also = states::open_asks(events, None)
         .into_iter()
@@ -951,7 +951,7 @@ mod tests {
         let scope = model.scope.clone().unwrap();
         assert_eq!(
             (scope.words.as_str(), scope.also),
-            ("Saved for this session", 1)
+            ("Saved for this task", 1)
         );
         let also: Vec<String> = model
             .also_answers(&events)
@@ -1204,7 +1204,7 @@ mod tests {
         let scope = model.scope.clone().unwrap();
         assert_eq!(
             (scope.words.as_str(), scope.also),
-            ("Saved for this repo (my-shop)", 1)
+            ("Saved for this project (my-shop)", 1)
         );
         let also: Vec<String> = model
             .also_answers(&events)
@@ -1237,7 +1237,7 @@ mod tests {
         let scope = model.scope.clone().unwrap();
         assert_eq!(
             (scope.words.as_str(), scope.also),
-            ("Saved for this repo (docs)", 1)
+            ("Saved for this project (docs)", 1)
         );
 
         // The fold exception the core raised for a thread: no decision is saved from it, and it is never counted.
@@ -1282,7 +1282,7 @@ mod tests {
         odd.push(in_session("F", "s6"));
         odd.push(in_session("G", ""));
         let model = Model::read(&odd, "ask:F", 0).unwrap();
-        assert_eq!(model.scope.clone().unwrap().words, "Saved for this session");
+        assert_eq!(model.scope.clone().unwrap().words, "Saved for this task");
         assert!(Model::read(&odd, "ask:G", 0).unwrap().scope.is_none());
 
         // No project: the core saves for the session alone, though the worktree has a name.
@@ -1290,7 +1290,7 @@ mod tests {
         let scope = model.scope.clone().unwrap();
         assert_eq!(
             (scope.words.as_str(), scope.also),
-            ("Saved for this session", 0)
+            ("Saved for this task", 0)
         );
 
         // The core knows a session by its letters: "s-4" is s4.
@@ -1343,9 +1343,6 @@ mod tests {
         ];
         let model = Model::read(&events, "ask:X", 0).unwrap();
         assert_eq!(model.scope.as_ref().unwrap().also, 1);
-        assert_eq!(
-            model.scope.as_ref().unwrap().words,
-            "Saved for this session"
-        );
+        assert_eq!(model.scope.as_ref().unwrap().words, "Saved for this task");
     }
 }

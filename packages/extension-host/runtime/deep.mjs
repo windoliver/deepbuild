@@ -23,6 +23,8 @@ export const API = Object.freeze([
   // context's fetch), which adds the channel's token and holds the call to its settings.
   { method: 'deep.registerChannel', needs: null },
   { method: 'deep.channel.fetch', needs: null },
+  // #66: a work source's provider calls go through the hub too (its context's fetch), under the source's quota and secret.
+  { method: 'deep.work.fetch', needs: null },
   // #67: what a workspace touches; read, compare, undo and its fixture stay with the package.
   { method: 'deep.registerStateSource', needs: null },
   { method: 'deep.registerRoute', needs: null },
@@ -225,6 +227,14 @@ export function extensionSide(call, load, imports = (file) => import(file)) {
         const fn = migrations.get(params?.kind);
         if (!fn) throw Error(`no migration of ${params?.kind} is declared here`);
         return (await fn(params.from, params.value)) ?? null;
+      }
+      // A work source's list, item read, delivery or marker search (#66): its context's fetch is the hub's call, named by `call`.
+      if (method === 'work') {
+        const source = sources.get(params?.name);
+        const op = params?.op;
+        if (!source || !['list', 'item', 'deliver', 'find'].includes(op) || typeof source[op] !== 'function') throw Error(`no work source ${params?.name} with ${op} is registered here`);
+        const ctx = { fetch: (request) => call('deep.work.fetch', [params.call, request]) };
+        return (await source[op](ctx, params.arg)) ?? null;
       }
       if (method === 'source.parse' || method === 'source.read') {
         const source = sources.get(params?.name);

@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/doneright/github-issue-1348-7c5142/tests/acceptance/1348
+
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  11:17:31
+   Duration  1036.48s (tests 100%)
+
+
+[exited with code 0]

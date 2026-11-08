@@ -1,0 +1,29 @@
+{
+  "id": "deepbuild/linear",
+  "version": "1.0.0",
+  "digest": "d1:58f3903136ebe3e8beac535cae580a97d20883a854c0ad9b6889dde67f41a59c",
+  "access": {
+    "words": [
+      "hosts"
+    ]
+  },
+  "secrets": [
+    {
+      "name": "linear_key",
+      "for": "your Linear API key"
+    }
+  ],
+  "sources": [
+    {
+      "name": "ext.linear.issues",
+      "variant": "stream",
+      "reading": "work.item@1"
+    }
+  ],
+  "requires": {
+    "preview": [
+      "deep.registerSource",
+      "deep.secret"
+    ]
+  }
+}
