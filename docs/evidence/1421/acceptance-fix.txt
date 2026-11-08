@@ -1,0 +1,13 @@
+ 13:23:32 up 7 days, 17:36,  2 users,  load average: 16.09, 13.48, 9.94
+✔ a merge base whose real check workload's time report has no CPU line is refused as missing, never PASS (654.166703ms)
+✔ a checkout whose real check workload reports no CPU reading is refused as missing, never PASS (609.345244ms)
+✔ a trivial base check read as 0.00 0.00 CPU still gives the fixture its own PASS, not missing base cpuMs (558.665751ms)
+✔ a warm base check read as 0.00 0.00 CPU still gives the fixture its own FAIL for a regression, not missing base cpuMs (472.398626ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1346.371467
