@@ -3993,6 +3993,9 @@ pub fn frame_planted(
     zoom: f64,
     planted: Planted,
 ) -> Result<Frame, Refused> {
+    // #467: parallax groups moved to their offset at the record's time, repeats laid out.
+    let moved = crate::fields::apply(doc, items, record.pinned)?;
+    let items = moved.as_ref().unwrap_or(items);
     let bound = bound_texts(doc, items, record)?;
     frame_shown(
         doc,
@@ -4206,14 +4209,13 @@ fn ancestors(items: &Map<String, Value>, id: &str) -> Vec<String> {
 /// `id`'s rank among `items`: its z, or inside an isolated group that group's, then its chain.
 fn rank_of(items: &Map<String, Value>, id: &str, item: &Value) -> Rank {
     let node = |i: &str, it: &Value| {
-        (
-            band_of(it),
-            it.get("order")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string(),
-            i.to_string(),
-        )
+        let order = it.get("order").and_then(Value::as_str).unwrap_or("");
+        // #467: a `sort: y` group's child orders first by its sort anchor's y at t.
+        let order = match foot_key(items, i, it) {
+            Some(key) => format!("{key}\u{1}{order}"),
+            None => order.to_string(),
+        };
+        (band_of(it), order, i.to_string())
     };
     let mut z = z_of(item);
     let mut chain = Vec::new();
@@ -4226,6 +4228,42 @@ fn rank_of(items: &Map<String, Value>, id: &str, item: &Value) -> Rank {
     }
     chain.push(node(id, item));
     Rank { z, chain }
+}
+
+/// #467 (Frame and group: y sort): when `id`'s parent group sorts by y, the y of `id`'s sort
+/// anchor (the parent's `sort_anchor`, its foot by default) on its evaluated bounds, a group's
+/// the union of its descendants', as text that sorts as the number does.
+fn foot_key(items: &Map<String, Value>, id: &str, item: &Value) -> Option<String> {
+    let parent = items.get(item.get("parent")?.as_str()?)?;
+    let params = parent.get("params")?;
+    if params.get("sort").and_then(Value::as_str) != Some("y") {
+        return None;
+    }
+    let anchor = pair(params.get("sort_anchor")).unwrap_or([0.5, 1.0]);
+    let own = |it: &Value| {
+        let kind = it.get("kind").and_then(Value::as_str).unwrap_or_default();
+        let local = crate::relations::own_box(kind, object_or_empty(it.get("params")))?;
+        Some(crate::relations::placed(local, crate::relations::place_of(it, Some(local))))
+    };
+    let mut boxes: Vec<[f64; 4]> = own(item).into_iter().collect();
+    if item.get("kind").and_then(Value::as_str) == Some("group@1") {
+        for (cid, c) in items {
+            if ancestors(items, cid).iter().any(|a| a == id) {
+                boxes.extend(own(c));
+            }
+        }
+    }
+    let (y0, y1) = boxes.iter().fold((f64::MAX, f64::MIN), |(a, b), r| {
+        (a.min(r[1]), b.max(r[1] + r[3]))
+    });
+    if y0 > y1 {
+        return None;
+    }
+    let y = y0 + anchor[1] * (y1 - y0);
+    // f64 in total order as unsigned bits: negatives flipped whole, the rest with the sign set.
+    let bits = y.to_bits();
+    let ordered = if bits >> 63 == 1 { !bits } else { bits | (1 << 63) };
+    Some(format!("{ordered:016x}"))
 }
 
 /// Each item whose own z would lift it out of the isolated group it draws inside, with that

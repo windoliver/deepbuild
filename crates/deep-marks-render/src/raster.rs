@@ -1627,6 +1627,13 @@ pub fn path_answer(
                 &req.vectors,
                 deep_canvas_vector::Write::Honest,
             );
+            // #467: a parallax group's frame is its offset at t.
+            if let Some(o) = deep_canvas_marks::fields::group_offset(&req.doc, &items, &req.item, t)
+                .map_err(|r| refused(r.code, &r.path))?
+            {
+                frames.push(json!({"t": t, "parallax": {"offset": o}}));
+                continue;
+            }
             // The build alone is timed: the item through its ops, its heads and its digest (a
             // first pass over the frame only when an attachment needs other items' boxes).
             let started = std::time::Instant::now();
