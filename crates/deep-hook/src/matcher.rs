@@ -1115,7 +1115,7 @@ fn gh(run: &Run, subs: &[&[&str]]) -> bool {
 }
 
 /// The word of `gh api` naming a pull request's merge endpoint, `repos/<owner>/<repo>/pulls/<n>/merge`.
-fn merge_endpoint<'a>(run: &'a Run) -> Option<&'a str> {
+fn merge_endpoint(run: &Run) -> Option<&str> {
     if !run.is("gh") {
         return None;
     }
