@@ -632,7 +632,7 @@ impl Indexer {
             st,
         );
         let palette = init("indexed palette", bytemuck::cast_slice(&f.palette), st);
-        let bytes = u64::from(w) * u64::from(h) * 4;
+        let bytes = target_bytes([w, h]) / 2;
         let out = |label| {
             device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(label),
@@ -735,4 +735,10 @@ mod tests {
         }
         assert_eq!(super::class(), "exact");
     }
+}
+
+/// #465: the bytes of the GPU targets the indexed basis draws into at `size`: the index target
+/// and the resolved colors (light rides in the index), a u32 per target pixel each.
+pub fn target_bytes(size: [u32; 2]) -> u64 {
+    2 * u64::from(size[0]) * u64::from(size[1]) * 4
 }

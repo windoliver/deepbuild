@@ -1,0 +1,46 @@
+# #1523: the PR-delivery stop in the blind fixture is sent back by main's #1537 review check, not by this change
+
+tests/acceptance/1523/helpers.ts delivered() opens PR 12 and expects the stop not to be sent back, then a PASS on head.
+Since #1537 (packages/hub/src/core.ts, 'if (await this.prOf(r.session)) add("review", ...)'), every claim whose
+session has a PR gets a review check run by a second model. The blind fixture has none, the review crashes, the
+requirement stays unmet, and #82's prDelivery sends the stop back. AC5 (head.test.ts) and AC6 (auto.test.ts) start there.
+
+## Pure origin/main (d6463b71), none of this branch's code: the 1523 tests copied onto a main worktree, 2026-11-07
+start 2026-11-07T15:01:23-08:00 load 118.57 main d6463b71
+ × head.test.ts > AC5 #1523.d4c1de27 a GraphQL merge names its head by expectedHeadOid; gt merge can't, and is denied > AC5 #1523.d4c1de27 in a thread that names a merge, the GraphQL merge with no head and gt merge are denied by merge-names-head, gt merge's denial naming gh pr merge --match-head-commit, and the GraphQL merge with expectedHeadOid set to the PASS's commit runs 11336ms
+ FAIL  head.test.ts > AC5 #1523.d4c1de27 a GraphQL merge names its head by expectedHeadOid; gt merge can't, and is denied > AC5 #1523.d4c1de27 in a thread that names a merge, the GraphQL merge with no head and gt merge are denied by merge-names-head, gt merge's denial naming gh pr merge --match-head-commit, and the GraphQL merge with expectedHeadOid set to the PASS's commit runs
+Error: BLOCKED: AC5 #1523.d4c1de27 the stop on the passing head must not be sent back: exit 0 after 5017 ms, stdout "{\"decision\":\"block\",\"reason\":\"https://github.com/acme/shop/pull/12 · Part of · review: run: the review stopped before i… · 2 tests · next: agent\\nDeepBuild: https://github.com/acme/shop/pull/12 is open as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch, open no new one.\",\"systemMessage\":\"https://github.com/acme/shop/pull/12 · Part of · review: run: the review stopped before i… · 2 tests · next: agent\"}", stderr ""
+    121|   if (!ok) throw Error(message);
+ Test Files  1 failed (1)
+exit 1 load 114.80
+exit done
+
+## The merged tree (7142d280 = branch + origin/main), 2026-11-07
+== acceptance 1523 (verbose)
+ × head.test.ts > AC5 #1523.d4c1de27 a GraphQL merge names its head by expectedHeadOid; gt merge can't, and is denied > AC5 #1523.d4c1de27 in a thread that names a merge, the GraphQL merge with no head and gt merge are denied by merge-names-head, gt merge's denial naming gh pr merge --match-head-commit, and the GraphQL merge with expectedHeadOid set to the PASS's commit runs 9527ms
+ ✓ free.test.ts > AC3 #1523.2436253f the read-only forms of jj, gt and gh api go through > AC3 #1523.2436253f jj log, jj git fetch, gt log, gh api repos/acme/shop/pulls/3, gh api repos/acme/shop/pulls/3/merge each go through with no ask, in a thread whose prompts name none of push, PR or merge 7205ms
+ ✓ free.test.ts > AC3 #1523.2436253f the read-only forms of jj, gt and gh api go through > AC3 #1523.2436253f (wrong program) a matcher that holds every call to these programs (DEEP_HUB_PLANT=holds-every-program) fails this test, naming the call 2587ms
+ ↓ proceed.test.ts > AC7 #1523.bc21ee43 no proceed covers gh issue create: it is a send > AC7 #1523.bc21ee43 in the turn a planted sorter's proceed starts, gh issue create -t x is held with an authority ask whose card names the send; gh issue list runs 3676ms [INCONCLUSIVE deep-hook couldn't hand PostToolUse to the hub within its budget (deep-hook: spooled 01M6W3K2BXZ830SNYDXWFECV34, but its sync didn't finish within the hook's 50 ms), 1-minute load 114.7 on 20 cores]
+ × auto.test.ts > AC6 #1523.ea4ec67a jj pushes meet the armed --auto merge and name their remote on the card > AC6 #1523.ea4ec67a with gh pr merge --auto armed on branch b, jj git push --bookmark b is denied by merge-names-head; the card of jj git push --remote fork names fork 8694ms
+ ✓ unreadable.test.ts > AC4 #1523.fca551f5 a jj push whose program the line computes is denied by no-unreadable-push > AC4 #1523.fca551f5 "$(printf jj)" git push is denied by no-unreadable-push, naming $(printf jj), as "$(printf git)" push origin main is 2669ms
+ ✓ create-pr.test.ts > AC2 #1523.6933063f "create PR" covers gt submit; "push" alone doesn't > AC2 #1523.6933063f after "create PR" gt submit --stack runs; in a thread that says only "push" it is held as a PR 4293ms
+ ↓ held.test.ts > AC1 #1523.b593135b the new push, PR and merge forms are held in a thread that names none of them > AC1 #1523.b593135b jj git push --bookmark main, gt submit --stack, git town ship, sl push, glab mr merge 3, gh api graphql are each held with an authority ask whose card names the effect 2851ms [INCONCLUSIVE deep-hook couldn't hand UserPromptSubmit to the hub within its budget (deep-hook: spooled 01M6W3KNKAKVYNY9TQTDG44GHE, but its sync didn't finish within the hook's 50 ms), 1-minute load 111.7 on 20 cores]
+ ✓ calls.test.ts > AC1 #1523.b593135b the new push, PR and merge forms meet their effect classes in check mode > AC1 #1523.b593135b each of AC1's calls meets the effect classes its Scope line gives it; git push and gh pr merge still do 227ms
+ ✓ calls.test.ts > AC1 #1523.b593135b the new push, PR and merge forms meet their effect classes in check mode > AC1 #1523.b593135b (Scope) every new form the Scope names meets its classes: jj, sl, gt, git town, glab, a GraphQL merge or auto-merge, and gh issue create 230ms
+ ✓ calls.test.ts > AC3 #1523.2436253f the read-only forms of the same tools meet no push, PR, merge or send > AC3 #1523.2436253f jj log, jj git fetch, gt log and a gh api GET of a pull request or its merge endpoint meet none of effect:push, effect:pr, effect:merge, effect:send, unread:push; a PUT of the merge endpoint is still a merge 533ms
+ ✓ calls.test.ts > AC4 #1523.fca551f5 a jj push whose program the line computes meets unread:push > AC4 #1523.fca551f5 "$(printf jj)" git push meets unread:push, as "$(printf git)" push origin main does 66ms
+ ✓ calls.test.ts > Scope (install check) each new form lands with a planted call and a twin in the guard's install check > Scope (install check) for each new form, a default entry of its class ships a planted call of that form and a twin, and check mode matches the planted call and not the twin 522ms
+ ✓ hubdown.test.ts > AC8 #1523.da8f9b01 with the hub stopped the new forms go through and are spooled; the unreadable jj push stays denied > AC8 #1523.da8f9b01 git push origin HEAD, jj git push --bookmark main, gt submit --stack, git town ship, sl push, glab mr merge 3, gh api graphql, gh issue create -t x go through and are spooled with their effect entries; "$(printf jj)" git push is denied by no-unreadable-push 824ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  auto.test.ts > AC6 #1523.ea4ec67a jj pushes meet the armed --auto merge and name their remote on the card > AC6 #1523.ea4ec67a with gh pr merge --auto armed on branch b, jj git push --bookmark b is denied by merge-names-head; the card of jj git push --remote fork names fork
+Error: BLOCKED: AC6 #1523.ea4ec67a the stop on the passing head must not be sent back: exit 0 after 3623 ms, stdout "{\"decision\":\"block\",\"reason\":\"https://github.com/acme/shop/pull/12 · Part of · review: run: the review stopped before i… · 2 tests · next: agent\\nDeepBuild: https://github.com/acme/shop/pull/12 is open as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch, open no new one.\",\"systemMessage\":\"https://github.com/acme/shop/pull/12 · Part of · review: run: the review stopped before i… · 2 tests · next: a
+ FAIL  head.test.ts > AC5 #1523.d4c1de27 a GraphQL merge names its head by expectedHeadOid; gt merge can't, and is denied > AC5 #1523.d4c1de27 in a thread that names a merge, the GraphQL merge with no head and gt merge are denied by merge-names-head, gt merge's denial naming gh pr merge --match-head-commit, and the GraphQL merge with expectedHeadOid set to the PASS's commit runs
+Error: BLOCKED: AC5 #1523.d4c1de27 the stop on the passing head must not be sent back: exit 0 after 3954 ms, stdout "{\"decision\":\"block\",\"reason\":\"https://github.com/acme/shop/pull/12 · Part of · review: run: the review stopped before i… · 2 tests · next: agent\\nDeepBuild: https://github.com/acme/shop/pull/12 is open as Part of its issue, with review still unmet. Keep working on it in the same pull request: push to its branch, open no new one.\",\"systemMessage\":\"https://github.com/acme/shop/pull/12 · Part of · review: run: the review stopped before i… · 2 tests · next: a
+ Test Files  2 failed | 7 passed (9)
+      Tests  2 failed | 10 passed | 2 skipped (14)
+acceptance exit 1
+
+## The branch before the merge (22b50d6d, base 2bba2a50 without #1537), 2026-11-07 12:52: all 9 files passed
+ ✓ auto.test.ts (1 test) 8468ms
+ ✓ head.test.ts (1 test) 7512ms
+ Test Files  9 passed (9)
