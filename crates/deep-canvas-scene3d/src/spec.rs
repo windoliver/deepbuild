@@ -749,6 +749,9 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             unit("diffuse_roughness", 0.0, 0.0, 1.0),
             unit("retroreflection", 0.0, 0.0, 1.0),
             p("flakes", "{weight, size, tilt, color | base}", "m", Value::Null, S, Value::Null, json!({"weight": 1, "size": 0.001, "tilt": 15})),
+            // #465: the planar part it mirrors in; the sweep leaves it unset, since the fixture
+            // holds no planar part.
+            p("mirror", "{strength, blur: px, plane: named part}", "px", Value::Null, S, Value::Null, Value::Null),
             p(
                 "pattern",
                 "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",
@@ -810,6 +813,49 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
         "light.point@1" => local("light.point@1", false),
         "light.spot@1" => local("light.spot@1", true),
         "light.area@1" => local("light.area@1", false),
+        // #427: a light probe, captured or baked from what it sees; it draws nothing itself.
+        "light.probe@1" => Spec {
+            kind: "light.probe@1",
+            module: "scene3d",
+            params: vec![
+                p(
+                    "type",
+                    "reflection | irradiance",
+                    "",
+                    json!("reflection"),
+                    S,
+                    json!("reflection"),
+                    json!("irradiance"),
+                ),
+                p(
+                    "size",
+                    "vec3",
+                    "m",
+                    json!([4, 3, 4]),
+                    S,
+                    json!([4, 3, 4]),
+                    json!([2, 2, 2]),
+                ),
+                p(
+                    "shape",
+                    "box | ellipsoid",
+                    "",
+                    json!("box"),
+                    S,
+                    json!("box"),
+                    json!("ellipsoid"),
+                ),
+                ranged(
+                    p("falloff", "f32", "", json!(0.2), S, json!(0.2), json!(0.5)),
+                    0.0,
+                    1.0,
+                ),
+                p("priority", "i8", "", json!(0), S, json!(0), json!(1)),
+            ],
+            reads: None,
+            fixture: json!({"it": item("light.probe@1", json!({"type": "irradiance"})),
+                            "key": item("light.sun@1", json!({"illuminance": 10_000}))}),
+        },
         "material@1" => material(),
         // The sky and the soft cloud sprite (#422).
         "sky@1" => Spec {
@@ -963,6 +1009,25 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             ],
             reads: None,
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
+        },
+        // #465: an Effect item; scene3d draws `kind: flare` (Effect: flare).
+        "effect@1" => Spec {
+            kind: "effect@1",
+            module: "scene3d",
+            params: vec![
+                p("kind", "flare", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p(
+                    "flare",
+                    "{from: lights | {emissive: EV100}, ghosts: u8 <= 8, streak: {count: 0 | 2 | 4 | 6, length: ratio, anamorphic}, halo: ratio, starburst: {blades: u8}, intensity, tint: role}",
+                    "",
+                    Value::Null,
+                    S,
+                    json!({"from": "lights", "ghosts": 4}),
+                    json!({"from": "lights", "ghosts": 6, "halo": 0.05}),
+                ),
+            ],
+            reads: None,
+            fixture: json!({"it": item("effect@1", json!({"kind": "flare", "flare": {"from": "lights", "ghosts": 4}}))}),
         },
         // #424: the cutaway and the instancer.
         "cutaway@1" => Spec {
@@ -1650,7 +1715,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 24] = [
+pub const SCENE3D: [&str; 25] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -1661,6 +1726,7 @@ pub const SCENE3D: [&str; 24] = [
     "light.point@1",
     "light.spot@1",
     "light.area@1",
+    "light.probe@1",
     "material@1",
     "sky@1",
     "puff@1",

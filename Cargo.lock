@@ -1980,6 +1980,7 @@ dependencies = [
  "deep-gpu",
  "deep-marks-gpui",
  "deep-text-gpui",
+ "ed25519-dalek",
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-shell",
@@ -2042,6 +2043,15 @@ name = "deep-canvas-graph"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "serde_json",
+]
+
+[[package]]
+name = "deep-canvas-input"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-motion",
  "serde_json",
 ]
 
@@ -2220,6 +2230,7 @@ dependencies = [
  "image",
  "libc",
  "meshopt",
+ "naga 30.0.1",
  "serde_json",
  "sha2 0.11.1",
  "wgpu 30.0.1",
@@ -2231,6 +2242,14 @@ name = "deep-hook"
 version = "0.0.0"
 dependencies = [
  "deep-contracts",
+]
+
+[[package]]
+name = "deep-input"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-input",
+ "serde_json",
 ]
 
 [[package]]
@@ -2344,8 +2363,10 @@ version = "0.0.0"
 dependencies = [
  "bytemuck",
  "deep-canvas-effects",
+ "deep-canvas-marks",
  "deep-canvas-scene3d",
  "deep-gpu",
+ "naga 30.0.1",
  "serde_json",
  "wgpu 30.0.1",
  "wgpu-profiler",
@@ -2359,6 +2380,7 @@ dependencies = [
  "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-graph",
+ "deep-canvas-input",
  "deep-canvas-loop",
  "deep-canvas-marks",
  "deep-canvas-motion",

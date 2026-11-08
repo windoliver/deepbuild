@@ -1,0 +1,103 @@
+# #1329 acceptance tests: the run on the base, and the planted programs
+
+## The base (9bdebdfb, origin/main, no implementation), in this checkout, run once
+
+$ node --test 'tests/acceptance/1329/*.test.mjs'
+(stack-trace lines dropped; gh signed in, network on)
+
+All eight fail. Criterion 1's text test fails on CONTRIBUTING.md's "`docs/` is generated" line; the other seven stop
+at NO LANE, because the base has neither a drift lane nor a public-text lane.
+
+✖ #1329.6069ef82 criterion 1: CONTRIBUTING.md names docs/technical-design.md and docs/canvas-primitives.md as the source, and no longer says docs/ is generated or not to be edited (2.336792ms)
+✖ #1329.6069ef82 criterion 1: a design change committed in the repo is what the lanes read: an open issue naming `deep zorptangle` and its heading fails the drift lane before it, and the drift, design links and public-text lanes pass after it (96557.095375ms)
+✖ #1329.bbfb846d criterion 2: an open issue (9605, the 36th of 40) naming `deep zorptangle`, which the design doesn't hold, fails the drift lane, naming the issue and the command (95975.519417ms)
+✖ #1329.bbfb846d criterion 2: an open issue (9605) whose design link is technical-design.md#no-such-heading-1329 fails the drift lane, naming the issue and the link (81810.190375ms)
+✖ #1329.bbfb846d criterion 2, clean twin: 40 open issues naming only commands and tools the design holds, linking real headings, and #9601 naming `deep quuxify` and `deep_quuxify` from the planned-names list, pass the drift lane (73217.416042ms)
+✖ #1329.c6aca305 criterion 3: a change whose text holds the studied name Zorblax fails the public-text lane, and its output holds no other listed name, no listed hash and no salt-free hash (96980.2045ms)
+✖ #1329.c6aca305 criterion 3, twin: the same change with the common word "window" in place of Zorblax passes the public-text lane (81040.118ms)
+✖ #1329.077043aa criterion 4 (live): the drift lane passes on the real docs and every real open issue, and each planned-names entry lists the open issue that names it (97412.268ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 251603.532666
+
+✖ failing tests:
+
+test at tests/acceptance/1329/ac1-design-source.test.mjs:12:1
+✖ #1329.6069ef82 criterion 1: CONTRIBUTING.md names docs/technical-design.md and docs/canvas-primitives.md as the source, and no longer says docs/ is generated or not to be edited (2.336792ms)
+  AssertionError [ERR_ASSERTION]: CONTRIBUTING.md still says the docs are generated
+  + actual - expected
+  
+  + [
+  +   "- `docs/` is generated from the design, so don't edit it in a feature pull request. Propose a design change in an issue."
+  + ]
+  - []
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "- `docs/` is generated from the design, so don't edit it in a feature pull request. Propose a design change in an issue." ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1329/ac1-design-source.test.mjs:25:1
+✖ #1329.6069ef82 criterion 1: a design change committed in the repo is what the lanes read: an open issue naming `deep zorptangle` and its heading fails the drift lane before it, and the drift, design links and public-text lanes pass after it (96557.095375ms)
+  Error: no drift lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes for the drift lane (/\bnames?\b/i), of ["typecheck","lint","unit","contracts","interfaces","noop","seams","relay","wasm32","catalogue drift","design links","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+  
+
+test at tests/acceptance/1329/ac2-drift-lane.test.mjs:17:1
+✖ #1329.bbfb846d criterion 2: an open issue (9605, the 36th of 40) naming `deep zorptangle`, which the design doesn't hold, fails the drift lane, naming the issue and the command (95975.519417ms)
+  Error: no drift lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes for the drift lane (/\bnames?\b/i), of ["typecheck","lint","unit","contracts","interfaces","noop","seams","relay","wasm32","catalogue drift","design links","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+  
+
+test at tests/acceptance/1329/ac2-drift-lane.test.mjs:25:1
+✖ #1329.bbfb846d criterion 2: an open issue (9605) whose design link is technical-design.md#no-such-heading-1329 fails the drift lane, naming the issue and the link (81810.190375ms)
+  Error: no drift lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes for the drift lane (/\bnames?\b/i), of ["typecheck","lint","unit","contracts","interfaces","noop","seams","relay","wasm32","catalogue drift","design links","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+  
+
+test at tests/acceptance/1329/ac2-drift-lane.test.mjs:33:1
+✖ #1329.bbfb846d criterion 2, clean twin: 40 open issues naming only commands and tools the design holds, linking real headings, and #9601 naming `deep quuxify` and `deep_quuxify` from the planned-names list, pass the drift lane (73217.416042ms)
+  Error: no drift lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes for the drift lane (/\bnames?\b/i), of ["typecheck","lint","unit","contracts","interfaces","noop","seams","relay","wasm32","catalogue drift","design links","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+  
+
+test at tests/acceptance/1329/ac3-public-text.test.mjs:29:1
+✖ #1329.c6aca305 criterion 3: a change whose text holds the studied name Zorblax fails the public-text lane, and its output holds no other listed name, no listed hash and no salt-free hash (96980.2045ms)
+  Error: no public lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes for the public lane (/\bpublic\b/i), of ["typecheck","lint","unit","contracts","interfaces","noop","seams","relay","wasm32","catalogue drift","design links","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+  
+
+test at tests/acceptance/1329/ac3-public-text.test.mjs:40:1
+✖ #1329.c6aca305 criterion 3, twin: the same change with the common word "window" in place of Zorblax passes the public-text lane (81040.118ms)
+  Error: no public lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes for the public lane (/\bpublic\b/i), of ["typecheck","lint","unit","contracts","interfaces","noop","seams","relay","wasm32","catalogue drift","design links","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+  
+
+test at tests/acceptance/1329/ac4-live-issues.live.test.mjs:13:1
+✖ #1329.077043aa criterion 4 (live): the drift lane passes on the real docs and every real open issue, and each planned-names entry lists the open issue that names it (97412.268ms)
+  Error: no drift lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes for the drift lane (/\bnames?\b/i), of ["typecheck","lint","unit","contracts","interfaces","noop","seams","relay","wasm32","catalogue drift","design links","corpus","canvas kit","parity quick","proof","verdict proofs","config eval"]
+
+## The harness against a planted fix (before the base run, in this checkout, reverted after)
+
+To check the harness can pass, I planted a crude fix in this worktree and ran the suite once: a `design names` lane
+(scripts/design-names.mjs: backticked `deep …` and `deep_…` names in each open issue must appear in backticks in the
+docs or in scripts/planned-names.txt, and each blob link into docs/*.md must land on a slugged heading), a
+`public text` lane (scripts/public-text.mjs: every word of each file the change touches, hashed with the salt from
+scripts/studied-names.json), both added to `checks` after `design links`, and CONTRIBUTING.md's line rewritten to
+name the two docs as the source. All seven offline tests passed (each 2 to 4 minutes on a Mac at load average ~600,
+where the throttle holds lanes). The plant was then removed and scripts/lanes.mjs and CONTRIBUTING.md restored from
+git before the base run above; none of it is part of this suite.
+
+The live test against that plant first timed out at the helper's old 300 s limit (now 900 s; a stopped run reads
+INCONCLUSIVE). Rerun, the planted lane read the live open issues and FAILed with 32 drifts (`deep pair` in #1572,
+`deep memory` in #1568, `deep help` in #1359, `deep work show` in #1332 and so on), so the test failed as it should.
+That count is the crude plant's reading, not the Proof's "before".

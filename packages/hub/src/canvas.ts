@@ -81,6 +81,7 @@ export async function exportCommand(args: readonly string[]): Promise<number> {
       sessions: [{ id: EXPORTER, thread: EXPORTER, name: 'deep export' }],
       record: {},
       file: { panels: { still: { rect: [0, 0, 1, 1] } }, docs: { [STILL_DOC]: { panel: 'still', document } } },
+      docs: [STILL_DOC],
     };
     const { reply: at } = await canvas.call(world, { call: 'time', doc: STILL_DOC, text: /^\d+$/.test(still) ? `${still}f` : `@${still}` });
     if (typeof at.t !== 'number') {
@@ -117,6 +118,8 @@ export interface CanvasWorld {
   record: Obj;
   /** The panels, documents, claims, window, card and fault of the world file; empty without one. */
   file: Obj;
+  /** The documents shown so far, each on the app's one canvas panel unless the world file places it. */
+  docs: string[];
 }
 
 /** One call to the canvas core: who it writes as, and #393's call fields. */
@@ -179,11 +182,15 @@ export class Canvas {
   }
 }
 
+/** The panel a document draws on with no world file: the app's canvas panel, the app laying its rect out in a session's page (#1454). */
+const PANEL = 'main';
+const PANELS = { [PANEL]: { rect: [0, 0, 800, 600] } };
+
 /** The world as `deep-show canvas` reads it: #393's scenario fields, sessions keyed by session ID. */
 function shape(world: CanvasWorld, evidence: string): Obj {
   const sessions: Obj = {};
   for (const s of world.sessions) sessions[s.id] = { thread: s.thread, name: s.name, process: { pid: 0, start: 0 } };
-  const out: Obj = { evidence, sessions, record: world.record };
+  const out: Obj = { evidence, sessions, record: world.record, panels: PANELS, docs: Object.fromEntries(world.docs.map((doc) => [doc, { panel: PANEL }])) };
   for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault']) if (world.file[key] !== undefined) out[key] = world.file[key];
   return out;
 }

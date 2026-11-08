@@ -1,0 +1,8 @@
+{
+  "id": "test/overlay",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["record"] },
+  "panels": [{ "name": "ext.overlay.view", "area": "sidebar" }],
+  "requires": { "preview": ["deep.registerView"] }
+}

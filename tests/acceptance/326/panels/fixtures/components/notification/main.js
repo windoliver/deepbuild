@@ -2,9 +2,7 @@
 // a 240 x 400 point button at the center of the panel; a click there pushes a notification that
 // stays up, which the window draws in its top-right corner, inside the question card's rect
 // unless the host keeps it off.
-import { View } from "gpui-kit";
-import { v_flex } from "gpui-base";
-import { Notification } from "gpui-component";
+import { View, v_flex, Notification } from "@deepbuild/panel";
 
 export default class NotificationFixture extends View {
   render() {

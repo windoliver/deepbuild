@@ -267,7 +267,7 @@ fn check_by(
                 Tail::Budget => budget_check(&lowered, sealed, coefficients, &mut issues),
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
-                    check_controls(&lowered, &mut issues);
+                    check_controls(&lowered, sealed, &mut issues);
                     check_time_remaps(&lowered, &expansions, &mut issues);
                     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
                     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
@@ -483,7 +483,11 @@ fn lights_check(lowered: &Value, issues: &mut Vec<Issue>) {
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
-        .filter(|(_, item)| kind_text(item).is_some_and(|k| k.starts_with("light.")))
+        // A probe (#427) is no light: it captures light and gives none.
+        .filter(|(_, item)| {
+            kind_text(item)
+                .is_some_and(|k| k.starts_with("light.") && !k.starts_with("light.probe@"))
+        })
         .map(|(id, _)| id.clone())
         .collect();
     if lights.len() as u64 > cap {
@@ -1870,6 +1874,11 @@ fn check_params(
                                 param.max.unwrap_or(f64::INFINITY)
                             ),
                         ));
+                    } else if param.unit == "Hz" {
+                        // A step rate (issue #497): valid only with a whole-flick step.
+                        if let Err(why) = crate::time::step_length(n) {
+                            issues.push(Issue::error("bad_rate", key, path(), json!(n), &why));
+                        }
                     }
                 }
             }
@@ -1945,7 +1954,9 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
 /// Every control carries a role, so a screen reader can say what it is (Rules every primitive
 /// follows: Accessible; Control: `role`, an ARIA role). A control without one is refused, naming
 /// the control and the field; the section and its keys are [`check_id_maps`]'s.
-fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
+/// A control `kind` is an entry of the input module's `control@1` (#308), so a build whose set
+/// holds the input module and that left it out refuses one with `module_missing`, naming it.
+fn check_controls(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
     let Some(entries) = member(doc, "controls").and_then(Value::as_object) else {
         return;
     };
@@ -1953,6 +1964,17 @@ fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
         let Some(fields) = entry.as_object() else {
             continue;
         };
+        if let Some(kind) = fields.get("kind").and_then(Value::as_str) {
+            if sealed.lacks("input") {
+                issues.push(Issue::error(
+                    "module_missing",
+                    key,
+                    format!("controls/{key}/kind"),
+                    json!(kind),
+                    &format!("control kind `{kind}` is the input module's, which this build lacks"),
+                ));
+            }
+        }
         let what = match fields.get("role") {
             None => "required, and absent",
             Some(Value::String(role)) if !role.is_empty() => continue,
@@ -2174,11 +2196,13 @@ const BOUND_VALUE_FIELDS: &[&str] = &[
     "missing",
 ];
 
-/// The transport's `frame_rate` as `[p, q]`, or as `p/q` text, when it is one.
+/// The transport's `frame_rate` as `[p, q]`, as `p/q` text, or as a whole number `p` (p/1),
+/// when it is one.
 pub fn frame_rate_of(transport: &Value) -> Option<(u32, u32)> {
     let whole = |v: &Value| u32::try_from(v.as_u64()?).ok();
     match member(transport, "frame_rate")? {
         Value::Array(pq) if pq.len() == 2 => Some((whole(&pq[0])?, whole(&pq[1])?)),
+        n @ Value::Number(_) => Some((whole(n)?, 1)),
         Value::String(s) => {
             let (p, q) = s.split_once('/').unwrap_or((s, "1"));
             Some((p.trim().parse().ok()?, q.trim().parse().ok()?))

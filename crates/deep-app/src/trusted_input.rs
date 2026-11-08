@@ -144,8 +144,21 @@ impl Gate {
     }
 }
 
+/// Which edge of a mouse press is being delivered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PressEdge {
+    Down,
+    Up,
+}
+
 #[cfg(target_os = "macos")]
 pub use macos::*;
+
+/// No platform here names a press's source yet.
+#[cfg(not(target_os = "macos"))]
+pub fn delivered(_: PressEdge) -> Option<(f64, bool)> {
+    None
+}
 
 #[cfg(target_os = "macos")]
 mod macos {
@@ -169,7 +182,7 @@ mod macos {
     use objc2_foundation::NSPoint;
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-    use super::{Gate, Key, Provenance, SHORTCUT_KEY_CODE};
+    use super::{Gate, Key, PressEdge, Provenance, SHORTCUT_KEY_CODE};
 
     /// One event the monitor saw, for the record.
     #[derive(Clone, Debug)]
@@ -201,6 +214,30 @@ mod macos {
         let any = (0u16..128).any(|key_code| CGEventSource::key_state(hid, key_code));
         let option = CGEventSource::flags_state(hid).contains(CGEventFlags::MaskAlternate);
         (any, option)
+    }
+
+    /// The left-button event AppKit is delivering, as the question card judges a press on it (#1454): its age in ms and
+    /// whether the HID system says the button did this, in the state `kind` names. GPUI delivers a press a screen reader
+    /// sends as a mouse down and up with no AppKit event of their own, and the current event is then whatever came last,
+    /// so a click counts as hardware only when its down and its up each find their own event here.
+    pub fn delivered(kind: PressEdge) -> Option<(f64, bool)> {
+        let event = NSApplication::sharedApplication(main_thread()).currentEvent()?;
+        let (wanted, down) = match kind {
+            PressEdge::Down => (NSEventType::LeftMouseDown, true),
+            PressEdge::Up => (NSEventType::LeftMouseUp, false),
+        };
+        if event.r#type() != wanted {
+            return None;
+        }
+        let (_, seen) = provenance(&event);
+        let hid = CGEventSourceStateID::HIDSystemState;
+        let button =
+            CGEventSource::button_state(hid, objc2_core_graphics::CGMouseButton::Left) == down;
+        let age = objc2_foundation::NSProcessInfo::processInfo().systemUptime() - event.timestamp();
+        Some((
+            (age * 1000.).max(0.),
+            button && seen.source_state == Some(hid.0 as i64) && seen.source_pid == Some(0),
+        ))
     }
 
     /// Reads the event's provenance fields through its `CGEvent`.

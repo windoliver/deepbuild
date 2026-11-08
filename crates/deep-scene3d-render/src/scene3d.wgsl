@@ -194,7 +194,7 @@ struct Env {
     fog: vec4<f32>,
     // Its color; w 1 to mix toward what the background shows instead.
     fog_color: vec4<f32>,
-    // x: 1 when the background shows the environment; y: its blur's mip; z, w: its ground's
+    // x: 1 when the background shows the environment; y: its blur's roughness; z, w: its ground's
     // height and radius (w 0 for none).
     bg: vec4<f32>,
     // The sun the sky follows: toward it and the cosine of its disk's radius (w 2 for none); its
@@ -207,6 +207,9 @@ struct Env {
 @group(1) @binding(4) var env_sampler: sampler;
 @group(1) @binding(5) var<uniform> env: Env;
 @group(1) @binding(6) var env_cube_to: texture_cube<f32>;
+// The blurred background's own cubes (#426), from and to: one mip at the blur's roughness.
+@group(1) @binding(18) var env_bg: texture_cube<f32>;
+@group(1) @binding(19) var env_bg_to: texture_cube<f32>;
 // The cascades' depth comparison: lit where the point lies no deeper than the map holds.
 @group(1) @binding(7) var shadow_cmp: sampler_comparison;
 
@@ -2246,6 +2249,23 @@ fn shadow_fs(in: MeshOut) {
 
 // The ao prepass (#418): an opaque solid's world normal; its depth goes to the prepass's own
 // depth target.
+// The core's emission target (#431): the emitted radiance of an opaque solid where it shows, its
+// emission map applied, before fog, adjust and bloom; see-through solids and what a cutaway
+// removes write none.
+@fragment
+fn emission_fs(in: MeshOut) -> @location(0) vec4<f32> {
+    let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
+    if in.emission.w < 1.0 || ((in.flags & CUT) != 0u && cut_hides(in.world))
+        || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x) {
+        discard;
+    }
+    var e = in.emission.rgb;
+    if (in.flags & MAPS) != 0u && has_map(4u) {
+        e = e * fetch(4u, map_emission, sampler_emission, in.uv, g).rgb;
+    }
+    return vec4<f32>(e, 1.0);
+}
+
 @fragment
 fn ao_normal_fs(in: MeshOut) -> @location(0) vec4<f32> {
     // A see-through solid writes no occlusion depth, nor what a cutaway removes (#424); a band
@@ -2761,7 +2781,13 @@ fn background(d: vec3<f32>) -> vec3<f32> {
         }
         dir = normalize(p - c);
     }
-    return env_radiance(dir, env.bg.y) * env.k.z;
+    if env.bg.y > 0.0 {
+        let e = env_dir(dir);
+        let a = textureSampleLevel(env_bg, env_sampler, e, 0.0).rgb;
+        let b = textureSampleLevel(env_bg_to, env_sampler, e, 0.0).rgb;
+        return select(a, mix(a, b, env.m.x), env.m.x > 0.0) * env.k.z;
+    }
+    return env_radiance(dir, 0.0) * env.k.z;
 }
 
 @fragment

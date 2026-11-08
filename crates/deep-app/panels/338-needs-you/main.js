@@ -1,8 +1,6 @@
 // Issue #338, the fixture panel: a Needs you view written against the registry, one row per
 // open ask in the inbox projection's order. The kit `needs-you@1` passes it.
-import { View, div } from "gpui-kit";
-import { DockArea, v_flex } from "gpui-base";
-import { needs_you } from "deepbuild";
+import { View, div, DockArea, v_flex, needs_you } from "@deepbuild/panel";
 
 class NeedsYou extends View {
   init() {

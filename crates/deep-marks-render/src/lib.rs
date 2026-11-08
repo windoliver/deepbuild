@@ -295,7 +295,7 @@ fn doc(value: Option<&Value>) -> Option<Map<String, Value>> {
 /// module's) and R1's mark sets, axes and scales (the data module's).
 fn drawn_here(kind: &Value) -> bool {
     let name = kind.as_str().and_then(|k| k.split('@').next());
-    matches!(name, Some("vector" | "marks" | "axis" | "scale"))
+    matches!(name, Some("vector" | "marks" | "axis" | "scale" | "tiles.terrain"))
 }
 
 /// Each imported `vector@1` item by ID (#398).
@@ -308,7 +308,7 @@ fn check(
     doc: &Map<String, Value>,
     look: Option<&Look>,
     store: Option<&Path>,
-    (twin, distance_0_03): (Twin, bool),
+    (twin, distance_0_03, twin_parallax): (Twin, bool, bool),
 ) -> (Value, Vectors) {
     let result = deep_canvas::document::check(&Value::Object(doc.clone()));
     // This binary draws vector@1 and R1's mark sets, axes and scales itself, so their modules
@@ -321,6 +321,23 @@ fn check(
             !(i.code == "module_missing" && (drawn_here(&i.actual) || effects))
         })
         .collect();
+    // #467: each terrain recipe expands here into its mark set, its choice fixed by its seed.
+    let mut expansions = Vec::new();
+    for (id, item) in doc.get("items").and_then(Value::as_object).into_iter().flatten() {
+        if item.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND) {
+            continue;
+        }
+        match deep_canvas_marks::terrain::expand(id, item) {
+            Ok((name, derived)) => expansions.push(json!({"instance": id, "derived": {name: derived}})),
+            Err(r) => issues.push(deep_canvas::document::Issue::error(
+                r.code,
+                id,
+                r.path,
+                Value::Null,
+                "the terrain recipe can't expand as its params say",
+            )),
+        }
+    }
     let (found, vectors) = deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), twin);
     issues.extend(found);
     // #406: a quote's raw bytes against its source's, and a formula's numbers.
@@ -367,7 +384,9 @@ fn check(
     if let (true, Some(look)) = (ok, look) {
         let mut drawn = doc.clone();
         if let Some(Value::Object(items)) = doc.get("items") {
-            let items = deep_canvas_vector::lower_items(items, &vectors, Default::default());
+            let mut items = deep_canvas_vector::lower_items(items, &vectors, Default::default());
+            // A terrain draws as the atlas set it expands into, which marks2d doesn't check.
+            items.retain(|_, i| i.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND));
             // #399: graphs draw as marks2d's items, and labels place where the view draws them.
             let items = match graphs::lower(doc, &items, &vectors, Default::default()) {
                 Ok((mut items, _)) => {
@@ -390,7 +409,12 @@ fn check(
         // An issue on an item a vector draws as names the vector.
         // #417 AC9's wrong check compares against 0.03 in place of the look's status distance.
         let min = distance_0_03.then_some(0.03);
-        for mut issue in deep_canvas_marks::check::check(&drawn, look, min) {
+        // #467 AC6's wrong check compares a band's offsets without the repeat's modulo.
+        let unwrapped = twin_parallax;
+        let checked = deep_canvas_marks::check::check(&drawn, look, min);
+        let checked = checked.into_iter().filter(|i| !(unwrapped && i.code == "parallax_loop_jump"));
+        let planted = unwrapped.then(|| deep_canvas_marks::fields::loop_issues(doc, false));
+        for mut issue in checked.chain(planted.into_iter().flatten()) {
             for id in issue.ids.iter_mut() {
                 if let Some(v) = vectors.keys().find(|v| id.starts_with(&format!("{v}."))) {
                     *id = v.clone();
@@ -409,6 +433,7 @@ fn check(
         "numbers": numbers,
         "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
         "lowered": result.lowered,
+        "expansions": expansions,
     });
     (answer, vectors)
 }
@@ -547,6 +572,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     }
     let skips = import_twin(input);
     let near = distance_0_03(input);
+    let unwrapped = input.get("planted").and_then(Value::as_str) == Some("parallax_without_modulo");
     let store_dir = store(input.get("store"))?;
     if command == "path" {
         let planted = match input.get("planted") {
@@ -580,7 +606,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
-            (skips, near),
+            (skips, near, unwrapped),
         );
         if let Some(refused) = refused_by_check(&checked) {
             return Some(Answer::Now(refused));
@@ -602,6 +628,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         if input.get("planted").is_some()
             && skips == Twin::Honest
             && !near
+            && !(unwrapped && command == "check")
             && !(straight && command == "geometry")
         {
             return None;
@@ -611,7 +638,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
-            (skips, near),
+            (skips, near, unwrapped),
         );
         let timing = input.get("timing") == Some(&Value::Bool(true));
         if command == "check" {
@@ -673,7 +700,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             Some(&look),
             store_dir.as_deref(),
-            (Twin::Honest, false),
+            (Twin::Honest, false, false),
         );
         if let Some(refusal) = refused_by_check(&checked) {
             return Some(Answer::Now(refusal));
@@ -731,7 +758,11 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 if p == "write_fades_fills_from_start"
                     || p == "import_skips_clip_path"
                     || p == "import_drops_marker"
-                    || p == "status_distance_0_03" =>
+                    || p == "status_distance_0_03"
+                    || p == "triangle_peaks_at_start"
+                    || p == "on_curve_left_edge"
+                    || p == "roll_moves_every_grapheme"
+                    || p == "weight_snaps_to_static" =>
             {
                 (Planted::None, false, false)
             }
@@ -789,18 +820,36 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             look,
             config,
             blend_inputs,
+            text_plant: match input.get("planted").and_then(Value::as_str) {
+                Some("triangle_peaks_at_start") => {
+                    deep_canvas_marks::animator::Plant::TrianglePeaksAtStart
+                }
+                Some("on_curve_left_edge") => deep_canvas_marks::animator::Plant::OnCurveLeftEdge,
+                Some("roll_moves_every_grapheme") => {
+                    deep_canvas_marks::animator::Plant::RollMovesEveryGrapheme
+                }
+                _ => deep_canvas_marks::animator::Plant::None,
+            },
+            snaps_weight: input.get("planted").and_then(Value::as_str)
+                == Some("weight_snaps_to_static"),
         };
         let mut request = request;
+        // #496: the runs this line shapes, its check included, counted from here.
+        deep_text::cache::record();
+        let _ = deep_text::cache::take_log();
+        raster::preshape(&request);
         let (checked, vectors) = check(
             &request.doc,
             Some(&request.look),
             request.store.as_deref(),
-            (skips, near),
+            (skips, near, unwrapped),
         );
         request.vectors = vectors;
-        return Some(Answer::Now(
-            refused_by_check(&checked).unwrap_or_else(|| raster::answer(request)),
-        ));
+        let mut answer = refused_by_check(&checked).unwrap_or_else(|| raster::answer(request));
+        if answer.get("ok") == Some(&Value::Bool(true)) {
+            answer["shaped"] = json!(deep_text::cache::take_log().len());
+        }
+        return Some(Answer::Now(answer));
     }
     let request = match command {
         "frames" => {

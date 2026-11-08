@@ -144,14 +144,17 @@ describe('AC13 every closed enum says exhaustive or extensible, and an extensibl
   });
 
   it('AC13 a reader built at the earlier minor reads the new stop cause as unknown, which makes no result pass', () => {
-    const earlier = getSchema(FACTS);
     const claude = readJson(join(REPO, 'adapters', 'claude-code.facts.json'));
+    // The earlier reader is the schema the shipped facts declare: they moved past adapter.facts@1 to a later major
+    // (owner-approved on 2026-11-07, #13).
+    const facts = String(getAt(claude, '/schema'));
+    const earlier = getSchema(facts);
     const at = '/stop/cause/payload/values/rate_limit';
     expect(getAt(claude, at), 'the shipped facts map rate_limit to a cause').toBeDefined();
     const later = setAt(claude, at, 'quota_paused');
     const served = serveAt(earlier, later);
     expect(getAt(served, at)).toBe('unknown');
-    expectAccepted(validate(FACTS, served), 'what the earlier reader sees');
+    expectAccepted(validate(facts, served), 'what the earlier reader sees');
     // Everything else is as it was.
     expect(setAt(served, at, getAt(claude, at)!)).toEqual(claude);
     // unknown is never a success: in every extensible code family it judges below PASS.

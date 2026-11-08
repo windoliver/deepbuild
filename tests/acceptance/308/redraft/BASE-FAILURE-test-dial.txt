@@ -1,0 +1,26 @@
+Base: c3978da0 (#308: dispute of the deep-canvas input surface, and its blind redraft).
+
+What was run: no build. The working tree holds someone's uncommitted crate changes (crates/deep-show/Cargo.toml among
+them), so a cargo build here would not be the base. The base's manifest was read from git instead:
+
+$ git show c3978da0:crates/deep-show/Cargo.toml | grep -n test-control-kind
+exit=1 (grep: 1 = no match)
+
+$ git show c3978da0:crates/deep-show/Cargo.toml | grep -n -A40 "^\[features\]"   (excerpt)
+26:[features]
+27-default = ["full"]
+...
+50-test-leave-out-motion = []
+...
+(no test-control-kind, no test-leave-out-input)
+
+$ git ls-tree -r --name-only c3978da0 crates | grep -c -e deep-canvas-input -e "crates/deep-input/"
+0
+
+Why the redrafted test fails there, for the expected reason: its first step is builds.bin(TEST_KIND), i.e.
+`cargo build --locked --bin deep-show --no-default-features --features full,test-control-kind`. deep-show at the base
+has no feature `test-control-kind`, so cargo refuses the build and the test fails at its first assertion,
+"the binary builds: deep-show with features full,test-control-kind", before any seal or registry check. That is the
+expected reason: neither the input module nor its test kind exists at the base.
+
+Not run: the build itself and vitest (against the working tree, by instruction).

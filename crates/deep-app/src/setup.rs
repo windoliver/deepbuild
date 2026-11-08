@@ -1,14 +1,16 @@
 //! Issue #326: the one Set up click. It runs the same steps as `deep setup` (the hooks in watch-only mode, the
 //! safety rules, the hub at login) and says so in one line. The first launch's button and `deep-app --set-up` both
-//! call [`set_up`]. R1 builds the app from the checkout, so it runs the `deep` on your login shell's PATH, else the
-//! checkout's CLI. Issue #41: an app opened from Finder has launchd's short PATH, so Set up reads your login shell's
-//! PATH once and runs `deep` from it, and names a login shell it can't read.
+//! call [`set_up`]; the button through [`start`], so the window keeps drawing while it runs (#1556). Issue #41: an app
+//! opened from Finder has launchd's short PATH, so Set up reads your login shell's PATH once and runs `deep` from it,
+//! else the checkout's CLI, and names a login shell it can't read.
 
 use std::{
+    cell::Cell,
     io::Read,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
+    sync::mpsc::{self, Receiver},
     time::{Duration, Instant},
 };
 
@@ -18,12 +20,22 @@ const LOGIN_SHELL_WAIT: Duration = Duration::from_secs(5);
 /// What the click says once it's done; the first `deep` command says the same (packages/hub/src/setup.ts).
 pub const SET_UP_LINE: &str = "DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo's checks, and started the hub at login; deep setup --undo removes it all.";
 
+thread_local! {
+    /// A replica has no machine to set up: its record stands for one that finished.
+    static ASSUMED: Cell<bool> = const { Cell::new(false) };
+}
+
+pub fn assume_finished() {
+    ASSUMED.with(|assumed| assumed.set(true));
+}
+
 /// Whether setup hasn't finished in this home, so the window shows the Set up button (#1002): nothing of DeepBuild
 /// is here yet, or a setup started and didn't finish. Setup's first step writes `~/.deepbuild/setup-stopped.json` and
 /// its last writes `setup-finished.json` and takes the first away (packages/hub/src/setup.ts).
 pub fn needed() -> bool {
     let root = crate::hub::root();
-    !root.join("setup-finished.json").exists()
+    !ASSUMED.with(Cell::get)
+        && !root.join("setup-finished.json").exists()
         && (nothing_here(&root) || root.join("setup-stopped.json").exists())
 }
 
@@ -101,6 +113,8 @@ pub fn login_path() -> Result<String, String> {
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
             waited => {
                 let _ = child.kill();
+                // blocking call: reaps the shell just killed; login_path runs only off the UI thread, from set_up and
+                // the headless check_for_updates.
                 let _ = child.wait();
                 return Err(unreadable(waited.err().map_or_else(
                     || format!("it didn't answer within {} s", LOGIN_SHELL_WAIT.as_secs()),
@@ -145,13 +159,26 @@ pub fn deep(path: &str) -> Command {
     command
 }
 
-/// Runs `deep setup` and returns the one line, or what went wrong.
+/// Runs [`set_up`] on a thread of its own and returns where it says the one line, or what went wrong, so the click
+/// never waits on `deep setup` (#1556). It says it once; a thread that couldn't start says that.
+pub fn start() -> Receiver<Result<&'static str, String>> {
+    let (said, heard) = mpsc::channel();
+    let thread = std::thread::Builder::new().name("deep setup".into());
+    let running = said.clone();
+    if let Err(error) = thread.spawn(move || running.send(set_up())) {
+        let _ = said.send(Err(format!("deep setup didn't start: {error}")));
+    }
+    heard
+}
+
+/// Runs `deep setup` and returns the one line, or what went wrong. It waits for setup to end, so the window calls it
+/// only through [`start`].
 pub fn set_up() -> Result<&'static str, String> {
     let path = login_path().map_err(|error| format!("Set up {error}"))?;
-    let output = deep(&path)
-        .arg("setup")
-        .output()
-        .map_err(|error| format!("deep setup didn't start: {error}"))?;
+    let mut setup = deep(&path);
+    // blocking call: off the UI thread, on start's thread or in the headless `deep-app --set-up`.
+    let output = setup.arg("setup").output();
+    let output = output.map_err(|error| format!("deep setup didn't start: {error}"))?;
     match output {
         Output { status, .. } if status.success() => Ok(SET_UP_LINE),
         Output { status, stderr, .. } => Err(format!(
@@ -165,11 +192,10 @@ pub fn set_up() -> Result<&'static str, String> {
 /// does; with none readable, the app's own PATH.
 pub fn check_for_updates() -> String {
     let path = login_path().unwrap_or_else(|_| std::env::var("PATH").unwrap_or_default());
-    match deep(&path)
-        .args(["update", "--check"])
-        .stderr(Stdio::inherit())
-        .output()
-    {
+    let mut check = deep(&path);
+    check.args(["update", "--check"]).stderr(Stdio::inherit());
+    // blocking call: only the headless `deep-app --check-for-updates` runs it, never the UI thread.
+    match check.output() {
         Ok(output) => String::from_utf8_lossy(&output.stdout)
             .lines()
             .map(str::trim)

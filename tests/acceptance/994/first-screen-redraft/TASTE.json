@@ -1,0 +1,9 @@
+{
+  "issue": 994,
+  "criterion": "#994.f8ef6a91",
+  "verdict": null,
+  "who": null,
+  "when": null,
+  "files": {},
+  "note": "No call recorded yet. A person fills this in once, on the pictures one check run wrote: verdict looks_right or looks_wrong, who, when, and files with each file's name and SHA-256, run.json among them. notification.png isn't among them: it stays with ../taste.test.ts (README)."
+}

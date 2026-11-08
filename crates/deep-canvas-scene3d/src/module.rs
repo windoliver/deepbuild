@@ -17,6 +17,10 @@ use crate::light::{self, Tie};
 pub const GEOMETRY_PASS: &str = "scene3d.geometry";
 /// The one pass that writes the final frame: exposure, tone map and the sRGB encode.
 pub const OUTPUT_PASS: &str = "scene3d.output";
+/// #465: the mirror's pass, its view and its picture over the mirror's parts, after the geometry.
+pub const MIRROR_PASS: &str = "scene3d.mirror";
+/// #465: the flare, added into the linear image before tone mapping.
+pub const FLARE_PASS: &str = "scene3d.flare";
 /// The key light's shadow map: the solids' vertex stage under the light's clip matrix, depth
 /// only (the core's shadow pass, in the frame's shadows place).
 pub const SHADOW_PASS: &str = "scene3d.shadow";
@@ -154,7 +158,7 @@ fn has_light(doc: &Value, _: &str, _: &Value) -> bool {
             items.values().any(|i| {
                 i.get("kind")
                     .and_then(Value::as_str)
-                    .is_some_and(|k| k.starts_with("light."))
+                    .is_some_and(|k| k.starts_with("light.") && !k.starts_with("light.probe@"))
             })
         })
 }
@@ -309,6 +313,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             ("light.point@1", "light", "point"),
             ("light.spot@1", "light", "spot"),
             ("light.area@1", "light", "area"),
+            ("light.probe@1", "light", "probe"),
             ("material@1", "", "material"),
             ("sky@1", "", "sky"),
             ("puff@1", "", "puff"),
@@ -319,7 +324,11 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         }
     }
     // #424: the cutaway and the instancer, read by the scene as data.
-    for (kind, name) in [("cutaway@1", "cutaway"), ("instance@1", "instance")] {
+    for (kind, name) in [
+        ("cutaway@1", "cutaway"),
+        ("instance@1", "instance"),
+        ("effect@1", "effect"),
+    ] {
         if let Some(spec) = crate::spec::of(kind) {
             r.kind(crate::spec::entry(&spec, "", name), &[], "");
         }
@@ -355,6 +364,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         .pass_steps(SHADOW_STEPS);
     r.pass(OBJECT_ID_PASS, "geometry")
         .pass_steps(OBJECT_ID_STEPS);
+    r.pass(MIRROR_PASS, "geometry");
+    r.pass(FLARE_PASS, "bloom");
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it
     // with no issue. Its pixels need the GPU, and the acceptance suite draws them there.

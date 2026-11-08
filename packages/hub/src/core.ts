@@ -8,7 +8,7 @@ import { access, chmod, copyFile, mkdir, open, readFile, realpath, stat, type Fi
 import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { UsageTail } from '@deepbuild/readings';
 import { Numbers } from './numbers.js';
-import { availableParallelism, homedir, networkInterfaces } from 'node:os';
+import { availableParallelism, homedir, loadavg, networkInterfaces } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ADAPTERS, shipped } from '@deepbuild/adapters';
@@ -24,6 +24,7 @@ import { answers as stackHealthy, composeKind, downStack, environmentOf, keysOf,
 import { endsEmpty, freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
+import { Acceptance } from './acceptance.js';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { alive as running, openSupervisor, openUnder, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, recordVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
@@ -34,8 +35,8 @@ import { keychain, ownHome } from './keychain.js';
 import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
 import { sessionStates, statusRows, WAITING_QUIET_MS } from './status.js';
-import { addGuards, blocksCall, writeStanding } from './guards.js';
-import { captureRejected, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor } from './memory.js';
+import { addGuards, blocksCall, provenGuards, writeStanding } from './guards.js';
+import { captureRejected, decisionKey, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
 import { SizeScope } from './scope.js';
 import { codexTrusted } from './codex-settings.js';
@@ -48,30 +49,42 @@ import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs
 import { coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
+import { cachedRuleFiles, creditOf, handleOf as ruleHandle, pageLines, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, setOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
+/** A rule you type in a session (#344): `rule: <text>.` */
+const TYPED_RULE = /(?:^|\s)rule:[ \t]*([^\n]*?)\.(?=\s|$)/gi;
+const RULES_HEAD = 'Your rules, which DeepBuild gives every agent (from your rule files, the rules you typed and your decisions)';
 import { GateRunner, type ClaimCheck, type DefinitionState, type RunKey, type StatePin } from './gate-runner.js';
+import { Siblings } from './siblings.js';
 import type { KeyFacts } from './shared-runs.js';
 import { argsOf, groupUnder, parents, startOf } from './children.js';
-import { deepHook, repoOf, rootOf, type Root } from './paths.js';
+import { deepHook, forgeOf, repoOf, rootOf, type Root } from './paths.js';
+import { OWNER, People, scopeOf } from './people.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { Teardowns } from './teardowns.js';
+import { Agents, type Sync } from './agents.js';
+import { NEWER_SET, OLDER_SET } from './status.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
-import { openGitHub, type GitHub, type GitHubPlant } from '@deepbuild/github';
+import { gateTokens, openGitHub, type AppKey, type GitHub, type GitHubPlant } from '@deepbuild/github';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
-import { liveFetch, liveGraphql, recordedFetch, recordedGraphql } from './github-source.js';
+import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
 import { OpenItems } from './open-items.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackConfig, slackThread, slackThreads } from './reach.js';
 import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { Answers, answerText, type Answer } from './answers.js';
 import { RUN_AS_YOU, Runs } from './runs.js';
+import { Kinds, type ReviewOf } from './kinds.js';
+import type { CheckSpec } from '@deepbuild/conformance';
 import { retain } from './retention.js';
 import { Stacks, type StackWant } from './stacks.js';
+import { Starts } from './starts.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
+import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
@@ -100,7 +113,6 @@ const ghToken = (): Promise<string | undefined> => {
   if (!ownHome()) return Promise.resolve(undefined);
   return new Promise((done) => execFile('gh', ['auth', 'token'], { timeout: 5000 }, (error, out) => done(error || !out.trim() ? undefined : out.trim())));
 };
-const YOU = { actor: 'you', scope: 'you' };
 const SECRETS_TTL = 10_000;
 /** The spool file every deep-hook appends to. */
 const SPOOL = 'spool.jsonl';
@@ -138,10 +150,22 @@ const TURN_ENTRIES = 5_000;
 const PROMPT_PLACE_MS = 3000;
 /** The cores the check slots are half of: this machine's, or DEEP_HUB_TEST_CORES's, which only tests set (#965). */
 const CORES = Number(process.env.DEEP_HUB_TEST_CORES) > 0 ? Math.floor(Number(process.env.DEEP_HUB_TEST_CORES)) : availableParallelism();
+/**
+ * The machine's 1-minute load against those cores, for a timing check's failed run (#352): DEEP_HUB_TEST_LOAD names a
+ * file holding the load instead, read afresh each time; only tests set it.
+ */
+const machineLoad = (): { load: number; cores: number } => {
+  const file = process.env.DEEP_HUB_TEST_LOAD;
+  let read = NaN;
+  try { if (file) read = Number(readFileSync(file, 'utf8').trim()); } catch { /* unreadable: the machine's own reading */ }
+  return { load: file && Number.isFinite(read) ? read : loadavg()[0]!, cores: CORES };
+};
 /** How many ended sessions the core still answers for, newest first. */
 const ENDED_KEPT = 64;
 /** The agents whose hooks run Claude Code's entries but who aren't Claude Code: never a session's asks or claims. */
 const FOREIGN = new Set(['cursor', 'grok']);
+/** The agents whose adapter has no route to hold a prompt at its submit: pi's package and paseo's plugin take none (#40, #55). */
+const HOLDS_NO_PROMPT = new Set(['pi', 'paseo']);
 /** The commands that take effect only once the OS confirms you (#19), as `you.confirm` names them. */
 /** The sign-in command each agent's facts name, by the agent's name as a task would say it (#84). */
 function signInCommands(): Record<string, string> {
@@ -415,6 +439,10 @@ export class Core {
   private readonly told = new Map<string, Set<string>>();
   /** The gate runner (#29): each claim's checks on its snapshot, in their lanes, under the stop's hold. */
   private readonly gate: GateRunner;
+  /** The session map and the notices it hands each session, and the loop rule (#352). */
+  private readonly siblings: Siblings;
+  /** The sessions told the loop rule is watch-only for them (#352). */
+  private readonly loopWatched = new Set<string>();
   /** Each session's last stop's final message, what its claims cite (#29). */
   private readonly lastMessage = new Map<string, string>();
   /** What each claim's stop waits on: its fast lane, and what the hold reports of it. */
@@ -476,10 +504,18 @@ export class Core {
   private compose?: ReturnType<typeof composeKind>;
   /** DeepBuild's own headless jobs (#159): their hooks are theirs, never a session's. */
   private runner!: Runner;
+  /** The blind acceptance job (#1328): the runner's one kind that writes, before an issue's first attempt. */
+  private acceptance!: Acceptance;
+  /** Sessions started without your Send, under a run you approved (#1330). */
+  private sessionStarts!: Starts;
   /** Setup's wiki build (#356). */
-  private wikiBuild!: { build(): Promise<WikiBuilt>; forget(claim: string): Promise<string> };
+  private wikiBuild!: { build(): Promise<WikiBuilt>; forget(claim: string): Promise<string>; writeRules(): Promise<void> };
   /** The taste calls each session was given since it started, and the sessions whose first prompt was read for its screen (#111). */
   private tasted = new Map<string, Set<string>>();
+  /** What each session was given of your rules (#344): the set's handles, whether its next prompt carries every rule you typed, and a rule file's lines before an agent's edit. */
+  private ruleState = new Map<string, { given: Set<string>; full: boolean; editing: Map<string, RuleFileBefore[]> }>();
+  /** Each repo's rule files, read at most once a few seconds, so a call's notice reads no folder tree. */
+  private ruleFiles = new Map<string, { at: number; files: RuleFile[] }>();
   private firstPrompted = new Set<string>();
   /** Hooks from a running job's folder held until the runner reads that job's session ID, by job. */
   private readonly parked = new Map<string, Promise<void>>();
@@ -523,10 +559,15 @@ export class Core {
   private readonly entered = new Map<string, string>();
   /** The supervisor's runs (runs.ts). */
   private readonly runs: Runs;
+  private readonly checkKinds: Kinds;
+  /** Each claim's checks of a kind other than command, by check (#1537): its spec, and the claim's session for a review. */
+  private readonly kindChecks = new Map<string, Map<string, { spec: CheckSpec; of: ReviewOf }>>();
   /** Each worktree's stack and every stack run a check started (#331, #332). */
   private readonly stacks: Stacks;
   /** Each outside resource a session created, and its teardown task (#342). */
   private readonly teardowns: Teardowns;
+  /** The Agents page's syncs (#148): servers and skills written into each agent's own files. */
+  private readonly agents: Agents;
   /** Each session's deep_drive replicas (#124). */
   private readonly replicas: Replicas;
   /** The screen each session's computer use last switched to, one it leases (#332). */
@@ -537,7 +578,7 @@ export class Core {
   private streaming = false;
   private restream = false;
   /** The full page after the last one read, built ahead for a reader paging in order. */
-  private ahead: { after: number; limit: number; log_pos: number; events: string } | undefined;
+  private ahead: { after: number; limit: number; seen: string; log_pos: number; events: string } | undefined;
   private secrets: { at: number; value: Promise<string> } | undefined;
   private readonly timers: NodeJS.Timeout[] = [];
   /**
@@ -618,6 +659,9 @@ export class Core {
   private readonly midTurn = new Map<string, string[]>();
   /** The repo each session works in, from its hooks' folder: what its events carry as their project (#23). */
   private readonly projects = new Map<string, string>();
+  /** The people on this hub's projects (#1337), and the person each session's first hook connection named. */
+  private readonly people: People;
+  private readonly sessionPeople = new Map<string, string>();
   /** The asks raised for permission prompts and saved offers, by handle: their answer is never delivered as a message (#23). */
   private readonly prompts = new Set<string>();
   private readonly answers: Answers;
@@ -663,6 +707,7 @@ export class Core {
    */
   constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
     this.root = rootOf(options.root);
+    this.people = new People(this.root.dir);
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
     this.devices = new Devices(this.root.devices);
@@ -755,9 +800,17 @@ export class Core {
       stoodIn: (r) => this.tasks.stoodIn(this.connection('core'), r),
       kept: async (evidence) => (await Promise.all(evidence.map((sha) => this.store.get(sha)))).every(Boolean),
       slots: () => ({ free: Math.max(0, Math.floor(CORES / 2) - this.runs.size) }),
-      capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined), plant: options.plant,
+      capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined), plant: options.plant, load: machineLoad,
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
+    });
+    this.siblings = new Siblings({
+      raw: (query, params) => this.record.raw(query, params), now: this.now,
+      append: (session, agent, input) => this.append(this.connection('core', { session, agent }), input),
+      ask: async (session, agent, cwd, source, ask) => this.asks.raise(this.connection('core', { session, agent }), source, {
+        ...ask, deadline: this.now() + 2 * DAY, key: sha256Hex(canonicalize({ kind: source, key: String(ask.key) })), pinned_to: await this.pinOf(cwd, String(ask.question)),
+      }),
+      acking: (session) => this.acking(session), queue: (work) => void this.queue(work).catch(() => undefined), wake: (session, text) => this.noticeWake(session, text),
     });
     this.answers = new Answers({
       raw: (query, params) => this.record.raw(query, params), settled: () => Promise.allSettled([...this.inflight]),
@@ -780,13 +833,31 @@ export class Core {
       raw: (query, params) => this.record.raw(query, params), held: options.held, append: (session, agent, kind, data) => this.appendSession(session, agent, kind, data),
       reading: (session, agent, text) => this.appendReading(session, agent, text), raise: (session, agent, ask) => this.raiseTask(session, agent, ask),
     });
+    this.agents = new Agents({
+      root: this.root.dir, plant: options.plant, durable: this.durable, now: this.now, held: options.held,
+      raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan as never); },
+      synced: async (data) => { await this.ready; await this.appendCore('agents.synced', data); },
+      wanted: async () => { await this.ready; return ((await this.record.raw("SELECT data FROM events WHERE kind = 'agents.synced' ORDER BY log_pos")) as { data: string }[]).map((r) => JSON.parse(r.data) as Obj); },
+      sessions: () => [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, agent: s.agent, pid: s.pid, start: s.start })),
+      older: (sync) => this.olderSet(sync),
+    });
     this.runs = new Runs({
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
       raw: (query, params) => this.record.raw(query, params), sync: () => this.record.sync(), appendAsCore: (input) => this.append(this.connection('core'), input as EventInput),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), stored: (put, what) => this.stored(put, what),
       invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), recorded: (run, record) => this.gate.recorded(run, record), keyed: (key, run, record) => this.gate.keyed(key, run, record),
       stopping: () => this.stopping, stacks: this.stacks, store: () => this.store, host: () => this.host, supervisor: () => this.supervisor, leases: () => this.leases, extensions: () => this.extensions,
+      kind: (run, checkout, deadline) => {
+        const of = this.kindChecks.get(run.claim)?.get(run.check)?.of ?? { claim: run.claim, task: '', agent: 'claude-code', transcript: undefined };
+        const spec = run.spec as unknown as CheckSpec;
+        // A review reads the diff from the merge base to the claim's snapshot, both in the hub's object store, which
+        // reads the repo's objects as alternates; the checkout is the snapshot's tree alone.
+        if (spec.kind === 'review') return this.checkKinds.run({ ...spec, head: this.gate.snapshotOf(run.claim) ?? run.commit } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+        return this.checkKinds.run(spec, { checkout, deadline, now: this.now }, of);
+      },
     });
+    // The check kinds the hub holds (#1537): command, review, numbers and the work kinds, each with its routes.
+    this.checkKinds = new Kinds({ host: () => this.host, submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
       raw: (query) => this.record.raw(query), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -1015,9 +1086,24 @@ export class Core {
       record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
     });
+    this.sessionStarts = new Starts({
+      root: this.root.dir, socket: this.root.socket, lock: this.root.lock, loginPath: () => this.config().loginPath, now: this.now, plant: this.options.plant,
+      supervisor: () => this.supervisor, asks: () => asks, raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
+      agentAbove: (peer) => this.agentAbove(peer), windowUsed: (agent, home) => this.runner.windowUsed(agent as JobSpec['agent'], home),
+      forge: this.options.forge ?? 'https://api.github.com', agentsApp: () => this.forgeApp('agents'), gateToken: (repo) => this.gateToken(repo),
+    });
+    await this.sessionStarts.open();
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
     const trust = this.trust = await openTrust({ record: this.record, now: this.now });
     await this.spaces.open();
+    this.acceptance = new Acceptance({
+      record: this.record, runner: () => this.runner, supervisor: () => this.supervisor, checkouts: () => this.checkouts, asks: () => this.asks, core: this.connection('core'), now: this.now, ...this.config().acceptance,
+      append: async (kind, data) => { const ts = this.now(); await this.append(this.connection('core'), { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue }); },
+      read: async (owner, name, n) => {
+        const fetch = this.options.github ? recordedFetch(this.options.github) : liveFetch(this.options.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+        return (await readIssue(fetch, owner, name, n, undefined))?.[0];
+      },
+    });
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite') });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
@@ -1026,6 +1112,8 @@ export class Core {
       if (!extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
       const load = await extensions.load(pkg);
       if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
+      // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
+      else await this.panelKits(pkg.id, true);
     }
     await this.replaySpool();
     // The replay is done: the extensions start, and each that can't is unloaded and named.
@@ -1096,8 +1184,13 @@ export class Core {
     this.timers.push(setInterval(() => { if (this.blocked && !this.lost && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     // Between session starts, a removed or weakened entry of ours in Claude Code's settings goes back at once.
     if (this.options.plant !== 'restores-at-session-start-only') this.watchSettings();
+    // A sync a stop cut short is recovered from its journal before anything else is synced (#148).
+    void this.agents.recoverAtStart().catch((error: unknown) => process.stderr.write(`deep hub: agent syncs not recovered: ${error instanceof Error ? error.message : String(error)}\n`));
     // The promised checks the record still holds wait on, armed again (#120).
     await this.restorePromises().catch(() => undefined);
+    await this.acceptance.open();
+    // The session map and what its notices delivered, and the loop rule's count, read back (#352).
+    await this.siblings.restore().catch(() => undefined);
     for (const timer of this.timers) timer.unref();
   }
 
@@ -1107,7 +1200,8 @@ export class Core {
     return openGitHub({
       api: this.options.forge ?? 'https://api.github.com', state: join(this.root.dir, 'github.json'), snapshots: join(this.root.dir, 'objects'), raw: (query, params) => this.record.raw(query, params),
       reads: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
-      posts: () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN,
+      // The gate's own identity once your settings name it; until then your login, which no ruleset counts (#1325).
+      posts: async (repo) => (this.forgeApp('gate') ? this.gateToken(repo) : process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN),
       settings: () => {
         let github: { delivery?: unknown; yours?: unknown } | undefined;
         try { github = (JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as { github?: typeof github }).github; } catch { /* none yet: nothing is on */ }
@@ -1118,9 +1212,23 @@ export class Core {
         const ts = this.now();
         return this.append(this.connection('core', session ? { session: session.id, agent: session.agent } : {}), { v: 1, id: ulid(ts), kind: 'ref.unguarded', ts, ...(session ? { subject: `session:${letters(session.id)}` } : {}), data });
       },
+      pushed: (_repo, change) => this.sessionStarts.pushed(change),
       hear: (session, text) => { this.later(session.id, session.cwd, text); this.offer(session.id); },
       ...(plant ? { plant } : {}),
     });
+  }
+  /** An app your settings name as `github.gate` or `github.agents` (#1325): its ID, and its key from the Keychain service named. */
+  private forgeApp(which: 'gate' | 'agents'): AppKey | undefined {
+    let app: unknown;
+    try { app = (JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as { github?: Obj }).github?.[which]; } catch { /* none yet */ }
+    if (!isObj(app) || !Number.isSafeInteger(app.app_id) || typeof app.key !== 'string' || !app.key) return undefined;
+    const service = app.key;
+    return { app_id: app.app_id as number, key: () => keychain(service) };
+  }
+  private gateTokens?: (repo: string) => Promise<string | undefined>;
+  /** The gate's token for a repo: minted in this process, kept only in its memory. */
+  private gateToken(repo: string): Promise<string | undefined> {
+    return (this.gateTokens ??= gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate')))(repo);
   }
   /** `stack.slot` in <root>/config.json: how many warm stacks this machine keeps. */
   private stackSlots(): number {
@@ -1129,7 +1237,7 @@ export class Core {
     return typeof slot === 'number' && Number.isInteger(slot) && slot > 0 ? slot : 4;
   }
   /** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
-  private config(): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number } } {
+  private config(): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number }; acceptance: { slots: number; gateKey: string | null } } {
     let c: Obj = {};
     try { c = JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as Obj; } catch { /* none yet: no binary resolves, so every job is refused saying so */ }
     const runner = isObj(c.runner) ? c.runner : {};
@@ -1140,6 +1248,8 @@ export class Core {
       loginPath: typeof runner.login_path === 'string' ? runner.login_path : '',
       reservePct: typeof plan.reserve_pct === 'number' ? plan.reserve_pct : 10,
       rules: { margin: typeof rules.margin === 'number' ? rules.margin : 1.5, windowMs: (typeof rules.window_days === 'number' ? rules.window_days : 30) * DAY },
+      // The issues that run at once, and the gate identity's key (#1325): with none, a swap goes to you.
+      acceptance: { slots: isObj(c.acceptance) && typeof c.acceptance.slots === 'number' ? c.acceptance.slots : 1, gateKey: isObj(c.gate) && typeof c.gate.key === 'string' ? c.gate.key : null },
     };
   }
 
@@ -1160,9 +1270,14 @@ export class Core {
 
   // ---- Appends.
 
+  /**
+   * An event's connection: its actor is the person whose connection sent it, or for the core's own events the person
+   * whose session they are about, never a field the event carries (#1337); its scope is who may see it.
+   */
   private connection(writer: string, extra: Partial<Connection> = {}): Connection {
     const project = extra.project ?? (extra.session ? this.projects.get(extra.session) : undefined);
-    return { writer, ...YOU, ...(project ? { project } : {}), ...extra };
+    const actor = extra.actor ?? (extra.session ? this.sessionPeople.get(extra.session) : undefined) ?? OWNER;
+    return { writer, actor, scope: scopeOf(this.people, actor, project), ...(project ? { project } : {}), ...extra };
   }
   /** Appends one event; a storage failure turns every gate watch-only, BLOCKED, until a write succeeds again. */
   private async append(connection: Connection, input: EventInput, backfill = false): Promise<void> {
@@ -1235,10 +1350,43 @@ export class Core {
         const quiet = (s.last_seen ?? 0) < this.now() - DAY;
         const [last] = (await this.record.raw(`SELECT json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [s.id, `${CANT_RUN}%`, `${CAN_RUN}%`])) as { text: string }[];
         if (problem && quiet && !last?.text.startsWith(CANT_RUN)) continue;
-        const text = problem ? `${CANT_RUN}, so this session's gates are watch-only: ${problem}. Run \`deep setup\` to point them at a deep-hook that runs.` : last?.text.startsWith(CANT_RUN) ? `${CAN_RUN}: this session's gates hold again.` : undefined;
+        const text = problem ? `${CANT_RUN}, so this session's holds and every block but the floor are watch-only: ${problem}. Run \`deep setup\` to point them at a deep-hook that runs.` : last?.text.startsWith(CANT_RUN) ? `${CAN_RUN}: this session's gates hold again.` : undefined;
         if (text && text !== last?.text) await this.queue(() => this.appendReading(s.id, s.agent, text));
       }
     }
+  }
+  /**
+   * A sync landed (#148): each live session of an agent it reached that started before it runs the older set, until
+   * its own evidence shows otherwise; for Codex, whose sessions share a daemon, that daemon is named by its PID.
+   */
+  private async olderSet(sync: Sync): Promise<void> {
+    await this.ready;
+    const at = sync.completed ?? this.now();
+    const reached = new Set(sync.agents);
+    for (const s of [...this.sessions.values()]) {
+      if (s.ended || !reached.has(s.agent === 'claude' ? 'claude-code' : s.agent)) continue;
+      const [row] = (await this.record.raw(`SELECT MAX(ts) AS ts FROM events WHERE session_id = ? AND kind = 'session.start'`, [s.id])) as { ts: number | null }[];
+      if (row?.ts === null || row?.ts === undefined || row.ts > at) continue;
+      const text = s.agent === 'codex'
+        ? `${OLDER_SET} Codex's daemon (pid ${s.pid}${s.start ? `, started ${s.start}` : ''}) started before sync:${sync.id} landed, so this session loads the new MCP servers and skills only once it starts from a daemon started since.`
+        : `${OLDER_SET} it started before sync:${sync.id} landed, and loads the new MCP servers and skills only once it starts again.`;
+      await this.queue(() => this.appendReading(s.id, s.agent, text));
+    }
+  }
+  /** A session's start from a process started after the sync its row names: its own evidence of the new set (#148). */
+  private async newSet(session: Session, meta: HookMeta): Promise<void> {
+    // Its own start: its transcript, from a process of its agent's own binary, a Codex daemon started since included.
+    if (meta.transcript && resolve(meta.transcript) !== session.transcript) return;
+    // npm's Codex runs as node with its bin script, its native build as codex itself.
+    const binaries = meta.agent === 'codex' ? [CODEX_BINARY, /@openai\/codex\/bin\/codex\.js(?:\s|$)/] : meta.agent === 'claude-code' || meta.agent === 'claude' ? [CLAUDE_BINARY] : [];
+    const args = binaries.length ? await argsOf(meta.ppid) : '';
+    if (binaries.length && !binaries.some((b) => b.test(args))) return;
+    const ppid = meta.ppid;
+    const [last] = (await this.record.raw(`SELECT ts, json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [session.id, `${OLDER_SET}%`, `${NEWER_SET}%`])) as { ts: number; text: string }[];
+    if (!last || last.text.startsWith(NEWER_SET)) return;
+    const started = Date.parse((await this.startOf(ppid, true)) ?? '');
+    if (!(started > last.ts)) return;
+    await this.queue(() => this.appendReading(session.id, session.agent, `${NEWER_SET} its process started after the sync its row named, so it loads the MCP servers and skills synced since.`));
   }
   /** A session.reading for the session, appended as the core. */
   private appendReading(session: string, agent: string, reading: string): Promise<void> {
@@ -1268,7 +1416,13 @@ export class Core {
     const replayed = this.replaying ?? Promise.resolve();
     // A network stop's try runs before it queues, so it holds no other hook of any session (#85).
     const tried = this.tryNetwork(drafts, meta);
-    const handled = replayed.then(() => tried).then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
+    const handled = replayed.then(() => tried).then(() => this.queue(async () => {
+      const done = await this.handleHook(drafts, meta, writer);
+      // Your rules at a tool call, in the hook's own turn (#344).
+      if (meta.event === 'SessionEnd') this.ruleState.delete(meta.session);
+      if (meta.event === 'PreToolUse' || meta.event === 'PostToolUse') await this.ruleHook(meta).catch((error: unknown) => process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`));
+      return done;
+    })).then(({ settled }) => settled);
     if (!tried) return handled;
     // It was acknowledged, so nothing else keeps it: the hub stops only once it's in the record.
     const kept = handled.catch(() => undefined).finally(() => this.tried.delete(kept));
@@ -1381,6 +1535,7 @@ export class Core {
       // Copied now, verified or not: a desktop app deletes what follows this hook (#342), and a copy changes nothing.
       void this.archiveSession?.(meta.session).catch((error: unknown) => process.stderr.write(`deep hub: archive of ${meta.session}: ${error instanceof Error ? error.message : String(error)}\n`));
     }
+    if (meta.printed) void this.sessionStarts.refusals(meta.session, meta.toolUse, meta.printed).catch(() => undefined);
     if (meta.ran && meta.cwd) void this.teardowns.saw({ session: meta.session, agent: meta.agent, cwd: meta.cwd, call: meta.toolUse ?? meta.id, ...meta.ran }).catch(() => undefined);
     if (meta.event === 'UserPromptSubmit' && this.options.plant === 'typed-saves-decision') {
       this.typedAt.set(meta.session, Date.now());
@@ -1418,9 +1573,11 @@ export class Core {
       await this.appendReading(meta.session, meta.agent, meta.caller).catch(() => undefined);
     }
     const verified = meta.watchOnly ? false : await this.verify(meta);
+    // A session's first hook from under a run DeepBuild started (#1330): its start.session first, so its first event names the run.
+    if (meta.session) await this.sessionStarts.sessionOf(meta.session, meta.ppid, meta.agent).catch(() => undefined);
     if (meta.watchOnly && meta.session && !this.versioned.has(meta.session)) {
       this.versioned.add(meta.session);
-      await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, past the versions its facts cover: it is recorded unverified, and its holds and blocks are watch-only until the live smoke test widens the range to ${meta.version}.`).catch(() => undefined);
+      await this.appendReading(meta.session, meta.agent, meta.paseo?.lacks ?? `This session runs ${meta.agent} ${meta.version}, past the versions its facts cover: it is recorded unverified, and its holds and every block but the floor are watch-only until the live smoke test widens the range to ${meta.version}. The floor still holds: its fail_closed guard entries deny as they do with the hub stopped.`).catch(() => undefined);
     }
     const session = this.sessions.get(meta.session);
     if (session && (verified || this.options.plant === 'ends-binding')) {
@@ -1448,6 +1605,8 @@ export class Core {
       }
     }
     await this.enrich(drafts, meta, session && verified ? session : undefined);
+    // A session's start is its own evidence of the set it loads (#148), from the process it starts in.
+    if (meta.event === 'SessionStart' && session && !FOREIGN.has(meta.agent)) void this.newSet(session, meta).catch(() => undefined);
     // The session's newest stop, with its cause and owner read: one whose task is open holds the turns DeepBuild
     // would start there until the task closes (#85); any other stop ends an earlier hold.
     const stopped = meta.session && !meta.fields?.agent_id ? drafts.find((d) => d.kind === 'agent.stop') : undefined;
@@ -1508,6 +1667,12 @@ export class Core {
           this.midTurn.delete(meta.session);
           // The prompt that opens a turn is its origin, and ends the grace window a loop's last stop started (#965).
           live.turnFrom = String(data.from);
+          this.siblings.turn(meta.session, draft.id, live.turnFrom, this.now());
+          // An adapter with no route to hold a prompt leaves the loop rule watch-only for its session, which says so once (#352).
+          if (HOLDS_NO_PROMPT.has(meta.agent) && this.siblings.looping(meta.session) && !this.loopWatched.has(meta.session)) {
+            this.loopWatched.add(meta.session);
+            void this.appendReading(meta.session, meta.agent, `Another session's messages started more than 20 of this session's turns in 10 minutes with no prompt from you, but its adapter (${meta.agent}) has no route to hold a prompt, so the loop rule is watch-only for it: nothing was held.`).catch(() => undefined);
+          }
           live.claimedInTurn = false;
           this.gate.prompted(meta.session);
         }
@@ -1557,7 +1722,10 @@ export class Core {
       // A session's events carry the repo it works in, so your answer there is saved for the repo (#23).
       const project = repoOf(meta.cwd);
       if (project && meta.session) this.projects.set(meta.session, project);
-      const connection = this.connection(writer, { ...(meta.session ? { session: meta.session } : {}), agent: meta.agent, verified });
+      // The person is the hook connection's, and a session is the person's whose connection first sent its hooks (#1337).
+      const actor = meta.person ?? OWNER;
+      if (meta.session && !this.sessionPeople.has(meta.session)) this.sessionPeople.set(meta.session, actor);
+      const connection = this.connection(writer, { ...(meta.session ? { session: meta.session } : {}), agent: meta.agent, verified, actor });
       // The tasks a prompt opens are appended after it, as the core.
       return [this.append(connection, {
         v: draft.v, id: draft.id, kind: draft.kind, ts: draft.ts, ...(draft.seq !== undefined ? { seq: draft.seq } : {}), ...(draft.subject ? { subject: draft.subject } : {}), data: data as JsonValue,
@@ -1582,6 +1750,8 @@ export class Core {
       if (drafts.some((d) => d.kind === 'agent.stop')) void this.asks.tick().catch(() => undefined);
     });
     settled.catch(() => undefined);
+    // The session map reads the hook before its reply is asked for (#352), once its appends are watched.
+    if (verified && meta.session && !FOREIGN.has(meta.agent)) await this.siblings.hook(drafts, meta).catch(() => undefined);
     // A stop that leaves the agent's question open is recorded as waiting on you once the stop is in the record (#27).
     if (meta.event === 'Stop' && drafts.some((d) => d.kind === 'agent.stop' && d.data.outcome !== 'failed')) {
       void settled.then(async () => { if (await this.asksYou(meta.session)) await this.attention(meta.session, meta.agent, 'waiting'); }).catch(() => undefined);
@@ -2838,6 +3008,7 @@ export class Core {
     this.permits.get(delivery.ask)?.(delivery);
     if (this.prompts.has(delivery.ask)) return;
     this.tasks.answered(delivery);
+    this.acceptance?.answered(delivery);
     this.delivery(delivery);
     void this.waitsOnTask(delivery).catch(() => undefined);
     const asker = this.sessions.get(delivery.session);
@@ -3216,6 +3387,9 @@ export class Core {
    */
   async toolGate(meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string; rule?: string; answers?: Record<string, string> }> {
     await this.ready;
+    // A synced server is called only from a session in its scope (#148).
+    const scoped = call.mcp ? this.agents.scopeDenial(call.mcp.server, meta.cwd) : undefined;
+    if (scoped) return { deny: scoped, rule: "the server's scope (#148)" };
     // A question card is sorted like a question at a stop (#84).
     if (call.card) {
       if (FOREIGN.has(meta.agent) || !meta.session) return {};
@@ -3268,6 +3442,8 @@ export class Core {
   private async closesGate(session: string, command: string): Promise<string | undefined> {
     const issue = closesIssue(command);
     if (issue === undefined) return this.partOfGate(session, command);
+    // The planted wrong program judges the bootstrap's commands alone: the issue's criteria never hold a PR back.
+    if (this.options.plant === 'bootstrap-commands-only') return undefined;
     const open = await this.tasks.unproven(session, issue);
     if (!open) return undefined;
     if (!open.locked) return `DeepBuild blocked this: the pull request can't say Closes #${issue} while the definition of ${open.task_ref} hasn't locked, so nothing of it is proven yet. Say Part of #${issue} instead, and list what's left.`;
@@ -3339,6 +3515,7 @@ export class Core {
   }
   /** Your answer to an ask the done gate raised (#325): an issue's budget approved, a stalled claim split, funded or accepted, a switch left off. */
   private delivery(d: Delivery): void {
+    if (this.agents.delivered(d.ask, d.option, d.decision)) return;
     const fail = (what: string) => (error: unknown) => process.stderr.write(`deep hub: ${what} for ${d.ask} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
     const budget = this.budgetAsks.get(d.ask);
     if (budget) {
@@ -3865,8 +4042,203 @@ export class Core {
     return tasteBlock(fresh);
   }
   /** `deep memory`'s list (#111). */
-  private async lessons() {
-    return lessonsOf(this.raw, await repoFolders(this.record, this.store));
+  private async lessons(): Promise<Lesson[]> {
+    const lessons = [...await lessonsOf(this.raw, await repoFolders(this.record, this.store)), ...await this.ruleLessons()];
+    return lessons.map((l, i) => ({ ...l, rank: i + 1 }));
+  }
+
+  // ---- Your rules (#344): the rules page, the start slice's rules, rules you type, scoped notices and held rule lines.
+  private filesOf(repo: string): RuleFile[] {
+    return cachedRuleFiles(this.ruleFiles, repo);
+  }
+  /** The rules you typed, in force: base changes to `rule:typed<id>`. */
+  private async typedRules(): Promise<{ target: string; text: string }[]> {
+    const rows = (await this.record.raw(`SELECT target, diff FROM learned_layer WHERE kind IN ('learn.applied', 'learn.widened') AND state = 'applied' AND layer = 'base' AND target LIKE 'rule:typed%' ORDER BY log_pos`)) as { target: string; diff: string }[];
+    return rows.map((r) => ({ target: r.target, text: r.diff.replace(/^\+ /, '') }));
+  }
+  /** The rule lines an agent's edit removed, still in force; each leaves once you apply the proposal it became. */
+  private async heldRules(): Promise<Held[]> {
+    const held = readHeld(this.root.dir);
+    const kept: Held[] = [];
+    for (const h of held) {
+      const [answer] = (await this.record.raw(`SELECT json_extract(data, '$.answer') AS answer FROM events WHERE kind = 'ask.answered' AND subject = ? ORDER BY log_pos DESC LIMIT 1`, [h.ask])) as { answer: unknown }[];
+      if (answer?.answer !== 'apply') kept.push(h);
+    }
+    if (kept.length !== held.length) saveHeld(this.root.dir, kept);
+    return kept;
+  }
+  /** Every rule on the page: each repo a session worked in, your user-level files and the rules you typed. */
+  private async allRules(guards: readonly { name: string; rule: string }[]): Promise<{ rules: Rule[]; files: RuleFile[] }> {
+    // The record's sessions, and the ones whose hooks reached the hub but aren't folded into it yet.
+    const worktrees = [...((await this.record.raw('SELECT DISTINCT worktree FROM sessions WHERE worktree IS NOT NULL')) as { worktree: string }[]).map((w) => w.worktree), ...[...this.routes.values()].map((r) => r.cwd)];
+    const repos = [...new Set(worktrees.map((w) => repoRoot(w)).filter((r): r is string => r !== undefined))].sort();
+    const files = [...repos.flatMap((repo) => readRuleFiles(repo, null)), ...readRuleFiles(undefined)];
+    return { rules: rulesOf({ files, typed: await this.typedRules(), held: await this.heldRules(), guards }), files };
+  }
+  /** What the start slice gives a session of your rules: every rule for all paths but the files its own agent reads, then the slice's entries. */
+  private async startSet(session: string, cwd: string, agent: string): Promise<{ handles: string[]; lines: Map<string, string> }> {
+    const repo = repoRoot(cwd);
+    const own = agent === 'codex' ? 'codex' : 'claude-code';
+    const lines = new Map<string, string>();
+    for (const r of rulesOf({ files: [...(repo ? this.filesOf(repo) : []), ...readRuleFiles(undefined)], typed: [], held: await this.heldRules(), guards: [] })) {
+      if (r.scope === 'all' && r.native !== own) lines.set(ruleHandle(r), r.text);
+    }
+    for (const e of await this.record.startSlice(session)) lines.set(e.target, e.text);
+    return { handles: [...lines.keys()], lines };
+  }
+  private ruleStateOf(session: string) {
+    let st = this.ruleState.get(session);
+    if (!st) this.ruleState.set(session, (st = { given: new Set(), full: false, editing: new Map() }));
+    return st;
+  }
+  /** The record of what a session was given, at the log position its rules and start slice were read at. */
+  private async delivered(session: string, via: 'start' | 'prompt' | 'notice', rules: string[]): Promise<void> {
+    const [row] = (await this.record.raw('SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events')) as { pos: number }[];
+    const ts = this.now();
+    await this.append(this.connection('core', { session }), { v: 1, id: ulid(ts), kind: 'session.rules_delivered', ts, subject: `session:${letters(session)}`, data: { via, pos: Number(row?.pos ?? 0), rules } });
+  }
+  /** At a session's start: its rules, first; after a compaction or a resume its next prompt carries every rule you typed, and a scoped rule is heard once more. */
+  private async startRules(meta: HookMeta): Promise<string | undefined> {
+    const st = this.ruleStateOf(meta.session);
+    const set = await this.startSet(meta.session, meta.cwd, meta.agent);
+    st.given = new Set(set.handles);
+    await this.delivered(meta.session, 'start', set.handles);
+    return set.lines.size ? `${RULES_HEAD}:\n${[...set.lines.values()].map((t) => `- ${t}`).join('\n')}` : undefined;
+  }
+  /** A rule you type, `rule: <text>.`, saved at once as yours; resolves with the targets this prompt typed. */
+  private async saveTyped(prompt: string): Promise<Set<string>> {
+    const out = new Set<string>();
+    if (prompt.includes('<task-notification>')) return out;
+    const have = new Set((await this.typedRules()).map((t) => t.target));
+    for (const m of prompt.matchAll(TYPED_RULE)) {
+      const text = m[1]!.trim();
+      if (!text) continue;
+      const target = `rule:typed${ruleId('you', text)}`;
+      out.add(target);
+      if (have.has(target)) continue;
+      have.add(target);
+      // The rule's own words are its evidence, never the rest of the prompt.
+      const at = await this.record.keep(this.connection('core'), { bytes: new TextEncoder().encode(`rule: ${text}.`), kind: 'user.rule', source: 'prompt' });
+      const ts = this.now();
+      await this.append(this.connection('cli'), { v: 1, id: ulid(ts), kind: 'learn.applied', ts, data: { layer: 'base', target, diff: `+ ${text}`, evidence: [{ at, quote: text }], scope: 'all', replay: null, applied_by: 'you', supersedes: null } });
+    }
+    return out;
+  }
+  /** At a prompt: a new set (a rule typed anywhere, a slice entry) is carried and recorded; after a compaction or a resume, every rule you typed. */
+  private async promptRules(meta: HookMeta, prompt: string): Promise<string | undefined> {
+    const typedNow = await this.saveTyped(prompt);
+    const st = this.ruleStateOf(meta.session);
+    const set = await this.startSet(meta.session, meta.cwd, meta.agent);
+    const fresh = set.handles.filter((h) => !st.given.has(h));
+    if (!fresh.length && !st.full && set.handles.length === st.given.size) return undefined;
+    const typedAll = await this.typedRules();
+    for (const t of typedAll) if (!set.lines.has(t.target)) set.lines.set(t.target, t.text);
+    const typed = st.full ? typedAll.map((t) => t.target) : [];
+    const carried = [...new Set([...typed, ...fresh])].filter((h) => !typedNow.has(h));
+    st.given = new Set(set.handles);
+    st.full = false;
+    await this.delivered(meta.session, 'prompt', set.handles);
+    return carried.length ? `${RULES_HEAD}${typed.length ? ', every rule you typed again after the compaction or resume' : ', new since your last prompt'}:\n${carried.map((h) => `- ${set.lines.get(h)}`).join('\n')}` : undefined;
+  }
+  /**
+   * At a tool call, behind its hook (#344): the scoped rules the server's reply carried, recorded as delivered; an agent's
+   * edit of a rule file, read before the call by the server and after it here, and each rule line it removed held.
+   */
+  private async ruleHook(meta: HookMeta): Promise<void> {
+    if (FOREIGN.has(meta.agent) || !meta.session) return;
+    const st = this.ruleStateOf(meta.session);
+    const key = meta.toolUse ?? '';
+    if (meta.event === 'PreToolUse' && meta.rules) {
+      for (const handle of meta.rules.notices) await this.delivered(meta.session, 'notice', [handle]);
+      if (meta.rules.before?.length && key) st.editing.set(key, meta.rules.before);
+    }
+    const before = meta.event === 'PostToolUse' ? st.editing.get(key) : undefined;
+    const repo = before ? repoRoot(meta.cwd) : undefined;
+    if (before) st.editing.delete(key);
+    if (before && repo) await this.holdRemoved(meta.session, repo, before);
+  }
+  /** Each rule line an agent's edit removed stays in force, held, and becomes one proposal to you, as deep_propose's are. */
+  private async holdRemoved(session: string, repo: string, before: { file: string; scope: string; rules: string[] }[]): Promise<void> {
+    this.ruleFiles.delete(repo);
+    const held = readHeld(this.root.dir);
+    for (const b of before) {
+      const after = new Set(rulesInFile(join(repo, b.file)).map(sameRule));
+      for (const text of b.rules.filter((r) => !after.has(sameRule(r)))) {
+        const id = ruleId(b.file, text);
+        if (held.some((h) => h.id === id && h.repo === repo)) continue;
+        const made = await this.propose(session, { target: `wiki:rules#${id}`, change: `Remove the rule “${text}” from ${b.file}. An agent's edit took this line out; the rule stays in force on the rules page until you apply this.`, evidence: null }).catch(() => undefined);
+        if (made) held.push({ id, text, file: b.file, scope: b.scope, repo, proposal: String(made.proposal), ask: String(made.ask) });
+      }
+    }
+    saveHeld(this.root.dir, held);
+  }
+  /** `deep rules sync`: the rules page, each rule with its file, scope, size and what enforces it, written through the wiki. */
+  private async syncRules(): Promise<Obj> {
+    this.ruleFiles.clear();
+    const { rules, files } = await this.allRules(await this.ruleGuards());
+    savePage(this.root.dir, pageLines(rules, files));
+    await this.wikiBuild.writeRules();
+    return { rules: rules.length, files: new Set(rules.map((r) => `${r.repo ?? ''} ${r.file}`)).size };
+  }
+  /** The guard entries that enforce a rule: only those whose planted call deep-hook denies and whose twin it allows now. */
+  private ruleGuards(): Promise<{ name: string; rule: string }[]> {
+    return provenGuards(this.root.dir, process.env.DEEP_HUB_TEST_DEEP_HOOK || deepHook());
+  }
+  /**
+   * The rules offered for removal on the keep-or-remove list (#111): a rule a guard enforces, naming it, and a rule whose
+   * path scope matched no session's tool calls in the last 60 days, naming the count. Never one you typed; once each,
+   * until its text changes.
+   */
+  private async ruleLessons(): Promise<Lesson[]> {
+    const { rules } = await this.allRules(await this.ruleGuards());
+    const decided = new Set(((await this.record.raw("SELECT key FROM decisions WHERE state = 'active'")) as { key: string }[]).map((d) => d.key));
+    const out: Lesson[] = [];
+    for (const r of rules) {
+      if (r.known !== 'repo' || r.held) continue;
+      let why: string | undefined;
+      if (r.enforcer.kind === 'guard') why = `The guard ${r.enforcer.name} enforces it: its planted call is denied and its twin allowed, so the line in ${r.file} only repeats it.`;
+      else if (r.scope !== 'all' && r.repo) {
+        const reach = await ruleReach((sql, params) => this.record.raw(sql, params), r.repo, r.scope, reachSince(this.now(), 60));
+        if (!reach.sessions.length) why = `Its scope ${r.scope} matched ${reach.sessions.length} sessions' tool calls in the last 60 days.`;
+      }
+      if (!why) continue;
+      const id = `lesson-${sha256Hex(new TextEncoder().encode(`removal ${ruleHandle(r)} ${r.repo ?? ''}`)).slice(0, 12)}`;
+      if (!decided.has(decisionKey(id))) out.push({ id, kind: 'removal', text: r.text, rank: 0, claim: ruleHandle(r), scope: 'all', sources: [{ at: null, path: r.file, quote: r.text }], why });
+    }
+    return out;
+  }
+  /**
+   * Taking a rule's removal lesson: a configuration eval (#112) first; the line leaves its file only if that eval doesn't
+   * read as a regression. With no eval run, nothing changes (BLOCKED).
+   */
+  private async removeRule(lesson: Lesson): Promise<Obj> {
+    const { rules } = await this.allRules([]);
+    const rule = rules.find((r) => ruleHandle(r) === lesson.claim && r.repo);
+    if (!rule?.repo) return { status: 'refused', reason: `${lesson.claim} is no rule in a repo file now; nothing changed.` };
+    const path = join(rule.repo, rule.file);
+    const given = process.env.DEEP_HUB_TEST_EVAL;
+    if (!given) return { status: 'refused', reason: `BLOCKED: removing “${rule.text}” from ${rule.file} needs a configuration eval, and none ran; ${rule.file} is unchanged.` };
+    const evaluated = JSON.parse(readFileSync(given, 'utf8')) as { outcome?: string; broke?: string[] };
+    if (evaluated.outcome !== 'adopt') {
+      return { status: 'refused', reason: `the configuration eval reads removing “${rule.text}” as a regression (${evaluated.outcome ?? 'no outcome'}) on ${(evaluated.broke ?? []).join(', ') || 'no named task'}; ${rule.file} is unchanged.` };
+    }
+    const lines = readFileSync(path, 'utf8').split('\n');
+    const at = lines.findIndex((l) => { const m = /^\s*[-*+]\s+(.+?)\s*$/.exec(l); return m !== undefined && m !== null && sameRule(m[1]!) === sameRule(rule.text); });
+    if (at < 0) return { status: 'refused', reason: `${rule.file} no longer holds “${rule.text}”; nothing changed.` };
+    lines.splice(at, 1);
+    writeFileSync(path, lines.join('\n'));
+    this.ruleFiles.delete(rule.repo);
+    return { decision: `removed “${rule.text}” from ${rule.file}` };
+  }
+  /** `deep session rules <id>`: the set a session was given, whether a newer one is in force since, and the set a regression in it is credited to. */
+  private async sessionRules(params: Obj): Promise<Obj> {
+    const session = String(params.session ?? '');
+    const set = await setOf((sql, p) => this.record.raw(sql, p), session);
+    if (!set) throw new Refused(refusal('not_found', '/params/session', `No rules were recorded as given to session ${session}.`, session));
+    const [row] = (await this.record.raw('SELECT worktree, agent FROM sessions WHERE id = ?', [session])) as { worktree: string | null; agent: string | null }[];
+    const now = await this.startSet(session, row?.worktree ?? '', row?.agent ?? 'claude-code');
+    const current = [...now.handles].sort().join('\n') === [...set.rules].sort().join('\n');
+    return { session: `session:${session}`, runs: current ? 'current' : 'earlier', set: set.pos, credited_to: set.pos };
   }
   /**
    * `deep memory keep` and `remove` (#111): yours alone, from your own terminal, once the OS confirms you. Keeping a
@@ -3881,6 +4253,7 @@ export class Core {
     const agent = await this.agentAbove(context.peer);
     const why = await this.confirmer.you(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, { handle: lesson.id, revision: lesson.claim });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing changed: the OS didn't confirm you (${why}).`, lesson.id, true));
+    if (verb === 'remove' && lesson.claim.startsWith('wiki:rules#') && lesson.why) return this.removeRule(lesson);
     if (verb === 'remove') return { decision: await this.wikiBuild.forget(lesson.claim) };
     const guard = guardOf(lesson);
     if (guard) {
@@ -3919,8 +4292,18 @@ export class Core {
   }
   private async buildReply(meta: HookMeta, until: number): Promise<{ context?: string; block?: string; message?: string }> {
     const own = !FOREIGN.has(meta.agent) && meta.session;
-    if (own && (meta.event === 'PreToolUse' || meta.event === 'PostToolUse')) return this.queue(async () => this.acknowledge(meta.session));
+    // A tool call's reply carries a message typed mid-turn and the notices waiting for the session (#340, #352).
+    if (own && (meta.event === 'PreToolUse' || meta.event === 'PostToolUse')) {
+      return this.queue(async () => {
+        const ack = this.acknowledge(meta.session);
+        const context = [ack.context, await this.siblings.deliver(meta, until)].filter(Boolean).join('\n');
+        return { ...ack, ...(context ? { context } : {}) };
+      });
+    }
     if (meta.event === 'SessionStart') {
+      // After a compaction or a resume the next prompt carries every rule you typed (#344), set before any wait here,
+      // so a prompt whose hook arrives before this reply is done still carries them.
+      if (own && (meta.fields?.source === 'compact' || meta.fields?.source === 'resume')) this.ruleStateOf(meta.session).full = true;
       // What Codex says of our entries' trust, off this reply's path.
       if (meta.agent === 'codex') void this.readCodexTrust(meta.cwd);
       // The worktree receives its build products first, beside the rest of the reply (#1017).
@@ -3936,7 +4319,11 @@ export class Core {
       const open = own && !(this.options.plant === 'brief-at-startup-only' && source !== 'startup') ? await this.tasks.brief(meta.session, this.sessions.get(meta.session)?.thread) : undefined;
       if (this.options.plant === 'slow-brief' && (source === 'compact' || source === 'resume')) await new Promise((done) => setTimeout(done, 25));
       const taste = own ? await this.tasteAt(meta.session, meta.cwd, (await headOf(meta.cwd))?.branch ?? '', true) : undefined;
-      const context = [await placed, brief, open, answers, taste].filter(Boolean).join('\n\n');
+      // Your rules first (#344): every agent's rule files and the rules you typed, recorded as the set this session runs under.
+      const rules = own ? await this.queue(() => this.startRules(meta)).catch((error: unknown) => { process.stderr.write(`deep hub: no rules for ${meta.session}: ${error instanceof Error ? error.message : String(error)}\n`); return undefined; }) : undefined;
+      // Who else is in the repo, and on what (#352).
+      const siblings = own ? await this.queue(() => this.siblings.deliver(meta, until)) : undefined;
+      const context = [rules, await placed, brief, open, answers, taste, siblings].filter(Boolean).join('\n\n');
       return context ? { context } : {};
     }
     if (!own || (meta.event === 'UserPromptSubmit' && childPrompt(meta))) return {};
@@ -3955,6 +4342,9 @@ export class Core {
       // an answer or a send-back waits for the agent at this prompt: that is never lost, so the prompt goes on
       // with it, and the status rides beside it where the chat shows it.
       const reply = await this.queue(async (): Promise<{ context?: string; block?: string; message?: string }> => {
+        // Another session's message past the loop rule's count waits for your answer, at its submit (#352).
+        const held = await this.loopHeld(meta);
+        if (held) return { block: held, message: held.split(':')[0]! };
         // Behind this prompt's own hook, so its origin is recorded (its event, or the queue's) when read.
         const status = await this.statusReply(meta);
         for (const [ask, handed] of [...this.handed]) if (handed.session === meta.session) await this.unwoken(meta.session, ask, prompt);
@@ -4000,7 +4390,10 @@ export class Core {
         const first = !this.firstPrompted.has(meta.session);
         this.firstPrompted.add(meta.session);
         const taste = first ? await this.tasteAt(meta.session, meta.cwd, prompt, false) : undefined;
-        const context = [answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0).filter((text) => !prompt.includes(text)), landed && `DeepBuild: ${landed}`, slow, ack.context, taste].filter(Boolean).join('\n\n');
+        // A rule you typed anywhere, or every one after a compaction or a resume (#344).
+        const rules = await this.promptRules(meta, prompt).catch((error: unknown) => { process.stderr.write(`deep hub: rules at ${meta.session}'s prompt: ${error instanceof Error ? error.message : String(error)}\n`); return undefined; });
+        const siblings = await this.siblings.deliver(meta, until);
+        const context = [rules, answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0).filter((text) => !prompt.includes(text)), landed && `DeepBuild: ${landed}`, slow, ack.context, taste, siblings].filter(Boolean).join('\n\n');
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
       });
@@ -4016,6 +4409,13 @@ export class Core {
       await this.appendReading(meta.session, meta.agent, `This stop's claim could not be recorded: ${e instanceof Error ? e.message : String(e)}`).catch(() => undefined);
       return undefined;
     });
+    // A record that takes no writes (a full disk, the lock lost) turns every gate watch-only: the stop goes on
+    // unjudged, and its line says so and why (#33).
+    if (this.blocked && !judged?.claim) {
+      r.holding--;
+      const said = this.options.plant === 'failures-as-fail' ? this.blocked.replace(/^BLOCKED/, 'FAIL') : this.blocked;
+      return { message: `${said}: DeepBuild is watch-only until the record takes writes again, so this stop wasn't judged.` };
+    }
     // The claim's fast lane (#29): the hold waits for the checks the budget admitted, and no longer than the hold.
     // deep-hook stamps the stop on the wall clock; a stepped test clock's steps put it on the hub's (#965).
     const stopAt = ulidTime(meta.id) + this.stepped;
@@ -4163,6 +4563,34 @@ export class Core {
     const live = this.live.get(session);
     const still = [...(live?.background.values() ?? [])].map((b) => b.what);
     await this.queue(() => this.appendReading(session, live?.agent ?? 'claude-code', `${checks.join(', ')} waited 30 minutes for work in the background and ${checks.length === 1 ? 'starts' : 'start'} now${still.length ? `; still running: ${backgrounded(still)}, which DeepBuild leaves running` : ''}.`));
+  }
+  /**
+   * An idle session woken with a notice through its waiter (#352): never one held on an ask still open for you, or
+   * whose newest claim's verdict stands BLOCKED (its cause yours to clear, which a BLOCKED verdict names); that one
+   * hears it at its next turn instead.
+   */
+  private async noticeWake(session: string, text: string): Promise<boolean> {
+    const r = this.routes.get(session);
+    if (!r?.waiter || r.holding || r.places || await this.asksYou(session)) return false;
+    const [newest] = (await this.record.raw(`SELECT v.outcome FROM claims c JOIN verdicts v ON v.claim_id = c.id WHERE c.session_id = ? AND v.stale = 0 ORDER BY c.created DESC, v.created DESC LIMIT 1`, [session])) as { outcome: string }[];
+    if (newest?.outcome === 'BLOCKED') return false;
+    r.waiter.give({ session, text });
+    r.waiter = undefined;
+    return true;
+  }
+  /**
+   * Whether the loop rule holds this prompt (#352): its origin as the hook mapped it, and the session whose message
+   * started it as the prompt's transcript entry names it (Claude Code's origin.from), never the message's text.
+   */
+  private async loopHeld(meta: HookMeta): Promise<string | undefined> {
+    const live = this.live.get(meta.session);
+    const session = this.sessions.get(meta.session);
+    if (!live?.turnFrom || childPrompt(meta)) return undefined;
+    return this.siblings.held(meta, live.turnFrom, async () => {
+      const entry = session && meta.fields?.prompt_id ? (await this.turnFrom(session, meta.fields.prompt_id))[0] : undefined;
+      const origin = entry && isObj(entry.origin) ? entry.origin : undefined;
+      return typeof origin?.from === 'string' ? /^local_(.+)$/.exec(origin.from)?.[1] : undefined;
+    });
   }
   /**
    * The messages typed mid-turn since the last acknowledgement (#340): the agent is asked to acknowledge each in one
@@ -4447,6 +4875,8 @@ export class Core {
     for (const wake of this.waiting.get(session) ?? []) wake();
     // What its reply carried never reached the agent (#906): stalled, unless a turn shows it, and it goes by the next route.
     for (const [ask, handed] of this.handed) if (handed.hook === id) void this.queue(() => this.unwoken(handed.session, ask)).catch(() => undefined);
+    // The notices it carried wait for the session's next hook (#352).
+    this.siblings.gone(id);
   }
   /** A waiter whose connection closed: Claude Code stopped it, or it exited. */
   waiterGone(key: number): void {
@@ -5077,10 +5507,27 @@ export class Core {
   }
 
   /** The sessions' rows; one paseo runs whose answer no route could carry reads "answer waiting" (#55). */
-  private async sessionRows(): Promise<Record<string, unknown>[]> {
-    const rows = (await this.record.table('sessions')).rows as Record<string, unknown>[];
+  private async sessionRows(seen = ''): Promise<Record<string, unknown>[]> {
+    let rows = (await this.record.table('sessions')).rows as Record<string, unknown>[];
+    // A reader sees a session whose events it may see (#1337).
+    if (seen) {
+      const visible = new Set(((await this.record.raw(`SELECT DISTINCT session_id AS id FROM events WHERE session_id IS NOT NULL${seen}`)) as { id: string }[]).map((r) => r.id));
+      rows = rows.filter((row) => visible.has(String(row.id)));
+    }
     for (const id of [...this.answerWaiting]) if (!(await this.waitingFor(id)).length) this.answerWaiting.delete(id);
-    return rows.map((row) => (this.answerWaiting.has(String(row.id)) ? { ...row, delivery: 'answer waiting: neither deep-hook\'s waiter nor paseo\'s plugin can carry it, so it goes with the session\'s next prompt' } : row));
+    // The session map (#352): each session's repo, branch, issue and changed files, the commands it runs now, its leases and its state.
+    const leases = (await this.record.raw(`SELECT kind, key, holder FROM leases WHERE state = 'held'`)) as { kind: string; key: string; holder: string }[];
+    return rows.map((row) => {
+      const id = String(row.id);
+      const placed = this.siblings.row(id);
+      const map = placed && {
+        ...placed, running: [...(this.live.get(id)?.calls.values() ?? [])].filter((c) => c.ended === undefined).map((c) => c.what),
+        leases: leases.filter((l) => l.holder === `session:${letters(id)}`).map((l) => `${l.kind} ${l.key}`), state: row.status,
+      };
+      // A session DeepBuild started shows its run and what its agent's own sandbox holds (#1330).
+      const started = this.sessionStarts.rowOf(id);
+      return { ...row, ...(started ? { run: started.run, sandbox: started.sandbox } : {}), ...(map ? { map } : {}), ...(this.answerWaiting.has(id) ? { delivery: 'answer waiting: neither deep-hook\'s waiter nor paseo\'s plugin can carry it, so it goes with the session\'s next prompt' } : {}) };
+    });
   }
 
   // ---- Methods.
@@ -5105,14 +5552,16 @@ export class Core {
       case 'test.send_back': return this.sendBack(params);
       case 'test.verdict': return this.testVerdict(params);
       case 'test.clock': return this.testClock(params);
-      case 'events.read': return this.read(params);
+      case 'events.read': return this.read(params, context);
       case 'inbox.read': return this.reflecting(() => this.inbox());
-      case 'sessions.read': return this.reflecting(async () => ({ sessions: await this.sessionRows() }));
+      case 'sessions.read': return this.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
+      case 'person.add': return this.addPerson(params, context);
       case 'numbers.read': return this.reflecting(async () => {
         const read = await this.numbers.read() as unknown as { rows: unknown[] };
         return { ...read, rows: [...read.rows, await this.handbacks()] } as unknown as Obj;
       });
       case 'numbers.baseline': await this.notAnAgent(context, method); return this.numbers.baseline(String(params.manifest));
+      case 'race.start': return this.race(params, context);
       case 'numbers.refresh': await this.notAnAgent(context, method); return this.numbers.refresh();
       case 'numbers.sample': await this.notAnAgent(context, method); return this.numbers.sample(Number(params.before), typeof params.manifest === 'string' ? params.manifest : undefined);
       case 'changes.read': return this.change(params);
@@ -5123,12 +5572,20 @@ export class Core {
       case 'ask.undo': return this.undo(params, context);
       case 'offer.save': return this.saveOffered(params, context);
       case 'staged.undo': return this.staging.undo(params);
+      case 'agents.propose': await this.ready; return this.agents.propose(params);
+      case 'agents.read': return this.agents.read();
+      case 'agents.restart': await this.ready; return this.agents.restart(params);
+      case 'agents.undo': return this.agents.undo(params);
+      case 'mcp.exec': return this.agents.exec(params);
       case 'device.pair': return this.pair(params);
       case 'device.unpair': return this.unpair(params, context);
       case 'channel.link': return this.link(params);
       case 'confirm.enroll': return this.enrollAgain(params, context);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
+      case 'ask.confirm': return this.confirmCard(params);
+      case 'views.installed': return { views: this.extensions?.installedViews() ?? [] };
+      case 'command.run': return this.runCommand(params);
       // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
       case 'status.read':
         this.replayLate();
@@ -5137,6 +5594,8 @@ export class Core {
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);
+      case 'start.approve': return this.sessionStarts.approve(params, context);
+      case 'start.session': return this.sessionStarts.startSession(params, context);
       case 'test.load': return this.testLoad(params);
       case 'record.backup': return this.backup(params);
       case 'lease.wait': return this.heavy.wait(params, context.peer, () => this.agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
@@ -5151,15 +5610,29 @@ export class Core {
       }
       case 'memory.list': return { lessons: await this.lessons(), rejected: await rejectedDirections(this.raw) };
       case 'memory.act': return this.memoryAct(params, context);
+      // The rules page (#344): written, a scope's reach over the last 30 days, the sessions a rule was given to, a session's set.
+      // Behind every hook already received or spooled, so a session that just started is a repo the page reads.
+      case 'rules.sync':
+        this.replayLate();
+        return (this.replaying ?? Promise.resolve()).then(() => this.queue(() => this.syncRules()));
+      case 'rules.reach': return ruleReach((sql, p) => this.record.raw(sql, p), realpathSync(String(params.repo)), String(params.scope), reachSince(this.now(), 30));
+      case 'rules.credit': return { sessions: await creditOf((sql, p) => this.record.raw(sql, p), String(params.rule)) };
+      case 'session.rules': return this.sessionRules(params);
+      case 'acceptance.start': return this.acceptance.start(params);
+      case 'acceptance.status': return this.acceptance.status(params);
+      case 'acceptance.dispute': return this.acceptance.dispute(params);
+      case 'acceptance.ended': return this.acceptance.ended(params).then(() => ({ ended: true }));
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.runner.list() };
+      case 'checks.kinds': return { kinds: this.checkKinds.list() };
       case 'job.output': return { stdout: await this.runner.output(String(params.job)) };
       case 'canvas.show': return this.showCli(params, context);
       case 'canvas.revisions': return this.canvasCall({ call: 'revisions', doc: String(params.doc) });
       case 'canvas.messages': return this.canvasCall({ call: 'messages', session: String(params.session) });
       case 'canvas.user': return this.canvasUser(params, context);
       case 'canvas.drawn': return this.drawnBy(context);
+      case 'work.fix': return await this.workspaceCall(() => this.fixItem(String(params.id ?? ''), typeof params.cwd === 'string' ? params.cwd : homedir()));
       case 'workspace.new': return await this.workspaceCall(() => this.spaces.make(String(params.topic ?? ''), typeof params.folder === 'string' ? params.folder : undefined));
       case 'workspace.move': return await this.workspaceCall(() => this.spaces.move(String(params.id), String(params.folder)));
       case 'workspace.revert': return await this.workspaceCall(() => this.spaces.revert(String(params.id), String(params.commit)));
@@ -5260,9 +5733,22 @@ export class Core {
    * A page of the log as each event's JSON text, the record's own JSON with `verified` for its unverified mark,
    * built by SQLite from the stored text without parsing it again: the reads and the stream page through many events.
    */
-  private async page(after: number, limit: number, kinds?: string[]): Promise<{ log_pos: number; json: string }[]> {
+  private async page(after: number, limit: number, kinds?: string[], seen = ''): Promise<{ log_pos: number; json: string }[]> {
     const only = kinds ? ` AND kind IN (${kinds.map((k) => `'${k.replace(/'/g, "''")}'`).join(',')})` : '';
-    return (await this.record.raw(`SELECT log_pos, ${EVENT_TEXT} AS json FROM events WHERE log_pos > ${after}${only} ORDER BY log_pos LIMIT ${limit}`)) as { log_pos: number; json: string }[];
+    return (await this.record.raw(`SELECT log_pos, ${EVENT_TEXT} AS json FROM events WHERE log_pos > ${after}${only}${seen} ORDER BY log_pos LIMIT ${limit}`)) as { log_pos: number; json: string }[];
+  }
+  /**
+   * The events a reader may see, as SQL (#1337): a person reads their own personal scope and the projects they are
+   * on; the owner reads everything but another person's personal scope. With nobody else on the hub, everything.
+   */
+  private seenBy(role: string): string {
+    if (!this.people.any) return '';
+    const person = role.startsWith('person:') ? role.slice('person:'.length) : OWNER;
+    if (person === OWNER) return ` AND scope NOT LIKE 'person:%'`;
+    // The planted wrong program: a person's reads without the filter.
+    if (this.options.plant === 'reads-unfiltered') return '';
+    const scopes = [`person:${person}`, ...[...this.people.projects(person)].map((p) => `repo:${p}`)];
+    return ` AND scope IN (${scopes.map((x) => `'${sql(x)}'`).join(',')})`;
   }
   /**
    * The log's committed end, read in the same step as `read` starts, before anything else can append: a read
@@ -5279,26 +5765,27 @@ export class Core {
    * A page of the log: a full one reflects its last event, a short one the log's end, so an empty gap is crossed
    * once. Its events go back as one JSON array's text, which the server writes as it is.
    */
-  private async read(params: Obj): Promise<Obj> {
+  private async read(params: Obj, context: CallContext): Promise<Obj> {
+    const seen = this.seenBy(context.role);
     const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
     const limit = Number.isSafeInteger(params.limit) && (params.limit as number) > 0 ? Math.min(params.limit as number, 1000) : 1000;
     const kinds = Array.isArray(params.kinds) && params.kinds.every((k) => typeof k === 'string') ? (params.kinds as string[]) : undefined;
-    const ahead = !kinds && this.ahead?.after === after && this.ahead.limit === limit ? this.ahead : undefined;
+    const ahead = !kinds && this.ahead?.after === after && this.ahead.limit === limit && this.ahead.seen === seen ? this.ahead : undefined;
     this.ahead = undefined;
     let out: { log_pos: number; events: string };
     if (ahead) {
       await Promise.allSettled([...this.inflight]);
       out = { log_pos: ahead.log_pos, events: ahead.events };
     } else {
-      const read = await this.reflecting(async () => ({ events: await this.page(after, limit, kinds) }));
+      const read = await this.reflecting(async () => ({ events: await this.page(after, limit, kinds, seen) }));
       const events = read.events as { log_pos: number; json: string }[];
       out = { log_pos: events.length === limit ? events[limit - 1]!.log_pos : Math.max(after, read.log_pos as number), events: `[${events.map((e) => e.json).join(',')}]` };
     }
     // History is paged in order: the next full page is built while the reader takes this one. A full page never
     // changes once committed, since log positions only grow and a gap never fills.
     if (!kinds && out.events !== '[]') {
-      setImmediate(() => void this.page(out.log_pos, limit).then((next) => {
-        if (next.length === limit) this.ahead = { after: out.log_pos, limit, log_pos: next[limit - 1]!.log_pos, events: `[${next.map((e) => e.json).join(',')}]` };
+      setImmediate(() => void this.page(out.log_pos, limit, undefined, seen).then((next) => {
+        if (next.length === limit) this.ahead = { after: out.log_pos, limit, seen, log_pos: next[limit - 1]!.log_pos, events: `[${next.map((e) => e.json).join(',')}]` };
       }));
     }
     return out;
@@ -5650,6 +6137,44 @@ export class Core {
     return { channel, account };
   }
 
+  /**
+   * A person joins a project (#1337): the owner names them and a clone of the project's repo, whose forge identity is the
+   * project, so every clone of it reads as one. Once the OS confirms the owner, the person's credential comes back
+   * once; the hub keeps only its digest. A repo with no remote keeps its path scope, so it can't be shared.
+   */
+  private async addPerson(params: Obj, context: CallContext): Promise<Obj> {
+    if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A person is added from your own terminal, once the OS confirms you.', 'person.add'));
+    const { person, repo } = params;
+    if (typeof person !== 'string') throw new Refused(refusal('type', '/params/person', "Name the person as their forge login.", person));
+    if (typeof repo !== 'string' || !isAbsolute(repo)) throw new Refused(refusal('type', '/params/repo', "Name a clone of the project's repo by its absolute path.", repo));
+    const forge = forgeOf(repo);
+    if (!forge) throw new Refused(refusal('not_found', '/params/repo', `${repo} is in no repo with an origin remote: a repo with no remote keeps its path scope, so it can't be shared.`, repo));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nobody was added: this deep command runs inside agent session ${agent}'s process tree, and no agent adds a person. Run it from your own terminal.`, 'person.add'));
+    const what = `add ${person} to ${forge}`;
+    const why = await this.confirmer.you(what, { handle: `person:${person}`, revision: forge });
+    if (why) throw new Refused(refusal('unconfirmed', '/method', `${what} changed nothing: the OS didn't confirm you (${why}).`, 'person.add', true));
+    try {
+      return this.people.add(person, forge);
+    } catch (error) {
+      throw new Refused(refusal('pattern', '/params/person', `Nobody was added: ${error instanceof Error ? error.message : String(error)}.`, person));
+    }
+  }
+  /** `deep race <issue>` (#352): you start a race on an issue, so its sessions settle on the first PASS and raise no "keep which?" ask. */
+  private async race(params: Obj, context: CallContext): Promise<Obj> {
+    const issue = Number(params.issue);
+    if (!Number.isSafeInteger(issue) || issue < 1) throw refuse('type', '/params/issue', 'Name the issue by its number, such as 79.', params.issue);
+    const what = `start a race on issue #${issue}`;
+    if (context.role !== 'cli' || !context.peer) throw new Refused(refusal('unconfirmed', '/method', `No race started: ${what} counts only from your terminal, once the OS confirms you.`, 'race.start'));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `No race started: this deep command runs inside agent session ${agent}'s process tree, and only you start a race. Run it from your own terminal.`, 'race.start'));
+    // A race keeps an ask from you, so it counts as your decision: once the OS confirms you.
+    const why = await this.confirmer.you(what, { handle: `race:${issue}`, revision: what });
+    if (why) throw new Refused(refusal('unconfirmed', '/params/issue', `No race started: the OS didn't confirm you (${why}). Run it again and confirm.`, String(issue), true));
+    const ts = this.now();
+    await this.append(this.connection('core'), { v: 1, id: ulid(ts), kind: 'race.started', ts, data: { issue } });
+    return { issue };
+  }
   /** What feeds your numbers or labels is yours to run: an agent's word is never evidence. */
   private async notAnAgent(context: CallContext, method: string): Promise<void> {
     const agent = await this.agentAbove(context.peer);
@@ -5698,7 +6223,8 @@ export class Core {
         const checked = await this.extensions.check(pkg);
         const load = checked.passed ? await this.extensions.load(pkg) : { status: 'refused' as const, reason: `it failed conformance: ${checked.reasons.join('; ')}` };
         plantedReload(this.options.plant);
-        return load.status === 'refused' ? { ...installed, not_loaded: load.reason } : installed;
+        const panels = load.status === 'refused' ? undefined : await this.panelKits(pkg.id);
+        return load.status === 'refused' ? { ...installed, not_loaded: load.reason } : panels ? { ...installed, not_loaded: panels } : installed;
       } catch (error) {
         return { ...installed, not_loaded: error instanceof Error ? error.message : String(error) };
       }
@@ -5707,11 +6233,45 @@ export class Core {
     }
   }
 
+  /** Each view's panel held to panel@1 (#1454), its verdict kept for the app: what failed, in words, or undefined. */
+  private async panelKits(id: string, unrun = false): Promise<string | undefined> {
+    const failed: string[] = [];
+    for (const view of this.extensions!.installedViews().filter((v) => v.extension === id && (!unrun || v.kit === null))) {
+      const { verdict, why } = await panelKit(view.folder);
+      this.extensions!.keepKit(id, { slot: 'panel@1', fill: view.name, verdict });
+      if (verdict !== 'PASS') failed.push(`${view.name} reads ${verdict} on panel@1: ${why}`);
+    }
+    return failed.length ? failed.join('; ') : undefined;
+  }
+
+  /** A view's ⌘K command, chosen in the app (#1454): the action its manifest declares, called as you. */
+  private async runCommand(params: Obj): Promise<Obj> {
+    const { action } = params;
+    const view = this.extensions?.installedViews().find((v) => v.commands.some((c) => c.action === action));
+    if (!view) throw new Refused(refusal('not_found', '/params/action', `No installed view runs ${String(action)}.`, action));
+    return { ...(await this.extensions!.callAction({ action: String(action), target: { handle: `ext:${view.extension}`, version: view.version }, input: {}, caller: this.connection('app') })) };
+  }
+
   /**
    * `deep off`, `deep on`, `deep hub stop`, `deep hub use` and `deep setup --undo` (#19): each takes effect only once
    * the OS confirms you, with a prompt naming the command. Run inside an agent's process tree it acts as that agent's
    * session, and no agent switches DeepBuild off; the peer check alone never makes one count.
    */
+  /**
+   * The OS confirming you for a press on the question card that wasn't hardware (#1454): one press, one prompt, naming
+   * the option's words the app sends and the ask the hub reads, and never cached. The app signs its answer only after this.
+   */
+  private async confirmCard(params: Obj): Promise<Obj> {
+    const { ask: handle, reason } = params;
+    if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>.', handle));
+    if (typeof reason !== 'string' || !reason) throw new Refused(refusal('required', '/params/reason', "Give the words the OS's prompt shows.", reason));
+    const [row] = (await this.record.raw("SELECT e.data AS data FROM events e WHERE e.id = ? AND e.kind = 'ask.created'", [handle.slice(4)])) as { data: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}.`, handle));
+    const why = await this.confirmer.you(reason.slice(0, 200), { handle, revision: await this.revisionOf(handle, JSON.parse(row.data) as { pinned_to?: { ref?: string } }) });
+    if (why) throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}).`, handle, true));
+    return { confirmed: handle };
+  }
+
   private async confirmCommand(params: Obj, context: CallContext): Promise<Obj> {
     const command = params.command;
     if (typeof command !== 'string' || !AUTHORITY.has(command)) throw new Refused(refusal('enum', '/params/command', `Name one of ${[...AUTHORITY].join(', ')}.`, command));
@@ -5793,7 +6353,8 @@ export class Core {
     for (const [sub, after] of this.subscribers) {
       let last = after;
       for (;;) {
-        const events = await this.page(last, 1000);
+        // Only the owner subscribes, and reads what the owner may see (#1337).
+        const events = await this.page(last, 1000, undefined, this.seenBy(OWNER));
         if (!this.subscribers.has(sub)) break;
         for (const event of events) this.emit(sub, event.json);
         if (events.length) last = events[events.length - 1]!.log_pos;
@@ -5812,6 +6373,8 @@ export class Core {
    */
   private async mcpCall(params: Obj, context: CallContext): Promise<unknown> {
     const tool = String(params.tool);
+    // No MCP call starts a session, whatever it claims (#1330): refused before its arguments are read.
+    if (tool === 'deep_start') return this.sessionStarts.refuseMcp(context.session);
     try {
       const args = checkArguments(tool, params.arguments);
       const sent = isObj(params.arguments) ? params.arguments : {};
@@ -5884,6 +6447,8 @@ export class Core {
   private readonly worldFile = new WorldFile(process.env.DEEP_HUB_TEST_SHOW);
   /** Each presented revision for the app, in order; an app's `canvas.drawn` takes those after the last it took. */
   private readonly presented: Obj[] = [];
+  /** The documents deep_show has named, each on the app's canvas panel. */
+  private readonly shownDocs = new Set<string>();
   private readonly drawnUpTo = new Map<string, number>();
   /** When an app last took what was presented: an app that took it within the last 250 ms is open (it asks every 100 ms), and draws it. */
   private appSeen = 0;
@@ -5901,7 +6466,7 @@ export class Core {
       const d = JSON.parse(r.data) as Obj;
       if (typeof d.reading === 'string' && typeof d.value === 'number') record[d.reading] = { session: r.session, value: d.value, as_of: Number(d.as_of ?? 0) };
     }
-    return { sessions, record, file };
+    return { sessions, record, file, docs: [...this.shownDocs] };
   }
   private canvas(): Canvas {
     return (this.canvasCore ??= new Canvas(this.root.evidence));
@@ -5915,6 +6480,7 @@ export class Core {
    * session the peer check found, or as you: the writer is the binding's, never the payload's.
    */
   private async show(as: { session: string | null } | { you: true }, call: Obj): Promise<Obj> {
+    if (typeof call.doc === 'string') this.shownDocs.add(call.doc);
     // The planted hub stamps the writer the payload claims (#806's wrong program): a session whose thread it names.
     if (this.options.plant === 'deep-show-writer-from-payload' && 'session' in as && isObj(call.document) && typeof call.document.writer === 'string') {
       const claimed = [...this.sessions.values()].find((s) => `agent:${s.thread}` === (call.document as Obj).writer);
@@ -5975,7 +6541,7 @@ export class Core {
         hash, layer: String(p.layer), thread: writer.kind === 'agent' ? writer.id : null,
       } as JsonValue,
     });
-    this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers });
+    this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
   }
   /** `deep show` from the CLI: the peer check makes it the agent's whose process tree runs it, never by PID alone; else yours. */
   private async showCli(params: Obj, context: CallContext): Promise<Obj> {
@@ -6127,13 +6693,13 @@ export class Core {
     return [...this.sessions.values()].map((s) => s.cwd).find((cwd) => cwd === real || isUnder(real, cwd));
   }
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline as the spec writes it, where it gives one. */
-  private checksOf(worktree: string): Map<string, { run: string; deadline?: unknown }> {
+  private checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string }> {
     let spec: unknown;
     try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
-      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}) }] as const];
+      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(typeof c.type === 'string' ? { type: c.type } : {}) }] as const];
     }));
   }
   private unknownCheck(worktree: string, check: unknown): Refused {
@@ -6421,6 +6987,27 @@ export class Core {
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
   /** `deep workspace`'s calls (#67): a refusal says why, on the command's stderr. */
+  /**
+   * `deep fix <id>` (#66): the work item with that ID, from the work sources you switched on, opens its task as a prompt
+   * naming it would, whenever it was made; what done means locks from its readings, outside text waiting for your one
+   * answer, and a task with no repo lands in a workspace.
+   */
+  private async fixItem(id: string, cwd: string): Promise<{ task: string; link: string }> {
+    if (!id) throw Error('deep fix names a work item by its ID');
+    let item = await this.tasks.workItem(id);
+    if (!item && this.extensions) {
+      const task = await this.extensions.fix(this.connection('cli'), id);
+      const readings = (await this.extensions.workEvents(task.task_ref)).map((e) => ({ ...e.reading, authors: e.reading.authors.map((a) => ({ ...a })) }));
+      const main = readings.find((r) => r.source_id === task.id);
+      if (main) item = { ...main, readings };
+    }
+    if (!item) throw Error(`no work source you switched on holds ${id}`);
+    const at = this.now();
+    const task_ref = `task:${letters(item.source_id)}`;
+    const session = `fix${letters(item.source_id)}`;
+    await this.tasks.opened({ session, agent: 'claude-code', cwd, thread: `fix:${item.source_id}`, task_ref, text: `Fix ${id}`, prompt: `fix:${letters(id)}:${at}`, at, item });
+    return { task: task_ref, link: item.link };
+  }
   private async workspaceCall(call: () => Promise<object>): Promise<Obj> {
     try {
       return { ...await call() };
@@ -6443,7 +7030,7 @@ export class Core {
     this.entered.delete(session);
     await this.extensions!.leaveProject(cwd).catch(() => undefined);
   }
-  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references' | 'runs' | 'held_out'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean; state?: StatePin }): Promise<void> {
+  private async runClaim(r: { claim: string; session: string; task: string; commit: string; base: string; cwd: string; deliverables: string[]; requirements: { req: string; id: string; text: string; depth: string; oracle: string; on_base: 'fails' | 'passes'; check: string | null }[]; checks: (Pick<ClaimCheck, 'check' | 'approved' | 'on_base' | 'asserts' | 'req' | 'surface' | 'expected_ms' | 'deadline_ms' | 'references' | 'runs' | 'held_out' | 'timing'> & { command?: string; paid?: PaidKind })[]; definition: DefinitionState; joins?: boolean; state?: StatePin }): Promise<void> {
     const at = this.now();
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
     this.claimScopes.set(r.claim, { task: r.task, base: r.base, cwd: r.cwd });
@@ -6465,8 +7052,9 @@ export class Core {
       const told = r.joins ? [] : toldToRun(message);
       const cited = told.reduce((m, command) => m.replaceAll(`\`${command}\``, command), message);
       // The validity gate reads the claim against its definition: a claim with none yet, and none on its way, has nothing to be read against.
+      // A number's cited query is the numbers check's to re-run (#1537), never a run or a file the session had to make or read.
       const [log, trusted] = await reads;
-      const findings = log === undefined ? [] : validityGate({ claim: { claim: r.claim, message: cited }, checkout: r.cwd, deliverables: r.deliverables, session: log }).map((f) => f.why);
+      const findings = log === undefined ? [] : validityGate({ claim: { claim: r.claim, message: this.checkKinds.uncited(cited) }, checkout: r.cwd, deliverables: r.deliverables, session: log }).map((f) => f.why);
       // A claim that fails the validity gate goes back naming what's missing, before any check runs.
       if (findings.length) return { fast: [], slow: [], snapshot: r.commit, readyAt: this.now(), findings };
       // The planted wrong program runs no check before the definition locks, the repo's spec included.
@@ -6489,7 +7077,7 @@ export class Core {
       // trusted, or one the agents' own trust records already do; an untrusted repo's spec commands never run, and
       // its claims are watch-only, so none passes. On a claim that joins its early run they ran already.
       if (!r.joins) {
-        if (spec.length && trusted) {
+        if (spec.length && trusted && this.options.plant !== 'drafted-spec-only') {
           checks.push(...spec);
           // A claim on a pull request also runs the repo's release checks, on the PR's commit merged with main (#325).
           if (await this.prOf(r.session)) checks.push(...await this.releaseChecks(r.cwd, r.commit));
@@ -6502,6 +7090,26 @@ export class Core {
           }
         }
       }
+      // The checks of the other kinds the hub holds (#1537), each run through its kind: a drafted check whose bytes name
+      // a work kind; the review on every claim that opens or updates a PR, its second model through the runner under
+      // your reserve (#87); and the numbers check on every claim whose words state a number with the query behind it.
+      const of: ReviewOf = { claim: r.claim, task: r.task, agent: this.live.get(r.session)?.agent ?? 'claude-code', transcript: this.sessions.get(r.session)?.transcript };
+      const kinded = new Map<string, { spec: CheckSpec; of: ReviewOf }>();
+      for (const c of checks) {
+        const spec = c.source === 'definition' && c.approved ? this.checkKinds.definitionSpec(await this.store.read(c.approved).catch(() => new Uint8Array())) : undefined;
+        if (spec) kinded.set(c.check, { spec, of });
+      }
+      if (!r.joins) {
+        const add = (check: string, spec: CheckSpec | undefined, command: string): void => {
+          if (!spec) return;
+          checks.push({ check, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec' });
+          kinded.set(check, { spec, of });
+        };
+        if (await this.prOf(r.session)) add('review', this.checkKinds.reviewSpec(r.base, r.commit, this.root.dir), `review ${r.base}..${r.commit}`);
+        const numbers = this.checkKinds.numbersSpec(cited);
+        if (numbers) add(`numbers: ${numbers.numbers.map((n) => n.stated).join(', ')}`, numbers, numbers.numbers.map((n) => `${n.stated}: ${n.query.sql} on ${n.query.database}`).join('; '));
+      }
+      if (kinded.size) this.kindChecks.set(r.claim, kinded);
       // Each told command runs once on the claim's snapshot as the agent's own check: failing, it sends the claim back
       // with its output; passing, it proves nothing, as the agent's own checks never pass a claim.
       for (const command of told) checks.push({ check: command, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'own' });
@@ -6529,7 +7137,8 @@ export class Core {
       const check = checks.get(name);
       if (!check) return [];
       const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
-      return [{ check: name, approved: null, command: check.run, covers: [], depth: 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, ...(deadline ? { deadline_ms: deadline } : {}) }];
+      // A journey runs on the repo's stack, as its environment block starts it (#33, #580).
+      return [{ check: name, approved: null, command: check.run, covers: [], depth: check.type === 'journey' ? 'journey' as const : 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, ...(deadline ? { deadline_ms: deadline } : {}) }];
     });
   }
   /**
@@ -6607,6 +7216,8 @@ export class Core {
   private async judged(claim: string): Promise<void> {
     let v = this.gate.verdictOf(claim);
     if (!v || v.outcome === 'pending') return;
+    // The planted engine reads a run cut short, or one missing what lies outside the code, as a failure.
+    if (this.options.plant === 'failures-as-fail' && (v.outcome === 'BLOCKED' || v.outcome === 'INCONCLUSIVE')) v = { ...v, outcome: 'FAIL' };
     // An untrusted repo's spec commands never ran, so its claim is watch-only: it never passes (#322).
     if (v.outcome === 'PASS' && this.watchOnlyClaims.has(claim)) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, 'project trust: the repo\'s spec checks never run until you trust the project, so this claim is watch-only'] };
     // A target that no longer resolves makes the claim INVALID, naming it, whatever its checks show; a FAIL still goes first (#323).
@@ -6692,12 +7303,47 @@ export class Core {
       const out = await this.ledger.request(this.connection('core'), { run: id, check: r.check, inputs, issue: paid.task });
       if (out.status !== 'started') throw Error(out.status === 'BLOCKED' ? (out.cause === 'price' ? `${out.missing} is unknown` : `the budget for ${paid.task} has no room for it (${out.ask})`) : `it waits for your answer, ${out.ask}`);
     }
-    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? null, ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.stacks.wanted(r.cwd) ? r.stack : undefined);
+    // A check your repo's spec lists under `outside` runs as you, outside the sandbox, once its checkout is built (#33).
+    const outside = this.outsideOf(r.cwd, r.check);
+    if (outside) await this.builtOutside(r.cwd, outside.build);
+    // A check of another kind runs its spec through the kinds the hub holds, within its kind's budget unless it names a deadline (#1537).
+    const kinded = this.kindChecks.get(r.claim)?.get(r.check);
+    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, ...(outside ? { outside: true } : {}), env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? this.checkKinds.deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.stacks.wanted(r.cwd) ? r.stack : undefined);
     if (paid) {
       const charge = () => this.ledger.charge(this.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
       void this.runs.ended(String(run)).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     return String(run);
+  }
+  /**
+   * Whether the checkout's spec runs this check outside the sandbox (#33): `outside: { checks: [paths], build }` in
+   * .deepbuild/done.yaml, for suites that start sandboxes of their own, which macOS can't nest. Its build makes what
+   * those suites start (the workspaces, deep-hook) once per checkout.
+   */
+  private outsideOf(cwd: string, check: string): { build: string } | undefined {
+    let spec: unknown;
+    try { spec = parseYaml(readFileSync(join(cwd, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return undefined; }
+    const o = isObj(spec) && isObj(spec.outside) ? spec.outside : undefined;
+    const paths = Array.isArray(o?.checks) ? o.checks.map(String) : [];
+    return o && typeof o.build === 'string' && paths.some((p) => check === p || (p.endsWith('/') && check.startsWith(p))) ? { build: o.build } : undefined;
+  }
+  /** Each checkout's outside build, run once, as you, outside the sandbox; one that fails keeps its checks from starting, naming it. */
+  private readonly outsideBuilds = new Map<string, Promise<void>>();
+  private builtOutside(cwd: string, build: string): Promise<void> {
+    let built = this.outsideBuilds.get(cwd);
+    if (!built) {
+      built = (async () => {
+        const run = `run:${ulid(this.now())}`;
+        let tail = '';
+        const keep = (chunk: Buffer): void => { tail = `${tail}${chunk.toString('utf8')}`.slice(-2000); };
+        const started = await this.host.start({ run, argv: ['/bin/sh', '-c', build], cwd, own_sandbox: true, output: { stdout: keep, stderr: keep } });
+        if (started.status !== 'started') throw Error(`its checkout's build \`${build}\` found no ${started.kind} free`);
+        const exit = await this.host.wait(run);
+        if (exit.code !== 0) throw Error(`its checkout's build \`${build}\` exited ${String(exit.code)}: ${tail.trim().split('\n').slice(-3).join(' ')}`);
+      })();
+      this.outsideBuilds.set(cwd, built);
+    }
+    return built;
   }
   /**
    * The stop rule (#303, design: Every stop is judged): a stop whose turn did work is a claim, other than one right
@@ -7001,6 +7647,7 @@ export class Core {
     this.stopping = true;
     plantedStop();
     for (const timer of this.timers) clearInterval(timer);
+    this.siblings.stop();
     // The pool's pipe goes with the hub, as its socket does: left in the root with no writer, any read of it blocks.
     this.pool?.close(true);
     for (const live of this.live.values()) clearTimeout(live.quiet);

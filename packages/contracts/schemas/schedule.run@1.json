@@ -106,10 +106,9 @@
             "FAIL",
             "BLOCKED",
             "INCONCLUSIVE",
-            "INVALID",
-            "uncounted"
+            "INVALID"
           ],
-          "description": "On an end: the verdict on the schedule's claim; left out for a run stopped before dispatch.",
+          "description": "On an end: the verdict on the schedule's claim; left out for a run stopped before dispatch and for a declared no-op.",
           "x-closure": {
             "closed": "each value is a verdict the claim defines and every reader acts on",
             "reopens": "a new major of this schema",
@@ -128,6 +127,10 @@
         "stopped": {
           "type": "boolean",
           "description": "On an end: the run was queued when the hub stopped, and never dispatched."
+        },
+        "noop": {
+          "type": "boolean",
+          "description": "On an end: the run was a no-op its job declares, so it is uncounted and has no verdict."
         },
         "changes": {
           "type": "array",

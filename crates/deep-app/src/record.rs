@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
+use crate::events::FOLD_AFTER;
 use crate::hub::{HubClient, HubError};
 use crate::states::{closes, handle, Table};
 
@@ -155,11 +156,29 @@ impl View {
         if kind == "ask.created" {
             let ask = format!("ask:{}", event["id"].as_str().unwrap_or_default());
             if !self.inbox.iter().any(|row| row["ask"] == ask.as_str()) {
+                // Past a session's fifth open ask, it folds, as in the core.
+                let mine = self
+                    .inbox
+                    .iter()
+                    .filter(|row| row["session"] == event["session"] && row["status"] != "closed");
+                let status = if mine.count() < FOLD_AFTER {
+                    "shown"
+                } else {
+                    "folded"
+                };
                 self.inbox.push(json!({
                     "ask": ask, "kind": event["data"]["kind"], "session": event["session"],
-                    "status": "shown", "outcome": "unanswered", "owner": event["data"]["owner"],
+                    "status": status, "outcome": "unanswered", "owner": event["data"]["owner"],
                     "question": event["data"]["question"],
                 }));
+            }
+        } else if kind == "ask.later" {
+            for row in self
+                .inbox
+                .iter_mut()
+                .filter(|row| row["ask"] == event["subject"] && row["status"] != "closed")
+            {
+                row["status"] = json!("later");
             }
         } else if let Some((_, outcome)) = CLOSING.iter().find(|(k, _)| *k == kind) {
             // The close rule the rest of the app reads, and the first close to append decides, as in the core.
