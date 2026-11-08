@@ -1,0 +1,39 @@
+#1662 acceptance suite on the base commit c950fe14 (origin/main), November 7, 2026, before any #1662 code.
+Linux aarch64, 20 cores, Node v24.22.0, cargo 1.99.1, vitest 5.0.5; 1-minute load about 11-15 while it ran.
+Run: npx vitest run --root tests/acceptance/1662 --no-file-parallelism
+Result: Test Files 2 failed | 1 passed (3); Tests 2 failed | 4 passed | 1 skipped (7); 11.16 s. Home paths redacted to ~.
+Then: node node_modules/typescript/bin/tsc -p tests/acceptance/1662/tsconfig.json -> exit 0.
+
+Builds went to this checkout's own target/ (README, How to run), warm: deep-app release had been built here both ways
+within the hour, so each of AC2's three builds was a relink of seconds. The first --workspace release build in this
+target, made by hand before the run, recompiled 133 crates in 1m 24s and linked only deep-app (the other release
+binaries kept their dates); its binary held ROW_PLANT once (nm: _RNv...8deep_app5views9ROW_PLANT...), RowPlant and
+plant_row 0 times. The -p deep-app build after it: 1 crate, 8.7 s, all three strings 0 times.
+
+Not run here: AC3 (macOS only; skipped as INCONCLUSIVE, below), and #124's planted drive suite on the Mac, which it runs.
+
+ac1-tree.test.ts (AC1 #1662.0b9026c1)
+  x AC1 the tree of this checkout names deep-app and no plant-* feature of it   306ms
+    Error: the workspace's feature tree turns on deep-app's "plant-row": └── deep-app feature "plant-row"  <- └──
+    deep-replica v0.0.0 (~/deepbuild/.claude/worktrees/<worktree>/crates/deep-replica) (*)
+  v AC1 (wrong program) the merge base's manifests, where deep-replica's dependency turns plant-row on, fail the judge
+    naming plant-row   (passes: on the base the merge base is this checkout; cargo tree --offline on the git archive)
+  v AC1 the judge, on written trees: a plant-* feature fails named, a tree of other features holds   (passes)
+
+ac2-symbols.test.ts (AC2 #1662.2fa0bd8c)
+  v AC2 the release deep-app built with -p deep-app (cargo build --locked --release -p deep-app --bin deep-app) holds
+    none of the three   (passes: target/acceptance-1662/alone/deep-app, 121187472 bytes, 0 of each string)
+  x AC2 the release deep-app built with --workspace (cargo build --locked --release --workspace --bin deep-app) holds
+    none of the three, the same as the one built alone   582ms
+    Error: the release deep-app built with --workspace holds ROW_PLANT (byte search of
+    ~/deepbuild/.claude/worktrees/<worktree>/target/acceptance-1662/workspace/deep-app, 121905896 bytes)
+  v AC2 (wrong program) a release deep-app built with --features plant-row fails the byte search naming ROW_PLANT
+    (passes: target/acceptance-1662/planted/deep-app, 121190224 bytes, holds ROW_PLANT)
+
+ac3-planted.test.ts (AC3 #1662.9ac71651)
+  ↓ AC3 tests/acceptance/124/ac7-ui-check.test.ts's two planted tests pass against deep-drive built with --features
+    env-plants (macOS)   skipped [INCONCLUSIVE: the replica renders with GPUI's offscreen Metal renderer, on macOS
+    only (linux here); #124's planted tests did not run, and this is not a pass]
+    At the base the plant is always on (deep-replica's [dependencies] turn plant-row on, and #124's helper builds
+    deep-drive with --features env-plants), so on the Mac this test is expected to pass at the base: AC3 is a "still"
+    criterion (README, Criterion 3).
