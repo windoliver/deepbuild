@@ -28,7 +28,7 @@ function world(o: {
   kept?: boolean | ((evidence: string[]) => boolean); hold?: boolean; dir?: string; read?: string[]; variants?: 'none' | 'unstartable' | 'second-unstartable';
   records?: (n: number, variant: boolean) => Partial<RecordedRun>; runs?: number; definition?: DefinitionState; onBase?: 'fails'; state?: (session: string) => StatePin;
   /** The check's depth, and whether the checkout's done.yaml has an environment, so a journey runs on its stack (#580). */
-  depth?: string; stacked?: boolean; variantDirs?: boolean;
+  depth?: 'unit' | 'integration' | 'journey' | 'live'; stacked?: boolean; variantDirs?: boolean;
   /** A timing check (#352), whose result is the machine's load's as much as its files'. */
   timing?: boolean;
 } = {}) {

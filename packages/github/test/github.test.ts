@@ -68,8 +68,8 @@ describe('a verdict waiting on a pushed commit', () => {
       return [];
     };
     const open = () => openGitHub({
-      api: forge.url, state: join(dir, 'github.json'), snapshots: join(dir, 'none'), raw, reads: async () => 'token', posts: () => 'token',
-      settings: () => ({ delivery: { 'acme/shop': 'on' }, yours: [] }), sessions: () => [session], unguarded: async () => undefined, hear: () => undefined,
+      api: forge.url, state: join(dir, 'github.json'), snapshots: join(dir, 'none'), raw, reads: async () => 'token', posts: async () => 'token',
+      settings: () => ({ delivery: { 'acme/shop': 'on' }, yours: [] }), sessions: () => [session], unguarded: async () => undefined, pushed: async () => undefined, hear: () => undefined,
     });
     const first = open();
     await sleep(300);

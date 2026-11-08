@@ -100,10 +100,11 @@ let built: string | undefined;
 export function buildDrive(): void {
   if (built === 'ok') return;
   if (built === undefined) {
-    const r = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', DRIVE_NAME], { cwd: REPO, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 64 * 1024 * 1024 });
+    // With the planted replicas a test selects with DEEP_DRIVE_PLANT, which only an env-plants build reads (#1408).
+    const r = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', DRIVE_NAME, '--features', 'env-plants'], { cwd: REPO, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 64 * 1024 * 1024 });
     built = r.status === 0 && existsSync(DRIVE_BIN) ? 'ok' : `${r.error?.message ?? ''}${(r.stderr ?? '').split('\n').filter((l) => /error/.test(l)).slice(0, 6).join('\n')}`;
   }
-  if (built !== 'ok') expect.fail(`BLOCKED: the ${DRIVE_NAME} binary can't be built (cargo build --locked -p deep-replica --bin ${DRIVE_NAME}): ${built}`);
+  if (built !== 'ok') expect.fail(`BLOCKED: the ${DRIVE_NAME} binary can't be built (cargo build --locked -p deep-replica --bin ${DRIVE_NAME} --features env-plants): ${built}`);
 }
 
 export interface Reply { reply: Obj; ms: number }
@@ -375,9 +376,11 @@ const sh = (command: string, args: string[]): string => {
   const r = spawnSync(command, args, { encoding: 'utf8', timeout: 10_000 });
   return r.status === 0 ? r.stdout.trim() : '';
 };
+// `lsappinfo info -only <key>` printed `"Key"="value"`; macOS 27.2 prints its record instead (`type="Foreground"`, `pid = 123`,
+// `bundleID="..."`). Each reader takes either.
 export const frontApp = (): { asn: string; pid: number | null } => {
   const asn = sh('lsappinfo', ['front']);
-  const pid = Number(/"pid"=(\d+)/.exec(sh('lsappinfo', ['info', '-only', 'pid', asn]))?.[1]);
+  const pid = Number(/(?:"pid"=|\bpid = )(\d+)/.exec(sh('lsappinfo', ['info', '-only', 'pid', asn]))?.[1]);
   return { asn, pid: Number.isFinite(pid) ? pid : null };
 };
 export const pasteboard = (): string => sh('pbpaste', []);
@@ -396,7 +399,7 @@ export function family(pid: number): Set<number> {
 /** Is `pid` registered with LaunchServices as a foreground (Dock) app? */
 export function foreground(pid: number): boolean {
   const asn = /ASN:[0-9a-fx-]+/.exec(sh('lsappinfo', ['find', `pid=${pid}`]))?.[0];
-  return asn !== undefined && /"ApplicationType"="Foreground"/.test(sh('lsappinfo', ['info', '-only', 'applicationtype', `${asn}:`]));
+  return asn !== undefined && /(?:"ApplicationType"|\btype)="Foreground"/.test(sh('lsappinfo', ['info', '-only', 'applicationtype', `${asn}:`]));
 }
 
 export interface Watch { front: Set<string>; frontPids: Set<number>; marker: boolean; audio: Set<number>; foreground: boolean; pids: Set<number>; samples: number }

@@ -10,7 +10,7 @@
 //! accessibility tree a screen reader sees and the observed elements a replica reads back are
 //! the same set of nodes.
 
-use std::{cell::Cell, cell::RefCell, rc::Rc, sync::Arc, time::Duration};
+use std::{cell::Cell, cell::RefCell, rc::Rc, sync::mpsc::TryRecvError, sync::Arc, time::Duration};
 
 use gpui_kit::base::dock::{
     register_panel, DockArea, DockAreaState, DockPlacement, DockState, Panel, PanelEvent,
@@ -32,6 +32,8 @@ pub const LINE: &str = "deepbuild/line";
 pub const WELCOME: &str = "deepbuild/welcome";
 /// Issue #148: each agent's MCP servers and skills, the agents each is synced to, and a sync's per-file diff to approve.
 pub const AGENTS: &str = "deepbuild/agents";
+/// The rules page (#344): every rule you wrote, with its file, scope, size and what enforces it.
+pub const RULES: &str = "deepbuild/rules";
 
 /// The shipped views a replica snapshots, by the ids the record uses.
 pub const SHIPPED_VIEWS: [&str; 3] = ["needs-you", "sidebar", "session"];
@@ -41,10 +43,17 @@ pub const LINE_HEIGHT: f32 = 120.;
 const ROW_HEIGHT: f32 = 18.;
 /// A status mark's colored core, in points: at least the look's `core_min_px`.
 const CORE: f32 = 6.;
+/// How much of its text the row planted to cut off draws, short enough to fit in any sidebar.
+#[cfg(feature = "plant-row")]
+const CUT_TO: usize = 24;
 /// The panel the hub's canvas core knows a session's page by.
 const SESSION_PAGE: &str = "session-page";
 /// How often an open terminal tab reads its grid again.
 const TERMINAL_TICK: Duration = Duration::from_millis(250);
+/// How often the window looks for what setup said, while it runs (#1556).
+const SET_UP_TICK: Duration = Duration::from_millis(50);
+/// What the window says in place of Set up while setup runs.
+pub const SETTING_UP: &str = "Setting up…";
 /// How often the Agents page reads the hub's model again.
 const AGENTS_TICK: Duration = Duration::from_secs(2);
 /// The diff lines the Agents page shows of each file, and the width a line is cut to, in points.
@@ -88,10 +97,11 @@ pub enum Kind {
     Line,
     Welcome,
     Agents,
+    Rules,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 7] = [
+    pub const ALL: [Kind; 8] = [
         Kind::Sidebar,
         Kind::Home,
         Kind::NeedsYou,
@@ -99,6 +109,7 @@ impl Kind {
         Kind::Line,
         Kind::Welcome,
         Kind::Agents,
+        Kind::Rules,
     ];
 
     pub fn name(self) -> &'static str {
@@ -110,8 +121,29 @@ impl Kind {
             Kind::Line => LINE,
             Kind::Welcome => WELCOME,
             Kind::Agents => AGENTS,
+            Kind::Rules => RULES,
         }
     }
+}
+
+/// #124's wrong session rows, for the UI check to name: in a replica only, with the `plant-row` feature.
+#[cfg(feature = "plant-row")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowPlant {
+    /// Draws its text whole, past its frame.
+    PastFrame,
+    /// Draws its text cut off, and names only what it drew.
+    CutOff,
+}
+
+#[cfg(feature = "plant-row")]
+thread_local! {
+    static ROW_PLANT: Cell<Option<RowPlant>> = const { Cell::new(None) };
+}
+
+#[cfg(feature = "plant-row")]
+pub fn plant_row(plant: Option<RowPlant>) {
+    ROW_PLANT.with(|row| row.set(plant));
 }
 
 thread_local! {
@@ -138,6 +170,13 @@ pub struct Shipped {
     focus_handle: FocusHandle,
     /// What Home's Set up click said, once clicked.
     set_up: Option<String>,
+    /// The wait for what setup says, while it runs off the UI thread (#1556).
+    setting_up: Option<Task<()>>,
+    /// The sidebar's open session and the one keyboard focus is on (#1003).
+    rows: SidebarRows,
+    /// The rows, by index, the replica opens the sidebar with: read at its first frame, when the sidebar also
+    /// takes keyboard focus if one is focused.
+    start: Option<(Option<usize>, Option<usize>)>,
     terminal: Option<TerminalTab>,
     /// Whether this is the view's own window, not its panel in the shell.
     popped: bool,
@@ -145,6 +184,50 @@ pub struct Shipped {
     agents: Option<serde_json::Value>,
     reviewing: Option<String>,
     _agents_poll: Option<Task<()>>,
+}
+
+/// The sidebar's open session, drawn in the selected fill with a bar at its leading edge, and the one keyboard focus
+/// is on, drawn with the focus ring (#1003). Each is a session, not a row, so a row that moves keeps them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SidebarRows {
+    pub selected: Option<String>,
+    pub focused: Option<String>,
+}
+
+impl SidebarRows {
+    /// `key` over the sidebar's `sessions` in their order: up and down move the focus ring a row, return or space
+    /// opens the focused session. Whether it changed anything.
+    pub fn key(&mut self, key: &str, sessions: &[String]) -> bool {
+        let Some(last) = sessions.len().checked_sub(1) else {
+            return false;
+        };
+        let at = self
+            .focused
+            .as_ref()
+            .and_then(|f| sessions.iter().position(|s| s == f));
+        let to = match key {
+            "down" => at.map_or(0, |i| (i + 1).min(last)),
+            "up" => at.map_or(0, |i| i.saturating_sub(1)),
+            "enter" | "space" if at.is_some() => {
+                let changed = self.selected != self.focused;
+                self.selected = self.focused.clone();
+                return changed;
+            }
+            _ => return false,
+        };
+        let changed = at != Some(to);
+        self.focused = Some(sessions[to].clone());
+        changed
+    }
+}
+
+thread_local! {
+    static SIDEBAR_ROWS: std::cell::Cell<(Option<usize>, Option<usize>)> = const { std::cell::Cell::new((None, None)) };
+}
+
+/// The sidebar's selected and focused rows as the next sidebar opens with them, for the replica (#1003).
+pub fn start_sidebar(selected: Option<usize>, focused: Option<usize>) {
+    SIDEBAR_ROWS.with(|rows| rows.set((selected, focused)));
 }
 
 impl Shipped {
@@ -162,6 +245,9 @@ impl Shipped {
             kind,
             focus_handle: cx.focus_handle(),
             set_up: None,
+            setting_up: None,
+            rows: SidebarRows::default(),
+            start: (kind == Kind::Sidebar).then(|| SIDEBAR_ROWS.with(std::cell::Cell::get)),
             terminal: None,
             popped: false,
             agents: None,
@@ -177,6 +263,27 @@ impl Shipped {
             self.agents = page;
             cx.notify();
         }
+    }
+
+    /// The Set up click: setup runs on a thread of its own (#1556), the window says it's working, and a tick on the UI
+    /// thread picks up what it said.
+    fn start_set_up(&mut self, cx: &mut Context<Self>) {
+        let heard = crate::setup::start();
+        self.setting_up = Some(cx.spawn(async move |this, cx| loop {
+            cx.background_executor().timer(SET_UP_TICK).await;
+            let said = match heard.try_recv() {
+                Ok(said) => said.map_or_else(|error| error, str::to_owned),
+                Err(TryRecvError::Empty) => continue,
+                Err(TryRecvError::Disconnected) => "deep setup stopped without a word".to_owned(),
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.set_up = Some(said);
+                this.setting_up = None;
+                cx.notify();
+            });
+            return;
+        }));
+        cx.notify();
     }
 
     /// Opens the Terminal tab of `session`'s page on what the hub's canvas core holds for it.
@@ -484,7 +591,7 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
                 table.state(&session),
             )]
         }
-        Kind::Home | Kind::NeedsYou | Kind::Welcome | Kind::Agents => Vec::new(),
+        Kind::Home | Kind::NeedsYou | Kind::Welcome | Kind::Agents | Kind::Rules => Vec::new(),
     };
     let deadlines = match (kind, sessions.first()) {
         (Kind::Session, Some((first, ..))) => {
@@ -555,7 +662,22 @@ fn status(
 /// A status mark for a status-map entry, and its words.
 fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElement<Stateful<Div>> {
     let glyph = states::glyph(entry);
+    #[cfg(feature = "plant-row")]
+    let text = match ROW_PLANT.get() {
+        Some(RowPlant::CutOff) if text.chars().count() > CUT_TO => {
+            format!("{}…", text.chars().take(CUT_TO).collect::<String>())
+        }
+        _ => text,
+    };
     let name = format!("{glyph} {text}");
+    // Past the row's width the text ends in an ellipsis; the row's name keeps the whole of it.
+    let words = div().flex_1().min_w_0().truncate();
+    #[cfg(feature = "plant-row")]
+    let words = if ROW_PLANT.get() == Some(RowPlant::PastFrame) {
+        div().flex_none()
+    } else {
+        words
+    };
     div()
         .id(id)
         .test_support()
@@ -572,7 +694,7 @@ fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElemen
                 .bg(rgb(states::color(entry))),
         )
         .child(glyph)
-        .child(text)
+        .child(words.child(text))
 }
 
 /// The bound values on `surface`, one accessibility node each named by its surface, its ID and
@@ -659,93 +781,156 @@ impl Render for Shipped {
             .text_xs()
             .text_color(chrome.ink_primary);
         match self.kind {
-            Kind::Sidebar => page
-                .bg(chrome.raised)
-                .child(title("sidebar-title", "Sessions"))
-                // The window's count, which shows Needs you; a fixture's view draws the record alone.
-                .children(decorations.is_none().then(|| {
-                    label("sidebar-count", count_line())
-                        .role(Role::Button)
-                        .h(px(24.))
-                        .px_1()
-                        .rounded_sm()
-                        .hover(|style| style.bg(chrome.hover))
-                        .on_click(|_, window, cx| show(NEEDS_YOU, window, cx))
-                }))
-                // Each agent's MCP servers and skills (#148).
-                .children(decorations.is_none().then(|| {
-                    label("sidebar-agents", "Agents")
-                        .role(Role::Button)
-                        .aria_label("Agents: MCP servers and skills")
-                        .h(px(24.))
-                        .px_1()
-                        .rounded_sm()
-                        .hover(|style| style.bg(chrome.hover))
-                        .on_click(|_, window, cx| show(AGENTS, window, cx))
-                }))
-                .children(record.sessions.iter().zip(&record.rows).enumerate().map(
-                    |(index, ((session, task, _), (words, entry)))| {
-                        let text = format!("{task} · {words}");
-                        let session = session.clone();
-                        // Its readings beside it (#990), a line each under the row, quieter than its state.
-                        let readings = record.readings.get(index).cloned().unwrap_or_default();
-                        div()
-                            .flex()
-                            .flex_col()
-                            .child(
-                                marked(("sidebar-session", index), entry, text)
-                                    .role(Role::Button)
-                                    .h(px(24.))
-                                    .px_1()
-                                    .rounded_sm()
-                                    .hover(|style| style.bg(chrome.hover))
-                                    .on_click(move |_, window, cx| {
-                                        open_session(&session, window, cx)
-                                    }),
+            Kind::Sidebar => {
+                let ids: Vec<String> = record.sessions.iter().map(|(id, ..)| id.clone()).collect();
+                if let Some((selected, focused)) = self.start.take() {
+                    let id = |at: Option<usize>| at.and_then(|i| ids.get(i).cloned());
+                    self.rows = SidebarRows {
+                        selected: id(selected),
+                        focused: id(focused),
+                    };
+                    if self.rows.focused.is_some() {
+                        window.focus(&self.focus_handle, cx);
+                    }
+                }
+                // The ring shows only while keys reach the sidebar, so it never points where they don't go.
+                let focused = (self.focus_handle.is_focused(window))
+                    .then(|| self.rows.focused.clone())
+                    .flatten();
+                let selected = self.rows.selected.clone();
+                page.bg(chrome.raised)
+                    .track_focus(&self.focus_handle)
+                    .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
+                        let was = this.rows.selected.clone();
+                        if this.rows.key(&event.keystroke.key, &ids) {
+                            // Return or space opens the focused session, as a click on its row does.
+                            if let Some(session) = this
+                                .rows
+                                .selected
+                                .clone()
+                                .filter(|s| Some(s) != was.as_ref())
+                            {
+                                open_session(&session, window, cx);
+                            }
+                            cx.notify();
+                        }
+                    }))
+                    .child(title("sidebar-title", "Sessions"))
+                    // The window's count, which shows Needs you; a fixture's view draws the record alone.
+                    .children(decorations.is_none().then(|| {
+                        label("sidebar-count", count_line())
+                            .role(Role::Button)
+                            .h(px(24.))
+                            .px_1()
+                            .rounded_sm()
+                            .hover(|style| style.bg(chrome.hover))
+                            .on_click(|_, window, cx| show(NEEDS_YOU, window, cx))
+                    }))
+                    // Each agent's MCP servers and skills (#148).
+                    .children(decorations.is_none().then(|| {
+                        label("sidebar-agents", "Agents")
+                            .role(Role::Button)
+                            .aria_label("Agents: MCP servers and skills")
+                            .h(px(24.))
+                            .px_1()
+                            .rounded_sm()
+                            .hover(|style| style.bg(chrome.hover))
+                            .on_click(|_, window, cx| show(AGENTS, window, cx))
+                    }))
+                    .children(record.sessions.iter().zip(&record.rows).enumerate().map(
+                        |(index, ((session, task, _), (words, entry)))| {
+                            let text = format!("{task} · {words}");
+                            // Its readings beside it (#990), a line each under the row, quieter than its state.
+                            let readings = record.readings.get(index).cloned().unwrap_or_default();
+                            // The ring is always laid out, so focus moving never shifts a row; it shows on the
+                            // focused row alone.
+                            let ring = if focused.as_ref() == Some(session) {
+                                chrome.focus
+                            } else {
+                                chrome.focus.opacity(0.)
+                            };
+                            let row = marked(("sidebar-session", index), entry, text)
+                                .role(Role::Button)
+                                .h(px(24.))
+                                // Every row leaves room for the bar and a gap after it, so opening one moves no text.
+                                .pl(px(10.))
+                                .pr_1()
+                                .rounded_sm()
+                                .border_2()
+                                .border_color(ring)
+                                .hover(|style| style.bg(chrome.hover))
+                                // The open session: the selected fill, and a bar of the primary ink the row's full
+                                // height at its leading edge, since in dark the fill can only be faint while status
+                                // keeps 3:1 on it.
+                                .when(selected.as_ref() == Some(session), |row| {
+                                    row.relative().bg(chrome.selected).child(
+                                        div()
+                                            .absolute()
+                                            .left_0()
+                                            .top_0()
+                                            .bottom_0()
+                                            .w(px(3.))
+                                            .bg(chrome.ink_primary),
+                                    )
+                                })
+                                .on_click(cx.listener({
+                                    let session = session.clone();
+                                    // A click opens the row and gives the sidebar the keys, so the ring
+                                    // goes on from there.
+                                    move |this, _, window, cx| {
+                                        this.rows = SidebarRows {
+                                            selected: Some(session.clone()),
+                                            focused: Some(session.clone()),
+                                        };
+                                        window.focus(&this.focus_handle, cx);
+                                        open_session(&session, window, cx);
+                                        cx.notify();
+                                    }
+                                }));
+                            div().flex().flex_col().child(row).children(
+                                readings.into_iter().enumerate().map(|(n, reading)| {
+                                    // A reading wider than the sidebar ends in an ellipsis; its
+                                    // accessibility label keeps the whole of it. A block, not the
+                                    // label's flex row, so the text is laid out to the row's width
+                                    // and can truncate; its line height centers it in the row.
+                                    label(("sidebar-reading", index * READINGS + n), reading)
+                                        .block()
+                                        .h(px(18.))
+                                        .line_height(px(18.))
+                                        .pl_4()
+                                        .text_color(chrome.ink_secondary)
+                                        .truncate()
+                                }),
                             )
-                            .children(readings.into_iter().enumerate().map(|(n, reading)| {
-                                // A reading wider than the sidebar ends in an ellipsis; its
-                                // accessibility label keeps the whole of it. A block, not the
-                                // label's flex row, so the text is laid out to the row's width
-                                // and can truncate; its line height centers it in the row.
-                                label(("sidebar-reading", index * READINGS + n), reading)
-                                    .block()
-                                    .h(px(18.))
-                                    .line_height(px(18.))
-                                    .pl_4()
-                                    .text_color(chrome.ink_secondary)
-                                    .truncate()
-                            }))
-                    },
-                )),
+                        },
+                    ))
+            }
             Kind::Home => match unfinished {
                 Some(count) => page
                     .child(title("home-title", "Home"))
                     .child(label("home-needs-you", count))
                     .children(self.set_up.is_none().then(|| {
-                        label("set-up", "Set up")
-                            .role(Role::Button)
-                            .aria_label("Set up")
-                            // As the welcome draws it: ink on the ground, as wide as its word.
-                            .self_start()
-                            .my_1()
-                            .px_4()
-                            .rounded_md()
-                            .bg(chrome.ink_primary)
-                            .text_color(chrome.ground)
-                            .hover(|style| style.bg(chrome.ink_secondary))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.set_up = Some(
-                                    crate::setup::set_up()
-                                        .map_or_else(|error| error, str::to_owned),
-                                );
-                                cx.notify();
-                            }))
+                        match self.setting_up {
+                            Some(_) => label("set-up-working", SETTING_UP),
+                            None => label("set-up", "Set up")
+                                .role(Role::Button)
+                                .aria_label("Set up")
+                                // As the welcome draws it: ink on the ground, as wide as its word.
+                                .self_start()
+                                .my_1()
+                                .px_4()
+                                .rounded_md()
+                                .bg(chrome.ink_primary)
+                                .text_color(chrome.ground)
+                                .hover(|style| style.bg(chrome.ink_secondary))
+                                .on_click(cx.listener(|this, _, _, cx| this.start_set_up(cx))),
+                        }
                     }))
+                    // While setup runs, the last one's reason no longer stands.
                     .children(
                         self.set_up
                             .clone()
-                            .or_else(crate::setup::reason)
+                            .or_else(|| self.setting_up.is_none().then(crate::setup::reason)?)
                             .map(|line| label("set-up-reason", line).h_auto().py_1()),
                     ),
                 None => page.child(title("home-title", "Home")).child(label(
@@ -903,8 +1088,9 @@ impl Render for Shipped {
             }
             Kind::Welcome => {
                 let said = self.set_up.as_deref();
+                let working = said.is_none() && self.setting_up.is_some();
                 let (ground, ink) = (chrome.ground, chrome.ink_primary);
-                let button = (said.is_none() && crate::setup::needed()).then(|| {
+                let button = (said.is_none() && !working && crate::setup::needed()).then(|| {
                     div()
                         .id("set-up")
                         .test_support()
@@ -915,12 +1101,7 @@ impl Render for Shipped {
                         .rounded_md()
                         .bg(ink)
                         .text_color(ground)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.set_up = Some(
-                                crate::setup::set_up().map_or_else(|error| error, str::to_owned),
-                            );
-                            cx.notify();
-                        }))
+                        .on_click(cx.listener(|this, _, _, cx| this.start_set_up(cx)))
                         .child("Set up")
                 });
                 page.child(
@@ -945,22 +1126,138 @@ impl Render for Shipped {
                         )
                         .child(div().child("Where your agents show, not tell."))
                         .children(button)
-                        .children(said.map(|line| div().child(line.to_owned())))
-                        .children(said.is_none().then(crate::setup::reason).flatten().map(
-                            |line| {
-                                div()
-                                    .id("set-up-reason")
-                                    .test_support()
-                                    .aria_label(line.clone())
-                                    // A long path in the reason wraps inside the window, so its fix stays in view.
-                                    .max_w(px(560.))
-                                    .text_center()
-                                    .child(line)
-                            },
-                        )),
+                        .children(working.then(|| {
+                            div()
+                                .id("set-up-working")
+                                .test_support()
+                                .aria_label(SETTING_UP)
+                                .child(SETTING_UP)
+                        }))
+                        .children(said.map(|line| {
+                            div()
+                                .id("set-up-said")
+                                .test_support()
+                                .aria_label(line.to_owned())
+                                .max_w(px(560.))
+                                .text_center()
+                                .child(line.to_owned())
+                        }))
+                        .children(
+                            (said.is_none() && !working)
+                                .then(crate::setup::reason)
+                                .flatten()
+                                .map(|line| {
+                                    div()
+                                        .id("set-up-reason")
+                                        .test_support()
+                                        .aria_label(line.clone())
+                                        // A long path in the reason wraps inside the window, so its fix stays in view.
+                                        .max_w(px(560.))
+                                        .text_center()
+                                        .child(line)
+                                }),
+                        ),
                 )
             }
             Kind::Agents => agents_page(page, self, chrome, cx),
+            Kind::Rules => {
+                // The rules page (#344): each rule file with its total, then each rule with its scope, what enforces
+                // it and its size. A rule nothing enforces reads "text only": the list to shrink.
+                let files = crate::rules::read(&crate::hub::root().join("wiki").join("rules.md"));
+                let rules: Vec<&crate::rules::Rule> = files.iter().flat_map(|f| &f.rules).collect();
+                let text_only = rules.iter().filter(|r| r.enforcer == "text only").count();
+                let mut row: usize = 0;
+                page.child(title("rules-title", "Rules"))
+                    .child(
+                        label(
+                            "rules-count",
+                            format!("{} rules · {text_only} text only", rules.len()),
+                        )
+                        .text_color(chrome.ink_secondary),
+                    )
+                    .child(
+                        // The column heads, at the rows' widths.
+                        div()
+                            .id("rules-head")
+                            .h(px(ROW_HEIGHT))
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .pl_4()
+                            .mt_2()
+                            .text_color(chrome.ink_secondary)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(div().w(px(480.)).child("Rule"))
+                            .child(div().w(px(160.)).child("Scope"))
+                            .child(div().w(px(180.)).child("Enforced by"))
+                            .child(div().w(px(72.)).text_right().child("Tokens")),
+                    )
+                    .children(files.iter().enumerate().map(|(f, file)| {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .mt_2()
+                            .child(
+                                label(
+                                    ("rules-file", f),
+                                    format!("{} · whole file {} tokens", file.file, file.tokens),
+                                )
+                                .font_weight(FontWeight::SEMIBOLD),
+                            )
+                            .children(file.rules.iter().map(|rule| {
+                                row += 1;
+                                let mut said = format!(
+                                    "{} · {} · {} · {} tokens",
+                                    rule.text, rule.scope, rule.enforcer, rule.tokens
+                                );
+                                if rule.yours {
+                                    said.push_str(" · typed by you");
+                                }
+                                if rule.held {
+                                    said.push_str(" · held: an agent removed its line");
+                                }
+                                div()
+                                    .id(("rules-row", row))
+                                    .test_support()
+                                    .role(Role::Label)
+                                    .aria_label(said)
+                                    .h(px(ROW_HEIGHT))
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .pl_4()
+                                    .child(div().w(px(480.)).truncate().child(rule.text.clone()))
+                                    .child(
+                                        div()
+                                            .w(px(160.))
+                                            .truncate()
+                                            .text_color(chrome.ink_secondary)
+                                            .child(rule.scope.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .w(px(180.))
+                                            .truncate()
+                                            .text_color(if rule.enforcer == "text only" {
+                                                chrome.ink_secondary
+                                            } else {
+                                                chrome.ink_primary
+                                            })
+                                            .when(rule.enforcer != "text only", |e| {
+                                                e.font_weight(FontWeight::SEMIBOLD)
+                                            })
+                                            .child(rule.enforcer.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .w(px(72.))
+                                            .text_right()
+                                            .text_color(chrome.ink_secondary)
+                                            .child(format!("{} tokens", rule.tokens)),
+                                    )
+                            }))
+                    }))
+            }
             Kind::Line => {
                 // The session's line: from its task to where it stands now.
                 let (_, task, state) = first(&record);
@@ -1437,6 +1734,7 @@ impl Layout {
             "needs-you" => NEEDS_YOU,
             "session" => SESSION,
             "home" | "sidebar" => HOME,
+            "rules" => RULES,
             other => {
                 panic!("{other} is not a shipped view; the shipped views are {SHIPPED_VIEWS:?} and home")
             }
@@ -1564,6 +1862,43 @@ impl Render for Shell {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[std::prelude::v1::test]
+    fn the_sidebars_keys_move_the_ring_and_open_the_focused_session_which_keeps_its_row_as_rows_move(
+    ) {
+        let ids = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let sessions = ids(&["a", "b", "c"]);
+        let mut rows = SidebarRows::default();
+        // Down from nothing focuses the first row; down again the second; up and down stop at the ends.
+        assert!(rows.key("down", &sessions));
+        assert!(rows.key("down", &sessions));
+        assert_eq!(rows.focused.as_deref(), Some("b"));
+        rows.key("down", &sessions);
+        assert!(!rows.key("down", &sessions), "the last row holds");
+        rows.key("up", &sessions);
+        rows.key("up", &sessions);
+        assert!(!rows.key("up", &sessions), "the first row holds");
+        // Return opens the focused session; focus moving on leaves it open, so selected and focused differ.
+        rows.key("down", &sessions);
+        assert!(rows.key("enter", &sessions));
+        rows.key("down", &sessions);
+        assert_eq!(
+            rows,
+            SidebarRows {
+                selected: Some("b".into()),
+                focused: Some("c".into())
+            }
+        );
+        // A new session shown first moves every row down a place; the same sessions stay selected and focused.
+        let moved = ids(&["z", "a", "b", "c"]);
+        rows.key("up", &moved);
+        assert_eq!(rows.focused.as_deref(), Some("b"));
+        assert_eq!(rows.selected.as_deref(), Some("b"));
+        // Keys on an empty sidebar change nothing; space opens as return does.
+        assert!(!SidebarRows::default().key("down", &[]));
+        assert!(rows.key("down", &moved) && rows.key("space", &moved));
+        assert_eq!(rows.selected.as_deref(), Some("c"));
+    }
 
     #[std::prelude::v1::test]
     fn a_shipped_view_fills_the_center_and_the_sidebar_view_shows_home() {

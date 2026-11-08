@@ -58,7 +58,9 @@ impl Glass {
             format: LINEAR,
             usage: wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::COPY_DST,
+                | wgpu::TextureUsages::COPY_DST
+                // Read back with its mips by view3d's `backdrop` target (#431).
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
         let levels: Vec<wgpu::TextureView> = (0..count)

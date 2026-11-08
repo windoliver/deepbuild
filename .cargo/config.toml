@@ -9,6 +9,8 @@ rquickjs = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49
 # sprite drawn from the core's glyph atlas"). vendor/gpui-pre is gpui-pre 0.3.9 from crates.io with
 # `AtlasKey::Mask`, `Window::paint_mask_sprite` and `Window::remove_mask_page` added, each marked
 # "DeepBuild patch". gpui-kit and gpui-shell still come from upstream, unforked.
+# Issue #124 adds, for test support only, `Hitbox::element` and `Window::hits_at`: a replica asks the frame's own
+# hit test what a pointer event would reach, and sends nothing.
 gpui-pre = { path = "vendor/gpui-pre" }
 # Issue #391: the GPUI patch's exact gradient mode (technical design: Conventions, "an exact
 # gradient mode (no dither, the sRGB curve, premultiplied stops)"). vendor/gpui-pre-apple is

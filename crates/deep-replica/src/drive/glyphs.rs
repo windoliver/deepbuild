@@ -21,6 +21,9 @@ type GlyphKey = (FontId, GlyphId);
 /// A row of glyphs: the clip they're drawn under and their baseline, in whole device pixels.
 type Row = ([i32; 4], i32);
 
+/// The fewest glyphs that say which line a cut-off row starts: fewer could start anything.
+const MIN_CUT: usize = 4;
+
 #[derive(Default)]
 struct Seen {
     /// The platform's text system, which says where in its tile each glyph's raster starts.
@@ -52,6 +55,10 @@ pub struct Run {
     pub text: String,
     pub bounds: [i64; 4],
     pub visible: bool,
+    /// The part of `bounds` its clip lets show.
+    pub drawn: [i64; 4],
+    /// Its clip cut glyphs off its end: `text` is the whole string, and `bounds` only what was painted.
+    pub cut: bool,
 }
 
 /// What the replica's platform saw, shared by the text system, the atlas and the renderer it wraps.
@@ -94,9 +101,18 @@ impl Glyphs {
                     let key: Vec<GlyphKey> = glyphs[at..end].iter().map(|(k, _)| *k).collect();
                     seen.lines.get(&key).map(|text| (end, text.clone()))
                 });
-                let (end, text) = found.unwrap_or((at + 1, String::new()));
+                // GPUI paints no glyph wholly past a clip, so a line that runs past one spells only its start.
+                let cut = found
+                    .is_none()
+                    .then(|| started(&seen.lines, &glyphs[at..]))
+                    .flatten();
+                let (end, text) = found
+                    .or(cut.clone().map(|text| (glyphs.len(), text)))
+                    .unwrap_or((at + 1, String::new()));
                 if !text.is_empty() {
-                    runs.push(run(text, &glyphs[at..end]));
+                    let mut drawn = run(text, &glyphs[at..end]);
+                    drawn.cut = cut.is_some();
+                    runs.push(drawn);
                 }
                 at = end;
             }
@@ -147,20 +163,60 @@ impl Glyphs {
 fn run(text: String, glyphs: &[(GlyphKey, Sprite)]) -> Run {
     let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
     let mut visible = false;
+    let (mut dx0, mut dy0, mut dx1, mut dy1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
     for (_, sprite) in glyphs {
         let b = sprite.bounds;
         x0 = x0.min(b.origin.x.0);
         y0 = y0.min(b.origin.y.0);
         x1 = x1.max(b.origin.x.0 + b.size.width.0);
         y1 = y1.max(b.origin.y.0 + b.size.height.0);
-        visible |= b.intersects(&sprite.clip);
+        if b.intersects(&sprite.clip) {
+            visible = true;
+            let shown = b.intersect(&sprite.clip);
+            dx0 = dx0.min(shown.origin.x.0);
+            dy0 = dy0.min(shown.origin.y.0);
+            dx1 = dx1.max(shown.origin.x.0 + shown.size.width.0);
+            dy1 = dy1.max(shown.origin.y.0 + shown.size.height.0);
+        }
     }
-    let (x0, y0) = (x0.floor() as i64, y0.floor() as i64);
+    let whole = |x0: f32, y0: f32, x1: f32, y1: f32| {
+        let (x0, y0) = (x0.floor() as i64, y0.floor() as i64);
+        [x0, y0, x1.ceil() as i64 - x0, y1.ceil() as i64 - y0]
+    };
     Run {
         text,
-        bounds: [x0, y0, x1.ceil() as i64 - x0, y1.ceil() as i64 - y0],
+        bounds: whole(x0, y0, x1, y1),
         visible,
+        drawn: if visible {
+            whole(dx0, dy0, dx1, dy1)
+        } else {
+            [0; 4]
+        },
+        cut: false,
     }
+}
+
+/// The shaped line `glyphs` starts, when they run up to their clip's far edge, as a line cut off there does. The
+/// shortest such line, then the first by its text, so a run reads the same every time.
+fn started(
+    lines: &HashMap<Vec<GlyphKey>, String>,
+    glyphs: &[(GlyphKey, Sprite)],
+) -> Option<String> {
+    let (_, last) = glyphs.last()?;
+    let (right, clip) = (
+        last.bounds.origin.x.0 + last.bounds.size.width.0,
+        last.clip.origin.x.0 + last.clip.size.width.0,
+    );
+    if glyphs.len() < MIN_CUT || right + 2. * last.bounds.size.height.0 < clip {
+        return None;
+    }
+    let keys: Vec<GlyphKey> = glyphs.iter().map(|(key, _)| *key).collect();
+    lines
+        .iter()
+        .filter(|(line, _)| line.len() > keys.len() && line.starts_with(&keys))
+        .map(|(line, text)| (line.len(), text))
+        .min()
+        .map(|(_, text)| text.clone())
 }
 
 struct TextSystem {
