@@ -123,6 +123,7 @@ describe('a held push (#1156)', () => {
     ['jj -R ../shop git push --remote=fork -b b', 'fork'],
     ['sl push --to main', 'default'],
     ['sl push upstream --to main', 'upstream'],
+    ['sl -R ../shop push --to main', 'default'],
     ['gt submit --stack', 'origin'],
     ['git town ship', 'origin'],
   ])('`%s` goes to %s', (line, ref) => {
@@ -141,6 +142,10 @@ describe('a held push (#1156)', () => {
     ['sl push --to b', ['b']],
     ['gt submit --stack', ['cur']],
     ['jj git push --all', ['*']],
+    ['jj git push -r main', ['*']],
+    ['jj git push -c @', ['*']],
+    ['jj git push --named x=@', ['*']],
+    ['sl -R ../shop push --to main', ['main']],
   ])('`%s` pushes %j', (line, branches) => {
     expect(pushBranches(line, 'cur')).toEqual(branches);
   });
