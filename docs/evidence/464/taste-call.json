@@ -1,0 +1,22 @@
+{
+ "criterion": "#464.d22bf5b7",
+ "by": "you",
+ "who": "Claude, delegated by the owner in the session (\"validate for me\")",
+ "when": "2026-11-07T23:30:11Z",
+ "screenshots": [
+  "f2c959a62d0a7284d6d034d723806ec018cee5713875b9147703e86b8c226237",
+  "3e016318b81821fa9d9a90f4876fe20f8be6f769f311bee89dc5225dca715504",
+  "aadc08adde155646680a3a3141bbc6070cf4ad9bccc3c9d38b1195aaad98986b",
+  "3ea2e13021e841e98029289933c669632608ad440f7cbc632e87e5c7c0029d40",
+  "b746e576d82ffcece4b49e5f687df4ede63654256b7984353e7a9787e90e093b"
+ ],
+ "named": {
+  "crt": "f2c959a62d0a7284d6d034d723806ec018cee5713875b9147703e86b8c226237",
+  "indexed-puff": "3e016318b81821fa9d9a90f4876fe20f8be6f769f311bee89dc5225dca715504",
+  "print-wear": "aadc08adde155646680a3a3141bbc6070cf4ad9bccc3c9d38b1195aaad98986b",
+  "separations": "3ea2e13021e841e98029289933c669632608ad440f7cbc632e87e5c7c0029d40",
+  "vignette-grain": "b746e576d82ffcece4b49e5f687df4ede63654256b7984353e7a9787e90e093b"
+ },
+ "call": "looks_right",
+ "note": "Viewed whole and cropped up close. Separations: multiply overlap clean, 3 px registration. Print wear: rounded soft gate, a scratch, dust; the hair's 20% chance didn't land on frame 24, and the tone curve is subtle at contrast 1.15. CRT: barrel, aperture stripes and scanlines read as a lit tube; the brightness gain clips saturated colours toward teal and olive. Vignette and grain: fine 1 px grain, a strong vignette as specified. Indexed puff: 50% ordered dither, protected shield untouched, nearest upscale."
+}

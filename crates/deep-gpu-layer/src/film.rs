@@ -24,6 +24,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use deep_canvas_drawn::medium::Lamp;
+use deep_canvas_marks::drawn::{self, View};
 use deep_canvas_marks::look::{self, Distance};
 use deep_canvas_marks::scene::{self, Drawn, Palette, Record, Rgb, Type};
 use deep_canvas_motion::eval;
@@ -31,8 +33,10 @@ use deep_canvas_motion::program::{Program, State};
 use deep_gpu::ring::Mark as RingMark;
 use serde_json::{json, Map, Value};
 
+use crate::drawn::Page;
 use crate::groups::Clock;
-use crate::marks2d::{close2, open2, packs_of, show, Frame2, Marks2};
+use crate::marks2d::{close2, drawn_type, open2, packs_of, page_of, show, Frame2, Marks2};
+use crate::view3d::{png, write_named};
 use crate::{frames, parity, refused, App, Planted};
 
 const FLICKS_PER_SECOND: i64 = 705_600_000;
@@ -40,9 +44,9 @@ const FLICKS_PER_SECOND: i64 = 705_600_000;
 /// When the frame's Vello GPU passes finished encoding, set by the surface's module.
 pub type Encoded = Arc<Mutex<Option<Instant>>>;
 
-/// A look's light theme as the 2D marks read it: its roles and its type.
-fn look_of(v: &Value) -> Result<(Palette, Type), Value> {
-    let def = match v {
+/// A look's definition: a shipped look's by its ID, or the look@1 given.
+fn def_of(v: &Value) -> Result<Value, Value> {
+    Ok(match v {
         Value::String(id) => look::shipped(id)
             .ok_or_else(|| refused("bad_input", format!("look: {id} isn't a shipped look")))?,
         Value::Object(_) => v.clone(),
@@ -52,25 +56,56 @@ fn look_of(v: &Value) -> Result<(Palette, Type), Value> {
                 "a look is a shipped look's ID or a look@1",
             ))
         }
-    };
+    })
+}
+
+/// A look's light theme as the 2D marks read it: its roles and its type.
+fn look_of(app: &App, v: &Value, doc: &Map<String, Value>) -> Result<(Palette, Type), Value> {
+    let def = def_of(v)?;
     let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
     // A film played on its own holds the status distance only where it shows status, which the
     // check judges (The status-color rule).
     let resolved =
         look::resolve_in(&def, &bundled, Distance::WhereStatusShows).map_err(|r| r.to_json())?;
-    Ok((resolved.light, resolved.light_type))
+    let bare = drawn_type(app, &def, doc)?;
+    let ty = Type {
+        drawn: bare.drawn,
+        first_rim: bare.first_rim,
+        flat_ink: bare.flat_ink,
+        ..resolved.light_type
+    };
+    Ok((resolved.light, ty))
 }
 
-/// The film's marks at `t` in a look, by writer layer, and its ground.
+/// The film's marks at `t` in a look, by writer layer, its ground, its camera, its lamps and its
+/// evaluated items.
+type Marked = (Vec<Vec<Arc<Drawn>>>, Rgb, Option<View>, Vec<Lamp>, Map<String, Value>);
+
 fn marks_at(
     doc: &Map<String, Value>,
     program: &Program,
     state: &mut State,
     t: i64,
     (palette, ty): &(Palette, Type),
-) -> Result<(Vec<Vec<Arc<Drawn>>>, Rgb), Value> {
+    snap: Option<f64>,
+) -> Result<Marked, Value> {
     program.evaluate(t, eval::Validity::Full, state);
-    let items = eval::items(doc, program, state);
+    let mut items = eval::items(doc, program, state);
+    let lamps = match &ty.drawn {
+        Some(look) => drawn::screen_lamps(look, &items, palette).map_err(|r| refused(r.code, r.path))?,
+        None => Vec::new(),
+    };
+    let mut view = drawn::view_of(doc, &mut items);
+    // #464: an indexed look's camera snaps to whole target pixels.
+    if let (Some(v), Some(scale)) = (view.as_mut(), snap) {
+        for i in 0..2 {
+            let origin = v.center[i] - v.target[i] * v.k;
+            v.target[i] = (v.center[i] - (origin / scale).round() * scale) / v.k;
+        }
+    }
+    if let Some(v) = &view {
+        drawn::through(v, &mut items);
+    }
     let record = Record {
         pinned: t,
         ..Record::default()
@@ -89,7 +124,7 @@ fn marks_at(
         .iter()
         .map(|l| l.marks.iter().cloned().collect())
         .collect();
-    Ok((layers, frame.ground))
+    Ok((layers, frame.ground, view, lamps, items))
 }
 
 fn hex(c: &image::Rgba<u8>) -> String {
@@ -98,10 +133,16 @@ fn hex(c: &image::Rgba<u8>) -> String {
 
 /// Frame `n` encoded and submitted on the render side and waited for there: the encode's CPU ms
 /// and the GPU layer's ms from the end of the encode to the work done.
-fn render(app: &App, n: u64, encoded: &Encoded, hash: bool) -> Result<(f64, f64, Option<String>), Value> {
+fn render(
+    app: &App,
+    n: u64,
+    encoded: &Encoded,
+    hash: bool,
+    keep: bool,
+) -> Result<(f64, f64, Option<String>, Option<Vec<u8>>), Value> {
     let encoded = encoded.clone();
     app.worker
-        .call(move |state| -> Result<(f64, f64, Option<String>), String> {
+        .call(move |state| -> Result<(f64, f64, Option<String>, Option<Vec<u8>>), String> {
             let view = state.view2d.as_mut().ok_or("no 2D surface")?;
             let (drawn, encode) = loop {
                 let started = Instant::now();
@@ -118,19 +159,21 @@ fn render(app: &App, n: u64, encoded: &Encoded, hash: bool) -> Result<(f64, f64,
                 .ok_or("the frame's passes weren't encoded")?;
             let done = view.times(drawn.slot).ok_or("the frame has no times")?;
             let gpu = done.render_done.saturating_duration_since(at);
-            let pixels = hash.then(|| view.read(drawn.slot).map(|b| frames::hex(&b))).flatten();
-            Ok((encode.as_secs_f64() * 1e3, gpu.as_secs_f64() * 1e3, pixels))
+            let bytes = (hash || keep).then(|| view.read(drawn.slot)).flatten();
+            let pixels = bytes.as_ref().filter(|_| hash).map(|b| frames::hex(b));
+            let kept = bytes.filter(|_| keep);
+            Ok((encode.as_secs_f64() * 1e3, gpu.as_secs_f64() * 1e3, pixels, kept))
         })
         .map_err(|e| refused("render_failed", e))
 }
 
-pub fn film2d(app: &mut App, call: &Value) -> Value {
-    match run(app, call) {
+pub fn film2d(app: &mut App, out: &str, call: &Value) -> Value {
+    match run(app, out, call) {
         Ok(v) | Err(v) => v,
     }
 }
 
-fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
+fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let doc = call["doc"]
         .as_object()
@@ -139,11 +182,18 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
     let size = crate::view3d::pair(&doc["size"])
         .filter(|s| s[0] > 0 && s[1] > 0)
         .ok_or_else(|| bad("doc: size is [w, h]"))?;
+    let is_camera = |i: &Value| i["kind"].as_str().is_some_and(|k| k.starts_with("camera@"));
     if doc["items"]
         .as_object()
-        .is_some_and(|items| items.values().any(parity::three_d))
+        .is_some_and(|items| items.values().any(|i| parity::three_d(i) && !is_camera(i)))
     {
         return Err(bad("film2d plays a 2D film; the document holds a 3D item"));
+    }
+    if let Some((pass, collection)) = deep_canvas_effects::module::foreign_read(&doc) {
+        return Err(refused(
+            "collection_other_writer",
+            format!("items/{pass}: reads another writer's collection {collection}"),
+        ));
     }
     let count = call["frames"]
         .as_u64()
@@ -156,17 +206,45 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
         .ok_or_else(|| bad("fps"))? as i64;
     let from = call["from"].as_u64().unwrap_or(0);
     let hash = call["hash"] == true;
+    // #464: the targets a captured frame writes beside its final PNG, reduced motion and the
+    // flicker check over the frames played.
+    let targets: Vec<&str> = call["targets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    if let Some(t) = targets
+        .iter()
+        .find(|t| !["final", "linear", "indices"].contains(t))
+    {
+        return Err(bad(&format!("targets are final, linear and indices; {t} isn't one")));
+    }
+    let wants_linear = targets.contains(&"linear");
+    let wants_indices = targets.contains(&"indices");
+    let reduced_motion = call["reduced_motion"] == true;
+    let checks_flicker = call["flicker"] == true;
+    let seed = doc.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
     let mut events = Vec::new();
     for e in call["events"].as_array().into_iter().flatten() {
         let frame = e["frame"]
             .as_u64()
             .filter(|f| *f > 0 && *f < count)
             .ok_or_else(|| bad("an event names a frame after the first, within the film"))?;
-        events.push((frame, look_of(&e["look"])?));
+        events.push((frame, (look_of(app, &e["look"], &doc)?, def_of(&e["look"])?)));
     }
     events.sort_by_key(|(f, _)| *f);
     let mut events = events.into_iter().peekable();
-    let mut look = look_of(&call["look"])?;
+    let mut look = look_of(app, &call["look"], &doc)?;
+    let mut def = def_of(&call["look"])?;
+    let capture: Vec<u64> = call["capture"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_u64)
+        .collect();
+    let export = call["export"].is_object();
+    let black = app.planted == Some(Planted::DrawsBlack);
     let stops_at_request = app.planted == Some(Planted::StopsAtRequest);
 
     // Compiled once: no look enters the motion program.
@@ -181,7 +259,70 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
                 .collect(),
         )
     };
-    let (first, ground) = marks_at(&doc, &program, &mut state, at(from), &look)?;
+    let planted = app.planted;
+    // The look's print finish for frame `n`, refused at check before any frame is drawn.
+    let printing_at = |n: u64,
+                       def: &Value,
+                       look: &(Palette, Type),
+                       items: &Map<String, Value>,
+                       view: Option<&View>,
+                       ground: Rgb|
+     -> Result<Option<Arc<crate::print2d::Printing>>, Value> {
+        let placed = view.map_or_else(Default::default, |v| {
+            let (scale, offset) = v.to_world();
+            deep_scene3d_render::print::Placed { scale, offset }
+        });
+        crate::print2d::printing(
+            def,
+            &look.0,
+            f64::from(size[0]),
+            seed,
+            at(n),
+            reduced_motion,
+            items,
+            placed,
+            ground,
+            planted,
+        )
+        .map(|p| p.map(Arc::new))
+        .map_err(|r| {
+            let mut v = refused(r.code, r.path);
+            for (k, x) in r.extra {
+                v[k] = x;
+            }
+            v
+        })
+    };
+    // #464: an indexed look, its tables checked before any frame is drawn.
+    let indexed = |def: &Value, look: &(Palette, Type)| {
+        deep_canvas_marks::print::indexed(def, &look.0).map_err(|r| {
+            let mut v = refused(r.code, r.path);
+            for (k, x) in r.extra {
+                v[k] = x;
+            }
+            v
+        })
+    };
+    let mut ix = indexed(&def, &look)?;
+    for (_, (l, d)) in events.clone() {
+        indexed(&d, &l)?;
+    }
+    let index_frame = |ix: &Option<deep_canvas_marks::print::Indexed>,
+                       layers: &[Vec<Arc<Drawn>>],
+                       items: &Map<String, Value>| {
+        ix.as_ref().map(|ix| {
+            let marks: Vec<Arc<Drawn>> = layers.iter().flatten().cloned().collect();
+            Arc::new(crate::indexed::frame(ix, &marks, items, "ground", planted))
+        })
+    };
+    let snap = |ix: &Option<deep_canvas_marks::print::Indexed>| ix.as_ref().map(|i| f64::from(i.scale));
+    let (first, ground, view, lamps, items) =
+        marks_at(&doc, &program, &mut state, at(from), &look, snap(&ix))?;
+    let first_print = printing_at(from, &def, &look, &items, view.as_ref(), ground)?;
+    let first_index = index_frame(&ix, &first, &items);
+    // The paper's fields hold still; only where the pixels land moves with the camera.
+    let page = page_of(&look.1, view.as_ref(), &doc, &roles(&look), call)?;
+    let first_page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
 
     app.window(size)?;
     {
@@ -199,25 +340,32 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
     }
     let baseline = frames::baseline_ns(app);
     let packs = Arc::new(packs_of(call)?);
-    let frame2 = |layers, n, look: &(Palette, Type)| {
+    let frame2 = |layers, n, look: &(Palette, Type), page: Option<Arc<Page>>, print, indexed| {
         Arc::new(Frame2 {
+            indexed,
             layers,
             clock: Clock::of(&doc, at(n)),
             roles: roles(look),
             guard: None,
             packs: packs.clone(),
+            page,
+            print,
         })
     };
-    let marks: Marks2 = Arc::new(Mutex::new(frame2(first, from, &look)));
+    let marks: Marks2 = Arc::new(Mutex::new(frame2(first, from, &look, first_page, first_print, first_index)));
     let encoded: Encoded = Arc::new(Mutex::new(None));
-    let (ui, error) = open2(app, marks.clone(), size, Some(encoded.clone()))?;
+    let taps = crate::print2d::Taps::default();
+    *taps.want_linear.lock().unwrap_or_else(|e| e.into_inner()) = wants_linear;
+    let (ui, error) = open2(app, marks.clone(), size, Some(encoded.clone()), taps.clone())?;
     app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
     ui.record(false);
     ui.take_record();
     ui.record(true);
 
     let mut listed = Vec::with_capacity(count as usize);
+    let mut lumas: Vec<Vec<f32>> = Vec::new();
     let mut switches = Vec::new();
+    let mut movie = Movie::new(out, export, size);
     let played = (|| -> Result<(), Value> {
         for k in 0..count {
             let mut request = None;
@@ -235,11 +383,17 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
                 } else {
                     request = Some(asked);
                 }
-                look = next;
+                (look, def) = next;
+                ix = indexed(&def, &look)?;
             }
             let started = Instant::now();
-            let (drawn, ground) = marks_at(&doc, &program, &mut state, at(n), &look)?;
-            *marks.lock().unwrap_or_else(|e| e.into_inner()) = frame2(drawn, n, &look);
+            let (drawn, ground, view, lamps, items) =
+                marks_at(&doc, &program, &mut state, at(n), &look, snap(&ix))?;
+            let print = printing_at(n, &def, &look, &items, view.as_ref(), ground)?;
+            let index = index_frame(&ix, &drawn, &items);
+            let page = page.as_ref().map(|p| Arc::new(p.seen_through(view.as_ref(), lamps)));
+            *marks.lock().unwrap_or_else(|e| e.into_inner()) =
+                frame2(drawn, n, &look, page, print, index);
             {
                 let win = app.window.as_ref().expect("opened");
                 let mut p = win.paint.borrow_mut();
@@ -248,7 +402,8 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
                 }
             }
             let built = started.elapsed().as_secs_f64() * 1e3;
-            let (encode_ms, layer_gpu_ms, pixels) = render(app, k, &encoded, hash)?;
+            let keep = export || checks_flicker || capture.contains(&n);
+            let (encode_ms, layer_gpu_ms, pixels, bytes) = render(app, k, &encoded, hash, keep)?;
             if let Some(e) = error.lock().unwrap_or_else(|e| e.into_inner()).take() {
                 return Err(e);
             }
@@ -278,6 +433,22 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
             if hash {
                 row["pixel_hash"] = json!(pixels);
             }
+            if let Some(bytes) = bytes {
+                let image = picture(&bytes, size, ground, black);
+                if capture.contains(&n) {
+                    row["final"] = json!(write_named(out, &png(&image, size)?, "png")?);
+                    if wants_linear {
+                        row["linear"] = json!(linear_of(app, out, &taps, &image, size)?);
+                    }
+                    if wants_indices && ix.is_some() {
+                        row["indices"] = json!(indices_of(app, out, &taps)?);
+                    }
+                }
+                if checks_flicker {
+                    lumas.push(crate::print2d::luminance(&image));
+                }
+                movie.add(&image, at(n))?;
+            }
             listed.push(row);
             if let Some(asked) = request {
                 if app.window.as_ref().expect("opened").paint.borrow().shown != Some(k) {
@@ -299,5 +470,162 @@ fn run(app: &mut App, call: &Value) -> Result<Value, Value> {
     ui.record(false);
     close2(app, &ui);
     played?;
-    Ok(json!({"size": size, "frames": listed, "switches": switches}))
+    let mut reply = json!({"size": size, "frames": listed, "switches": switches});
+    if let Some(ix) = &ix {
+        let palette: Vec<&str> = ix.palette.iter().map(|(r, _)| r.as_str()).collect();
+        reply["indexed"] = json!({"operator": crate::indexed::OPERATOR,
+            "class": crate::indexed::class(), "palette": palette});
+    }
+    if checks_flicker {
+        reply["flicker"] = crate::print2d::flicker(&lumas, fps as f64);
+    }
+    if export {
+        reply["export"] = movie.finish()?;
+    }
+    Ok(reply)
+}
+
+/// A captured frame's linear target, `<sha256>.f32`: the print finish's, read back, or the
+/// frame's own pixels decoded where nothing printed it.
+fn linear_of(
+    app: &App,
+    out: &str,
+    taps: &crate::print2d::Taps,
+    image: &[u8],
+    size: [u32; 2],
+) -> Result<String, Value> {
+    let written = taps.linear.lock().unwrap_or_else(|e| e.into_inner()).take();
+    let bytes = match written {
+        Some((texture, at)) if at == size => app
+            .worker
+            .call(move |state| {
+                let d = state.gpu.device();
+                crate::print2d::read_f32(&d.device, &d.queue, &texture, size)
+            })
+            .map_err(|e| refused("no_read_back", e))?,
+        _ => image
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|p| {
+                let lin = |c: u8| deep_canvas_marks::finish::srgb_decode(f64::from(c) / 255.0) as f32;
+                [lin(p[0]), lin(p[1]), lin(p[2]), 1.0]
+            })
+            .flat_map(f32::to_le_bytes)
+            .collect(),
+    };
+    write_named(out, &bytes, "f32")
+}
+
+/// A captured frame's index target as the operator wrote it, `<sha256>.u16`.
+fn indices_of(app: &App, out: &str, taps: &crate::print2d::Taps) -> Result<String, Value> {
+    let written = taps.indices.buffer.lock().unwrap_or_else(|e| e.into_inner()).take();
+    let Some((buffer, size)) = written else {
+        return Err(refused("no_read_back", "the frame's index target wasn't written"));
+    };
+    let bytes = app
+        .worker
+        .call(move |state| {
+            let d = state.gpu.device();
+            crate::indexed::read_indices(&d.device, &buffer, size)
+        })
+        .map_err(|e| refused("no_read_back", e))?;
+    write_named(out, &bytes, "u16")
+}
+
+/// A frame's surface as a picture: its premultiplied BGRA over the page's ground, RGBA rows.
+fn picture(bytes: &[u8], size: [u32; 2], ground: Rgb, black: bool) -> Vec<u8> {
+    let mut out = Vec::with_capacity((size[0] * size[1] * 4) as usize);
+    for p in bytes.chunks_exact(4) {
+        let under = |c: u8| u32::from(c) * (255 - u32::from(p[3]));
+        let over = |s: u8, g: u8| (u32::from(s) + (under(g) + 127) / 255).min(255) as u8;
+        out.extend_from_slice(&[over(p[2], ground[0]), over(p[1], ground[1]), over(p[0], ground[2]), 255]);
+    }
+    if black {
+        out.chunks_exact_mut(4).for_each(|p| p[..3].fill(0));
+    }
+    out
+}
+
+/// A film's frames on their way to the encode tool: I420 files beside the output.
+struct Movie {
+    on: bool,
+    dir: std::path::PathBuf,
+    out: String,
+    size: [u32; 2],
+    files: Vec<String>,
+    pts: Vec<i64>,
+}
+
+/// The encode's time base: flicks reduced to a timescale the MP4 holds.
+const TIMESCALE: i64 = 90_000;
+
+impl Movie {
+    fn new(out: &str, on: bool, size: [u32; 2]) -> Movie {
+        Movie {
+            on,
+            dir: std::path::Path::new(out).join("frames.i420"),
+            out: out.to_string(),
+            size,
+            files: Vec::new(),
+            pts: Vec::new(),
+        }
+    }
+
+    /// BT.709 limited range, 4:2:0, as the encode job takes it.
+    fn add(&mut self, rgba: &[u8], t: i64) -> Result<(), Value> {
+        if !self.on {
+            return Ok(());
+        }
+        std::fs::create_dir_all(&self.dir).map_err(|e| refused("not_written", e.to_string()))?;
+        let [w, h] = self.size.map(|v| v as usize);
+        let mut i420 = Vec::with_capacity(w * h * 3 / 2);
+        let px = |x: usize, y: usize| {
+            let o = (y * w + x) * 4;
+            [rgba[o], rgba[o + 1], rgba[o + 2]].map(f64::from)
+        };
+        for y in 0..h {
+            for x in 0..w {
+                let [r, g, b] = px(x, y);
+                i420.push((16.0 + (0.1826 * r + 0.6142 * g + 0.0620 * b)).round() as u8);
+            }
+        }
+        for plane in 0..2 {
+            for y in (0..h).step_by(2) {
+                for x in (0..w).step_by(2) {
+                    let [r, g, b] = px(x, y);
+                    let v = if plane == 0 {
+                        128.0 - 0.1006 * r - 0.3386 * g + 0.4392 * b
+                    } else {
+                        128.0 + 0.4392 * r - 0.3989 * g - 0.0403 * b
+                    };
+                    i420.push(v.round() as u8);
+                }
+            }
+        }
+        let path = self.dir.join(format!("{}.i420", self.files.len()));
+        std::fs::write(&path, i420).map_err(|e| refused("not_written", e.to_string()))?;
+        self.files.push(path.to_string_lossy().into_owned());
+        self.pts.push(t * TIMESCALE / FLICKS_PER_SECOND);
+        Ok(())
+    }
+
+    fn finish(self) -> Result<Value, Value> {
+        let exe = std::env::current_exe().map_err(|e| refused("no_encoder", e.to_string()))?;
+        let out = std::path::Path::new(&self.out).join("export.mp4");
+        let caps = deep_codecs::Caps::default();
+        let mut tool = deep_codecs::Helper::start(&exe, deep_codecs::ENCODE_TOOL, &caps, None)
+            .map_err(|e| refused("no_encoder", e.to_string()))?;
+        let reply = tool.ask(&json!({
+            "op": "encode", "frames": self.files, "pts": self.pts, "timescale": TIMESCALE,
+            "size": self.size, "out": out.to_string_lossy(),
+        }));
+        std::fs::remove_dir_all(&self.dir).ok();
+        let Some(sha) = reply["sha256"].as_str() else {
+            return Err(refused("encode_failed", reply.to_string()));
+        };
+        let named = std::path::Path::new(&self.out).join(format!("{sha}.mp4"));
+        std::fs::rename(&out, named).map_err(|e| refused("not_written", e.to_string()))?;
+        Ok(json!({"file": sha, "codec": "h264", "frames": self.files.len()}))
+    }
 }

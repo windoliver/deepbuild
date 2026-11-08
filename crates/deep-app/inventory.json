@@ -1,6 +1,14 @@
 {
   "panels": [
     {
+      "panel": "deepbuild/agents",
+      "entry": "crates/deep-app/src/views.rs Shipped, Kind::Agents",
+      "roles": [
+        "ink_primary"
+      ],
+      "literals": []
+    },
+    {
       "panel": "deepbuild/extension",
       "entry": "crates/deep-app/src/views.rs Slot",
       "roles": [],
@@ -53,10 +61,12 @@
       "panel": "deepbuild/sidebar",
       "entry": "crates/deep-app/src/views.rs Shipped, Kind::Sidebar",
       "roles": [
+        "focus",
         "hover",
         "ink_primary",
         "ink_secondary",
-        "raised"
+        "raised",
+        "selected"
       ],
       "literals": []
     },
