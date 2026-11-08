@@ -755,6 +755,9 @@ pub struct Eval {
     pub clean: bool,
     pub perturb: Option<String>,
     pub pixels: bool,
+    /// #493: the film block, each camera's pose, a reduced-motion cut's dissolve, each parallax
+    /// group's offset and each text's glyphs.
+    pub film: bool,
     pub size: Option<[u16; 2]>,
     /// #855: each node's Debug text digest beside its result, a diagnostic only.
     pub debug_text: bool,
@@ -1229,6 +1232,9 @@ impl<'a> Hub<'a> {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
         let palette = self.look.light.clone();
+        // #493: a shot writes the camera's pose the 3D frame is drawn through.
+        let posed = crate::film::posed(doc, t);
+        let doc = posed.as_ref().unwrap_or(doc);
         let gpu = self.gpu3().ok_or(())?;
         gpu.draw(doc, t, &palette, size)
             .map(|(rgba, scene)| (rgba, size, scene.boxes()))
