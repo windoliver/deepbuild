@@ -194,10 +194,13 @@ type Obj = Record<string, unknown>;
 /** One tool call: its kind, its command or the files it touched, and how it ended. */
 function callLine(call: Obj, after: Obj | undefined, worktree: string): string {
   const paths = Array.isArray(call.paths) ? call.paths.filter((p): p is string => typeof p === 'string') : [];
-  const what = typeof call.command === 'string' ? call.command.replace(/\s+/g, ' ').trim()
+  // Runs of spaces fold to one; any other white space is a character `render` marks (#1510), never a space.
+  const what = typeof call.command === 'string' ? call.command.replace(/ +/g, ' ').replace(/^ | $/g, '')
     : paths.length ? paths.map((p) => (worktree && isAbsolute(p) && p.startsWith(`${worktree}/`) ? relative(worktree, p) : p)).join(', ')
     : typeof call.tool === 'string' ? call.tool : '';
-  const shortened = what.length > 72 ? `${what.slice(0, 71)}…` : what;
+  // By code point, so an emoji or a tag character is never cut in half.
+  const points = [...what];
+  const shortened = points.length > 72 ? `${points.slice(0, 71).join('')}…` : what;
   const ended = !after ? 'no result' : after.outcome !== 'failed' ? 'ok'
     : ['failed', ...(typeof after.exit_code === 'number' ? [`exit ${after.exit_code}`] : []), ...(typeof after.signature === 'string' ? [after.signature] : [])].join(', ');
   return `${String(call.kind ?? 'call')} ${shortened}  ${ended}`;
