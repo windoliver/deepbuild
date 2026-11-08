@@ -192,7 +192,7 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
   ]);
   const v = /(\d+\.\d+\.\d+[\w.-]*)/.exec(version?.out ?? '')?.[1];
   if (!v) add('claude.binary', agent, 'binary_missing', 'fail', `${claude} --version printed no version`, 'Reinstall Claude Code.');
-  else if (!covered(agent, v)) add('claude.binary', agent, 'version_uncovered', 'fail', `${claude} is Claude Code ${v}, outside what its facts cover (${range[0]} to ${range[range.length - 1]}): its hooks are recorded unverified and its gates are watch-only`, 'Install a version the facts cover, or update DeepBuild.');
+  else if (!covered(agent, v)) add('claude.binary', agent, 'version_uncovered', 'fail', `${claude} is Claude Code ${v}, outside what its facts cover (${range[0]} to ${range[range.length - 1]}): its hooks are recorded unverified, and its holds and every block but the floor are watch-only; its fail_closed guard entries still deny`, 'Install a version the facts cover, or update DeepBuild.');
   else add('claude.binary', agent, 'healthy', 'ok', `${claude} is Claude Code ${v}, which its facts cover`, 'Nothing to do.');
   if (jobs !== undefined) {
     const same = (() => { try { return realpathSync(jobs) === realpathSync(claude); } catch { return jobs === claude; } })();
