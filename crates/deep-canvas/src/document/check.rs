@@ -1870,6 +1870,11 @@ fn check_params(
                                 param.max.unwrap_or(f64::INFINITY)
                             ),
                         ));
+                    } else if param.unit == "Hz" {
+                        // A step rate (issue #497): valid only with a whole-flick step.
+                        if let Err(why) = crate::time::step_length(n) {
+                            issues.push(Issue::error("bad_rate", key, path(), json!(n), &why));
+                        }
                     }
                 }
             }
