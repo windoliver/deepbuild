@@ -2220,6 +2220,7 @@ dependencies = [
  "image",
  "libc",
  "meshopt",
+ "naga 30.0.1",
  "serde_json",
  "sha2 0.11.1",
  "wgpu 30.0.1",
@@ -2344,8 +2345,10 @@ version = "0.0.0"
 dependencies = [
  "bytemuck",
  "deep-canvas-effects",
+ "deep-canvas-marks",
  "deep-canvas-scene3d",
  "deep-gpu",
+ "naga 30.0.1",
  "serde_json",
  "wgpu 30.0.1",
  "wgpu-profiler",

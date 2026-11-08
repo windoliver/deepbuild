@@ -190,13 +190,33 @@ impl Glyphs for Gpu<'_> {
         _: &mut vello_cpu::Resources,
         font: &FontData,
         size: f32,
+        coords: &[i16],
         glyph: vello_cpu::Glyph,
     ) {
         let run = self.scene.glyph_run(self.resources, font);
         let _ = run
             .font_size(size)
             .hint(false)
+            .normalized_coords(coords)
             .fill_glyphs(std::iter::once(glyph));
+    }
+
+    fn glyph_stroke(
+        &mut self,
+        _: &mut vello_cpu::Resources,
+        font: &FontData,
+        size: f32,
+        coords: &[i16],
+        glyph: vello_cpu::Glyph,
+        width: f64,
+    ) {
+        self.set_stroke(deep_marks_vello::stroke(width));
+        let run = self.scene.glyph_run(self.resources, font);
+        let _ = run
+            .font_size(size)
+            .hint(false)
+            .normalized_coords(coords)
+            .stroke_glyphs(std::iter::once(glyph));
     }
 }
 

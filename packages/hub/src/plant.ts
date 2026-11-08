@@ -9,8 +9,13 @@ import { createServer, type Server } from 'node:net';
 
 /** The planted wrong programs a test selects with DEEP_HUB_PLANT; only tests set it. */
 export type Plant =
+  // #1330's: a start with no approval on the record, a start with no sandbox, a sandbox setting that leaves the agent's
+  // way out open, and a sandbox that cuts the hub's socket.
+  | 'starts-without-approval' | 'starts-without-sandbox' | 'sandbox-way-out-open' | 'sandbox-cuts-hub-socket'
   // #46's: a poster that takes HEAD for the commit a verdict covers, and a recorder that marks every push it reads, or none.
   | 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none'
+  // #1537's: the hub holds the shipped message kind with no route into a gate run.
+  | 'kind-without-route'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
@@ -60,6 +65,10 @@ export type Plant =
   // substitutes on every allowed host, and the run's CA added to the login keychain.
   | 'standin-value-in-env' | 'env-loads-by-value' | 'standin-every-host' | 'run-ca-in-login-keychain'
   | 'runs-disk-bytes'
+  // #148's: a sync that writes each file as it plans it, replaces from the plan you were shown, keeps a file's original
+  // again before each write, renames without flushing the folder, writes entries unchecked against the agent's facts, and
+  // restarts Codex's daemon as soon as it asks.
+  | 'writes-before-parsing' | 'replaces-from-first-plan' | 'copies-original-each-write' | 'no-folder-flush' | 'skips-entry-check' | 'restarts-without-answer'
   // #325's: a stalled-claim rule that counts any new run as new evidence, and one that counts the stops a question holds.
   | 'new-run-is-evidence' | 'counts-waiting-stops'
   // #120's: the long-wait lines wait for the turn's stop, so a long turn of short calls shows none while it runs.
@@ -183,6 +192,7 @@ const PLANTS: readonly string[] = [
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
+  'writes-before-parsing', 'replaces-from-first-plan', 'copies-original-each-write', 'no-folder-flush', 'skips-entry-check', 'restarts-without-answer',
   'new-run-is-evidence', 'counts-waiting-stops',
   'line-at-stop',
   'turn-closes-at-child-stop',
@@ -225,6 +235,8 @@ const PLANTS: readonly string[] = [
   'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
+  'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
+  'kind-without-route',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

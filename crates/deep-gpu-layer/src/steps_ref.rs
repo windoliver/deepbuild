@@ -103,6 +103,12 @@ fn domain(op: &str, port: &str) -> (f64, f64, bool) {
         ("clamp", "hi") => (0.0, 4.0, false),
         ("smoothstep", "lo") => (-4.0, -0.25, false),
         ("smoothstep", "hi") => (0.25, 4.0, false),
+        // #431: gradients that keep the harness texture magnified, so the level is its one; the
+        // backdrop's harness image has one level too; hue, saturation and lightness in range.
+        ("sample_grad", "dx" | "dy") => (-0.001, 0.001, false),
+        ("backdrop", "lod") => (0.0, 0.0, false),
+        ("from_hsl", _) => (0.0, 1.0, false),
+        ("adjust", "x") => (-2.0, 2.0, false),
         (_, "uv") => (-0.1, 1.1, false),
         (_, "lod") => (0.0, 2.0, false),
         (_, "rgb" | "base") => (0.0, 1.0, false),
@@ -241,9 +247,9 @@ struct Plan {
 /// What a harness reads besides its steps: each texture input's image as the GPU holds it, and
 /// each storage input's values (by scalar type).
 #[derive(Default)]
-struct Data {
-    textures: BTreeMap<String, (Tex, Image)>,
-    storage: BTreeMap<String, (Sc, Vec<f64>)>,
+pub(crate) struct Data {
+    pub textures: BTreeMap<String, (Tex, Image)>,
+    pub storage: BTreeMap<String, (Sc, Vec<f64>)>,
 }
 
 /// How the harness ends: a placeholder output to type the step, the step's result widened to
@@ -556,6 +562,32 @@ fn fields(op: &str, t: &Ty) -> Map<String, Value> {
         "blend" => {
             f.insert("mode".into(), json!("multiply"));
         }
+        // #431's steps' literals: a mode, points that rise and dip, a quad no affine map makes,
+        // and feature points moved most of the way.
+        "adjust" => {
+            f.insert("mode".into(), json!("exposure"));
+        }
+        "spline" => {
+            f.insert(
+                "points".into(),
+                json!([
+                    [-3.0, -1.0],
+                    [-1.0, 0.5],
+                    [0.0, 0.25],
+                    [2.0, 2.0],
+                    [3.0, 2.5]
+                ]),
+            );
+        }
+        "homography" => {
+            f.insert(
+                "quad".into(),
+                json!([[0.1, 0.2], [0.9, 0.1], [1.1, 0.95], [-0.05, 0.8]]),
+            );
+        }
+        "cells" => {
+            f.insert("jitter".into(), json!(0.8));
+        }
         _ => {}
     }
     f
@@ -628,7 +660,20 @@ fn build(def: &Def, plan: &Plan, end: &End) -> Option<(Value, Data)> {
         }
         args.extend(fields(op, t));
         g.step("r", def.name, Value::Object(args));
-        "r".to_string()
+        if op == "backdrop" {
+            // The opaque scene's copy the check binds for it, a smooth image here.
+            g.texture(Tex::Float);
+            g.inputs.remove("in_tex");
+            let img = g.data.textures.remove("in_tex")?;
+            g.data
+                .textures
+                .insert(deep_canvas_effects::graph::BACKDROP_INPUT.into(), img);
+        }
+        if op == "cells" {
+            "r.f1".to_string()
+        } else {
+            "r".to_string()
+        }
     };
     let out_sc = if plan.buf_out {
         statement_sc
@@ -705,10 +750,11 @@ fn harness(def: &Def, plan: &Plan) -> Result<(Compiled, Data), String> {
             e.iter().map(|i| i.message.clone()).collect::<Vec<_>>()
         )
     })?;
-    let key = if def.name.starts_with("repeat@") {
-        "r.s"
-    } else {
-        "r"
+    let key = match def.name {
+        n if n.starts_with("repeat@") => "r.s",
+        // A cell's distance to its nearest feature point, its continuous port.
+        "cells@1" => "r.f1",
+        _ => "r",
     };
     let end = match c.checked.types.get(key) {
         Some(t) => End::Result(t.clone()),
@@ -792,7 +838,7 @@ fn roles() -> BTreeMap<String, [f64; 3]> {
 }
 
 /// The harness through the f64 interpreter: each pixel's (or element's) RGBA.
-fn cpu(c: &Compiled, data: &Data) -> Result<Vec<[f64; 4]>, String> {
+fn cpu(c: &Compiled, data: &Data, [w, h]: [u32; 2]) -> Result<Vec<[f64; 4]>, String> {
     let f = frame();
     let textures = data
         .textures
@@ -810,8 +856,8 @@ fn cpu(c: &Compiled, data: &Data) -> Result<Vec<[f64; 4]>, String> {
         normals: [[0.0; 3]; 3],
     };
     match c.kind() {
-        Kind::Pass => Ok(reference::cpu_pass(c, &env, [W, H])?.px),
-        Kind::Material => interp::material_rows(&c.checked, &env, [W, H], 0..H),
+        Kind::Pass => Ok(reference::cpu_pass(c, &env, [w, h])?.px),
+        Kind::Material => interp::material_rows(&c.checked, &env, [w, h], 0..h),
         Kind::Compute => {
             let storage = data
                 .storage
@@ -834,7 +880,12 @@ fn bits(sc: Sc, v: f64) -> u32 {
 
 /// The harness on this GPU, under a validation scope: the output's raw bytes (compute's words,
 /// a pass's RGBA f32 texels) and each pixel's (or element's) RGBA.
-fn gpu(device: &Device, c: &Compiled, data: &Data) -> Result<(Vec<u8>, Vec<[f64; 4]>), String> {
+fn gpu(
+    device: &Device,
+    c: &Compiled,
+    data: &Data,
+    [w, h]: [u32; 2],
+) -> Result<(Vec<u8>, Vec<[f64; 4]>), String> {
     use wgpu::util::DeviceExt as _;
     let d = &device.device;
     let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -863,7 +914,7 @@ fn gpu(device: &Device, c: &Compiled, data: &Data) -> Result<(Vec<u8>, Vec<[f64;
         }));
     }
     let out_sc = c.checked.op.storage.get("out").map(|s| s.sc);
-    let out_bytes = u64::from(4 * N) * 4;
+    let out_bytes = u64::from(4 * w * h) * 4;
     if out_sc.is_some() {
         buffers.push(d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("steps_reference output"),
@@ -874,13 +925,13 @@ fn gpu(device: &Device, c: &Compiled, data: &Data) -> Result<(Vec<u8>, Vec<[f64;
     }
     let buf_refs: Vec<&wgpu::Buffer> = buffers.iter().collect();
     let values = interp::inputs(&c.checked, &BTreeMap::new(), &roles());
-    let (g0, g1, _keep) = runner.bind(d, &frame(), [W, H], &values, &view_refs, &buf_refs);
+    let (g0, g1, _keep) = runner.bind(d, &frame(), [w, h], &values, &view_refs, &buf_refs);
     let mut enc = d.create_command_encoder(&Default::default());
     let target = d.create_texture(&wgpu::TextureDescriptor {
         label: Some("steps_reference target"),
         size: wgpu::Extent3d {
-            width: W,
-            height: H,
+            width: w,
+            height: h,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
@@ -945,6 +996,20 @@ fn gpu(device: &Device, c: &Compiled, data: &Data) -> Result<(Vec<u8>, Vec<[f64;
     Ok((raw, px))
 }
 
+/// An operator drawn by the step harness at `size` (#431: check_operator's `reference`): on this
+/// GPU (its f32 RGBA texels) and through the step graph's f64 interpreter, each with the frame
+/// every harness runs in.
+pub(crate) fn drawn_both(
+    device: &Device,
+    c: &Compiled,
+    data: &Data,
+    size: [u32; 2],
+) -> Result<(Vec<u8>, Vec<u8>), String> {
+    let cpu_px = cpu(c, data, size)?;
+    let (_, gpu_px) = gpu(device, c, data, size)?;
+    Ok((f32_file(&gpu_px), f32_file(&cpu_px)))
+}
+
 fn f32_file(px: &[[f64; 4]]) -> Vec<u8> {
     px.iter()
         .flat_map(|p| p.iter().flat_map(|v| (*v as f32).to_le_bytes()))
@@ -969,7 +1034,7 @@ fn first_run(
             }
         };
         let cpu_px = if with_cpu {
-            match cpu(&c, &data) {
+            match cpu(&c, &data, [W, H]) {
                 Ok(p) => p,
                 Err(e) => {
                     why = format!("{} on the CPU: {e}", plan.kind.name());
@@ -979,7 +1044,7 @@ fn first_run(
         } else {
             Vec::new()
         };
-        match gpu(device, &c, &data) {
+        match gpu(device, &c, &data, [W, H]) {
             Ok((raw, px)) => return Ok((plan.kind, raw, px, cpu_px)),
             Err(e) => why = format!("{} on the GPU: {e}", plan.kind.name()),
         }

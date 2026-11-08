@@ -393,7 +393,12 @@ impl Effect {
                         },
                     };
                     let item = items.get(op).cloned();
-                    Ok(GroupPass { op: op.to_string(), item, params, grow })
+                    Ok(GroupPass {
+                        op: op.to_string(),
+                        item,
+                        params,
+                        grow,
+                    })
                 })
                 .collect::<Result<_, _>>()?,
             Some(_) => return refuse("bad_doc", path("passes")),
@@ -774,18 +779,24 @@ pub fn text_spec_in(
         Some(Value::String(lang)) => Some(lang.clone()),
         Some(_) => return refuse("bad_doc", format!("{path}/params/lang")),
     };
+    // #496: a weight a channel or driver writes arrives as a number, rounded to a whole unit;
+    // a weight no static face of the family has is set on its variable twin.
+    let weight = params
+        .get("weight")
+        .and_then(Value::as_f64)
+        .map(f64::round)
+        .filter(|w| (1.0..=1000.0).contains(w))
+        .map_or(400, |w| w as u16);
     Ok(TextSpec {
         text,
-        family: ty.family(&font),
+        family: ty
+            .family(&font)
+            .map(|f| deep_text::fonts::family_at(f, weight)),
         fallback: ty.fallback.clone(),
         lang,
         font,
         size: num(params.get("size")).unwrap_or(13.0),
-        weight: params
-            .get("weight")
-            .and_then(Value::as_u64)
-            .and_then(|w| u16::try_from(w).ok())
-            .unwrap_or(400),
+        weight,
         width: params.get("box").and_then(|b| num(b.get("w"))),
         max_lines: match params.get("max_lines") {
             None => None,
@@ -947,7 +958,12 @@ impl Drawn {
                     .width
                     .unwrap_or(spec.text.chars().count() as f64 * spec.size);
                 grown(
-                    [origin[0], origin[1] - spec.size, width, lines * spec.size * 2.0],
+                    [
+                        origin[0],
+                        origin[1] - spec.size,
+                        width,
+                        lines * spec.size * 2.0,
+                    ],
                     spec.size,
                 )
             }
@@ -955,7 +971,10 @@ impl Drawn {
         match self.clip {
             Some(c) => {
                 let (x0, y0) = (b[0].max(c[0]), b[1].max(c[1]));
-                let (x1, y1) = ((b[0] + b[2]).min(c[0] + c[2]), (b[1] + b[3]).min(c[1] + c[3]));
+                let (x1, y1) = (
+                    (b[0] + b[2]).min(c[0] + c[2]),
+                    (b[1] + b[3]).min(c[1] + c[3]),
+                );
                 [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
             }
             None => b,
@@ -2601,6 +2620,9 @@ pub enum Notation {
     Percent,
     /// A reading in seconds (or in ms with `unit: ms`) as 450 ms, 3.5 s, 2 min 05 s or 1 h 02 min.
     Duration,
+    /// #496: whole seconds as hours, minutes and seconds, each at least two digits, as a
+    /// countdown shows them: 8104 is 02:15:04.
+    Clock,
 }
 
 /// How a bound value or a counter shows its number (canvas primitives: Bound value, `format`).
@@ -2701,6 +2723,7 @@ impl Format {
             Some("compact") => Notation::Compact,
             Some("percent") => Notation::Percent,
             Some("duration") => Notation::Duration,
+            Some("clock") => Notation::Clock,
             Some(_) => return refuse("format_notation", format!("{path}/format/notation")),
         };
         if f.notation == Notation::Duration
@@ -2745,6 +2768,13 @@ impl Format {
             Notation::Percent => (self.digits(n.abs() * 100.0, self.precision), "%".into()),
             Notation::Compact => self.compact(n.abs()),
             Notation::Duration => (self.duration(n.abs()), String::new()),
+            Notation::Clock => {
+                let s = n.abs().floor() as u64;
+                (
+                    format!("{:02}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60),
+                    String::new(),
+                )
+            }
         };
         let sign = if n < 0.0 && body.chars().any(|c| c.is_ascii_digit() && c != '0') {
             "−"
@@ -2754,7 +2784,7 @@ impl Format {
             ""
         };
         let unit = match (&self.unit, self.notation) {
-            (_, Notation::Percent | Notation::Duration) => String::new(),
+            (_, Notation::Percent | Notation::Duration | Notation::Clock) => String::new(),
             (Some(u), _) if self.unit_raised => raised(u),
             (Some(u), _) if u == "%" || u == "°" => u.clone(),
             (Some(u), _) => format!(" {u}"),
@@ -2973,6 +3003,15 @@ fn evaluated_number(
 ) -> Result<Evaluated, Refused> {
     if let Some(found) = anchor_of(items, source)? {
         return Ok(found);
+    }
+    // #496: a data value by its path, as the frame evaluated it on the item, else as written.
+    if let Some(name) = source.strip_prefix("data/") {
+        let value = item.pointer(&format!("/params/data/{name}")).or_else(|| {
+            doc.get("data")?
+                .get(name)
+                .map(|d| d.get("value").unwrap_or(d))
+        });
+        return Ok(value.and_then(Value::as_f64).map(|v| (v, None)));
     }
     let target = doc
         .get("drivers")
@@ -4259,7 +4298,10 @@ fn isolated(item: &Value) -> bool {
 /// Whether `id` is a `backdrop: below` group no item names as its parent.
 fn childless_backdrop(id: &str, item: &Value, items: &Map<String, Value>) -> bool {
     item.get("kind").and_then(Value::as_str) == Some("group@1")
-        && item.get("params").and_then(|p| p.get("backdrop")).and_then(Value::as_str)
+        && item
+            .get("params")
+            .and_then(|p| p.get("backdrop"))
+            .and_then(Value::as_str)
             == Some("below")
         && !items
             .values()

@@ -49,8 +49,13 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['offer.save', ['app', 'cli']],
   // A run of a destructive command undone from the copy staged before it ran (#347).
   ['staged.undo', ['app', 'cli']],
+  // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
+  // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
+  ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['mcp.exec', ['cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
+  // Sessions started without your Send (#1330): a run you approve, and a start under it, from your own terminal.
+  ['start.approve', ['cli']], ['start.session', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
@@ -58,7 +63,9 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['wiki.build', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
   ['memory.list', ['cli']], ['memory.act', ['cli']],
-  ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
+  // The blind acceptance job (#1328).
+  ['acceptance.start', ['cli']], ['acceptance.status', ['app', 'cli']], ['acceptance.dispute', ['cli']], ['acceptance.ended', ['cli']],
+  ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['checks.kinds', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
   // `deep workspace` (#67), and the views of the projects you're in.
@@ -976,8 +983,10 @@ class Hub {
     }
     // A patch the adapter can't read is Codex's deny, with its reason and nothing else.
     if (meta.denied && !this.off) return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: meta.denied } }), stderr: '' });
-    // A session past its facts is watch-only: a matched entry is recorded, never a block.
-    if (meta.event !== 'PreToolUse' || meta.watchOnly || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
+    if (meta.event !== 'PreToolUse' || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
+    // A watch-only session (one past its facts, #1501) gets the reply every session gets under `deep off`: a matched
+    // entry is recorded, never a block, but the floor's, which deep-hook applies with no facts and no hub at all.
+    const watching = this.off || meta.watchOnly === true;
     const entries = this.rules();
     // The planted wrong program for #304's AC3 ignores what deep-hook matched and reads the command line as text.
     const matched = this.plant === 'matches-text'
@@ -987,18 +996,18 @@ class Hub {
     const unread = (n: string) => this.plant === 'unknown-as-block' && /couldn't be read/.test(meta.notes?.[n] ?? '');
     const mode = (n: string): unknown => ((this.plant === 'warn-as-block' || unread(n)) && entries[n]?.mode === 'warn' ? 'block' : entries[n]?.mode);
     const words = (n: string): string => `${String(entries[n]!.reason)} ${String(entries[n]!.next_step)}${meta.notes?.[n] ? ` ${meta.notes[n]}` : ''} (guard ${n})`;
-    // With `deep off` only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
+    // Watch-only or off, only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
     // A destructive command is staged or asked about at the gate (#347, #1294), never blocked outright.
-    const decided = (n: string) => !this.off && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
-    const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
+    const decided = (n: string) => !watching && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
+    const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!watching || floor(n)));
     if (blocks.length) {
       meta.blockedBy = blocks;
       return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
     }
-    if (this.off) return EMPTY_REPLY;
+    if (watching) return EMPTY_REPLY;
     const warns = matched.filter((n) => mode(n) === 'warn');
     if (!warns.length || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return EMPTY_REPLY;
     const additionalContext = warns.map((n) => `DeepBuild warns: ${words(n)}`).join('\n');

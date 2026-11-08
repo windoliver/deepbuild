@@ -60,7 +60,7 @@ Bays are weaker than today's proof lane, and equal to today's perf kept copies. 
 Once bays exist, most of a proof run's cost is work it repeats:
 
 - **`npm ci` only when the lock changed** (T2). Per proof run it is 0 without a lock change, 1 when the change edits the lock, and 1 more in the base bay only when the merge base moved past a lock change. Stryker's `node_modules` relink walk is skipped in a bay.
-- **perf's kept copies per machine** (T3). They are keyed per machine, `deepbuild-perf/<machine>/{base,without-tests}`, not per worktree path, under a machine-wide lock taken only under the `timed` class, and their trees are replaced by the bays' byte-compare rule. The one rebuild left on the base side is deep-show and its dependents when the canvas-kit lane rewrote `kit-ledger.json` with different bytes, and the record names it.
+- **perf's kept copies per machine** (T3). They are keyed per machine and clone, `deepbuild-perf/<machine>-<clone>/{base,without-tests}`, not per worktree path: every worktree of a clone shares them, and another repository on the machine, such as a test's fixture, gets its own. `<clone>` hashes the clone's git directory, and `<machine>` is the first label of the machine's name, which macOS and a router's DHCP extend with a domain that changes with the network (`.local`, `.attlocal.net`). They sit under one lock for the clone on the machine, taken only under the `timed` class, and their trees are replaced by the bays' byte-compare rule. The one rebuild left on the base side is deep-show and its dependents when the canvas-kit lane rewrote `kit-ledger.json` with different bytes, and the record names it.
 - **Stryker scoped to the mutated package** (T6). Per mutant, build the mutated package and its dependents, read from the reverse workspace graph: `tsc -b packages/<p>` alone builds p and its dependencies, while tests read the dependents' `dist`. `undoBuild` still restores every touched source file. A planted scope that builds the mutated package without its dependents changes the kill set; the real scope leaves the killed and survived sets equal to an unscoped reference run's.
 
 ### Binaries for tests
@@ -209,6 +209,20 @@ Agents run day and night, so no idle period exists for budgets, and a per-PR bud
 - **Who runs it.** Agents never run or edit the window. `budget-window.mjs` joins the guard's list, so a change to it needs a signed approval tag.
 
 **Reading rule.** An existing budget criterion that says "in the local preflight" is met by the scheduled budget window's record for its commit. On 2026-11-02, 258 open issues carried that phrase, 238 times in the criterion lines of 236 of them (not all of those are budgets; the rule reads only the budget ones), and several already have tagged tests, such as the budget tests under `tests/acceptance/104`, `159`, `331` and `365`. A criterion's ID is the hash of its normalized text, so rewording those lines would change their IDs and break the tags that prove them. Their text stays as written, and this rule reads it.
+
+### 12b. Main is watched (#1333)
+
+Nothing else runs after a merge, so `scripts/main-watch.mjs` does, on the run's host, in a checkout of main that no session works in:
+
+```
+0 * * * * zsh -lc 'cd ~/doneright && node scripts/main-watch.mjs tick' >> ~/.deepbuild/main-watch.log 2>&1
+```
+
+- **When.** A tick runs the unit and lint lanes of main's head, from that head's own `lanes.mjs`, once 5 landings reached main or 6 hours passed since its last run, and at every tick while landings are paused. A landing is a commit on main's first-parent line. Its lanes go through `runLanes`, so the throttle and `deep lease` hold them like any other. It calls no model and starts no hosted workflow.
+- **A new failure** is one `known-failures.json` doesn't list. It runs again alone, up to three times. One that passes on a repeat reads INCONCLUSIVE and is filed once, with its runs, and nothing pauses. One that holds pauses landings and is bisected, running only that test, over the landings since the last clean run, which names the landing and its issue.
+- **Recovery.** A pull request reverts that landing. It is merged once the failing test passes on it and nothing that passed on main fails there, and then the issue reopens naming the failure and landings open again. A revert that conflicts or doesn't clear main starts an attempt on the issue, a headless `claude` or `codex` run. Only once that attempt has ended with main still red is a person asked, once, by an issue titled `Ask: …`.
+- **The gate.** `node scripts/main-watch.mjs status` prints `landings open` (exit 0) or `landings paused: …` (exit 1) from the job's state under `~/.deepbuild/main-watch/`, without fetching. The landing queue (#1331), and anyone landing by hand, reads it first.
+- **Listed failures lapse.** Each `failures` entry of `known-failures.json` ends `(#<issue>, added <YYYY-MM-DD>)`. The lint lane's `scripts/known-failures-check.mjs` fails an entry that names no issue, names one that isn't open, or was added more than 14 days ago.
 
 ## 13. Capacity
 

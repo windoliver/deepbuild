@@ -38,7 +38,7 @@ const started = Date.now();
 try {
   const change = readChange(root);
   const issue = readIssue(root, change);
-  const approvals = readApprovals(root, change);
+  const approvals = readApprovals(root, change, issue);
   if (lanes.has('guard')) guard({ root, change, issue: issue?.blocked && !issue.number ? null : issue }, approvals, say);
 
   if (lanes.has('before') || lanes.has('mutation')) {
