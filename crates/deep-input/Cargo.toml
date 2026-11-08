@@ -1,0 +1,17 @@
+[package]
+name = "deep-input"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# The input module's proof binary (#308): JSON lines in, one answer per line. Outside the
+# deep-canvas* crates because the `lookup` probe reads the clock, which the canvas lint keeps out
+# of checked code; nothing a check reads is computed here.
+[[bin]]
+name = "deep-input"
+path = "src/main.rs"
+
+[dependencies]
+deep-canvas-input = { path = "../deep-canvas-input" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
