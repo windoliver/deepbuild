@@ -1,4 +1,4 @@
-✖ a CPU reading of 0 is a run shorter than time's 10 ms resolution, not a missing one (#1421) (1.352481ms)
+✖ a CPU reading of 0 is a run shorter than time's 10 ms resolution, not a missing one (#1421) (1.438839ms)
 ℹ tests 1
 ℹ suites 0
 ℹ pass 0
@@ -6,14 +6,14 @@
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 64.106157
+ℹ duration_ms 119.172699
 
 ✖ failing tests:
 
 test at tests/benchmark.test.mjs:152:1
-✖ a CPU reading of 0 is a run shorter than time's 10 ms resolution, not a missing one (#1421) (1.352481ms)
+✖ a CPU reading of 0 is a run shorter than time's 10 ms resolution, not a missing one (#1421) (1.438839ms)
   Error: preflight: missing cpuMs
-      at compare (file://<main-benchmark-copy>/scripts/benchmark.mjs:291:74)
+      at compare (file://<main-benchmark-copy>/scripts/benchmark.mjs:303:74)
       at TestContext.<anonymous> (file://<main-benchmark-copy>/tests/benchmark.test.mjs:157:18)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
