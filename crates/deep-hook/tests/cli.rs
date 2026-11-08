@@ -725,6 +725,7 @@ fn inline_programs_and_shells_fed_what_the_line_cant_say_meet_the_floor_with_the
         ("python3 <<'EOF'\nimport os, sqlite3\nsqlite3.connect(os.path.expanduser('~/.deepbuild/ledger.db'))\nEOF".into(), "no-deepbuild-home-write"),
         ("cat scripts/stop.sh | sh".into(), "no-kill-by-name"),
         ("pytho[n]3 -c \"open('~/.deepbuild/rules.json','w')\"".into(), "no-deepbuild-home-write"),
+        ("\"$PY\" -c \"open('~/.deepbuild/rules.json','w')\"".into(), "no-deepbuild-home-write"),
     ];
     let unread = [
         "echo cGtpbGwgbm9kZQ== | base64 -d | sh",
@@ -750,6 +751,7 @@ fn inline_programs_and_shells_fed_what_the_line_cant_say_meet_the_floor_with_the
         "sh < /dev/null",
         "python3 < /dev/null",
         "python3 -c \"print(10/2)\"",
+        "\"$CC\" -o out main.c",
         "python3 -c \"import urllib.request; urllib.request.urlopen('https://example.com/a/b')\"",
     ];
     let mut wrong = Vec::new();
