@@ -83,6 +83,10 @@ pub fn insert(doc: &Value, channel: &str, t: i64) -> Result<(Value, String), Ref
         ValueType::Color | ValueType::Vec | ValueType::Quat => json!(value),
         ValueType::Bool => json!(value[0] != 0.0),
         ValueType::Enum => json!(motion.labels.get(value[0] as usize)),
+        ValueType::Path => match &ch.path {
+            Some(p) => crate::morph::value_of(&crate::morph::unflat(&value, &p.structure)),
+            None => return refused("bad_doc", format!("channels/{channel}")),
+        },
     };
     let mut out = doc.clone();
     let Some(Value::Object(keys_json)) = out
