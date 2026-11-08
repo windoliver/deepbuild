@@ -1,0 +1,48 @@
+// The planted reader of AC6 (#66): a Linear work source over the same recorded Linear fixture that marks every author
+// a collaborator, whatever the team's membership says. It reads the team's issues and each issue's comments through
+// the hub's ctx.fetch, with the Linear key by handle; an author's handle is the user's displayName.
+interface Answer { status: number; headers: Record<string, string>; body: string }
+interface Ctx { fetch(r: { method: string; path: string; headers?: Record<string, string>; body?: string }): Promise<Answer> }
+const gql = async (ctx: Ctx, query: string, variables: Record<string, unknown>): Promise<any> => {
+  const a = await ctx.fetch({ method: 'POST', path: '/graphql', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query, variables }) });
+  if (a.status !== 200) throw Error(`Linear answered ${a.status}`);
+  return JSON.parse(a.body);
+};
+const ISSUE = 'id identifier title description url createdAt updatedAt team { key } creator { displayName } comments { nodes { id body updatedAt url user { displayName } } }';
+
+export default async function (deep: any): Promise<void> {
+  const secret = await deep.secret('linear_key');
+  await deep.registerSource('ext.linroles.issues', {
+    variant: 'stream',
+    host: 'api.linear.app',
+    secret,
+    header: 'Authorization',
+    quota: { per_minute: 600, per_day: 100_000 },
+    delivers: 'comment',
+    read(stream: { events: unknown[] }, cursor: string | null, limit: number) {
+      const start = cursor === null ? 0 : Number(cursor);
+      const events = stream.events.slice(start, start + limit);
+      return { events, cursor: String(start + events.length) };
+    },
+    async list(ctx: Ctx, q: { scope: string; since: string; cursor: string | null; limit: number }) {
+      const r = await gql(ctx, `query Issues($first: Int, $after: String, $since: DateTime) { issues(first: $first, after: $after, filter: { updatedAt: { gte: $since } }) { nodes { identifier createdAt updatedAt team { key } } pageInfo { hasNextPage endCursor } } }`, { first: q.limit, after: q.cursor, since: q.since });
+      const c = r.data.issues;
+      return { items: c.nodes.map((i: any) => ({ id: i.identifier, scope: i.team.key, created: i.createdAt, updated: i.updatedAt, mention: false })), cursor: c.pageInfo.hasNextPage ? c.pageInfo.endCursor : null };
+    },
+    async item(ctx: Ctx, q: { scope: string; id: string }) {
+      const r = await gql(ctx, `query Issue($id: String!) { issue(id: $id) { ${ISSUE} } }`, { id: q.id });
+      const i = r.data?.issue;
+      if (!i) return { failed: 'not found' };
+      // The plant: a role from no membership record at all.
+      const author = (u: any) => ({ handle: u.displayName, role: 'collaborator' });
+      return {
+        events: [
+          { id: `${i.identifier}@${i.updatedAt}`, kind: 'item', at: i.updatedAt, marker: null, mention: false, data: { source_id: i.identifier, link: i.url, title: i.title, body: i.description, criteria: [], authors: [author(i.creator)], updated: i.updatedAt } },
+          ...i.comments.nodes.map((c: any) => ({ id: c.id, kind: 'comment', at: c.updatedAt, marker: null, mention: false, data: { source_id: `${i.identifier}.${c.id}`, link: c.url, title: i.title, body: c.body, criteria: [], authors: [author(c.user)], updated: c.updatedAt } })),
+        ],
+      };
+    },
+    async deliver() { throw Error('the planted reader delivers nothing'); },
+    async find() { return null; },
+  });
+}

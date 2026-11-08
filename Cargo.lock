@@ -1980,6 +1980,7 @@ dependencies = [
  "deep-gpu",
  "deep-marks-gpui",
  "deep-text-gpui",
+ "ed25519-dalek",
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-shell",

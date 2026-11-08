@@ -31,7 +31,7 @@
       },
       {
         "role": "button",
-        "name": "Session 1 · 01MCBH57",
+        "name": "40 asks need you",
         "value": null,
         "bounds": [
           8,
@@ -43,7 +43,7 @@
       },
       {
         "role": "button",
-        "name": "Session 2 · 01MCBH58",
+        "name": "Agents: MCP servers and skills",
         "value": null,
         "bounds": [
           8,
@@ -55,7 +55,7 @@
       },
       {
         "role": "button",
-        "name": "Session 3 · 01MCBH59",
+        "name": "! Session 01MCBH57 · needs you",
         "value": null,
         "bounds": [
           8,
@@ -67,7 +67,7 @@
       },
       {
         "role": "button",
-        "name": "Session 4 · 01MCBH5A",
+        "name": "! Session 01MCBH58 · needs you",
         "value": null,
         "bounds": [
           8,
@@ -79,7 +79,7 @@
       },
       {
         "role": "button",
-        "name": "Session 5 · 01MCBH5B",
+        "name": "! Session 01MCBH59 · needs you",
         "value": null,
         "bounds": [
           8,
@@ -91,7 +91,7 @@
       },
       {
         "role": "button",
-        "name": "Session 6 · 01MCBH5C",
+        "name": "! Session 01MCBH5A · needs you",
         "value": null,
         "bounds": [
           8,
@@ -103,11 +103,35 @@
       },
       {
         "role": "button",
-        "name": "Session 7 · 01MCBH5D",
+        "name": "! Session 01MCBH5B · needs you",
         "value": null,
         "bounds": [
           8,
           184,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "! Session 01MCBH5C · needs you",
+        "value": null,
+        "bounds": [
+          8,
+          208,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "! Session 01MCBH5D · needs you",
+        "value": null,
+        "bounds": [
+          8,
+          232,
           244,
           24
         ],
@@ -126,8 +150,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBHM300GP83QANM5WDCWNNP",
+        "role": "button",
+        "name": "Authority ask 1 in folding: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -138,8 +162,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBHNXK01C7MA759TY6A067E",
+        "role": "button",
+        "name": "Unblock ask 2 in folding: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -150,8 +174,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBHQR604RSDCGT0XNF4YCAH",
+        "role": "button",
+        "name": "Taste ask 3 in folding: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -162,8 +186,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBHSJS0JPWS3RM039XYQSNS",
+        "role": "button",
+        "name": "Exception ask 4 in folding: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -174,8 +198,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBHVDC0Z4S4BBGH7GFPD952",
+        "role": "button",
+        "name": "Choice ask 5 in folding: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -186,8 +210,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBHX7Z0FNAJRF955NVKMG9M",
+        "role": "button",
+        "name": "Definition ask 6 in folding: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -198,8 +222,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBHZ2J04Z23DH6W50XQ2A84",
+        "role": "button",
+        "name": "Authority ask 7 in folding: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -210,8 +234,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJ0X50EAQCQZ73BR8VEX8J",
+        "role": "button",
+        "name": "Unblock ask 8 in folding: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -222,8 +246,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJ2QR0QB676VKTSV2XNB40",
+        "role": "button",
+        "name": "Taste ask 9 in folding: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -234,8 +258,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJ4JB0HVWNWEBJSDKJ3455",
+        "role": "button",
+        "name": "Exception ask 10 in folding: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -246,8 +270,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJ87H07MNWWA7Q4AEDZN1C",
+        "role": "button",
+        "name": "Definition ask 12 in merge: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -258,8 +282,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJA240SW17ZRA9J03NKYSW",
+        "role": "button",
+        "name": "Authority ask 13 in merge: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -270,8 +294,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJBWQ0PEVQEWK18997336F",
+        "role": "button",
+        "name": "Unblock ask 14 in merge: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -282,8 +306,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJDQA0AQA7A53MHVBC3EFP",
+        "role": "button",
+        "name": "Taste ask 15 in merge: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -294,8 +318,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJFHX0HBZPRXE7PB8WSP8Z",
+        "role": "button",
+        "name": "Exception ask 16 in merge: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -306,8 +330,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJN1P00Y2QKCG37JSPXQKY",
+        "role": "button",
+        "name": "Definition ask 18 in release: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -318,8 +342,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJPW90WFPZM3KB5SC2EGT1",
+        "role": "button",
+        "name": "Authority ask 19 in release: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -330,8 +354,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJRPW0278W412Z0G9XCRFQ",
+        "role": "button",
+        "name": "Unblock ask 20 in release: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -342,8 +366,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJTHF0G3F0RX9V9R3RAQQZ",
+        "role": "button",
+        "name": "Taste ask 21 in release: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -354,8 +378,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBJWC206E670JH89MEG9QWN",
+        "role": "button",
+        "name": "Exception ask 22 in release: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -366,8 +390,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBK0180861FYX1QB7D4FH40",
+        "role": "button",
+        "name": "Choice ask 23 in docs: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -378,8 +402,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBK1VV0C16MFYY0FV9VS2MC",
+        "role": "button",
+        "name": "Definition ask 24 in docs: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -390,8 +414,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBK3PE07YZ30D3DDGHH7TAH",
+        "role": "button",
+        "name": "Authority ask 25 in docs: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -402,8 +426,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3",
+        "role": "button",
+        "name": "Unblock ask 26 in docs: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -414,8 +438,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA",
+        "role": "button",
+        "name": "Taste ask 27 in docs: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -426,8 +450,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R",
+        "role": "button",
+        "name": "Exception ask 28 in review: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -438,8 +462,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2",
+        "role": "button",
+        "name": "Choice ask 29 in review: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -450,8 +474,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKEP00AF27SH36Z7R1YMBQ",
+        "role": "button",
+        "name": "Definition ask 30 in review: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -462,8 +486,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H",
+        "role": "button",
+        "name": "Authority ask 31 in review: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -474,8 +498,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKJB60W8KQQYERE7QKXH5K",
+        "role": "button",
+        "name": "Unblock ask 32 in review: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -486,8 +510,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKM5S08BX0Q7W6PAAZ9V33",
+        "role": "button",
+        "name": "Taste ask 33 in migrate: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -498,8 +522,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKP0C0326Y1A9RPQYVNGPG",
+        "role": "button",
+        "name": "Exception ask 34 in migrate: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -510,8 +534,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKQTZ0EDAQT02919ZW2SFR",
+        "role": "button",
+        "name": "Choice ask 35 in migrate: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -522,8 +546,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKSNJ0FM55WQBQPTSVJAPV",
+        "role": "button",
+        "name": "Definition ask 36 in migrate: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -534,8 +558,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKVG50GQC93ENP7EY121TD",
+        "role": "button",
+        "name": "Authority ask 37 in migrate: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -546,8 +570,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKXAR0Z44974EVGRASG9RG",
+        "role": "button",
+        "name": "Unblock ask 38 in design: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -558,8 +582,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBKZ5B04TEWTB5FFGVYNJJ9",
+        "role": "button",
+        "name": "Taste ask 39 in design: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -570,8 +594,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBM0ZY0Q8HQF8XBV866MV02",
+        "role": "button",
+        "name": "Exception ask 40 in design: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -582,8 +606,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBM2TH0NW7SS2F1197R3CFM",
+        "role": "button",
+        "name": "Choice ask 41 in design: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -594,8 +618,8 @@
         "children": []
       },
       {
-        "role": "label",
-        "name": "ask:01MCBM4N40Z3CSTTRFF8PNDT8E",
+        "role": "button",
+        "name": "Definition ask 42 in design: go ahead?",
         "value": null,
         "bounds": [
           268,
@@ -606,8 +630,20 @@
         "children": []
       },
       {
+        "role": "button",
+        "name": "Pop out Needs you",
+        "value": null,
+        "bounds": [
+          268,
+          760,
+          59,
+          18
+        ],
+        "children": []
+      },
+      {
         "role": "label",
-        "name": "40 asks open · virtual clock 1800000000000",
+        "name": "! Session 01MCBH57 · needs you",
         "value": null,
         "bounds": [
           268,

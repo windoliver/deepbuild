@@ -104,6 +104,11 @@ pub enum Reason {
     FrameHealth,
     Battery,
     You,
+    /// A build failed for memory, or the device is lost and won't come back (#1413); and the
+    /// view's return once it does.
+    OutOfMemory,
+    DeviceLost,
+    Reopened,
 }
 
 impl Reason {
@@ -114,6 +119,9 @@ impl Reason {
             Reason::FrameHealth => "frame_health",
             Reason::Battery => "battery",
             Reason::You => "you",
+            Reason::OutOfMemory => "out_of_memory",
+            Reason::DeviceLost => "device_lost",
+            Reason::Reopened => "reopened",
         }
     }
 }
@@ -308,7 +316,10 @@ impl Ladder {
     fn climbs(&self) -> bool {
         self.up().is_some()
             && !self.battery_low
-            && self.reason != Reason::You
+            && !matches!(
+                self.reason,
+                Reason::You | Reason::OutOfMemory | Reason::DeviceLost
+            )
             && (self.view_changed
                 || (self.planted.reclimbs_without_view_change
                     && self.reason == Reason::FrameHealth)
@@ -331,6 +342,12 @@ impl Ladder {
             return self.go(to, Reason::Battery);
         }
         None
+    }
+
+    /// A failure sets the rung (#1413): the placeholder for a build out of memory or a device
+    /// that won't come back, held and never climbed; the class's base once the device is back.
+    pub fn fail(&mut self, to: Rung, reason: Reason) -> Option<Step> {
+        self.go(to, reason)
     }
 
     /// You set the rung.
