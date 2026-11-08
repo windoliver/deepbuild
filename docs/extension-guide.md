@@ -39,13 +39,15 @@ A panel imports only `@deepbuild/panel`, DeepBuild's own module, by name: `impor
 - `DockArea`: The app's dock: DockArea.register_panel(slot, View) puts a view in a slot.
 - `Canvas`: DeepBuild's canvas: new Canvas(scene, color?) draws a CanvasScene's items.
 - `CanvasScene`: The items a Canvas draws, by ID, kept across renders: scene.set(id, values).
+- `Button`: A button: Button.new(id) with its label as a child and .on_click(handler), styled like a div.
+- `Input`: A text field: Input.new(state) over an InputState.
 - `InputState`: The text an Input holds, kept across renders: InputState.new({ placeholder }).
 - `needs_you`, `quotes`: the data the app serves a panel, as plain values.
 
 Its components, each with its props:
 
-- `Button`: `id`: string, given to Button.new(id); `child`: its label: text or an element; `on_click`: (event, window, cx) => void, called on your click. For example `Button.new("ok").child("OK")`.
-- `Input`: `state`: an InputState, given to Input.new(state), holding the text you type. For example `Input.new(InputState.new({ placeholder: "Name" })).w(160)`.
+- `Badge`: `count`: number, from .count(n); `max`: number, from .max(n), past which it shows n+; `dot`: from .dot(), a dot instead of a count; `color`: string, from .color("#rrggbb"). For example `Badge.new().count(3)`.
+- `Label`: `text`: string, given to Label.new(text); `secondary`: string, from .secondary(text), muted text after it; `masked`: boolean, from .masked(on); `on_click`: (event, window, cx) => void, called on your click; `disabled`: boolean, from .disabled(on). For example `Label.new("Name")`.
 
 A component whose script runs per frame, such as a table drawing each cell or a list drawing each row through a callback, is never offered: a panel's rows are data.
 
