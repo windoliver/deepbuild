@@ -1,0 +1,5 @@
+claims:
+  done:
+    checks: [lint]
+checks:
+  lint: { type: command, run: "./bin/cartlint", min_tests: 1 }

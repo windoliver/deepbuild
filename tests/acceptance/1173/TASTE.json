@@ -1,0 +1,20 @@
+{
+  "issue": 1173,
+  "criterion": "#1173.2197a951",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation in the session (\"record them\")",
+  "when": "2026-11-07T07:47:19Z",
+  "screenshots": {
+    "city-after.png": "1c4a310789a6524cf37a98ebfc968286ae83e404e07c6742e5b85d7c4edffdb6",
+    "city-before.png": "2e9a5906ee7c4a2b03257b2bce8e40a433314d772f686caa7c84a6c767011985",
+    "city-edge-x6.png": "3697933aad0822557fcb54cdf82041105b7403a6610e24f659ee995b8accbde9",
+    "effects-after.png": "1236b875634578918e65c03e66ae567e4cc2c20cf4f9a5d952b949f8af6a66e2",
+    "effects-before.png": "43ce4baca3365f8ae6c1766a8f970c35a32fa187f67a7324490b06a3fb6a678e",
+    "effects-edge-x6.png": "72158a64a2d8fd7710b5bdabc0b97caf2db63e8065d1c0570ff4b210bd01e5d2",
+    "effects-puff-x4.png": "49e924ba2e9c4b0f396db78ebb2647ba8685ee075571aff35bc3a5bbda50bb06",
+    "house-after.png": "cac63c0d59b3aa1c10f06254fc83bff87590f244ee08750b092df3752c6fb8c4",
+    "house-before.png": "08c4052aa867439aa4146e87c74d4a21524b83179a80771e5160a846e766c944",
+    "house-edge-x6.png": "294055444e0be72d0cd9324c17049bd4561fd1c934c9160642eab09c2c2d8205"
+  },
+  "note": "Drawn on the Mac (Apple M3, Metal) by Mac run 7 at bf6cf9ab, against main d1778722 as before. Edges: the city's, the effects box's and the house's silhouettes go from hard steps to graded coverage; nothing gains a halo or seam. Puff: the half-resolution glow on the orange box is smooth after, where before it showed 2 x 2 blocks. Full frames match before apart from edges; no part moves, darkens or vanishes. Two things unchanged by MSAA: the house's large stair-stepped shadow edge on the right (the same in before), and the effects box's thin cyan outline and blue grid line, which keep some steps."
+}

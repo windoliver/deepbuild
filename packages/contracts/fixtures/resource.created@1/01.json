@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H1",
+  "kind": "resource.created",
+  "subject": "session:01K74FMXR4T6V8X0Z2B4D6F8H4",
+  "data": {
+    "resource": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfca",
+    "kind": "cloud-instance",
+    "key": "instance-1f2e3d4c",
+    "cost_usd": 49,
+    "check": "instance-gone",
+    "cwd": "/srv/shop"
+  },
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017051123
+}

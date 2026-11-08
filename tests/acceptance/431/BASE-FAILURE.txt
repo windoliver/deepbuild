@@ -1,0 +1,19 @@
+#431 acceptance suite at the base, c12a65bb (Merge pull request #1281), before any implementation.
+
+Not run at the base: no cargo binary was built and no test was run there, to spare a shared machine under load, and because
+the surfaces plainly don't exist (checked by reading the base): crates/deep-canvas/src/steps.rs's op table holds no spline@1,
+homography@1, sample_grad@1, backdrop@1, noise3@1, cells@1, use@1 or HSL step, so every graph using one is refused as an
+unknown op; noise@1 and fbm@1 take `period` as one number, so `period: [8, 8]` is refused; no operator input reads a core
+`velocity` or `emission` target (nothing in deep-canvas-effects or deep-effects-render names either); view3d's targets are
+final, linear, ids, pre_tone, dirt and scene, so `"backdrop"` is refused; check_operator reads `assets` but no `packs`,
+`class` or `reference`, so AC6's `fn` form can't resolve its pack, its 32-fetch material is refused with operator_limit
+(a material is held to 16 fetches whatever its class), and no CPU reference comes back; `live`'s memory rows carry
+no `targets`; the base's derivative refusal carries its reason in the message, not as a `reason` field; and Planted::parse
+has none of this suite's seven names, so `deep-gpu run --planted <name>` refuses them at startup. Every test would fail on a
+refusal, a missing field or an unknown planted name, and taste.test.ts is INCONCLUSIVE with no taste call recorded.
+
+Checked instead: `tsc -p tests/acceptance/431/tsconfig.json` exits 0 (with node_modules linked from the owner's checkout for
+the type-check only, not committed); the PCHIP reference in spline-homography.test.ts reproduces NAG E01BEC's 11 values
+within 5e-5 (worst 4.53e-5, as SciPy's own test allows); and the fixtures' numbers by node on helpers.ts: the 192 seam
+pixels' reference holds 72 black, 88 white and 32 mixed values, the checker's texels either side of the seam and the ring's
+edges match, every texel of its levels 3 and 5 is mid gray, and the card, sign and wall boxes land on their stated pixels.

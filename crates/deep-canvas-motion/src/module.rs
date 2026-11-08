@@ -290,7 +290,10 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
                     .is_some_and(|t| t.starts_with(&prefix))
             })
     };
-    let channel = targets("channels") || targets("drivers") || !keyed_data(doc, item).is_empty();
+    let channel = targets("channels")
+        || targets("drivers")
+        || !keyed_data(doc, item).is_empty()
+        || counter_data(doc, item).is_some();
     let held = doc
         .get("constraints")
         .and_then(Value::as_object)
@@ -317,6 +320,13 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
             _ => false,
         });
     channel || held || bound
+}
+
+/// The data value a counter's driver writes (`data/<name>`), which its text shows at t.
+fn counter_data<'a>(doc: &'a Value, item: &Value) -> Option<&'a str> {
+    let source = item.pointer("/params/text/counter/source")?.as_str()?;
+    let target = doc.get("drivers")?.get(source)?.get("target")?.as_str()?;
+    target.strip_prefix("data/")
 }
 
 /// The data names a text template's slots read (`{data/<name>}`), each once.
@@ -411,6 +421,14 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
         if let Some(x) = keyed.and_then(|c| program.channel_value(&state, &c.id)) {
             fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
         }
+    }
+    // A counter on a driver of a data value shows it at t the same way.
+    let source = v.item()?.pointer("/params/text/counter/source").and_then(Value::as_str);
+    let driver = source.and_then(|d| program.motion.drivers.iter().find(|x| x.id == d));
+    let name = driver.and_then(|d| d.target.owner.strip_prefix("data/"));
+    if let Some(field) = name.and_then(|n| program.fields.iter().find(|f| f.data.as_deref() == Some(n))) {
+        let name = field.data.clone().unwrap_or_default();
+        fields.push((vec!["params".into(), "data".into(), name], Datum::Num(state.slots[field.slot])));
     }
     let set = |name: &str, from: usize| Edit {
         add: false,

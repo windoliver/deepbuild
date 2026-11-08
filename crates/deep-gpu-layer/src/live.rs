@@ -76,6 +76,10 @@ pub struct Plants {
     ),
     render_back_live_only: bool,
     settles_with_fallback: bool,
+    /// #431's: a core that builds the velocity and emission targets for every frame.
+    builds_unread_targets: bool,
+    /// #1173's: scene3d's sample count (session3::msaa_planted) and the claimed one.
+    planted: Option<Planted>,
 }
 
 impl Plants {
@@ -106,6 +110,8 @@ impl Plants {
             ops: crate::effects::operator_plants(p),
             render_back_live_only: p == Some(Planted::RenderBackDrawsLiveOnly),
             settles_with_fallback: p == Some(Planted::SettlesWithFallback),
+            builds_unread_targets: p == Some(Planted::BuildsUnreadTargets),
+            planted: p,
         }
     }
 }
@@ -1225,6 +1231,7 @@ impl Live {
                     rev.fit.history,
                     &self.args.look,
                     &mut self.labels,
+                    crate::session3::msaa_planted(self.plants.planted),
                 ) {
                     Ok(mut v) => {
                         v.plant(self.plants.upscale);
@@ -1269,6 +1276,7 @@ impl Live {
                 &self.args.fail_pipelines,
             );
             v.canonical_draws_live_only = self.plants.render_back_live_only;
+            v.want_targets(&rev.doc, self.plants.builds_unread_targets);
             for i in v.ops.issues() {
                 if !ses.issues.contains(&i) {
                     ses.issues.push(i);
@@ -2060,9 +2068,20 @@ impl Live {
     /// The writers' counts, the cache and the device, after the frame's queue drained.
     fn memory(&self) -> Value {
         let mut writers: BTreeMap<&str, (u64, Vec<Value>)> = BTreeMap::new();
+        // Each core target the writer's views hold (#431), at what the meter counts and the
+        // device's own size for it.
+        let mut targets: BTreeMap<&str, Vec<Value>> = BTreeMap::new();
         for s in self.sessions.iter().filter(|s| s.state == State::Live) {
             let e = writers.entry(s.writer.as_str()).or_insert((0, Vec::new()));
             e.0 += s.view.as_ref().and_then(View::own_bytes).unwrap_or(0);
+            let rows = targets.entry(s.writer.as_str()).or_default();
+            for (target, bytes, device_bytes) in s
+                .view
+                .as_ref()
+                .map_or(Vec::new(), |v| v.targets(&self.device))
+            {
+                rows.push(json!({"session": s.id, "target": target, "bytes": bytes, "device_bytes": device_bytes}));
+            }
         }
         for (writer, e) in writers.iter_mut() {
             for (key, bytes) in self.results.charged(writer) {
@@ -2078,7 +2097,7 @@ impl Live {
         }
         let (entries, bytes) = self.results.totals();
         json!({
-            "writers": writers.into_iter().map(|(w, (count, results))| json!({"writer": w, "count_bytes": count, "results": results})).collect::<Vec<_>>(),
+            "writers": writers.into_iter().map(|(w, (count, results))| json!({"writer": w, "count_bytes": count, "results": results, "targets": targets.remove(w).unwrap_or_default()})).collect::<Vec<_>>(),
             "cache": {"entries": entries, "bytes": bytes.unwrap_or(0)},
             "device_bytes": memory::allocated(&self.device),
         })
@@ -2121,6 +2140,7 @@ impl Live {
             &mut self.labels,
             &self.plants,
             &self.args.fail_pipelines,
+            None,
         );
         if let Some(o) = c.as_object_mut() {
             o.insert("frame".into(), json!(frame));
@@ -2306,7 +2326,8 @@ impl Live {
 
 /// One canonical render of a stamped document at `t`: a fresh view of one slot, its own results,
 /// no history, at the class's base rung with every operator at full resolution; `live` is the
-/// planted worker's live rung and operator resolution.
+/// planted worker's live rung and operator resolution; `out` where its final picture (a PNG) and
+/// its resolved linear target (f32 RGBA) are written when asked, each by its flag (#1173).
 #[allow(clippy::too_many_arguments)]
 fn render_canonical(
     device: &Arc<Device>,
@@ -2322,6 +2343,7 @@ fn render_canonical(
     labels: &mut Labels,
     plants: &Plants,
     fail: &[String],
+    out: Option<(&str, bool, bool)>,
 ) -> Value {
     let _ = assets;
     let mut doc = doc.clone();
@@ -2331,7 +2353,19 @@ fn render_canonical(
         Err(r) => return refused(r.code, r.path),
     };
     let content = Content::Scene(Box::new(frames));
-    let mut view = match View::new(device, Path::Copy, size, 1, content, 1.0, 0, look, labels) {
+    let planted3 = crate::session3::msaa_planted(plants.planted);
+    let mut view = match View::new(
+        device,
+        Path::Copy,
+        size,
+        1,
+        content,
+        1.0,
+        0,
+        look,
+        labels,
+        planted3,
+    ) {
         Ok(v) => v,
         Err(e) => return refused("no_view", e),
     };
@@ -2360,6 +2394,7 @@ fn render_canonical(
     let (options, planted) = plants.ops;
     view.ops = DocOps::new(device, &doc, options, planted, fail);
     view.canonical_draws_live_only = plants.render_back_live_only;
+    view.want_targets(&doc, plants.builds_unread_targets);
     let (rung, resolution) = live.unwrap_or((Rung::Base, 1.0));
     let drawing = Drawing {
         rung,
@@ -2403,6 +2438,8 @@ fn render_canonical(
             operators.push(json!({"operator": m.name, "resolution": res}));
         }
     }
+    let claims = plants.planted == Some(Planted::ClaimsMsaaOverSingleSample);
+    let (msaa, render_targets) = crate::session3::msaa(view.renderer(), claims);
     // A frame drawn with an operator's fallback, its pipeline rejected, is still settling: a
     // render-back of it is not presented, and a check that needs it is BLOCKED (#429).
     let failed: Vec<&str> = view
@@ -2423,20 +2460,41 @@ fn render_canonical(
         Purpose::PixelCheck => Some(if presented { "PASS" } else { "BLOCKED" }),
         _ => None,
     };
-    json!({
+    let mut reply = json!({
         "purpose": purpose.name(),
         "presented": presented, "reason": reason, "verdict": verdict,
-        "pixel_hash": pixels.map(|p| hex(&p)),
+        "pixel_hash": pixels.as_ref().map(|p| hex(p)),
         "rung": rung.name(),
         "internal_scale": if live.is_some() { rung.scale(1.0) } else { view.drew.0 },
         "upscale": view.drew.1,
         "operators": operators,
-    })
+        "msaa": msaa,
+        "render_targets": render_targets,
+    });
+    let Some((out, final_, linear)) = out else {
+        return reply;
+    };
+    if let (true, Some(bgra)) = (final_, &pixels) {
+        match crate::view3d::write_final(out, bgra, size) {
+            Ok(name) => reply["final"] = json!(name),
+            Err(e) => return e,
+        }
+    }
+    let read = (linear && device.backend != Backend::Noop)
+        .then(|| view.renderer().read_targets(device))
+        .flatten();
+    if let Some((floats, _)) = read {
+        match crate::view3d::write_named(out, &floats, "f32") {
+            Ok(name) => reply["linear"] = json!(name),
+            Err(e) => return e,
+        }
+    }
+    reply
 }
 
 /// The `canonical` call: the same render a `canonical` event makes, in a process with no live
 /// session.
-pub fn canonical(app: &mut App, call: &Value) -> Value {
+pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
     let bad = |what: &str| refused("bad_input", what);
     let (Some(writer), Some(doc), Some(size), Some(frame), Some(purpose)) = (
         call["writer"].as_str().map(str::to_string),
@@ -2453,6 +2511,13 @@ pub fn canonical(app: &mut App, call: &Value) -> Value {
     };
     let fps = call["fps"].as_u64().unwrap_or(60).max(1) as i64;
     let plants = Plants::of(app.planted);
+    let wants = |name: &str| {
+        call["targets"]
+            .as_array()
+            .is_some_and(|t| t.iter().any(|t| t == name))
+    };
+    let (final_, linear) = (wants("final"), wants("linear"));
+    let out = (final_ || linear).then(|| out.to_string());
     app.worker.call(move |state| {
         let device = match state.gpu.recover() {
             Ok(d) => d,
@@ -2488,6 +2553,7 @@ pub fn canonical(app: &mut App, call: &Value) -> Value {
             &mut labels,
             &plants,
             &[],
+            out.as_deref().map(|o| (o, final_, linear)),
         );
         if let Some(o) = c.as_object_mut() {
             o.insert("frame".into(), json!(frame));

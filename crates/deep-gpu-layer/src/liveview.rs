@@ -583,11 +583,12 @@ impl View {
         window: u32,
         look: &Look3,
         labels: &mut Labels,
+        planted: Planted3,
     ) -> Result<View, String> {
         let ((slots, renderer, frames, prepared), base_bytes) = memory::across(device, || {
             let slots: Result<Vec<_>, String> =
                 (0..slots).map(|_| allocate(device, path, size)).collect();
-            let mut renderer = Renderer::new(device, Planted3::default());
+            let mut renderer = Renderer::new(device, planted);
             let mut frames = frames;
             let prepared = match &mut frames {
                 Content::Scene(frames) => match frames.at(0, size, &Offsets::default(), labels) {
@@ -632,15 +633,36 @@ impl View {
         self.still = None;
     }
 
-    /// What the view itself holds on the device, as the device reports it.
+    /// The core targets its frames build (#431): those its operators read, or both under the
+    /// planted core.
+    pub fn want_targets(&mut self, doc: &Value, all: bool) {
+        self.renderer.core.want = deep_scene3d_render::targets::Want {
+            velocity: all || deep_canvas_effects::module::reads_core(doc, "velocity"),
+            emission: all || deep_canvas_effects::module::reads_core(doc, "emission"),
+        };
+    }
+
+    /// Each core target the view holds (#431): its name, the bytes the meter counts for it
+    /// (width × height × its texel's bytes) and the size the device reports for it.
+    pub fn targets(&self, device: &Device) -> Vec<(&'static str, u64, Option<u64>)> {
+        self.renderer
+            .target_rows()
+            .into_iter()
+            .map(|(name, texture, bytes)| (name, bytes, memory::texture(device, texture)))
+            .collect()
+    }
+
+    /// What the view itself holds on the device, as the device reports it; the core's velocity
+    /// and emission targets, made after it opened and only while read, as the meter counts them.
     pub fn own_bytes(&self) -> Option<u64> {
         let low = Some(self.renderer.low_bytes());
+        let core: u64 = self.renderer.core.held().iter().map(|(_, _, b)| b).sum();
         let history = self.history.as_ref().map_or(Some(0), |h| h.bytes);
         #[cfg(feature = "test-meter")]
         let test = self.test.bytes();
         #[cfg(not(feature = "test-meter"))]
         let test = Some(0);
-        Some(self.base_bytes? + low? + history? + test?)
+        Some(self.base_bytes? + low? + history? + test? + core)
     }
 
     /// The pixels its effect pass shades, while it has one.
@@ -652,6 +674,11 @@ impl View {
     /// Render pipelines its document has needed so far.
     pub fn pipelines(&self) -> u32 {
         self.renderer.pipelines()
+    }
+
+    /// The renderer it draws through.
+    pub fn renderer(&self) -> &Renderer {
+        &self.renderer
     }
 
     /// Plants the upscale's wrong programs (#386).
@@ -720,6 +747,14 @@ impl View {
                 }
                 self.still = Some((drawing.rung, scale, still.map_or(0, |n| n + 1)));
                 true
+            }
+            // #467: a 2D frame that draws what the view last drew records nothing.
+            Content::Flat(flat) if !drawing.canonical && drawing.rung != Rung::Placeholder => {
+                let still = flat.still(t).map_err(|(code, path)| Refused { code, path })?;
+                if still && self.shown.is_some() {
+                    return Ok(false);
+                }
+                false
             }
             _ => {
                 self.still = None;
@@ -826,6 +861,12 @@ impl View {
                 .collect();
             let res = &self.op_resolution;
             let canonical = drawing.canonical && !self.canonical_draws_live_only;
+            self.ops.core = ["velocity", "emission"]
+                .into_iter()
+                .filter_map(|n| Some((n, self.renderer.core_target(n)?.clone())))
+                .collect();
+            // Stepped operators count fixed steps from the exact time, not its f32 (#252).
+            self.ops.clock = Some(t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64);
             self.ops.plan(
                 device,
                 &linear,

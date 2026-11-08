@@ -11,12 +11,12 @@ const DECISIONS = {
   'AGENTS.md': { heading: '## The four invariants', what: 'one of the four invariants', row: () => true },
   'docs/technical-design.md': { heading: '## Decisions', what: 'a row under Decisions', row: (line) => line.startsWith('|') },
 };
-// The proof lanes' own code, lanes.mjs, which names the test paths and the timed tests, the throttle and perf, which
-// decide when a budget counts, affected.mjs, which decides which tests a change runs, and the bays, which decide what
+// The proof lanes' own code, lanes.mjs, which names the test paths and the timed tests, the throttle, perf and the
+// budget window, which decide when a budget counts, affected.mjs, which decides which tests a change runs, the bays and the shards, which decide what
 // a proof's build reuses: once main holds the lanes, the change runs its own copy of them, so an edit of them is an
 // edit of the checks. So is an edit of a test runner's config (RUNNER_CONFIG), which can stub the code under test
 // only where it finds the change.
-const LANES_CODE = /^scripts\/(?:proof[^/]*|lanes|throttle|perf|affected|bays)\.mjs$/;
+const LANES_CODE = /^scripts\/(?:proof[^/]*|lanes|throttle|perf|budget-window|affected|bays|shards)\.mjs$/;
 // The skips the lanes let stand are a decision of the same weight, so that key is guarded. Only that key: affected.mjs
 // --record rewrites the rest of the file on main.
 const SKIPS_FILE = 'scripts/known-failures.json';

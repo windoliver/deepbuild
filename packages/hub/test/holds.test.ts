@@ -46,7 +46,7 @@ describe('a saved approval of an MCP tool', () => {
     const holds = new Holds({
       raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
       append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
-      archived: async () => undefined,
+      archived: async () => undefined, reading: async () => undefined,
     });
     const call = (session: string) => holds.gate({ session, agent: 'claude-code', cwd } as HookMeta, { label: 'forge delete_repo', classes: [], mcp: { server: 'forge', tool: 'delete_repo' } });
 
@@ -137,6 +137,7 @@ describe('a held push (#1156)', () => {
     const holds = new Holds({
       raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
       append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
+      reading: async () => undefined,
       archived: async (session) => { seen.push(`${session} with ${(await record.raw("SELECT id FROM asks")).length} asks`); },
     });
     await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Push?', rule: 'r' } });
@@ -156,7 +157,7 @@ describe('a held push (#1156)', () => {
     const holds = new Holds({
       raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
       append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
-      archived: () => new Promise(() => undefined),
+      archived: () => new Promise(() => undefined), reading: async () => undefined,
     });
     await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Push?', rule: 'r' } });
     const started = Date.now();
