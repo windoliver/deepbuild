@@ -70,6 +70,61 @@ impl Image {
         }
         out
     }
+
+    /// The next mip down: each texel the 2 × 2 box mean of the four above it, the last row or
+    /// column clamped where the size is odd (the core's mip step).
+    pub fn half(&self) -> Image {
+        let (w, h) = ((self.w / 2).max(1), (self.h / 2).max(1));
+        let mut out = Image::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let mut c = [0.0; 4];
+                for k in 0..4 {
+                    let p = self.at(i64::from(2 * x + (k & 1)), i64::from(2 * y + (k >> 1)));
+                    for i in 0..4 {
+                        c[i] += p[i] * 0.25;
+                    }
+                }
+                out.px[(y * w + x) as usize] = c;
+            }
+        }
+        out
+    }
+
+    /// Its mip chain down to 1 × 1, itself first.
+    pub fn mips(&self) -> Vec<Image> {
+        let mut out = vec![self.clone()];
+        while out.last().is_some_and(|m| m.w > 1 || m.h > 1) {
+            let next = out
+                .last()
+                .map(Image::half)
+                .unwrap_or_else(|| Image::new(1, 1));
+            out.push(next);
+        }
+        out
+    }
+
+    /// Trilinear at uv and mip level `lod`, clamped into the chain.
+    pub fn sample_level(&self, uv: [f64; 2], lod: f64) -> [f64; 4] {
+        let mips = self.mips();
+        let lod = lod.clamp(0.0, (mips.len() - 1) as f64);
+        let (l0, f) = (lod.floor() as usize, lod - lod.floor());
+        let a = mips[l0].sample(uv);
+        if f == 0.0 || l0 + 1 >= mips.len() {
+            return a;
+        }
+        let b = mips[l0 + 1].sample(uv);
+        std::array::from_fn(|i| a[i] + (b[i] - a[i]) * f)
+    }
+
+    /// At uv with the level its uv gradients give: log2 of the longer gradient in texels.
+    pub fn sample_grad(&self, uv: [f64; 2], dx: [f64; 2], dy: [f64; 2]) -> [f64; 4] {
+        let (w, h) = (f64::from(self.w), f64::from(self.h));
+        let len2 = |d: [f64; 2]| (d[0] * w).powi(2) + (d[1] * h).powi(2);
+        let rho2 = len2(dx).max(len2(dy));
+        let lod = if rho2 > 0.0 { 0.5 * rho2.log2() } else { 0.0 };
+        self.sample_level(uv, lod)
+    }
 }
 
 /// What a frame hands a pass: the frame uniform's values, each non-texture input's value and
@@ -398,7 +453,7 @@ impl<'a> Prog<'a> {
             let v = match &input.from {
                 From::Time => V::N(Sc::F32, L::one(env.t)),
                 From::Seed => V::N(Sc::U32, L::one(f64::from(env.seed))),
-                From::Target { .. } => {
+                From::Target { .. } | From::Asset(_) => {
                     let img = env
                         .textures
                         .get(name)
@@ -953,7 +1008,7 @@ impl<'a> Prog<'a> {
                 one(
                     Sc::F32,
                     if name == "noise" {
-                        deep_canvas::steps::noise2(at, seed, f.period)
+                        deep_canvas::steps::noise2(at, seed, [f.period[0], f.period[1]])
                     } else {
                         // The GPU holds the lacunarity and gain in f32.
                         deep_canvas::steps::fbm2(
@@ -962,10 +1017,126 @@ impl<'a> Prog<'a> {
                             f.octaves,
                             f32r(f.lacunarity),
                             f32r(f.gain),
-                            f.period,
+                            [f.period[0], f.period[1]],
                         )
                     },
                 )
+            }
+            "noise3" => {
+                let f = crate::check::seeded_fields(p.s).map_err(|e| format!("{name}: {e}"))?;
+                let q = as_l(g("p"), Sc::F32, 2).v;
+                let seed = as_l(g("seed"), Sc::U32, 1).v[0] as u32;
+                V::N(
+                    Sc::F32,
+                    L::of(&deep_canvas::steps::noise3(
+                        [q[0], q[1]],
+                        seed,
+                        [f.period[0], f.period[1]],
+                    )),
+                )
+            }
+            "cells" => {
+                let f = crate::check::seeded_fields(p.s).map_err(|e| format!("{name}: {e}"))?;
+                let (jitter, metric) =
+                    crate::check::cell_fields(p.s).map_err(|e| format!("{name}: {e}"))?;
+                let dims = match p.args.iter().find(|(q, _, _)| *q == "p") {
+                    Some((_, _, Ty::V(_, n))) => *n as usize,
+                    _ => 2,
+                };
+                let q = as_l(g("p"), Sc::F32, dims).v;
+                let seed = as_l(g("seed"), Sc::U32, 1).v[0] as u32;
+                let c = deep_canvas::steps::cells(&q[..dims], seed, f32r(jitter), metric, f.period);
+                let ports = [
+                    ("f2", V::N(Sc::F32, L::one(c.f2))),
+                    ("id", one(Sc::U32, f64::from(c.id))),
+                    ("center", V::N(Sc::F32, L::of(&c.center))),
+                ];
+                for (port, v) in ports {
+                    if let Some(&k) = self.slots.get(&key(p.id, Some(port))) {
+                        if k < regs.len() {
+                            regs[k] = v;
+                        }
+                    }
+                }
+                if let Some(&k) = self.slots.get(&key(p.id, Some("f1"))) {
+                    if k < regs.len() {
+                        regs[k] = V::N(Sc::F32, L::one(c.f1));
+                    }
+                }
+                one(Sc::F32, c.f1)
+            }
+            "spline" => {
+                let points = p.s.fields.get("points").unwrap_or(&Value::Null);
+                let pts = deep_canvas::steps::spline_points(points)
+                    .map_err(|e| format!("step {}: {e}", p.id))?;
+                // The GPU holds the table in f32.
+                let table: Vec<[f64; 4]> = deep_canvas::steps::spline_table(&pts)
+                    .into_iter()
+                    .map(|c| c.map(f32r))
+                    .collect();
+                let pts32: Vec<[f64; 2]> = pts.iter().map(|q| q.map(f32r)).collect();
+                let x = as_l(g("x"), Sc::F32, 1).v[0];
+                one(Sc::F32, deep_canvas::steps::spline_at(&pts32, &table, x))
+            }
+            "homography" => {
+                let q: [[f64; 2]; 4] = match p.s.fields.get("quad") {
+                    Some(v) => {
+                        crate::check::quad_of(v).map_err(|e| format!("step {}: {e}", p.id))?
+                    }
+                    None => match g("quad") {
+                        V::A(i) => {
+                            let items = &self.arrays[i].1;
+                            std::array::from_fn(|k| {
+                                let e = items.get(k).copied().unwrap_or([0.0; 4]);
+                                [e[0], e[1]]
+                            })
+                        }
+                        _ => return Err(format!("step {}: homography's quad", p.id)),
+                    },
+                };
+                let m = deep_canvas::steps::homography(q);
+                // Column-major, as WGSL holds it.
+                let mut a = [0.0; 16];
+                for c in 0..3 {
+                    for r in 0..3 {
+                        a[c * 3 + r] = m[r][c];
+                    }
+                }
+                V::M(3, a)
+            }
+            "to_hsl" | "from_hsl" | "adjust" => {
+                let port = if name == "from_hsl" { "hsl" } else { "rgb" };
+                let c = as_l(g(port), Sc::F32, 3).v;
+                let c = [c[0], c[1], c[2]];
+                let out = match name {
+                    "to_hsl" => deep_canvas::steps::to_hsl(c),
+                    "from_hsl" => deep_canvas::steps::from_hsl(c),
+                    _ => deep_canvas::steps::adjust(
+                        p.s.fields.get("mode").and_then(Value::as_str).unwrap_or(""),
+                        c,
+                        as_l(g("x"), Sc::F32, 1).v[0],
+                    ),
+                };
+                V::N(Sc::F32, L::of(&out))
+            }
+            "sample_grad" => {
+                let img = self.image(g("tex"))?;
+                let uv = as_l(g("uv"), Sc::F32, 2).v;
+                let (dx, dy) = (as_l(g("dx"), Sc::F32, 2).v, as_l(g("dy"), Sc::F32, 2).v);
+                V::N(
+                    Sc::F32,
+                    L::of(&img.sample_grad([uv[0], uv[1]], [dx[0], dx[1]], [dy[0], dy[1]])),
+                )
+            }
+            "backdrop" => {
+                let img = self
+                    .env
+                    .textures
+                    .get(crate::graph::BACKDROP_INPUT)
+                    .ok_or_else(|| format!("step {}: no backdrop to read", p.id))?;
+                let uv = as_l(g("uv"), Sc::F32, 2).v;
+                let lod = as_l(g("lod"), Sc::F32, 1).v[0];
+                V::N(Sc::F32, L::of(&img.sample_level([uv[0], uv[1]], lod)))
             }
             "rand" => {
                 let k = as_l(g("key"), Sc::U32, 1).v[0] as u32;
@@ -1129,10 +1300,18 @@ pub fn inputs(
     for (name, input) in &c.op.inputs {
         let v = match &input.from {
             From::Target { .. }
+            | From::Asset(_)
             | From::Texture3d { .. }
             | From::Storage { .. }
             | From::Column { .. }
             | From::Attribute { .. } => Val::T(name.clone()),
+            From::Spline(slots) => Val::A(
+                Sc::F32,
+                slots
+                    .iter()
+                    .map(|c| c.iter().map(|x| f32r(*x)).collect())
+                    .collect(),
+            ),
             From::Role(r) => Val::N(
                 Sc::F32,
                 roles
@@ -1148,6 +1327,8 @@ pub fn inputs(
                     .unwrap_or(Value::Null);
                 typed_literal(&v, &input.ty)
             }
+            // The step a stepped operator computes, which its runtime sets each step (#252).
+            From::Step => Val::N(Sc::U32, vec![0.0]),
             From::Time | From::Phase(_) | From::Seed => continue,
         };
         out.insert(name.clone(), v);

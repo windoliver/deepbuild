@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas_effects::graph;
 use deep_effects_render::compile::compile_planted;
-use deep_effects_render::docops::{DocOps, Hooks, Times};
+use deep_effects_render::docops::{DocOps, Hooks, Untimed};
 use deep_effects_render::runner::{Frame, LINEAR};
 use deep_gpu::device::Device;
 use serde_json::{json, Map, Value};
@@ -22,22 +22,6 @@ pub fn wants(call: &Value) -> bool {
     ["operators", "data", "size", "repeat", "read", "pool_marker"]
         .iter()
         .any(|k| call.get(*k).is_some())
-}
-
-/// No timer: the frame writes its own timestamps.
-struct NoTimes;
-
-impl Times for NoTimes {
-    fn start(&mut self, _: &'static str, _: &mut wgpu::CommandEncoder) -> Option<usize> {
-        None
-    }
-    fn render(&self, _: Option<usize>) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
-        None
-    }
-    fn compute(&self, _: Option<usize>) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
-        None
-    }
-    fn end(&mut self, _: Option<usize>, _: &mut wgpu::CommandEncoder) {}
 }
 
 fn words(path: &str) -> Result<Vec<u8>, Value> {
@@ -273,6 +257,82 @@ pub fn read_one(
     ))
 }
 
+/// The frame's f64 reference (#431: `reference: true`): each compute operator run through the
+/// step graph's interpreter over the same `data`, each output `reads` names written as its read
+/// is, storage as u32 words (an f32 output's bits).
+fn reference(
+    computes: &BTreeMap<String, deep_canvas_effects::check::Checked>,
+    data: &BTreeMap<String, Vec<u8>>,
+    reads: &[String],
+    out: &str,
+) -> Result<Value, Value> {
+    use deep_canvas_effects::graph::{From, Sc, Ty};
+    let env = deep_canvas_effects::interp::Env {
+        t: 0.0,
+        seed: 0,
+        clip: [0.0; 16],
+        inverse_clip: [0.0; 16],
+        eye: [0.0; 4],
+        inputs: BTreeMap::new(),
+        textures: BTreeMap::new(),
+        normals: [[0.0; 3]; 3],
+    };
+    let mut ran: BTreeMap<String, BTreeMap<String, Vec<f64>>> = BTreeMap::new();
+    let mut result = Map::new();
+    for key in reads {
+        let Some((item, output)) = key.split_once('.') else {
+            continue;
+        };
+        let Some(c) = computes.get(item) else {
+            continue;
+        };
+        if !ran.contains_key(item) {
+            let mut storage = BTreeMap::new();
+            for (name, input) in &c.op.inputs {
+                let (From::Storage { output, .. }, Ty::Storage(sc, _)) = (&input.from, &input.ty)
+                else {
+                    continue;
+                };
+                let words = data.get(output).cloned().unwrap_or_default();
+                let vals = words
+                    .chunks(4)
+                    .map(|w| {
+                        let b = u32::from_le_bytes(w.try_into().unwrap_or([0; 4]));
+                        match sc {
+                            Sc::F32 => f64::from(f32::from_bits(b)),
+                            Sc::I32 => f64::from(b as i32),
+                            _ => f64::from(b),
+                        }
+                    })
+                    .collect();
+                storage.insert(name.clone(), vals);
+            }
+            let mut env = env.clone();
+            env.inputs = deep_canvas_effects::interp::inputs(c, &BTreeMap::new(), &BTreeMap::new());
+            let outs = deep_canvas_effects::interp::compute(c, &env, storage)
+                .map_err(|e| refused("bad_input", format!("reference {item}: {e}")))?;
+            ran.insert(item.to_string(), outs);
+        }
+        let (Some(vals), Some(so)) = (ran[item].get(output), c.op.storage.get(output)) else {
+            continue;
+        };
+        let bytes: Vec<u8> = vals
+            .iter()
+            .flat_map(|v| match so.sc {
+                Sc::F32 => (*v as f32).to_bits().to_le_bytes(),
+                Sc::I32 => (*v as i32).to_le_bytes(),
+                _ => (*v as u32).to_le_bytes(),
+            })
+            .collect();
+        let file = write_named(out, &bytes, "u32")?;
+        result.insert(
+            key.clone(),
+            json!({"type": "u32", "count": vals.len(), "file": file}),
+        );
+    }
+    Ok(Value::Object(result))
+}
+
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     let ops: Vec<Value> = match (&call["operators"], &call["operator"]) {
         (Value::Array(a), _) => a.clone(),
@@ -317,10 +377,16 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     let mut counts: BTreeMap<String, u32> = BTreeMap::new();
     // The elements the check costs each compute operator at: an indirect dispatch's max (#484).
     let mut costed = Map::new();
+    // Each compute operator as checked, for the frame's f64 reference (#431).
+    let mut computes: BTreeMap<String, deep_canvas_effects::check::Checked> = BTreeMap::new();
+    let wants_reference = call["reference"] == json!(true);
     for op in &ops {
         let id = op["id"].as_str().unwrap_or("").to_string();
         match compile_planted(op, &BTreeMap::new(), options, check_options) {
             Ok(c) => {
+                if wants_reference && c.checked.op.kind == graph::Kind::Compute {
+                    computes.insert(id.clone(), c.checked.clone());
+                }
                 if first.is_none() {
                     first = Some((c.checked.class.name().to_string(), c.checked.estimate));
                 }
@@ -488,7 +554,7 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
             let mut at = 0u32;
             let mut spans = Vec::new();
             for r in &recs {
-                let used = r.record_passes(&mut enc, &mut NoTimes, set.as_ref().map(|s| (s, at)));
+                let used = r.record_passes(&mut enc, &mut Untimed, set.as_ref().map(|s| (s, at)));
                 spans.push((r.mark, at, used));
                 at += used;
             }
@@ -563,7 +629,14 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
                     Err(e) => return e,
                 }
             }
-            dispatches.push(json!({"read": read}));
+            let mut dispatch = json!({"read": read});
+            if wants_reference {
+                match reference(&computes, &data, &reads, &out) {
+                    Ok(r) => dispatch["reference"] = r,
+                    Err(e) => return e,
+                }
+            }
+            dispatches.push(dispatch);
         }
         reply["dispatches"] = json!(dispatches);
         reply["timing"] = json!({"gpu_ns": gpu_ns});

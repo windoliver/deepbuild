@@ -57,6 +57,10 @@ pub struct Hooks {
     pub compact_by_atomic: bool,
     /// #484: an indirect dispatch runs `max` invocations, with no guard against its count.
     pub dispatch_without_guard: bool,
+    /// #252: a stepped operator steps once per frame drawn, not once per fixed step.
+    pub steps_per_frame: bool,
+    /// #252: a carried output's ring keeps a checkpoint every `every` steps and never thins.
+    pub keeps_every_checkpoint: bool,
 }
 
 /// One iterate step of a pass operator: its body's pipeline and its two ping-pong targets.
@@ -87,6 +91,8 @@ pub struct Op {
     iterates: Vec<IterRun>,
     /// Whether it is a sort, a scan or a compaction, run on the shipped kernels.
     structural: bool,
+    /// Whether it runs once per fixed step rather than once a frame (#252).
+    stepped: bool,
 }
 
 /// The frame's row for one operator: its resolution this frame and what it drew.
@@ -240,6 +246,8 @@ pub struct DocOps {
     storage: BTreeMap<(String, String), wgpu::Buffer>,
     /// Each compute operator's texture outputs, by (item, output).
     textures: BTreeMap<(String, String), OutTex>,
+    /// #149: each collection target this frame drew, by the (op, output) its readers name.
+    pub collections: BTreeMap<(String, String), wgpu::TextureView>,
     /// Each pass operator's own target, with its size; each iterate's two ping-pong targets.
     targets: BTreeMap<String, ([u32; 2], wgpu::Texture)>,
     /// Each pass operator's target in the last frame planned, by item.
@@ -261,6 +269,88 @@ pub struct DocOps {
     pub params: BTreeMap<String, BTreeMap<String, Value>>,
     /// And the px each may write, `[x, y, w, h]` of the frame, by item.
     pub within: BTreeMap<String, [u32; 4]>,
+    /// The core's targets beside color, depth and object ID that this frame drew because an
+    /// operator reads them (#431): velocity and emission, by name.
+    pub core: BTreeMap<&'static str, wgpu::TextureView>,
+    /// The document's stepped operators and their carried state (#252).
+    stepping: Option<Stepping>,
+    /// The frame's time in seconds of document time, exact past f32, when its caller knows it:
+    /// what the fixed steps count from (#252).
+    pub clock: Option<f64>,
+}
+
+/// The steps a frame records itself; any before them a seek or a cold start needs are submitted
+/// ahead of it, `CHUNK` steps to a command buffer (#252).
+const IN_FRAME: u64 = 4;
+const CHUNK: u64 = 32;
+
+/// No timer: work that writes its own timestamps, or runs outside a frame's marks.
+pub struct Untimed;
+
+impl Times for Untimed {
+    fn start(&mut self, _: &'static str, _: &mut wgpu::CommandEncoder) -> Option<usize> {
+        None
+    }
+    fn render(&self, _: Option<usize>) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
+        None
+    }
+    fn compute(&self, _: Option<usize>) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
+        None
+    }
+    fn end(&mut self, _: Option<usize>, _: &mut wgpu::CommandEncoder) {}
+}
+
+/// Records `parts` in order into a command buffer of their own and submits it.
+fn submit(device: &Device, parts: Vec<Part>) {
+    let mut enc = device.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("stepped operators"),
+    });
+    Rec { mark: "op.steps", parts }.record_passes(&mut enc, &mut Untimed, None);
+    device.queue.submit([enc.finish()]);
+}
+
+/// One carried storage output (#252; canvas primitives: Carried state; Checkpoint ring): its
+/// current state is the operator's storage buffer; `prev` the copy the previous step left, which
+/// a `step: previous` read binds; and its ring of checkpoints, each a GPU copy of the state after
+/// its step, spaced `spacing` steps apart, the spacing doubling whenever the ring passes its
+/// budget.
+struct Carried {
+    item: String,
+    output: String,
+    prev: wgpu::Buffer,
+    bytes: u64,
+    carry: graph::Carry,
+    spacing: u64,
+    ring: Vec<(u64, wgpu::Buffer)>,
+}
+
+impl Carried {
+    fn held(&self) -> u64 {
+        self.ring.len() as u64 * self.bytes
+    }
+
+    /// Thins the ring until it fits its budget: the spacing doubles and the checkpoints off it
+    /// go; a state larger than the budget keeps none.
+    fn thin(&mut self) {
+        if self.bytes > self.carry.budget {
+            self.ring.clear();
+            return;
+        }
+        while self.held() > self.carry.budget {
+            self.spacing *= 2;
+            let spacing = self.spacing;
+            self.ring.retain(|(s, _)| s % spacing == 0);
+        }
+    }
+}
+
+/// The document's stepped operators (#252): one fixed-step clock at `rate` steps a second, the
+/// step the carried state holds (`None` before step 0), and the last frame's restore.
+struct Stepping {
+    rate: u32,
+    carried: Vec<Carried>,
+    at: Option<u64>,
+    restored: Option<(u64, u64)>,
 }
 
 /// The issue a rejected pipeline raises, naming its canvas module, operator and item, with the
@@ -280,7 +370,9 @@ fn reads_items(c: &Checked) -> Vec<String> {
     c.op.inputs
         .values()
         .filter_map(|i| match &i.from {
-            From::Storage { op, .. } | From::Texture3d { op, .. } | From::Target { op, .. }
+            From::Storage { op, previous: false, .. }
+            | From::Texture3d { op, .. }
+            | From::Target { op, .. }
                 if op != "core" =>
             {
                 Some(op.clone())
@@ -304,6 +396,7 @@ impl DocOps {
             ops: Vec::new(),
             storage: BTreeMap::new(),
             textures: BTreeMap::new(),
+            collections: BTreeMap::new(),
             targets: BTreeMap::new(),
             drawn: BTreeMap::new(),
             plans: BTreeMap::new(),
@@ -317,6 +410,9 @@ impl DocOps {
             hooks: Hooks::default(),
             params: BTreeMap::new(),
             within: BTreeMap::new(),
+            core: BTreeMap::new(),
+            stepping: None,
+            clock: None,
         }
     }
 
@@ -397,6 +493,7 @@ impl DocOps {
                 mark: mark_of(id),
                 iterates: Vec::new(),
                 structural,
+                stepped: c.op.stepped.is_some(),
             };
             let mut built = compiled.clone();
             if fail.contains(id) {
@@ -425,17 +522,40 @@ impl DocOps {
                 Some(e) => op.failed = Some(e.to_string()),
                 None => op.runner = Some(Arc::new(runner)),
             }
+            // A stepped operator (#252) steps with the document's one fixed-step clock, and binds
+            // storage only.
+            if let Some(rate) = c.op.stepped {
+                let st = out.stepping.get_or_insert_with(|| Stepping { rate, carried: Vec::new(), at: None, restored: None });
+                if st.rate != rate {
+                    op.failed = Some(format!("{id} steps {rate} times a second, and the document's stepped operators step {} times", st.rate));
+                } else if !c.textures.is_empty() || !c.op.textures.is_empty() {
+                    op.failed = Some(format!("{id} is stepped, and a stepped operator reads and writes storage only"));
+                }
+            }
             if op.kind == Kind::Compute {
                 for (name, s) in &c.op.storage {
-                    let buf = d.create_buffer(&wgpu::BufferDescriptor {
-                        label: Some("operator storage"),
-                        size: u64::from(s.count.max(1)) * 4,
-                        usage: wgpu::BufferUsages::STORAGE
-                            | wgpu::BufferUsages::COPY_SRC
-                            | wgpu::BufferUsages::COPY_DST,
-                        mapped_at_creation: false,
-                    });
-                    out.storage.insert((id.clone(), name.clone()), buf);
+                    let buffer = || {
+                        d.create_buffer(&wgpu::BufferDescriptor {
+                            label: Some("operator storage"),
+                            size: u64::from(s.count.max(1)) * 4,
+                            usage: wgpu::BufferUsages::STORAGE
+                                | wgpu::BufferUsages::COPY_SRC
+                                | wgpu::BufferUsages::COPY_DST,
+                            mapped_at_creation: false,
+                        })
+                    };
+                    if let (Some(carry), Some(st)) = (s.carry, out.stepping.as_mut().filter(|_| op.stepped)) {
+                        st.carried.push(Carried {
+                            item: id.clone(),
+                            output: name.clone(),
+                            prev: buffer(),
+                            bytes: u64::from(s.count.max(1)) * 4,
+                            carry,
+                            spacing: u64::from(carry.every),
+                            ring: Vec::new(),
+                        });
+                    }
+                    out.storage.insert((id.clone(), name.clone()), buffer());
                 }
                 for (name, t) in &c.op.textures {
                     let levels = if t.mips {
@@ -642,6 +762,11 @@ impl DocOps {
         self.storage.get(&(item.to_string(), output.to_string()))
     }
 
+    /// An operator item's computed determinism class.
+    pub fn class_of(&self, item: &str) -> Option<Class> {
+        self.ops.iter().find(|o| o.item == item).map(|o| o.class)
+    }
+
     /// A compute operator's texture output.
     pub fn texture_of(&self, item: &str, output: &str) -> Option<&OutTex> {
         self.textures.get(&(item.to_string(), output.to_string()))
@@ -696,8 +821,15 @@ impl DocOps {
             From::Target { op, output } if op == "core" && output == "depth" => {
                 depth.cloned().unwrap_or_else(|| src.clone())
             }
+            From::Target { op, output }
+                if op == "core" && self.core.contains_key(output.as_str()) =>
+            {
+                self.core[output.as_str()].clone()
+            }
             From::Target { op, output } | From::Texture3d { op, output, .. } => {
-                if let Some(t) = self.textures.get(&(op.clone(), output.clone())) {
+                if let Some(v) = self.collections.get(&(op.clone(), output.clone())) {
+                    v.clone()
+                } else if let Some(t) = self.textures.get(&(op.clone(), output.clone())) {
                     t.tex.create_view(&Default::default())
                 } else if let Some(v) = iterated.get(op) {
                     v.clone()
@@ -722,7 +854,9 @@ impl DocOps {
         let input = |port: &str| -> Option<wgpu::Buffer> {
             let Some(graph::Arg::Ref(name, None)) = s.args.get(port) else { return None };
             match &c.op.inputs.get(name)?.from {
-                From::Storage { op, output } => self.storage.get(&(op.clone(), output.clone())).cloned(),
+                From::Storage { op, output, previous: false } => {
+                    self.storage.get(&(op.clone(), output.clone())).cloned()
+                }
                 _ => None,
             }
         };
@@ -784,6 +918,197 @@ impl DocOps {
         Some(made)
     }
 
+    /// The buffer a storage input binds: the output an operator wrote earlier in the frame or
+    /// step, or with `previous`, a carried output as the previous step left it (#252).
+    fn storage_in(&self, from: &From) -> Option<wgpu::Buffer> {
+        match from {
+            From::Storage { op, output, previous: false } => {
+                self.storage.get(&(op.clone(), output.clone())).cloned()
+            }
+            From::Storage { op, output, previous: true } => self
+                .stepping
+                .as_ref()?
+                .carried
+                .iter()
+                .find(|c| c.item == *op && c.output == *output)
+                .map(|c| c.prev.clone()),
+            _ => None,
+        }
+    }
+
+    /// What each carried output holds after the last frame planned (#252): the step, its ring's
+    /// bytes, budget and checkpoints, and the checkpoint a seek restored with the steps it then
+    /// ran, by `<item>.<output>`.
+    pub fn carried(&self) -> Value {
+        let Some(st) = &self.stepping else {
+            return json!({});
+        };
+        let mut m = serde_json::Map::new();
+        for c in &st.carried {
+            let mut row = json!({
+                "step": st.at,
+                "ring": {
+                    "bytes": c.held(),
+                    "budget": c.carry.budget,
+                    "checkpoints": c.ring.iter().map(|(s, _)| *s).collect::<Vec<_>>(),
+                },
+            });
+            if let Some((from, steps)) = st.restored {
+                row["restored"] = json!({"from": from, "steps": steps});
+            }
+            m.insert(format!("{}.{}", c.item, c.output), row);
+        }
+        Value::Object(m)
+    }
+
+    /// The stepped operators' work for the frame at `frame` (#252; canvas primitives: Carried
+    /// state): the frame shows step ⌊t × rate⌋, so the carried state steps from the step it holds
+    /// to that one, every stepped operator once a step in dependency order, each step reading the
+    /// last through `prev`. A frame behind the state it holds (a seek back), or with a checkpoint
+    /// nearer it than that state, restores the nearest checkpoint at or before it that every
+    /// carried output holds, or else starts again from step 0. After each step a carried output
+    /// takes a checkpoint on its ring's spacing, and the ring thins to its budget.
+    fn steps(
+        &mut self,
+        device: &Device,
+        frame: &Frame,
+        params: &BTreeMap<String, Value>,
+        roles: &BTreeMap<String, [f64; 3]>,
+    ) -> Vec<Part> {
+        let Some(mut st) = self.stepping.take() else {
+            return Vec::new();
+        };
+        let d = &device.device;
+        let rate = f64::from(st.rate);
+        let t = self.clock.unwrap_or(f64::from(frame.t));
+        // The step the frame shows; the small term keeps an exact quotient from flooring under.
+        let target = if self.hooks.steps_per_frame {
+            st.at.map_or(0, |a| a + 1)
+        } else {
+            (t * rate + 1e-6).floor().max(0.0) as u64
+        };
+        let mut parts = Vec::new();
+        let current = |c: &Carried| self.storage[&(c.item.clone(), c.output.clone())].clone();
+        st.restored = None;
+        let behind = st.at.is_some_and(|a| target < a);
+        let nearest = st.carried.first().and_then(|first| {
+            first.ring.iter().rev().map(|(s, _)| *s).find(|s| {
+                *s <= target && st.carried.iter().all(|c| c.ring.iter().any(|(x, _)| x == s))
+            })
+        });
+        match nearest {
+            Some(s) if behind || st.at.is_none_or(|a| s > a) => {
+                for c in &st.carried {
+                    let (_, b) = c.ring.iter().find(|(x, _)| *x == s).expect("held by every output");
+                    parts.push(Part::StepCopy(b.clone(), current(c)));
+                }
+                st.at = Some(s);
+                st.restored = Some((s, target - s));
+            }
+            _ if behind => {
+                for c in &st.carried {
+                    parts.push(Part::StepClear(current(c)));
+                }
+                st.at = None;
+            }
+            _ => {}
+        }
+        let order: Vec<usize> = (0..self.ops.len())
+            .filter(|&k| self.ops[k].stepped && self.ops[k].failed.is_none() && self.ops[k].runner.is_some())
+            .collect();
+        let first = st.at.map_or(0, |a| a + 1);
+        self.stepping = Some(st);
+        for step in first..=target {
+            // A long run of steps (a seek's, or a cold start's) goes to the GPU in submissions of
+            // its own, a chunk at a time, before the frame's: one command buffer holding hundreds of
+            // steps outlasts the GPU's limit for one. The frame records the last few.
+            if target - step >= IN_FRAME && (step - first) % CHUNK == 0 && !parts.is_empty() {
+                submit(device, std::mem::take(&mut parts));
+            }
+            let st = self.stepping.as_ref().expect("taken back above");
+            for c in &st.carried {
+                parts.push(Part::StepCopy(current(c), c.prev.clone()));
+            }
+            for &k in &order {
+                let op = &self.ops[k];
+                let runner = op.runner.clone().expect("built");
+                let c = &runner.compiled.checked;
+                // Storage it doesn't carry starts each step at its declared clear value.
+                for (n, out) in c.op.storage.iter().filter(|(_, o)| o.carry.is_none()) {
+                    let key = (op.item.clone(), n.clone());
+                    parts.push(Part::StepClear(self.storage[&key].clone()));
+                    if out.clear != 0 {
+                        let words: Vec<u8> = std::iter::repeat_n(out.clear.to_le_bytes(), out.count.max(1) as usize).flatten().collect();
+                        let from = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("operator clear"),
+                            contents: &words,
+                            usage: wgpu::BufferUsages::COPY_SRC,
+                        });
+                        parts.push(Part::StepCopy(from, self.storage[&key].clone()));
+                    }
+                }
+                let mut f = *frame;
+                f.seed = item_seed(self.doc_seed, &op.item);
+                f.t = (step as f64 / rate) as f32;
+                let mut values = interp::inputs(c, params, roles);
+                for (n, i) in &c.op.inputs {
+                    if i.from == From::Step {
+                        values.insert(n.clone(), Val::N(Sc::U32, vec![step as f64]));
+                    }
+                }
+                let Some(ins) = c
+                    .storage_inputs
+                    .iter()
+                    .map(|n| self.storage_in(&c.op.inputs[n].from))
+                    .collect::<Option<Vec<wgpu::Buffer>>>()
+                else {
+                    continue;
+                };
+                let outs: Vec<wgpu::Buffer> = c
+                    .op
+                    .storage
+                    .keys()
+                    .map(|n| self.storage[&(op.item.clone(), n.clone())].clone())
+                    .collect();
+                let all: Vec<&wgpu::Buffer> = ins.iter().chain(&outs).collect();
+                let (g0, g1, keep) = runner.bind_with(d, &f, [1, 1], &values, &[], &all, &[]);
+                parts.push(Part::Dispatch(runner.clone(), (g0, g1), keep, c.op.elements));
+            }
+            let every_one = self.hooks.keeps_every_checkpoint;
+            let mut taken = Vec::new();
+            let st = self.stepping.as_mut().expect("taken back above");
+            for c in &mut st.carried {
+                let due = if every_one {
+                    step % u64::from(c.carry.every) == 0
+                } else {
+                    step % c.spacing == 0 && c.bytes <= c.carry.budget
+                };
+                if !due || c.ring.iter().any(|(s, _)| *s == step) {
+                    continue;
+                }
+                let b = d.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("carried checkpoint"),
+                    size: c.bytes,
+                    usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                taken.push((c.item.clone(), c.output.clone(), b.clone()));
+                let at = c.ring.partition_point(|(s, _)| *s < step);
+                c.ring.insert(at, (step, b));
+                if !every_one {
+                    c.thin();
+                }
+            }
+            for (item, output, b) in taken {
+                parts.push(Part::StepCopy(self.storage[&(item, output)].clone(), b));
+            }
+        }
+        if let Some(st) = self.stepping.as_mut() {
+            st.at = Some(target.max(st.at.unwrap_or(0)));
+        }
+        parts
+    }
+
     /// Plans the frame's operators over `color`, the frame's linear color at `size` (`ids` and
     /// `depth` its other targets): compute operators first, then each pass reading the color so
     /// far into a target of its own at its resolution, returned to full size when below it.
@@ -811,6 +1136,8 @@ impl DocOps {
         let mut passes: BTreeMap<String, wgpu::TextureView> = BTreeMap::new();
         let marker = self.hooks.marker;
         let clear = !self.hooks.no_clear;
+        // Every stepped operator steps once, together, in the place of the first (#252).
+        let mut steps = Some(self.steps(device, frame, &params, roles));
         for k in 0..self.ops.len() {
             let op = &self.ops[k];
             let res = resolution(&op.item);
@@ -826,7 +1153,14 @@ impl DocOps {
             let mark = op.mark;
             let runner = op.runner.clone();
             let structural = op.structural;
-            if drew == Drew::Operator {
+            let stepped = op.stepped;
+            // The steps record whatever this frame draws: the carried state already counts them,
+            // and a stepped operator's state never steps down (#252).
+            if stepped {
+                if let Some(parts) = steps.take().filter(|p| !p.is_empty()) {
+                    recs.push(Rec { mark, parts });
+                }
+            } else if drew == Drew::Operator {
                 let runner = runner.expect("built");
                 let c = runner.compiled.checked.clone();
                 let mut f = *frame;
@@ -837,12 +1171,7 @@ impl DocOps {
                 let storage: Option<Vec<wgpu::Buffer>> = c
                     .storage_inputs
                     .iter()
-                    .map(|n| match &c.op.inputs[n].from {
-                        From::Storage { op, output } => {
-                            self.storage.get(&(op.clone(), output.clone())).cloned()
-                        }
-                        _ => None,
-                    })
+                    .map(|n| self.storage_in(&c.op.inputs[n].from))
                     .collect();
                 let mut parts = Vec::new();
                 match (kind, storage) {
@@ -1086,6 +1415,9 @@ enum Part {
     Pre(Arc<Pre>),
     Plan(Arc<Plan>),
     Mips(Arc<Chain>),
+    /// A copy or a clear among a stepped operator's dispatches, recorded in their order (#252).
+    StepCopy(wgpu::Buffer, wgpu::Buffer),
+    StepClear(wgpu::Buffer),
 }
 
 /// One operator's run, bound, to record into the frame's encoder: its clears, then its passes,
@@ -1203,6 +1535,8 @@ impl Rec {
                     used += plan.queries();
                 }
                 Part::Mips(c) => c.record(encoder),
+                Part::StepCopy(from, to) => encoder.copy_buffer_to_buffer(from, 0, to, 0, None),
+                Part::StepClear(b) => encoder.clear_buffer(b, 0, None),
                 _ => {}
             }
         }

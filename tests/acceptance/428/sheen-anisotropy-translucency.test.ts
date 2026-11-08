@@ -10,7 +10,9 @@
 // index, drawn as one `mesh.asset@1` item with `imports: true` in the orthographic view `SAMPLE_VIEWS` names, tone map
 // none: every material carrying KHR_materials_sheen, _anisotropy or _diffuse_transmission has the file's values on its
 // `sheen`, `anisotropy` and `translucency` fields (helpers: `lobeFieldProblems`); every judged pixel (2 px inside its
-// node, its material's inputs all read by the reference, the lobe wider than the pixel, its textures magnified) is within
+// node, one triangle under all of it (helpers: `oneTriangleAt`; the owner's approved proposal on #1173, since at 4× MSAA a
+// pixel where two triangles meet shades both at its centre), its material's inputs all read by the reference, the lobe
+// wider than the pixel, its textures magnified) is within
 // 1% per channel of `reference.ts`'s lobes at that pixel's ray (SheenChair's velvet and AnisotropyStrengthTest's spheres
 // under a sun behind the camera; DiffuseTransmissionTest under its own light, behind its panels), each failure naming
 // its material; and in AnisotropyStrengthTest, each sphere of the roughness 1 column (nodes 43 to 48, strengths 1/6 to
@@ -89,7 +91,7 @@ describe(`${ID} sheen, anisotropy and translucency`, () => {
     const failures: string[] = [];
     for (const name of ['SheenChair', 'AnisotropyStrengthTest', 'DiffuseTransmissionTest'] as const) {
       const f = await khronos(name, out);
-      const { run, reply } = checkSample(bin(), out, f, SAMPLE_VIEWS[name]);
+      const { run, reply } = checkSample(bin(), out, f, SAMPLE_VIEWS[name], undefined, true);
       failures.push(...lobeFieldProblems(f.gltf, importOf(reply, ASSET, name), name), ...run.failures);
       console.log(`${ID}: ${name}: judged ${[...run.judged.values()].reduce((a, b) => a + b, 0)} pixels over ${run.judged.size} materials`);
       if (name === 'AnisotropyStrengthTest') failures.push(...roughOneColumn(run));
