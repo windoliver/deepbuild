@@ -1,0 +1,8 @@
+{
+  "output": "row sums",
+  "reference": "float64",
+  "accumulate": "fp32",
+  "atol": 0.05,
+  "rtol": 1e-05,
+  "twin": "fp16"
+}
