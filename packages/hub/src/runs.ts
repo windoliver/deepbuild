@@ -27,6 +27,8 @@ type Obj = Record<string, unknown>;
 export interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; /** A claim's check that needs the app: it runs on the worktree's warm stack (#580). */ stack?: StackWant; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
   /** A claim's check (#30): the command line the command check kind runs in `cwd`, hermetically through host@1; `argv` is what it would be as a shell line. */
   command?: string;
+  /** A check your repo's spec runs outside the sandbox (#33). */
+  outside?: boolean;
   /** Named command stand-ins in base runs (#874). */
   stand_ins?: string[];
   /** What its key is made of (#1018): a gate run's, kept with its finish so any claim with an equal key reads it. */
@@ -199,7 +201,7 @@ export class Runs {
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and whether it's a held-out variant's (#1018); a claim's check that needs the app with its stack (#580). */
   async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut = false, stack?: StackWant): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec } = params;
+    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec, outside } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
@@ -225,7 +227,7 @@ export class Runs {
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
-      ...(key ? { key } : {}), ...(isObj(spec) && typeof command === 'string' ? { spec } : {}),
+      ...(key ? { key } : {}), ...(isObj(spec) && typeof command === 'string' ? { spec } : {}), ...(outside === true ? { outside: true } : {}),
     }).catch((error: unknown) => { this.heldOut.delete(handle); throw error; });
     return { run };
   }
@@ -292,15 +294,21 @@ export class Runs {
       } else ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
         if (!byPackage) {
           // #669's planted runner judges the run by its exit code alone, whatever masks it.
-          const exitOnly = this.o.plant === 'runner-passes-masked-exit' ? { plant: 'exit-code-only' as const } : {};
+          // #33's planted gate reads every command check's result from its exit status alone.
+          const exitOnly = this.o.plant === 'runner-passes-masked-exit' || this.o.plant === 'verdict-from-exit-status' ? { plant: 'exit-code-only' as const } : {};
           // A check that needs the app runs on its stack, started from its checkout once the run may start (#580). What
           // it served is read while it lasts, so a run on another tree, or on an environment that broke its rules, is uncounted.
           const serving = run.stack ? await this.o.stacks.serve({ ...run.stack, run: run.run, claim: run.claim, check: run.check, folder: run.cwd, expected_ms: run.expected_ms ?? null }) : undefined;
-          if (serving && 'cause' in serving) return { code: null, missing: serving.cause };
+          // A stack that never came up is a missing run the gate reads, naming why, so the check is BLOCKED (#33), never left
+          // with no run; one the hub's stop cut short is stopped.
+          if (serving && 'cause' in serving) {
+            const failures = [{ test: '(stack)', file: '.', line: 1, stack: null, assertion: false, message: `its stack never came up: ${serving.cause}` }];
+            return { code: null, record: { run: run.run, outcome: this.o.stopping() ? 'stopped' : 'missing', testsRun: 0, failures, evidence: [], read: [], mask: null, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun };
+          }
           const hosts = [...(run.grant.hosts ?? []), ...(serving?.hosts ?? [])];
           let record: CommandRun;
           try {
-            record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly });
+            record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly, ...(run.outside ? { outside: true } : {}) });
           } catch (error) {
             await this.o.stacks.finish(run.run);
             throw error;
