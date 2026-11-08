@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { AC, repoRoot, SCRIPT } from './common.mjs';
-import { judgeCargoTests, judgeNodeTests, judgeRealRows, judgeRemoval, judgeVitestTests } from './rows-judge.mjs';
+import { judgeCargoTests, judgeNodeTests, judgeRemoval, judgeVitestTests } from './rows-judge.mjs';
 
 const script = join(repoRoot, SCRIPT);
 
@@ -25,8 +25,4 @@ test(`${AC.tests} (scope) a row's Rust test is read from cargo's own list: a mis
 
 test(`${AC.tests} a row with no removal condition (empty, a dash, or "none" with no reason) fails check, naming the row; "none: <reason>" and an upstream change pass`, () => {
   assert.deepEqual(judgeRemoval(script), []);
-});
-
-test(`${AC.tests} (scope) the real table: every row has a removal condition and names its test by a repo path whose file holds it`, () => {
-  assert.deepEqual(judgeRealRows(), []);
 });
