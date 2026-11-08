@@ -175,7 +175,8 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
             three: three.contains(&l.id.as_str()),
             marks: l.marks.iter().cloned().collect(),
         })
-        .filter(|l| l.three || !l.marks.is_empty())
+        // A layer whose items are all hidden (a flip showing none) is still the film's layer.
+        .filter(|l| l.three || !l.marks.is_empty() || flat.values().any(|v| v["layer"] == l.id.as_str()))
         .collect();
     let gpu = match look3 {
         Some((look, themed)) => {
