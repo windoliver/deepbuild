@@ -1431,6 +1431,12 @@ fn seconds_of(v: Option<&Value>, ctx: &Ctx, path: &str) -> Result<i64, Refused> 
     }
 }
 
+/// A `follow` read on its own, its times in seconds or time literals at 60 fps: the input
+/// module's smoothing and the channels it feeds read their model here (#308).
+pub fn follow_spec(f: &Map<String, Value>, path: &str) -> Result<follow::Spec, Refused> {
+    follow_spec_of(f, &Ctx::of((60, 1)), path)
+}
+
 /// A follow channel's `follow` on held keys or a control's value (#489): its source, its model
 /// and its outputs. A `follow` naming `source.control` and its option `values` is #417's.
 fn follow_spec_of(f: &Map<String, Value>, ctx: &Ctx, path: &str) -> Result<follow::Spec, Refused> {
