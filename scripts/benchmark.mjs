@@ -232,7 +232,8 @@ export function fingerprint() {
   };
   const memory = Number(read('sysctl', '-n', 'hw.memsize'));
   const source = read('pmset', '-g', 'ps');
-  const lowPower = read('pmset', '-g')?.match(/^\s*lowpowermode\s+([01])\s*$/m)?.[1];
+  // Low Power Mode as the OS reports it: macOS 26 drops pmset's lowpowermode line for powermode.
+  const lowPower = read('osascript', '-l', 'JavaScript', '-e', 'ObjC.import("Foundation"); $.NSProcessInfo.processInfo.isLowPowerModeEnabled');
   // NSProcessInfo's thermalState: 0 nominal, 1 fair, 2 serious, 3 critical.
   const thermal = read('osascript', '-l', 'JavaScript', '-e', 'ObjC.import("Foundation"); $.NSProcessInfo.processInfo.thermalState');
   return {
@@ -240,7 +241,7 @@ export function fingerprint() {
     chip: read('sysctl', '-n', 'machdep.cpu.brand_string') || null,
     memoryBytes: Number.isSafeInteger(memory) && memory > 0 ? memory : null,
     power: /'AC Power'/.test(source) ? 'ac' : /'Battery Power'/.test(source) ? 'battery' : null,
-    lowPowerMode: lowPower === undefined ? null : lowPower === '1',
+    lowPowerMode: lowPower === 'true' ? true : lowPower === 'false' ? false : null,
     thermalState: ['nominal', 'fair', 'serious', 'critical'][thermal] ?? null,
     macosBuild: read('sw_vers', '-buildVersion') || null,
   };
