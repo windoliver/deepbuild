@@ -7,6 +7,7 @@ pub mod building;
 pub mod clusters;
 pub mod curve;
 pub mod cut;
+pub mod deviation;
 pub mod fixtures;
 pub mod flare;
 pub mod frames;
