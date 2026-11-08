@@ -12,6 +12,10 @@ export type Plant =
   // #1330's: a start with no approval on the record, a start with no sandbox, a sandbox setting that leaves the agent's
   // way out open, and a sandbox that cuts the hub's socket.
   | 'starts-without-approval' | 'starts-without-sandbox' | 'sandbox-way-out-open' | 'sandbox-cuts-hub-socket'
+  // #1325's: rules that read the status's context alone or let the agents' app merge, push the default branch or push an
+  // approval tag, a session's credential that can post a status, and a hub that passes the gate's token to a session.
+  | 'rule-reads-context-alone' | 'agent-credential-merges' | 'agent-credential-pushes-default-branch' | 'agent-credential-pushes-approved-tags'
+  | 'agent-credential-posts-statuses' | 'passes-gate-credential'
   // #46's: a poster that takes HEAD for the commit a verdict covers, and a recorder that marks every push it reads, or none.
   | 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none'
   // #1537's: the hub holds the shipped message kind with no route into a gate run.
@@ -243,6 +247,8 @@ const PLANTS: readonly string[] = [
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
   'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
+  'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
+  'agent-credential-posts-statuses', 'passes-gate-credential',
   'kind-without-route',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
