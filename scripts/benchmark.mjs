@@ -205,11 +205,12 @@ export function prepareCopy(directory) {
 }
 
 // A timing or memory budget counts only on a reference Mac, on mains power, with Low Power Mode
-// off and the thermal state nominal (design: The reference Mac). There are two, and a budget holds
+// off and the thermal state nominal (design: The reference Mac). There are three, and a budget holds
 // on each.
 const references = [
   { name: 'Mac15,7 (M3 Pro, 36 GB)', model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30 },
   { name: 'Mac15,12 (M3, 16 GB)', model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30 },
+  { name: 'Mac17,10 (M5 Max, 64 GB)', model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 64 * 2 ** 30 },
 ];
 const hardware = ['model', 'chip', 'memoryBytes'];
 const conditions = [
@@ -254,7 +255,7 @@ export function judgeLimit({ limit, runs, fingerprint: machine }) {
     return { status: 'BLOCKED', limit, runs, reason: `a limit is judged on five readings taken after warm-up, got ${JSON.stringify(runs)}` };
   const margin = Math.max(0.05, (Math.max(...runs) - Math.min(...runs)) / limit);
   const off = references.some((reference) => hardware.every((key) => machine?.[key] === reference[key])) ? []
-    : [`${hardware.map((key) => `${key} is ${JSON.stringify(machine?.[key] ?? null)}`).join(', ')}: neither ${referenceNames}`];
+    : [`${hardware.map((key) => `${key} is ${JSON.stringify(machine?.[key] ?? null)}`).join(', ')}: none of ${referenceNames}`];
   off.push(...conditions.filter(([key, value]) => machine?.[key] !== value).map(([key, value, label]) => `${label} is ${JSON.stringify(machine?.[key] ?? null)}, not ${JSON.stringify(value)}`));
   if (!machine?.macosBuild) off.push('the macOS build is missing');
   if (off.length) return { status: 'INCONCLUSIVE', limit, runs, margin, reason: `a reading, not a budget result: off the reference Macs (${referenceNames}; mains power, Low Power Mode off, thermal state nominal): ${off.join('; ')}` };

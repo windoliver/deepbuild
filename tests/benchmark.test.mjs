@@ -159,23 +159,27 @@ test('an established harness budget cannot disappear or change, so it can never 
     assert.throws(() => validateBudgets({ ...config, harness: { ...harness, ...change } }, withHarness), /harness/);
 });
 
-// The design names two reference Macs (design: The reference Mac). A budget counts on either; anywhere
-// else it is a reading, and the reason names both machines.
-test('a budget counts on either reference Mac and is a reading on any other', () => {
+// The design names three reference Macs (design: The reference Mac). A budget counts on any of them;
+// anywhere else it is a reading, and the reason names every machine.
+test('a budget counts on any reference Mac and is a reading on any other', () => {
   const conditions = { power: 'ac', lowPowerMode: false, thermalState: 'nominal', macosBuild: '23H723' };
   const pro = { model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30, ...conditions };
   const air = { model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30, ...conditions };
+  const max = { model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 64 * 2 ** 30, ...conditions };
   const within = [90, 92, 95, 91, 99], over = [110, 111, 110, 112, 111];
-  for (const machine of [pro, air]) {
+  for (const machine of [pro, air, max]) {
     assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: machine }).status, 'PASS', machine.model);
     assert.equal(judgeLimit({ limit: 100, runs: over, fingerprint: machine }).status, 'FAIL', machine.model);
   }
   // The Air's chip with the Pro's memory, or the other way round, is neither machine.
-  for (const mixed of [{ ...air, memoryBytes: pro.memoryBytes }, { ...pro, chip: air.chip }, { ...air, model: 'Mac15,13' }]) {
+  // So is the M5 Max's model with an M3's chip or memory.
+  for (const mixed of [{ ...air, memoryBytes: pro.memoryBytes }, { ...pro, chip: air.chip }, { ...air, model: 'Mac15,13' },
+    { ...max, chip: pro.chip }, { ...max, memoryBytes: pro.memoryBytes }]) {
     const result = judgeLimit({ limit: 100, runs: within, fingerprint: mixed });
     assert.equal(result.status, 'INCONCLUSIVE', JSON.stringify(mixed));
     assert.match(result.reason, /Mac15,7/);
     assert.match(result.reason, /Mac15,12/);
+    assert.match(result.reason, /Mac17,10/);
   }
   // Conditions still hold on both.
   assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: { ...air, power: 'battery' } }).status, 'INCONCLUSIVE');
