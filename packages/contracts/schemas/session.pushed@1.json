@@ -1,0 +1,144 @@
+{
+  "title": "session.pushed@1",
+  "description": "A push GitHub recorded as the agents' app's (#1325): the session DeepBuild started whose commit it carried, the run and approval it ran under, and who approved it. A commit's author and committer are never read for any of these.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "session.pushed"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The ref GitHub says changed."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192,
+          "description": "The commit the ref moved to."
+        },
+        "pusher": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The login GitHub recorded the push as: the agents' app."
+        },
+        "session": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192,
+          "description": "The session whose commit it carried, or the one live started session holding it; null when none could be told."
+        },
+        "run": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The run that session started as."
+        },
+        "approval": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^ask:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The authority ask whose yes approved the run."
+        },
+        "approved_by": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192,
+          "description": "The person who answered it yes: the person behind the push."
+        }
+      },
+      "required": [
+        "ref",
+        "commit",
+        "pusher",
+        "session",
+        "run",
+        "approval",
+        "approved_by"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

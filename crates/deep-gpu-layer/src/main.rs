@@ -37,6 +37,7 @@ mod liveview;
 mod lod;
 mod marks2d;
 mod opframe;
+mod paintfx;
 mod parity;
 mod plugin;
 mod print2d;
@@ -91,6 +92,8 @@ pub enum Planted {
     BackdropReadsLaterItems,
     BackdropPastCoverage,
     BackdropReadsStatus,
+    /// #467 AC5's: a bevel lit from the side opposite its light.
+    BevelLitOpposite,
     VividLightAsLinearLight,
     DissolveReadsPlayback,
     PassLinearIn2d,
@@ -143,6 +146,10 @@ pub enum Planted {
     /// #383's wrong programs (tests/acceptance/383/README.md: Planted programs).
     LoadsEverything,
     SlowGpuFrame,
+    /// #465: each ghost at a fixed place, whatever its light.
+    FlareFixedGhosts,
+    /// #465: the flare built as if nothing covered its light.
+    FlareIgnoresOcclusion,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -321,6 +328,7 @@ impl Planted {
             "backdrop_reads_later_items" => Planted::BackdropReadsLaterItems,
             "backdrop_past_coverage" => Planted::BackdropPastCoverage,
             "backdrop_reads_status" => Planted::BackdropReadsStatus,
+            "bevel_lit_opposite" => Planted::BevelLitOpposite,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,
@@ -367,6 +375,8 @@ impl Planted {
             "guard_to_grey" => Planted::GuardToGrey,
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
+            "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
+            "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,

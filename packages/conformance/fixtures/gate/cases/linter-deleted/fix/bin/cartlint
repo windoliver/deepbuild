@@ -1,0 +1,9 @@
+#!/usr/bin/env -S node --test
+// cartlint: every source file exports what it defines.
+const test = require('node:test');
+const assert = require('node:assert');
+const { readFileSync } = require('node:fs');
+
+test('src/cart.js exports what it defines', () => {
+  assert.match(readFileSync('src/cart.js', 'utf8'), /module\.exports/);
+});

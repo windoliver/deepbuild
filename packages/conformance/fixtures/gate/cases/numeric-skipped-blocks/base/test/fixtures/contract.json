@@ -1,0 +1,8 @@
+{
+  "output": "scaled batch",
+  "reference": "float64",
+  "accumulate": "fp64",
+  "atol": 0,
+  "rtol": 0,
+  "compare": "every element"
+}

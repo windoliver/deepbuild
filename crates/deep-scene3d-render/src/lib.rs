@@ -10,14 +10,16 @@
 pub mod ao;
 pub mod cull;
 pub mod env;
+pub mod flare;
 mod glass;
 pub mod local;
-pub mod print;
 pub mod maps;
 mod mesh;
+pub mod mirror;
 mod motion;
 mod oit;
 mod op;
+pub mod print;
 pub mod shadow;
 pub mod status;
 pub mod surface;
@@ -96,7 +98,7 @@ pub const SKY_PASS: &str = "scene3d.sky";
 pub const PUFF_PASS: &str = "scene3d.puff";
 /// The pass resolving the geometry pass's object IDs and depth (#1173).
 pub const RESOLVE_PASS: &str = "scene3d.sample_resolve";
-pub use deep_canvas_scene3d::module::{CASCADE_PASS, CULL_PASS};
+pub use deep_canvas_scene3d::module::{CASCADE_PASS, CULL_PASS, FLARE_PASS, MIRROR_PASS};
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -132,6 +134,8 @@ pub struct Planted {
     pub status_without_depth: bool,
     /// #421: a solid's front faces chosen without its world determinant's sign.
     pub winding_ignores_determinant: bool,
+    /// #465: the flare's wrong programs.
+    pub flare: flare::Planted,
     /// #421: opaque solids submitted in an order that turns over each frame, ties left to the
     /// depth test.
     pub ties_by_submission: bool,
@@ -1037,16 +1041,19 @@ struct PrintStage {
 impl PrintStage {
     fn record(&self, encoder: &mut wgpu::CommandEncoder, into: &wgpu::TextureView) {
         let coverage = print::Coverage::Ids(&self.ids, self.masks.clone());
-        self.printer.lock().unwrap_or_else(|e| e.into_inner()).record(
-            &self.device,
-            encoder,
-            &self.params,
-            &self.source,
-            &coverage,
-            into,
-            self.format,
-            None,
-        );
+        self.printer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .record(
+                &self.device,
+                encoder,
+                &self.params,
+                &self.source,
+                &coverage,
+                into,
+                self.format,
+                None,
+            );
     }
 }
 
@@ -1711,10 +1718,20 @@ pub struct Renderer {
     finished: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
     /// #464: the look's print finish for the frame being drawn (its fields, the frame's values,
     /// the ground, each item's color for its separations), the pass, and the frame it reads.
-    print: Option<(Arc<deep_canvas_marks::print::Print>, deep_canvas_marks::print::Frame, [u8; 3])>,
+    print: Option<(
+        Arc<deep_canvas_marks::print::Print>,
+        deep_canvas_marks::print::Frame,
+        [u8; 3],
+    )>,
     print_colors: BTreeMap<String, [u8; 3]>,
     printer: Option<Arc<Mutex<print::Printer>>>,
     print_source: Option<(wgpu::TextureView, [u32; 2], wgpu::TextureFormat)>,
+    /// #465: the mirror's pass, made when a frame first has a mirror, and whether this frame has.
+    mirrorer: Option<Box<mirror::Mirrorer>>,
+    mirroring: bool,
+    /// #465: the flare's passes, made when a frame first has a flare, and whether this frame has.
+    flarer: Option<Box<flare::Flarer>>,
+    flaring: bool,
     /// The pass resolving the geometry pass's object IDs and depth (#1173), and the planted
     /// resolve_accumulates_frames' blend of the previous frame.
     resolve: wgpu::RenderPipeline,
@@ -3058,6 +3075,10 @@ impl Renderer {
             print_colors: BTreeMap::new(),
             printer: None,
             print_source: None,
+            mirrorer: None,
+            mirroring: false,
+            flarer: None,
+            flaring: false,
             resolve,
             accumulate,
             compiled: 3,
@@ -4202,6 +4223,57 @@ impl Renderer {
             _ => None,
         };
         self.prepare_core(device, scene);
+        // #465: the mirror's view at t, drawn whole each frame.
+        self.mirroring = match &scene.mirror {
+            Some(m) => {
+                let planted = self.planted.clone();
+                let mirrorer = self
+                    .mirrorer
+                    .get_or_insert_with(|| Box::new(mirror::Mirrorer::new(device, planted)));
+                mirrorer.prepare(device, scene, m, look, &self.picks);
+                true
+            }
+            None => false,
+        };
+        // #465: the flare's sources at t, at the internal size the targets draw.
+        self.flaring = match &scene.flare {
+            Some(f) => {
+                let internal = self.internal();
+                let k = [
+                    f64::from(internal[0]) / f64::from(scene.size[0]),
+                    f64::from(internal[1]) / f64::from(scene.size[1]),
+                ];
+                let mut sources = deep_canvas_scene3d::flare::sources(scene, f, look);
+                for s in &mut sources {
+                    s.at = [s.at[0] * k[0], s.at[1] * k[1]];
+                    s.radius *= k[0];
+                }
+                let clip = self.camera.0;
+                let depth = |p: [f64; 3]| {
+                    let row = |r: usize| {
+                        clip[r] * p[0] + clip[4 + r] * p[1] + clip[8 + r] * p[2] + clip[12 + r]
+                    };
+                    row(2) / row(3)
+                };
+                let grows = self.depth_grows_nearer();
+                let planted = self.planted.flare;
+                let flarer = self
+                    .flarer
+                    .get_or_insert_with(|| Box::new(flare::Flarer::new(device)));
+                flarer.prepare(
+                    device,
+                    f,
+                    &sources,
+                    internal,
+                    depth,
+                    grows,
+                    planted,
+                    look.exposure,
+                );
+                true
+            }
+            None => false,
+        };
     }
 
     /// The core targets this frame reads (#431), made at the internal size, and their draws:
@@ -4365,6 +4437,7 @@ impl Renderer {
             || self.order.len() != scene.layers.len()
             || self.batches.values().any(|b| !b.clear_draws.is_empty())
             || !self.adjusts.is_empty()
+            || scene.mirror.is_some()
         {
             return self.prepare(device, scene, look);
         }
@@ -4372,7 +4445,13 @@ impl Renderer {
         // rewrites too, and a frame draws the same however it was reached (#149).
         let mut moved = moved.to_vec();
         let ties = look.drawn.as_ref().map(|_| {
-            tie_ranks(scene.layers.iter().flat_map(|l| &l.solids).filter(|s| s.batch == 0))
+            tie_ranks(
+                scene
+                    .layers
+                    .iter()
+                    .flat_map(|l| &l.solids)
+                    .filter(|s| s.batch == 0),
+            )
         });
         if let Some(ties) = ties.filter(|t| *t != self.ties) {
             for (l, layer) in scene.layers.iter().enumerate() {
@@ -4613,8 +4692,8 @@ impl Renderer {
     fn prepare_frame(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.counts = Counts::default();
         // #464: the print finish this frame draws, and each solid's color its separations read.
-        self.print = (!look.print.is_identity())
-            .then(|| (look.print.clone(), scene.print, scene.ground));
+        self.print =
+            (!look.print.is_identity()).then(|| (look.print.clone(), scene.print, scene.ground));
         self.print_colors = if look.print.separations.is_empty() {
             BTreeMap::new()
         } else {
@@ -6116,6 +6195,15 @@ impl Renderer {
             ));
         }
         jobs.push((GEOMETRY_PASS.into(), geometry));
+        // #465: the mirror's view and its picture over the mirror's parts, before the effects.
+        if let (true, Some(m), Some(t)) = (
+            self.mirroring,
+            self.mirrorer.as_mut(),
+            self.targets.as_ref(),
+        ) {
+            let (linear, ids) = (t.linear_view.clone(), t.ids_view.clone());
+            jobs.extend(m.jobs(device, slot, &linear, &ids, &self.profiler));
+        }
         let covers = after.as_deref().and_then(|a| a.covers());
         deep_gpu::alloc::outside(|| self.cover(device, covers));
         let Some(t) = self.targets.as_ref() else {
@@ -6147,6 +6235,18 @@ impl Renderer {
             self.pre_tone = source;
         } else {
             self.pre_tone = None;
+        }
+        // #465: the flare, added into the linear image the output reads.
+        if let (true, Some(f), Some(t)) =
+            (self.flaring, self.flarer.as_ref(), self.targets.as_ref())
+        {
+            let into = self
+                .pre_tone
+                .clone()
+                .unwrap_or_else(|| t.linear_view.clone());
+            if let Some(job) = f.job(device, &t.depth_view, &into, &self.profiler) {
+                jobs.push((FLARE_PASS.into(), job));
+            }
         }
         // With passes after the finish, the output writes the finished frame, and they write
         // the slot from it (#382). Below scale 1 the output and the guard write the internal
@@ -6419,7 +6519,12 @@ impl Renderer {
     /// The finished frame's view at `size`, made or remade when the size changed.
     /// #464: the print pass for this frame, when the look prints anything: the frame the output
     /// writes for it at `size`, in the format the output would have written.
-    fn print_stage(&mut self, device: &Device, size: [u32; 2], finished: bool) -> Option<PrintStage> {
+    fn print_stage(
+        &mut self,
+        device: &Device,
+        size: [u32; 2],
+        finished: bool,
+    ) -> Option<PrintStage> {
         let (print, frame, ground) = self.print.clone()?;
         let format = if finished { status::FINISHED } else { FORMAT };
         if self
@@ -7607,6 +7712,28 @@ impl Module3 {
                 writes: vec!["linear", "ids", "depth"],
                 resolution: Resolution::Full,
                 ns_per_px: 0.5,
+                determinism: Determinism::SameMachine,
+            },
+            // #465: the mirror's view and its picture, drawn only while a frame has a mirror.
+            Pass {
+                name: MIRROR_PASS.into(),
+                place: "geometry",
+                order: 1,
+                reads: vec!["ids"],
+                writes: vec!["linear"],
+                resolution: Resolution::Half,
+                ns_per_px: 0.5,
+                determinism: Determinism::SameMachine,
+            },
+            // #465: the flare, after the effects' bloom, drawn only while a frame has one.
+            Pass {
+                name: FLARE_PASS.into(),
+                place: "bloom",
+                order: u32::MAX,
+                reads: vec!["depth"],
+                writes: vec!["linear"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.1,
                 determinism: Determinism::SameMachine,
             },
             Pass {

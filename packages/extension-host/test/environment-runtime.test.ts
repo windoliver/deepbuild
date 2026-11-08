@@ -1,5 +1,5 @@
 // Runtime selection must exercise the same installed environment that passed its kit, and unload must stop it.
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { join } from 'node:path';

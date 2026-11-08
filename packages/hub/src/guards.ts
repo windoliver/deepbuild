@@ -1,7 +1,8 @@
 // The guard engine's install (#304; design: Before each command). `deep guard add <file>` hands the hub guard@1
 // entries, each with a planted call it must deny and a twin it must allow, `{"v": 1, "entries": {<name>: guard@1},
-// "proofs": {<name>: {"planted": <call>, "twin": <call>}}}`. The hub runs deep-hook's check mode, the one matcher,
-// over both; an entry whose planted call goes through, or whose twin is matched, is refused, naming it and the call.
+// "proofs": {<name>: {"planted": <call>, "twin": <call>}}}`, or a list of them for an entry that reads more than one
+// spelling of an effect, one pair for each (#1523). The hub runs deep-hook's check mode, the one
+// matcher, over each pair; an entry whose planted call goes through, or whose twin is matched, is refused, naming it and the call.
 // Then it rewrites rules.json with every installed entry, its mode included, and what each tool counts as, so
 // deep-hook matches a call the same way with the hub up or down. The hub never reads an entry's `match` itself.
 // A fail_closed entry that names a program or an effect class must also deny its planted call with the program
@@ -51,6 +52,26 @@ export async function blocksCall(dir: string, deepHook: string, command: string)
   return said.includes(true);
 }
 
+/**
+ * The guard entries in `<dir>/rules.json` that name a rule they enforce (`proofs.<name>.rule`, #344) and pass their check
+ * now: deep-hook's matcher denies the planted call and allows the twin. An entry that fails, or that can't be checked, is
+ * left out, so its rule reads text only.
+ */
+export async function provenGuards(dir: string, deepHook: string): Promise<{ name: string; rule: string }[]> {
+  let read: { entries?: Obj; proofs?: Obj; classes?: Obj };
+  try { read = JSON.parse(readFileSync(join(dir, 'rules.json'), 'utf8')) as typeof read; } catch { return []; }
+  const out: { name: string; rule: string }[] = [];
+  for (const [name, proof] of Object.entries(read.proofs ?? {})) {
+    const entry = read.entries?.[name];
+    if (!isObj(entry) || !isObj(proof) || typeof proof.rule !== 'string' || !isCall(proof.planted) || !isCall(proof.twin)) continue;
+    const classes = read.classes ?? {};
+    const denied = await matches(deepHook, entry, proof.planted, classes).catch(() => false);
+    const allowed = denied && !(await matches(deepHook, entry, proof.twin, classes).catch(() => true));
+    if (allowed) out.push({ name, rule: proof.rule });
+  }
+  return out;
+}
+
 export type Added = { status: 'installed'; names: string[] } | { status: 'refused'; reason: string };
 
 /**
@@ -70,16 +91,19 @@ export async function addGuards(dir: string, given: unknown, o: { deepHook: stri
     const checked = validate('guard@1', entry);
     if (!checked.ok) return refused(`${name} isn't a guard@1 entry: ${checked.issues[0]!.path} ${checked.issues[0]!.remediation}`);
     const proof = proofs[name];
-    if (!isObj(proof) || !isCall(proof.planted) || !isCall(proof.twin)) {
-      return refused(`${name} ships no planted call it denies and twin it allows: give proofs.${name}.planted and proofs.${name}.twin, each {"tool_name", "tool_input"}.`);
+    const pairs: unknown[] = Array.isArray(proof) ? proof : [proof];
+    if (!pairs.length || !pairs.every((p) => isObj(p) && isCall(p.planted) && isCall(p.twin))) {
+      return refused(`${name} ships no planted call it denies and twin it allows: give proofs.${name}.planted and proofs.${name}.twin, each {"tool_name", "tool_input"}, or a list of such pairs.`);
     }
     if (o.plant === 'installs-unchecked') continue;
     const match = String((entry as Obj).match);
     try {
-      if (!(await matches(o.deepHook, entry, proof.planted, o.classes))) return refused(`${name}: its planted call \`${shown(proof.planted)}\` goes through its match ${match}, so it guards nothing.`);
-      if (await matches(o.deepHook, entry, proof.twin, o.classes)) return refused(`${name}: its twin \`${shown(proof.twin)}\` is matched by ${match}, so it would deny a call it must allow.`);
-      const form = (entry as Obj).fail_closed === true && /^(run|effect):/.test(match) ? computed(proof.planted) : undefined;
-      if (form && !(await matches(o.deepHook, entry, form, o.classes))) return refused(`${name}: its planted call with the program computed, \`${shown(form)}\`, goes through its match ${match}, so a line that computes the program gets past it.`);
+      for (const { planted, twin } of pairs as { planted: Call; twin: Call }[]) {
+        if (!(await matches(o.deepHook, entry, planted, o.classes))) return refused(`${name}: its planted call \`${shown(planted)}\` goes through its match ${match}, so it guards nothing.`);
+        if (await matches(o.deepHook, entry, twin, o.classes)) return refused(`${name}: its twin \`${shown(twin)}\` is matched by ${match}, so it would deny a call it must allow.`);
+        const form = (entry as Obj).fail_closed === true && /^(run|effect):/.test(match) ? computed(planted) : undefined;
+        if (form && !(await matches(o.deepHook, entry, form, o.classes))) return refused(`${name}: its planted call with the program computed, \`${shown(form)}\`, goes through its match ${match}, so a line that computes the program gets past it.`);
+      }
     } catch (error) {
       return refused(`${name}: ${error instanceof Error ? error.message : String(error)}`);
     }

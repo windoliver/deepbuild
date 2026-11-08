@@ -34,14 +34,16 @@ export interface GitHubOptions {
   api: string;
   /** The token reads go with; none, and nothing is read. */
   reads(): Promise<string | undefined>;
-  /** The gate's own token: the hub's process holds it, and no session's login stands in for it (#1325). */
-  posts(): string | undefined;
+  /** The gate's own token for a repo: the hub's process holds it, and no session's login stands in for it (#1325). */
+  posts(repo: string): Promise<string | undefined>;
   /** `github` in your settings, read at each use. */
   settings(): { delivery: Record<string, unknown>; yours: string[] };
   raw(query: string, params?: (string | number | null)[]): Promise<unknown[]>;
   /** The sessions working now. */
   sessions(): GitHubSession[];
   unguarded(session: GitHubSession | undefined, data: { ref: string; commit: string; pusher: string | null; call: string | null; command: string | null }): Promise<void>;
+  /** A ref change GitHub recorded in a repo sessions work in, with its pusher: the hub names the session behind one an agent's credential made (#1325). */
+  pushed(repo: string, change: { ref: string; commit: string; pusher: string | null }): Promise<void>;
   /** Words for a session: an idle one wakes with them. */
   hear(session: GitHubSession, text: string): void;
   /** Where what must outlive a restart is kept: a file. */
@@ -131,9 +133,9 @@ export function openGitHub(o: GitHubOptions): GitHub {
   const post = async (v: Going, sha: string): Promise<boolean> => {
     if (!ruleOn(v.repo)) return true;
     if (Date.now() < limited) return false;
-    const token = o.posts();
-    if (!token) { process.stderr.write(`deep hub: no gate token (GH_TOKEN) in the hub's environment, so ${v.claim}'s status on ${sha} wasn't posted\n`); return true; }
     try {
+      const token = await o.posts(v.repo);
+      if (!token) { process.stderr.write(`deep hub: no gate identity (github.gate in your settings) or GH_TOKEN, so ${v.claim}'s status on ${sha} wasn't posted\n`); return true; }
       const open = await o.raw(`SELECT text FROM open_items WHERE closed IS NULL AND task_ref = (SELECT subject_ref FROM claims WHERE id = ?)`, [v.claim.slice(6)]) as { text: string }[];
       const untrusted = !await trusted(v, sha);
       await restOf(o.api, token)('POST', `/repos/${v.repo}/statuses/${sha}`, { context: CONTEXT, ...describeStatus(v.outcome, open.map((r) => r.text), untrusted) });
@@ -277,6 +279,7 @@ export function openGitHub(o: GitHubOptions): GitHub {
     for (const change of changes) {
       keep(w, await commitsOf(rest, repo, false, w.base!, change));
       if (first?.since != null && change.at >= first.since - 1000) await unguard(change, sessions);
+      if (change.after !== ZERO) await o.pushed(repo, { ref: change.ref, commit: change.after, pusher: change.pusher });
       state.seen[repo] = change.id;
       save();
     }
