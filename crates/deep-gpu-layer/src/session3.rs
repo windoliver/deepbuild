@@ -38,6 +38,9 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         status_before_upscale: p == Some(Planted::StatusBeforeUpscale),
         status_without_depth: p == Some(Planted::StatusWithoutDepth),
         winding_ignores_determinant: p == Some(Planted::WindingIgnoresDeterminant),
+        water: deep_scene3d_render::water::Planted {
+            foam_keeps_state: p == Some(Planted::WaterFoamKeepsState),
+        },
         flare: deep_scene3d_render::flare::Planted {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
             ignores_occlusion: p == Some(Planted::FlareIgnoresOcclusion),
@@ -417,6 +420,9 @@ pub struct Drawn {
     /// The opaque scene's copy with its mips, read with the targets while the frame holds one
     /// (#431): each level's size and f32 RGBA texels.
     pub backdrop: Option<Vec<([u32; 2], Vec<u8>)>>,
+    /// #166: the view-axis depth, f32 a pixel, and each mirror part's lookup, f32 RGBA.
+    pub view_depth: Option<Vec<u8>>,
+    pub reflection: Option<Vec<u8>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -538,6 +544,16 @@ pub fn draw_on(
                 },
                 pre_tone: if read_targets && !noop {
                     r.read_pre_tone(&device)
+                } else {
+                    None
+                },
+                view_depth: if read_targets && !noop {
+                    r.read_view_depth(&device)
+                } else {
+                    None
+                },
+                reflection: if read_targets && !noop {
+                    r.read_reflection(&device)
                 } else {
                     None
                 },
