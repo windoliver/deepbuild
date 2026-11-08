@@ -1,0 +1,181 @@
+# #1121's acceptance suite on the base 063e410a, on a darwin-arm64 Mac at a load of about 85
+# Run in a scratch worktree of the base with this suite copied in:
+#   node --test 'tests/acceptance/1121/*.test.mjs'
+# 8 tests: 2 fail at their assertions (AC3), 6 skip with INCONCLUSIVE (platform), 0 pass.
+# Paths: <base> is the scratch worktree, <tmp> the system temp folder, <pid> a process ID.
+
+✖ #1121.95fa4a52 a Mac's cargo test writes each target's `cargo test -- --list` into its unit record, beside its tests (5796.305125ms)
+✖ #1121.95fa4a52 a Linux run's unit record lists each test absent by platform against the Mac's list, and the lane is INCONCLUSIVE (platform), not PASS (7745.479792ms)
+﹣ #1121.301969cb env-local's port kind finds a free port, and reads one a process listens on as taken (671.11425ms) # INCONCLUSIVE (platform): this criterion is proven only on Linux aarch64 (the Spark); this machine is darwin-arm64
+﹣ #1121.301969cb the hub's env-resources suite passes on the Spark, its stacks leasing free ports and listing their listeners (0.124334ms) # INCONCLUSIVE (platform): this criterion is proven only on Linux aarch64 (the Spark); this machine is darwin-arm64
+﹣ #1121.73d8f179 every crate of the workspace builds on the Spark: N of N, the issue's 27 of 27 (0.341166ms) # INCONCLUSIVE (platform): this criterion is proven only on Linux aarch64 (the Spark); this machine is darwin-arm64
+﹣ #1121.b915783e `cargo test` on the Spark has no FAIL or BLOCKED: not the lane, not any test (0.050041ms) # INCONCLUSIVE (platform): this criterion is proven only on Linux aarch64 (the Spark); this machine is darwin-arm64
+﹣ #1121.95fa4a52 the Spark's real unit record lists the tests absent by platform against the Mac's, four whole test files among them, and reads INCONCLUSIVE (platform) (0.043708ms) # INCONCLUSIVE (platform): this criterion is proven only on Linux aarch64 (the Spark); this machine is darwin-arm64
+﹣ #1121.23cb368c deep-hook refuses a spool.jsonl that is a symlink: nothing is written through it, and it says so (13020.100958ms) # INCONCLUSIVE (platform): this criterion is proven only on Linux aarch64 (the Spark); this machine is darwin-arm64
+ℹ tests 8
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 6
+ℹ todo 0
+ℹ duration_ms 13611.701542
+
+✖ failing tests:
+
+test at tests/acceptance/1121/lanes.test.mjs:21:1
+✖ #1121.95fa4a52 a Mac's cargo test writes each target's `cargo test -- --list` into its unit record, beside its tests (5796.305125ms)
+  AssertionError [ERR_ASSERTION]: the Mac's unit record (<tmp>/deep-1121-bNHLDY/mac-home/.deepbuild/lanes/ecb8e97ee3fd749c492f3855d5a2f64f56cb1eb3-unit.json) names no reference list for the target t1121_alpha (t1121-alpha src/lib.rs) beside its tests; beside them it holds {}
+      at TestContext.<anonymous> (file://<base>/tests/acceptance/1121/lanes.test.mjs:29:12)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:297:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '=='
+  }
+
+test at tests/acceptance/1121/lanes.test.mjs:34:1
+✖ #1121.95fa4a52 a Linux run's unit record lists each test absent by platform against the Mac's list, and the lane is INCONCLUSIVE (platform), not PASS (7745.479792ms)
+  AssertionError [ERR_ASSERTION]: the Linux run's unit lane reads PASS unit (0.42 s), not INCONCLUSIVE (platform), though 4 of the Mac's tests never ran
+  exit 0
+  stdout:
+  RUN unit
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo test --workspace --locked` runs unleased
+       Running unittests src/lib.rs (target/debug/deps/t1121_alpha-0123456789abcdef)
+  
+  running 1 test
+  test alpha::adds_two_numbers ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+       Running tests/metal_frames.rs (target/debug/deps/metal_frames-0123456789abcdef)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+     Doc-tests t1121_alpha
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+       Running unittests src/lib.rs (target/debug/deps/t1121_beta-0123456789abcdef)
+  
+  running 1 test
+  test beta::parses_a_line ... ok
+  
+  test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+       Running tests/screen_capture.rs (target/debug/deps/screen_capture-0123456789abcdef)
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  
+     Doc-tests t1121_beta
+  
+  running 0 tests
+  
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  PASS unit (0.42 s)
+  
+  stderr:
+  
+  + actual - expected
+  
+  + 'PASS'
+  - 'INCONCLUSIVE'
+  
+      at TestContext.<anonymous> (file://<base>/tests/acceptance/1121/lanes.test.mjs:42:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:744:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'PASS',
+    expected: 'INCONCLUSIVE',
+    operator: 'strictEqual'
+  }
+
+# ---------------------------------------------------------------------------------------------------------------
+# Twin x86-nofollow (#1121.23cb368c), on this Mac: the base's crates/deep-hook/src/main.rs with the macOS
+# NOFOLLOW (0x0100) replaced by the x86_64 Linux value 0o400000, which on macOS is O_NOCTTY. Run:
+#   node --test tests/acceptance/1121/spool.test.mjs
+
+✖ #1121.23cb368c deep-hook refuses a spool.jsonl that is a symlink: nothing is written through it, and it says so (30728.884833ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 30783.472875
+
+✖ failing tests:
+
+test at tests/acceptance/1121/spool.test.mjs:15:1
+✖ #1121.23cb368c deep-hook refuses a spool.jsonl that is a symlink: nothing is written through it, and it says so (30728.884833ms)
+  AssertionError [ERR_ASSERTION]: deep-hook on darwin-arm64 followed the symlinked spool path <tmp>/deep-1121-G8iiSf/home/.deepbuild/spool/spool.jsonl -> <tmp>/deep-1121-G8iiSf/home/elsewhere.jsonl and appended to it: "{\"v\":1,\"agent\":\"claude-code\",\"event\":\"SessionStart\",\"seq\":\"1794166417733806000\",\"id\":\"01M6YADTA5AZMYZS0Y5SDFR3T5\",\"pid\":42356,\"ppid\":10285,\"matched\":[],\"payload\":{\"session_id\":\"s1121\",\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"},\"billing\":{\"ANTHROPIC_API_KEY\":false,\"ANTHROPIC_AUTH_TOKEN\":false,\"CLAUDE_CODE_USE_BEDROCK\":false,\"CLAUDE_CODE_USE_VERTEX\":false,\"OPENAI_API_KEY\":false}}\n{\"v\":1,\"agent\":\"claude-code\",\"event\":\"SessionStart\",\"seq\":\"1794166417733806000\",\"id\":\"01M6YADTA5AZMYZS0Y5SDFR3T5\",\"pid\":42356,\"ppid\":10285,\"matched\":[],\"payload\":{\"session_id\":\"s1121\",\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"},\"billing\":{\"ANTHROPIC_API_KEY\":false,\"ANTHROPIC_AUTH_TOKEN\":false,\"CLAUDE_CODE_USE_BEDROCK\":false,\"CLAUDE_CODE_USE_VERTEX\":false,\"OPENAI_API_KEY\":false}}\n{\"v\":1,\"agent\":\"claude-code\",\"event\":\"SessionStart\",\"seq\":\"1794166417733806000\",\"id\":\"01M6YADTA5AZMYZS0Y5SDFR3T5\",\"pid\":42356,\"ppid\":10285,\"matched\":[],\"payload\":{\"session_id\":\"s1121\",\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"},\"billing\":{\"ANTHROPIC_API_KEY\":false,\"ANTHROPIC_AUTH_TOKEN\":false,\"CLAUDE_CODE_USE_BEDROCK\":false,\"CLAUDE_CODE_USE_VERTEX\":false,\"OPENAI_API_KEY\":false}}\n"
+  exit 0
+  stdout:
+  
+  stderr:
+  deep-hook: could not spool 01M6YADTA5AZMYZS0Y5SDFR3T5: the spool line was cut or moved in each of three tries
+  
+  + actual - expected
+  
+  + 'a file the spool link points at; deep-hook must not append to it\n' +
+  +   '{"v":1,"agent":"claude-code","event":"SessionStart","seq":"1794166417733806000","id":"01M6YADTA5AZMYZS0Y5SDFR3T5","pid":<pid>,"ppid":<pid>,"matched":[],"payload":{"session_id":"s1121","hook_event_name":"SessionStart","source":"startup"},"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}\n' +
+  +   '{"v":1,"agent":"claude-code","event":"SessionStart","seq":"1794166417733806000","id":"01M6YADTA5AZMYZS0Y5SDFR3T5","pid":<pid>,"ppid":<pid>,"matched":[],"payload":{"session_id":"s1121","hook_event_name":"SessionStart","source":"startup"},"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}\n' +
+  +   '{"v":1,"agent":"claude-code","event":"SessionStart","seq":"1794166417733806000","id":"01M6YADTA5AZMYZS0Y5SDFR3T5","pid":<pid>,"ppid":<pid>,"matched":[],"payload":{"session_id":"s1121","hook_event_name":"SessionStart","source":"startup"},"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}\n'
+  - 'a file the spool link points at; deep-hook must not append to it\n'
+  
+      at TestContext.<anonymous> (file://<base>/tests/acceptance/1121/spool.test.mjs:47:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:297:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'a file the spool link points at; deep-hook must not append to it\n{"v":1,"agent":"claude-code","event":"SessionStart","seq":"1794166417733806000","id":"01M6YADTA5AZMYZS0Y5SDFR3T5","pid":<pid>,"ppid":<pid>,"matched":[],"payload":{"session_id":"s1121","hook_event_name":"SessionStart","source":"startup"},"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}\n{"v":1,"agent":"claude-code","event":"SessionStart","seq":"1794166417733806000","id":"01M6YADTA5AZMYZS0Y5SDFR3T5","pid":<pid>,"ppid":<pid>,"matched":[],"payload":{"session_id":"s1121","hook_event_name":"SessionStart","source":"startup"},"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}\n{"v":1,"agent":"claude-code","event":"SessionStart","seq":"1794166417733806000","id":"01M6YADTA5AZMYZS0Y5SDFR3T5","pid":<pid>,"ppid":<pid>,"matched":[],"payload":{"session_id":"s1121","hook_event_name":"SessionStart","source":"startup"},"billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}\n',
+    expected: 'a file the spool link points at; deep-hook must not append to it\n',
+    operator: 'strictEqual'
+  }
+
+# ---------------------------------------------------------------------------------------------------------------
+# Twin usr-bin-lsof (#1121.301969cb), on this Mac: the base's packages/env-local/src/stack.ts with
+#   const LSOF = '/usr/bin/lsof';
+# on every platform, the mirror of the Spark's usr-sbin-lsof. Run:
+#   node --test tests/acceptance/1121/lsof.test.mjs
+
+✖ #1121.301969cb env-local's port kind finds a free port, and reads one a process listens on as taken (2327.597167ms)
+﹣ #1121.301969cb the hub's env-resources suite passes on the Spark, its stacks leasing free ports and listing their listeners (1.03075ms) # INCONCLUSIVE (platform): this criterion is proven only on Linux aarch64 (the Spark); this machine is darwin-arm64
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 2487.434
+
+✖ failing tests:
+
+test at tests/acceptance/1121/lsof.test.mjs:11:1
+✖ #1121.301969cb env-local's port kind finds a free port, and reads one a process listens on as taken (2327.597167ms)
+  AssertionError [ERR_ASSERTION]: on darwin-arm64, env-local read port 58783, which nothing listens on, as taken; it ran /usr/bin/lsof (ENOENT spawn /usr/bin/lsof ENOENT); lsof on PATH: /usr/sbin/lsof; /usr/sbin/lsof exists; /usr/bin/lsof is absent
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file://<base>/tests/acceptance/1121/lsof.test.mjs:15:10)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:297:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual'
+  }
