@@ -144,8 +144,14 @@ export const PANEL = 'main';
 export const SIZE: [number, number] = [480, 320];
 /** #96's virtual display clock as #376's scenarios carry it: 60 Hz, latched at the vsync, a check taking no clock time. */
 const CLOCK: JsonObject = { refresh_hz: 60, lead: 0, check: 0 };
+/** One frame of that clock in flicks (705,600,000 a second). */
+const FRAME = 705_600_000 / 60;
 
-/** The scenario: one test agent's session, its process tree, the main panel showing DOC, the evidence store. */
+/**
+ * The scenario: one test agent's session, its process tree, the main panel showing DOC, the evidence store. With
+ * `clock`, #96 has every call carry `at` (its arrival), so the calls arrive in order 10 frames apart from 0, as #140's
+ * scenarios do; `deep-show live`'s `after` calls keep their own timing (`after_ms`).
+ */
 export function scenario(evidence: string, calls: JsonObject[], extra: JsonObject = {}): JsonObject {
   return {
     evidence,
@@ -157,7 +163,7 @@ export function scenario(evidence: string, calls: JsonObject[], extra: JsonObjec
     clock: CLOCK,
     record: {},
     ...extra,
-    calls,
+    calls: calls.map((c, i) => ({ at: i * 10 * FRAME, ...c })),
   };
 }
 
