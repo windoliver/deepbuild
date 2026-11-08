@@ -1506,6 +1506,15 @@ impl Sealed {
             .map(|m| m.name.as_str())
     }
 
+    /// Whether this build's set names the design module `module` and this build left it out
+    /// (#308: a control kind in a full build without the input module).
+    pub(crate) fn lacks(&self, module: &str) -> bool {
+        KNOWN_MODULES
+            .iter()
+            .any(|(name, set)| *name == module && *set <= self.build_set)
+            && !self.has(module)
+    }
+
     /// The canvas module a kind's family belongs to when this build lacks it: a registered
     /// kind's module, or a design-named module whose kind family this is.
     pub(crate) fn missing_for_kind(&self, kind_name: &str) -> Option<String> {

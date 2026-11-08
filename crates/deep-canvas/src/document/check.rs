@@ -267,7 +267,7 @@ fn check_by(
                 Tail::Budget => budget_check(&lowered, sealed, coefficients, &mut issues),
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
-                    check_controls(&lowered, &mut issues);
+                    check_controls(&lowered, sealed, &mut issues);
                     check_time_remaps(&lowered, &expansions, &mut issues);
                     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
                     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
@@ -1945,7 +1945,9 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
 /// Every control carries a role, so a screen reader can say what it is (Rules every primitive
 /// follows: Accessible; Control: `role`, an ARIA role). A control without one is refused, naming
 /// the control and the field; the section and its keys are [`check_id_maps`]'s.
-fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
+/// A control `kind` is an entry of the input module's `control@1` (#308), so a build whose set
+/// holds the input module and that left it out refuses one with `module_missing`, naming it.
+fn check_controls(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
     let Some(entries) = member(doc, "controls").and_then(Value::as_object) else {
         return;
     };
@@ -1953,6 +1955,17 @@ fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
         let Some(fields) = entry.as_object() else {
             continue;
         };
+        if let Some(kind) = fields.get("kind").and_then(Value::as_str) {
+            if sealed.lacks("input") {
+                issues.push(Issue::error(
+                    "module_missing",
+                    key,
+                    format!("controls/{key}/kind"),
+                    json!(kind),
+                    &format!("control kind `{kind}` is the input module's, which this build lacks"),
+                ));
+            }
+        }
         let what = match fields.get("role") {
             None => "required, and absent",
             Some(Value::String(role)) if !role.is_empty() => continue,
