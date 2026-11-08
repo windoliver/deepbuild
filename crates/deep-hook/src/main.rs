@@ -1762,9 +1762,56 @@ extern "C" {
     fn clonefile(src: *const std::ffi::c_char, dst: *const std::ffi::c_char, flags: u32) -> i32;
 }
 
+#[cfg(target_os = "linux")]
+extern "C" {
+    fn ioctl(fd: std::ffi::c_int, request: std::ffi::c_ulong, ...) -> std::ffi::c_int;
+}
+
 /// One copy-on-write clone of `from` at `to`, which must not exist: a folder whole, a link as a link (APFS's
-/// clonefile(2); the other platforms' staging isn't built yet, so they can't stage).
+/// clonefile(2); on Linux each file a reflink, FICLONE, as btrfs and XFS make; elsewhere staging isn't built yet).
+/// Unsupported, leaving nothing at `to`, where the file system can't make one.
 fn clone_one(from: &Path, to: &Path) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::io::AsRawFd;
+        const FICLONE: std::ffi::c_ulong = 0x4004_9409;
+        let meta = fs::symlink_metadata(from)?;
+        let kind = meta.file_type();
+        if kind.is_symlink() {
+            return std::os::unix::fs::symlink(fs::read_link(from)?, to);
+        }
+        if kind.is_dir() {
+            fs::create_dir(to)?;
+            let made = (|| {
+                for entry in fs::read_dir(from)? {
+                    let entry = entry?;
+                    clone_one(&entry.path(), &to.join(entry.file_name()))?;
+                }
+                fs::set_permissions(to, meta.permissions())
+            })();
+            if made.is_err() {
+                let _ = fs::remove_dir_all(to);
+            }
+            return made;
+        }
+        if !kind.is_file() {
+            // A FIFO, socket or device has no copy-on-write copy.
+            return Err(io::Error::from(ErrorKind::Unsupported));
+        }
+        let source = fs::File::open(from)?;
+        let copy = fs::OpenOptions::new().write(true).create_new(true).open(to)?;
+        // SAFETY: two open descriptors that live through the call.
+        if unsafe { ioctl(copy.as_raw_fd(), FICLONE, source.as_raw_fd()) } != 0 {
+            let e = io::Error::last_os_error();
+            drop(copy);
+            let _ = fs::remove_file(to);
+            // EOPNOTSUPP, EINVAL or EXDEV: no reflink on this file system, or not between these two.
+            return Err(if matches!(e.raw_os_error(), Some(95 | 22 | 18)) { io::Error::from(ErrorKind::Unsupported) } else { e });
+        }
+        copy.set_permissions(meta.permissions())?;
+        copy.set_modified(meta.modified()?)?;
+        Ok(())
+    }
     #[cfg(target_os = "macos")]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -1779,7 +1826,7 @@ fn clone_one(from: &Path, to: &Path) -> io::Result<()> {
         }
         Err(io::Error::last_os_error())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = (from, to);
         Err(io::Error::from(ErrorKind::Unsupported))
