@@ -1,0 +1,2 @@
+div .size_full .p[Number(8.0)]
+  text "script sidebar"
