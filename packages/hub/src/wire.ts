@@ -92,6 +92,11 @@ export interface HookMeta {
   caller?: string;
   /** Set by the server on a hook whose agent's hook program the last check found can't run (#993): its gates watch-only. */
   cantRun?: boolean;
+  /**
+   * Set by the server on a PreToolUse (#344): the scoped rules its reply carried as notices, by handle, and an edited
+   * rule file's rules before the call ran, for the core to record and to compare after the call.
+   */
+  rules?: { notices: string[]; before?: { file: string; scope: string; rules: string[] }[] };
   /** A shell call's command line; only the matches-text plant reads it. */
   command?: string;
   /** The agent version the session's transcript names; unset until it holds an entry. */
@@ -151,7 +156,7 @@ export interface Gated {
   label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string;
   /** The push, PR and merge defaults this call meets (#84), each with what it does; `merge` is what a merge names. */
   named?: { rule: string; effect: 'push' | 'pr' | 'merge' }[];
-  merge?: { head?: string; pr?: string; auto?: boolean; disable?: boolean };
+  merge?: { head?: string; pr?: string; auto?: boolean; disable?: boolean; blind?: boolean };
   /** A question card's questions (#84), sorted as a stop's question is. */
   card?: Record<string, unknown>[];
   /** A computer-use step: allowed only on what its session leases (#332). */

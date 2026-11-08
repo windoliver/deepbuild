@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { openAsks } from '@deepbuild/asks';
 import { openRecord, ulid, type Connection } from '@deepbuild/record';
 import { Holds, pushTargets } from '../src/holds.js';
+import { pushBranches } from '../src/named.js';
 import type { HookMeta } from '../src/wire.js';
 import { hookLine, reply, withHub } from './hub.js';
 
@@ -46,7 +47,7 @@ describe('a saved approval of an MCP tool', () => {
     const holds = new Holds({
       raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
       append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
-      archived: async () => undefined,
+      archived: async () => undefined, reading: async () => undefined,
     });
     const call = (session: string) => holds.gate({ session, agent: 'claude-code', cwd } as HookMeta, { label: 'forge delete_repo', classes: [], mcp: { server: 'forge', tool: 'delete_repo' } });
 
@@ -117,12 +118,36 @@ describe('a held push (#1156)', () => {
     ['git push --repo mirror', 'mirror'],
     ['cd web && git push "$REMOTE" main; echo ok', '$REMOTE'],
     ["sh -c 'git push'", 'origin'],
+    ['jj git push --bookmark main', 'origin'],
+    ['jj git push --remote fork', 'fork'],
+    ['jj -R ../shop git push --remote=fork -b b', 'fork'],
+    ['sl push --to main', 'default'],
+    ['sl push upstream --to main', 'upstream'],
+    ['sl -R ../shop push --to main', 'default'],
+    ['gt submit --stack', 'origin'],
+    ['git town ship', 'origin'],
   ])('`%s` goes to %s', (line, ref) => {
     expect(pushTargets(line)).toEqual([{ kind: 'remote', ref }]);
   });
   it('names each remote of a line once, and a line that pushes nothing names none', () => {
     expect(pushTargets('git push a main && git push b main && git push a dev').map((t) => t.ref)).toEqual(['a', 'b']);
     expect(pushTargets('git status && echo push')).toEqual([]);
+    expect(pushTargets('jj log && jj git fetch && gt log')).toEqual([]);
+  });
+  it.each([
+    ['git push origin HEAD:b', ['b']],
+    ['jj git push --bookmark b', ['b']],
+    ['jj git push -b a --bookmark=b', ['a', 'b']],
+    ['jj git push', ['cur']],
+    ['sl push --to b', ['b']],
+    ['gt submit --stack', ['cur']],
+    ['jj git push --all', ['*']],
+    ['jj git push -r main', ['*']],
+    ['jj git push -c @', ['*']],
+    ['jj git push --named x=@', ['*']],
+    ['sl -R ../shop push --to main', ['main']],
+  ])('`%s` pushes %j', (line, branches) => {
+    expect(pushBranches(line, 'cur')).toEqual(branches);
   });
 
   it("copies the session's transcript before it raises the ask, so what the session read is placed as read", async () => {
@@ -137,6 +162,7 @@ describe('a held push (#1156)', () => {
     const holds = new Holds({
       raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
       append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
+      reading: async () => undefined,
       archived: async (session) => { seen.push(`${session} with ${(await record.raw("SELECT id FROM asks")).length} asks`); },
     });
     await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Push?', rule: 'r' } });
@@ -156,7 +182,7 @@ describe('a held push (#1156)', () => {
     const holds = new Holds({
       raw: (q, params) => record.raw(q, params), asks: () => asks, now, plant: undefined, sorter: undefined,
       append: async (c, e) => { await record.append(c, e); }, connection: (s) => as('core', s), pin: async () => ({ kind: 'commit', ref: '0'.repeat(40) }),
-      archived: () => new Promise(() => undefined),
+      archived: () => new Promise(() => undefined), reading: async () => undefined,
     });
     await record.append(as('core', 's1'), { v: 1, id: ulid(now()), kind: 'question.proceeded', ts: now(), data: { question: 'Push?', rule: 'r' } });
     const started = Date.now();
