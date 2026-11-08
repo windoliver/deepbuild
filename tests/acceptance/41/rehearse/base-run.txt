@@ -362,3 +362,13 @@ AssertionError: the failure names the file: expected '\nnode:internal/modules/cj
    Start at  23:39:44
    Duration  140.20s (tests 100%)
 
+
+---- Blind redraft, Nov 8: the hook-command parse in fixtures/clean-machine.mjs
+Disputed: the fixture took a settings.json command's program as its first word (or first quoted string), so DeepBuild's
+long-standing hook form `exec '<deep-hook>' claude-code <Event>` (pinned by 41/install/twins.test.ts, 567, 1202) gave
+`exec` as the program and AC1's judge could find no deep-hook whatever DeepBuild did.
+Changed: only `first(c)` and one header line. It now reads the program as a shell runs it: a leading `exec` skipped, then
+the first word, single-quoted ('\'' a quote), double-quoted or bare. Checked once by hand with node -e on
+`exec '/a b/deep-hook' claude-code SessionStart`, `'/x/deep-hook' claude-code Stop`, `/y/deep-hook claude-code Stop` and
+`exec '/it'\''s/deep-hook' claude-code Stop`: all four gave the expected path.
+No test, assertion, criterion or expected value changed. The suites were not rerun for this redraft.
