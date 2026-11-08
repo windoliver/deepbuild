@@ -53,6 +53,18 @@ test('an allowance that gives no reason fails, as does one above other code', ()
   assert.match(out, /view\.rs:5:/);
 });
 
+test('an allowance inside a string is no allowance', () => {
+  const { code, out } = run([
+    '    let _ = Command::new("sh").arg("// blocking call: a string").output();',
+    '    let said = "',
+    '// blocking call: a line of the string",',
+    '    let _ = child.wait();',
+  ]);
+  assert.equal(code, 1);
+  assert.match(out, /view\.rs:1:/);
+  assert.match(out, /view\.rs:4:/);
+});
+
 test('a call named in a comment or a string is no call', () => {
   const { code, out } = run(['// a blocking .output() froze the window', 'const SAID: &str = "child.wait()";']);
   assert.equal(code, 0, out);

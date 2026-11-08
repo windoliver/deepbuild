@@ -26,7 +26,8 @@ const files = (dir) => readdirSync(dir).flatMap((name) => {
   return statSync(path).isDirectory() ? files(path) : name.endsWith('.rs') ? [path] : [];
 });
 
-/** Whether the call on `lines[index]` carries its reason: on its line, or in the `//` lines just above it. */
+/** Whether the call on `lines[index]` carries its reason: on its line, or in the `//` lines just above it. `lines` keeps
+ * the comments and blanks the strings, so a string that reads like a reason is none. */
 function allowed(lines, index) {
   if (ALLOWED.test(lines[index])) return true;
   for (let above = index - 1; above >= 0 && /^\s*\/\//.test(lines[above]); above -= 1) if (ALLOWED.test(lines[above])) return true;
@@ -37,7 +38,7 @@ const findings = [];
 for (const file of files(join(root, SOURCE)).sort()) {
   const path = relative(root, file).replaceAll('\\', '/');
   const text = readFileSync(file, 'utf8');
-  const lines = text.split('\n');
+  const lines = stripRust(text, { keepComments: true }).split('\n');
   stripRust(text).split('\n').forEach((code, index) => {
     for (const match of code.matchAll(CALL)) {
       if (!allowed(lines, index)) findings.push(`FAIL blocking call: ${path}:${index + 1}:${match.index + 1}: ${match[1] ?? match[2]}() waits for a process to end, and UI code that waits freezes the window; run it on a thread of its own and hand the UI thread its result (as setup::start does), or, if it never runs on the UI thread, say why in a // blocking call: <why> comment above it`);
