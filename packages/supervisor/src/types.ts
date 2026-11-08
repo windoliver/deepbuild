@@ -17,6 +17,8 @@ export interface Grant {
   listen?: string[];
   /** Run-as-you (Access): your files and programs, as you. Still no device, and no socket or host it doesn't name. */
   run_as_you?: boolean;
+  /** Folders under a guarded path that are this run's alone, which it may write: a hosted terminal's own, never its neighbours'. Bubblewrap only; Seatbelt's guards are one profile for every run. */
+  own?: string[];
 }
 /** A process to start: what the supervisor would spawn. */
 export interface Launch { argv: string[]; cwd: string; env: Record<string, string> }
@@ -106,7 +108,7 @@ export interface Cleanup {
 }
 export interface RunStatus { run: string; state: 'held' | 'running' | 'exited' | 'cleaned' | 'BLOCKED'; on?: string[] }
 /** The planted wrong programs the acceptance tests select; tests only. */
-export type Plant = 'sandbox-left-to-caller' | 'stops-token-bearing-group-members' | 'requires-token-in-group' | 'records-only-started' | 'hold-without-ask' | 'holds-lease-while-taken'
+export type Plant = 'kept-in-service-cgroup' | 'sandbox-left-to-caller' | 'stops-token-bearing-group-members' | 'requires-token-in-group' | 'records-only-started' | 'hold-without-ask' | 'holds-lease-while-taken'
   // #1106's: the stand-in's value in the run's environment too, a filter that substitutes on every allowed host, the run's CA in the login keychain.
   | 'standin-value-in-env' | 'standin-every-host' | 'run-ca-in-login-keychain' | 'sandbox-any-loopback';
 export interface SupervisorOptions {
@@ -130,6 +132,11 @@ export interface SupervisorOptions {
   guarded?: (string | { path: string; except: string[] })[];
   /** How long a lease is granted for; past it a lease whose holder still runs is only stale. A day unless a test sets it. */
   lease_ms?: number;
+  /**
+   * Where a kept run's output goes under a systemd service, a folder only you can read: a pipe to the hub would end
+   * with the hub, and the run with it (#70).
+   */
+  kept?: string;
   plant?: Plant;
   /** Tests only: the supervisor's process kills itself right after a start is recorded, or right after its spawn. */
   crash?: 'start-recorded' | 'spawned';
@@ -138,6 +145,8 @@ export interface Supervisor extends Host {
   /** Stops every process the run owns that it can prove, releases its leases, runs their cleanup steps and checks. */
   cleanup(run: string): Promise<Cleanup>;
   status(run: string): Promise<RunStatus>;
+  /** Whether any process the run owns still runs, as it can prove: what an adopted run has in place of its exit. */
+  lives(run: string): Promise<boolean>;
   /** While an unblock ask is open or a key is out of its pool: ticks the asks core, reads what the record gained (an answer, a default) and acts on it. */
   tick(): Promise<void>;
   close(): Promise<void>;
