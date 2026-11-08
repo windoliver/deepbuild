@@ -98,14 +98,53 @@ fn track_of(value: Option<&Value>) -> Option<Vec<Entry>> {
         .as_array()?
         .iter()
         .map(|e| {
+            let player = match e.get("player") {
+                None => 1,
+                Some(p) => p.as_i64().filter(|p| (1..=8).contains(p))?,
+            };
             Some(Entry {
                 t: flicks(e.get("t"))?,
                 seq: e.get("seq").and_then(Value::as_i64)?,
                 control: e.get("control").and_then(Value::as_str)?.to_string(),
                 value: e.get("value")?.clone(),
+                player,
             })
         })
         .collect()
+}
+
+/// #497: when each entry of `input` reaches the track, in the order listed: its `arrives`, or
+/// before the first frame (`i64::MIN`) without one.
+fn arrivals_of(value: Option<&Value>) -> Option<Vec<i64>> {
+    let Some(Value::Array(list)) = value else {
+        return Some(Vec::new());
+    };
+    list.iter()
+        .map(|e| match e.get("arrives") {
+            None => Some(i64::MIN),
+            Some(a) => a.as_i64(),
+        })
+        .collect()
+}
+
+/// #497's planted tracks: one that keeps entries where they arrived, and one that forks at a
+/// late entry, dropping the entries stamped after it.
+#[derive(Clone, Copy, PartialEq)]
+enum TrackPlant {
+    None,
+    OrdersByArrival,
+    ForksAtLateEntry,
+}
+
+/// The track once `entry` arrives at `at`: it joins at its own place, dropping nothing; planted,
+/// at its arrival, or after dropping every entry stamped after it.
+fn take(track: &mut Vec<Entry>, mut entry: Entry, at: i64, plant: TrackPlant) {
+    match plant {
+        TrackPlant::None => {}
+        TrackPlant::OrdersByArrival => entry.t = entry.t.max(at),
+        TrackPlant::ForksAtLateEntry => track.retain(|e| e.t <= entry.t),
+    }
+    track.push(entry);
 }
 
 /// The look's time feel: a look@1, or a shipped look's ID; at its defaults with no look.
@@ -150,10 +189,28 @@ fn eval_line(input: &Map<String, Value>) -> Value {
     };
     // The planted twin (#417 AC10) reads time.state's ease as linear; #489's plants are motion's.
     let linear = input.get("planted").and_then(Value::as_str) == Some("state_ease_linear");
-    let planted = if linear { Some(Planted::None) } else { planted_of(input.get("planted")) };
-    let (Some(planted), Some(track), Some(entries)) = (planted, track_of(input.get("track")), track_of(input.get("input"))) else {
+    let plant = match input.get("planted").and_then(Value::as_str) {
+        Some("track_orders_by_arrival") => TrackPlant::OrdersByArrival,
+        Some("track_forks_at_late_entry") => TrackPlant::ForksAtLateEntry,
+        _ => TrackPlant::None,
+    };
+    let planted = if linear || plant != TrackPlant::None { Some(Planted::None) } else { planted_of(input.get("planted")) };
+    let (Some(planted), Some(track), Some(listed), Some(arrives)) =
+        (planted, track_of(input.get("track")), track_of(input.get("input")), arrivals_of(input.get("input")))
+    else {
         return bad_input();
     };
+    // #497: the entries that arrive later than the first frame wait; the rest are on the track.
+    let first = times.first().copied().unwrap_or(i64::MIN);
+    let mut waiting: Vec<(i64, Entry)> = Vec::new();
+    let mut entries: Vec<Entry> = Vec::new();
+    for (entry, at) in listed.into_iter().zip(arrives) {
+        if at <= first {
+            take(&mut entries, entry, at, plant);
+        } else {
+            waiting.push((at, entry));
+        }
+    }
     // #490: the function tables and ease tables a pinned pack would give the document, each
     // checked once; a broken one refuses the document, naming it.
     let scope = match input.get("packs") {
@@ -171,26 +228,26 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         Some(_) => return bad_input(),
     };
     let options = Options {
-        input: entries,
+        input: Vec::new(),
         reduced_motion,
         planted,
         unwrap: flag("unwrap").unwrap_or(false),
         scope,
         layout: Some(Layout(solve_layout)),
     };
-    let program = match Program::compile_with(doc, options) {
+    // The document compiled over the track as it stands, again whenever an entry arrives.
+    let build = |entries: &[Entry]| -> Result<Program, Value> {
+        let options = Options { input: entries.to_vec(), ..options.clone() };
+        let program = Program::compile_with(doc, options).map_err(refusal)?;
+        let mut feel = look_feel(input.get("look"), program.motion.frame_rate)?;
+        if linear {
+            feel.ease = Ease::Linear;
+        }
+        program.with_inputs(feel, &track).ok_or_else(bad_input)
+    };
+    let mut program = match build(&entries) {
         Ok(p) => p,
-        Err(r) => return refusal(r),
-    };
-    let mut feel = match look_feel(input.get("look"), program.motion.frame_rate) {
-        Ok(feel) => feel,
         Err(answer) => return answer,
-    };
-    if linear {
-        feel.ease = Ease::Linear;
-    }
-    let Some(program) = program.with_inputs(feel, &track) else {
-        return bad_input();
     };
     // The document's own revision hash: the look, the track and the times never enter it.
     let value = Value::Object(doc.clone());
@@ -201,7 +258,6 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         Ok(hash) => hash,
         Err(e) => return json!({"ok": false, "code": "out_of_range", "path": e.path}),
     };
-    let motion = &program.motion;
     let mut state = program.state();
     if flag("timing") == Some(true) {
         // Each frame's own evaluation, the document compiled before the first.
@@ -216,9 +272,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
             .collect();
         return json!({"ok": true, "frames": frames});
     }
-    let track = input.contains_key("input").then(|| {
-        json!({"hash": track_hash(&program.options.input), "entries": program.options.input.len()})
-    });
+    let shows_track = input.contains_key("input");
     let film = match film_of(input, &program) {
         Some(film) => film,
         None => return bad_input(),
@@ -227,6 +281,25 @@ fn eval_line(input: &Map<String, Value>) -> Value {
     let mut degenerate: Vec<Value> = Vec::new();
     let mut previous: Option<i64> = None;
     for &t in &times {
+        // #497: the entries that have arrived by this frame join the track, each at its place.
+        if waiting.iter().any(|(at, _)| *at <= t) {
+            for (at, entry) in std::mem::take(&mut waiting) {
+                if at <= t {
+                    take(&mut entries, entry, at, plant);
+                } else {
+                    waiting.push((at, entry));
+                }
+            }
+            program = match build(&entries) {
+                Ok(p) => p,
+                Err(answer) => return answer,
+            };
+            state = program.state();
+        }
+        let motion = &program.motion;
+        let track = shows_track.then(|| {
+            json!({"hash": track_hash(&program.options.input), "entries": program.options.input.len()})
+        });
         let f = frame_with(doc, &program, t, Validity::Full, &mut state);
         let passes = previous.map_or(0, |p| {
             let (_, before) = position(motion, p);
@@ -347,6 +420,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         frames.push(frame);
         previous = Some(t);
     }
+    let motion = &program.motion;
     let markers: Map<String, Value> = motion
         .markers
         .iter()

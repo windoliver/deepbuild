@@ -2046,6 +2046,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-input"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-motion",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-canvas-loop"
 version = "0.0.0"
 dependencies = [
@@ -2235,6 +2244,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-input"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-input",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-marks-gpui"
 version = "0.0.0"
 dependencies = [
@@ -2362,6 +2379,7 @@ dependencies = [
  "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-graph",
+ "deep-canvas-input",
  "deep-canvas-loop",
  "deep-canvas-marks",
  "deep-canvas-motion",
