@@ -2,9 +2,7 @@
 // a 240 x 400 point button at the center of the panel; a click there opens a menu whose items are
 // long enough to run to the right of the panel, into the question card's rect unless the host
 // keeps it off.
-import { View } from "gpui-kit";
-import { v_flex } from "gpui-base";
-import { DropdownMenu } from "gpui-component";
+import { View, v_flex, DropdownMenu } from "@deepbuild/panel";
 
 const LONG = "an item long enough to run well past the sidebar slot it opened from, over the card";
 

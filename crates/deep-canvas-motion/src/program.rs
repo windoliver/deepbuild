@@ -93,6 +93,8 @@ pub(crate) enum CoreInput {
     Rate(usize),
     /// A remap's `.active`, or with `true` its `.progress`.
     Remap(usize, bool),
+    /// #495: `lag(var, dt)`: a slot, the time or a control as it reads at t − dt flicks.
+    Lag(Box<CoreInput>, i64),
 }
 
 /// A driver's ops at most (Driver: "≤ 64 ops"), and so its stack's depth.
@@ -208,6 +210,28 @@ pub enum Planted {
     RampSumsPerFrame,
     /// #492: a `then: lag` hitstop that matches in parent time.
     HitstopMatchesParentTime,
+    /// #493: a log zoom that eases the view width, not its logarithm.
+    LogZoomEasesWidth,
+    /// #493: framing that bounds the kept items from 30 samples a second.
+    FramerSamples30Hz,
+    /// #493: framing that fits the frames' samples, never refusing a bound it can't settle.
+    FramerFitsSamples,
+    /// #493: a lens zoom that eases the field of view in degrees.
+    LensZoomEasesFovDegrees,
+    /// #493: a lens zoom that dollies at its starting field of view.
+    LensZoomDollies,
+    /// #493: a whip that eases each half in and out.
+    WhipEasesHalves,
+    /// #493: a shake drawing a new random offset each frame.
+    ShakeFreshPerFrame,
+    /// #493: a shot that writes roll 0 whatever its roll.
+    ShotWritesRoll0,
+    /// #493: a pan that turns right whatever its angle.
+    PanIgnoresAngle,
+    /// #493: a match cut's incoming shot framed by its keep, ignoring the match.
+    MatchFramerIgnoresMatch,
+    /// #493: a kick drawing a fresh random offset each frame.
+    KickFreshPerFrame,
 }
 
 impl Planted {
@@ -259,12 +283,16 @@ impl PartialEq for Layout {
     }
 }
 
-/// The input track's hash: SHA-256 over each entry's time, seq, control and value.
+/// The input track's hash: SHA-256 over each entry's time, player, seq, control and value, in
+/// the track's (t, player, seq) order, so the order entries arrived in never enters it (#497).
 pub fn track_hash(entries: &[Entry]) -> String {
+    let mut sorted: Vec<&Entry> = entries.iter().collect();
+    sorted.sort_by_key(|e| e.key());
     let mut bytes = Vec::new();
-    for e in entries {
+    for e in sorted {
         let value = e.value.to_string();
         bytes.extend(e.t.to_le_bytes());
+        bytes.extend(e.player.to_le_bytes());
         bytes.extend(e.seq.to_le_bytes());
         for text in [&e.control, &value] {
             bytes.extend((text.len() as u64).to_le_bytes());
@@ -317,6 +345,8 @@ pub struct Program {
     /// The mark sets whose rows come from occurrence lists.
     pub(crate) rows: Vec<crate::rows::RowList>,
     pub options: Options,
+    /// #493: the document's shots and their transitions, compiled at check.
+    pub shots: Option<Arc<crate::shots::Plan>>,
 }
 
 /// What one evaluation fills, sized by [`Program::state`] and reused frame after frame.
@@ -341,6 +371,8 @@ pub struct State {
     pub(crate) last: Vec<Option<(i64, crate::follow::Out)>>,
     /// Each constraint but `limit`: whether its aim had no direction this frame.
     pub degenerate: Vec<bool>,
+    /// An earlier chain a lag reads (#495), which leaves the lagging drivers out.
+    nested: bool,
 }
 
 fn number(v: Option<&Value>) -> Option<f64> {
@@ -380,6 +412,7 @@ impl Program {
 
     /// [`Program::compile`] with the input track, the view and a planted program.
     pub fn compile_with(doc: &Map<String, Value>, options: Options) -> Result<Program, Refused> {
+        crate::held::check(doc)?;
         let mut motion = doc::read_with(doc, options.planted == Planted::BeatGridF32, options.planted.arc())?;
         if options.planted == Planted::SpringDropsVelocity {
             for c in &mut motion.channels {
@@ -441,6 +474,7 @@ impl Program {
             rows: Vec::new(),
             options,
             motion: motion.clone(),
+            shots: None,
         };
         // Only a document with frames is laid out; it is refused here only when a key glides
         // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
@@ -555,6 +589,39 @@ impl Program {
             };
             program.drivers.push((slot, ops));
         }
+        // A lag evaluates the chain again at another time, so a lagged slot is never one a lagging
+        // driver writes: that chain would evaluate itself without end.
+        let lags = |program: &Program, d: usize| match program.drivers[d].1.as_slice() {
+            [Op::Core(i)] => program.cores[*i]
+                .inputs
+                .iter()
+                .any(|x| matches!(x, CoreInput::Lag(..))),
+            _ => false,
+        };
+        for (d, (_, ops)) in program.drivers.iter().enumerate() {
+            let [Op::Core(i)] = ops.as_slice() else {
+                continue;
+            };
+            for input in &program.cores[*i].inputs {
+                let CoreInput::Lag(inner, _) = input else {
+                    continue;
+                };
+                let CoreInput::Slot(s) = **inner else {
+                    continue;
+                };
+                if let Some(other) = (0..program.drivers.len())
+                    .find(|&o| program.drivers[o].0 == s && lags(&program, o))
+                {
+                    return Err(Refused {
+                        code: "lag_cycle",
+                        path: format!("drivers/{}/expr", motion.drivers[d].id),
+                        detail: Some(Box::new(
+                            json!({"driver": motion.drivers[d].id, "why": format!("it lags a slot drivers/{} writes with a lag of its own", motion.drivers[other].id)}),
+                        )),
+                    });
+                }
+            }
+        }
         for limit in &motion.limits {
             let Some(i) = program.items.iter().position(|x| *x == limit.owner) else {
                 return Err(Refused {
@@ -639,6 +706,8 @@ impl Program {
                 program.base[field.slot] = v;
             }
         }
+        // #493: the shots read the compiled program: their framing bounds its writers' forms.
+        program.shots = crate::shots::Plan::compile(doc, &program)?.map(Arc::new);
         Ok(program)
     }
 
@@ -721,7 +790,7 @@ impl Program {
                 return Err(Refused { code: "ref_unresolved", path: format!("placements/{}/switch/control", self.motion.placements[p].id), detail: None });
             };
             let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == switch.control).collect();
-            entries.sort_by_key(|e| (e.t, e.seq));
+            entries.sort_by_key(|e| e.key());
             // A synced change waits for the placement's next pass, or for the change before it.
             let placement = &self.motion.placements[p];
             let pass = placement.active_for(self.motion.clip(&placement.clip).map_or(1, |c| c.span)) / i64::from(placement.count);
@@ -745,15 +814,9 @@ impl Program {
 
     /// `control`'s input track entries in time order, with values as numbers.
     fn control_entries(&self, control: &str) -> Vec<(i64, f64)> {
-        let mut entries: Vec<(i64, i64, f64)> = self
-            .options
-            .input
-            .iter()
-            .filter(|e| e.control == control)
-            .filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?)))
-            .collect();
-        entries.sort_by_key(|e| (e.0, e.1));
-        entries.into_iter().map(|e| (e.0, e.2)).collect()
+        let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == control).collect();
+        entries.sort_by_key(|e| e.key());
+        entries.into_iter().filter_map(|e| Some((e.t, e.value.as_f64()?))).collect()
     }
 
     /// Groups each path's mix placements, by placement ID, so neither placement nor writer order
@@ -1067,7 +1130,7 @@ impl Program {
                     Source::Control(id) => {
                         let default = self.motion.control_defaults.iter().find(|(c, _)| c == id).map_or(0.0, |c| c.1);
                         let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
-                        entries.sort_by_key(|e| (e.t, e.seq));
+                        entries.sort_by_key(|e| e.key());
                         let value = |e: &Entry| e.value.as_f64().or_else(|| e.value.as_bool().map(|b| f64::from(u8::from(b))));
                         (default, entries.iter().filter_map(|e| Some((e.t, value(e)?))).collect())
                     }
@@ -1186,6 +1249,7 @@ impl Program {
             reports: vec![(0, f64::NAN); self.limits.len() + self.constraints.len()],
             last: vec![None; self.motion.channels.len()],
             degenerate: vec![false; self.constraints.len()],
+            nested: false,
         }
     }
 
@@ -1359,9 +1423,15 @@ impl Program {
                 }
                 Step::Driver(d) => {
                     let (slot, ops) = &self.drivers[d];
+                    // A lag's earlier chain skips the drivers that lag themselves: none writes a slot a lag reads.
+                    if state.nested
+                        && matches!(ops.as_slice(), [Op::Core(i)] if self.cores[*i].inputs.iter().any(|x| matches!(x, CoreInput::Lag(..))))
+                    {
+                        continue;
+                    }
                     let slots = &state.slots;
                     let value = match ops.as_slice() {
-                        [Op::Core(i)] => self.evaluate_core(*i, slots, doc_t),
+                        [Op::Core(i)] => self.evaluate_core(*i, slots, doc_t, t, validity),
                         _ => evaluate_ops(ops, slots, |i, k| self.world(slots, i)[k]),
                     };
                     if value.is_finite() {
@@ -1764,7 +1834,7 @@ impl Program {
                 v[0]
             }
             doc::Influence::Control(control) => {
-                let last = self.options.input.iter().filter(|e| e.control == *control && e.t <= at).max_by_key(|e| (e.t, e.seq));
+                let last = self.options.input.iter().filter(|e| e.control == *control && e.t <= at).max_by_key(|e| e.key());
                 last.and_then(|e| e.value.as_f64()).unwrap_or_else(|| {
                     self.motion.control_defaults.iter().find(|(id, _)| id == control).map_or(0.0, |c| c.1)
                 })
@@ -1974,7 +2044,15 @@ impl Program {
             path: format!("{path}/expr"),
             detail: Some(Box::new(json!({"driver": driver.id, "why": why}))),
         };
-        let (text, found) = crate::occurrence::rewrite(&driver.text, &lists).map_err(|r| refused(r.code, r.why))?;
+        let frame_rate = doc
+            .get("transport")
+            .and_then(|t| t.get("frame_rate"))
+            .and_then(Value::as_array)
+            .and_then(|r| Some((r.first()?.as_u64()? as u32, r.get(1)?.as_u64()? as u32)))
+            .unwrap_or_default();
+        let time = deep_canvas::grammar::TimeContext { frame_rate, ..Default::default() };
+        let (text, lagged) = crate::lag::rewrite(&driver.text, &time).map_err(|r| refused(r.code, r.why))?;
+        let (text, found) = crate::occurrence::rewrite(&text, &lists).map_err(|r| refused(r.code, r.why))?;
         for f in &found {
             let Some((_, doc::DriverInput::List(filter))) = driver.inputs.iter().find(|(n, _)| *n == f.list) else {
                 continue;
@@ -2011,6 +2089,19 @@ impl Program {
         for (name, input) in &driver.inputs {
             let input = match input {
                 doc::DriverInput::List(_) => continue,
+                doc::DriverInput::Array(array) => {
+                    // #497: a stepping module's array has no steps after t yet, as the input
+                    // track has no entries after t, so a lag or smooth that looks ahead through it
+                    // is refused; motion's evaluation reads no module's array at any time.
+                    if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
+                        return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
+                    }
+                    return Err(Refused {
+                        code: "ref_unresolved",
+                        path: format!("{path}/vars/{name}"),
+                        detail: Some(Box::new(json!({"driver": driver.id, "array": array, "why": "motion's drivers read no canvas module's array"}))),
+                    });
+                }
                 doc::DriverInput::Time => CoreInput::Time,
                 doc::DriverInput::Rate(id) => {
                     let Some(c) = self.motion.channels.iter().position(|c| c.id == *id) else {
@@ -2036,14 +2127,10 @@ impl Program {
                     };
                     let (lo, hi) = (lo.as_f64().unwrap_or(0.0), hi.as_f64().unwrap_or(0.0));
                     scope.maxes.insert(name.clone(), hi);
-                    let mut entries: Vec<(i64, i64, f64)> = self
-                        .options
-                        .input
-                        .iter()
-                        .filter(|e| e.control == *id)
-                        .filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?)))
-                        .collect();
-                    entries.sort_by_key(|e| (e.0, e.1));
+                    let mut track: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
+                    track.sort_by_key(|e| e.key());
+                    let entries: Vec<(i64, i64, f64)> =
+                        track.into_iter().filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?))).collect();
                     CoreInput::Control {
                         entries,
                         default: c.get("default").and_then(Value::as_f64).unwrap_or(lo),
@@ -2052,6 +2139,26 @@ impl Program {
                 }
             };
             inputs_of.push((name.as_str(), input));
+        }
+        for l in &lagged {
+            let Some((_, input)) = inputs_of.iter().find(|(n, _)| *n == l.var) else {
+                return Err(refused(
+                    "ref_unresolved",
+                    format!("lag reads `{}`, which is not one of its vars", l.var),
+                ));
+            };
+            let input = match input {
+                CoreInput::Control { .. } if l.dt < 0 => {
+                    let id = driver.inputs.iter().find_map(|(n, i)| match i {
+                        doc::DriverInput::Control(c) if *n == l.var => Some(c.as_str()),
+                        _ => None,
+                    });
+                    return Err(refused("look_ahead_on_control", format!("lag({}) looks ahead through the control `{}`, which the input track feeds", l.var, id.unwrap_or_default())));
+                }
+                CoreInput::Slot(_) | CoreInput::Time | CoreInput::Control { .. } => input.clone(),
+                _ => return Err(refused("lag_unsupported", format!("lag({}) reads a number, bound value, list or live simulation, which draws once", l.var))),
+            };
+            inputs_of.push((l.name.as_str(), CoreInput::Lag(Box::new(input), l.dt)));
         }
         if self.options.planted == Planted::TableFormSamples8 {
             scope.planted = Some(deep_canvas::expr::Planted::TableFormSamples8);
@@ -2094,7 +2201,14 @@ impl Program {
     }
 
     /// A core driver's value over the slots at `doc_t`.
-    fn evaluate_core(&self, c: usize, slots: &[f64], doc_t: i64) -> f64 {
+    fn evaluate_core(
+        &self,
+        c: usize,
+        slots: &[f64],
+        doc_t: i64,
+        t_run: i64,
+        validity: Validity,
+    ) -> f64 {
         let core = &self.cores[c];
         // The document's time from the transport's start, held to its span, the range its
         // bound reads.
@@ -2103,8 +2217,43 @@ impl Program {
             .saturating_sub(transport.start)
             .clamp(0, transport.span.unwrap_or(i64::MAX));
         let mut vals = [0.0f64; DRIVER_OPS];
+        // Each time a lag reaches, evaluated once: the program again at t − dt, nothing kept.
+        let mut earlier: Vec<(i64, State)> = Vec::new();
         for (v, input) in vals.iter_mut().zip(&core.inputs) {
             *v = match input {
+                CoreInput::Lag(inner, dt) => match &**inner {
+                    CoreInput::Slot(s) => {
+                        let i = match earlier.iter().position(|e| e.0 == *dt) {
+                            Some(i) => i,
+                            None => {
+                                let mut state = self.state();
+                                state.nested = true;
+                                self.run(t_run - dt, validity, &mut state, |_, _, _| {});
+                                earlier.push((*dt, state));
+                                earlier.len() - 1
+                            }
+                        };
+                        earlier[i].1.slots[*s]
+                    }
+                    CoreInput::Time => {
+                        let at = (doc_t - dt)
+                            .saturating_sub(transport.start)
+                            .clamp(0, transport.span.unwrap_or(i64::MAX));
+                        at as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
+                    }
+                    CoreInput::Control {
+                        entries,
+                        default,
+                        range,
+                    } => {
+                        let at = doc_t - dt;
+                        let i = entries.partition_point(|e| e.0 <= at);
+                        i.checked_sub(1)
+                            .map_or(*default, |i| entries[i].2)
+                            .clamp(range.0, range.1)
+                    }
+                    _ => f64::NAN,
+                },
                 CoreInput::Occurrence(read) => match read.at(t) {
                     Some(v) => v,
                     None => return core.fallback.unwrap_or(f64::NAN),
@@ -2186,7 +2335,8 @@ impl Program {
     }
 
     /// The occurrences a list names: `markers.<kind>`, or `input.<control>`, the input track's
-    /// entries for a control, each a match whose payload is `{value}`.
+    /// entries for a control in the track's order, each a match whose payload is `{value,
+    /// player}`, so a `where` can count one player's (#497).
     fn occurrences(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
         use crate::occurrence::Occurrence;
         // A list names a marker kind or a declared control; any other would read empty forever.
@@ -2219,11 +2369,11 @@ impl Program {
         if !controls.is_some_and(|c| c.contains_key(control)) {
             return None;
         }
+        let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == control).collect();
+        entries.sort_by_key(|e| e.key());
         Some(
-            self.options
-                .input
-                .iter()
-                .filter(|e| e.control == control)
+            entries
+                .into_iter()
                 .map(|e| Occurrence {
                     t: e.t,
                     end: e.t,
@@ -2231,7 +2381,7 @@ impl Program {
                     b: None,
                     kind: "input".into(),
                     tags: Vec::new(),
-                    payload: json!({"value": e.value}),
+                    payload: json!({"value": e.value, "player": e.player}),
                 })
                 .collect(),
         )
@@ -2243,16 +2393,54 @@ impl Program {
         let span = self.motion.transport.span.map_or(f64::INFINITY, |s| {
             s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
         });
+        self.core_bound_in(core, Iv::new(0.0, span))
+    }
+
+    /// #493: what slot `s` holds over the document times `time` (seconds), from its writer's
+    /// interval form: a core driver's over that time, a lone channel's whole bound, or the base
+    /// where nothing writes it; `None` where no form bounds it (another writer, or a channel the
+    /// forms don't settle). A driver's form may be unbounded there: a pole the caller refuses.
+    pub fn slot_bound_over(&self, s: usize, time: Iv) -> Option<Iv> {
+        if let Some((_, ops)) = self.drivers.iter().rev().find(|(slot, _)| *slot == s) {
+            return match ops.as_slice() {
+                [Op::Core(i)] => Some(self.core_bound_in(&self.cores[*i], time)),
+                _ => None,
+            };
+        }
+        (!self.writes(s..s + 1)).then(|| Iv::point(self.base[s]))
+    }
+
+    /// #493: the key times of the channels that write slot `s`, where a channel's monotone
+    /// segments reach their extremes.
+    pub fn slot_key_times(&self, s: usize) -> Vec<i64> {
+        self.channels
+            .iter()
+            .zip(&self.motion.channels)
+            .filter(|((slot, width), _)| (*slot..slot + width).contains(&s))
+            .flat_map(|(_, c)| c.curve.keys.iter().map(|k| k.t))
+            .collect()
+    }
+
+    /// A core driver's bound with time over `time`.
+    fn core_bound_in(&self, core: &Core, time: Iv) -> Iv {
+        let span = self.motion.transport.span.map_or(f64::INFINITY, |s| {
+            s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
+        });
         let vars: Vec<Iv> = core
             .inputs
             .iter()
             .map(|input| match input {
-                CoreInput::Time => Iv::new(0.0, span),
+                CoreInput::Time => time,
                 CoreInput::Control { range, .. } => Iv::new(range.0, range.1),
                 CoreInput::Slot(s) => self.slot_bound(*s),
                 CoreInput::World(..) | CoreInput::Rate(_) => Iv::ENTIRE,
                 CoreInput::Remap(..) => Iv::new(0.0, 1.0),
                 CoreInput::Occurrence(read) => read.bound(span),
+                CoreInput::Lag(inner, _) => match &**inner {
+                    CoreInput::Slot(s) => self.slot_bound(*s),
+                    CoreInput::Control { range, .. } => Iv::new(range.0, range.1),
+                    _ => Iv::new(0.0, span),
+                },
             })
             .collect();
         let b = core.expr.bound_num(&vars);

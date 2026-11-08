@@ -6,8 +6,7 @@
 //
 // The twin, ../device-insets-twin/main.js, is this file with SAFE set to true and nothing else changed: Account 48
 // points down and Send just under the field, clear of the bar and of a 300-point keyboard.
-import { View, div } from "gpui-kit";
-import { v_flex, Button, Input, InputState } from "gpui-base";
+import { View, div, v_flex, Button, Input, InputState } from "@deepbuild/panel";
 
 const SAFE = true;
 

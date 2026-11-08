@@ -1,6 +1,5 @@
 // A button whose one line runs past the panel's slot, so the slot's clip cuts it and GPUI paints only its first glyphs.
-import { View } from "gpui-kit";
-import { v_flex, Button } from "gpui-base";
+import { View, v_flex, Button } from "@deepbuild/panel";
 
 const LINE = "feature/PLAT-48213-".repeat(12);
 

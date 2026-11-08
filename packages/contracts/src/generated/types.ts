@@ -4329,6 +4329,74 @@ export interface DefinitionLockedV8 {
   evidence?: Array<string>;
 }
 
+/** definition.locked@9 */
+export interface DefinitionLockedV9 {
+  v: 9;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+      targets?: Array<string>;
+      paid?: "live call" | "hosted browser run" | "model job";
+      runs?: number;
+      held_out?: Array<{
+        files: { [key: string]: string };
+      }>;
+      timing?: boolean;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.revised@1 */
 export interface DefinitionRevised {
   v: 1;
@@ -5495,6 +5563,33 @@ export interface NoteOpened {
   evidence?: Array<string>;
 }
 
+/** notice.delivered@1 */
+export interface NoticeDelivered {
+  v: 1;
+  id: string;
+  kind: "notice.delivered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    notice: string;
+    type: "interface" | "dependency" | "behavior" | "test" | "configuration";
+    source: string | null;
+    target: string;
+    files: Array<string>;
+    pr: number | null;
+    key: string;
+    version: string;
+    via: "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "waiter";
+    text: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** notice.sent@1 */
 export interface NoticeSent {
   v: 1;
@@ -5957,6 +6052,23 @@ export interface QuestionProceeded {
   evidence?: Array<string>;
 }
 
+/** race.started@1 */
+export interface RaceStarted {
+  v: 1;
+  id: string;
+  kind: "race.started";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    issue: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** reading.answer@1 */
 export interface ReadingAnswer {
   findings: Array<{
@@ -6407,6 +6519,29 @@ export interface RunStartedV3 {
   evidence?: Array<string>;
 }
 
+/** run.under_load@1 */
+export interface RunUnderLoad {
+  v: 1;
+  id: string;
+  kind: "run.under_load";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    claim: string;
+    under_load: true;
+    load: number;
+    cores: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** runner.answered@1 */
 export interface RunnerAnswered {
   v: 1;
@@ -6513,9 +6648,10 @@ export interface ScheduleRun {
     phase: "queued" | "dispatched" | "ended";
     due: number;
     resumed?: boolean;
-    verdict?: "PASS" | "FAIL" | "BLOCKED" | "INCONCLUSIVE" | "INVALID" | "uncounted";
+    verdict?: "PASS" | "FAIL" | "BLOCKED" | "INCONCLUSIVE" | "INVALID";
     cause?: string | null;
     stopped?: boolean;
+    noop?: boolean;
     changes?: Array<string>;
   };
   evidence?: Array<string>;

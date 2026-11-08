@@ -63,7 +63,7 @@
 
 use std::{path::PathBuf, time::Instant};
 
-use deep_app::{init, menu_bar_line, mount_panel, views};
+use deep_app::{commands::Palette, init, menu_bar_line, mount_panel, show::CanvasPanel, views};
 use gpui_kit::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -176,10 +176,18 @@ fn main() {
         let runtime = deep_app::new_runtime().expect("panel runtime");
         // The window draws its own title bar, with the mark, so it owns the bar's drag.
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(size(px(960.), px(640.)), cx)),
+            window_bounds: Some(WindowBounds::centered(
+                size(px(views::OPENING.0), px(views::OPENING.1)),
+                cx,
+            )),
             ..gpui_kit::component::TitleBar::window_options()
         };
-        open_window(options, cx, move |window, cx| {
+        let opens = mode == Mode::Window && panel_dir.is_none();
+        let opener = deep_app::installed::opener(runtime.clone());
+        let mounts = runtime.clone();
+        let palette: std::rc::Rc<std::cell::RefCell<Option<Entity<Palette>>>> = Default::default();
+        let made = palette.clone();
+        let (window, _) = open_window(options, cx, move |window, cx| {
             let panel = panel_dir.as_ref().map(|dir| {
                 // A script panel reads its colors from the theme, so it holds the look's roles before one mounts.
                 deep_app::chrome::follow(window, cx);
@@ -228,12 +236,53 @@ fn main() {
                 if let Some(view) = panel {
                     views::place_extension(view);
                 }
-                cx.new(|cx| views::Shell::new(&layout, window, cx).with_title_bar())
+                let canvas = cx.new(|_| CanvasPanel::new(deep_app::hub::root().join("evidence")));
+                views::set_canvas(canvas.clone());
+                deep_app::show::follow(canvas, cx);
+                cx.new(|cx| {
+                    let mut shell = views::Shell::new(&layout, window, cx).with_title_bar();
+                    let palette = cx.new(|cx| {
+                        let mut palette = Palette::new(&[], Vec::new(), opener, window, cx);
+                        palette.set_entries(deep_app::installed::shipped_pages(), cx);
+                        palette
+                    });
+                    *made.borrow_mut() = Some(palette.clone());
+                    shell.set_commands(palette, window, cx);
+                    shell
+                })
             }
         })
         .expect("open window");
+        #[cfg(not(feature = "plant-spike-window"))]
+        if opens {
+            load_installed(window, palette, mounts, cx);
+        }
         cx.activate(true);
     });
+}
+
+/// Once the hub answers, the views you installed mount and ⌘K learns them, once (#1454).
+#[cfg(not(feature = "plant-spike-window"))]
+fn load_installed(
+    window: AnyWindowHandle,
+    palette: std::rc::Rc<std::cell::RefCell<Option<Entity<Palette>>>>,
+    runtime: std::rc::Rc<gpui_shell::ShellRuntime>,
+    cx: &mut App,
+) {
+    cx.spawn(async move |cx| {
+        while !deep_app::record::connected() {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(250))
+                .await;
+        }
+        let Some(palette) = palette.borrow().clone() else {
+            return;
+        };
+        let _ = window.update(cx, |_, window, cx| {
+            deep_app::installed::load(&palette, &runtime, window, cx)
+        });
+    })
+    .detach();
 }
 
 fn args() -> (Option<PathBuf>, Option<String>, Mode) {
@@ -372,6 +421,7 @@ mod trusted {
         active_at_post: bool,
     ) -> serde_json::Value {
         let posted: Option<Posted> = child
+            // blocking call: the probe's report, read once its run is over and the window has nothing left to draw.
             .wait_with_output()
             .ok()
             .and_then(|output| serde_json::from_slice(&output.stdout).ok());
@@ -449,6 +499,7 @@ mod trusted {
                     // so the last line says so, and no poster is left running.
                     if let Some(mut child) = poster.take() {
                         let _ = child.kill();
+                        // blocking call: reaps the poster it just killed, as the probe's window closes.
                         let _ = child.wait();
                     }
                     println!(
