@@ -10,13 +10,24 @@ use serde_json::Value;
 use crate::curve::Ease;
 use crate::doc::{Feel, Motion};
 
-/// One input track entry: at `t`, `control` takes `value` (`seq` orders entries on one flick).
+/// One input track entry: at `t`, `player`'s `control` takes `value` (`seq` orders one
+/// player's entries on one flick). The track orders entries by (t, player, seq), never by
+/// arrival (#497), so an entry that arrives late joins at its own flick and drops nothing.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Entry {
     pub t: i64,
     pub seq: i64,
     pub control: String,
     pub value: Value,
+    /// 1 for a piece played alone, 1 to 8 in a match.
+    pub player: i64,
+}
+
+impl Entry {
+    /// Its place on the track.
+    pub fn key(&self) -> (i64, i64, i64) {
+        (self.t, self.player, self.seq)
+    }
 }
 
 /// One move toward a new target: from the value shown at `t` to `to`, over `span` by `ease`.
@@ -121,7 +132,7 @@ impl Inputs {
             }
         }
         let mut entries: Vec<&Entry> = track.iter().collect();
-        entries.sort_by_key(|e| (e.t, e.seq));
+        entries.sort_by_key(|e| e.key());
         for e in entries {
             let c = motion.controls.iter().position(|c| c.id == e.control)?;
             let control = &motion.controls[c];

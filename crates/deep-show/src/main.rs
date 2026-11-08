@@ -599,6 +599,10 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 perturb: optional(c.get("perturb"), |p| Some(p.as_str()?.to_string()))?,
                 pixels: flag("pixels")?,
                 size: px_size(c.get("size"), |_| true)?,
+                arrays: optional(c.get("arrays"), |a| {
+                    a.as_array()?.iter().map(|n| Some(n.as_str()?.to_string())).collect()
+                })?
+                .unwrap_or_default(),
             })));
         }
         "frames" => {
@@ -1660,6 +1664,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-step-cycle",
     feature = "test-scatter",
     feature = "test-tick",
+    feature = "test-held",
     feature = "test-frame-cache",
     feature = "test-kit",
     feature = "test-leave-out-look",
@@ -1801,6 +1806,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::scatter());
     #[cfg(feature = "test-tick")]
     out.push(deep_canvas_test_modules::tick());
+    #[cfg(feature = "test-held")]
+    out.push(deep_canvas_test_modules::held());
     #[cfg(feature = "test-frame-cache")]
     out.push(deep_canvas_test_modules::cache());
     #[cfg(feature = "test-a")]

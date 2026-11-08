@@ -758,6 +758,8 @@ pub struct Eval {
     pub size: Option<[u16; 2]>,
     /// #855: each node's Debug text digest beside its result, a diagnostic only.
     pub debug_text: bool,
+    /// #497: document arrays to answer as the frame read them.
+    pub arrays: Vec<String>,
 }
 
 pub struct Scenario {

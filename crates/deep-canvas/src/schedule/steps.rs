@@ -113,6 +113,8 @@ impl Session {
             for g in &l.groups {
                 let sop = &sealed.ops[g.op];
                 if let (Some(step), Some(&n)) = (sop.op.step, g.nodes.first()) {
+                    // A step the document sets (#497), which the check holds to whole flicks.
+                    let step = sop.op.rate.and_then(|rate| rate(&l.doc)).filter(|s| *s > 0).unwrap_or(step);
                     steppers.push((n, step, sop.module.clone()));
                 }
             }

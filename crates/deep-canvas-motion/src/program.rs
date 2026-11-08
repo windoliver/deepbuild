@@ -261,12 +261,16 @@ impl PartialEq for Layout {
     }
 }
 
-/// The input track's hash: SHA-256 over each entry's time, seq, control and value.
+/// The input track's hash: SHA-256 over each entry's time, player, seq, control and value, in
+/// the track's (t, player, seq) order, so the order entries arrived in never enters it (#497).
 pub fn track_hash(entries: &[Entry]) -> String {
+    let mut sorted: Vec<&Entry> = entries.iter().collect();
+    sorted.sort_by_key(|e| e.key());
     let mut bytes = Vec::new();
-    for e in entries {
+    for e in sorted {
         let value = e.value.to_string();
         bytes.extend(e.t.to_le_bytes());
+        bytes.extend(e.player.to_le_bytes());
         bytes.extend(e.seq.to_le_bytes());
         for text in [&e.control, &value] {
             bytes.extend((text.len() as u64).to_le_bytes());
@@ -759,7 +763,7 @@ impl Program {
                 return Err(Refused { code: "ref_unresolved", path: format!("placements/{}/switch/control", self.motion.placements[p].id), detail: None });
             };
             let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == switch.control).collect();
-            entries.sort_by_key(|e| (e.t, e.seq));
+            entries.sort_by_key(|e| e.key());
             // A synced change waits for the placement's next pass, or for the change before it.
             let placement = &self.motion.placements[p];
             let pass = placement.active_for(self.motion.clip(&placement.clip).map_or(1, |c| c.span)) / i64::from(placement.count);
@@ -783,15 +787,9 @@ impl Program {
 
     /// `control`'s input track entries in time order, with values as numbers.
     fn control_entries(&self, control: &str) -> Vec<(i64, f64)> {
-        let mut entries: Vec<(i64, i64, f64)> = self
-            .options
-            .input
-            .iter()
-            .filter(|e| e.control == control)
-            .filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?)))
-            .collect();
-        entries.sort_by_key(|e| (e.0, e.1));
-        entries.into_iter().map(|e| (e.0, e.2)).collect()
+        let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == control).collect();
+        entries.sort_by_key(|e| e.key());
+        entries.into_iter().filter_map(|e| Some((e.t, e.value.as_f64()?))).collect()
     }
 
     /// Groups each path's mix placements, by placement ID, so neither placement nor writer order
@@ -1105,7 +1103,7 @@ impl Program {
                     Source::Control(id) => {
                         let default = self.motion.control_defaults.iter().find(|(c, _)| c == id).map_or(0.0, |c| c.1);
                         let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
-                        entries.sort_by_key(|e| (e.t, e.seq));
+                        entries.sort_by_key(|e| e.key());
                         let value = |e: &Entry| e.value.as_f64().or_else(|| e.value.as_bool().map(|b| f64::from(u8::from(b))));
                         (default, entries.iter().filter_map(|e| Some((e.t, value(e)?))).collect())
                     }
@@ -1809,7 +1807,7 @@ impl Program {
                 v[0]
             }
             doc::Influence::Control(control) => {
-                let last = self.options.input.iter().filter(|e| e.control == *control && e.t <= at).max_by_key(|e| (e.t, e.seq));
+                let last = self.options.input.iter().filter(|e| e.control == *control && e.t <= at).max_by_key(|e| e.key());
                 last.and_then(|e| e.value.as_f64()).unwrap_or_else(|| {
                     self.motion.control_defaults.iter().find(|(id, _)| id == control).map_or(0.0, |c| c.1)
                 })
@@ -2064,6 +2062,19 @@ impl Program {
         for (name, input) in &driver.inputs {
             let input = match input {
                 doc::DriverInput::List(_) => continue,
+                doc::DriverInput::Array(array) => {
+                    // #497: a stepping module's array has no steps after t yet, as the input
+                    // track has no entries after t, so a lag or smooth that looks ahead through it
+                    // is refused; motion's evaluation reads no module's array at any time.
+                    if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
+                        return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
+                    }
+                    return Err(Refused {
+                        code: "ref_unresolved",
+                        path: format!("{path}/vars/{name}"),
+                        detail: Some(Box::new(json!({"driver": driver.id, "array": array, "why": "motion's drivers read no canvas module's array"}))),
+                    });
+                }
                 doc::DriverInput::Time => CoreInput::Time,
                 doc::DriverInput::Rate(id) => {
                     let Some(c) = self.motion.channels.iter().position(|c| c.id == *id) else {
@@ -2089,14 +2100,10 @@ impl Program {
                     };
                     let (lo, hi) = (lo.as_f64().unwrap_or(0.0), hi.as_f64().unwrap_or(0.0));
                     scope.maxes.insert(name.clone(), hi);
-                    let mut entries: Vec<(i64, i64, f64)> = self
-                        .options
-                        .input
-                        .iter()
-                        .filter(|e| e.control == *id)
-                        .filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?)))
-                        .collect();
-                    entries.sort_by_key(|e| (e.0, e.1));
+                    let mut track: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
+                    track.sort_by_key(|e| e.key());
+                    let entries: Vec<(i64, i64, f64)> =
+                        track.into_iter().filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?))).collect();
                     CoreInput::Control {
                         entries,
                         default: c.get("default").and_then(Value::as_f64).unwrap_or(lo),
@@ -2301,7 +2308,8 @@ impl Program {
     }
 
     /// The occurrences a list names: `markers.<kind>`, or `input.<control>`, the input track's
-    /// entries for a control, each a match whose payload is `{value}`.
+    /// entries for a control in the track's order, each a match whose payload is `{value,
+    /// player}`, so a `where` can count one player's (#497).
     fn occurrences(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
         use crate::occurrence::Occurrence;
         // A list names a marker kind or a declared control; any other would read empty forever.
@@ -2334,11 +2342,11 @@ impl Program {
         if !controls.is_some_and(|c| c.contains_key(control)) {
             return None;
         }
+        let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == control).collect();
+        entries.sort_by_key(|e| e.key());
         Some(
-            self.options
-                .input
-                .iter()
-                .filter(|e| e.control == control)
+            entries
+                .into_iter()
                 .map(|e| Occurrence {
                     t: e.t,
                     end: e.t,
@@ -2346,7 +2354,7 @@ impl Program {
                     b: None,
                     kind: "input".into(),
                     tags: Vec::new(),
-                    payload: json!({"value": e.value}),
+                    payload: json!({"value": e.value, "player": e.player}),
                 })
                 .collect(),
         )
