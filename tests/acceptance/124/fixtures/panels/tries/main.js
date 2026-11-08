@@ -2,8 +2,7 @@
 // "Try", writes MARKER to the clipboard, brings its window to the front and moves the keyboard onto itself, every
 // time it is clicked. Its manifest grants the clipboard write, so nothing but the replica stops it. The count below
 // the button shows the clicks reached the panel.
-import { View, div } from "gpui-kit";
-import { v_flex, Button } from "gpui-base";
+import { View, div, v_flex, Button } from "@deepbuild/panel";
 
 const MARKER = "deepbuild-124-replica-clipboard-marker";
 

@@ -2712,6 +2712,18 @@ impl Session {
         out
     }
 
+    /// A document array as the last frame read it (#497): for a stepping array, what the last
+    /// step at or before the frame's time left; `None` for an array no document node writes.
+    pub fn array(&self, s: &Scheduler<'_>, name: &str) -> Option<Val> {
+        let l = self.loaded.as_ref()?;
+        l.groups.iter().find_map(|g| {
+            let sop = &s.sealed.ops[g.op];
+            let w = sop.op.writes.iter().position(|w| w == name)?;
+            let node = &l.nodes[*g.nodes.first()?];
+            node.item.is_none().then(|| node.out.get(w).cloned()).flatten()
+        })
+    }
+
     /// Every input a perturbed clean evaluation may change: each array the revision's nodes
     /// write, each table they read, the six view inputs, the look's tokens, the seed and each
     /// asset.

@@ -1980,6 +1980,7 @@ dependencies = [
  "deep-gpu",
  "deep-marks-gpui",
  "deep-text-gpui",
+ "ed25519-dalek",
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-shell",
@@ -2042,6 +2043,15 @@ name = "deep-canvas-graph"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "serde_json",
+]
+
+[[package]]
+name = "deep-canvas-input"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-motion",
  "serde_json",
 ]
 
@@ -2235,6 +2245,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-input"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-input",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-marks-gpui"
 version = "0.0.0"
 dependencies = [
@@ -2362,6 +2380,7 @@ dependencies = [
  "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-graph",
+ "deep-canvas-input",
  "deep-canvas-loop",
  "deep-canvas-marks",
  "deep-canvas-motion",

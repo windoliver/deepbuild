@@ -1,8 +1,6 @@
 // Issue #338: the canvas mounted from a script through the app's component registry. The scene
 // is retained state the script keeps across renders; the Canvas draws its items.
-import { View, div } from "gpui-kit";
-import { DockArea } from "gpui-base";
-import { Canvas, CanvasScene } from "gpui-component";
+import { View, div, DockArea, Canvas, CanvasScene } from "@deepbuild/panel";
 
 class CanvasPanel extends View {
   init() {

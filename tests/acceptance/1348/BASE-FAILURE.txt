@@ -1,0 +1,19 @@
+#1348 acceptance suite on the base commit ede4b3679680a6b16a5324cf002f0ba627cc3067 (origin/main), before any #1348 code.
+
+Command:  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1348
+Node:     v23.9.0 (the suite needs no build to fail at the base)
+Run:      2026-11-08T18:39Z, macOS. Exit 1.
+          Test Files 2 failed (2); Tests 3 failed | 3 skipped (6).
+
+fixture.test.ts: its beforeAll fails, so AC2, AC3 (first sentence) and AC4 are skipped and the file fails:
+  Error: BLOCKED: no word list at <repo>/contracts/plain-words.json
+plants.test.ts: AC1 (both sentences) and AC3 (second sentence) each fail:
+  Error: BLOCKED: no word list at <repo>/contracts/plain-words.json
+
+Why, beyond the first missing piece: the base has no word list, no lane named "plain words" in scripts/lanes.mjs's
+checks (the next BLOCKED each test would reach), no dump, no plants of these names, and no project page, one card or
+run end notice to draw. `deep` with no arguments prints the usage at the base, which holds "sessions", "issue" and
+"commit". Every failure is a missing surface reported BLOCKED; none is a test-side error.
+
+The suite's own logic was checked against a throwaway twin of the lane (README, Criterion to tests); that twin is not
+committed and proves nothing about an implementation.

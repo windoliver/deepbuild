@@ -1,0 +1,23 @@
+{
+  "name": "dialpack",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #308 acceptance suite that declares a control@1 entry, which only canvas modules fill.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {}
+  },
+  "entries": {
+    "control@1": [
+      {
+        "name": "dialpack.dial",
+        "classes": ["document"],
+        "sources": ["pointer", "keys"],
+        "value": { "type": "f64" },
+        "read_region": { "bytes": 8, "layout": "f64" },
+        "role": "slider",
+        "keyboard": "arrows"
+      }
+    ]
+  }
+}

@@ -1,0 +1,106 @@
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-493-929fac/agent-ae355f500511b416f/tests/acceptance/493-redraft-ac12
+
+ ❯ place.test.ts (4 tests | 4 failed) 1259ms
+   ❯ AC12: a shot's framing puts the kept items' center at its place (4)
+     × AC12 #493.c0595506 perspective, one box: its center at the default place [0.5, 0.5] within 0.5 px at every frame 377ms
+     × AC12 #493.c0595506 perspective, two boxes: their union's center at [0.3, 0.6] of a 60 u safe frame within 0.5 px at every frame 6ms
+     × AC12 #493.c0595506 perspective, a rolled shot: the union's center at [0.6, 0.4] of the frame as drawn within 0.5 px at every frame 6ms
+     × AC12 #493.c0595506 a 2D page: two rects' union center at [0.25, 0.65] with fill 0.5 within 0.5 px at every frame 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  place.test.ts > AC12: a shot's framing puts the kept items' center at its place > AC12 #493.c0595506 perspective, one box: its center at the default place [0.5, 0.5] within 0.5 px at every frame
+AssertionError: one box at the default place: projected.mid at 0 flicks is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ projOf helpers.ts:314:13
+ ❯ placed place.test.ts:54:15
+ ❯ place.test.ts:69:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  place.test.ts > AC12: a shot's framing puts the kept items' center at its place > AC12 #493.c0595506 perspective, two boxes: their union's center at [0.3, 0.6] of a 60 u safe frame within 0.5 px at every frame
+AssertionError: two boxes at [0.3, 0.6], safe 60: projected.mid at 0 flicks is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ projOf helpers.ts:314:13
+ ❯ placed place.test.ts:54:15
+ ❯ place.test.ts:81:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  place.test.ts > AC12: a shot's framing puts the kept items' center at its place > AC12 #493.c0595506 perspective, a rolled shot: the union's center at [0.6, 0.4] of the frame as drawn within 0.5 px at every frame
+AssertionError: a rolled shot at [0.6, 0.4]: projected.mid at 0 flicks is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ projOf helpers.ts:314:13
+ ❯ placed place.test.ts:54:15
+ ❯ place.test.ts:92:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  place.test.ts > AC12: a shot's framing puts the kept items' center at its place > AC12 #493.c0595506 a 2D page: two rects' union center at [0.25, 0.65] with fill 0.5 within 0.5 px at every frame
+AssertionError: a 2D page at [0.25, 0.65]: projected.mid at 0 flicks is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ projOf helpers.ts:314:13
+ ❯ placed place.test.ts:54:15
+ ❯ place.test.ts:104:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  12:48:20
+   Duration  1.38s (tests 97%, transform 2%, import 1%)
+

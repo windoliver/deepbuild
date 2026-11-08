@@ -12,10 +12,13 @@ describe('AC16 the event catalogue is generated from the kinds\' schemas, and a 
     for (const entry of catalogue()) expect(names.has(entry.schema), `${entry.kind}'s schema ${entry.schema}`).toBe(true);
     // A kind appears once per version (#603: agent.stop@1 stays catalogued beside agent.stop@2; owner-approved).
     expect(new Set(catalogue().map((e) => `${e.kind}@${e.version}`)).size).toBe(catalogue().length);
-    const userAsk = kindSchema('user.ask');
-    const without = buildCatalogue(entries.filter((e) => e.name !== userAsk));
+    // Dropping a kind's schemas drops the kind: every version of it (#40 added user.ask@2 beside user.ask@1;
+    // owner-approved on 2026-11-07, #13).
+    const userAsk = new Set(catalogue().filter((e) => e.kind === 'user.ask').map((e) => e.schema));
+    expect(userAsk.has(kindSchema('user.ask'))).toBe(true);
+    const without = buildCatalogue(entries.filter((e) => !userAsk.has(e.name)));
     expect(without.map((e) => e.kind)).not.toContain('user.ask');
-    expect(without).toHaveLength(catalogue().length - 1);
+    expect(without).toHaveLength(catalogue().length - userAsk.size);
   });
 
   it.each(['transcript.archived', 'learn.proposed', 'learn.applied', 'learn.widened', 'learn.rolled_back'])('AC16 %s is in the catalogue', (kind) => {
