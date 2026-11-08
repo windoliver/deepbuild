@@ -1,15 +1,18 @@
-// The gpui patches are ours to carry (#1426). `check`, run by the lint lane, compares each vendored crate with its
+// The gpui patches are ours to carry (#1426). `check`, run by the lint lane, compares each vendored tree with its
 // pinned release against the table in vendor/gpui-pre-apple/upstream/README.md: every changed file has a row, every
-// hunk the mark, and every hunk and file its budget. `diff` prints what we carry. `merge <crate> <version>` three-way
-// merges the new release onto our tree and leaves conflict markers. It reads and writes its working folder.
+// hunk the mark, every hunk and file its budget, and every row a removal condition and a test its suite lists. `diff`
+// prints what we carry. `merge <crate> <version>` three-way merges the new release onto our tree, leaves conflict
+// markers, and moves the pin only when the rows' tests pass on the result. It reads and writes its working folder.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const TABLE = 'vendor/gpui-pre-apple/upstream/README.md';
 const HEADING = '## Carried patches';
-const COLUMNS = 'Behavior|Issue|Files|Test|Budget';
+const COLUMNS = 'Behavior|Issue|Files|Test|Budget|Removal';
 const HUNK_BUDGET = 8; // lines, added and removed
 const FILE_BUDGET = 40; // lines added
 const MARK = /DeepBuild patch \(windoliver\/deepbuild#(\d+)\)/g;
@@ -33,16 +36,41 @@ function filesUnder(dir, skip = () => false) {
   return found;
 }
 
-/** Each vendored crate: a folder under vendor/ with a manifest, its pin being the manifest's version. */
+/**
+ * Each vendored tree, every folder under vendor/. A crate is pinned by its manifest's version; a tree with no manifest,
+ * such as unicode-17.0.0, by its folder's name, `<name>-<version>`, its README.md being ours.
+ */
 function crates() {
-  return existsSync('vendor') ? readdirSync('vendor').filter((name) => existsSync(join('vendor', name, 'Cargo.toml'))).map((name) => {
-    const manifest = readFileSync(join('vendor', name, 'Cargo.toml'), 'utf8');
-    return { name, dir: `vendor/${name}`, version: /^\[package\][^[]*?^version = "([^"]+)"/ms.exec(manifest)?.[1], rev: /\brev = "([0-9a-f]{40})"/.exec(manifest)?.[1] };
-  }) : [];
+  if (!existsSync('vendor')) return [];
+  return readdirSync('vendor', { withFileTypes: true }).filter((entry) => entry.isDirectory()).map(({ name }) => {
+    const dir = `vendor/${name}`;
+    if (!existsSync(join(dir, 'Cargo.toml'))) {
+      const [, base, version] = /^(.+)-(\d[\w.]*)$/.exec(name) ?? [];
+      return { name: base ?? name, dir, version, folder: true };
+    }
+    const manifest = readFileSync(join(dir, 'Cargo.toml'), 'utf8');
+    return { name, dir, version: /^\[package\][^[]*?^version = "([^"]+)"/ms.exec(manifest)?.[1], rev: /\brev = "([0-9a-f]{40})"/.exec(manifest)?.[1] };
+  });
 }
 
-/** Ours, in a vendored crate, and no part of a release. */
-const ours = (inner) => inner === 'upstream' || inner === 'target';
+/** Ours, in a vendored tree, and no part of a release. */
+const ours = (crate) => (inner) => inner === 'upstream' || inner === 'target' || (crate.folder && inner === 'README.md');
+
+/** A tree with no manifest, read without stub releases: the release is the files its README's SHA-256 list names. */
+function hashed(crate) {
+  const readme = join(crate.dir, 'README.md');
+  if (!existsSync(readme)) return null;
+  const listed = new Set([...readFileSync(readme, 'utf8').matchAll(/`([0-9a-f]{64})`/g)].map(([, hash]) => hash));
+  const dir = mkdtempSync(join(tmpdir(), 'vendor-release-'));
+  process.on('exit', () => rmSync(dir, { recursive: true, force: true }));
+  for (const inner of filesUnder(crate.dir, ours(crate))) {
+    const bytes = readFileSync(join(crate.dir, inner));
+    if (!listed.has(createHash('sha256').update(bytes).digest('hex'))) continue;
+    mkdirSync(dirname(join(dir, inner)), { recursive: true });
+    writeFileSync(join(dir, inner), bytes);
+  }
+  return dir;
+}
 
 async function download(crate, version, rev, cached) {
   const git = FROM_GIT[crate];
@@ -68,14 +96,15 @@ async function download(crate, version, rev, cached) {
 }
 
 /** The release's folder, or null when it can't be had. */
-async function release(crate, version, rev) {
+async function release(crate, version = crate.version) {
   const stub = process.env.DEEP_VENDOR_RELEASES;
   if (stub) {
-    const dir = join(stub, `${crate}-${version}`);
+    const dir = join(stub, `${crate.name}-${version}`);
     return existsSync(dir) ? dir : null;
   }
-  const cached = join(homedir(), '.cache/deepbuild/vendor-releases', `${crate}-${version}${FROM_GIT[crate] ? `-${rev}` : ''}`);
-  return existsSync(cached) ? cached : download(crate, version, rev, cached);
+  if (crate.folder) return version === crate.version ? hashed(crate) : null;
+  const cached = join(homedir(), '.cache/deepbuild/vendor-releases', `${crate.name}-${version}${FROM_GIT[crate.name] ? `-${crate.rev}` : ''}`);
+  return existsSync(cached) ? cached : download(crate.name, version, crate.rev, cached);
 }
 
 const gitDiff = (a, b, unified) => spawnSync('git', ['diff', '--no-index', '--no-color', `-U${unified}`, a, b], { encoding: 'utf8', maxBuffer: 1 << 30 }).stdout;
@@ -113,15 +142,60 @@ function readTable() {
   }
   const cells = (line) => line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim());
   if (table.length < 2 || cells(table[0]).join('|') !== COLUMNS) return null;
-  return table.slice(2).map(cells).map(([behavior, issue, files, test, budget]) => ({
-    behavior, issue, test, budget: budget ?? '', files: [...(files ?? '').matchAll(/`([^`]+)`/g)].map(([, file]) => file), hunks: [], overFiles: [],
+  return table.slice(2).map(cells).map(([behavior, issue, files, test, budget, removal]) => ({
+    behavior, issue, test, budget: budget ?? '', removal: removal ?? '', files: [...(files ?? '').matchAll(/`([^`]+)`/g)].map(([, file]) => file), hunks: [], overFiles: [],
   }));
+}
+
+// A node test file's own list: the file loaded with node:test standing in, which records each test's name, its
+// suites' names joined by ` › `, and runs none of them.
+const NODE_TEST = `const names = [], suites = [];
+const named = (name) => [...suites, String(name)].join(' › ');
+export function test(name) { names.push(named(name)); }
+export function describe(name, ...rest) { suites.push(String(name)); try { rest.find((arg) => typeof arg === 'function')?.(); } finally { suites.pop(); } }
+for (const each of [test, describe]) each.skip = each.only = each.todo = each;
+const noop = () => {};
+export { test as it, describe as suite, noop as before, noop as after, noop as beforeEach, noop as afterEach };
+export const mock = new Proxy({}, { get: () => noop });
+export default test;
+process.on('exit', () => { for (const name of names) process.stdout.write('# Subtest: ' + name + '\\n'); });`;
+let nodeHooks = null;
+function nodeList(path) {
+  if (!nodeHooks) {
+    const dir = mkdtempSync(join(tmpdir(), 'vendor-tests-'));
+    process.on('exit', () => rmSync(dir, { recursive: true, force: true }));
+    writeFileSync(join(dir, 'test.mjs'), NODE_TEST);
+    writeFileSync(join(dir, 'hooks.mjs'), `export async function resolve(specifier, context, next) { return specifier === 'node:test' ? { url: ${JSON.stringify(pathToFileURL(join(dir, 'test.mjs')).href)}, shortCircuit: true } : next(specifier, context); }`);
+    writeFileSync(join(dir, 'register.mjs'), `import { register } from 'node:module'; register(${JSON.stringify(pathToFileURL(join(dir, 'hooks.mjs')).href)});`);
+    nodeHooks = join(dir, 'register.mjs');
+  }
+  const run = spawnSync(process.execPath, ['--import', pathToFileURL(nodeHooks).href, path], { encoding: 'utf8', timeout: 120_000, maxBuffer: 1 << 26 });
+  return [...(run.stdout ?? '').matchAll(/^# Subtest: (.+)$/gm)].map(([, name]) => name);
+}
+
+/** The names a test file's suite lists, each as `named` joins it, or null when its runner can't list them. */
+const lists = new Map();
+function suiteList(path) {
+  if (lists.has(path)) return lists.get(path);
+  let names = null;
+  if (/\.test\.[cm]?js$/.test(path)) names = nodeList(path);
+  else if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path)) {
+    const run = spawnSync(process.execPath, ['node_modules/vitest/vitest.mjs', 'list', path, '--json'], { encoding: 'utf8', timeout: 300_000, maxBuffer: 1 << 26 });
+    try { names = JSON.parse(run.stdout).map(({ name }) => name.split(' > ').join(' › ')); } catch { names = null; }
+  } else if (path.endsWith('.rs')) {
+    let crate = dirname(path);
+    while (crate !== '.' && !existsSync(join(crate, 'Cargo.toml'))) crate = dirname(crate);
+    const run = spawnSync('cargo', ['test', '--locked', '-q', '--', '--list'], { cwd: crate, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 1 << 26 });
+    names = run.status === 0 ? [...run.stdout.matchAll(/^(.+): test$/gm)].map(([, name]) => name) : null;
+  }
+  lists.set(path, names);
+  return names;
 }
 
 /** Every changed file of a crate: its path, its text and its hunks. A vendored license isn't a change of ours. */
 function changesIn(crate, pinned) {
   const changes = [];
-  for (const inner of filesUnder(crate.dir, ours)) {
+  for (const inner of filesUnder(crate.dir, ours(crate))) {
     const path = `${crate.dir}/${inner}`, from = join(pinned, inner), there = existsSync(from);
     if (there && readFileSync(from).equals(readFileSync(path))) continue;
     if (!there && /^LICENSE/.test(inner)) continue;
@@ -136,7 +210,10 @@ function judgeRow(row, fail) {
   if (!/^#\d+$/.test(row.issue)) fail(`row ${row.behavior}: no issue`);
   const [, path, test] = /^`(.+?) › (.+)`$/.exec(row.test) ?? [];
   if (!path) fail(`row ${name}: no test`);
-  else if (!existsSync(path) || !readFileSync(path, 'utf8').includes(test)) fail(`row ${name}: the test ${path} › ${test} isn't there`);
+  else if (!existsSync(path)) fail(`row ${name}: the test ${path} › ${test} isn't there: no such file`);
+  else if (!suiteList(path)) fail(`row ${name}: the test ${path} › ${test} can't be checked: its suite gave no list`);
+  else if (!suiteList(path).includes(test)) fail(`row ${name}: the test ${path} › ${test} isn't in its suite's list`);
+  if (!row.removal || /^(?:[—–-]|none:?)$/i.test(row.removal)) fail(`row ${name}: no removal condition; name the upstream change that would retire it, or none: <reason>`);
   const [, allowed, reason] = /^(\d+) over(?::\s*(.*))?$/.exec(row.budget) ?? [];
   if (allowed && !reason) fail(`row ${name}: a raised budget with no reason`);
   const over = row.hunks.filter(({ size, fresh }) => !fresh && size > HUNK_BUDGET).length + row.overFiles.length;
@@ -155,7 +232,7 @@ async function check() {
   const rows = readTable();
   if (!rows) fail(`${TABLE}: no carried-patch table under ${HEADING}`);
   for (const crate of crates()) {
-    const pinned = await release(crate.name, crate.version, crate.rev);
+    const pinned = await release(crate);
     if (!pinned) {
       refuse(`BLOCKED ${crate.name} ${crate.version}: no pinned release to compare with; fetch it from the network once, or set DEEP_VENDOR_RELEASES`);
       continue;
@@ -182,7 +259,7 @@ async function check() {
 
 async function diff() {
   for (const crate of crates()) {
-    const pinned = await release(crate.name, crate.version, crate.rev);
+    const pinned = await release(crate);
     if (!pinned) {
       say(`BLOCKED ${crate.name} ${crate.version}: no pinned release to compare with`);
       return 1;
@@ -208,13 +285,16 @@ async function merge(name, version) {
     say(`INVALID merge: ${name ?? 'no crate'} ${version ?? 'no version'}: name a folder under vendor/ and its new release`);
     return 2;
   }
-  const [from, to] = [await release(name, crate.version, crate.rev), await release(name, version, crate.rev)];
+  const [from, to] = [await release(crate), await release(crate, version)];
   if (!from || !to) {
     say(`BLOCKED ${name}: no release ${from ? version : crate.version}`);
     return 1;
   }
   const same = (a, b) => readFileSync(a).equals(readFileSync(b));
   const conflicts = [];
+  const before = mkdtempSync(join(tmpdir(), 'vendor-merge-'));
+  process.on('exit', () => rmSync(before, { recursive: true, force: true }));
+  cpSync(crate.dir, before, { recursive: true, filter: (from) => relative(crate.dir, from).split('/')[0] !== 'target' });
   for (const inner of new Set([...filesUnder(from), ...filesUnder(to)])) {
     const path = join(crate.dir, inner), base = join(from, inner), theirs = join(to, inner);
     const inBase = existsSync(base), inNew = existsSync(theirs), inOurs = existsSync(path);
@@ -232,7 +312,42 @@ async function merge(name, version) {
     }
   }
   for (const conflict of conflicts) say(`CONFLICT ${toPosix(conflict)}`);
-  return conflicts.length ? 1 : 0;
+  if (conflicts.length) return 1;
+  // A clean merge proves the source only: the pin moves when every test of a row of this tree passes on it.
+  const tests = [...new Set((readTable() ?? []).filter(({ files }) => files.some((file) => file.startsWith(`${crate.dir}/`))).map(({ test }) => test))];
+  const failed = tests.flatMap((test) => { const why = runTest(test); return why ? [`${test.replace(/^`|`$/g, '')}: ${why}`] : []; });
+  if (!failed.length) return 0;
+  for (const inner of filesUnder(crate.dir, ours(crate))) if (!existsSync(join(before, inner))) rmSync(join(crate.dir, inner));
+  cpSync(before, crate.dir, { recursive: true });
+  for (const line of failed) say(`FAIL ${line}, on ${crate.name} ${version}; the tree is back as it was and the pin stays at ${crate.version}`);
+  return 1;
+}
+
+/** Runs one row's test, named as its cell names it: null when it passed, else why not. */
+function runTest(cell) {
+  const [, path, name] = /^`(.+?) › (.+)`$/.exec(cell) ?? [];
+  if (!path || !existsSync(path)) return 'no such test';
+  const last = name.split(' › ').at(-1);
+  const exact = `^${last.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
+  const options = { encoding: 'utf8', timeout: 3_600_000, maxBuffer: 1 << 28 };
+  let states = [];
+  if (/\.test\.[cm]?js$/.test(path)) {
+    const run = spawnSync(process.execPath, ['--test-reporter=tap', `--test-name-pattern=${exact}`, path], options);
+    states = [...(run.stdout ?? '').matchAll(/^\s*(not )?ok \d+ - (.*?)(?: # (?:SKIP|TODO)\b.*)?$/gm)].filter(([line, , each]) => each === last && !/ # (?:SKIP|TODO)\b/.test(line)).map(([, not]) => (not ? 'failed' : 'passed'));
+  } else if (path.endsWith('.rs')) {
+    let crate = dirname(path);
+    while (crate !== '.' && !existsSync(join(crate, 'Cargo.toml'))) crate = dirname(crate);
+    const run = spawnSync('cargo', ['test', '--locked', name, '--', '--exact'], { ...options, cwd: crate });
+    states = [...(run.stdout ?? '').matchAll(/^test (\S+) \.\.\. (\w+)$/gm)].filter(([, each]) => each === name).map(([, , state]) => (state === 'ok' ? 'passed' : 'failed'));
+  } else {
+    const out = join(mkdtempSync(join(tmpdir(), 'vendor-vitest-')), 'report.json');
+    spawnSync(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', path, '-t', exact.slice(1, -1), '--reporter=json', `--outputFile=${out}`], options);
+    const report = existsSync(out) ? JSON.parse(readFileSync(out, 'utf8')) : { testResults: [] };
+    rmSync(dirname(out), { recursive: true, force: true });
+    states = report.testResults.flatMap(({ assertionResults }) => assertionResults).filter(({ ancestorTitles, title }) => [...ancestorTitles, title].join(' › ') === name).map(({ status }) => status);
+  }
+  if (!states.length) return 'ran no test by that name';
+  return states.every((state) => state === 'passed') ? null : 'fails';
 }
 
 const [command, ...rest] = process.argv.slice(2);
