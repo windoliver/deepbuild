@@ -5619,6 +5619,7 @@ export class Core {
       case 'canvas.messages': return this.canvasCall({ call: 'messages', session: String(params.session) });
       case 'canvas.user': return this.canvasUser(params, context);
       case 'canvas.drawn': return this.drawnBy(context);
+      case 'work.fix': return await this.workspaceCall(() => this.fixItem(String(params.id ?? ''), typeof params.cwd === 'string' ? params.cwd : homedir()));
       case 'workspace.new': return await this.workspaceCall(() => this.spaces.make(String(params.topic ?? ''), typeof params.folder === 'string' ? params.folder : undefined));
       case 'workspace.move': return await this.workspaceCall(() => this.spaces.move(String(params.id), String(params.folder)));
       case 'workspace.revert': return await this.workspaceCall(() => this.spaces.revert(String(params.id), String(params.commit)));
@@ -6973,6 +6974,27 @@ export class Core {
    * temporary checkout and runs its fast lane; what the stop waits for.
    */
   /** `deep workspace`'s calls (#67): a refusal says why, on the command's stderr. */
+  /**
+   * `deep fix <id>` (#66): the work item with that ID, from the work sources you switched on, opens its task as a prompt
+   * naming it would, whenever it was made; what done means locks from its readings, outside text waiting for your one
+   * answer, and a task with no repo lands in a workspace.
+   */
+  private async fixItem(id: string, cwd: string): Promise<{ task: string; link: string }> {
+    if (!id) throw Error('deep fix names a work item by its ID');
+    let item = await this.tasks.workItem(id);
+    if (!item && this.extensions) {
+      const task = await this.extensions.fix(this.connection('cli'), id);
+      const readings = (await this.extensions.workEvents(task.task_ref)).map((e) => ({ ...e.reading, authors: e.reading.authors.map((a) => ({ ...a })) }));
+      const main = readings.find((r) => r.source_id === task.id);
+      if (main) item = { ...main, readings };
+    }
+    if (!item) throw Error(`no work source you switched on holds ${id}`);
+    const at = this.now();
+    const task_ref = `task:${letters(item.source_id)}`;
+    const session = `fix${letters(item.source_id)}`;
+    await this.tasks.opened({ session, agent: 'claude-code', cwd, thread: `fix:${item.source_id}`, task_ref, text: `Fix ${id}`, prompt: `fix:${letters(id)}:${at}`, at, item });
+    return { task: task_ref, link: item.link };
+  }
   private async workspaceCall(call: () => Promise<object>): Promise<Obj> {
     try {
       return { ...await call() };
