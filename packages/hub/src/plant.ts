@@ -4,6 +4,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { openSync } from 'node:fs';
 import { close as closeInspector } from 'node:inspector';
 import { createServer, type Server } from 'node:net';
 
@@ -154,7 +155,11 @@ export type Plant =
   | 'trusts-channel-proof' | 'last-writer-wins' | 'live-buttons-after-answer' | 'closes-on-failed-send' | 'takes-turns-at-token' | 'reconnects-every-channel' | 'buttons-for-authority' | 'keeps-unpaired-key'
   // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
   // reads it, a store of the newest result per key, and a carry that copies the source run's evidence whole.
-  | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence';
+  | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence'
+  // #41's: a hub that opens a record a newer version wrote for writing, as if it could read every kind in it.
+  | 'append-unknown-kind'
+  // #41's soak: a hub that opens one file each session it ends and never closes it.
+  | 'leak-file-per-session';
 const PLANTS: readonly string[] = [
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
@@ -225,6 +230,7 @@ const PLANTS: readonly string[] = [
   'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
+  'append-unknown-kind', 'leak-file-per-session',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
@@ -241,6 +247,7 @@ const reloads = new EventEmitter().setMaxListeners(0);
 const leftSockets: Server[] = [];
 const leftTimers: NodeJS.Timeout[] = [];
 const leftChildren: ChildProcess[] = [];
+const leftFiles: number[] = [];
 /** 1 KiB no other value shares: 1 MB over 5,000 cycles is 200 bytes a cycle, so a short ID alone would stay under it. */
 const kibibyte = (): string => randomBytes(512).toString('hex');
 
@@ -250,6 +257,7 @@ export function plantedSessionEnd(plant: Plant | undefined, session: string): vo
   if (plant === 'churn-leaves-socket') leftSockets.push(createServer().listen(0, '127.0.0.1').unref());
   if (plant === 'churn-leaves-timer') leftTimers.push(setInterval(() => undefined, 2 ** 30).unref());
   if (plant === 'churn-leaves-child') leftChildren.push(spawn('/bin/sleep', ['86400'], { stdio: 'ignore' }));
+  if (plant === 'leak-file-per-session') leftFiles.push(openSync('/dev/null', 'r'));
 }
 /** What a planted hub leaves behind as an extension reloads. */
 export function plantedReload(plant: Plant | undefined): void {

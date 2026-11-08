@@ -143,6 +143,15 @@ function worktreeHub(uses: Record<string, unknown>, cwd: string): string | undef
 }
 
 /** The deep-hook this checkout built, the newer of its release and debug builds. */
+/**
+ * An installed version's programs, through the versions folder's `current` link, which every update switches and
+ * none removes (#41): the paths setup writes into every entry, so an update leaves each entry as it was. Undefined
+ * for a checkout, which has no versions folder.
+ */
+export function installedPrograms(root: string): { deep: string; hook: string } | undefined {
+  const bin = join(root, 'versions', 'current', 'bin');
+  return existsSync(bin) ? { deep: join(bin, 'deep'), hook: join(bin, 'deep-hook') } : undefined;
+}
 export function deepHook(): string {
   const repo = fileURLToPath(new URL('../../../', import.meta.url));
   const built = ['release', 'debug'].map((p) => join(repo, 'target', p, 'deep-hook')).filter((p) => existsSync(p));

@@ -22,6 +22,7 @@ import { reaches } from './memory.js';
 import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { heavyDenial } from './heavy.js';
+import { processHealth } from './process-health.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
 import { plantedStart } from './plant.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
@@ -1107,7 +1108,9 @@ class Hub {
         return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }));
       case 'hub.health':
       case 'health':
-        return void reply(this.core.request({ op: 'health' }).then((health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj) })));
+        // The process readings after the core's: its own checks start short-lived children (the secret store's) that
+        // would count as the hub's.
+        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         conn.subs.add(sub);
