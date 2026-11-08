@@ -213,6 +213,10 @@ export const timed = [
 
 // #33's suite runs one file at a time, its live files by hand, and its budget as a timed file.
 alone.push('tests/acceptance/33/');
+// #1427's files build deep-drive and start about 40 replicas; its budget runs by hand on the reference Mac.
+alone.push('tests/acceptance/1427/');
+byHand.push('tests/acceptance/1427/ac8-budget.live.test.ts');
+timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 
@@ -273,6 +277,8 @@ export const checks = [
   { name: 'corpus', commands: [[process.execPath, 'scripts/corpus.mjs', 'check']], fix: 'Follow the Fix line under each corpus failure above.' },
   // The canvas conformance kit over the shipped canvas modules (#138): every part, headless on Vello CPU and
   // wgpu's noop backend, no GPU. It rewrites crates/deep-show/kit-ledger.json, which a release build seals by.
+  // #1427: the motion check on the shipped journeys for Needs you, a session page and the project page.
+  { name: 'motion', commands: [['cargo', 'build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive'], [process.execPath, 'scripts/motion.mjs']], fix: 'Make the motion each finding above names settle, fade or fly as declared,.' },
   { name: 'canvas kit', commands: [[process.execPath, 'scripts/canvas-kit.mjs']], fix: 'Repair the canvas module and part each line above names; run the kit call alone to replay a failing seed.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
