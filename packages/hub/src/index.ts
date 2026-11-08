@@ -28,7 +28,7 @@ export { gateCommand } from './gate-command.js';
 export { fixCommand, workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, raceCommand, memoryCommand, relationItems, rulesCommand, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { numbersCommand, statusCommand } from './status.js';
 export { showCommand } from './show.js';
-export { kindsCommand } from './canvas.js';
+export { exportCommand, kindsCommand } from './canvas.js';
 export { doctorCommand, doctorItems } from './doctor.js';
 export { activePlant } from './plant.js';
 export { contractAdapter, type DeprecatedNotice, type RpcEntry } from './contracts.js';

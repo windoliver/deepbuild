@@ -304,6 +304,12 @@ export const checks = [
  */
 export const releaseLanes = [
   {
+    // #41's: every recorded budget task on this commit and on the last release, which per-change margins can't bound.
+    name: 'release budgets',
+    commands: [[process.execPath, 'scripts/release-budgets.mjs', '--candidate', 'HEAD']],
+    fix: 'Under FAIL, the task named got slower than the last release by more than the release margin: find the change that slowed it and rework it. With no last release, tag the last shipped commit release/<version>.',
+  },
+  {
     // #824's: 5,000 cycles beside the merge base's, about 90 minutes, so never in the checks' time budget.
     name: 'hub churn',
     commands: [[process.execPath, 'benchmarks/hub-churn.mjs', '--merge-base']],

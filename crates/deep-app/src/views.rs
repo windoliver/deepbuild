@@ -1096,6 +1096,15 @@ impl Render for Shipped {
                 .child(label("needs-you-setup", unfinished.unwrap_or_default())),
             Kind::NeedsYou => {
                 page.child(title("needs-you-title", "Needs you"))
+                    // An older hub gets the one screen naming it and its fix (#41), in place of rows it can't serve.
+                    .children(crate::record::older().map(|screen| {
+                        div()
+                            .id("hub-older")
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .children(screen.lines().map(|line| div().child(line.to_owned())))
+                    }))
                     .children(record.open.iter().enumerate().map(
                         |(index, (handle, _, question, status))| {
                             let ask = handle.clone();

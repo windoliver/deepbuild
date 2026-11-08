@@ -1,0 +1,65 @@
+
+ RUN  v5.0.5 /Users/<user>/dev/claude-worktrees/doneright/github-issue-41-97fa68
+
+file:///Users/<user>/dev/claude-worktrees/doneright/github-issue-41-97fa68/packages/hub/dist/plant.js:84
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=append-unknown-kind names no planted program
+    at plantOf (file:///Users/<user>/dev/claude-worktrees/doneright/github-issue-41-97fa68/packages/hub/dist/plant.js:84:15)
+    at runHub (file:///Users/<user>/dev/claude-worktrees/doneright/github-issue-41-97fa68/packages/hub/dist/server.js:1319:19)
+    at hubCommand (file:///Users/<user>/dev/claude-worktrees/doneright/github-issue-41-97fa68/packages/hub/dist/index.js:50:28)
+    at file:///Users/<user>/dev/claude-worktrees/doneright/github-issue-41-97fa68/packages/cli/dist/main.js:189:30
+
+Node.js v24.22.0
+ ❯ tests/acceptance/41/rollback/rollback.test.ts (2 tests | 2 failed) 9519ms
+   ❯ AC12 #41.b131ba09 rolling back over a record a newer hub wrote (2)
+     × AC12 #41.b131ba09 a hub on a record holding tool.after at a version it can't read starts read-only, names tool.after and the version, turns every gate watch-only, offers the newest finished backup and appends nothing 6165ms
+     × AC12 #41.b131ba09 (wrong program) a hub that appends to a log holding a kind it can't read (DEEP_HUB_PLANT=append-unknown-kind) fails this test, naming the kind 3354ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/rollback/rollback.test.ts > AC12 #41.b131ba09 rolling back over a record a newer hub wrote > AC12 #41.b131ba09 a hub on a record holding tool.after at a version it can't read starts read-only, names tool.after and the version, turns every gate watch-only, offers the newest finished backup and appends nothing
+AssertionError: the hub appended to a log holding tool.after v4, a kind at a version it can't read: the events count changed: expected 21 to be 10 // Object.is equality
+
+- Expected
++ Received
+
+- 10
++ 21
+
+ ❯ tests/acceptance/41/rollback/rollback.test.ts:135:84
+    133|     await new Promise((r) => setTimeout(r, 2_000));
+    134|     const holding = `a log holding ${KIND} v${NEWER}, a kind at a vers…
+    135|     expect(rows(root), `the hub appended to ${holding}: the events cou…
+       |                                                                                    ^
+    136|     expect(ledgerBytes(root), `the hub wrote to ${holding}: ledger.db …
+    137|
+ ❯ withHub packages/hub/test/hub.ts:83:5
+ ❯ rollback tests/acceptance/41/rollback/rollback.test.ts:114:3
+ ❯ tests/acceptance/41/rollback/rollback.test.ts:157:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/41/rollback/rollback.test.ts > AC12 #41.b131ba09 rolling back over a record a newer hub wrote > AC12 #41.b131ba09 (wrong program) a hub that appends to a log holding a kind it can't read (DEEP_HUB_PLANT=append-unknown-kind) fails this test, naming the kind
+AssertionError: it fails on its append: expected 'the hub exited before it was ready' to contain 'the hub appended'
+
+Expected: "the hub appended"
+Received: "the hub exited before it was ready"
+
+ ❯ tests/acceptance/41/rollback/rollback.test.ts:163:47
+    161|     const failure = await failureOf(() => rollback('append-unknown-kin…
+    162|     expect(failure, 'the planted hub must fail the judge').not.toBeNul…
+    163|     expect(failure, 'it fails on its append').toContain('the hub appen…
+       |                                               ^
+    164|     expect(failure, 'the failure names the kind').toContain(KIND);
+    165|   }, 120_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:08:06
+   Duration  9.74s (tests 99%)
+
