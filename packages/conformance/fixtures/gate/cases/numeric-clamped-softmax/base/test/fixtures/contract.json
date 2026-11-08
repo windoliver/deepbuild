@@ -1,0 +1,7 @@
+{
+  "output": "softmax",
+  "reference": "float64",
+  "accumulate": "fp64",
+  "atol": 1e-09,
+  "rtol": 1e-09
+}
