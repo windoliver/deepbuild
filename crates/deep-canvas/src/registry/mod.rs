@@ -155,6 +155,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("material", "scene3d"),
     ("sky", "scene3d"),
     ("vector", "vector"),
+    // #494: a graph is the graph module's, so a match morph pairs its nodes by key.
+    ("graph", "graph"),
     // R1's mark sets, scales and axes are the data module's, which marks2d draws.
     ("marks", "data"),
     ("axis", "data"),

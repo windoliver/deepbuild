@@ -40,6 +40,8 @@ pub struct Field {
     pub written: bool,
     /// A keyed data value's name (`data/<name>`), which owns the field in place of an item.
     pub data: Option<String>,
+    /// #494: a path channel's field, its sub-paths' structure, written as an SVG path string.
+    pub shape: Option<crate::morph::Structure>,
 }
 
 /// One step of a driver's compiled expression, over the program's slots.
@@ -347,6 +349,8 @@ pub struct Program {
     pub options: Options,
     /// #493: the document's shots and their transitions, compiled at check.
     pub shots: Option<Arc<crate::shots::Plan>>,
+    /// #494: the match morphs between two items in one shot.
+    pub betweens: Vec<crate::morph::Between>,
 }
 
 /// What one evaluation fills, sized by [`Program::state`] and reused frame after frame.
@@ -377,6 +381,49 @@ pub struct State {
 
 fn number(v: Option<&Value>) -> Option<f64> {
     v.and_then(Value::as_f64).filter(|n| n.is_finite())
+}
+
+/// #494: each path key `{of: ID[#part]}` takes that item's evaluated path at the key's time, in
+/// its own item's space, from the document evaluated without the channels that hold such keys;
+/// then its channel's keys are matched as any path keys are.
+fn resolve_of(doc: &Map<String, Value>, motion: &mut doc::Motion, options: &Options) -> Result<(), Refused> {
+    let holds = |c: &doc::Channel| c.path.as_ref().is_some_and(|p| !p.of.is_empty());
+    if !motion.channels.iter().any(holds) {
+        return Ok(());
+    }
+    let mut without = doc.clone();
+    if let Some(Value::Object(channels)) = without.get_mut("channels") {
+        for c in motion.channels.iter().filter(|c| holds(c)) {
+            channels.remove(&c.id);
+        }
+    }
+    let base = Program::compile_with(&without, options.clone())?;
+    let mut state = base.state();
+    for c in motion.channels.iter_mut().filter(|c| holds(c)) {
+        let path = format!("channels/{}", c.id);
+        let keyed = c.path.as_mut().expect("a path channel");
+        for (i, of) in keyed.of.clone() {
+            let key = &c.curve.keys[i];
+            let at = format!("{path}/keys/{}/value/of", key.id);
+            base.evaluate(key.t, Validity::Full, &mut state);
+            let items = crate::eval::items(doc, &base, &state);
+            let (id, part) = match of.split_once('#') {
+                Some((id, part)) => (id, Some(part)),
+                None => (of.as_str(), None),
+            };
+            let unresolved = || Refused { code: "ref_unresolved", path: at.clone(), detail: None };
+            let item = items.get(id).ok_or_else(unresolved)?;
+            let shape = crate::morph::of_item(item, part).ok_or_else(unresolved)?;
+            let world = crate::morph::placed(item, &shape);
+            keyed.shapes[i] = Some(match items.get(&c.target.owner) {
+                Some(own) => crate::morph::unplaced(own, &world),
+                None => world,
+            });
+        }
+        keyed.of.clear();
+        doc::match_path(&c.id, keyed, &mut c.curve.keys, &path)?;
+    }
+    Ok(())
 }
 
 /// The authored value at `path` inside `item`, `width` components wide.
@@ -427,6 +474,7 @@ impl Program {
             }
         }
         open_eases(&mut motion, &options)?;
+        resolve_of(doc, &mut motion, &options)?;
         for c in &motion.channels {
             range_check(c)?;
         }
@@ -475,6 +523,7 @@ impl Program {
             options,
             motion: motion.clone(),
             shots: None,
+            betweens: Vec::new(),
         };
         // Only a document with frames is laid out; it is refused here only when a key glides
         // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
@@ -510,6 +559,9 @@ impl Program {
             let width = channel.curve.keys.first().map_or(1, |k| k.value.len());
             let slot = program.slot(items_json, &channel.target.owner, &channel.target, width);
             program.mark_type(slot, channel.ty);
+            if let (Some(p), Some(f)) = (&channel.path, program.fields.iter_mut().find(|f| f.slot == slot)) {
+                f.shape = Some(p.structure.clone());
+            }
             program.mark_written(slot);
             program.channels.push((slot, width));
             program.values.push(values);
@@ -708,6 +760,7 @@ impl Program {
         }
         // #493: the shots read the compiled program: their framing bounds its writers' forms.
         program.shots = crate::shots::Plan::compile(doc, &program)?.map(Arc::new);
+        program.betweens = crate::morph::betweens_of(doc, &doc::Ctx::of(program.motion.frame_rate))?;
         Ok(program)
     }
 
@@ -1194,6 +1247,13 @@ impl Program {
         width: usize,
     ) -> usize {
         let item = self.items.iter().position(|i| i == owner);
+        // A vec3 on a whole `at` vector writes the transform's own three slots, so a frame draws
+        // it as it draws a component's.
+        if let (Some(i), [at, name], 3) = (item, target.field.as_slice(), width) {
+            if let (true, Some(g)) = (at == "at", ["pos", "rot", "scale"].iter().position(|n| n == name)) {
+                return i * TRANSFORM + 3 * g;
+            }
+        }
         if let (Some(i), [at, name, k]) = (item, target.field.as_slice()) {
             let group = ["pos", "rot", "scale"].iter().position(|n| n == name);
             if let (true, Some(g), Ok(k)) = (at == "at", group, k.parse::<usize>()) {
@@ -1229,6 +1289,7 @@ impl Program {
             enumerated: false,
             written: false,
             data,
+            shape: None,
         });
         slot
     }
@@ -1483,6 +1544,11 @@ impl Program {
             .filter(|f| f.item == Some(i) && f.written)
             .map(|f| {
                 let run = &state.slots[f.slot..f.slot + f.width];
+                // #494: an item's own path draws as its `d`; a vector import draws as a path too.
+                if let (Some(structure), true) = (&f.shape, f.path == ["path"]) {
+                    let d = crate::morph::d_of(&crate::morph::unflat(run, structure));
+                    return (vec!["params".to_string(), "d".to_string()], Datum::Text(d));
+                }
                 let value = match run {
                     [one] if f.boolean => Datum::Bool(*one >= 0.5),
                     [one] if f.enumerated => Datum::Text(self.label(*one).to_string()),
