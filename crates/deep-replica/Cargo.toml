@@ -53,6 +53,11 @@ path = "src/deep_drive.rs"
 name = "deep-live"
 path = "src/live.rs"
 
+# Issue #1348: the `plain words` lane, its fixture run drawn headless and every string it shows judged against the list.
+[[bin]]
+name = "deep-plain-words"
+path = "src/plain_words.rs"
+
 # AppKit needs the main thread for the offscreen Metal renderer, so no libtest harness; the
 # suite prints libtest's result lines. Outside tests/ for the same reason as deep-app's screens.
 [[test]]
