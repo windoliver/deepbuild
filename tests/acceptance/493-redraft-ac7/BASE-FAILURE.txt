@@ -1,0 +1,104 @@
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-493-929fac/agent-ae355f500511b416f/tests/acceptance/493-redraft-ac7
+
+ ❯ defaults.test.ts (4 tests | 4 failed) 2020ms
+   ❯ AC7: default moves and the glide from a shot framed at 4 m, and pose channels (4)
+     × AC7 #493.5bfe22ba push at its default amount: 4.600 m from the target on the first frame, 4.000 m on the last 437ms
+     × AC7 #493.5bfe22ba orbit at its default sweeps the azimuth from 15° before to 15° after the framed azimuth 5ms
+     × AC7 #493.5bfe22ba a shot that glides in over 0.5 s starts at the previous shot's last pose within 1e-6 m and 1e-6 rad 5ms
+     × AC7 #493.5bfe22ba a channel on a pose path of a camera in a shot that isn't keyed is refused naming both 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  defaults.test.ts > AC7: default moves and the glide from a shot framed at 4 m, and pose channels > AC7 #493.5bfe22ba push at its default amount: 4.600 m from the target on the first frame, 4.000 m on the last
+AssertionError: the unit box framed by keep: shots.probe is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ framedOf helpers.ts:287:19
+ ❯ scaleFor4m defaults.test.ts:42:18
+ ❯ defaults.test.ts:59:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  defaults.test.ts > AC7: default moves and the glide from a shot framed at 4 m, and pose channels > AC7 #493.5bfe22ba orbit at its default sweeps the azimuth from 15° before to 15° after the framed azimuth
+AssertionError: the unit box framed by keep: shots.probe is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ framedOf helpers.ts:287:19
+ ❯ scaleFor4m defaults.test.ts:42:18
+ ❯ defaults.test.ts:75:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  defaults.test.ts > AC7: default moves and the glide from a shot framed at 4 m, and pose channels > AC7 #493.5bfe22ba a shot that glides in over 0.5 s starts at the previous shot's last pose within 1e-6 m and 1e-6 rad
+AssertionError: the unit box framed by keep: shots.probe is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ framedOf helpers.ts:287:19
+ ❯ scaleFor4m defaults.test.ts:42:18
+ ❯ defaults.test.ts:91:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  defaults.test.ts > AC7: default moves and the glide from a shot framed at 4 m, and pose channels > AC7 #493.5bfe22ba a channel on a pose path of a camera in a shot that isn't keyed is refused naming both
+AssertionError: a channel on items/cam/params/target/0 in an unkeyed shot is refused: {"ok":true,"order":["cam.channels","cam.transform"],"frames":[{"t":0,"frame":0,"doc_t":0,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"a0cam","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":45,"elevation":30,"distance":10},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}}},"channels":{"nudge-x":{"value":0,"iterations":0}},"constraints":{},"placements":{},"cameras":{"cam":{"target":[0,0,0]}},"valid_until":1},{"t":705600000,"frame":60,"doc_t":705600000,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"a0cam","params":{"projection":"perspective","target":[1,0,0],"orbit":{"azimuth":45,"elevation":30,"distance":10},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}}},"channels":{"nudge-x":{"value":1,"iterations":0}},"constraints":{},"placements":{},"cameras":{"cam":{"target":[0,0,0]}},"valid_until":705600001}],"markers":{},"cuts":[],"hash":"1cc73f144bf911d89ea08c1fad4c651621002ce767d6df946bce84b47452bc3b"}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ refused helpers.ts:251:63
+    249| /** A refused document: `{ok: false, …}`, its whole JSON. */
+    250| export function refused(answer: JsonObject, what: string): JsonObject {
+    251|   expect(answer['ok'], `${what} is refused: ${show(answer)}`).toBe(fal…
+       |                                                               ^
+    252|   return answer;
+    253| }
+ ❯ defaults.test.ts:133:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  12:48:10
+   Duration  2.14s (tests 98%, transform 1%, import 1%)
+
