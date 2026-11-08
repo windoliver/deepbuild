@@ -934,6 +934,23 @@ impl Render for Shipped {
                         )
                         .text_color(chrome.ink_secondary),
                     )
+                    .child(
+                        // The column heads, at the rows' widths.
+                        div()
+                            .id("rules-head")
+                            .h(px(ROW_HEIGHT))
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .pl_4()
+                            .mt_2()
+                            .text_color(chrome.ink_secondary)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(div().w(px(480.)).child("Rule"))
+                            .child(div().w(px(160.)).child("Scope"))
+                            .child(div().w(px(180.)).child("Enforced by"))
+                            .child(div().w(px(72.)).text_right().child("Tokens")),
+                    )
                     .children(files.iter().enumerate().map(|(f, file)| {
                         div()
                             .flex()
@@ -942,7 +959,7 @@ impl Render for Shipped {
                             .child(
                                 label(
                                     ("rules-file", f),
-                                    format!("{} · {} tokens", file.file, file.tokens),
+                                    format!("{} · whole file {} tokens", file.file, file.tokens),
                                 )
                                 .font_weight(FontWeight::SEMIBOLD),
                             )
