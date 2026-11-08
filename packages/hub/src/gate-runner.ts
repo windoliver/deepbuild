@@ -730,7 +730,7 @@ export class GateRunner {
   }
   /**
    * A fix check that passed on the snapshot runs on the merge base, in a temporary checkout from the service (#31), and so
-   * does any other check that failed there (#33: an inherited failure),
+   * does a spec check that failed there (#33: an inherited failure),
    * through the same command check kind, with the files its run read under the test, fixture and script folders taken
    * from the snapshot (#875); its record is what the verdict engine judges the fix by: passing there, or failing off
    * the assertions it names, makes the claim INVALID. A base run that can't be made is no run on the base, which
@@ -742,9 +742,9 @@ export class GateRunner {
    * requirement's `stand_in`.
    */
   private async onBase(c: Claim, e: Entry): Promise<void> {
-    // A fix check runs there once it passed, to prove the fix; any other once it failed, so a failure the merge base
+    // A fix check runs there once it passed, to prove the fix; a spec check once it failed, so a failure the merge base
     // shares reads as inherited, BLOCKED, never as the claim's own FAIL (design: How runs become one of five verdicts).
-    if (e.outcome !== (e.check.on_base === 'fails' ? 'passed' : 'failed')) return;
+    if (e.outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null)) return;
     const check = e.check.check;
     const token = `${e.claim} ${check} base`;
     const surface = this.o.plant === 'stand-in-surface-dropped' ? null : e.check.surface ?? null;

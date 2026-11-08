@@ -6826,14 +6826,47 @@ export class Core {
       const out = await this.ledger.request(this.connection('core'), { run: id, check: r.check, inputs, issue: paid.task });
       if (out.status !== 'started') throw Error(out.status === 'BLOCKED' ? (out.cause === 'price' ? `${out.missing} is unknown` : `the budget for ${paid.task} has no room for it (${out.ask})`) : `it waits for your answer, ${out.ask}`);
     }
+    // A check your repo's spec lists under `outside` runs as you, outside the sandbox, once its checkout is built (#33).
+    const outside = this.outsideOf(r.cwd, r.check);
+    if (outside) await this.builtOutside(r.cwd, outside.build);
     // A check of another kind runs its spec through the kinds the hub holds, within its kind's budget unless it names a deadline (#1537).
     const kinded = this.kindChecks.get(r.claim)?.get(r.check);
-    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? this.checkKinds.deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.stacks.wanted(r.cwd) ? r.stack : undefined);
+    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, ...(outside ? { outside: true } : {}), env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? this.checkKinds.deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.stacks.wanted(r.cwd) ? r.stack : undefined);
     if (paid) {
       const charge = () => this.ledger.charge(this.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
       void this.runs.ended(String(run)).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     return String(run);
+  }
+  /**
+   * Whether the checkout's spec runs this check outside the sandbox (#33): `outside: { checks: [paths], build }` in
+   * .deepbuild/done.yaml, for suites that start sandboxes of their own, which macOS can't nest. Its build makes what
+   * those suites start (the workspaces, deep-hook) once per checkout.
+   */
+  private outsideOf(cwd: string, check: string): { build: string } | undefined {
+    let spec: unknown;
+    try { spec = parseYaml(readFileSync(join(cwd, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return undefined; }
+    const o = isObj(spec) && isObj(spec.outside) ? spec.outside : undefined;
+    const paths = Array.isArray(o?.checks) ? o.checks.map(String) : [];
+    return o && typeof o.build === 'string' && paths.some((p) => check === p || (p.endsWith('/') && check.startsWith(p))) ? { build: o.build } : undefined;
+  }
+  /** Each checkout's outside build, run once, as you, outside the sandbox; one that fails keeps its checks from starting, naming it. */
+  private readonly outsideBuilds = new Map<string, Promise<void>>();
+  private builtOutside(cwd: string, build: string): Promise<void> {
+    let built = this.outsideBuilds.get(cwd);
+    if (!built) {
+      built = (async () => {
+        const run = `run:${ulid(this.now())}`;
+        let tail = '';
+        const keep = (chunk: Buffer): void => { tail = `${tail}${chunk.toString('utf8')}`.slice(-2000); };
+        const started = await this.host.start({ run, argv: ['/bin/sh', '-c', build], cwd, own_sandbox: true, output: { stdout: keep, stderr: keep } });
+        if (started.status !== 'started') throw Error(`its checkout's build \`${build}\` found no ${started.kind} free`);
+        const exit = await this.host.wait(run);
+        if (exit.code !== 0) throw Error(`its checkout's build \`${build}\` exited ${String(exit.code)}: ${tail.trim().split('\n').slice(-3).join(' ')}`);
+      })();
+      this.outsideBuilds.set(cwd, built);
+    }
+    return built;
   }
   /**
    * The stop rule (#303, design: Every stop is judged): a stop whose turn did work is a claim, other than one right

@@ -49,6 +49,11 @@ export interface CommandCheck {
   timing?: { repeats: number };
   /** The hub going down: the run is stopped and ends stopped. */
   stop?: AbortSignal;
+  /**
+   * Run as you, outside the sandbox and the tracer's rules on untraced programs: a suite your repo's spec lists as
+   * starting sandboxes of its own, which macOS can't nest (#33). Its result still comes from its tool's report.
+   */
+  outside?: boolean;
   plant?: Plant;
 }
 export interface Attempt { test: string; outcome: 'passed' | 'failed' }
@@ -267,7 +272,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     // A tool that isn't installed can't start: the run is missing, not untraced.
     const gone = absent(spec.runner, checkout, PATH);
     if (gone !== null) return { run: result('missing', { failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: null, assertion: false, message: `${gone} isn't on the run's PATH` }] }), ran: [] };
-    const hidden = plant === 'exit-code-only' ? null : untraced(spec.runner, checkout, PATH, { writable: [checkout, temp] });
+    const hidden = plant === 'exit-code-only' || check.outside ? null : untraced(spec.runner, checkout, PATH, { writable: [checkout, temp] });
     if (hidden !== null) return { run: result('uncounted', { mask: `untraced ${hidden}` }), ran: [] };
     // The run's folder is its own already: the evidence files' folder inside it needs no second random name.
     const work = join(temp, 'deep-check-run-evidence');
@@ -296,7 +301,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     // A run that names its tests runs only those, so a control it never selects proves nothing either way (#1099 adds theirs).
     if (!filters.length) controls = await plantControls(checkout);
     const started = host.start({
-      run, argv: ['/bin/sh', '-c', spec.runner], cwd: checkout, env, inherit: false,
+      run, argv: ['/bin/sh', '-c', spec.runner], cwd: checkout, env, inherit: false, ...(check.outside ? { own_sandbox: true } : {}),
       // Its checkout and its temp folder are its own; it reads the Node it runs on, the programs it names and the runner's loaders.
       grant: { read: [dirname(NODE_BIN), CHECK_RUNTIME, RUNTIME, ...roots], write: [checkout, temp], ...(check.hosts?.length ? { hosts: check.hosts } : {}) },
       output: { stdout: (c) => chunks.stdout.push(c), stderr: (c) => chunks.stderr.push(c) },
@@ -408,7 +413,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       if (cause === 'stop') return done('stopped', rest, ran);
       if (plant === 'exit-code-only') return done(code === 0 ? 'passed' : 'failed', { ...rest, mask }, ran);
       // A program the run started that the tracer can't see into, or a child outside its group, leaves it uncounted.
-      for (const spawned of spawns?.lines ?? []) {
+      for (const spawned of check.outside ? [] : spawns?.lines ?? []) {
         let child: Spawned;
         try { child = JSON.parse(spawned) as Spawned; } catch { continue; }
         if (typeof child.file !== 'string') continue;
