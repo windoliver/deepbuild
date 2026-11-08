@@ -162,6 +162,23 @@ const BUN: Lang = Lang {
     run: Some("run"),
 };
 
+/// The interpreters' plain names, which a pattern for a program name is matched against.
+pub const INTERPRETERS: &[&str] = &[
+    "python",
+    "python3",
+    "python2",
+    "pypy",
+    "pypy3",
+    "node",
+    "nodejs",
+    "ruby",
+    "perl",
+    "php",
+    "osascript",
+    "deno",
+    "bun",
+];
+
 /// The interpreter a program name is: `python3.12`, `pypy3` and `nodejs` among them.
 pub fn interpreter(name: &str) -> Option<&'static Lang> {
     let versioned = |base: &str| {
@@ -373,7 +390,8 @@ fn path_of(piece: &str, home: &Path, cwd: Option<&Path>, reach: bool, out: &mut 
     let piece = piece
         .trim_start_matches(['<', '>', '+', '|', '&', ' '])
         .trim_end();
-    if piece.is_empty() || piece.len() > 4096 || piece.contains('\n') {
+    // A URL names no file here.
+    if piece.is_empty() || piece.len() > 4096 || piece.contains('\n') || piece.contains("://") {
         return;
     }
     let joined = |base: &Path, rest: &str| {

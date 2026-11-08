@@ -514,6 +514,10 @@ impl Call {
                 let top = rest.components().next()?;
                 let folder = root.join(top);
                 let mkdir = by.is_some_and(|(r, _)| self.runs[r].is("mkdir"));
+                // A path an inline program holds may be any string in it, not a folder it makes.
+                if by.is_some_and(|(r, _)| self.runs[r].held.contains(w)) {
+                    return None;
+                }
                 // A file written at the top is not a folder; a folder already there is not new.
                 (rest.components().count() > 1 || mkdir)
                     .then_some(folder)
@@ -1813,7 +1817,10 @@ mod tests {
             call("echo x > notes.md && mkdir src/a"),
             call("mkdir src/b"),
         );
+        // #1503: a string in an inline program is a path it may reach, not a folder it makes.
+        let held = call("python3 -c \"print(10/2); print('https://example.com/a/b')\"");
         fs::remove_dir_all(&repo).unwrap();
+        assert!(!held, "an inline program's strings make no folder");
         assert!(made, "mkdir of a new folder at the top is recorded");
         assert!(
             !file,
