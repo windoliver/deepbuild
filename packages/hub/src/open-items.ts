@@ -130,8 +130,8 @@ export class OpenItems {
       // The same error as one you waived, its run-to-run values aside, stays closed by that waiver.
       if (!was && waived.has(this.shapeOf(f.text))) continue;
       await this.opened(core, c.task, item, f, again);
-      // Opened again, it reaches you through its ask only when none was ever raised: never the same question twice.
-      const ask = !was || (again !== null && !asked?.any);
+      // Opened again, it reaches you through its ask again only when none is open for it and you never answered one.
+      const ask = !was || (again !== null && !asked?.open && !asked?.answered);
       if (ask && f.from === 'section' && f.section && UNVERIFIED.has(f.section)) await this.askWaiver(c, item, f.text);
       // A review note on the PR keeps it from Closes until it is fixed or you accept it (#87). Its ask is raised
       // apart from the claim, so no verdict waits on the ask's resolver.
@@ -217,10 +217,11 @@ export class OpenItems {
     const ts = this.o.now();
     await this.o.append(core, { v: replaces ? 4 : 2, id: ulid(ts), kind: 'open_item.opened', ts, data: { task_ref: task, text: f.text.slice(0, 8192), item, from: f.from, ...(f.resolved_by ? { resolved_by: f.resolved_by.slice(0, 256) } : {}), ...(replaces ? { replaces } : {}) } });
   }
-  /** The item's asks: whether any was ever raised, and whether you closed it through one, accepting or waiving it. */
-  private async asked(item: string): Promise<{ any: boolean; closed: boolean }> {
+  /** The item's asks: whether one is open, whether you answered one, and whether you closed it through one, accepting or waiving it. */
+  private async asked(item: string): Promise<{ open: boolean; answered: boolean; closed: boolean }> {
     const rows = (await this.o.raw(`SELECT status, answer FROM asks WHERE key = ?`, [waiverKey(item)])) as { status: string; answer: string | null }[];
-    return { any: rows.length > 0, closed: rows.some((r) => r.status === 'answered' && (r.answer === '"accept"' || r.answer === '"waive"')) };
+    const answered = rows.filter((r) => r.status === 'answered' || r.status === 'decided');
+    return { open: rows.some((r) => r.status === 'open' || r.status === 'later'), answered: answered.length > 0, closed: answered.some((r) => r.answer === '"accept"' || r.answer === '"waive"') };
   }
   private async closed(core: Connection, task: string, item: string, text: string, by: string): Promise<void> {
     const ts = this.o.now();

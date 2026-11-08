@@ -2,6 +2,8 @@
 // unresolved again, and a reopened note reaches you through an ask only when none was ever raised for it (design: Open
 // items as records; AGENTS.md invariant 4). The real hub with deep-hook, through #322's world and #323's recorded GitHub
 // answers, as tests/acceptance/1633 drives it: one review thread T on PR 21, its answers changed between three stops.
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   FIX, FLAG, answer, cleanup, itemTask, lastPos, listed, lockedFor, makeWorld, recordAnswers, req, Session, settle, startHub, taskVerdicts, trustRepo,
@@ -22,9 +24,17 @@ const answers = (resolvedBy: string | null): Answer[] => prAnswers([{ n: 21, bod
 const namesT = (e: Ev): boolean => strings(e.data).some((x) => x.includes(T.id));
 const asksForT = (events: readonly Ev[], since = 0): Ev[] => events.filter((e) => e.kind === 'ask.created' && e.log_pos > since && namesT(e));
 
-/** Opens PR 21, then makes one stop per entry of `resolved` (who resolved T at it, null: unresolved), calling `between` after each. */
-async function play(resolved: (string | null)[], between?: (n: number, events: Ev[], w: World, hub: Hub) => Promise<void>): Promise<{ ref: string; stops: { since: number; events: Ev[] }[] }> {
+/**
+ * Opens PR 21, then makes one stop per entry of `resolved` (who resolved T at it, null: unresolved), calling `between`
+ * after each. `deadline`: the exception asks' deadline in your settings, in place of the world's.
+ */
+async function play(resolved: (string | null)[], between?: (n: number, events: Ev[], w: World, hub: Hub) => Promise<void>, deadline?: string): Promise<{ ref: string; stops: { since: number; events: Ev[] }[] }> {
   const w = makeWorld({ drafts: [DRAFT], readings: [ISSUE], answers: answers(resolved[0]!), files: EXPIRED.files });
+  if (deadline) {
+    const config = JSON.parse(readFileSync(join(w.root, 'config.json'), 'utf8')) as { asks: { deadline: Record<string, string> } };
+    config.asks.deadline.exception = deadline;
+    writeFileSync(join(w.root, 'config.json'), `${JSON.stringify(config, null, 2)}\n`);
+  }
   await trustRepo(w, true);
   const hub = await startHub(w, { holdMs: 20_000 });
   const s = new Session(w);
@@ -82,5 +92,22 @@ describe('#1633 review rounds: a reopened review note and its ask', () => {
     expect(isOpen(second!.events, item), 'maya\'s resolution closes it').toBe(false);
     expect(isOpen(third!.events, item), 'unresolved again, it opens again').toBe(true);
     expect(asksForT(third!.events, third!.since).length, 'no ask was ever raised for it, so one is raised now').toBe(1);
+  }, 900_000);
+
+  it('a reopened note whose ask passed its deadline unanswered reaches you through a new accept ask', async () => {
+    let defaulted = 0;
+    const { stops } = await play([null, REVIEWER, null], async (n, events, _w, hub) => {
+      if (n !== 0) return;
+      // The first stop's accept ask takes its default, keep, at its one-minute deadline: you never answered it.
+      const [ask] = asksForT(events);
+      expect(ask, `the first stop raised an accept ask for ${T.id}`).toBeDefined();
+      const all = await settle(hub, (e) => e.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 150_000);
+      expect(all.some((x) => x.kind === 'ask.defaulted' && x.subject === `ask:${ask!.id}`), 'the ask defaults at its deadline').toBe(true);
+      defaulted = await lastPos(hub);
+    }, '1m');
+    const third = stops.at(-1)!;
+    const raised = asksForT(third.events, defaulted);
+    const open = raised.filter((a) => !third.events.some((e) => e.subject === `ask:${a.id}` && /^ask\.(answered|defaulted|cancelled|moot|superseded|escalated)$/.test(e.kind)));
+    expect(open.length, `none is open for T and you never answered one, so its reopened note gets one new accept ask: ${listed(raised)}`).toBe(1);
   }, 900_000);
 });
