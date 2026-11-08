@@ -99,11 +99,8 @@ fn waves(x: vec2<f32>, t: f32) -> Waved {
 
 struct MeshOut {
     @builtin(position) pos: vec4<f32>,
-    // The clip z and w, and the world point, at a sample the triangle covers (the pixel's centre
-    // when it covers that); and the world point at the centre, on the triangle's plane.
+    // The clip z and w at a sample the triangle covers (the pixel's centre when it covers that).
     @location(0) @interpolate(perspective, centroid) zw: vec2<f32>,
-    @location(1) @interpolate(perspective, centroid) inside: vec3<f32>,
-    @location(2) @interpolate(perspective, center) centre: vec3<f32>,
 };
 
 @vertex
@@ -114,12 +111,9 @@ fn mesh_vs(@location(0) p: vec3<f32>) -> MeshOut {
         dot(params.model[2], vec4<f32>(p, 1.0)),
     );
     let w = waves(world0.xz, params.eye.w);
-    let world = world0 + w.offset;
     var o: MeshOut;
-    o.pos = params.clip * vec4<f32>(world, 1.0);
+    o.pos = params.clip * vec4<f32>(world0 + w.offset, 1.0);
     o.zw = o.pos.zw;
-    o.inside = world;
-    o.centre = world;
     return o;
 }
 
@@ -133,9 +127,11 @@ struct Ids {
 fn ids_fs(in: MeshOut) -> Ids {
     let id = params.pick.x;
     // A triangle that covers a sample but not the centre, seen edge-on, would carry its plane far
-    // from the surface to reach the centre: past 2 cm, its depth is the one at a sample it covers.
-    let off = distance(in.inside, in.centre) > 0.02;
-    return Ids(vec2<u32>(id & 0xffffu, id >> 16u), select(in.pos.z, in.zw.x / in.zw.y, off));
+    // from the surface to reach the centre: past 0.5% of the depth, its depth is the one at a
+    // sample it covers.
+    let inside = in.zw.x / in.zw.y;
+    let off = abs(in.pos.z - inside) > 0.005 * max(abs(inside), 1e-6);
+    return Ids(vec2<u32>(id & 0xffffu, id >> 16u), select(in.pos.z, inside, off));
 }
 
 @vertex
@@ -349,61 +345,73 @@ fn rest_of(x: vec2<f32>, t: f32) -> vec2<f32> {
     return x - waves(x, t).offset.xz;
 }
 
+// Whether the points the pixel's centre ray meets at depths a and b lie further apart than one
+// smooth surface spans across a pixel, a span that grows as the view grazes it: one crest standing
+// in front of the water behind it, or the water's edge (a depth with no point is apart from all).
+fn apart(xy: vec2<f32>, a: f32, b: f32, size: vec2<f32>) -> bool {
+    let pa = world_at(xy, a, size);
+    let da = distance(pa, params.eye.xyz);
+    let db = distance(world_at(xy, b, size), params.eye.xyz);
+    let grazing = max(abs(normalize(params.eye.xyz - pa).y), 1e-3);
+    let across = distance(world_at(xy + vec2<f32>(0.0, 1.0), a, size), pa) / max(da, 1e-6);
+    return !(abs(da - db) <= min(da, db) * (0.1 + across / grazing));
+}
+
 @fragment
 fn shade_fs(@builtin(position) at: vec4<f32>) -> Shaded {
     let px = vec2<i32>(at.xy);
     let size = vec2<f32>(textureDimensions(ids));
-    // Each sample: whether the water covers it, and its depth.
-    var wet: array<bool, 4>;
+    let resolved = is_part(textureLoad(ids, px, 0).r);
+    // The resolved depth (its first covered sample's) and the last sample's: where they agree, the
+    // pixel sees one surface and the resolve's ID speaks for every sample.
+    let centre = textureLoad(depth, px, 0);
     var z: array<f32, 4>;
-    var count = 0;
-    // How far apart the points the water's samples see lie, in m.
-    var spread = 0.0;
-    var first = vec3<f32>(0.0);
-    for (var s = 0; s < SAMPLES; s++) {
-        let id = textureLoad(ids_ms, px, s).xy;
-        wet[s] = is_part(id.x | (id.y << 16u));
-        z[s] = textureLoad(depth_ms, px, s);
-        if wet[s] {
-            let p = world_at(at.xy, z[s], size);
-            if count == 0 {
-                first = p;
+    let other = textureLoad(depth_ms, px, SAMPLES - 1);
+    var wet = array<bool, 4>(resolved, resolved, resolved, resolved);
+    var count = select(0, SAMPLES, resolved);
+    var step = false;
+    if centre != other && apart(at.xy, centre, other, size) {
+        // Whether the water covers each sample, its depth, and the nearest and furthest of those.
+        count = 0;
+        var lo = 1e30;
+        var hi = -1e30;
+        for (var s = 0; s < SAMPLES; s++) {
+            let id = textureLoad(ids_ms, px, s).xy;
+            wet[s] = is_part(id.x | (id.y << 16u));
+            z[s] = textureLoad(depth_ms, px, s);
+            if wet[s] {
+                lo = min(lo, z[s]);
+                hi = max(hi, z[s]);
+                count += 1;
             }
-            spread = max(spread, distance(p, first));
-            count += 1;
         }
+        step = count > 1 && hi > lo && apart(at.xy, lo, hi, size);
     }
     if count == 0 {
         discard;
     }
-    let resolved = is_part(textureLoad(ids, px, 0).r);
-    var color: vec3<f32>;
+    // Inside one stretch of water, one look at the resolved depth; on an edge of the water, or
+    // where one crest stands in front of the water behind it, each sample on its own, the bed
+    // where the water doesn't cover it.
+    let edge = count < SAMPLES || step;
+    let looks = select(1, SAMPLES, edge);
+    var sum = vec3<f32>(0.0);
     var mirrored = vec3<f32>(0.0);
-    if count == SAMPLES && spread < 0.05 {
-        // Inside one stretch of water: one look at the resolved depth.
-        let lit = shade(at.xy, textureLoad(depth, px, 0), size);
-        color = lit.color;
-        mirrored = lit.mirrored;
-    } else {
-        // On an edge of the water, or where one crest stands in front of the water behind it:
-        // each sample on its own, the bed where the water doesn't cover it.
-        var sum = vec3<f32>(0.0);
-        var looked = false;
-        for (var s = 0; s < SAMPLES; s++) {
-            if wet[s] {
-                let lit = shade(at.xy, z[s], size);
-                sum += lit.color;
-                // The `reflection` target keeps the lookup of the sample the resolve chose.
-                if !looked {
-                    mirrored = lit.mirrored;
-                    looked = true;
-                }
-            } else {
-                sum += textureLoad(bed_color, px, 0).rgb;
-            }
+    var looked = false;
+    for (var s = 0; s < looks; s++) {
+        if !wet[s] {
+            sum += textureLoad(bed_color, px, 0).rgb;
+            continue;
         }
-        color = sum / f32(SAMPLES);
+        let lit = shade(at.xy, select(centre, z[s], edge), size);
+        sum += lit.color;
+        // The `reflection` target keeps the lookup of the sample the resolve chose.
+        if !looked {
+            mirrored = lit.mirrored;
+            looked = true;
+        }
     }
+    let color = sum / f32(looks);
     // The `reflection` target holds a lookup only where the resolved ID is the water's.
     let reflection = select(vec4<f32>(0.0), vec4<f32>(mirrored, 1.0), resolved);
     return Shaded(vec4<f32>(color, 1.0), reflection);
@@ -416,8 +424,6 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
     let px = vec2<i32>(xy);
     let p = world_at(xy, z, size);
     let v = normalize(params.eye.xyz - p);
-    // How much water one pixel spans here, stretched along the view as it grazes the surface.
-    let pixel = distance(world_at(xy + vec2<f32>(0.0, 1.0), z, size), p) / max(v.y, 0.3);
     let rest = rest_of(p.xz, t);
     let w = waves(rest, t);
     var n = normalize(cross(w.tz, w.tx));
@@ -426,7 +432,16 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
     if params.counts.z > 0.0 {
         slope += noise_grad((rest - params.drift.xy * t) / params.counts.y) * params.counts.z * 0.5;
     }
-    slope += rain(rest, t);
+    // How much water one pixel spans across the view here, and along it as the view grazes the
+    // surface.
+    let span = distance(world_at(xy + vec2<f32>(0.0, 1.0), z, size), p);
+    let foot = span / max(v.y, 0.02);
+    // Where a pixel spans more than five rings' widths a ring only sparkles: rain fades out
+    // between five and ten.
+    let rainy = clamp((10.0 * RING_WIDTH - foot) / (5.0 * RING_WIDTH), 0.0, 1.0);
+    if rainy > 0.0 {
+        slope += rain(rest, t) * rainy;
+    }
     let wk = wake(rest);
     slope += wk.ripple * wk.away;
     n = normalize(n - vec3<f32>(slope.x, 0.0, slope.y));
@@ -438,20 +453,29 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
     if l > params.look.x {
         shift = shift * (params.look.x / l);
     }
-    var bent = clamp(px - vec2<i32>(round(shift)), vec2<i32>(0), vec2<i32>(size) - 1);
-    if !is_part(textureLoad(ids, bent, 0).r) {
-        bent = px;
-    }
-    let below = textureLoad(bed_color, bent, 0).rgb;
-    let zb = textureLoad(bed_depth, bent, 0).r;
     // The bed behind: its color, and its distance from here along the view. A bed point above the
     // surface (an item standing behind a crest) is air the ray reached after leaving the water,
-    // so the crest hides it as deep water would.
-    let far = select(zb >= 1.0, zb <= 0.0, params.pick.y == 1u);
-    let q = world_at(vec2<f32>(bent) + 0.5, zb, size);
-    let level = p.y - w.offset.y;
-    let above = q.y > level + waves(rest_of(q.xz, t), t).offset.y;
-    let d = select(length(q - p), 1e30, far || above);
+    // so the crest hides it as deep water would; open sky behind needs no bent lookup.
+    var bent = px;
+    var zb = textureLoad(bed_depth, px, 0).r;
+    var far = select(zb >= 1.0, zb <= 0.0, params.pick.y == 1u);
+    if !far {
+        let to = clamp(px - vec2<i32>(round(shift)), vec2<i32>(0), vec2<i32>(size) - 1);
+        if is_part(textureLoad(ids, to, 0).r) {
+            bent = to;
+            zb = textureLoad(bed_depth, bent, 0).r;
+            far = select(zb >= 1.0, zb <= 0.0, params.pick.y == 1u);
+        }
+    }
+    let below = textureLoad(bed_color, bent, 0).rgb;
+    var d = 1e30;
+    if !far {
+        let q = world_at(vec2<f32>(bent) + 0.5, zb, size);
+        let level = p.y - w.offset.y;
+        if q.y <= level + waves(rest_of(q.xz, t), t).offset.y {
+            d = length(q - p);
+        }
+    }
     let share = exp(-d / params.absorption.w);
     let transmitted = below * share + params.absorption.rgb * params.ambient.rgb * (1.0 - share);
 
@@ -467,6 +491,8 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
         cause = smoothstep(params.look.y, min(params.look.y + 0.15, 1.0), w.steep);
     }
     var foam = 0.0;
+    // The span foam's texture is filtered by, its stretch along the view capped.
+    let pixel = span / max(v.y, 0.3);
     if cause > 0.0 {
         foam = foam_cover(cause, foam_texture(rest, pixel));
     }
