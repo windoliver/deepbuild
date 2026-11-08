@@ -60,6 +60,10 @@ pub enum Unread {
     /// A shell or an interpreter whose program is a value the line computes, as with `eval "$X"`, `sh -c "$(curl …)"`
     /// or `bash <(curl …)`: it may run anything.
     Computed,
+    /// An interpreter that runs a program it fetches from a URL, as `deno run https://…` does: it may run anything.
+    Fetched,
+    /// A shell that runs a script the line writes before it, as `curl -o f … && sh f` does: it may run anything.
+    Written,
 }
 
 #[derive(Debug, Clone)]
@@ -1516,7 +1520,13 @@ impl Reader {
                         cwd = text(k + 1).and_then(|d| within(&cwd, &d));
                         k += 2;
                     } else if a == "-S" || a == "--split-string" {
-                        spliced = Some((text(k + 1).unwrap_or_default(), k + 2));
+                        match text(k + 1) {
+                            Some(s) => spliced = Some((s, k + 2)),
+                            None if argv.get(i + 2 + k).is_some() => {
+                                unread = Some(Unread::Computed)
+                            }
+                            None => {}
+                        }
                         break;
                     } else if let Some(s) = a
                         .strip_prefix("--split-string=")
@@ -1536,6 +1546,9 @@ impl Reader {
                     } else {
                         break;
                     }
+                }
+                if unread.is_some() {
+                    break;
                 }
                 if let Some((s, after)) = spliced {
                     let mut words = self.split(&s, ctx);
@@ -1727,6 +1740,26 @@ impl Reader {
                 i += 1 + k;
                 continue;
             }
+            // A project's runner runs the command after its options in the project's environment.
+            if RUNNERS.iter().any(|n| is(n)) && text(0).as_deref() == Some("run") {
+                let mut k = 1;
+                while let Some(a) = text(k) {
+                    if a == "--" {
+                        k += 1;
+                        break;
+                    }
+                    if !a.starts_with('-') || a == "-" {
+                        break;
+                    }
+                    k += if RUNNER_VALUED.contains(&a.as_str()) {
+                        2
+                    } else {
+                        1
+                    };
+                }
+                i += 1 + k;
+                continue;
+            }
             if is("xargs") {
                 let k = options(&[
                     "-I",
@@ -1846,7 +1879,7 @@ impl Reader {
                     unread = self.piped(&stdin, ctx, &cwd, &env);
                 } else {
                     match text(k) {
-                        Some(file) => self.file(&file, ctx, &cwd, &env),
+                        Some(file) => unread = self.file(&file, ctx, &cwd, &env),
                         None => unread = Some(Unread::Computed),
                     }
                 }
@@ -1854,7 +1887,7 @@ impl Reader {
             }
             if is("source") || is(".") {
                 match text(0) {
-                    Some(file) => self.file(&file, ctx, &cwd, &env),
+                    Some(file) => unread = self.file(&file, ctx, &cwd, &env),
                     None if argv.get(i + 1).is_some() => unread = Some(Unread::Computed),
                     None => {}
                 }
@@ -1905,6 +1938,11 @@ impl Reader {
                         },
                     },
                     Program::File(None) => unread = Some(Unread::Computed),
+                    Program::File(Some(f))
+                        if f.starts_with("https://") || f.starts_with("http://") =>
+                    {
+                        unread = Some(Unread::Fetched)
+                    }
                     Program::File(Some(_)) | Program::None => {}
                 }
                 break;
@@ -1926,7 +1964,7 @@ impl Reader {
         let Some(first) = argv.get(i) else { return };
         // A program named by its path may be a script: what it runs is read from the file.
         if let Some(path) = first.text.as_deref().filter(|t| t.contains('/')) {
-            self.file(path, ctx, &cwd, &env);
+            unread = unread.or(self.file(path, ctx, &cwd, &env));
         }
         let (program, glob) = program(first);
         let args: Vec<Arg> = argv[i + 1..]
@@ -1944,13 +1982,16 @@ impl Reader {
                 held.extend(holds(text, &ctx.home, cwd.as_deref()));
             }
         }
+        let later = !self.runs.is_empty();
         self.runs.push(Run {
             unread: (first.text.is_none() && !cfg!(feature = "plant-computed-misses"))
                 .then_some(Unread::Program)
                 .or(unread)
                 .or((cfg!(feature = "plant-every-pipe-unread")
                     && !matches!(stdin.feed, Feed::Inherited))
-                .then_some(Unread::Piped)),
+                .then_some(Unread::Piped))
+                .or((cfg!(feature = "plant-later-command-unread") && later)
+                    .then_some(Unread::Written)),
             held,
             program,
             glob,
@@ -1965,25 +2006,49 @@ impl Reader {
     }
 
     /// Reads the script file `name` the line runs, in `cwd` with `env`, as a shell started by this line: a text
-    /// file of at most SCRIPT bytes, with no `#!` line or one that names a shell.
-    fn file(&mut self, name: &str, ctx: &Ctx, cwd: &Option<PathBuf>, env: &[(String, String)]) {
+    /// file of at most SCRIPT bytes, with no `#!` line or one that names a shell. One the line writes before it
+    /// runs it, or names before it while it doesn't exist yet, as `curl -o f … && sh f` does, is unread.
+    fn file(
+        &mut self,
+        name: &str,
+        ctx: &Ctx,
+        cwd: &Option<PathBuf>,
+        env: &[(String, String)],
+    ) -> Option<Unread> {
         let mut at = ctx.clone();
         at.cwd = cwd.clone();
-        let Some(path) = at.path(name) else { return };
-        let Some(text) = script_text(&path, SCRIPT) else {
-            return;
+        let path = at.path(name)?;
+        let key = same_name(&lexical(&path).to_string_lossy());
+        let is = |p: &Path| same_name(&lexical(p).to_string_lossy()) == key;
+        let written = self.runs.iter().any(|run| run.writes.iter().any(|w| is(w)));
+        let named = || {
+            self.runs.iter().any(|run| {
+                run.args.iter().filter_map(|a| a.text.as_deref()).any(|a| {
+                    let a = Path::new(a);
+                    is(&a
+                        .is_absolute()
+                        .then(|| a.to_path_buf())
+                        .or(run.cwd.as_ref().map(|c| c.join(a)))
+                        .unwrap_or_default())
+                })
+            })
         };
+        if written || (!path.exists() && named()) {
+            return Some(Unread::Written);
+        }
+        let text = script_text(&path, SCRIPT)?;
         if let Some(line) = text.strip_prefix("#!").and_then(|t| t.lines().next()) {
             let shells = ["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash"];
             if !line
                 .split_whitespace()
                 .any(|w| shells.contains(&same_name(w.rsplit('/').next().unwrap_or(w)).as_str()))
             {
-                return;
+                return None;
             }
         }
         at.scripted = true;
         self.shell(&text, &at, cwd, env, Stdin::default());
+        None
     }
 
     /// Reads the program a shell reads on `stdin`: the text the line writes into it, or the plain files a pipe or a
@@ -2067,6 +2132,51 @@ impl Reader {
         }
     }
 }
+
+/// The project runners whose `run` runs a command in the project's environment, as `uv run python -c …` does.
+const RUNNERS: &[&str] = &[
+    "uv",
+    "poetry",
+    "pipenv",
+    "pdm",
+    "hatch",
+    "rye",
+    "pixi",
+    "conda",
+    "mamba",
+    "micromamba",
+];
+
+/// The runners' options before the command that take the next argument as their value.
+const RUNNER_VALUED: &[&str] = &[
+    "--with",
+    "--with-editable",
+    "--with-requirements",
+    "-p",
+    "--python",
+    "--project",
+    "--directory",
+    "--package",
+    "--extra",
+    "--group",
+    "--env-file",
+    "--index",
+    "--default-index",
+    "-i",
+    "--index-url",
+    "--extra-index-url",
+    "-f",
+    "--find-links",
+    "-C",
+    "-P",
+    "-e",
+    "--environment",
+    "--manifest-path",
+    "-n",
+    "--name",
+    "--prefix",
+    "--pyproject",
+];
 
 /// The shells the reader reads a script for.
 const SHELLS: &[&str] = &[

@@ -220,7 +220,13 @@ impl Call {
     fn may_be(&self, pattern: &str) -> Option<Hit> {
         let (kind, rest) = pattern.split_once(':')?;
         let fits = |run: &&Run| match run.unread {
-            Some(Unread::Depth | Unread::Piped | Unread::Computed) => true,
+            Some(
+                Unread::Depth
+                | Unread::Piped
+                | Unread::Computed
+                | Unread::Fetched
+                | Unread::Written,
+            ) => true,
             Some(Unread::Program) if kind == "run" => {
                 let wanted: Vec<&str> = rest.split_whitespace().skip(1).collect();
                 args_match(run, &wanted)
@@ -255,6 +261,12 @@ impl Call {
                     ),
                     Some(Unread::Computed) => {
                         format!("the program {} runs is a value the line computes", run.program)
+                    }
+                    Some(Unread::Fetched) => {
+                        format!("{} runs a program it fetches from a URL", run.program)
+                    }
+                    Some(Unread::Written) => {
+                        format!("{} runs a script the line writes before it", run.program)
                     }
                     _ => "the line computes the program it runs".to_string(),
                 };
