@@ -395,9 +395,27 @@ impl<C: Glyphs> Painter<'_, C> {
                 let row_of_set = item
                     .split_once('#')
                     .is_some_and(|(set, _)| self.text_sets.iter().any(|s| s == set));
+                // #467: the run's box, where its glyphs advance, in document u.
+                let at = match (spec.align, spec.width) {
+                    (scene::Align::Center, Some(w)) => (w - f64::from(shaped.width)) / 2.0,
+                    (scene::Align::End, Some(w)) => w - f64::from(shaped.width),
+                    _ => 0.0,
+                };
+                let bounds = [
+                    origin[0] + at,
+                    origin[1],
+                    f64::from(shaped.width),
+                    f64::from(shaped.height),
+                ];
                 if !item.contains('#') || row_of_set {
+                    self.texts.insert(
+                        item.clone(),
+                        json!({"shown": shaped.shown, "glyphs": glyphs, "bounds": bounds}),
+                    );
+                } else if item.ends_with("#drop") {
+                    // A drop's copy of the shaped run, read back beside the text's own.
                     self.texts
-                        .insert(item.clone(), json!({"shown": shaped.shown, "glyphs": glyphs}));
+                        .insert(item.clone(), json!({"glyphs": glyphs, "bounds": bounds}));
                 }
             }
             Mark::Image {
@@ -609,6 +627,7 @@ fn draw(req: &Request) -> Result<Value, Value> {
     for prim in &prims {
         p.prim(prim);
     }
+    fit_paint(&frame, &mut p.texts)?;
     let mut pixmap = Pixmap::new(w, h);
     p.ctx
         .render_with(&mut pixmap, &mut p.resources, req.config.rasterizer());
@@ -763,6 +782,17 @@ fn composite<'s>(
         content.marks(inside.iter())?;
         p.texts.append(&mut content.texts);
         let source = render(&mut content);
+        // #467: a part an item's paint builds from its coverage, which `source` holds.
+        let part = match &marks[start].scopes[at] {
+            Scope::Opacity {
+                effect: Some(e), ..
+            } => e.paint.clone(),
+            _ => None,
+        };
+        let source = match part {
+            Some(part) => painted(&source, &part, p.zoom as f32),
+            None => source,
+        };
         layer = sub(p);
         put(&mut layer.ctx, backdrop.clone());
         let outer = &marks[start].scopes[..at];
@@ -789,6 +819,108 @@ fn composite<'s>(
     let drawn = render(&mut layer);
     put(&mut p.ctx, drawn);
     Ok(inputs)
+}
+
+/// #467: each text's bounds grown by what its paint draws past its run (a drop's copy, an outer
+/// glow or bevel), and its drop's glyphs under `drop`; a number whose bounds then pass its box
+/// doesn't fit and fails (Honest numbers), naming it.
+fn fit_paint(frame: &scene::Frame, texts: &mut Map<String, Value>) -> Result<(), Value> {
+    let union = |a: [f64; 4], b: [f64; 4]| {
+        let (x0, y0) = (a[0].min(b[0]), a[1].min(b[1]));
+        let (x1, y1) = ((a[0] + a[2]).max(b[0] + b[2]), (a[1] + a[3]).max(b[1] + b[3]));
+        [x0, y0, x1 - x0, y1 - y0]
+    };
+    let four = |v: &Value| -> Option<[f64; 4]> {
+        let l = v.as_array()?;
+        Some([l.first()?.as_f64()?, l.get(1)?.as_f64()?, l.get(2)?.as_f64()?, l.get(3)?.as_f64()?])
+    };
+    let marks: Vec<&Drawn> = frame.layers.iter().flat_map(|l| l.marks.iter().map(|m| &**m)).collect();
+    for drawn in &marks {
+        let Mark::Text { item, spec, origin, .. } = &drawn.mark else {
+            continue;
+        };
+        if item.contains('#') {
+            continue;
+        }
+        let Some(mut bounds) = texts.get(item).and_then(|t| four(&t["bounds"])) else {
+            continue;
+        };
+        if let Some(copy) = texts.remove(&format!("{item}#drop")) {
+            if let Some(b) = four(&copy["bounds"]) {
+                bounds = union(bounds, b);
+            }
+            texts[item]["drop"] = json!({"glyphs": copy["glyphs"]});
+        }
+        let prefix = format!("{item}#");
+        let mut seen = std::collections::BTreeSet::new();
+        for d in &marks {
+            if !d.mark.item().starts_with(&prefix) {
+                continue;
+            }
+            for s in &d.scopes {
+                if let Scope::Opacity { item: part_id, effect: Some(e), .. } = s {
+                    if let (Some(part), true) = (&e.paint, seen.insert(part_id.clone())) {
+                        let [l, t, r, b] = part.reach();
+                        let own = texts[item]["bounds"].clone();
+                        if let Some(o) = four(&own) {
+                            bounds = union(bounds, [o[0] - l, o[1] - t, o[2] + l + r, o[3] + t + b]);
+                        }
+                    }
+                }
+            }
+        }
+        texts[item]["bounds"] = json!(bounds);
+        if let (true, Some(w)) = (spec.bound, spec.width) {
+            let eps = 1e-6;
+            if bounds[0] < origin[0] - eps || bounds[0] + bounds[2] > origin[0] + w + eps {
+                return Err(refused("number_unfit", &format!("items/{item}/params/box")));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// #467: the part `part` builds from the coverage in `source`'s alpha, in its color: the CPU
+/// reference, computed over the coverage's box grown by what the part reads.
+fn painted(source: &Pixmap, part: &deep_canvas_marks::fx::Part, scale: f32) -> Pixmap {
+    use deep_canvas_marks::fx::Grid;
+    let (w, h) = (usize::from(source.width()), usize::from(source.height()));
+    let bytes = source.data_as_u8_slice();
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+    for y in 0..h {
+        for x in 0..w {
+            if bytes[(y * w + x) * 4 + 3] > 0 {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x + 1);
+                y1 = y1.max(y + 1);
+            }
+        }
+    }
+    let mut out = vec![0u8; w * h * 4];
+    if x0 < x1 {
+        let m = (part.margin() * scale).ceil() as usize;
+        let (x0, y0) = (x0.saturating_sub(m), y0.saturating_sub(m));
+        let (x1, y1) = ((x1 + m).min(w), (y1 + m).min(h));
+        let mut a = Grid::new(x1 - x0, y1 - y0);
+        for y in y0..y1 {
+            for x in x0..x1 {
+                a.a[(y - y0) * a.w + (x - x0)] = f32::from(bytes[(y * w + x) * 4 + 3]) / 255.0;
+            }
+        }
+        let alpha = part.alpha(&a, scale);
+        let c = part.color();
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let v = alpha.a[(y - y0) * alpha.w + (x - x0)];
+                let o = (y * w + x) * 4;
+                out[o..o + 3].copy_from_slice(&c);
+                out[o + 3] = (v * 255.0).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    let size = [source.width(), source.height()];
+    deep_marks_vello::image(out, size, 1.0, &Default::default())
 }
 
 /// #140: `marks` alone over transparent black at `size` px and zoom 1, as `draw` paints them with

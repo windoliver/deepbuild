@@ -220,6 +220,8 @@ pub struct Effect {
     pub dancing: bool,
     /// #149: the marks inside are a fill or a line's coverage, laid through this medium.
     pub medium: Option<Arc<deep_canvas_drawn::medium::Medium>>,
+    /// #467: the marks inside are an item's coverage, and this is the layer built from it.
+    pub paint: Option<Arc<crate::fx::Part>>,
 }
 
 /// A group's blend (Frame and group: blend modes): the 16 W3C modes and add, which Vello draws,
@@ -376,6 +378,7 @@ impl Effect {
             backdrop,
             dancing,
             medium: None,
+            paint: None,
         }))
     }
 }
@@ -436,6 +439,9 @@ impl Scope {
                     }
                     if let Some(m) = &e.medium {
                         k.text(&format!("{m:?}"));
+                    }
+                    if let Some(p) = &e.paint {
+                        k.text(&format!("{p:?}"));
                     }
                 }
             }
@@ -4826,6 +4832,18 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             .flat_map(|mark| shaded(id, mark, shade, &scopes, clip))
             .collect(),
     };
+    // #467: paint built from the item's coverage: a drop, a glow, an inner shade, bevel, satin.
+    let light = ctx
+        .ty
+        .drawn
+        .as_ref()
+        .and_then(|l| l.light.as_ref())
+        .map_or(crate::fx::Light::default(), |l| crate::fx::Light {
+            dir: l.dir,
+            elevation: l.elevation,
+        });
+    let fx = crate::fx::Fx::read(ctx.palette, paint, &paint_path, light)?;
+    let drawn_marks = with_fx(id, &fx, drawn_marks);
     Ok(Some(Placed {
         keys: Vec::new(),
         layer: layer.to_string(),
@@ -4834,6 +4852,147 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         after: drawn(after),
         drawn: drawn_marks,
     }))
+}
+
+/// `mark` in one color, every span of a text included.
+fn recolored(mark: &Mark, c: Rgb) -> Mark {
+    let mut m = mark.clone();
+    match &mut m {
+        Mark::Rect { fill, .. } => *fill = Fill::Solid(c),
+        Mark::Circle { color, .. } | Mark::Path { color, .. } => *color = c,
+        Mark::Shape { fill, stroke, .. } => {
+            fill.iter_mut().for_each(|(f, a)| {
+                *f = Fill::Solid(c);
+                *a = 1.0;
+            });
+            stroke.iter_mut().for_each(|l| {
+                l.paint = Fill::Solid(c);
+                l.opacity = 1.0;
+            });
+        }
+        Mark::Text {
+            color, runs, role, ..
+        } => {
+            *color = c;
+            *role = None;
+            runs.iter_mut().for_each(|r| r.color = c);
+        }
+        Mark::Image { .. } => {}
+    }
+    m
+}
+
+/// `mark` moved by `d` u, renamed `item`.
+fn moved(mark: &Mark, d: [f64; 2], name: &str) -> Mark {
+    let shift = |p: [f64; 2]| [p[0] + d[0], p[1] + d[1]];
+    let mut m = mark.clone();
+    match &mut m {
+        Mark::Rect { item, bounds, .. } | Mark::Image { item, bounds, .. } => {
+            *item = name.to_string();
+            bounds[0] += d[0];
+            bounds[1] += d[1];
+        }
+        Mark::Circle { item, center, .. } => {
+            *item = name.to_string();
+            *center = shift(*center);
+        }
+        Mark::Path { item, offset, .. } => {
+            *item = name.to_string();
+            *offset = shift(*offset);
+        }
+        Mark::Text { item, origin, .. } => {
+            *item = name.to_string();
+            *origin = shift(*origin);
+        }
+        Mark::Shape { item, verbs, .. } => {
+            *item = name.to_string();
+            for v in verbs.iter_mut() {
+                *v = match *v {
+                    Verb::Move(p) => Verb::Move(shift(p)),
+                    Verb::Line(p) => Verb::Line(shift(p)),
+                    Verb::Quad(a, b) => Verb::Quad(shift(a), shift(b)),
+                    Verb::Cubic(a, b, c) => Verb::Cubic(shift(a), shift(b), shift(c)),
+                    Verb::Close => Verb::Close,
+                };
+            }
+        }
+    }
+    m
+}
+
+/// #467: an item's marks with what its paint builds from their coverage (Paint: drop; Paint:
+/// shade, `kind: inner`; Paint: glow, bevel and satin). A drop without blur is the item's own
+/// marks once more, moved and in its role, under them: on text the same shaped run. Every other
+/// part draws the item's own marks as white coverage inside a scope whose effect builds the part
+/// from it, under the marks (a blurred drop, an outer glow) or over them.
+fn with_fx(id: &str, fx: &crate::fx::Fx, marks: Vec<Arc<Drawn>>) -> Vec<Arc<Drawn>> {
+    let parts = fx.parts();
+    if fx.drop.is_none() && parts.is_empty() {
+        return marks;
+    }
+    let own: Vec<Arc<Drawn>> = marks.iter().filter(|d| d.mark.item() == id).cloned().collect();
+    let layer = |part: crate::fx::Part| -> Vec<Arc<Drawn>> {
+        let name = format!("{id}#{}", part.name());
+        let blend = match part.mode() {
+            crate::fx::Mode::Normal => Blend::Normal,
+            crate::fx::Mode::Multiply => Blend::Multiply,
+            crate::fx::Mode::Screen => Blend::Screen,
+            crate::fx::Mode::Add => Blend::Add,
+        };
+        let scope = Scope::Opacity {
+            item: name.clone(),
+            alpha: 1.0,
+            blend: Some(blend),
+            effect: Some(Arc::new(Effect {
+                paint: Some(Arc::new(part)),
+                ..Effect::default()
+            })),
+        };
+        own.iter()
+            .map(|d| {
+                let mut scopes = d.scopes.clone();
+                scopes.push(scope.clone());
+                Arc::new(Drawn {
+                    mark: moved(&recolored(&d.mark, [255, 255, 255]), [0.0, 0.0], &name),
+                    clip: d.clip,
+                    scopes,
+                })
+            })
+            .collect()
+    };
+    let mut under = Vec::new();
+    let mut over = Vec::new();
+    if let Some(drop) = fx.drop.as_ref().filter(|d| d.blur == 0.0) {
+        let name = format!("{id}#drop");
+        let mut extra = Vec::new();
+        if drop.opacity < 1.0 || drop.mode == crate::fx::Mode::Multiply {
+            extra.push(Scope::Opacity {
+                item: name.clone(),
+                alpha: drop.opacity,
+                blend: (drop.mode == crate::fx::Mode::Multiply).then_some(Blend::Multiply),
+                effect: None,
+            });
+        }
+        for d in &own {
+            let mut scopes = d.scopes.clone();
+            scopes.extend(extra.iter().cloned());
+            under.push(Arc::new(Drawn {
+                mark: moved(&recolored(&d.mark, drop.color), drop.offset, &name),
+                clip: d.clip,
+                scopes,
+            }));
+        }
+    }
+    for part in parts {
+        if part.under() {
+            under.extend(layer(part));
+        } else {
+            over.extend(layer(part));
+        }
+    }
+    under.extend(marks);
+    under.extend(over);
+    under
 }
 
 /// A filled outline with its shade: the fill, then the shade (the shape less a copy of it moved

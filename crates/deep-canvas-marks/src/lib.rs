@@ -18,6 +18,8 @@ pub mod dirty;
 pub mod drawn;
 pub mod ends;
 pub mod finish;
+pub mod fields;
+pub mod fx;
 pub mod function;
 pub mod key;
 pub mod layout;
