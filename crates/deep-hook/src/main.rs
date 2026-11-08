@@ -41,6 +41,19 @@ const BILLING_KEYS: &[&str] = &[
     "OPENAI_API_KEY",
 ];
 
+// A release build refuses the planted programs' feature (#1408).
+#[cfg(all(feature = "env-plants", not(debug_assertions)))]
+compile_error!("the env-plants feature is for test builds only, never a release build");
+
+/// The planted wrong program a test selects with `DEEP_HUB_PLANT`: read only in a build with the `env-plants` feature,
+/// so a shipped hook never bends on it (#1408).
+fn hub_plant() -> Option<String> {
+    #[cfg(feature = "env-plants")]
+    return env::var("DEEP_HUB_PLANT").ok();
+    #[cfg(not(feature = "env-plants"))]
+    None
+}
+
 /// Who is calling: Cursor's CLI and Grok run the hooks in Claude Code's settings file, so a hook installed for Claude
 /// Code may come from either. Each sets variables of its own in its hooks' environment, and a hook that has another
 /// tool's is sent under that tool's name. Claude Code's CLAUDECODE says nothing here: a tool started from a shell
@@ -1103,6 +1116,15 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     // and matched, the watchdog doesn't let it through while a fail_closed entry is installed.
     let ruling = event == "PreToolUse";
     RULING.store(ruling, Ordering::SeqCst);
+    // A panic before the hook decides is decided as the watchdog decides (#1407): Rust's exit 101 blocks nothing.
+    std::panic::set_hook(Box::new(|_| {
+        if !DECIDED.swap(true, Ordering::SeqCst) {
+            unanswered()
+        }
+        loop {
+            std::thread::park();
+        }
+    }));
     watchdog(start);
     let now = wall_clock_ns();
     let seq = now.min(i64::MAX as u128).to_string();
@@ -1179,7 +1201,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let read = read_fields(called.as_ref(), &matched);
     // A shell call that runs a heavy command (#1015), for the hub to run under `deep lease`; spooled with it, so a
     // hub that was away reads that it ran unleased.
-    let plant = env::var("DEEP_HUB_PLANT").ok();
+    let plant = hub_plant();
     let heavy = parsed
         .as_ref()
         .filter(|_| event == "PreToolUse")
@@ -1363,6 +1385,8 @@ fn decide() {
             std::thread::park();
         }
     }
+    // Once decided, a panic is Rust's again: the decision is printing, and parking would hang the hook.
+    let _ = std::panic::take_hook();
 }
 
 /// Keeps the 50 ms whatever holds the hook up before the hub acknowledges it (a stdin that never ends, a slow
@@ -1391,24 +1415,30 @@ fn watchdog(start: Instant) {
         if ACKED.load(Ordering::SeqCst) || DECIDED.swap(true, Ordering::SeqCst) {
             return;
         }
-        // RULED first: the hook sets a denial before it sets RULED, so once RULED is read as set, DENIAL is final.
-        let ruled = RULED.load(Ordering::SeqCst);
-        match DENIAL.get() {
-            Some(denial) => {
-                eprintln!("{denial}");
-                std::process::exit(2)
-            }
-            None if RULING.load(Ordering::SeqCst) && !ruled => {
-                if READ_RULES.load(Ordering::SeqCst) {
-                    eprintln!("DeepBuild blocked this: deep-hook couldn't read this call and check it against the guards that hold while the hub doesn't answer within 500 ms. Retry it.");
-                } else {
-                    eprintln!("DeepBuild blocked this: deep-hook couldn't read its guards in ~/.deepbuild/rules.json within 500 ms, with the hub not answering. Check that file, then retry.");
-                }
-                std::process::exit(2)
-            }
-            None => std::process::exit(0),
-        }
+        unanswered()
     });
+}
+
+/// Ends the process with the decision for a hook the hub hasn't answered, once it holds DECIDED: the watchdog's, and
+/// a panic's.
+fn unanswered() -> ! {
+    // RULED first: the hook sets a denial before it sets RULED, so once RULED is read as set, DENIAL is final.
+    let ruled = RULED.load(Ordering::SeqCst);
+    match DENIAL.get() {
+        Some(denial) => {
+            eprintln!("{denial}");
+            std::process::exit(2)
+        }
+        None if RULING.load(Ordering::SeqCst) && !ruled => {
+            if READ_RULES.load(Ordering::SeqCst) {
+                eprintln!("DeepBuild blocked this: deep-hook couldn't read this call and check it against the guards that hold while the hub doesn't answer within 500 ms. Retry it.");
+            } else {
+                eprintln!("DeepBuild blocked this: deep-hook couldn't read its guards in ~/.deepbuild/rules.json within 500 ms, with the hub not answering. Check that file, then retry.");
+            }
+            std::process::exit(2)
+        }
+        None => std::process::exit(0),
+    }
 }
 
 /// The account Claude Code records beside your sign-in: `oauthAccount.accountUuid` in ~/.claude.json.
@@ -1688,7 +1718,7 @@ fn waiter() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     // #824's planted wrong program: a copy of the session's transcript in the waiter's own memory while it waits.
-    let kept = if env::var("DEEP_HUB_PLANT").as_deref() == Ok("waiter-keeps-transcript") {
+    let kept = if hub_plant().as_deref() == Some("waiter-keeps-transcript") {
         fs::read(field("transcript_path")).unwrap_or_default()
     } else {
         Vec::new()
@@ -1709,7 +1739,7 @@ fn waiter() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
-    let watched = env::var("DEEP_HUB_PLANT").as_deref() != Ok("waiter-outlives-session");
+    let watched = hub_plant().as_deref() != Some("waiter-outlives-session");
     let gone = || watched && (agent_pid() != agent || !alive(agent));
     loop {
         std::hint::black_box(&kept);

@@ -1,0 +1,27 @@
+#467 acceptance suite at the base, 92aee55f (Merge pull request #1598), before any implementation.
+
+Not run at the base: the surfaces plainly don't exist there, and no cargo binary was built. A grep of crates/ finds no
+reader of the issue's fields: paint.rs reads `shade` (#160's crescent and step, with blur, choke and kind: inner noted as
+waiting for this issue) and nothing named drop, glow, bevel or satin; no group reads `sort`, `sort_anchor` or
+`parallax`; no mark set reads `atlas` or `grid`; no `tiles.terrain@1` recipe exists, so `check` can't expand the floor.
+
+Expected failures, file by file:
+- drop.test.ts: `raster`'s texts.word has no `drop` entry; the number with its copy 40 px right isn't refused, since
+  `raster` draws through Vello CPU and the base's number_unfit lives only on GPUI's draw path.
+- paint.test.ts: neither renderer draws glow, inner shade, bevel or satin, so each changes no pixel ("isn't drawn");
+  texts.word has no `bounds`; the outer glow doesn't take the number out of its box; the still card's first frame hashes
+  as the bare card's; `status.pass` in the four new fields isn't read, so the check passes it.
+- y-sort.test.ts: `sort: y` isn't read, so figures draw by order key; at 1 s figure b (order b2) draws under c and d
+  (c0, c1) though its foot is lower, and the pixel test names it.
+- parallax.test.ts: `path`'s frames have no `parallax`; the check raises no loop error for the marquee; `check` answers
+  `planted: "parallax_without_modulo"` with bad_input (no issues), so the planted twin's failure names no band.
+- terrain.test.ts: the check has no `tiles.terrain@1` (an unknown kind), so no expansion holds cx, cy and tile.
+- disc.test.ts: no bevel, satin or glow is drawn: the rims' means are equal (0 apart), satin changes no pixel, the glow's
+  alpha just outside the edge is 0; `deep-gpu run --planted bevel_lit_opposite` exits 2 with bad_input at startup.
+- taste.test.ts: INCONCLUSIVE with no TASTE.json (after drawing pictures without the paints).
+
+Checked instead: `npx tsc --noEmit -p tests/acceptance/467` exits 0. The pure arithmetic in helpers.ts ran once under
+Vitest in a throwaway file, then deleted: the foot order at 2 s is a < b < d < c < e < f (order key over ID for c and d,
+ID for e and f), at 1 s a < d < c < b < e < f; the floored modulo maps −265.5 to 4.5 in 90; the cloud and near bands'
+closed forms at 4.7 s are 0, at 2.35 s the clouds' is 85; the marquee's wrapped offset at 4.8 s is 0.2; the atlas PNG
+decodes at 64 × 16; the look's roles resolve to their palette colors.

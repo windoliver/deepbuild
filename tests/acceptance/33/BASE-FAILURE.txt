@@ -1,0 +1,54 @@
+#33 acceptance suite on the base commit b52f7357 (main), 2026-11-07, before any #33 code.
+Node 24.22, macOS, `npm run build --workspaces` and deep-hook built from the base. Local paths shortened to <repo>.
+
+Run 1 (every file but bootstrap.test.ts and part-of.test.ts):
+  npx vitest run --root tests/acceptance/33 --no-file-parallelism seeded budget edited-assertion spine failure-modes rows fakes numeric retry reporting next-pr.live spine.live
+  Test Files 10 failed | 2 skipped (12); Tests 21 failed | 2 skipped (23); under 1 s.
+Run 2: bootstrap.test.ts and part-of.test.ts: Test Files 2 failed (2); Tests 4 failed | 1 passed (5); 3 s.
+
+What the base lacks, and so where each test stops. Each is a plain absence, so the tests stop at their first read:
+
+- The corpus: packages/conformance/fixtures/gate/manifest.json doesn't exist. 17 tests fail at readManifest, two
+  (the corpora missing a row or a fake) at copying the folder:
+    Error: the corpus manifest packages/conformance/fixtures/gate/manifest.json must exist and parse as JSON: ENOENT: no
+    such file or directory, open '<repo>/packages/conformance/fixtures/gate/manifest.json'
+    Error: ENOENT: no such file or directory, lstat '<repo>/packages/conformance/fixtures/gate'
+  seeded.test.ts (AC1, AC2), budget.test.ts's timing (AC6), edited-assertion.test.ts (AC7, both), failure-modes.test.ts
+  (AC9, both), rows.test.ts (AC10, all three), fakes.test.ts (AC11, all four), numeric.test.ts (AC12),
+  retry.test.ts (AC13, both), reporting.test.ts (AC14, both).
+- The kit: the base's deep-conformance has no `gate` command, so every kit run would end at usage:
+    $ node packages/conformance/dist/bin.js gate check
+    Unsupported command. Usage: deep-conformance --help
+           deep-conformance run --fill <module> [--kit <name>]
+    exit 2
+- The wrong programs: the base's plant.ts lists none of drafted-spec-only, bootstrap-commands-only,
+  edited-check-approved, failures-as-fail, verdict-from-exit-status, empty-commit-run-alone,
+  own-files-test-folders-only, so a hub started with one doesn't start (BLOCKED, never a pass):
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=drafted-spec-only did not start: …
+    Error: DEEP_HUB_PLANT=drafted-spec-only names no planted program
+    (and the same for bootstrap-commands-only)
+- The local preflight lane (AC6):
+    Error: AC6 #33.9d9cd1ba some lane of scripts/lanes.mjs must run tests/acceptance/33/budget.test.ts with Vitest and
+    --no-file-parallelism, not excluded
+- The spine list (AC8):
+    Error: AC8 #33.9c912eb7 `node scripts/spine.mjs list` must exit 0: exit 1, … Error: Cannot find module
+    '<repo>/scripts/spine.mjs'
+- This repo's bootstrap (AC4, first test):
+    Error: AC4 #33.6932417b this repo's bootstrap .deepbuild/done.yaml must exist
+- AC5's scenario, on the shipped base hub, stops before the Closes call: the base reads the bootstrap's passing
+  typecheck (tsc --noEmit, a tool that runs no tests) as a run of nothing:
+    Error: AC5 #33.64a97658 the change passes the bootstrap's typecheck command: its runs ended ["ran_nothing"]
+  Under that reading no claim in a repo gated on a test-and-typecheck bootstrap could ever pass, so the suite holds
+  that a typecheck's clean run counts as passed (README, Readings).
+
+Skipped: next-pr.live.test.ts (AC3) and spine.live.test.ts (AC8's re-judge), which run only with DEEP_LIVE=1.
+
+Passed on the base: bootstrap.test.ts's world scenario (AC4, "a repo gated on a hand-written bootstrap alone: tests
+pass and typecheck fails → sent back, FAIL, naming the typecheck", 1.2 s). #322 already runs a trusted repo's
+done.yaml checks at a claim, so the base sends that stop back with a FAIL naming the typecheck. The criterion's
+wrong program, drafted-spec-only, is what that test proves against once the plant exists; on the base its test is
+BLOCKED as above.
+
+A check of this suite's own player (helpers.ts `play`) on the base, with a scratch corpus of one case
+(not kept): a session that commits a no-op change over a failing node:test and says done is sent back, reply
+"sent back 1/3: sum adds: Expected v… · test/sum.test.js:5 · 1 test · next: agent", verdict FAIL.
