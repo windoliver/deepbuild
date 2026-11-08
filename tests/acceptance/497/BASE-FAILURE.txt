@@ -1,0 +1,15 @@
+Base: c469fe2e (origin/main, no implementation of #497), this worktree.
+
+late-entries.test.ts was run at the base (deep-motion built from the base by its beforeAll):
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/497 --no-file-parallelism late-entries
+All 3 tests fail on assertions in this suite's own files:
+  - the late-entry test: "the track takes each entry when it arrives" (the base ignores `arrives` and takes every entry
+    before the first frame, so each frame's track holds all 80); the base also ignores `player`, so `where: "player == 1"`
+    counts nothing.
+  - both planted tests: "the late run is accepted: {"ok":false,"code":"bad_input"}" (the base knows neither planted value).
+
+held.test.ts and refusals.test.ts were not run: they build deep-show with `--features full,test-held`, and the base has no
+`test-held` feature (crates/deep-show/Cargo.toml), so cargo refuses the build and each of their 3 tests fails on
+"the binary builds". The base also has no `arrays` on eval, no `test.held@1` kind and no step_rate check.
+
+The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/497/tsconfig.json, exits 0.

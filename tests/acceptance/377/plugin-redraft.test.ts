@@ -24,7 +24,7 @@ const builds = useBuilds(['default']);
 const out = useOut();
 const DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'plugin', 'gpu-probe-redraft');
 const FIXTURE = JSON.parse(readFileSync(join(DIR, 'documents.json'), 'utf8')) as { documents: { name: string }[] };
-const MODULES = ['gpui-kit', 'gpui-base', 'gpui-component', 'deepbuild'];
+const MODULES = ['@deepbuild/panel', 'deepbuild'];
 const BRIDGE = ['__gpui', '__gpui_components'];
 const PLUGIN: JsonObject = { call: 'plugin', dir: DIR, scene: scenePath(SCENES.handoff) };
 

@@ -1,9 +1,7 @@
 // #326 AC7: gpui-shell's registered Command, the command palette, from a panel in the sidebar
 // slot. It is drawn 1200 points wide with a list allowed 2000 points tall, so it runs past its
 // 260-point panel into the question card's rect unless the host keeps it off.
-import { View } from "gpui-kit";
-import { v_flex } from "gpui-base";
-import { Command, CommandGroup, CommandItem, CommandState } from "gpui-component";
+import { View, v_flex, Command, CommandGroup, CommandItem, CommandState } from "@deepbuild/panel";
 
 export default class CommandPaletteFixture extends View {
   init() {
