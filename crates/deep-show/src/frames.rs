@@ -288,11 +288,31 @@ impl<'a> Hub<'a> {
                 .map(|a| json!({"operator": a.operator, "item": a.item, "read": a.read}))
                 .collect::<Vec<_>>());
         }
-        let drawing = if e.pixels {
+        // #493: a 2D film's shots: the sides its frame draws, and the film block.
+        let reduced = e.view.get("reduced_motion").and_then(Value::as_bool).unwrap_or(false);
+        let program = crate::film::program_of(&self.sched, evaluated);
+        let document = evaluated.document().cloned();
+        let sides = match (&program, &document) {
+            (Some(p), Some(d)) => crate::film::sides(p, d, t, reduced),
+            _ => None,
+        };
+        let drawing = if e.pixels || e.film {
             drawing_of(&self.sched, evaluated)
         } else {
             None
         };
+        if e.film {
+            let glyphs = drawing
+                .as_ref()
+                .and_then(|d| self.renderer.prepare_drawing(d, &self.scenario.evidence).ok())
+                .map(|d| d.glyphs())
+                .unwrap_or_default();
+            reply["film"] = match (&program, &document) {
+                (Some(p), Some(d)) => crate::film::block(p, d, t, reduced, glyphs),
+                _ => json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs}),
+            };
+        }
+        let drawing = drawing.filter(|_| e.pixels);
         reply["hashes"] = json!(self
             .sched
             .take_hashes()
@@ -300,7 +320,11 @@ impl<'a> Hub<'a> {
             .map(|h| json!({"of": h.of, "bytes": h.bytes}))
             .collect::<Vec<_>>());
         if let Some(drawing) = drawing {
-            match self.canonical_png(&drawing, e.size) {
+            let drawn = match (&sides, &document) {
+                (Some(sides), Some(doc)) => self.film_png(&drawing, e.size, sides, doc),
+                _ => self.canonical_png(&drawing, e.size),
+            };
+            match drawn {
                 Ok((sha, drawn, size)) => {
                     reply["snapshots"] = json!([snapshot::entry(&sha, &drawn, size)]);
                 }
@@ -336,6 +360,59 @@ impl<'a> Hub<'a> {
             path: "snapshots".into(),
         })?;
         Ok((sha, drawn, size))
+    }
+
+    /// #493: [`Hub::canonical_png`] of a 2D film whose shots write its camera: each side the
+    /// frame draws through its own camera, finished in its own look, the sides blended as
+    /// finished pixels, and the status marks drawn once on top from the side that holds the
+    /// reveal, never blended (Transition).
+    pub(crate) fn film_png(
+        &mut self,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+        sides: &crate::film::Sides,
+        doc: &Value,
+    ) -> Result<(String, Drawn, [u16; 2]), Unfit> {
+        let drawn = self
+            .renderer
+            .prepare_drawing(drawing, &self.scenario.evidence)?;
+        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
+        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
+        let ink = self.look.light.get("ink").copied().unwrap_or([0; 3]);
+        let frame = drawn.frame.size;
+        let mut pictures = Vec::with_capacity(sides.sides.len());
+        for side in &sides.sides {
+            let part = drawn.part(Some(crate::film::view(&side.pose, frame)), true, false);
+            let mut rgba = self.renderer.raster(&part, size, Some(ground));
+            if let Some(map) = side.look.as_deref().and_then(|l| self.tone_of(doc, l)) {
+                crate::film::finish(&mut rgba, map);
+            }
+            pictures.push(rgba);
+        }
+        let mut rgba = match (&sides.mix, pictures.len()) {
+            (Some(mix), 2) => crate::film::blend(&pictures[0], &pictures[1], mix, size, ink),
+            _ => pictures.swap_remove(0),
+        };
+        let top = &sides.sides[sides.status.min(sides.sides.len() - 1)];
+        let status = drawn.part(Some(crate::film::view(&top.pose, frame)), false, true);
+        let over = self.renderer.raster(&status, size, None);
+        crate::film::over(&mut rgba, &over);
+        let sha = evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
+            code: "evidence_unwritable",
+            path: "snapshots".into(),
+        })?;
+        Ok((sha, status, size))
+    }
+
+    /// A shot's look's tone map: the look@1 the document names by asset, read from the evidence
+    /// store (#1162's way).
+    fn tone_of(&self, doc: &Value, name: &str) -> Option<deep_canvas_marks::finish::ToneMap> {
+        let sha = doc.pointer(&format!("/assets/{name}/sha256"))?.as_str()?;
+        let bytes = (sha.len() == 64)
+            .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
+            .flatten()?;
+        let def: Value = serde_json::from_slice(&bytes).ok()?;
+        deep_canvas_marks::finish::read_tone_map(def.get("tone_map")).ok()
     }
 
     /// [`Hub::canonical_png`] of a document with 3D writer layers: its 3D frame at `t` on the GPU,

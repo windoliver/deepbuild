@@ -14,6 +14,7 @@ mod costs;
 mod efficiency;
 mod familiar;
 mod evidence;
+mod film;
 mod frames;
 mod function;
 mod gate;
@@ -598,6 +599,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 clean: flag("clean")?,
                 perturb: optional(c.get("perturb"), |p| Some(p.as_str()?.to_string()))?,
                 pixels: flag("pixels")?,
+                film: flag("film")?,
                 size: px_size(c.get("size"), |_| true)?,
             })));
         }
@@ -2089,6 +2091,9 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     }
     if cfg!(feature = "test-ease-in-motion") {
         registry = registry.plant(Fault::EaseInMotion);
+    }
+    if cfg!(feature = "test-camera-in-scene3d") {
+        registry = registry.plant(Fault::CameraInScene3d);
     }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {

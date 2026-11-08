@@ -233,18 +233,14 @@ features = [
     "std",
     "CALayer",
     "CAMetalLayer",
-    # DeepBuild patch (windoliver/deepbuild#140): the layer's colorspace.
-    "objc2-core-graphics",
+    "objc2-core-graphics", # DeepBuild patch (windoliver/deepbuild#140)
 ]
 default-features = false
 
 # DeepBuild patch (windoliver/deepbuild#140): the window's CAMetalLayer is tagged sRGB.
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies.objc2-core-graphics]
 version = "0.3.2"
-features = [
-    "std",
-    "CGColorSpace",
-]
+features = ["std", "CGColorSpace"]
 default-features = false
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies.objc2-security]
