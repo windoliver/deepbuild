@@ -474,7 +474,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if let Some(ix) = &ix {
         let palette: Vec<&str> = ix.palette.iter().map(|(r, _)| r.as_str()).collect();
         reply["indexed"] = json!({"operator": crate::indexed::OPERATOR,
-            "class": crate::indexed::class(), "palette": palette});
+            "class": crate::indexed::class(), "palette": palette,
+            "target_bytes": crate::indexed::target_bytes(ix.size)});
     }
     if checks_flicker {
         reply["flicker"] = crate::print2d::flicker(&lumas, fps as f64);
