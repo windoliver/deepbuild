@@ -6,4 +6,9 @@ claims:
     checks: [typecheck, test]
 checks:
   typecheck: { type: command, run: "node node_modules/typescript/bin/tsc --noEmit", deadline: 30m }
-  test: { type: command, run: "node scripts/affected.mjs", min_tests: 1, deadline: 4h }
+  test: { type: command, run: "node node_modules/vitest/vitest.mjs run packages", min_tests: 1, deadline: 2h }
+# The package tests and the acceptance suites start hubs, sandboxes and git of their own, which the gate's sandbox
+# can't hold (macOS can't nest Seatbelt): they run as you, outside it, once their checkout is built.
+outside:
+  checks: [test, tests/acceptance/]
+  build: "npm run build --workspaces && cargo build --locked -q -p deep-hook"
