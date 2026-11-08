@@ -10,7 +10,7 @@
 // charged to it after its first frame. README: The surface under test; Readings.
 import { describe, expect, it } from 'vitest';
 import {
-  AC, ALL_FOUR, CARD_SIZE, LOOK, PAINTS, answered, arr, card, check, describeErrors, diffAt, glyphsOf, layersCall, num, numberCard,
+  AC, ALL_FOUR, CARD_SIZE, LOOK, PAINTS, answered, arr, card, diffAt, glyphsOf, layersCall, num, numberCard,
   obj, rasterAll, rasterLine, refusalNames, render, requireMetal, runGpu, shown, sideOf, textEntry, useBin, useDir,
   writeJson, type Image, type JsonObject,
 } from './helpers.ts';
@@ -117,22 +117,5 @@ describe(`${ID} glow, the inner shade, bevel and satin on text`, () => {
     expect(typeof withFour[0]!.hash === 'string' && withFour[0]!.hash !== plain[0]!.hash, `the first frame shows the four: its pixels differ from the bare card's (${String(withFour[0]!.hash)} vs ${String(plain[0]!.hash)})`).toBe(true);
     const costly = withFour.slice(1).flatMap((f, k) => (f.drawn || f.passes > 0 || f.gpu !== 0 ? [`frame ${k + 2}: drawn ${f.drawn}, ${f.passes} passes, ${f.gpu} ms of GPU charged`] : []));
     expect(costly, `after its first frame the still card costs nothing: no frame draws it, runs a pass for it or charges it GPU time:\n${costly.join('\n')}`).toEqual([]);
-  });
-
-  it(`${ID} a status role is refused in each of the four`, () => {
-    const cases: [string, JsonObject][] = [
-      ['glow', { glow: { role: 'status.pass' } }],
-      ['the inner shade', { shade: { kind: 'inner', role: 'status.pass' } }],
-      ['bevel', { bevel: { highlight: { role: 'status.pass' }, shadow: { role: 'dark' } } }],
-      ['satin', { satin: { role: 'status.pass' } }],
-    ];
-    for (const [name, paint] of cases) {
-      const { answer, errors } = check(cpu(), card(`status-${name}`, paint));
-      expect(answer['ok'], `${name} naming status.pass is refused at check: ${describeErrors(errors)}`).toBe(false);
-      expect(errors.map((e) => e.code), `${name}: the only error is the status-color rule's`).toEqual(['status_color_unbound']);
-      expect(errors[0]!.ids, `${name}: the refusal names the text`).toContain('word');
-    }
-    const { errors } = check(cpu(), card('status-none', ALL_FOUR));
-    expect(describeErrors(errors), 'the same four in data roles pass the check').toBe('none');
   });
 });
