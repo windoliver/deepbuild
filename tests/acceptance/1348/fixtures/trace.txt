@@ -1,0 +1,3 @@
+TypeError: Cannot read properties of undefined (reading 'total')
+    at sumCart (/srv/shop/src/cart.ts:41:17)
+    at applyDiscount (/srv/shop/src/discount.ts:12:5)

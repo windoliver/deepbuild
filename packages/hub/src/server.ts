@@ -9,6 +9,7 @@ import { writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import { basename, dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { JUDGE_FAULTS } from '@deepbuild/gate';
 import type { HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
@@ -19,11 +20,13 @@ import { isPrCreate, isPrEdit } from './forge.js';
 import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
+import { cachedRuleFiles, callPaths, handleOf as ruleHandle, isRuleFile, noticesFor, noticeText, readHeld, repoRoot, RULE_EDITS, rulesInFile, rulesOf, type RuleFile, type RuleFileBefore } from './rules.js';
 import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { heavyDenial } from './heavy.js';
 import { processHealth } from './process-health.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
+import { People } from './people.js';
 import { plantedStart } from './plant.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 
@@ -39,19 +42,27 @@ const MAX_LINE = 64 << 20;
 const BEHIND = 10_000;
 const STALL_MS = 100;
 
-type Role = 'hook' | 'app' | 'cli' | 'mcp';
+/** A person's connection (#1337) reads only what that person may see. */
+type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
-  ['hub.health', ['app', 'cli']], ['health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
+  ['hub.health', ['app', 'cli', 'person']], ['health', ['app', 'cli', 'person']], ['events.read', ['app', 'cli', 'person']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['ask.confirm', ['app']], ['views.installed', ['app']], ['command.run', ['app']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
-  ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
-  ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
+  ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli', 'person']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
+  ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['race.start', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
   // A run of a destructive command undone from the copy staged before it ran (#347).
   ['staged.undo', ['app', 'cli']],
+  // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
+  // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
+  ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['mcp.exec', ['cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
+  // Sessions started without your Send (#1330): a run you approve, and a start under it, from your own terminal.
+  ['start.approve', ['cli']], ['start.session', ['cli']],
+  // A person added to a project, with a credential of their own (#1337).
+  ['person.add', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
@@ -59,11 +70,15 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['wiki.build', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
   ['memory.list', ['cli']], ['memory.act', ['cli']],
-  ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
+  // The rules page (#344): written from your rule files, a scope's reach before you save it, who a rule reached, a session's set.
+  ['rules.sync', ['app', 'cli']], ['rules.reach', ['app', 'cli']], ['rules.credit', ['app', 'cli']], ['session.rules', ['app', 'cli']],
+  // The blind acceptance job (#1328).
+  ['acceptance.start', ['cli']], ['acceptance.status', ['app', 'cli']], ['acceptance.dispute', ['cli']], ['acceptance.ended', ['cli']],
+  ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['checks.kinds', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
   // `deep workspace` (#67), and the views of the projects you're in.
-  ['workspace.new', ['cli']], ['workspace.move', ['cli']], ['workspace.revert', ['cli']], ['workspace.diff', ['cli']], ['workspace.drift', ['cli']], ['project.views', ['app', 'cli']],
+  ['work.fix', ['cli']], ['workspace.new', ['cli']], ['workspace.move', ['cli']], ['workspace.revert', ['cli']], ['workspace.diff', ['cli']], ['workspace.drift', ['cli']], ['project.views', ['app', 'cli']],
   // The app API's views/shown and views/hidden (#262): the views the app shows, repeated every 5 s while shown.
   ['views.shown', ['app']], ['views.hidden', ['app']],
   // What macOS says of the app's notifications (#994), when the app connects and when it changes.
@@ -291,6 +306,8 @@ class Conn {
   cwd: string | undefined;
   /** For an app or cli connection, the process its hello names as its own: the peer check starts there. */
   peer: { pid: number; start: string } | undefined;
+  /** The person whose credential the connection presented (#1337); none for the owner. */
+  person: string | undefined;
   first = true;
   done = false;
   /** A waiter's connection: its close tells the core the waiter is gone. */
@@ -324,7 +341,7 @@ function mergeNamed(meta: HookMeta, data: Obj): NonNullable<Gated['merge']> {
   if (read !== undefined) {
     const part = (name: string) => new RegExp(`\\b${name}=(\\S+)`).exec(read)?.[1];
     const [pr, head] = [part('pr'), part('head')];
-    return { ...(pr ? { pr } : {}), ...(head ? { head } : {}), ...(/ auto\b/.test(read) ? { auto: true } : {}), ...(/ disable\b/.test(read) ? { disable: true } : {}) };
+    return { ...(pr ? { pr } : {}), ...(head ? { head } : {}), ...(/ auto\b/.test(read) ? { auto: true } : {}), ...(/ disable\b/.test(read) ? { disable: true } : {}), ...(/ blind\b/.test(read) ? { blind: true } : {}) };
   }
   const input = isObj(meta.call?.input) ? meta.call.input : {};
   const pr = input.pullNumber ?? input.pull_number;
@@ -367,7 +384,10 @@ class Hub {
   /** The hub's clock (the test clock, moved on by a restart): what the waits measure by, like the record's `ts`. */
   private now: () => number = Date.now;
 
+  /** The people this hub holds credentials for (#1337), read again when one is added. */
+  private readonly people: People;
   constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {
+    this.people = new People(root.dir);
     this.waits = new Waits({ rewrites: (agent) => this.rewrites(agent), ...(plant ? { plant } : {}) });
   }
 
@@ -682,9 +702,16 @@ class Hub {
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
     const meta = parsed.meta;
+    // The person is the connection's, never the payload's, but for the planted wrong program (#1337).
+    const person = this.plant === 'actor-from-payload' && meta.payloadActor ? meta.payloadActor : conn.person;
+    if (person) meta.person = person;
+    else delete meta.person;
     if (this.cantRun.has(meta.agent)) Object.assign(meta, { watchOnly: true, cantRun: true });
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     let ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
+    // A rule you scoped to paths, at the session's first call inside its scope (#344): its words ride this reply.
+    const notice = meta.watchOnly ? undefined : this.rulesAt(meta, ruled);
+    if (notice) ruled = withWaits(ruled, meta.event, { context: notice });
     // The long waits (#120): each hook shows the waits its call's start or end, and takes the lines waiting for it.
     if (!meta.watchOnly) {
       const now = this.now();
@@ -795,6 +822,8 @@ class Hub {
       const words: [string, string[]][] = [['git push', ['push-needs-ask']], ['gh pr create', ['pr-needs-ask']], ['gh pr merge', ['merge-needs-ask', 'merge-names-head']]];
       matched = words.filter(([w]) => String(data.command ?? '').includes(w)).flatMap(([, rules]) => rules);
     }
+    // The planted wrong program for #1523 holds every call to the programs the new forms run, as a push.
+    if (this.plant === 'holds-every-program' && /^\s*(?:jj|gt|sl|glab|git[\s-]town|gh\s+api)\b/.test(String(data.command ?? ''))) matched = [...matched, 'push-needs-ask'];
     const shell = Object.entries(NAMED_RULES).flatMap(([rule, effect]) => (matched.includes(rule) ? [{ rule, effect }] : []));
     const tool = Object.entries(NAMED_RULES).flatMap(([rule, effect]) => (effect === data.effect ? [{ rule, effect }] : []));
     return [...shell, ...tool.filter((t) => !shell.some((s) => s.rule === t.rule))].filter((n) => blocks(n.rule));
@@ -871,6 +900,40 @@ class Hub {
       return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
     }
     conn.sock.end(ruled);
+  }
+
+  /** The scoped rules each session heard since its start, compaction or resume, by rule ID (#344). */
+  private rulesHeard = new Map<string, Set<string>>();
+  private ruleFiles = new Map<string, { at: number; files: RuleFile[] }>();
+  /**
+   * Your rules at a hook, read here so no call waits on the core (#344): a session's start, compaction or resume lets
+   * each scoped rule be heard once more; a PreToolUse inside a rule's scope carries it once, and an Edit or Write of a
+   * rule file has the file's rules read before it runs. Both go to the core on the hook's meta, to record.
+   */
+  private rulesAt(meta: HookMeta, ruled: string): string | undefined {
+    if (!meta.session || !['claude-code', 'claude', 'codex'].includes(meta.agent)) return undefined;
+    if (meta.event === 'SessionStart' || meta.event === 'SessionEnd') { this.rulesHeard.delete(meta.session); return undefined; }
+    if (meta.event !== 'PreToolUse' || !meta.call) return undefined;
+    const repo = repoRoot(meta.cwd);
+    const paths = repo ? callPaths(meta.call.input, meta.cwd, repo) : [];
+    if (!repo || !paths.length) return undefined;
+    try {
+      const files = cachedRuleFiles(this.ruleFiles, repo);
+      const before: RuleFileBefore[] = RULE_EDITS.has(meta.call.tool)
+        ? paths.filter(isRuleFile).map((file) => ({ file, scope: files.find((f) => f.file === file)?.scope ?? 'all', rules: rulesInFile(join(repo, file)) }))
+        : [];
+      if (before.length) this.ruleFiles.delete(repo);
+      // A call blocked before it runs hears nothing.
+      const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
+      const heard = this.rulesHeard.get(meta.session) ?? new Set<string>();
+      this.rulesHeard.set(meta.session, heard);
+      const notices = blocked ? [] : noticesFor(rulesOf({ files, typed: [], held: readHeld(this.root.dir), guards: [] }), paths, meta.agent, heard);
+      if (notices.length || before.length) meta.rules = { notices: notices.map(ruleHandle), ...(before.length ? { before } : {}) };
+      return notices.length ? noticeText(notices) : undefined;
+    } catch (error) {
+      process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`);
+      return undefined;
+    }
   }
 
   /**
@@ -977,8 +1040,10 @@ class Hub {
     }
     // A patch the adapter can't read is Codex's deny, with its reason and nothing else.
     if (meta.denied && !this.off) return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: meta.denied } }), stderr: '' });
-    // A session past its facts is watch-only: a matched entry is recorded, never a block.
-    if (meta.event !== 'PreToolUse' || meta.watchOnly || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
+    if (meta.event !== 'PreToolUse' || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
+    // A watch-only session (one past its facts, #1501) gets the reply every session gets under `deep off`: a matched
+    // entry is recorded, never a block, but the floor's, which deep-hook applies with no facts and no hub at all.
+    const watching = this.off || meta.watchOnly === true;
     const entries = this.rules();
     // The planted wrong program for #304's AC3 ignores what deep-hook matched and reads the command line as text.
     const matched = this.plant === 'matches-text'
@@ -988,18 +1053,18 @@ class Hub {
     const unread = (n: string) => this.plant === 'unknown-as-block' && /couldn't be read/.test(meta.notes?.[n] ?? '');
     const mode = (n: string): unknown => ((this.plant === 'warn-as-block' || unread(n)) && entries[n]?.mode === 'warn' ? 'block' : entries[n]?.mode);
     const words = (n: string): string => `${String(entries[n]!.reason)} ${String(entries[n]!.next_step)}${meta.notes?.[n] ? ` ${meta.notes[n]}` : ''} (guard ${n})`;
-    // With `deep off` only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
+    // Watch-only or off, only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
     // A destructive command is staged or asked about at the gate (#347, #1294), never blocked outright.
-    const decided = (n: string) => !this.off && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
-    const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
+    const decided = (n: string) => !watching && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
+    const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!watching || floor(n)));
     if (blocks.length) {
       meta.blockedBy = blocks;
       return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
     }
-    if (this.off) return EMPTY_REPLY;
+    if (watching) return EMPTY_REPLY;
     const warns = matched.filter((n) => mode(n) === 'warn');
     if (!warns.length || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return EMPTY_REPLY;
     const additionalContext = warns.map((n) => `DeepBuild warns: ${words(n)}`).join('\n');
@@ -1034,6 +1099,24 @@ class Hub {
     if (value.v !== 1) {
       conn.write({ id: null, error: versionRefusal(value) });
       return conn.end();
+    }
+    // A person's credential (#1337): their reads, or their hooks, whose events are stamped with them.
+    const person = (value.hello === 'cli' || value.hello === 'hook') && !this.tokenMatches(value.token) ? this.people.holder(value.token) : undefined;
+    if (value.hello === 'hook') {
+      if (!person && !this.tokenMatches(value.token)) {
+        conn.write({ id: null, error: refusal('credential', '/token', "Present the control token or a person's credential this hub issued.") });
+        return conn.end();
+      }
+      conn.person = person;
+      // The next line is the hook's request, read as a first line is.
+      conn.first = true;
+      return;
+    }
+    if (value.hello === 'cli' && person) {
+      conn.role = 'person';
+      conn.name = `person:${person}`;
+      conn.person = person;
+      return conn.write({ role: conn.name });
     }
     if (value.hello === 'app' || value.hello === 'cli') {
       if (!this.tokenMatches(value.token)) {
@@ -1119,6 +1202,11 @@ class Hub {
         // The reply is the stream's first frame: it carries the start ID, so a consumer that sees a new one redoes its reads.
         return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after, start: this.start })));
       }
+      case 'person.add':
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, ...(conn.peer ? { peer: conn.peer } : {}) } }).then((result) => {
+          this.people.load();
+          return result;
+        }));
       case 'session.wait':
         conn.waiter = true;
         return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session } }));
@@ -1206,6 +1294,9 @@ function writeToken(root: Root): string {
  */
 export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
+  // The kit gate@1's fault for rows no commit reaches (#33): only the kit sets it, and a name it doesn't know stops the hub.
+  const fault = process.env.DEEP_HUB_TEST_JUDGE_FAULT;
+  if (fault && !(JUDGE_FAULTS as readonly string[]).includes(fault)) throw Error(`DEEP_HUB_TEST_JUDGE_FAULT=${fault} names no fault the kit plays`);
   plantedStart(plant);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.

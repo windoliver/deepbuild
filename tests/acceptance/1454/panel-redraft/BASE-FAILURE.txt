@@ -1,0 +1,44 @@
+#1454's refused panel at the base, November 6 to 7, 2026, on a Mac, outside the Bash tool's sandbox, Node 24.22.0 from fnm (official build), cargo 1.99.1.
+
+The checkout was c12a65bb plus #1116's five commits (63766efe). Those touch only scripts/, docs/parallel-proof.md and #1116's tests, nothing under crates/ or
+packages/, so the app, the hub and the kit are the base's. tests/acceptance/1454/ from 0e41601b sat beside this folder, and the [[test]] entry of README, Pinned 3, sat in
+crates/deep-replica/Cargo.toml. Neither is committed here.
+
+RAN, no window:
+
+  cargo test --locked -p deep-replica --test acceptance_1454_panel_redraft
+
+    test the_kit_refuses_the_fixture_for_its_dialog ... ok
+    test the_fixture_loads_and_paints_its_words_in_the_sidebar_slot ... ok
+    test wrong_fixture_with_no_words_paints_no_ink ... ok
+    test wrong_fixture_dialog_from_gpui_base_is_refused_and_never_loads ... ok
+    test result: ok. 4 passed; 0 failed
+
+  These pass at the base on purpose: they judge the fixture, not the change.
+  A one-off build of the same file, since reverted, printed:
+
+    kit, on the import from gpui-base:  panel@1 refused this panel: it uses Dialog, a dialog, which gpui-shell draws outside its parent, where it could cover the question card
+    load, on the same script:           SyntaxError: Could not find export 'Dialog' in module 'gpui-base'
+    the fixture in the sidebar's slot:  987465 px of its background, 1563 px of its words' color
+    Vision OCR of that 3024 x 1964 capture read "Refused overlay panel" and "Open", the real Dialog's trigger, in the slot, beside the card.
+
+  npx vitest run --root tests/acceptance/1454 panel-redraft -t "says it isn't loaded"
+
+    × AC3 `deep install` of a panel that fails panel@1 says it isn't loaded, naming the kit
+      deep install says the refused panel isn't loaded, by its exit code: ... Installed test/refused@1.0.0: expected +0 not to be +0
+
+  It fails for the expected reason: on a real hub, with the package running in the platform sandbox, nothing refuses the panel. So the host's own registerView check takes it,
+  and only the kit can refuse it. fixtures/board installed there too, exit 0.
+
+  tsc -p tests/acceptance/1454/tsconfig.json: clean.
+
+NOT RUN: the three window tests in refused.test.ts. No result exists for them, pass or fail.
+
+  - doesn't load: alone or beside a panel that draws
+  - the refused panel is real: `deep-app --panel`
+  - wrong program: plant-panel-skips-kit
+
+  The screen was locked (CGSSessionScreenIsLocked=1) by the time the binaries were built. An unlocked spell earlier fell inside a wait for the build throttle, so no window test
+  could start in it. `probe access` printed ax true, screen true, so the permissions the first draft lacked are in place on this Mac, and the screen lock is what stopped these.
+  Expected at the base, read from the code and not seen: "doesn't load" fails its control, since no flag draws no installed panel; "--panel" passes; the wrong program
+  fails, since crates/deep-app/Cargo.toml has no plant-panel-skips-kit. neverDrawn has not been run on a real window.

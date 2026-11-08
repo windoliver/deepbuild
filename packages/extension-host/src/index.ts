@@ -4,11 +4,12 @@
 export { API as EXTENSION_API, type ApiMethod } from '../runtime/deep.mjs';
 export { packageDigest } from './digest.js';
 export {
-  openExtensionHost, type ActionCall, type ActionListing, type ActionResult, type ActionTarget, type Conformance, type Delivered, type ExtensionHost, type ExtensionHostOptions, type ProjectView, type RuntimeEnvironment, type RunningEnvironment, type HookReply, type HookRequest,
+  openExtensionHost, type ActionCall, type ActionListing, type ActionResult, type ActionTarget, type Conformance, type Delivered, type InstalledView, type ExtensionHost, type ExtensionHostOptions, type ProjectView, type RuntimeEnvironment, type RunningEnvironment, type HookReply, type HookRequest,
   type HostGrant, type HubCheckContext, type IndexFill, type Installed, type InstallFrom, type KitRun, type Load, type Loaded, type NoticeRow, type PackageTests, type Plant, type Refused, type ReleaseEntry, type Route, type ViewShown,
 } from './host.js';
 export { type ScheduleRow, type ScheduleRun, type Verdict } from './schedules.js';
 export { type SendRow, type SendRule } from './sends.js';
+export { type DeliveryRow, type WorkEvent, type WorkItem, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
 export { citedEvidence, type BoundValue, type Rollup as RollupStats } from './series.js';
 export { keychainStore, type HttpAnswer, type HttpClient, type HttpRequest, type KeyTest, type Reading, type RecordedCall, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 export { hostKit, runHostKit, type HostKit, type HostKitCase, type HostKitReport } from './kit.js';

@@ -5,7 +5,8 @@
 // sampling), so a uniform environment stays exactly uniform at every roughness.
 
 struct Params {
-    // x: the face, y: the mip, z: how many mips, w: samples per texel.
+    // x: the face, y: the mip, z: the lookups' level bias (1 for lighting's cube, 0 for the
+    // blurred background's, which holds the lobe itself to 1 code value), w: samples per texel.
     at: vec4<u32>,
     // x: the roughness, y: this mip's face size in px, z and w: the source's size in px.
     k: vec4<f32>,
@@ -85,7 +86,7 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             let dd = cos_t * cos_t * (a2 - 1.0) + 1.0;
             let pdf = a2 / (PI * dd * dd) / 4.0;
             let omega = 1.0 / (f32(count) * pdf);
-            let lod = max(0.5 * log2(omega / texel) + 1.0, 0.0);
+            let lod = max(0.5 * log2(omega / texel) + f32(p.at.z), 0.0);
             sum += radiance(l, lod) * nl;
             weight += nl;
         }

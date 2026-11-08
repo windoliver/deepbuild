@@ -656,6 +656,9 @@ pub struct Scene {
     /// Motion blur by velocity this frame (#419): the evaluations at t ± half the shutter that the
     /// renderer's velocity target reads, or `None`.
     pub motion: Option<Arc<Motion>>,
+    /// The core's velocity target this frame (#431): the evaluations at t ± half the shutter an
+    /// effect or operator reading it is drawn from, or `None` where nothing reads it.
+    pub velocity: Option<Arc<Motion>>,
     /// Each `overlay.text@1` readout (#419): drawn by the view after the frame's samples and
     /// motion blur resolve, over the frame, never into the frame itself.
     pub readouts: Vec<Label>,
@@ -680,6 +683,15 @@ pub struct Scene {
     pub shadowing: crate::light::Shadowing,
     /// Under samples per frame, the angle this sample turns a soft shadow's disk by (#446).
     pub sample_turn: Option<f64>,
+    /// #464: what the look's print finish draws from at this frame's t and the document's seed.
+    pub print: deep_canvas_marks::print::Frame,
+    /// The view's mirror (#465; Material: mirror), which one extra pass draws.
+    pub mirror: Option<crate::mirror::Mirror>,
+    /// The view's flare (#465; Effect: flare): the first `effect@1` of kind flare.
+    pub flare: Option<Arc<crate::flare::Flare>>,
+    /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
+    /// in item order. They draw nothing in the look.
+    pub probes: Vec<crate::probe::Probe>,
 }
 
 impl Scene {
@@ -2164,6 +2176,8 @@ pub(crate) fn evaluate_compiled(
     let mut protos: HashMap<String, Vec<Solid>> = HashMap::new();
     let mut instancers: Vec<(usize, String)> = Vec::new();
     let mut cutaway = None;
+    let mut flare: Option<Arc<crate::flare::Flare>> = None;
+    let mut probe_items: Vec<crate::probe::Wanted> = Vec::new();
     // The IES tables the lights name (#446).
     let mut tables: Vec<Arc<crate::ies::Distribution>> = Vec::new();
     for layer_id in &order {
@@ -2593,6 +2607,11 @@ pub(crate) fn evaluate_compiled(
                 "camera@1" | "sky@1" | "material@1" | "group@1" => {}
                 // #424: an instancer's elements, placed once its prototypes are read.
                 "instance@1" => instancers.push((layers.len(), id.clone())),
+                // #465: the first flare is the view's; scene3d draws no other effect kind.
+                "effect@1" => {
+                    let f = crate::flare::parse(id, params, look)?;
+                    flare.get_or_insert_with(|| Arc::new(f));
+                }
                 "cutaway@1" if cutaway.is_none() => {
                     cutaway = Some(crate::cut::cutaway(
                         id,
@@ -2607,6 +2626,11 @@ pub(crate) fn evaluate_compiled(
                     )?);
                 }
                 "cutaway@1" => {}
+                // #427: a probe draws nothing; its capture is made once the lights are read.
+                "light.probe@1" => {
+                    let pos = origin(&world(&items, id));
+                    probe_items.push(crate::probe::read(id, params, pos, &path)?);
+                }
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -2807,6 +2831,7 @@ pub(crate) fn evaluate_compiled(
         return refused("out_of_range", "budget/puffs");
     }
     crate::sets::compile(map, &mut lights, &mut layers)?;
+    let probes = probes(map, probe_items, &lights, &layers, sky.as_ref())?;
     // #149: a drawing look lights its marks from its own light, with no Light item.
     if let (None, true, Some(l)) = (&sun, lights.is_empty(), drawn_light(look)) {
         sun = Some(l);
@@ -2826,6 +2851,7 @@ pub(crate) fn evaluate_compiled(
         curves,
         pages: labels.pages(),
         motion: None,
+        velocity: None,
         readouts,
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
@@ -2834,9 +2860,58 @@ pub(crate) fn evaluate_compiled(
         distributions: tables,
         shadowing: crate::sets::policy(map)?,
         sample_turn: None,
+        print: deep_canvas_marks::print::frame(
+            &look.print,
+            map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32,
+            t,
+            false,
+        ),
+        mirror: None,
+        flare,
+        probes,
     };
     scene.set_cutaway(cutaway);
+    scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
     Ok(scene)
+}
+
+/// The document's light probes, each captured or baked from what it sees (#427). Figures and
+/// data views refuse probes, and `budget.probes` caps each type (reflection 8, irradiance 4).
+fn probes(
+    map: &Map<String, Value>,
+    wanted: Vec<crate::probe::Wanted>,
+    lights: &[crate::light::Light],
+    layers: &[Layer3],
+    sky: Option<&crate::sky::Sky>,
+) -> Result<Vec<crate::probe::Probe>, Refused> {
+    use crate::probe::{ProbeKind, MAX_IRRADIANCE, MAX_REFLECTION};
+    let Some(first) = wanted.first() else {
+        return Ok(Vec::new());
+    };
+    if matches!(
+        map.get("profile").and_then(Value::as_str),
+        Some("figure" | "view" | "chart" | "sheet" | "cells")
+    ) {
+        return refused("out_of_range", format!("items/{}/kind", first.id));
+    }
+    for (kind, name, most) in [
+        (ProbeKind::Reflection, "reflection", MAX_REFLECTION),
+        (ProbeKind::Irradiance, "irradiance", MAX_IRRADIANCE),
+    ] {
+        let cap = map
+            .get("budget")
+            .and_then(|b| b.pointer(&format!("/probes/{name}")))
+            .and_then(Value::as_u64)
+            .map_or(most, |c| (c as usize).min(most));
+        if wanted.iter().filter(|w| w.kind == kind).count() > cap {
+            return refused("out_of_range", format!("budget/probes/{name}"));
+        }
+    }
+    let around = crate::probe::Surroundings::of(layers, sky.map(|s| s.ambient));
+    Ok(wanted
+        .into_iter()
+        .map(|w| crate::probe::capture(w, lights, &around))
+        .collect())
 }
 
 /// Whether `id` and each of its parents are visible (Item: `visible`, inherited).

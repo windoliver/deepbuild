@@ -3,6 +3,10 @@
 //! would see, plus a screenshot. The checks that run in it live beside it: the Needs you kit, the
 //! panel registry against the app's slots, and the snapshot against the live tree.
 
+// A release build refuses the planted programs' feature (#1408).
+#[cfg(all(feature = "env-plants", not(debug_assertions)))]
+compile_error!("the env-plants feature is for test builds only, never a release build");
+
 pub mod drive;
 pub mod kit;
 mod replica;
@@ -68,20 +72,54 @@ pub fn panel_dir(name: &str) -> PathBuf {
 
 /// The view name `--first-screen` stands for: the app's first screen, Home, drawn for the HOME it runs with.
 pub const FIRST_SCREEN: &str = "first-screen";
+/// The rules page (#344), drawn from the HOME it runs with: `wiki/rules.md` as `deep rules sync` wrote it.
+pub const RULES_PAGE: &str = "rules";
+
+/// The replica's view of the look's 16 terminal colors on the terminal's background (#1003).
+pub const TERMINAL_COLORS: &str = "terminal-colors";
 
 /// `--view <id> --out <out>` from the command line, the view a shipped one (or `--first-screen`), and where `replica`
 /// takes them, `--appearance <light|dark>` as whether macOS is set to dark (#882) and `--bound <file>`, the runs and
-/// bound values to draw (#629); else the usage error is printed under `bin`'s name and the exit code is 2.
+/// bound values to draw (#629); else the usage error is printed under `bin`'s name and the exit code is 2. The replica
+/// also takes the `terminal-colors` view, `--selected-row <n>` and `--focused-row <n>`, the sidebar rows it opens
+/// selected and focused (#1003), `--click <button>` on the first screen (#1556), and `--window <w>x<h>` (#1454).
 pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
-    let (mut view, mut path, mut dark, mut bound) = (None, None, None, None);
+    let (mut view, mut path, mut dark, mut bound, mut click, mut size) =
+        (None, None, None, None, None, None);
+    let (mut selected, mut focused) = (None, None);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            row @ ("--selected-row" | "--focused-row") if replica => {
+                let Some(n) = args.next().and_then(|n| n.parse::<usize>().ok()) else {
+                    eprintln!("{bin}: {row} is a row's index from 0");
+                    return Err(2);
+                };
+                *(if row == "--selected-row" {
+                    &mut selected
+                } else {
+                    &mut focused
+                }) = Some(n);
+            }
             "--view" => view = args.next(),
             // #1002: the app's first screen as a launch shows it for this HOME, over its own record, not the fixture.
             "--first-screen" => view = Some(FIRST_SCREEN.to_owned()),
             "--out" => path = args.next().map(PathBuf::from),
             "--bound" if replica => bound = args.next().map(PathBuf::from),
+            // #1454: the replica's window can be the app's opening size, so a proof runs at both.
+            "--window" if replica => {
+                let given = args.next();
+                let read = given
+                    .as_deref()
+                    .and_then(|s| s.split_once('x'))
+                    .and_then(|(w, h)| Some((w.parse::<f32>().ok()?, h.parse::<f32>().ok()?)));
+                let Some(read) = read.filter(|(w, h)| *w > 0. && *h > 0.) else {
+                    eprintln!("{bin}: --window is <width>x<height> in points, not {given:?}");
+                    return Err(2);
+                };
+                size = Some(read);
+            }
+            "--click" if replica => click = args.next(),
             "--appearance" if replica => match args.next().as_deref() {
                 Some("light") => dark = Some(false),
                 Some("dark") => dark = Some(true),
@@ -100,16 +138,30 @@ pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
         eprintln!("usage: {bin} --view <id> --out <{out}>");
         return Err(2);
     };
-    if view != FIRST_SCREEN && !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str()) {
+    let extra = (replica && view == TERMINAL_COLORS) || view == RULES_PAGE;
+    if view != FIRST_SCREEN && !extra && !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str()) {
         let shipped = deep_app::views::SHIPPED_VIEWS;
         eprintln!("{bin}: {view} is not a shipped view; the views are {shipped:?}");
         return Err(2);
     }
-    Ok((view, path, dark, bound))
+    if click.is_some() && view != FIRST_SCREEN {
+        eprintln!("{bin}: --click clicks a button on the --first-screen");
+        return Err(2);
+    }
+    deep_app::views::start_sidebar(selected, focused);
+    Ok((view, path, dark, bound, click, size))
 }
 
-/// What `view_args` reads: the view, where to write, the appearance and the bound values' file.
-pub type ViewArgs = (String, PathBuf, Option<bool>, Option<PathBuf>);
+/// What `view_args` reads: the view, where to write, the appearance, the bound values' file, the button to click and
+/// the window's size.
+pub type ViewArgs = (
+    String,
+    PathBuf,
+    Option<bool>,
+    Option<PathBuf>,
+    Option<String>,
+    Option<(f32, f32)>,
+);
 
 /// Issue #629: `--bound <file>`, `{"runs": [{run, check, tool, report}], "card": [{id, bind}], "panel": [{id,
 /// bind}]}`: each run recorded from its tool's report, as the hub records it, and each bound value resolved by the

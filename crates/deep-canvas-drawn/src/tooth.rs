@@ -75,39 +75,43 @@ fn height(kind: u32, p: [f64; 2], seed: u32) -> f64 {
     match kind {
         // Cold press: round pits over a soft swell.
         0 => {
-            fbm2(p, seed, 3, 2.0, 0.55, TEETH)
+            fbm2(p, seed, 3, 2.0, 0.55, [TEETH; 2])
                 + 0.4 * (1.0 - 2.0 * cells([x * 0.5, y * 0.5], seed, TEETH / 2))
         }
         // Laid: close ribs crossed by wide chain lines.
         1 => {
             let ribs = ops::sin(TAU * y);
             let chain = ops::cos(TAU * x / 16.0);
-            ribs + 0.6 * chain * chain * chain * chain + 0.5 * noise2(p, seed, TEETH)
+            ribs + 0.6 * chain * chain * chain * chain + 0.5 * noise2(p, seed, [TEETH; 2])
         }
         // Wove: fine and even.
-        2 => fbm2([x * 2.0, y * 2.0], seed, 2, 2.0, 0.5, TEETH * 2),
+        2 => fbm2([x * 2.0, y * 2.0], seed, 2, 2.0, 0.5, [TEETH * 2; 2]),
         // Canvas: an over-under weave.
         3 => weave(x, y, 0.0),
         // Linen: a weave whose threads wander.
         4 => {
-            let wander = 0.35 * noise2([x / 4.0, y / 4.0], seed, TEETH / 4);
-            weave(x + wander, y - wander, 0.4 * noise2(p, seed ^ 1, TEETH))
+            let wander = 0.35 * noise2([x / 4.0, y / 4.0], seed, [TEETH / 4; 2]);
+            weave(
+                x + wander,
+                y - wander,
+                0.4 * noise2(p, seed ^ 1, [TEETH; 2]),
+            )
         }
         // Silk: long fine slubs along the warp.
         5 => {
-            let slub = noise2([x / 8.0, y / 8.0], seed, TEETH / 8);
+            let slub = noise2([x / 8.0, y / 8.0], seed, [TEETH / 8; 2]);
             ops::sin(TAU * (2.0 * y + 2.0 * slub))
-                + 0.5 * noise2([x / 4.0, y / 4.0], seed, TEETH / 4)
+                + 0.5 * noise2([x / 4.0, y / 4.0], seed, [TEETH / 4; 2])
         }
         // Stone: grains in cells.
         6 => {
             0.8 * (1.0 - 2.0 * cells([x / 2.0, y / 2.0], seed, TEETH / 2))
-                + 0.6 * fbm2(p, seed ^ 2, 3, 2.0, 0.5, TEETH)
+                + 0.6 * fbm2(p, seed ^ 2, 3, 2.0, 0.5, [TEETH; 2])
         }
         // Wood: rings that bend along the grain.
         _ => {
-            let bend = 1.6 * noise2([x / 16.0, y / 16.0], seed, TEETH / 16);
-            ops::sin(TAU * (x / 8.0 + bend)) + 0.35 * noise2(p, seed ^ 3, TEETH)
+            let bend = 1.6 * noise2([x / 16.0, y / 16.0], seed, [TEETH / 16; 2]);
+            ops::sin(TAU * (x / 8.0 + bend)) + 0.35 * noise2(p, seed ^ 3, [TEETH; 2])
         }
     }
 }
@@ -130,9 +134,18 @@ pub fn tile(kind: u32, seed: u32) -> Vec<f32> {
 /// fine noise that fills read (starving, pinholes, granulation), all repeating with the tile.
 pub fn channels(seed: u32) -> Vec<[f32; 4]> {
     let cracks = stretched(|p| borders(p, seed ^ 8, TEETH));
-    let slow = stretched(|p| fbm2([p[0] / 4.0, p[1] / 4.0], seed ^ 5, 4, 2.0, 0.5, TEETH / 4));
+    let slow = stretched(|p| {
+        fbm2(
+            [p[0] / 4.0, p[1] / 4.0],
+            seed ^ 5,
+            4,
+            2.0,
+            0.5,
+            [TEETH / 4; 2],
+        )
+    });
     let holes = stretched(|p| cells(p, seed ^ 6, TEETH));
-    let fine = stretched(|p| fbm2(p, seed ^ 7, 3, 2.0, 0.6, TEETH));
+    let fine = stretched(|p| fbm2(p, seed ^ 7, 3, 2.0, 0.6, [TEETH; 2]));
     (0..TILE * TILE)
         .map(|i| [cracks[i], slow[i], holes[i], fine[i]])
         .collect()

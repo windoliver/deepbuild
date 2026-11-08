@@ -195,7 +195,7 @@ impl Bound {
                 .ok_or_else(|| format!("input {name} reads no column or attribute"))?;
             read.push((name, s));
         }
-        let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+        let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
         let mut inputs = BTreeMap::new();
         for (name, s) in read {
             let bytes: Vec<u8> = s.words.iter().flat_map(|w| w.to_le_bytes()).collect();
@@ -241,7 +241,7 @@ impl Bound {
             c.storage_inputs.iter().map(|n| &self.inputs[n]).collect();
         bufs.extend(self.outputs.iter().map(|(_, b, _)| b));
         let values = deep_canvas_effects::interp::inputs(c, &BTreeMap::new(), &BTreeMap::new());
-        let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+        let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
         let (g0, g1, _b) = self
             .runner
             .bind(d, &Frame::default(), [1, 1], &values, &[], &bufs);
@@ -412,7 +412,7 @@ pub fn call(app: &mut App, call: &Value) -> Value {
         };
         let mut reported = Vec::new();
         for (offset, bytes) in &ups {
-            let scope = device.device.push_error_scope(wgpu::ErrorFilter::Validation);
+            let scope = deep_gpu::device::push_scope(&device.device, wgpu::ErrorFilter::Validation);
             device.queue.write_buffer(&bound.inputs[&column], *offset, bytes);
             let mut u = json!({"column": column, "offset": offset, "bytes": bytes.len(), "outcome": "written"});
             if let Some(e) = pollster_block(scope.pop()) {

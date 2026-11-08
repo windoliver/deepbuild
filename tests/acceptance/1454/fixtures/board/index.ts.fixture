@@ -1,0 +1,11 @@
+// The #1454 suite's installed plug-in (README: The fixtures): one view with a page per board and one ⌘K command,
+// which runs a no-op action. `.fixture` until helpers.ts copies it, so no TypeScript run reads it as this repo's.
+const empty = { type: 'object', properties: {}, required: [], additionalProperties: false };
+
+export default async function (deep: any): Promise<void> {
+  deep.registerAction('ext.board.refresh', { declares: 'read', reads: [], input: empty, output: empty }, async () => ({}));
+  await deep.registerView('ext.board.view', 'panel', 'sidebar', {
+    pages: [{ name: 'Board', param: 'name', values: ['alpha', 'beta'] }],
+    commands: [{ name: 'Refresh board', action: 'ext.board.refresh' }],
+  });
+}

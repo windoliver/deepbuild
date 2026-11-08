@@ -1,0 +1,502 @@
+Base run of tests/acceptance/495 at a4d2c5d4e (origin/main, no implementation of #495), on this worktree, deep-motion and
+deep-gpu built from the base by each file's beforeAll (cargo build --locked --bin <name>):
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/495 --no-file-parallelism --reporter=verbose
+
+All 10 tests fail, each on an AssertionError raised by an expect in this suite's own files; none fails on loading, a build or a
+type error. AC5 fails as INCONCLUSIVE, its one honest reading. The base has no echo, flip, matte@1, lag or smooth: echo and flip
+fields are ignored (the frames draw all copies once, all four children), `matte@1` answers module_missing, and an expression
+string literal is a bad_doc parse error ("unexpected `\""). Two checks of the refusals test (dt from a var, dt past 10 s) pass
+at the base only because it refuses everything it can't parse; the test still fails, on the look-ahead's reason and on its
+accepted twins. The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/495/tsconfig.json, exits 0.
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-495-b0fc70/tests/acceptance/495
+
+ × matte.test.ts > AC3 #495.a46e8949 a luma matte takes luma in linear light or encoded, and seeking equals playing > AC3 #495.a46e8949 a mid-grey source covers 0.214 in linear light and 0.5 encoded within 1/255; (200, 100, 50) covers by Rec. 709 weights in each space; the source stays hidden 13516ms
+   → the grey matte, luma unset was answered, not refused: {"code":"module_missing","reason":"items/m/kind: matte@1"}: expected 'module_missing' to be undefined
+ × matte.test.ts > AC3 #495.a46e8949 a luma matte takes luma in linear light or encoded, and seeking equals playing > AC3 #495.a46e8949 30 frames of a moving matte drawn alone in random order hash as the play does, in both modes, and the modes differ 606ms
+   → the linear play was answered, not refused: {"code":"module_missing","reason":"items/m/kind: matte@1"}: expected 'module_missing' to be undefined
+ × echo.test.ts > AC1 #495.2cde4005 an echo draws its copies at t - k x lag and keeps nothing > AC1 #495.2cde4005 at frame 30 copy k stands 16 k px left of the bar at alpha 0.5^k, for k = 0 to 8, and nothing stands at k = 9 6012ms
+   → the copies:
+  copy 1 (x = 226): alpha 0, not 128
+  copy 2 (x = 210): alpha 0, not 64
+  copy 3 (x = 194): alpha 0, not 32
+  copy 4 (x = 178): alpha 0, not 16
+  copy 5 (x = 162): alpha 0, not 8
+  copy 6 (x = 146): alpha 0, not 4
+  copy 7 (x = 130): alpha 0, not 2: expected [ …(7) ] to deeply equal []
+ × echo.test.ts > AC1 #495.2cde4005 an echo draws its copies at t - k x lag and keeps nothing > AC1 #495.2cde4005 1,000 frames drawn alone in random order hash as the played frames do, and the echo changes the frames 85117ms
+   → the 8-copy echo changes at least 40 of frames 2 to 47 against the same film with no echo; it changes 0: expected 0 to be greater than or equal to 40
+ × lag-smooth.test.ts > AC2 #495.268c5ad9 lag and smooth read the chain at other times > AC2 #495.268c5ad9 lag(x, "0.5s") equals x at t - 0.5 s within 1e-9 at 1,000 random times 372ms
+   → the lag is accepted: {"ok":false,"code":"bad_doc","path":"drivers/d_ahead/expr","call":"lag(x, \"-0.5s\")","why":"unexpected `\"`"}: expected false to be true // Object.is equality
+ × lag-smooth.test.ts > AC2 #495.268c5ad9 lag and smooth read the chain at other times > AC2 #495.268c5ad9 smooth with 5 samples equals the mean of those five lags, by hand and by the closed form 13ms
+   → smooth is accepted: {"ok":false,"code":"bad_doc","path":"drivers/d_by_hand/expr","call":"(lag(x, \"-0.2s\") + lag(x, \"-0.1s\") + x + lag(x, \"0.1s\") + lag(x, \"0.2s\")) / 5","why":"unexpected `\"`"}: expected false to be true // Object.is equality
+ × lag-smooth.test.ts > AC2 #495.268c5ad9 lag and smooth read the chain at other times > AC2 #495.268c5ad9 a dt computed at run time, a dt past +-10 s and a look-ahead through a control are each refused with their reason; the neighbouring forms are accepted 10ms
+   → the refusal for a look-ahead of a control names knob: {"ok":false,"code":"bad_doc","path":"drivers/d_a/expr","call":"lag(c, \"-0.5s\")","why":"unexpected `\"`"}: expected false to be true // Object.is equality
+ × flip.test.ts > AC4 #495.ece8b00e a flip group shows exactly one child, the one its last key at or before t names > AC4 #495.ece8b00e the keys form, with none among them, at each key, one flick before it and 150 random times 3672ms
+   → the keys form:
+  at 0 flicks (0.0000 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 352800000 flicks (0.5000 s) the shown children are [c0,c1,c2,c3], the last key names [c2]
+  at 352799999 flicks (0.5000 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 705600000 flicks (1.0000 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 705599999 flicks (1.0000 s) the shown children are [c0,c1,c2,c3], the last key names [c2]
+  at 1058400000 flicks (1.5000 s) the shown children are [c0,c1,c2,c3], the last key names [c1]
+  at 1058399999 flicks (1.5000 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 1128960000 flicks (1.6000 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 1128959999 flicks (1.6000 s) the shown children are [c0,c1,c2,c3], the last key names [c1]
+  at 1392921708 flicks (1.9741 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 1182799352 flicks (1.6763 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 139257469 flicks (0.1974 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 1049206108 flicks (1.4870 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 370220934 flicks (0.5247 s) the shown children are [c0,c1,c2,c3], the last key names [c2]
+  at 257085845 flicks (0.3644 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 723396073 flicks (1.0252 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 75390137 flicks (0.1068 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 1188762275 flicks (1.6848 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 1717308465 flicks (2.4338 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 1057388704 flicks (1.4986 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 1667372263 flicks (2.3631 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 8049022 flicks (0.0114 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 890189228 flicks (1.2616 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 540441623 flicks (0.7659 s) the shown children are [c0,c1,c2,c3], the last key names [c2]
+  at 921333179 flicks (1.3057 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 155879335 flicks (0.2209 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 951576429 flicks (1.3486 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 1075880411 flicks (1.5248 s) the shown children are [c0,c1,c2,c3], the last key names [c1]
+  at 531183722 flicks (0.7528 s) the shown children are [c0,c1,c2,c3], the last key names [c2]
+  at 545625364 flicks (0.7733 s) the shown children are [c0,c1,c2,c3], the last key names [c2]: expected [ …(159) ] to deeply equal []
+ × flip.test.ts > AC4 #495.ece8b00e a flip group shows exactly one child, the one its last key at or before t names > AC4 #495.ece8b00e the occurrence form shows the child its map gives the last cue's value, held until the next cue 278ms
+   → the occurrence form:
+  at 141120000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]
+  at 141120001 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]
+  at 317520000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]
+  at 493919999 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]
+  at 493920000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c0]
+  at 705600000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c0]
+  at 917279999 flicks the shown children are [c0,c1,c2,c3], the last cue names [c0]
+  at 917280000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c3]
+  at 2116800000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c3]: expected [ …(9) ] to deeply equal []
+ × taste.test.ts > AC5 #495.984de463 the screenshots, the recordings and the one taste call on them > AC5 #495.984de463 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS 3ms
+   → INCONCLUSIVE: the check run's pictures are not in docs/evidence/495/: echo-8-copies.png, echo-8-copies.apng, matte-linear.png, matte-encoded.png, flip-group.png, flip-group.apng; this is not a pass
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  echo.test.ts > AC1 #495.2cde4005 an echo draws its copies at t - k x lag and keeps nothing > AC1 #495.2cde4005 at frame 30 copy k stands 16 k px left of the bar at alpha 0.5^k, for k = 0 to 8, and nothing stands at k = 9
+AssertionError: the copies:
+  copy 1 (x = 226): alpha 0, not 128
+  copy 2 (x = 210): alpha 0, not 64
+  copy 3 (x = 194): alpha 0, not 32
+  copy 4 (x = 178): alpha 0, not 16
+  copy 5 (x = 162): alpha 0, not 8
+  copy 6 (x = 146): alpha 0, not 4
+  copy 7 (x = 130): alpha 0, not 2: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "copy 1 (x = 226): alpha 0, not 128",
++   "copy 2 (x = 210): alpha 0, not 64",
++   "copy 3 (x = 194): alpha 0, not 32",
++   "copy 4 (x = 178): alpha 0, not 16",
++   "copy 5 (x = 162): alpha 0, not 8",
++   "copy 6 (x = 146): alpha 0, not 4",
++   "copy 7 (x = 130): alpha 0, not 2",
++ ]
+
+ ❯ none helpers.ts:68:73
+     66| /** No failures; the message lists them. */
+     67| export function none(failures: readonly string[], what: string): void {
+     68|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     69| }
+     70| export function inconclusive(reason: string): never {
+ ❯ echo.test.ts:38:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  echo.test.ts > AC1 #495.2cde4005 an echo draws its copies at t - k x lag and keeps nothing > AC1 #495.2cde4005 1,000 frames drawn alone in random order hash as the played frames do, and the echo changes the frames
+AssertionError: the 8-copy echo changes at least 40 of frames 2 to 47 against the same film with no echo; it changes 0: expected 0 to be greater than or equal to 40
+ ❯ echo.test.ts:55:140
+     53|     // A program that draws no echo plays and seeks alike, so it must …
+     54|     const differing = played.filter((h, k) => k >= 2 && h !== plain[k]…
+     55|     expect(differing, `the 8-copy echo changes at least 40 of frames 2…
+       |                                                                                                                                            ^
+     56|     expect(new Set(played).size, 'the played frames differ from one an…
+     57|   }, TIMEOUT);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  flip.test.ts > AC4 #495.ece8b00e a flip group shows exactly one child, the one its last key at or before t names > AC4 #495.ece8b00e the keys form, with none among them, at each key, one flick before it and 150 random times
+AssertionError: the keys form:
+  at 0 flicks (0.0000 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 352800000 flicks (0.5000 s) the shown children are [c0,c1,c2,c3], the last key names [c2]
+  at 352799999 flicks (0.5000 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 705600000 flicks (1.0000 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 705599999 flicks (1.0000 s) the shown children are [c0,c1,c2,c3], the last key names [c2]
+  at 1058400000 flicks (1.5000 s) the shown children are [c0,c1,c2,c3], the last key names [c1]
+  at 1058399999 flicks (1.5000 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 1128960000 flicks (1.6000 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 1128959999 flicks (1.6000 s) the shown children are [c0,c1,c2,c3], the last key names [c1]
+  at 1392921708 flicks (1.9741 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 1182799352 flicks (1.6763 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 139257469 flicks (0.1974 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 1049206108 flicks (1.4870 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 370220934 flicks (0.5247 s) the shown children are [c0,c1,c2,c3], the last key names [c2]
+  at 257085845 flicks (0.3644 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 723396073 flicks (1.0252 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 75390137 flicks (0.1068 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 1188762275 flicks (1.6848 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 1717308465 flicks (2.4338 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 1057388704 flicks (1.4986 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 1667372263 flicks (2.3631 s) the shown children are [c0,c1,c2,c3], the last key names [c3]
+  at 8049022 flicks (0.0114 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 890189228 flicks (1.2616 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 540441623 flicks (0.7659 s) the shown children are [c0,c1,c2,c3], the last key names [c2]
+  at 921333179 flicks (1.3057 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 155879335 flicks (0.2209 s) the shown children are [c0,c1,c2,c3], the last key names [c0]
+  at 951576429 flicks (1.3486 s) the shown children are [c0,c1,c2,c3], the last key names []
+  at 1075880411 flicks (1.5248 s) the shown children are [c0,c1,c2,c3], the last key names [c1]
+  at 531183722 flicks (0.7528 s) the shown children are [c0,c1,c2,c3], the last key names [c2]
+  at 545625364 flicks (0.7733 s) the shown children are [c0,c1,c2,c3], the last key names [c2]: expected [ …(159) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at 0 flicks (0.0000 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 352800000 flicks (0.5000 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 352799999 flicks (0.5000 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 705600000 flicks (1.0000 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 705599999 flicks (1.0000 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 1058400000 flicks (1.5000 s) the shown children are [c0,c1,c2,c3], the last key names [c1]",
++   "at 1058399999 flicks (1.5000 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1128960000 flicks (1.6000 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1128959999 flicks (1.6000 s) the shown children are [c0,c1,c2,c3], the last key names [c1]",
++   "at 1392921708 flicks (1.9741 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1182799352 flicks (1.6763 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 139257469 flicks (0.1974 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1049206108 flicks (1.4870 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 370220934 flicks (0.5247 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 257085845 flicks (0.3644 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 723396073 flicks (1.0252 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 75390137 flicks (0.1068 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1188762275 flicks (1.6848 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1717308465 flicks (2.4338 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1057388704 flicks (1.4986 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1667372263 flicks (2.3631 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 8049022 flicks (0.0114 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 890189228 flicks (1.2616 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 540441623 flicks (0.7659 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 921333179 flicks (1.3057 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 155879335 flicks (0.2209 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 951576429 flicks (1.3486 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1075880411 flicks (1.5248 s) the shown children are [c0,c1,c2,c3], the last key names [c1]",
++   "at 531183722 flicks (0.7528 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 545625364 flicks (0.7733 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 798543517 flicks (1.1317 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1240881114 flicks (1.7586 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1625981165 flicks (2.3044 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1518333149 flicks (2.1518 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 459750120 flicks (0.6516 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 606346545 flicks (0.8593 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 769756790 flicks (1.0909 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1252274610 flicks (1.7748 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 305260657 flicks (0.4326 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1073131027 flicks (1.5209 s) the shown children are [c0,c1,c2,c3], the last key names [c1]",
++   "at 315732609 flicks (0.4475 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 525930062 flicks (0.7454 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 1717277276 flicks (2.4338 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 185919300 flicks (0.2635 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 750886828 flicks (1.0642 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 237795459 flicks (0.3370 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1079140957 flicks (1.5294 s) the shown children are [c0,c1,c2,c3], the last key names [c1]",
++   "at 828473215 flicks (1.1741 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 275522833 flicks (0.3905 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1294750339 flicks (1.8350 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1666340694 flicks (2.3616 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 353667311 flicks (0.5012 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 713147857 flicks (1.0107 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1706592454 flicks (2.4186 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1180894371 flicks (1.6736 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 130402135 flicks (0.1848 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 68270775 flicks (0.0968 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 284719879 flicks (0.4035 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 529694119 flicks (0.7507 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 1695722943 flicks (2.4032 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1421257665 flicks (2.0143 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 876076540 flicks (1.2416 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 663065457 flicks (0.9397 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 363483615 flicks (0.5151 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 654414993 flicks (0.9275 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 368093628 flicks (0.5217 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 1187655421 flicks (1.6832 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 639168265 flicks (0.9059 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 49068011 flicks (0.0695 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1333264881 flicks (1.8895 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1123301038 flicks (1.5920 s) the shown children are [c0,c1,c2,c3], the last key names [c1]",
++   "at 159083255 flicks (0.2255 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1657698348 flicks (2.3493 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 286907208 flicks (0.4066 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 984686292 flicks (1.3955 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1669552087 flicks (2.3661 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 447780985 flicks (0.6346 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 1510474212 flicks (2.1407 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1332066244 flicks (1.8878 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 535664977 flicks (0.7592 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 456247401 flicks (0.6466 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 536432338 flicks (0.7602 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 1617249907 flicks (2.2920 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 277427220 flicks (0.3932 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 634951436 flicks (0.8999 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 125708864 flicks (0.1782 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 40290799 flicks (0.0571 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1297617547 flicks (1.8390 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 104117574 flicks (0.1476 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1616053332 flicks (2.2903 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 592177531 flicks (0.8393 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 676700248 flicks (0.9590 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 1537012289 flicks (2.1783 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 734830601 flicks (1.0414 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 203090877 flicks (0.2878 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 436217100 flicks (0.6182 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 288903843 flicks (0.4094 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1435123114 flicks (2.0339 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 122665181 flicks (0.1738 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 832009203 flicks (1.1792 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1095749630 flicks (1.5529 s) the shown children are [c0,c1,c2,c3], the last key names [c1]",
++   "at 1501573228 flicks (2.1281 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 931039483 flicks (1.3195 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 655856802 flicks (0.9295 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 622212047 flicks (0.8818 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 715932618 flicks (1.0146 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 897885531 flicks (1.2725 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1662718720 flicks (2.3565 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1224327292 flicks (1.7352 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 748321983 flicks (1.0605 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1165363431 flicks (1.6516 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1606184434 flicks (2.2763 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1694894540 flicks (2.4021 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 270067850 flicks (0.3827 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 977851956 flicks (1.3858 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1270570037 flicks (1.8007 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 855150520 flicks (1.2119 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 270286371 flicks (0.3831 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 717277793 flicks (1.0166 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 705905118 flicks (1.0004 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1312072540 flicks (1.8595 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1251888718 flicks (1.7742 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 974477739 flicks (1.3811 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1137203991 flicks (1.6117 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 328876345 flicks (0.4661 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 684621699 flicks (0.9703 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 1492855494 flicks (2.1157 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 333181542 flicks (0.4722 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 172298643 flicks (0.2442 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 210701859 flicks (0.2986 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1047856045 flicks (1.4851 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 780507844 flicks (1.1062 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 205198429 flicks (0.2908 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 788741416 flicks (1.1178 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 690695833 flicks (0.9789 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 970680599 flicks (1.3757 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1732002323 flicks (2.4547 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 723479418 flicks (1.0253 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1164539447 flicks (1.6504 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1280542635 flicks (1.8148 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 325450002 flicks (0.4612 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 351195694 flicks (0.4977 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 1429572986 flicks (2.0260 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1237110225 flicks (1.7533 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 51745829 flicks (0.0733 s) the shown children are [c0,c1,c2,c3], the last key names [c0]",
++   "at 486450376 flicks (0.6894 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++   "at 832783706 flicks (1.1802 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 815215671 flicks (1.1554 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1320318543 flicks (1.8712 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1745564164 flicks (2.4739 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 830508709 flicks (1.1770 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1696349223 flicks (2.4041 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1169275576 flicks (1.6571 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 831232916 flicks (1.1781 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1548127696 flicks (2.1941 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 901496910 flicks (1.2776 s) the shown children are [c0,c1,c2,c3], the last key names []",
++   "at 1170346714 flicks (1.6587 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 1254225447 flicks (1.7775 s) the shown children are [c0,c1,c2,c3], the last key names [c3]",
++   "at 438838682 flicks (0.6219 s) the shown children are [c0,c1,c2,c3], the last key names [c2]",
++ ]
+
+ ❯ none helpers.ts:68:73
+     66| /** No failures; the message lists them. */
+     67| export function none(failures: readonly string[], what: string): void {
+     68|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     69| }
+     70| export function inconclusive(reason: string): never {
+ ❯ flip.test.ts:34:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  flip.test.ts > AC4 #495.ece8b00e a flip group shows exactly one child, the one its last key at or before t names > AC4 #495.ece8b00e the occurrence form shows the child its map gives the last cue's value, held until the next cue
+AssertionError: the occurrence form:
+  at 141120000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]
+  at 141120001 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]
+  at 317520000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]
+  at 493919999 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]
+  at 493920000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c0]
+  at 705600000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c0]
+  at 917279999 flicks the shown children are [c0,c1,c2,c3], the last cue names [c0]
+  at 917280000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c3]
+  at 2116800000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c3]: expected [ …(9) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at 141120000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]",
++   "at 141120001 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]",
++   "at 317520000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]",
++   "at 493919999 flicks the shown children are [c0,c1,c2,c3], the last cue names [c1]",
++   "at 493920000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c0]",
++   "at 705600000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c0]",
++   "at 917279999 flicks the shown children are [c0,c1,c2,c3], the last cue names [c0]",
++   "at 917280000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c3]",
++   "at 2116800000 flicks the shown children are [c0,c1,c2,c3], the last cue names [c3]",
++ ]
+
+ ❯ none helpers.ts:68:73
+     66| /** No failures; the message lists them. */
+     67| export function none(failures: readonly string[], what: string): void {
+     68|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     69| }
+     70| export function inconclusive(reason: string): never {
+ ❯ flip.test.ts:43:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  lag-smooth.test.ts > AC2 #495.268c5ad9 lag and smooth read the chain at other times > AC2 #495.268c5ad9 lag(x, "0.5s") equals x at t - 0.5 s within 1e-9 at 1,000 random times
+AssertionError: the lag is accepted: {"ok":false,"code":"bad_doc","path":"drivers/d_ahead/expr","call":"lag(x, \"-0.5s\")","why":"unexpected `\"`"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ posX helpers.ts:117:64
+    115| /** An accepted answer's frames' `items.<id>.at.pos[0]`, one per time,…
+    116| export function posX(answer: JsonObject, id: string, times: readonly n…
+    117|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    118|   const frames = arr(answer['frames'], `${what}: frames`);
+    119|   expect(frames.length, `${what}: one frame per time`).toBe(times.leng…
+ ❯ lag-smooth.test.ts:28:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  lag-smooth.test.ts > AC2 #495.268c5ad9 lag and smooth read the chain at other times > AC2 #495.268c5ad9 smooth with 5 samples equals the mean of those five lags, by hand and by the closed form
+AssertionError: smooth is accepted: {"ok":false,"code":"bad_doc","path":"drivers/d_by_hand/expr","call":"(lag(x, \"-0.2s\") + lag(x, \"-0.1s\") + x + lag(x, \"0.1s\") + lag(x, \"0.2s\")) / 5","why":"unexpected `\"`"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ posX helpers.ts:117:64
+    115| /** An accepted answer's frames' `items.<id>.at.pos[0]`, one per time,…
+    116| export function posX(answer: JsonObject, id: string, times: readonly n…
+    117|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    118|   const frames = arr(answer['frames'], `${what}: frames`);
+    119|   expect(frames.length, `${what}: one frame per time`).toBe(times.leng…
+ ❯ lag-smooth.test.ts:42:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  lag-smooth.test.ts > AC2 #495.268c5ad9 lag and smooth read the chain at other times > AC2 #495.268c5ad9 a dt computed at run time, a dt past +-10 s and a look-ahead through a control are each refused with their reason; the neighbouring forms are accepted
+AssertionError: the refusal for a look-ahead of a control names knob: {"ok":false,"code":"bad_doc","path":"drivers/d_a/expr","call":"lag(c, \"-0.5s\")","why":"unexpected `\"`"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ refusal lag-smooth.test.ts:65:103
+     63|     const refusal = (a: JsonObject | undefined, what: string, ...names…
+     64|       expect(a!['ok'], `${what} is refused: ${show(a)}`).toBe(false);
+     65|       for (const n of names) expect(mentions(a, n), `the refusal for $…
+       |                                                                                                       ^
+     66|     };
+     67|     refusal(runtime, 'a dt read from a var', 'd_r', 'lag');
+ ❯ lag-smooth.test.ts:70:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  matte.test.ts > AC3 #495.a46e8949 a luma matte takes luma in linear light or encoded, and seeking equals playing > AC3 #495.a46e8949 a mid-grey source covers 0.214 in linear light and 0.5 encoded within 1/255; (200, 100, 50) covers by Rec. 709 weights in each space; the source stays hidden
+AssertionError: the grey matte, luma unset was answered, not refused: {"code":"module_missing","reason":"items/m/kind: matte@1"}: expected 'module_missing' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"module_missing"
+
+ ❯ answered helpers.ts:150:78
+    148| }
+    149| const answered = (reply: JsonObject, what: string): JsonObject => {
+    150|   expect(reply['code'], `${what} was answered, not refused: ${show(rep…
+       |                                                                              ^
+    151|   return reply;
+    152| };
+ ❯ layerImage helpers.ts:160:3
+ ❯ coverage matte.test.ts:33:28
+ ❯ matte.test.ts:46:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  matte.test.ts > AC3 #495.a46e8949 a luma matte takes luma in linear light or encoded, and seeking equals playing > AC3 #495.a46e8949 30 frames of a moving matte drawn alone in random order hash as the play does, in both modes, and the modes differ
+AssertionError: the linear play was answered, not refused: {"code":"module_missing","reason":"items/m/kind: matte@1"}: expected 'module_missing' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"module_missing"
+
+ ❯ answered helpers.ts:150:78
+    148| }
+    149| const answered = (reply: JsonObject, what: string): JsonObject => {
+    150|   expect(reply['code'], `${what} was answered, not refused: ${show(rep…
+       |                                                                              ^
+    151|   return reply;
+    152| };
+ ❯ hashAt helpers.ts:171:3
+ ❯ matte.test.ts:65:58
+ ❯ matte.test.ts:65:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  taste.test.ts > AC5 #495.984de463 the screenshots, the recordings and the one taste call on them > AC5 #495.984de463 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: INCONCLUSIVE: the check run's pictures are not in docs/evidence/495/: echo-8-copies.png, echo-8-copies.apng, matte-linear.png, matte-encoded.png, flip-group.png, flip-group.apng; this is not a pass
+ ❯ inconclusive helpers.ts:71:10
+     69| }
+     70| export function inconclusive(reason: string): never {
+     71|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     72| }
+     73| /** The GPU layer draws on macOS's Metal device; anywhere else a pixel…
+ ❯ taste.test.ts:22:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  10 failed (10)
+   Start at  11:07:44
+   Duration  232.81s (tests 100%)
+

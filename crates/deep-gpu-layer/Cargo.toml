@@ -21,6 +21,10 @@ path = "src/main.rs"
 [features]
 test-pool = ["deep-gpu/test-pool"]
 test-meter = ["dep:deep-canvas-test-modules"]
+# `test-faults` (#1413) adds `--fail-reopen`, `raise_errors`, the live call's `lose_device` and
+# `gpu_change`, the frames call's `fail_resize` and the test kinds `test.alloc@1` and
+# `test.pipeline@1`; no shipped build has them.
+test-faults = ["test-meter"]
 # `test-seam` (#140) adds `--adapters`, `--quirks` and the validation lane's and error channel's
 # test fixtures; no shipped build has them.
 test-seam = []
@@ -54,6 +58,8 @@ deep-codecs = { path = "../deep-codecs" }
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-effects-render = { path = "../deep-effects-render" }
 wgpu-profiler = "0.28"
+# Issue #464: the indexed operator's class, computed from its module.
+naga = { version = "30", default-features = false, features = ["wgsl-in"] }
 deep-app = { path = "../deep-app" }
 deep-replica = { path = "../deep-replica" }
 bytemuck = { version = "1", features = ["derive"] }

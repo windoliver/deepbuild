@@ -190,6 +190,14 @@ impl HubClient {
         older(&self.hello).map_or(Ok(()), |screen| Err(HubError::Older(screen)))
     }
 
+    /// A connection of its own to the hub at its address, as the app.
+    pub fn app() -> Result<Self, HubError> {
+        let token = std::fs::read_to_string(root().join("control.token"))?;
+        let mut client = HubClient::connect(&address())?;
+        client.hello_app(token.trim())?;
+        Ok(client)
+    }
+
     /// Presents the control token as the app; the hub answers with the role it took.
     pub fn hello_app(&mut self, token: &str) -> Result<(), HubError> {
         self.send(json!({ "v": 1, "hello": "app", "token": token }))?;
