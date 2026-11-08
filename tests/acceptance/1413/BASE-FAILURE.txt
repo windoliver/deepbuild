@@ -1,0 +1,21 @@
+#1413 acceptance tests at the base, 063e410a ("Merge pull request #1684 …"; main, which holds da22dbe4).
+
+The suite wasn't run at the base: every test fails there before it reaches a device, because the surface doesn't
+exist. Each file's first step builds the one feature set every test uses, and the base has no such feature:
+
+$ CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-gpu --features test-faults
+error: none of the selected packages contains this feature: test-faults
+selected packages: deep-contracts, deep-canvas-seams, deep-canvas, …, deep-gpu, …, deep-gpu-layer, …, deep-show, deep-text-render
+
+So `useBuild()` records the error and every test fails its first expectation, "the binary builds: cargo build
+--locked --bin deep-gpu --features test-faults", with cargo's message (on macOS; off macOS each test fails first
+with INCONCLUSIVE, never a pass).
+
+Past the build, the base also lacks each surface the tests read (README, The surface under test): no
+`--fail-reopen` (an unknown argument exits 2 with bad_input), no `--planted keeps_latest_error`,
+`reopens_tight_loop` or `resize_leaves_rendering` (exit 2), no `lose_device` or `gpu_change` live events (the
+call answers bad_input), no `writer_errors`, `reopens` or `device_losses` in the live reply, no frame
+`error_scopes`, no `test.alloc@1` or `test.pipeline@1` kinds, no `fail_resize`, `drawn` or `shown_frame` in
+`frames`, no `rebuilds` in `surface`, and no `raise_errors` call. The base's error handler prints every device
+error (crates/deep-gpu/src/device.rs, `eprintln!` in `on_uncaptured_error`), and its `View::render` returns from
+`reallocate(slot)?` without abandoning the slot it began.
