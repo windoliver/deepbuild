@@ -46,7 +46,7 @@ export type Ended = { verdict: Verdict; cause: string | null; changes: string[] 
 /** One schedule.run@1 event's data. */
 export interface RunEvent {
   run: string; schedule: string; plugin: string; phase: 'queued' | 'dispatched' | 'ended'; due: number;
-  resumed?: boolean; verdict?: Verdict; cause?: string | null; stopped?: boolean; changes?: string[];
+  resumed?: boolean; verdict?: Exclude<Verdict, 'uncounted'>; noop?: boolean; cause?: string | null; stopped?: boolean; changes?: string[];
 }
 /** What the scheduler needs of the host. */
 export interface RunHost {
@@ -305,7 +305,8 @@ export class Schedules {
       verdict = 'FAIL';
       cause = `it ran past its deadline of ${s.decl.deadline} ms`;
     }
-    await this.host.append({ run: run.run, schedule: s.decl.name, plugin: s.decl.plugin, phase: 'ended', due: run.due, verdict, cause, changes: ended.changes });
+    // A declared no-op is recorded without a verdict: schedule.run@1's verdict holds only the five.
+    await this.host.append({ run: run.run, schedule: s.decl.name, plugin: s.decl.plugin, phase: 'ended', due: run.due, ...(verdict === 'uncounted' ? { noop: true } : { verdict }), cause, changes: ended.changes });
     const gap = Math.max(1000, nextSlot(s.cadence, run.due) - run.due);
     if (verdict === 'PASS' || verdict === 'uncounted') {
       s.fails = 0;

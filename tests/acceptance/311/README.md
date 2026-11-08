@@ -241,7 +241,7 @@ that catches it says so.
 | AC9 | seq refusals (JSON number, `-1`, `+1`, `01`, `1e3`, `1.0`, ` 1`, `9223372036854775808`), `0` and `9223372036854775807` pass; id a ULID | `hook.test.ts` AC9 (with a 1,000-case property over seq strings) |
 | AC10 | seqs parse to bigints through the generated types and print back | `hook.test.ts` AC10 (with a 1,000-case property over 0 to 2^63 − 1) |
 | AC11 | `user.ask` `from`: missing or outside the six fails; one fixture per value passes | `events.test.ts` AC11 |
-| AC12 | validating an event under 20 µs at p95; generated types add nothing at runtime | `budgets.test.ts` AC12; `codegen.test.ts` AC12 |
+| AC12 | validating an event under 20 µs at p95; generated types add nothing at runtime | `redraft-ac12/budgets.test.ts` AC12; `codegen.test.ts` AC12 |
 | AC13 | one handle grammar; an unlisted scheme is refused, naming it | `handles.test.ts` AC13 (with 1,000-case properties) |
 | AC14 | planted feature `f_test` | `features.test.ts` AC14 (partly BLOCKED, below) |
 | AC15 | four reshapes change `d1`; a description doesn't | `d1.test.ts` AC15 |
@@ -256,7 +256,11 @@ that catches it says so.
 
 ## Criterion 12: budgets
 
-`budgets.test.ts` times `validate` on the first fixture of `user.ask`, `tool.before` and `verdict.made`:
+The timing half is now `redraft-ac12/budgets.test.ts`, a blind redraft (see its README) that counts on the
+design's three reference Macs and judges with `scripts/benchmark.mjs`. It replaced the first draft below,
+which knew only the Mac15,7 and Mac15,12, when the owner added the Mac17,10 on 2026-11-07 (#13).
+
+The first draft, `budgets.test.ts`, timed `validate` on the first fixture of `user.ask`, `tool.before` and `verdict.made`:
 10,000 warm-up calls, then five runs of 10,000 timed calls each, a run's reading being its p95 in µs. Per the
 design's rule for timing results (the same judge as `tests/acceptance/15`), it passes when all five are
 within 20 µs, fails when all five are over it by more than the margin (the larger of 5% and the runs'

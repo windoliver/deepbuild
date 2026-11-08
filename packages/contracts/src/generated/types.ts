@@ -6648,9 +6648,10 @@ export interface ScheduleRun {
     phase: "queued" | "dispatched" | "ended";
     due: number;
     resumed?: boolean;
-    verdict?: "PASS" | "FAIL" | "BLOCKED" | "INCONCLUSIVE" | "INVALID" | "uncounted";
+    verdict?: "PASS" | "FAIL" | "BLOCKED" | "INCONCLUSIVE" | "INVALID";
     cause?: string | null;
     stopped?: boolean;
+    noop?: boolean;
     changes?: Array<string>;
   };
   evidence?: Array<string>;
