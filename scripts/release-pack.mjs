@@ -3,9 +3,11 @@
 // checkout of one commit, reads each archive back from its own bytes, and requires its `bin`, `main` and
 // every `exports` target (wildcards included) to resolve to a file in that archive. Only then does it
 // write <out>/manifest.json with the commit and each archive's sha256. It never publishes anything.
-//   node scripts/release-pack.mjs --repo <dir> --commit <sha> --out <dir>
+//   node scripts/release-pack.mjs --repo <dir> --commit <sha> --out <dir> [--key <ed25519.pem> --preflight <report.json>]
+// A release passes --key and --preflight together: the preflight report must say PASS on this very commit, and the
+// manifest is signed with the offline key into manifest.json.sig. Without both it is the pack check alone, unsigned.
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -35,6 +37,27 @@ const wanted = run('git', ['rev-parse', `${commit}^{commit}`], repo).trim();
 if (wanted !== head) fail(`the checkout is at ${head}, not the commit ${wanted} the release was asked to pack`);
 const changed = run('git', ['status', '--porcelain', '--untracked-files=all'], repo).split('\n').filter(Boolean).map((l) => l.slice(3));
 if (changed.length) fail(`the tree has changed files, so it is not commit ${head}: ${changed.join(', ')}`);
+
+// A signed release only from a commit whose preflight passed, and never an unsigned release manifest.
+const [keyArg, reportArg] = [flag('key'), flag('preflight')];
+if (keyArg && !reportArg) fail('--key signs a release, which needs --preflight: the report of the preflight that passed on this commit');
+if (reportArg && !keyArg) fail('--preflight is for a release, which needs --key: a release manifest is never left unsigned');
+let key;
+if (keyArg) {
+  let report;
+  try {
+    report = JSON.parse(readFileSync(resolve(reportArg), 'utf8'));
+  } catch (error) {
+    fail(`the preflight report ${resolve(reportArg)} can't be read as JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (report?.verdict !== 'PASS') fail(`the preflight report's verdict is ${report?.verdict === undefined ? 'missing' : report.verdict}, not PASS, so nothing is released`);
+  if (report.commit !== wanted) fail(`the preflight passed on ${report.commit}, not on ${wanted}, the commit asked to pack`);
+  try {
+    key = createPrivateKey(readFileSync(resolve(keyArg)));
+  } catch (error) {
+    fail(`the key ${resolve(keyArg)} isn't a private key: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 
 const work = mkdtempSync(join(tmpdir(), 'release-pack-'));
 try {
@@ -84,7 +107,10 @@ try {
 
   mkdirSync(out, { recursive: true });
   for (const a of archives) copyFileSync(join(staged, a.file), join(out, a.file));
-  writeFileSync(join(out, 'manifest.json'), `${JSON.stringify({ commit: wanted, archives }, null, 2)}\n`);
+  const manifest = Buffer.from(`${JSON.stringify({ commit: wanted, archives }, null, 2)}\n`);
+  writeFileSync(join(out, 'manifest.json'), manifest);
+  // Ed25519 over exactly the manifest's bytes, as the installer checks it.
+  if (key) writeFileSync(join(out, 'manifest.json.sig'), sign(null, manifest, key));
   console.log(`release-pack: ${archives.length} archives from ${wanted} recorded in ${join(out, 'manifest.json')}`);
 } finally {
   rmSync(work, { recursive: true, force: true });

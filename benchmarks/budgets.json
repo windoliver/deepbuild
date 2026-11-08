@@ -1,4 +1,8 @@
 {
+  "release": {
+    "margin": 0.1,
+    "initialReason": "Issue #41: the release preflight runs every recorded task on the candidate and on the last release (the highest release/<version> tag), rounds alternated, and fails any whose p50 rose more than 10%. Each change is judged against its merge base with its own margin, which lets a slowdown in steps through; this margin bounds the whole release."
+  },
   "preflight": {
     "margin": 0.5,
     "limits": {
