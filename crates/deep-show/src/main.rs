@@ -1747,6 +1747,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
         out.push(deep_canvas_scene3d::building::module());
         // Issue #453: the loop's check kinds, geometry.shading first.
         out.push(deep_canvas_loop::module());
+        // Issue #308: controls and the input track's handling, with control@1.
+        out.push(deep_canvas_input::module::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -1768,6 +1770,16 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::sandbox::prog());
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");
+    // #308: a build without the input module, which refuses a document with a control kind.
+    #[cfg(feature = "test-leave-out-input")]
+    out.retain(|m| m.manifest.name != "input");
+    // #308: the input module with the test control kind test.dial among its kinds.
+    #[cfg(feature = "test-control-kind")]
+    for m in &mut out {
+        if m.manifest.name == "input" {
+            *m = deep_canvas_input::module::with_test_kind("");
+        }
+    }
     out.extend(test_registries::modules());
     #[cfg(feature = "test-leave-out-look")]
     out.retain(|m| m.manifest.name != "look");
@@ -2056,6 +2068,19 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             *m = deep_canvas_motion::module::planted(p);
         }
     }
+    // #308: the input module, or the test control kind, with a planted program.
+    if let Some(StartPlanted::Input(p)) = planted {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "input") {
+            if let Some(planted) = deep_canvas_input::module::planted(p) {
+                *m = planted;
+            }
+        }
+    }
+    if let Some(StartPlanted::ControlKind(p)) = planted {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "input") {
+            *m = deep_canvas_input::module::with_test_kind(p);
+        }
+    }
     // Every build set holds text and look, since a status mark needs text's shaper and look's
     // status map; the planted seal lets a build without look start (#388).
     for name in deep_canvas::registry::CORE_MODULES {
@@ -2177,6 +2202,11 @@ enum StartPlanted {
     Kinds(kinds::Planted),
     /// #415: a wrong first-party layout's cap or validator.
     Layouts(deep_canvas_sandbox::layouts::Planted),
+    /// #308: the input module with a planted program, whose control@1 entry the kit refuses.
+    Input(&'static str),
+    /// #308: the test control kind test.dial, which the input module fills under
+    /// `test-control-kind`, with a planted program.
+    ControlKind(&'static str),
 }
 
 #[cfg(test)]
@@ -2543,6 +2573,14 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         )),
         "constraint_reads_previous_output" => Ok(StartPlanted::Constraints(
             deep_canvas_motion::kit::Planted::PreviousFrame,
+        )),
+        "input_drag_along_recompute" => Ok(StartPlanted::Input("drag_along_recompute")),
+        "input_tool_stamps_you" => Ok(StartPlanted::Input("tool_stamps_you")),
+        "control_kind_recompute"
+        | "control_kind_reads_modifiers"
+        | "control_kind_no_keyboard"
+        | "control_kind_agent_input" => Ok(StartPlanted::ControlKind(
+            Box::leak(twin.trim_start_matches("control_kind_").to_string().into_boxed_str()),
         )),
         "registries_without_slots" => Ok(StartPlanted::Listing(registries::Listing::WithoutSlots)),
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
