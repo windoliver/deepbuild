@@ -22,7 +22,8 @@ export const CONTROL = 'deepbuild control ';
 /** The words a run's evidence and its check's reason carry when a control didn't fail where it was written. */
 export const UNRECORDED = "the report can't record a failure";
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]s$/;
-const SKIP = new Set(['node_modules', '.git']);
+/** Folders whose test files are another tree's, never the run's: dependencies, and fixtures a test copies as a repo of its own. */
+const SKIP = new Set(['node_modules', '.git', 'fixtures', '__fixtures__', 'testdata']);
 
 export interface Control { file: string; name: string; line: number; block: string }
 
@@ -97,7 +98,8 @@ export function removeControls(checkout: string, controls: Control[]): Promise<v
 /** Why the run's report can't be trusted to record a failure: a control of a file it ran that didn't fail at its line; null when every one did. */
 export function unheld(controls: Control[], ran: Ran[], failures: Failure[], filesRan: Set<string>): string | null {
   for (const c of controls) {
-    if (!filesRan.has(c.file)) continue;
+    // A file the run reported no test of (one that failed to load) fails on its own; its control proves nothing.
+    if (!filesRan.has(c.file) || !ran.some((t) => t.file === c.file && !isControl(t.test))) continue;
     const r = ran.find((t) => t.test.includes(c.name));
     const f = failures.find((x) => x.test.includes(c.name));
     const at = `${c.file}:${c.line}`;
