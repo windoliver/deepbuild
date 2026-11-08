@@ -203,6 +203,7 @@ pub struct Groups {
     taken: Vec<wgpu::Texture>,
     stage: Option<Stage>,
     drawn: Option<drawn::Drawn>,
+    paintfx: Option<crate::paintfx::PaintFx>,
     mips: Option<deep_effects_render::mips::Mips>,
 }
 
@@ -436,6 +437,7 @@ impl Groups {
             taken: Vec::new(),
             stage: None,
             drawn: None,
+            paintfx: None,
             mips: None,
         }
     }
@@ -819,7 +821,34 @@ impl Groups {
             self.give(&children);
             return Ok(());
         }
+        // #467: a part an item's paint builds from its coverage, which `children` holds.
+        let painted = match effect.as_deref().and_then(|e| e.paint.clone()) {
+            Some(part) => {
+                let zoom = x.options.zoom;
+                let scaled = [bounds[0] * zoom, bounds[1] * zoom, bounds[2] * zoom, bounds[3] * zoom];
+                let rect = px(scaled, f64::from(part.margin()) * zoom, x.size);
+                let out = self.take(x.device, x.size, ACC);
+                let c = part.color().map(|v| f64::from(v) / 255.0);
+                let color = match x.space {
+                    Space::Encoded => c,
+                    Space::Linear => c.map(deep_canvas::color::srgb_decode),
+                }
+                .map(|v| v as f32);
+                let device = x.device;
+                let opposite = x.planted == Some(Planted::BevelLitOpposite);
+                self.paintfx
+                    .get_or_insert_with(|| crate::paintfx::PaintFx::new(device))
+                    .run(device, &part, zoom as f32, &view, rect, color, opposite, &out);
+                Some((out, rect))
+            }
+            None => None,
+        };
         let (shown, cover, rect) = match effect.as_deref() {
+            Some(e) if e.paint.is_some() => {
+                let (out, _) = painted.as_ref().expect("painted above");
+                let grow = e.paint.as_ref().map_or(0.0, |p| f64::from(p.margin()));
+                (out.create_view(&Default::default()), false, grow)
+            }
             Some(e) if e.backdrop => {
                 let layer = self.flattened(x, into);
                 let (passed, grow) = self.passes(x, item, e, bounds, &layer)?;
@@ -881,6 +910,9 @@ impl Groups {
         }
         self.composite(x.device, into, m, x.size);
         self.give(&children);
+        if let Some((out, _)) = &painted {
+            self.give(out);
+        }
         Ok(())
     }
 

@@ -931,6 +931,23 @@
       "initialReason": "Issue #854 first measurement: the merge base has no idle reading. A release deep-canvas-render opens a still fixture document in a headless window on the real clock and stays 60 s a run, reading the frames it drew, its wakeups and its CPU from its own process (proc_pid_rusage), five runs after a warm-up one, so the command takes over six minutes. A wakeup is a package-idle wakeup (Activity Monitor's Idle Wake Ups); interrupt wakeups are kept as a reading, since a process that has drawn with Metal takes about 22 a minute from the driver whatever it does. canvas.mjs judge holds frames on any machine and wakeups and CPU on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-flares-mirrors",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "flares-mirrors"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "finish_gpu_ms": 0.3,
+        "flare_gpu_ms": 0.3,
+        "mirror_share": 0.25,
+        "indexed_target_bytes": 1000000
+      },
+      "initialReason": "Issue #465 first measurement: the merge base has no flare, no mirror and no such task. A release deep-gpu draws one 1080p stage (a floor plate, twelve boxes, a sun, a point light, an orbiting camera) for 300 frames a side, five runs after a warm-up one, each a fresh process: the fused finish (print wear, tone curve, screen, grain, vignette) against none, a full flare against none and the floor as a mirror against not, each the difference of the sides' median GPU time, the mirror's as a share of the plain stage's; and film2d's indexed look at 320 x 180, scale 6, for its target bytes. canvas.mjs judge holds the bytes on any machine and the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "replica-cold-start",
       "command": [
         "node",

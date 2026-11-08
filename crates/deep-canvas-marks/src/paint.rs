@@ -827,8 +827,8 @@ pub fn profile(
 // Issue #160: a crescent shade (Paint: shade): a darker flat of the shape, offset away from the
 // light and clipped to the shape, with an optional highlight toward it and a rim along its edge.
 
-/// `shade {kind, role, offset, light, opacity, mode, highlight, rim}` as read; `blur`, `choke`
-/// and `kind: inner` wait for the pass that blurs (Paint: glow, bevel and satin).
+/// `shade {kind, role, offset, light, opacity, mode, highlight, rim}` as read for a step or a
+/// crescent; `kind: inner` is crate::fx's, and only it takes `blur` and `choke`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Shade {
     pub color: Rgb,
@@ -878,7 +878,8 @@ impl Shade {
             };
         match sh.get("kind").and_then(Value::as_str) {
             None | Some("crescent" | "step") => {}
-            Some("inner") => return refuse("module_missing", format!("{path}/kind")),
+            // #467: an inner shade is built from the coverage (crate::fx).
+            Some("inner") => return Ok(None),
             Some(_) => return refuse("bad_doc", format!("{path}/kind")),
         }
         if number(sh, "blur", 0.0, path)? > 0.0 {

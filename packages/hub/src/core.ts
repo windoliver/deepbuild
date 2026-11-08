@@ -62,7 +62,7 @@ import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
-import { openGitHub, type GitHub, type GitHubPlant } from '@deepbuild/github';
+import { gateTokens, openGitHub, type AppKey, type GitHub, type GitHubPlant } from '@deepbuild/github';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
 import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
 import { OpenItems } from './open-items.js';
@@ -1052,6 +1052,7 @@ export class Core {
       root: this.root.dir, socket: this.root.socket, lock: this.root.lock, loginPath: () => this.config().loginPath, now: this.now, plant: this.options.plant,
       supervisor: () => this.supervisor, asks: () => asks, raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
       agentAbove: (peer) => this.agentAbove(peer), windowUsed: (agent, home) => this.runner.windowUsed(agent as JobSpec['agent'], home),
+      forge: this.options.forge ?? 'https://api.github.com', agentsApp: () => this.forgeApp('agents'), gateToken: (repo) => this.gateToken(repo),
     });
     await this.sessionStarts.open();
     // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
@@ -1157,7 +1158,8 @@ export class Core {
     return openGitHub({
       api: this.options.forge ?? 'https://api.github.com', state: join(this.root.dir, 'github.json'), snapshots: join(this.root.dir, 'objects'), raw: (query, params) => this.record.raw(query, params),
       reads: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
-      posts: () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN,
+      // The gate's own identity once your settings name it; until then your login, which no ruleset counts (#1325).
+      posts: async (repo) => (this.forgeApp('gate') ? this.gateToken(repo) : process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN),
       settings: () => {
         let github: { delivery?: unknown; yours?: unknown } | undefined;
         try { github = (JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as { github?: typeof github }).github; } catch { /* none yet: nothing is on */ }
@@ -1168,9 +1170,23 @@ export class Core {
         const ts = this.now();
         return this.append(this.connection('core', session ? { session: session.id, agent: session.agent } : {}), { v: 1, id: ulid(ts), kind: 'ref.unguarded', ts, ...(session ? { subject: `session:${letters(session.id)}` } : {}), data });
       },
+      pushed: (_repo, change) => this.sessionStarts.pushed(change),
       hear: (session, text) => { this.later(session.id, session.cwd, text); this.offer(session.id); },
       ...(plant ? { plant } : {}),
     });
+  }
+  /** An app your settings name as `github.gate` or `github.agents` (#1325): its ID, and its key from the Keychain service named. */
+  private forgeApp(which: 'gate' | 'agents'): AppKey | undefined {
+    let app: unknown;
+    try { app = (JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as { github?: Obj }).github?.[which]; } catch { /* none yet */ }
+    if (!isObj(app) || !Number.isSafeInteger(app.app_id) || typeof app.key !== 'string' || !app.key) return undefined;
+    const service = app.key;
+    return { app_id: app.app_id as number, key: () => keychain(service) };
+  }
+  private gateTokens?: (repo: string) => Promise<string | undefined>;
+  /** The gate's token for a repo: minted in this process, kept only in its memory. */
+  private gateToken(repo: string): Promise<string | undefined> {
+    return (this.gateTokens ??= gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate')))(repo);
   }
   /** `stack.slot` in <root>/config.json: how many warm stacks this machine keeps. */
   private stackSlots(): number {
