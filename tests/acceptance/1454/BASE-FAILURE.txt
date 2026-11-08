@@ -1,0 +1,64 @@
+#1454 at the base: commit c12a65bb with this folder added, nothing else, on a Mac at load 130 to 150, Node 24.22.2 from Homebrew,
+outside the Bash tool's sandbox.
+
+  caffeinate -di npx vitest run --root tests/acceptance/1454 --no-file-parallelism --reporter=verbose
+
+14 failed, 9 passed, about 80 s. NOT ALL OF THESE FAIL FOR THE EXPECTED REASON: 10 of the 14 never reached the app.
+
+Why, read from this Mac, and not worked around:
+- `probe access` printed {"ax":false,"screen":false,"screens":[[1736,1133,2]]} from the Bash tool with its sandbox off, and the same from
+  the app's Terminal panel. Neither Accessibility nor Screen Recording is granted to anything this job can run from. The screen was not
+  locked (CGSSessionScreenIsLocked absent). Granting them is the owner's call in System Settings.
+- `deep install` of fixtures/board and of fixtures/fails-panel-kit printed "It is not loaded: it failed conformance: its code didn't register
+  in the platform sandbox: it exited (SIGABRT) before it connected". So on this Mac no installed package loads, whatever the app does, and
+  AC2, AC3 and AC7 need a machine where one does (README, How to run: Node).
+
+Failed for the expected reason (4):
+- AC5 the lint: "scripts/render-lint.mjs exists (README, Pinned 7): expected false to be true". The missing surface, named.
+- AC5 its lane: "a lane of scripts/lanes.mjs's `checks` runs scripts/render-lint.mjs: expected [] to not deeply equal []".
+- AC5 the replica: "Pop out shows over a fixture, as in the app: expected [ 'Sessions', …(49) ] to include 'Pop out Needs you'". This is the
+  issue's own complaint, seen on the real deep-replica binary. It stops there, so the count and Terminal asserts did not run.
+- AC1 no stand-in in a shipped build: "the stand-in for the OS prompt exists: expected 'crates/deep-app/Cargo.toml has no fea…' to be undefined".
+  The missing feature, named. Its first assert, that the plain binary holds no DEEP_APP_TEST_CONFIRM, passed.
+
+BLOCKED before reaching the app, so their expected failure is NOT shown (10), each "BLOCKED: this process has no Accessibility permission, so
+nothing can read the real window's nodes or the menu bar; grant it to the app the tests run under":
+- AC1: the answer reaches its session; wrong program plant-card-skips-confirm.
+- AC2: ⌘K lists and opens; wrong program plant-page-drops-param; the empty list.
+- AC3: installed and refused panels; wrong program plant-panel-skips-kit; the window with nothing installed.
+- AC4: the canvas in the window.
+- AC7: blocked in its first world, so no picture was written and the run never reached TASTE.json. This is a failure, not a pass.
+  judges.test.ts shows the INCONCLUSIVE path on made-up files only.
+
+No criterion of AC1 to AC4 or AC7 has been seen failing on the real app for its own reason. Run this file again on a machine with the two
+permissions and a Node that runs sandboxed packages, before reading anything into those tests.
+
+Passed at the base, on purpose (9):
+- judges.test.ts, 8 tests: made-up records and drawn pictures, no app and no criterion tag.
+- lint.test.ts "the judge fails the wrong lints": fixtures/wrong-lints, each failing the judge. The judge's pass side has not been seen (README,
+  Disputes 6).
+
+What was checked by hand with no window, in a scratch test, since removed: on a real hub, a live session's `deep_ask` filed its ask and came back
+provisional; `deep inbox answer` reached the session through `deep_wait` as `green`, with one ask.answered, writer core, via inbox; #806's figure
+was presented with a snapshot in the evidence store. That proves the fixtures' hub side, not the app's. It also showed the judge's `via` check
+tells the CLI's answer from the card's.
+tsc -p tests/acceptance/1454/tsconfig.json: clean.
+
+Raw results, trimmed to each test's first line:
+
+ × shown    AC7 #1454.f1f3739d the check run takes the screenshots ...                       BLOCKED: no Accessibility permission
+ × lint     AC5 #1454.cbcbeda8 `render` holds no branch on fixture state ...                 scripts/render-lint.mjs exists: expected false to be true
+ × lint     AC5 #1454.cbcbeda8 the lint runs in the local preflight ...                      a lane runs scripts/render-lint.mjs: expected [] to not deeply equal []
+ ✓ lint     AC5 #1454.cbcbeda8 the judge fails the wrong lints ...
+ × lint     AC5 #1454.cbcbeda8 the replica draws the app's tree over a fixture ...           expected [ 'Sessions', …(49) ] to include 'Pop out Needs you'
+ ✓ judges   8 tests
+ × answer   AC1 #1454.67866115 in the real app, answering a card ...                         BLOCKED: no Accessibility permission
+ × answer   AC1 #1454.67866115 wrong program: an app that takes a press ...                  BLOCKED: no Accessibility permission
+ × answer   AC1 #1454.67866115 the stand-in for the OS prompt is in no shipped build ...     crates/deep-app/Cargo.toml has no feature test-confirm
+ × panel    AC3 #1454.a94aca43 a panel installed by `deep install` draws ...                 BLOCKED: no Accessibility permission
+ × panel    AC3 #1454.a94aca43 wrong program: an app that mounts every installed panel ...   BLOCKED: no Accessibility permission
+ × panel    AC3 #1454.a94aca43 wrong program: ... with no flag and no package ...            BLOCKED: no Accessibility permission
+ × commands AC2 #1454.ecdbb26a ⌘K opens in the real app ...                                  BLOCKED: no Accessibility permission
+ × commands AC2 #1454.ecdbb26a wrong program: a page opened without its parameter ...        BLOCKED: no Accessibility permission
+ × commands AC2 #1454.ecdbb26a ⌘K with nothing installed still opens ...                     BLOCKED: no Accessibility permission
+ × canvas   AC4 #1454.913e347e a session's canvas drawn by `deep_show` appears ...           BLOCKED: no Accessibility permission

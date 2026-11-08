@@ -1,0 +1,48 @@
+#1002's first-screen redraft at the base: commit c12a65bb, this folder added, nothing else. November 6, 2026, a Mac at load
+118 to 136, Node 24.22.2, cargo 1.99.1, outside the Bash tool's sandbox.
+
+NOT THE RUN THE JOB ASKED FOR. No test here failed for its expected reason, and none has read a real window. Every window
+test stopped BLOCKED at its first step, before any window opened:
+
+  $ probe access
+  {"ax":false,"screen":false,"screens":[[1736,1133,2]],"locked":false}
+
+The screen was not locked. The same reading came from the Bash tool with its sandbox off, whose parents end in
+/Applications/Claude.app, and from the app's Terminal panel. This job did not change any permission, or run the tests through
+another app to borrow its permissions.
+
+  $ NO_COLOR=1 caffeinate -di npx vitest run --root tests/acceptance/1002/first-screen-redraft --no-file-parallelism --reporter=verbose
+  Test Files  3 failed | 1 passed (4)
+       Tests  9 failed | 19 passed (28)
+
+The 9 that failed, each with this one reason:
+  BLOCKED: this process has no Accessibility permission, so nothing can read the real window's nodes or the menu bar
+
+  first-screen.test.ts  #1002.4273b842 with Claude Code's settings file unparseable, ...
+  first-screen.test.ts  #1002.4273b842 whatever else exists: ...
+  first-screen.test.ts  #1002.8e3f037e after the file is fixed, ...
+  first-screen.test.ts  #1002.8e3f037e a setup on the real window whose hub doesn't start ...
+  shown.test.ts         #1002.1f6f1740 screenshots of the real window ...
+  twins.test.ts         a planted spike window, no shell, fails naming the count
+  twins.test.ts         a setup that writes its record first opens on "0 asks need you" ...
+  twins.test.ts         a setup that writes its record first, whose hub doesn't start ...
+  twins.test.ts         a Set up that finishes without its record fails, naming the record
+
+The 19 that passed: judges.test.ts, written readings, no app and no criterion. They show the judges reject what they must.
+They say nothing about the real window.
+
+Also seen working: tsc reports no errors; `plant-spike-window` and `plant-posts-unchecked` both build at the base with no
+Cargo.toml edit; the "whatever else exists" test started its hub before it stopped at the window.
+
+WHAT THE BASE SHOULD DO, FROM READING ITS CODE ONLY, UNRUN:
+
+- "whatever else exists" should fail, naming the count. `setup::needed()` wants a stopped record or nothing in the folder, so
+  a folder with a hub and neither record opens the shell, and `count_line` reads "0 asks need you". This is the one test
+  expected to fail at the base for its criterion.
+- AC1's flow, AC2's two flows and the capture's states should pass, or reach INCONCLUSIVE for the capture. The base's real
+  window has the Welcome pane, its reason, the sidebar's count and the menu bar's line. If they do pass, that still proves
+  something: the tests hold the behavior on the window a person gets, and twins.test.ts holds their wrong programs, which
+  should fail through the same judges.
+- Not knowable from the code: whether the failure line and the reason fit at 960 × 640, and whether Vision reads them.
+
+A later run with both permissions must replace this file.
