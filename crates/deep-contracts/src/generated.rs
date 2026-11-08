@@ -51000,7 +51000,6 @@ pub enum ScheduleRunDataVerdict {
     Blocked,
     Inconclusive,
     Invalid,
-    Uncounted,
 }
 
 impl Contract for ScheduleRunDataVerdict {
@@ -51011,7 +51010,6 @@ impl Contract for ScheduleRunDataVerdict {
             "BLOCKED" => Ok(Self::Blocked),
             "INCONCLUSIVE" => Ok(Self::Inconclusive),
             "INVALID" => Ok(Self::Invalid),
-            "uncounted" => Ok(Self::Uncounted),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
     }
@@ -51022,7 +51020,6 @@ impl Contract for ScheduleRunDataVerdict {
             Self::Blocked => "BLOCKED",
             Self::Inconclusive => "INCONCLUSIVE",
             Self::Invalid => "INVALID",
-            Self::Uncounted => "uncounted",
         }.to_string())
     }
 }
@@ -51038,12 +51035,13 @@ pub struct ScheduleRunData {
     pub verdict: Option<ScheduleRunDataVerdict>,
     pub cause: Option<Option<String>>,
     pub stopped: Option<bool>,
+    pub noop: Option<bool>,
     pub changes: Option<Vec<String>>,
 }
 
 impl Contract for ScheduleRunData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["run", "schedule", "plugin", "phase", "due", "resumed", "verdict", "cause", "stopped", "changes"])?;
+        let members = deep_contracts::members(value, at, &["run", "schedule", "plugin", "phase", "due", "resumed", "verdict", "cause", "stopped", "noop", "changes"])?;
         deep_contracts::check_member(members, at, "run", &RULE_259)?;
         deep_contracts::check_member(members, at, "schedule", &RULE_261)?;
         deep_contracts::check_member(members, at, "plugin", &RULE_168)?;
@@ -51060,6 +51058,7 @@ impl Contract for ScheduleRunData {
             verdict: deep_contracts::optional(members, at, "verdict")?,
             cause: deep_contracts::optional(members, at, "cause")?,
             stopped: deep_contracts::optional(members, at, "stopped")?,
+            noop: deep_contracts::optional(members, at, "noop")?,
             changes: deep_contracts::optional(members, at, "changes")?,
         })
     }
@@ -51081,6 +51080,9 @@ impl Contract for ScheduleRunData {
         }
         if let Some(value) = &self.stopped {
             members.push(("stopped".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.noop {
+            members.push(("noop".to_string(), value.to_json()));
         }
         if let Some(value) = &self.changes {
             members.push(("changes".to_string(), value.to_json()));
