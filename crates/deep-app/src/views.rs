@@ -849,7 +849,9 @@ impl Render for Shipped {
                             } else {
                                 chrome.focus.opacity(0.)
                             };
-                            let row = marked(("sidebar-session", index), entry, text)
+                            // Keyed by the session's ID, never its place, so a row keeps its identity as rows come and go (#1427).
+                            let id = ElementId::Name(format!("session:{session}").into());
+                            let row = marked(id, entry, text)
                                 .role(Role::Button)
                                 .h(px(24.))
                                 // Every row leaves room for the bar and a gap after it, so opening one moves no text.
@@ -954,45 +956,43 @@ impl Render for Shipped {
                             .hover(|style| style.bg(chrome.hover))
                             .on_click(|_, _, cx| pop_out(Kind::NeedsYou, cx))
                     }))
-                    .children(record.open.iter().enumerate().map(
-                        |(index, (handle, _, question))| {
-                            let has = |list: fn(&AppState) -> &Vec<String>| {
-                                decorations
-                                    .as_ref()
-                                    .is_some_and(|state| list(state).contains(handle))
-                            };
-                            let held = decorations.as_ref().is_some_and(|state| {
-                                state.held.as_deref() == Some(handle.as_str())
-                            });
-                            let ask = handle.clone();
-                            // The planted row shows the handle.
-                            let text = if cfg!(feature = "plant-handle-rows") {
-                                handle
-                            } else {
-                                question
-                            };
-                            let shown = if reach.not_notified(handle) {
-                                format!("{text} · not notified")
-                            } else {
-                                text.clone()
-                            };
-                            // The row reads as its question, on the screen and to a screen reader; its handle is nowhere (#1172).
-                            label(("ask", index), shown)
-                                .role(Role::Button)
-                                .rounded_sm()
-                                .hover(|style| style.bg(chrome.hover))
-                                .on_click(move |_, window, cx| {
-                                    crate::card::present_ask(&ask, window, cx)
-                                })
-                                .when(has(|state| &state.inbox.folded), |row| {
-                                    row.pl_4().text_color(chrome.ink_secondary)
-                                })
-                                .when(has(|state| &state.inbox.later), |row| {
-                                    row.text_color(chrome.ink_tertiary)
-                                })
-                                .when(held, |row| row.italic())
-                        },
-                    ))
+                    .children(record.open.iter().map(|(handle, _, question)| {
+                        let has = |list: fn(&AppState) -> &Vec<String>| {
+                            decorations
+                                .as_ref()
+                                .is_some_and(|state| list(state).contains(handle))
+                        };
+                        let held = decorations
+                            .as_ref()
+                            .is_some_and(|state| state.held.as_deref() == Some(handle.as_str()));
+                        let ask = handle.clone();
+                        // The planted row shows the handle.
+                        let text = if cfg!(feature = "plant-handle-rows") {
+                            handle
+                        } else {
+                            question
+                        };
+                        let shown = if reach.not_notified(handle) {
+                            format!("{text} · not notified")
+                        } else {
+                            text.clone()
+                        };
+                        // The row reads as its question, on the screen and to a screen reader; its handle is nowhere (#1172).
+                        label(ElementId::Name(handle.clone().into()), shown)
+                            .role(Role::Button)
+                            .rounded_sm()
+                            .hover(|style| style.bg(chrome.hover))
+                            .on_click(move |_, window, cx| {
+                                crate::card::present_ask(&ask, window, cx)
+                            })
+                            .when(has(|state| &state.inbox.folded), |row| {
+                                row.pl_4().text_color(chrome.ink_secondary)
+                            })
+                            .when(has(|state| &state.inbox.later), |row| {
+                                row.text_color(chrome.ink_tertiary)
+                            })
+                            .when(held, |row| row.italic())
+                    }))
             }
             Kind::Session => {
                 let (session, task, state) = first(&record);
