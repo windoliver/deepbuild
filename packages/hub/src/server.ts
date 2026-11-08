@@ -9,6 +9,7 @@ import { writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import { basename, dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { JUDGE_FAULTS } from '@deepbuild/gate';
 import type { HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
@@ -983,8 +984,10 @@ class Hub {
     }
     // A patch the adapter can't read is Codex's deny, with its reason and nothing else.
     if (meta.denied && !this.off) return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: meta.denied } }), stderr: '' });
-    // A session past its facts is watch-only: a matched entry is recorded, never a block.
-    if (meta.event !== 'PreToolUse' || meta.watchOnly || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
+    if (meta.event !== 'PreToolUse' || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
+    // A watch-only session (one past its facts, #1501) gets the reply every session gets under `deep off`: a matched
+    // entry is recorded, never a block, but the floor's, which deep-hook applies with no facts and no hub at all.
+    const watching = this.off || meta.watchOnly === true;
     const entries = this.rules();
     // The planted wrong program for #304's AC3 ignores what deep-hook matched and reads the command line as text.
     const matched = this.plant === 'matches-text'
@@ -994,18 +997,18 @@ class Hub {
     const unread = (n: string) => this.plant === 'unknown-as-block' && /couldn't be read/.test(meta.notes?.[n] ?? '');
     const mode = (n: string): unknown => ((this.plant === 'warn-as-block' || unread(n)) && entries[n]?.mode === 'warn' ? 'block' : entries[n]?.mode);
     const words = (n: string): string => `${String(entries[n]!.reason)} ${String(entries[n]!.next_step)}${meta.notes?.[n] ? ` ${meta.notes[n]}` : ''} (guard ${n})`;
-    // With `deep off` only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
+    // Watch-only or off, only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
     // A destructive command is staged or asked about at the gate (#347, #1294), never blocked outright.
-    const decided = (n: string) => !this.off && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
-    const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!this.off || floor(n)));
+    const decided = (n: string) => !watching && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
+    const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!watching || floor(n)));
     if (blocks.length) {
       meta.blockedBy = blocks;
       return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
     }
-    if (this.off) return EMPTY_REPLY;
+    if (watching) return EMPTY_REPLY;
     const warns = matched.filter((n) => mode(n) === 'warn');
     if (!warns.length || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return EMPTY_REPLY;
     const additionalContext = warns.map((n) => `DeepBuild warns: ${words(n)}`).join('\n');
@@ -1210,6 +1213,9 @@ function writeToken(root: Root): string {
  */
 export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
+  // The kit gate@1's fault for rows no commit reaches (#33): only the kit sets it, and a name it doesn't know stops the hub.
+  const fault = process.env.DEEP_HUB_TEST_JUDGE_FAULT;
+  if (fault && !(JUDGE_FAULTS as readonly string[]).includes(fault)) throw Error(`DEEP_HUB_TEST_JUDGE_FAULT=${fault} names no fault the kit plays`);
   plantedStart(plant);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.
