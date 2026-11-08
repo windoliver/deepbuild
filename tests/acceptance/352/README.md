@@ -21,6 +21,17 @@ Written first, blind, by a job that never saw an implementation of #352 (none ex
   (`deep-hook heavy` prints `null` for it, and the `npm test` entry for `npm test`). Each is still one tool call of
   the session, in the same place. No criterion, expected value or assertion changed. The branch now sits on
   `0c153d7c`.
+- **Redrafted blind** on 2026-11-08 for one dispute, `load.test.ts` (AC4) only. Main (`e10229c1`) now carries the
+  design's rule **Whose checks count** (#33): an approved check whose recorded read files are changed by the claim's
+  diff counts for that claim as the agent's own check, which can send the claim back but never pass it, and "a check's
+  own files are ... any other file its runs read under the repo's test, fixture and script folders"
+  (`packages/gate/src/own.ts`, `OWN_FOLDERS`, `ownRead`). AC4's deliverable was `tests/ready-at.json`, which the
+  timing check's test `tests/speed.test.js` reads: the claim's one change turned the approved check into the agent's
+  own, so R1 was covered by the agent's checks alone and the verdict INCONCLUSIVE, never the PASS the criterion
+  expects, whatever the timing rule did. The deliverable is now `src/ready-at.json`, read by the same test as
+  `../src/ready-at.json`: the code under test, "an input for staleness, never an own file", so `speed.sh` stays an
+  approved check. The check, its test, its assert line (`tests/speed.test.js:5`), the loads (9, then 1; the twin at 2),
+  the 4 cores and every assertion are unchanged. No helper changed.
 - **The base commit**: `e2e6e1cc` (origin/main, 2026-11-04), now `0c153d7c`. The base code read for its surfaces only:
   `packages/hub/src/core.ts` (`childOf` and `session.child_started`, `askFor` for `deep_ask` unblock tasks, `didIt`,
   `DEEP_HUB_TEST_CORES`, prompt origins), `server.ts` (the `DEEP_HUB_TEST_*` settings, the hook replies'

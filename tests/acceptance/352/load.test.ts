@@ -1,7 +1,10 @@
 // AC4: a timing check that fails while load exceeds the core count is rerun alone once; the rerun decides, and the run
 // under load stays attached to the verdict with its load reading. The hub counts 4 cores (DEEP_HUB_TEST_CORES) and
 // reads the machine's 1-minute load from DEEP_HUB_TEST_LOAD (README SURFACE), which the test sets. The timing check
-// fails until a time the agent's own change sets, 90 s on; the load reads 9 until that time has passed, then 1.
+// fails until a time the agent's own change sets, 90 s on; the load reads 9 until that time has passed, then 1. The
+// agent's deliverable is `src/ready-at.json`, under the code the check tests: a file its run reads under a test, fixture or
+// script folder would be the check's own (design, Whose checks count), and an approved check changed into the agent's own
+// can send the claim back but never pass it, so a PASS could never be reached.
 import { writeFileSync } from 'node:fs';
 import { afterAll, describe, it } from 'vitest';
 import {
@@ -12,14 +15,14 @@ afterAll(cleanup, 60_000);
 
 const ASK = 'make the cart total fast enough for the checkout page';
 const CHECK = '.deepbuild/checks/speed.sh';
-const SPEED_TEST = "const test = require('node:test');\nconst assert = require('node:assert');\nconst { at } = require('./ready-at.json');\ntest('the cart totals within its time budget', () => {\n  assert.ok(Date.now() >= at, `over its time budget by ${at - Date.now()} ms`);\n});\n";
+const SPEED_TEST = "const test = require('node:test');\nconst assert = require('node:assert');\nconst { at } = require('../src/ready-at.json');\ntest('the cart totals within its time budget', () => {\n  assert.ok(Date.now() >= at, `over its time budget by ${at - Date.now()} ms`);\n});\n";
 const DRAFT: Draft = {
   ask: ASK,
   requirements: [{ id: 'R1', text: 'The cart totals within its time budget', source_line: 'ask#L1', refuted_by: 'a total that takes longer than its budget', check: CHECK, on_base: 'passes', asserts: ['tests/speed.test.js:5'], depth: 'unit', oracle: 'code', near_misses: [], timing: true }],
-  deliverables: ['tests/ready-at.json'],
+  deliverables: ['src/ready-at.json'],
   budget: null,
 };
-const world = (): World => makeWorld({ drafts: [DRAFT], files: { [CHECK]: '#!/bin/sh\nnode --test tests/speed.test.js\n', 'tests/speed.test.js': SPEED_TEST, 'tests/ready-at.json': '{ "at": 0 }\n' } });
+const world = (): World => makeWorld({ drafts: [DRAFT], files: { [CHECK]: '#!/bin/sh\nnode --test tests/speed.test.js\n', 'tests/speed.test.js': SPEED_TEST, 'src/ready-at.json': '{ "at": 0 }\n' } });
 
 const handles = (events: readonly Ev[], ref: string): Set<string> => new Set(events.filter((e) => e.kind === 'claim.made' && e.data.task_ref === ref).map((e) => `claim:${e.id}`));
 /** The timing check's runs on the session's claims (the base-commit run told apart by its commit), each with its finish. */
@@ -47,7 +50,7 @@ async function scenario(w: World, hub: Awaited<ReturnType<typeof startHub>>): Pr
   must(ref !== undefined && events.some((e) => e.kind === 'definition.locked' && e.data.task_ref === ref), `BLOCKED: ${AC4} the handed definition for "${ASK}" never locked within 10 minutes (a loaded machine can take minutes, README): ${listed(events.filter((e) => e.kind === 'user.ask' || e.kind === 'definition.locked'))}`);
   const since = await lastPos(hub);
   const at = Date.now() + 90_000;
-  await s.write('tests/ready-at.json', `{ "at": ${at} }\n`);
+  await s.write('src/ready-at.json', `{ "at": ${at} }\n`);
   await s.stop('Done: the total is fast enough.');
   events = await allEvents(hub);
   return { ref: ref!, at, since };
