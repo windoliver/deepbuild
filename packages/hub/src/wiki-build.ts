@@ -17,6 +17,7 @@ import { claimId, openReading } from '@deepbuild/reading';
 import { openRecordReader, parseClaimLine, ulid, type Connection, type Message, type RecordStore } from '@deepbuild/record';
 import type { Agent, Runner } from '@deepbuild/runner';
 import { openWiki, type Candidate, type Wiki } from '@deepbuild/wiki';
+import { rulesAppendix } from './rules.js';
 import { writeJson } from './claude-settings.js';
 import { captureRejected } from './memory.js';
 import { repoOf, type Root } from './paths.js';
@@ -123,7 +124,7 @@ interface Row { id: string; project: string | null; transcript: string; agent: s
 /** Two folders of one name, one of them gone, and the ask whose key names the pair. */
 interface Pair { gone: string; live: string; key: string }
 
-export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt>; forget(claim: string): Promise<string> } {
+export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt>; forget(claim: string): Promise<string>; writeRules(): Promise<void> } {
   const { record, root, now } = o;
   const folder = root.wiki;
   /** The sessions a reading job still has, so a build run while one waits doesn't hand them to another. */
@@ -442,7 +443,7 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
     await o.archive();
     await record.sync();
     const before = pagesOf();
-    const wiki = await openWiki({ record, folder, now, pages: STANDING });
+    const wiki = await openWiki({ record, folder, now, pages: STANDING, appendix: rulesAppendix(root.dir) });
     // A line you deleted stays deleted: your edits are kept, as your decisions, before anything is learned again. The
     // planted wrong program forgets them and writes every page from the claims in force.
     if (o.plant === 'resurrects') {
@@ -565,9 +566,16 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
     async forget(claim) {
       await building?.catch(() => undefined);
       const before = pagesOf();
-      const decision = await (await openWiki({ record, folder, now, pages: STANDING })).forget(o.cli, claim);
+      const decision = await (await openWiki({ record, folder, now, pages: STANDING, appendix: rulesAppendix(root.dir) })).forget(o.cli, claim);
       bookkeeping(changedSince(before));
       return decision;
+    },
+    /** The rules page (#344) written again, with the rule lines its last sync saved, once any build has finished. */
+    async writeRules() {
+      await building?.catch(() => undefined);
+      const before = pagesOf();
+      await (await openWiki({ record, folder, now, pages: STANDING, appendix: rulesAppendix(root.dir) })).write();
+      bookkeeping(changedSince(before));
     },
   };
 }
