@@ -224,6 +224,10 @@ struct State {
     stage: Stage,
     picture: Option<Arc<RenderImage>>,
     view: Option<EntityId>,
+    /// #427: the live view's meter ladder, charged by each document frame it draws, and its
+    /// class's frame limits.
+    ladder: deep_gpu::meter::Ladder,
+    limits: deep_canvas::budget::Limits,
 }
 
 /// Where a window is in showing the document.
@@ -419,11 +423,17 @@ impl Render for View {
             if document {
                 let t0 = *st.clock.t0.get_or_insert(predicted);
                 let t = ((predicted - t0) as i128 * i128::from(FLICKS) / 1_000_000_000) as i64;
+                let began = host_ns();
                 if let Some(picture) = st.draw(t) {
                     if let Some(old) = st.picture.replace(picture) {
                         let _ = window.drop_image(old);
                     }
                 }
+                // #427: the frame's CPU time charges the live view's meter; the window draws
+                // on the CPU, so no GPU time is charged.
+                let cpu_ms = (host_ns() - began) as f64 / 1e6;
+                let limits = st.limits;
+                let _ = st.ladder.frame(0.0, cpu_ms, &limits, false, false);
                 if st.moves_after(t) {
                     let per_frame = st.clock.per_frame;
                     arm(window, state.clone(), seq + 1, per_frame);
@@ -670,6 +680,17 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
             f.push((label, (at.max(0.) * 1e9).round() as i64));
         }
     })));
+    let limits = hub
+        .current(&doc)
+        .and_then(|r| {
+            r.doc
+                .pointer("/budget/class")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .and_then(|c| deep_canvas::budget::Class::parse(&c))
+        .unwrap_or(deep_canvas::budget::Class::WorkProduct)
+        .limits();
     let state = Rc::new(RefCell::new(State {
         hub,
         doc: doc.clone(),
@@ -687,6 +708,8 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
         },
         feedback,
         stage: Stage::OrderingIn,
+        ladder: deep_gpu::meter::Ladder::new(Default::default()).0,
+        limits,
         picture: None,
         view: None,
     }));
@@ -853,9 +876,25 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         .iter()
                         .filter(|(f, _)| f.rev == rev)
                         .count();
+                    // #427: the frame callbacks the window's clock has asked for or received so
+                    // far, and its meter's rung, before the call runs.
+                    let wakeups = st.clock.wakeups.len();
+                    let rung = st.ladder.rung().name();
                     let doc = st.doc.clone();
                     st.hub.now = st.hub.now.max(a.at);
                     let reply = st.hub.call(&a.call);
+                    // A read or a diagnostic mode touches nothing the window shows, so it asks
+                    // for no frame (the planted mode draws on the live surface instead).
+                    let quiet = matches!(a.call, Call::Mode(..) | Call::Presented(_));
+                    let planted_live = matches!(a.call, Call::Mode(..))
+                        && st.hub.scenario.planted
+                            == Some(crate::hub::Planted::ModeDrawsLiveSurface);
+                    if planted_live {
+                        let seq = st.clock.seq + 1;
+                        let per_frame = st.clock.per_frame;
+                        st.clock.wakeups.push((host_ns(), seq));
+                        arm(window, state.clone(), seq, per_frame);
+                    }
                     // A call that made a new revision current arms a frame showing it.
                     let current = st.hub.current(&doc).map(|r| r.rev);
                     if current.is_some_and(|c| c != rev) {
@@ -867,14 +906,18 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         }
                     }
                     drop(st);
-                    cx.notify();
-                    window.refresh();
+                    if !quiet || planted_live {
+                        cx.notify();
+                        window.refresh();
+                    }
                     let mut showing = Map::new();
                     showing.insert(doc, json!(rev));
                     json!({
                         "after_ms": a.after_ms,
                         "showing": showing,
                         "presented": presented,
+                        "wakeups": wakeups,
+                        "rung": rung,
                         "reply": reply,
                     })
                 });

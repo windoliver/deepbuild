@@ -236,6 +236,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   const tool = str(payload.tool_name);
   if (event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
+  if (plant === 'actor-from-payload' && typeof payload.actor === 'string') meta.payloadActor = payload.actor;
   if (plant === 'matches-text' && tool === 'Bash' && isObj(payload.tool_input)) meta.command = str(payload.tool_input.command);
   if (event === 'PostToolUse' && isObj(payload.tool_response) && Array.isArray(payload.tool_response.structuredPatch)) {
     const hunks = payload.tool_response.structuredPatch.flatMap((h) => (isObj(h) ? hunkOf(h) : []));

@@ -9,6 +9,7 @@
 
 pub mod ao;
 pub mod cull;
+mod diag;
 pub mod env;
 pub mod flare;
 mod glass;
@@ -42,6 +43,7 @@ use deep_gpu::encode::Job;
 use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
 use deep_gpu::surface::FORMAT;
 
+pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
 use crate::mesh::Mesh;
 use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
@@ -1613,6 +1615,8 @@ pub type Camera = ([f64; 16], [f64; 3], f64);
 
 pub struct Renderer {
     planted: Planted,
+    /// The diagnostic views' pipelines (#427), made on first use.
+    diag: Option<Box<diag::Pipes>>,
     /// Motion blur by velocity (#419): its pipelines, and this frame's pass when it blurs.
     motion: motion::MotionPass,
     motion_frame: Option<motion::Frame>,
@@ -2985,6 +2989,7 @@ impl Renderer {
         };
         Renderer {
             planted,
+            diag: None,
             epoch: device.epoch,
             frame_buffer,
             frame_bind,

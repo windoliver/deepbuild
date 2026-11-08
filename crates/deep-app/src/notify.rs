@@ -153,6 +153,9 @@ pub struct Notifier {
     /// Asks that came due with notifications off, `(handle, session)`, and how many of them the log has.
     missed: Vec<(String, String)>,
     logged: usize,
+    /// The work runs whose end was told, by their approval's ask, and the log position last read for one (#1348).
+    told: HashSet<String>,
+    told_at: Option<u64>,
 }
 
 impl Notifier {
@@ -168,6 +171,8 @@ impl Notifier {
             setting: NotificationSetting::Allowed,
             missed: Vec::new(),
             logged: 0,
+            told: HashSet::new(),
+            told_at: None,
         }
     }
 
@@ -206,6 +211,10 @@ impl Notifier {
     pub fn start(&mut self, view: &View, delivered: Vec<Notification>) {
         self.read.extend(view.unseen.iter().filter_map(opening));
         self.delivered = delivered;
+        // A run that had ended already was told, or could have been seen.
+        self.told
+            .extend(view.table().ended_runs().into_iter().map(|(ask, _)| ask));
+        self.told_at = Some(view.log_pos);
     }
 
     /// An event reached the app at `now`.
@@ -259,12 +268,27 @@ impl Notifier {
         let (due, waiting): (Vec<_>, Vec<_>) =
             self.waiting.drain(..).partition(|(_, at)| *at <= now);
         self.waiting = waiting;
+        // A work run that has ended is told once (#1348), read only when the record moved.
+        let ended = if self.told_at == Some(view.log_pos) {
+            Vec::new()
+        } else {
+            self.told_at = Some(view.log_pos);
+            let ended: Vec<_> = view
+                .table()
+                .ended_runs()
+                .into_iter()
+                .filter(|(ask, _)| !self.told.contains(ask))
+                .collect();
+            self.told.extend(ended.iter().map(|(ask, _)| ask.clone()));
+            ended
+        };
         if self
             .delivered
             .iter()
             .all(|notification| notification.ask.is_none())
             && self.notices.is_empty()
             && due.is_empty()
+            && ended.is_empty()
         {
             return Vec::new();
         }
@@ -279,6 +303,18 @@ impl Notifier {
                 .is_none_or(|ask| table.is_open(ask))
         });
         let mut out = Vec::new();
+        for (ask, sessions) in ended {
+            if self.setting.off() {
+                continue;
+            }
+            out.push(Notification {
+                ask: None,
+                title: "DeepBuild".to_owned(),
+                text: end_notice(table, &sessions),
+                session: ask,
+                sound: None,
+            });
+        }
         for session in self.notices.drain(..) {
             if self.setting.off() {
                 continue;
@@ -380,6 +416,28 @@ pub fn notification_text(table: &Table, session: &str, now: u64) -> String {
             )
         }
     }
+}
+
+/// The run's end notice (#1348), in plain words: its tasks have stopped, and how many each state holds, such as
+/// "DeepBuild\nAll 2 tasks have stopped: 1 PASS, 1 needs you."
+pub fn end_notice(table: &Table, sessions: &[String]) -> String {
+    let mut counts: Vec<(&'static str, usize)> = Vec::new();
+    for session in sessions {
+        let word = table.state(session).word();
+        match counts.iter_mut().find(|(known, _)| *known == word) {
+            Some((_, count)) => *count += 1,
+            None => counts.push((word, 1)),
+        }
+    }
+    let tasks = match sessions.len() {
+        1 => "The run's 1 task has stopped".to_owned(),
+        n => format!("All {n} tasks have stopped"),
+    };
+    let counts: Vec<String> = counts
+        .iter()
+        .map(|(word, count)| format!("{count} {word}"))
+        .collect();
+    format!("DeepBuild\n{tasks}: {}.", counts.join(", "))
 }
 
 /// A notification's title: it names DeepBuild and the session's task.
