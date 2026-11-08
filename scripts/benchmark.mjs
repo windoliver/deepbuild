@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
@@ -115,6 +115,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
     if (build) writeFileSync(counted, '');
     const argv = build ? [build.run, follow ? build.library : '-', ...command] : command;
     const env = build ? { ...process.env, DEEP_COUNT_LOG: counted } : process.env;
+    const loadStart = loadavg()[0];
     const started = performance.now();
     // A captured run leads its own process group: spawnSync stops only /usr/bin/time at the timeout or
     // maxBuffer, so the group is stopped with it, or the measured command and its children run on (#1322).
@@ -122,6 +123,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
       ? { cwd, env, stdio: ['ignore', 'inherit', 'inherit'] }
       : { cwd, env, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024, detached: true });
     const elapsedMs = performance.now() - started;
+    const loadEnd = loadavg()[0];
     if (result.error) {
       try {
         if (!stream && result.pid > 0) process.kill(-result.pid, 'SIGKILL');
@@ -134,7 +136,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
     const peakBytes = parsePeakRss(report, process.platform);
     const own = parseInstructions(report, process.platform);
     const { instructions, uncounted } = !follow ? { instructions: own, uncounted: [] } : build && own !== null ? countChildren(readFileSync(counted, 'utf8'), command) : { instructions: null, uncounted: [] };
-    return { elapsedMs, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, status: result.status, output: stream ? '' : result.stdout + result.stderr };
+    return { elapsedMs, loadStart, loadEnd, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, status: result.status, output: stream ? '' : result.stdout + result.stderr };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -252,8 +254,10 @@ export function fingerprint() {
 // Judges one limit on five runs taken after warm-up. On a reference Mac it passes when all five
 // are within the limit and fails when all five are over it by more than the margin, the larger of
 // 5% and the five runs' spread, both as fractions of the limit. Anything else, and every result off
-// the reference Macs, is INCONCLUSIVE with the five runs attached.
-export function judgeLimit({ limit, runs, fingerprint: machine }) {
+// the reference Macs, is INCONCLUSIVE with the five runs attached. So is any run whose one-minute load average, read
+// at its start or its end, is above the core count or can't be read: a loaded run counts neither way (design: How we
+// know version 0 works). loads is one { start, end } per run.
+export function judgeLimit({ limit, runs, fingerprint: machine, loads }) {
   if (!Array.isArray(runs) || runs.length !== 5 || runs.some((run) => !Number.isFinite(run) || run < 0))
     return { status: 'BLOCKED', limit, runs, reason: `a limit is judged on five readings taken after warm-up, got ${JSON.stringify(runs)}` };
   const margin = Math.max(0.05, (Math.max(...runs) - Math.min(...runs)) / limit);
@@ -261,6 +265,10 @@ export function judgeLimit({ limit, runs, fingerprint: machine }) {
     : [`${hardware.map((key) => `${key} is ${JSON.stringify(machine?.[key] ?? null)}`).join(', ')}: none of ${referenceNames}`];
   off.push(...conditions.filter(([key, value]) => machine?.[key] !== value).map(([key, value, label]) => `${label} is ${JSON.stringify(machine?.[key] ?? null)}, not ${JSON.stringify(value)}`));
   if (!machine?.macosBuild) off.push('the macOS build is missing');
+  const cores = availableParallelism();
+  const readings = Array.isArray(loads) && loads.length === runs.length ? loads.flatMap((load) => [load?.start, load?.end]) : null;
+  if (!readings || readings.some((load) => !Number.isFinite(load) || load < 0)) off.push(`the load at each run's start and end can't be read: ${JSON.stringify(loads ?? null)}`);
+  else if (readings.some((load) => load > cores)) off.push(`load ${Math.max(...readings)} at a run's start or end is above the ${cores} cores`);
   if (off.length) return { status: 'INCONCLUSIVE', limit, runs, margin, reason: `a reading, not a budget result: off the reference Macs (${referenceNames}; mains power, Low Power Mode off, thermal state nominal): ${off.join('; ')}` };
   if (runs.every((run) => run <= limit)) return { status: 'PASS', limit, runs, margin };
   if (runs.every((run) => run > limit * (1 + margin))) return { status: 'FAIL', limit, runs, margin, reason: `all five runs are over ${limit} by more than the ${(margin * 100).toFixed(1)}% margin` };
@@ -312,7 +320,7 @@ export function judgeTask(budget, established, cwd, baseCwd) {
   };
   const runs = Object.keys(budget.limits).length ? (once(), Array.from({ length: 5 }, once)) : [];
   const machine = fingerprint();
-  const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine })]));
+  const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine, loads: runs.map(({ loadStart, loadEnd }) => ({ start: loadStart, end: loadEnd })) })]));
   // Instructions retired don't move with load, so this comparison holds on any machine; it never
   // changes a limit's verdict.
   const instructions = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })), [...new Set([...now.uncounted, ...then.uncounted])]);

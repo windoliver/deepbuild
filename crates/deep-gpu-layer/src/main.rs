@@ -21,6 +21,8 @@ mod compile;
 mod conformance;
 mod drawn;
 mod effects;
+#[cfg(feature = "test-faults")]
+mod faults;
 mod film;
 mod fixtures;
 mod flat;
@@ -311,6 +313,10 @@ pub enum Planted {
     PuffFullOpacity,
     LightAfterUpscale,
     FlickerWallTime,
+    /// #1413's wrong programs (tests/acceptance/1413/README.md: Planted programs).
+    KeepsLatestError,
+    ReopensTightLoop,
+    ResizeLeavesRendering,
 }
 
 impl Planted {
@@ -501,6 +507,9 @@ impl Planted {
             "puff_full_opacity" => Planted::PuffFullOpacity,
             "light_after_upscale" => Planted::LightAfterUpscale,
             "flicker_wall_time" => Planted::FlickerWallTime,
+            "keeps_latest_error" => Planted::KeepsLatestError,
+            "reopens_tight_loop" => Planted::ReopensTightLoop,
+            "resize_leaves_rendering" => Planted::ResizeLeavesRendering,
             _ => return None,
         })
     }
@@ -594,7 +603,35 @@ impl App {
                 "slots": slots,
                 "msaa": "transient",
                 "fps_cap": fps_cap,
+                "rebuilds": s.view.rebuilds(),
             })
+        })
+    }
+
+    /// `raise_errors` (#1413, test-faults): `count` identical validation errors on the app's
+    /// device, through its uncaptured-error callback, as fast as it can.
+    #[cfg(feature = "test-faults")]
+    fn raise_errors(&mut self, call: &Value) -> Value {
+        let count = call["count"].as_u64().unwrap_or(0);
+        self.worker.call(move |state| {
+            let device = match state.gpu.recover() {
+                Ok(d) => d,
+                Err(e) => return refused("no_device", e),
+            };
+            let before = deep_gpu::device::raised_total();
+            let start = std::time::Instant::now();
+            for _ in 0..count {
+                // A buffer both read- and write-mapped: invalid, the same error each time.
+                drop(device.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("raise_errors"),
+                    size: 4,
+                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE,
+                    mapped_at_creation: false,
+                }));
+            }
+            let ms = start.elapsed().as_secs_f64() * 1e3;
+            device.take_raised();
+            json!({"raised": deep_gpu::device::raised_total() - before, "ms": ms, "burst": deep_gpu::device::BURST})
         })
     }
 
@@ -720,6 +757,8 @@ impl App {
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),
+            #[cfg(feature = "test-faults")]
+            Some("raise_errors") => self.raise_errors(call),
             Some("live_frame") => parity::live_frame(self, out, call),
             Some("layers") => marks2d::layers(self, out, call),
             Some("window2d") => marks2d::window2d(self, out, call),
@@ -794,6 +833,9 @@ fn main() {
     let (mut backend, mut planted) = (Backend::Gpu, None);
     let (mut startup, mut validation) = (Startup::default(), false);
     let mut headless = false;
+    // The planted reopen (#1413, test-faults): the first n reopens fail, or every one.
+    #[allow(unused_mut)]
+    let mut fail_reopen: Option<Option<u64>> = None;
     // The shipped record, or in test-spike builds the one `--spike-record` names.
     #[allow(unused_mut)]
     let mut spike = marks2d::SPIKE.to_string();
@@ -824,6 +866,15 @@ fn main() {
                 None => bad_input(),
             },
             "--validation" => validation = true,
+            #[cfg(feature = "test-faults")]
+            "--fail-reopen" => match args.next().as_deref() {
+                Some("always") => fail_reopen = Some(None),
+                Some(n) => match n.parse() {
+                    Ok(n) => fail_reopen = Some(Some(n)),
+                    Err(_) => bad_input(),
+                },
+                None => bad_input(),
+            },
             #[cfg(feature = "test-seam")]
             "--adapters" => match args.next().as_deref().and_then(seam::test_adapters) {
                 Some(a) => startup.adapters = Some(a),
@@ -883,6 +934,9 @@ fn main() {
             std::process::exit(1);
         }
     };
+    if let Some(n) = fail_reopen {
+        worker.call(move |state| state.gpu.fail_reopens(n));
+    }
     if headless {
         // The headless canvas worker opens no window and holds no app: no GPUI context, the GPU
         // layer drawn into its offscreen slots (#140).
@@ -940,6 +994,7 @@ fn serve(mut call: impl FnMut(&str, &Value) -> Value) {
                     .iter()
                     .map(|c| call(&out, c))
                     .collect();
+                deep_gpu::device::flush_suppressed();
                 json!({"ok": true, "replies": replies})
             }
             _ => json!({"ok": false, "code": "bad_input"}),

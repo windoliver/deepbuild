@@ -53,7 +53,8 @@ import { checkReply, join as joinReplies, type JoinPlant, type Template } from '
 import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings, type Verdict } from './schedules.js';
 import { missing, SeriesStore, shownValue, type BoundValue, type Rollup, type Span } from './series.js';
 import { Sends, type SendRow, type SendRule } from './sends.js';
-import { declareSource, handleOf, nodeHttp, openBrowser, osSecrets, Sources, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
+import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
+import { declareSource, handleOf, NoAnswer, nodeHttp, openBrowser, osSecrets, Sources, type WorkDecl, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
@@ -344,6 +345,24 @@ export interface ExtensionHost {
    * the reading type its manifest names, and a page with one that isn't refused with the cursor where it was.
    */
   readStream(name: string, limit: number): Promise<StreamRead>;
+  /** On the trusted path (#66): switches a loaded work source on over a scope; its handle, which is also its schedule's name. */
+  addWorkSource(connection: Connection, spec: { source: string; scope: string; every: number }): Promise<string>;
+  removeWorkSource(connection: Connection, handle: string): Promise<void>;
+  /** On the trusted path: your standing rule for a work source's deliveries; its handle. */
+  setWorkRule(connection: Connection, handle: string, rule: { sentence: string }): Promise<string>;
+  /** "Fix <id>": the item read now by its ID through the sources you switched on, whenever it was made; its task. */
+  fix(connection: Connection, id: string): Promise<WorkTask>;
+  workTasks(): Promise<WorkTask[]>;
+  /** The events taken in on a task's item, each once. */
+  workEvents(task_ref: string): Promise<WorkEvent[]>;
+  endTask(connection: Connection, task_ref: string): Promise<void>;
+  /** A work source's page: its read position, and the items it skipped, dropped, keeps failing or refused. */
+  workPage(handle: string): Promise<WorkPage>;
+  /** Records a result for delivery into its task's thread; its send key. The hub's timer sends it. */
+  deliverResult(task_ref: string, result: WorkResult): Promise<string>;
+  deliveries(): Promise<DeliveryRow[]>;
+  /** The work.item@1 kit on a loaded work source, against its provider. */
+  workKit(source: string, fixture: WorkKitFixture): Promise<{ verdict: 'PASS' | 'FAIL'; failures: string[] }>;
   /** The hub's timer at now() (#365): every run due starts, or queues behind its schedule's running run; resolves once each is dispatched. */
   tick(): Promise<void>;
   /** Resolves once nothing the schedules started is still going and nothing due can start. */
@@ -401,6 +420,9 @@ const LOAD_MS = 10_000;
 const CALL_MS = 10_000;
 /** How long a channel's send or read may take (#65): its provider calls are the hub's, each bounded by the hub. */
 const CHANNEL_MS = 30_000;
+/** How long one op of a work source has, and one run of it (#66). */
+const WORK_CALL_MS = 60_000;
+const WORK_RUN_MS = 30 * 60_000;
 const CHANNEL = 'channel@1';
 const STATE_SOURCE = 'state-source@1';
 /** How long one call into a state source may take (#67). */
@@ -879,6 +901,11 @@ class Host implements ExtensionHost {
   private readonly sources: Sources;
   private readonly scheduler: Schedules;
   private readonly sending: Sends;
+  /** The work sources you switched on, their runs, tasks and deliveries (#66). */
+  private readonly work: WorkSources;
+  /** The work-source calls under way, by the call ID their context's fetch names (#66). */
+  private readonly workCalls = new Map<string, { ext: Ext; source: string; work: WorkDecl; noAnswer: boolean }>();
+  private workCount = 0;
   /** The runs under way, by the scope token their job's calls carry (#365). */
   private readonly runCtx = new Map<string, RunCtx>();
   /** The times of each plug-in's notices in the last minute, which its limit counts (#365). */
@@ -932,11 +959,93 @@ class Host implements ExtensionHost {
       now: options.now,
       newRun: () => `run:${ulid(options.now())}`,
       append: async (data: RunEvent) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind: 'schedule.run', ts: options.now(), data: data as unknown as JsonValue }); },
-      ready: (decl) => this.exts.get(decl.plugin)?.live === true,
-      blocked: (decl) => this.blockedRun(decl),
-      dispatch: (decl, run) => this.dispatchRun(decl, run),
+      ready: (decl) => this.exts.get(decl.plugin)?.live === true && (!this.work.isWork(decl.name) || this.work.on(decl.name)),
+      blocked: (decl) => (this.work.isWork(decl.name) ? this.blockedWork(decl) : this.blockedRun(decl)),
+      dispatch: (decl, run) => (this.work.isWork(decl.name) ? this.work.run(decl.name) : this.dispatchRun(decl, run)),
       saved: (name, settings) => this.save('schedules.json', { ...this.read('schedules.json'), [name]: settings }),
     });
+    this.work = new WorkSources(this.workHost());
+  }
+
+  /** The work sources' side of the host (#66). */
+  private workHost(): ConstructorParameters<typeof WorkSources>[0] {
+    return {
+      record: this.options.record, now: () => this.options.now(), asks: this.options.asks,
+      added: () => this.read<Added>('work-sources.json'), saveAdded: (all) => this.save('work-sources.json', all),
+      decl: (source) => {
+        const ext = this.workExt(source);
+        const d = ext?.sources.get(source);
+        return ext && d?.variant === 'stream' && d.work ? { work: d.work, plugin: ext.entry.id } : undefined;
+      },
+      call: (source, op, arg) => this.workCall(source, op, arg),
+      schedule: async (handle, added, plugin) => {
+        const decl: ScheduleDecl = { name: handle, plugin, cadence: { every: added.every }, deadline: WORK_RUN_MS, declares: { readings: [added.source], notices: [], stores: [], sends: [], noop: true } };
+        await this.scheduler.register(decl, { runs: await this.runs(handle), settings: this.read<Settings>('schedules.json')[handle] ?? {} });
+      },
+      trusted: (connection, what) => this.trustedPath(connection, what),
+    };
+  }
+  private workExt(source: string): Ext | undefined {
+    return [...this.exts.values()].find((e) => e.live && e.ask && e.mode === 'loaded' && (e.sources.get(source) as { work?: unknown } | undefined)?.work);
+  }
+  /** One op of a loaded work source, bounded; its context's fetch goes through the hub under this call's ID. */
+  private async workCall(source: string, op: 'list' | 'item' | 'deliver' | 'find', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }> {
+    const ext = this.workExt(source);
+    const d = ext?.sources.get(source);
+    if (!ext || d?.variant !== 'stream' || !d.work) throw Error(`no loaded package registers the work source ${source}`);
+    const call = `work:${++this.workCount}`;
+    const live = { ext, source, work: d.work, noAnswer: false };
+    this.workCalls.set(call, live);
+    try {
+      const value = await within(WORK_CALL_MS, `${ext.entry.id}'s work source ${source}'s ${op}`, ext.ask!('work', { name: source, op, call, arg }));
+      return { value, noAnswer: live.noAnswer };
+    } catch (e) {
+      throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
+    } finally {
+      this.workCalls.delete(call);
+    }
+  }
+  /** A work source's run is BLOCKED while its package isn't loaded or the secret it needs isn't held. */
+  private async blockedWork(decl: ScheduleDecl): Promise<string | null> {
+    const source = decl.declares.readings[0]!;
+    const ext = this.workExt(source);
+    const d = ext?.sources.get(source);
+    if (!ext || d?.variant !== 'stream' || !d.work) return `no loaded package registers the work source ${source}`;
+    if (d.work.secret && !(await this.sources.holds(ext.entry.id, d.work.secret))) return `missing secret ${d.work.secret}`;
+    return null;
+  }
+  async addWorkSource(connection: Connection, spec: { source: string; scope: string; every: number }): Promise<string> {
+    return this.work.add(connection, spec);
+  }
+  async removeWorkSource(connection: Connection, handle: string): Promise<void> {
+    return this.work.remove(connection, handle);
+  }
+  async setWorkRule(connection: Connection, handle: string, rule: { sentence: string }): Promise<string> {
+    return this.work.setRule(connection, handle, rule);
+  }
+  async fix(connection: Connection, id: string): Promise<WorkTask> {
+    return this.work.fix(connection, id);
+  }
+  async workTasks(): Promise<WorkTask[]> {
+    return this.work.workTasks();
+  }
+  async workEvents(task_ref: string): Promise<WorkEvent[]> {
+    return this.work.workEvents(task_ref);
+  }
+  async endTask(connection: Connection, task_ref: string): Promise<void> {
+    return this.work.endTask(connection, task_ref);
+  }
+  async workPage(handle: string): Promise<WorkPage> {
+    return this.work.page(handle);
+  }
+  async deliverResult(task_ref: string, result: WorkResult): Promise<string> {
+    return this.work.deliverResult(task_ref, result);
+  }
+  async deliveries(): Promise<DeliveryRow[]> {
+    return this.work.deliveries();
+  }
+  async workKit(source: string, fixture: WorkKitFixture): Promise<{ verdict: 'PASS' | 'FAIL'; failures: string[] }> {
+    return this.work.kit(source, fixture);
   }
 
   private read<T>(name: string): Record<string, T> {
@@ -1655,6 +1764,7 @@ class Host implements ExtensionHost {
     if (this.closed) return;
     await this.shownTick();
     await this.scheduler.tick();
+    await this.work.tick();
     await this.series?.tick();
   }
   /**
@@ -2462,6 +2572,18 @@ class Host implements ExtensionHost {
         if (!ext.stateSources.includes(name)) ext.stateSources.push(name);
         return null;
       }
+      case 'deep.work.fetch': {
+        // Only a call of its own work source under way: the hub's call, to the source's host, with its secret and quota.
+        const [call, request] = args;
+        const live = typeof call === 'string' ? this.workCalls.get(call) : undefined;
+        if (!live || live.ext !== ext) throw Error(`deep.work.fetch: ${id} has no work source call under way as ${String(call)}`);
+        try {
+          return await this.sources.workFetch(ext.entry.id, live.source, live.work, request as Parameters<Sources['workFetch']>[3]);
+        } catch (e) {
+          if (e instanceof NoAnswer) live.noAnswer = true;
+          throw e;
+        }
+      }
       case 'deep.channel.fetch': {
         // Only a send or read of its own under way: the hub's call, with the channel's settings and token.
         const [call, request] = args;
@@ -2493,6 +2615,8 @@ class Host implements ExtensionHost {
         const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.sources.has(source.name));
         if (owner) throw Error(`deep.registerSource: ${source.name} is already registered by ${owner.entry.id}`);
         ext.sources.set(source.name, source);
+        // A work source (#66): each one you switched on over it gets its schedule again.
+        if (!conformance && source.variant === 'stream' && source.work) await this.work.registered(source.name, ext.entry.id);
         return null;
       }
       case 'deep.registerRoute': {
@@ -2903,7 +3027,8 @@ class Host implements ExtensionHost {
     let refusal: string | undefined;
     if (m.stability === 'stable') {
       if (this.options.plant !== 'stable-may-call-preview') refusal = `${m.id} declares itself stable and calls ${method}, a preview method; a stable package calls stable methods only`;
-    } else if (!(m.requires?.preview ?? []).includes(method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
+      // A work source's context fetch is part of the deep.registerSource that registered it (#66).
+    } else if (!(m.requires?.preview ?? []).includes(method === 'deep.work.fetch' ? 'deep.registerSource' : method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
     if (!refusal) return;
     // Kept on the run, so a package that never awaits the call is refused all the same.
     ext.refusals.push(refusal);
@@ -3798,6 +3923,7 @@ class Host implements ExtensionHost {
     this.closed = true;
     clearInterval(this.timer);
     this.sending.close();
+    this.work.close();
     // Starts, loads and conformance runs under way finish first, each then unloaded here, so none leaves a process behind.
     await this.starting.catch(() => undefined);
     await Promise.all([...this.loading.values(), ...[...this.checking].map((c) => c.catch(() => undefined))]);

@@ -65,6 +65,8 @@ pub struct Args {
     pub pool: Option<Finish>,
     /// Hash each slot (off for the conformance runs that only read the fences or the times).
     pub hash: bool,
+    /// The planted allocator (#1413, test-faults): slot allocations at a new size to fail.
+    pub fail_resize: u32,
 }
 
 impl Args {
@@ -86,6 +88,7 @@ impl Args {
             #[cfg(feature = "test-pool")]
             pool: None,
             hash: true,
+            fail_resize: 0,
         }
     }
 
@@ -111,6 +114,12 @@ impl Args {
         a.window_hash = call["window_hash"].as_bool().unwrap_or(false);
         a.resize = call["resize"].as_bool().unwrap_or(false);
         a.lose_at = call["lose_device_at"].as_u64();
+        if let Some(n) = call["fail_resize"].as_u64() {
+            if !cfg!(feature = "test-faults") {
+                return Err(refused("bad_input", "fail_resize is a test-faults build's"));
+            }
+            a.fail_resize = u32::try_from(n).unwrap_or(u32::MAX);
+        }
         a.fences = call["fences"].as_bool().unwrap_or(false);
         a.timings = call["timings"].as_bool().unwrap_or(false);
         a.workers = call["workers"]
@@ -137,6 +146,10 @@ impl Args {
 
 pub struct Frame {
     pub frame: u64,
+    /// Whether the view drew this frame into a slot, and the frame its view shows after it
+    /// (#1413); `false` and `None` with no view.
+    pub drawn: bool,
+    pub shown_frame: Option<u64>,
     pub size: [u32; 2],
     pub path: Path,
     pub pixel_hash: Option<String>,
@@ -160,6 +173,8 @@ impl Frame {
     fn json(&self) -> Value {
         let mut f = json!({
             "frame": self.frame,
+            "drawn": self.drawn,
+            "shown_frame": self.shown_frame,
             "size": self.size,
             "path": self.path.name(),
             "pixel_hash": self.pixel_hash,
@@ -237,6 +252,9 @@ enum Drawn {
     },
     /// The device was lost while it drew.
     Lost,
+    /// Its slot's storage couldn't be made on a healthy device: nothing drawn, the slot given
+    /// back, and the next frame tries again (#1413).
+    Failed,
 }
 
 #[cfg(target_os = "macos")]
@@ -371,6 +389,21 @@ pub fn drive(
         ui.record(true);
         app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
     }
+    if args.layer {
+        let (key, fail, leaves) = (
+            args.scene.clone(),
+            args.fail_resize,
+            app.planted == Some(Planted::ResizeLeavesRendering),
+        );
+        app.worker.call(move |state| {
+            if let Some(s) = state.sessions.get_mut(&key) {
+                s.view.fail_resizes(fail);
+                if leaves {
+                    s.view.plant_resize_leaves_rendering();
+                }
+            }
+        });
+    }
     let noop = app.backend == Backend::Noop;
     let mut run = Run {
         frames: Vec::new(),
@@ -381,6 +414,8 @@ pub fn drive(
         let size = scene.size_at(n, args.resize);
         let mut frame = Frame {
             frame: n,
+            drawn: false,
+            shown_frame: None,
             size,
             path,
             pixel_hash: None,
@@ -407,10 +442,12 @@ pub fn drive(
                 let s = state.sessions.get_mut(&key).ok_or("no session")?;
                 s.view.resize(slot_size);
                 let drawn = loop {
-                    if let Some(d) = s.view.render(n)? {
-                        break d;
+                    match s.view.render(n) {
+                        Ok(Some(d)) => break d,
+                        Ok(None) => s.view.wait_free(),
+                        Err(_) if !s.view.device().is_lost() => return Ok(Drawn::Failed),
+                        Err(e) => return Err(e),
                     }
-                    s.view.wait_free();
                 };
                 let _ = submitted_tx.send(());
                 let device_epoch = s.view.device().epoch;
@@ -458,6 +495,7 @@ pub fn drive(
                     run.losses += 1;
                     continue;
                 }
+                Drawn::Failed => {}
                 Drawn::Shown {
                     settling,
                     pixel_hash,
@@ -466,6 +504,7 @@ pub fn drive(
                     device_epoch,
                     pipelines,
                 } => {
+                    frame.drawn = true;
                     frame.settling = settling;
                     frame.device_epoch = device_epoch;
                     frame.pipelines = pipelines;
@@ -484,6 +523,7 @@ pub fn drive(
             w.paint.borrow_mut().size = size;
             w.present(&mut app.cx);
         }
+        frame.shown_frame = ui.as_ref().and_then(deep_gpu::view::Ui::shown_frame);
         let ui_time =
             w.paint.borrow().ui_time + ui.as_ref().map_or(Duration::ZERO, |u| u.take_committed());
         if args.capture.wants(n) || args.window_hash || keep(n) {
