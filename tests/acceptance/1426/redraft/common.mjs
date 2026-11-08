@@ -16,7 +16,7 @@ export const AC = { 1: '#1426.4ef6dcfa', 2: '#1426.eb2029f7' };
 export const README = 'vendor/gpui-pre-apple/upstream/README.md';
 export const DESIGN = 'docs/technical-design.md';
 export const TABLE_HEADING = '## Carried patches';
-export const COLUMNS = ['Behavior', 'Issue', 'Files', 'Test', 'Budget'];
+export const COLUMNS = ['Behavior', 'Issue', 'Files', 'Test', 'Budget', 'Removal'];
 
 /** The carried-patch table in `text`, as rows; null when the file has none with the pinned heading and columns. */
 export function carriedRows(text) {
