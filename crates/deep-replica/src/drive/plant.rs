@@ -30,6 +30,8 @@ pub enum Plant {
     RowLabelPastFrame,
     /// The session row draws its text cut off and names only what it drew (#124 criterion 7).
     RowBranchCutOff,
+    /// After each action the whole tree draws 30% of the window to the right for one step (#1427 criterion 7).
+    JumpsOnAct,
 }
 
 impl Plant {
@@ -44,6 +46,7 @@ impl Plant {
             "no-hit-test" => Some(Plant::NoHitTest),
             "row-label-past-frame" => Some(Plant::RowLabelPastFrame),
             "row-branch-cut-off" => Some(Plant::RowBranchCutOff),
+            "jumps-on-act" => Some(Plant::JumpsOnAct),
             _ => None,
         }
     }
