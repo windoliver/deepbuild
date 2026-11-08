@@ -1,0 +1,32 @@
+Base 6aa228ce, Node 24.22.0, macOS, November 8, 2026.
+node node_modules/vitest/vitest.mjs run --root tests/acceptance/66 --testTimeout=600000 --no-file-parallelism
+
+ Test Files  16 failed (16)
+      Tests  28 failed (28)
+   Duration  133 s, exit 1
+
+Every test fails on the missing surface: the host has no work-source methods (addWorkSource, workKit), the perf lane
+has no #66 task, and packages/sources/linear and packages/sources/gmail don't exist. The test plug-ins
+(fixtures/tracker, chat, linroles) install, pass their conformance and load at the base. The hub halves of AC1 and
+AC5 (`deep fix`) aren't reached at the base: those tests stop first at the missing Linear source.
+
+backlog.test.ts  AC10 (both)          Error: packages/sources/gmail/deepbuild.json doesn't exist: the gmail work source isn't shipped
+budgets.test.ts  AC8 perf lane        AssertionError: benchmarks/budgets.json has a task whose reason names issue #66 ...: expected undefined to be defined
+budgets.test.ts  AC8 quota, 60 s      TypeError: h.addWorkSource is not a function
+crash.test.ts    AC11 (both)          TypeError: h.addWorkSource is not a function
+email.test.ts    AC2                  Error: packages/sources/gmail/deepbuild.json doesn't exist: the gmail work source isn't shipped
+failed.test.ts   AC9 (both)           TypeError: h.addWorkSource is not a function
+fits.test.ts     AC18                 TypeError: h.addWorkSource is not a function
+fix.test.ts      AC1, AC5             Error: packages/sources/linear/deepbuild.json doesn't exist: the linear work source isn't shipped
+gone.test.ts     AC13                 TypeError: h.addWorkSource is not a function
+identity.test.ts AC7                  TypeError: h.addWorkSource is not a function
+kit.test.ts      AC6                  Error: packages/sources/linear/deepbuild.json doesn't exist: the linear work source isn't shipped
+kit.test.ts      AC6 (wrong program)  TypeError: h.workKit is not a function
+markers.test.ts  AC12                 TypeError: h.addWorkSource is not a function
+order.test.ts    AC15                 TypeError: h.addWorkSource is not a function
+pages.test.ts    AC17 (all three)     TypeError: h.addWorkSource is not a function
+rules.test.ts    AC3 (both), AC4      TypeError: h.addWorkSource is not a function
+unknown.test.ts  AC14 (both)          TypeError: h.addWorkSource is not a function
+watch.test.ts    AC16                 TypeError: h.addWorkSource is not a function
+
+node node_modules/typescript/bin/tsc -p tests/acceptance/66/tsconfig.json: exit 0, no errors.
