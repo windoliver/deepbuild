@@ -1,12 +1,14 @@
-// The plug-in blocks' budgets (issues #365, #262): node benchmarks/plugin-blocks.mjs <source-call | store-query |
-// schedule-fire | batch-refresh | value-at-position>.
+// The plug-in blocks' budgets (issues #365, #262, #66): node benchmarks/plugin-blocks.mjs <source-call | store-query |
+// schedule-fire | batch-refresh | value-at-position | work-item>.
 // One process opens a record, the asks core, the supervisor and project trust in a temp folder, loads one package in
 // the hub (the release lists it), and then:
 // - source-call: 200 reads of a polled source against an HTTP server on 127.0.0.1, its freshness 1 ms so each read calls;
 // - store-query: 10,000 items put in the package's store, then 1,000 lookups of random keys, from inside the package;
 // - schedule-fire: a schedule every second on the real clock, until its job ran three times;
 // - batch-refresh: 20 calls of a 500-series source, each landing one batch, then its 500 bound values read live;
-// - value-at-position: 360 batches landed, then 200 bound values each pinned to a random earlier batch's log position.
+// - value-at-position: 360 batches landed, then 200 bound values each pinned to a random earlier batch's log position;
+// - work-item: a work source over a tracker on 127.0.0.1, run every second on the real clock; five items made one at a
+//   time, each timed from when the tracker holds it to when it is a task (#66's 60 s stays in tests/acceptance/66).
 // It prints how long the work took, as one JSON line (for the last two, the reads alone). The issues' limits (5 ms
 // beyond the network, 10 ms at p95 over 100,000 rows, 1 s; 1 ms for 500 values, 1 ms at p50) stay in
 // tests/acceptance/365/budgets.test.ts and tests/acceptance/262/budgets.test.ts.
@@ -43,12 +45,24 @@ export default async function (deep: any): Promise<void> {
     async () => ({ fired }));
 }
 `,
+  'work-item': `export default async function (deep: any): Promise<void> {
+  await deep.registerSource('ext.bench.work', { variant: 'stream', host: 'api.bench.example', quota: { per_minute: 1000000, per_day: 10000000 }, delivers: 'comment',
+    read: (stream: any, cursor: any, limit: number) => { const s = cursor === null ? 0 : Number(cursor); const events = stream.events.slice(s, s + limit); return { events, cursor: String(s + events.length) }; },
+    list: async (ctx: any, q: any) => ({ items: JSON.parse((await ctx.fetch({ method: 'GET', path: '/items' })).body).map((i: any) => ({ id: i.id, scope: q.scope, created: i.at, updated: i.at, mention: false })), cursor: null }),
+    item: async (ctx: any, q: any) => {
+      const i = JSON.parse((await ctx.fetch({ method: 'GET', path: '/items/' + q.id })).body);
+      return { events: [{ id: i.id + '@' + i.at, kind: 'item', at: i.at, marker: null, mention: false, data: { source_id: i.id, link: 'https://bench.example/' + i.id, title: 'Item ' + i.id, body: 'Its body', criteria: [], authors: [{ handle: 'you', role: 'owner' }], updated: i.at } }] };
+    },
+    deliver: async () => ({ outcome: 'sent' }), find: async () => null });
+}
+`,
 }[task] ?? (['batch-refresh', 'value-at-position'].includes(task) ? `export default async function (deep: any): Promise<void> {
   await deep.registerSource('ext.bench.fleet', { variant: 'polled', host: 'api.bench.example', path: '/fleet', shape: 'series', quota: { per_minute: 1000000, per_day: 10000000 }, timeout: 5000, freshFor: 1,
     parse: (answer: any) => ({ values: JSON.parse(answer.body), unit: 'rps' }) });
 }
 ` : undefined);
-if (!CODE) throw Error('usage: node benchmarks/plugin-blocks.mjs <source-call | store-query | schedule-fire | batch-refresh | value-at-position>');
+if (!CODE) throw Error('usage: node benchmarks/plugin-blocks.mjs <source-call | store-query | schedule-fire | batch-refresh | value-at-position | work-item>');
+const items = [];
 const SERIES = Array.from({ length: 500 }, (_, i) => `svc${String(i).padStart(3, '0')}`);
 
 const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-blocks-bench-')));
@@ -59,7 +73,8 @@ const supervisor = await openSupervisor({ record, asks, now: Date.now, settings:
 const trust = await openTrust({ record, now: Date.now });
 let calls = 0;
 const server = createServer((req, res) => res.writeHead(200, { 'content-type': 'application/json' })
-  .end(req.url === '/fleet' ? JSON.stringify(Object.fromEntries(SERIES.map((s, i) => [s, ((++calls * 31 + i * 7) % 1000) / 10]))) : '{"price":187.25}'));
+  .end(req.url === '/fleet' ? JSON.stringify(Object.fromEntries(SERIES.map((s, i) => [s, ((++calls * 31 + i * 7) % 1000) / 10])))
+    : req.url === '/items' ? JSON.stringify(items) : req.url.startsWith('/items/') ? JSON.stringify(items.find((i) => req.url === `/items/${i.id}`) ?? {}) : '{"price":187.25}'));
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const port = server.address().port;
 // The source's host, routed to the local server; nothing else is reachable.
@@ -74,7 +89,7 @@ mkdirSync(folder);
 writeFileSync(join(folder, 'index.ts'), CODE);
 const manifest = {
   id: 'bench/bench', version: '1.0.0', digest: '', access: { words: ['hosts'] }, stores: ['ext.bench.item'], actions: ['ext.bench.fill', 'ext.bench.lookup', 'ext.bench.fired'],
-  sources: [{ name: 'ext.bench.price', variant: 'polled' }, { name: 'ext.bench.fleet', variant: 'polled' }], requires: { preview: ['deep.registerSource', 'deep.store', 'deep.store.put', 'deep.store.get', 'deep.registerAction', 'deep.schedule'] },
+  sources: [{ name: 'ext.bench.price', variant: 'polled' }, { name: 'ext.bench.fleet', variant: 'polled' }, { name: 'ext.bench.work', variant: 'stream', reading: 'work.item@1' }], requires: { preview: ['deep.registerSource', 'deep.store', 'deep.store.put', 'deep.store.get', 'deep.registerAction', 'deep.schedule'] },
 };
 writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
 manifest.digest = packageDigest(folder);
@@ -119,6 +134,12 @@ try {
     for (let i = 0; i < 200; i++) {
       const [v] = await host.boundValues([handles[(i * 7919) % 500]], { log_pos: positions[(i * 104729) % (positions.length - 1)] });
       if (v.status !== 'reading') throw Error(`the pinned value: ${JSON.stringify(v)}`);
+    }
+  } else if (task === 'work-item') {
+    await host.addWorkSource(you, { source: 'ext.bench.work', scope: 'bench', every: 1000 });
+    for (let n = 1; n <= 5; n++) {
+      items.push({ id: `item-${n}`, at: new Date().toISOString() });
+      while (!(await host.workTasks()).some((t) => t.id === `item-${n}`)) await new Promise((resolve) => setTimeout(resolve, 20));
     }
   } else if (task === 'source-call') {
     for (let i = 0; i < 200; i++) {

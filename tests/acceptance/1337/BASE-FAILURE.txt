@@ -1,0 +1,49 @@
+Base commit: 9d31efdb9027284b0617d1185154a1e4fe6c61f4 (Merge pull request #1642 from windoliver/worktree-github-issue-344-2d308f)
+Built first: npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-hook
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1337 --no-file-parallelism
+Date: 2026-11-07  Machine: Mac17,10 (Apple M5 Max), 1-minute load about 60 to 110 (other worktrees' runs)
+Node: ~/.local/share/fnm/node-versions/v24.22.0 (v24.22.0)  vitest 5.0.5
+Exit code: 1
+Result: Test Files 5 failed (5); Tests 7 failed | 1 skipped (8). Duration 5 s.
+  (The skipped test is one-person.test.ts's fixture writer, which runs only with DEEPBUILD_1337_MAKE_RECORD=1.)
+
+No test passed at the base. Why each fails:
+
+Failing at a named judgement:
+  AC2 scope.test.ts, after real sessions in two clones of acme/shop:
+    "one repo, two clones: the session in /private/tmp/dh1337-Wxh6dK/m/src/shop (origin https://github.com/acme/shop.git)
+     reads as project "shopf957d167", the one in /private/tmp/dh1337-Wxh6dK/m/work/shop-2 (origin
+     git@github.com:acme/shop.git) as "shop2e544e174""   (the base's project is the folder name and a digest of its path)
+  AC1 actor.test.ts and AC3 reads.test.ts (main tests), at the fixture's first step:
+    "the hub must issue a second person's credential (person.add {person: "bob", repo: <maya's clone of acme/shop>} on
+     maya's control connection, answered {person, token}): it answered {"code":"unknown_method", ...
+     "remediation":"The hub serves no method person.add." ...}"   (the base has one person, every event stamped you)
+
+Plants the base doesn't list, BLOCKED (not yet seen failing on the wrong program):
+  AC1 actor-from-payload; AC3 reads-unfiltered:
+    "BLOCKED: the hub didn't start (deep hub run): exit {"code":1,"signal":null}; ... DEEP_HUB_PLANT=<plant> names no
+     planted program"
+
+BLOCKED, with no hub that has people to judge:
+  AC4 one-person.test.ts: the base's hub opened fixtures/one-person/ledger.db and read back all 21 events and both
+    session rows unchanged (as it should: the fixture is its own), then
+    "BLOCKED: the hub under test adds no second person (person.add answered {"code":"unknown_method", ...}), so it is not
+     yet the hub with people the criterion opens an old record with; the record read back unchanged, which proves
+     nothing until then"
+  AC4 visible.test.ts:
+    "BLOCKED: the hub here adds no second person (person.add answered {"code":"unknown_method", ...}): it is not yet the
+     hub with people, so there is no change to compare with the merge base"   (DEEPBUILD_1337_BASE was unset too)
+
+What was checked of the harness at the base, in throwaway runs not kept in the suite:
+  - AC2 with its main assertion taken out: the rest held at the base: each session's events name one project and one
+    scope, the session row names the events' project, maya/notes reads as another project, and the repo with no remote
+    reads as the path scope helpers.ts computes. The forge stand-in was written nothing.
+  - AC3's judgement with bob's credential replaced by the owner's control token (a reader with no filter): it failed,
+    naming event 01M6X2118V2K9NM3MS8VE8NWHM (session.start) of maya's notes session, as the plant must make it fail.
+  - AC1's judgement with bob's hooks sent as the owner's (no hello): it failed, naming event 01M6X211D7QWSQNB9NZMSDMV7C
+    (SessionStart from bob's connection, stored with actor "you", not "bob").
+  - visible.test.ts with its two BLOCKED checks for "no people" and "the base is this checkout" taken out, comparing
+    #667 in this checkout against itself (DEEPBUILD_1337_BASE=this checkout, DEEPBUILD_1337_MAIN=HEAD): both runs
+    reported, every test ended the same way, and it passed in 54 s.
+  - fixtures/one-person was written by the DEEPBUILD_1337_MAKE_RECORD=1 block at this base; `strings` of the ledger
+    shows no /Users/ path and no user name.
