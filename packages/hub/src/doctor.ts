@@ -8,6 +8,7 @@ import { access } from 'node:fs/promises';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
 import { canvasItems } from './canvas-doctor.js';
 import { claudeSettings, commands, installed, readJson } from './claude-settings.js';
