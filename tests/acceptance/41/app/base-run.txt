@@ -1,0 +1,218 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-41-97fa68/tests/acceptance/41/app
+
+ ❯ screens.test.ts (2 tests | 1 failed) 12730ms
+   ❯ AC22 #41.bff357be the three screenshots, shown to you (2)
+     × AC22 #41.bff357be the check run from the app takes the Set up screen, the older-hub screen and the update check line at the reference window, and stays INCONCLUSIVE until a taste call on them is recorded 12686ms
+ ❯ update-line.test.ts (7 tests | 6 failed) 12779ms
+   ❯ AC14 #41.3e1f79e3 `deep update --check` with the network down (3)
+     × AC14 #41.3e1f79e3 deep: after a check that succeeded, with the update server's port closed, it says it couldn't check and gives that check's time, never up to date 84ms
+     × AC14 #41.3e1f79e3 deep: after a check that succeeded, with a network that drops the connection, it says it couldn't check and gives that check's time 102ms
+     × AC14 #41.3e1f79e3 deep: offline in a home where no check ever succeeded, it says it couldn't check and that the last check was never 55ms
+   ❯ AC14 #41.3e1f79e3 the app's Check for updates (deep-app --check-for-updates) with the network down (3)
+     × AC14 #41.3e1f79e3 app: after a check that succeeded, with the update server's port closed, it says it couldn't check and gives that check's time, never up to date 11052ms
+     × AC14 #41.3e1f79e3 app: after a check that succeeded, with a network that drops the connection, it says it couldn't check and gives that check's time 1389ms
+     × AC14 #41.3e1f79e3 app: offline in a home where no check ever succeeded, it says it couldn't check and that the last check was never 37ms
+ ❯ finder.test.ts (5 tests | 5 failed) 12780ms
+   ❯ AC17 #41.fb18eabe Set up from an app opened by Finder (5)
+     × AC17 #41.fb18eabe with /bin/zsh as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once 12664ms
+     × AC17 #41.fb18eabe with /bin/bash as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once 20ms
+     × AC17 #41.fb18eabe with a login shell that is missing, Set up names it, within 60 s 39ms
+     × AC17 #41.fb18eabe with a login shell that exits non-zero, Set up names it, within 60 s 26ms
+     × AC17 #41.fb18eabe with a login shell that never answers, Set up names it, within 60 s 17ms
+ ❯ compat.test.ts (6 tests | 6 failed) 13731ms
+   ❯ AC13 #41.1d9debfb the app against an older running hub (6)
+     × AC13 #41.1d9debfb with a hub that lists the app's contract and every method it calls, the app says hub ok, calls the hub, and calls only listed methods 12689ms
+     × AC13 #41.1d9debfb with a hub on an older contract, the app shows one screen naming the hub as older, both contracts and the fix, and calls nothing the hub doesn't list 31ms
+     × AC13 #41.1d9debfb with a hub whose hello has no contract and lists nothing, the app shows the older-hub screen and calls nothing 37ms
+     × AC13 #41.1d9debfb with a hub of the app's contract that lacks one method the app calls, for each such method, the screen names the hub as older and the method, and the app never calls it 28ms
+     × AC13 #41.1d9debfb against the real hub of this checkout, the app finds it compatible: hub ok, no older screen 858ms
+     × AC13 #41.1d9debfb planted: an app that calls without checking the hello (plant-calls-unlisted) fails this test, naming the method it called 42ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 18 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  compat.test.ts > AC13 #41.1d9debfb the app against an older running hub > AC13 #41.1d9debfb with a hub that lists the app's contract and every method it calls, the app says hub ok, calls the hub, and calls only listed methods
+AssertionError: #41 AC13 deep-app --hub-needs must print the app's contract and the methods it calls as one JSON line and exit 0: exit 101, stdout "", stderr "\nthread 'main' (148704746) panicked at crates/deep-app/src/main.rs:308:22:\nunknown argument --hub-needs\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ needs compat.test.ts:43:37
+
+ ❯ compat.test.ts:88:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/18]⎯
+
+ FAIL  compat.test.ts > AC13 #41.1d9debfb the app against an older running hub > AC13 #41.1d9debfb with a hub on an older contract, the app shows one screen naming the hub as older, both contracts and the fix, and calls nothing the hub doesn't list
+AssertionError: #41 AC13 deep-app --hub-needs must print the app's contract and the methods it calls as one JSON line and exit 0: exit 101, stdout "", stderr "\nthread 'main' (148705082) panicked at crates/deep-app/src/main.rs:308:22:\nunknown argument --hub-needs\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ needs compat.test.ts:43:37
+
+ ❯ compat.test.ts:99:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/18]⎯
+
+ FAIL  compat.test.ts > AC13 #41.1d9debfb the app against an older running hub > AC13 #41.1d9debfb with a hub whose hello has no contract and lists nothing, the app shows the older-hub screen and calls nothing
+AssertionError: #41 AC13 deep-app --hub-needs must print the app's contract and the methods it calls as one JSON line and exit 0: exit 101, stdout "", stderr "\nthread 'main' (148705100) panicked at crates/deep-app/src/main.rs:308:22:\nunknown argument --hub-needs\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ needs compat.test.ts:43:37
+
+ ❯ compat.test.ts:109:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/18]⎯
+
+ FAIL  compat.test.ts > AC13 #41.1d9debfb the app against an older running hub > AC13 #41.1d9debfb with a hub of the app's contract that lacks one method the app calls, for each such method, the screen names the hub as older and the method, and the app never calls it
+AssertionError: #41 AC13 deep-app --hub-needs must print the app's contract and the methods it calls as one JSON line and exit 0: exit 101, stdout "", stderr "\nthread 'main' (148705124) panicked at crates/deep-app/src/main.rs:308:22:\nunknown argument --hub-needs\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ needs compat.test.ts:43:37
+
+ ❯ compat.test.ts:118:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/18]⎯
+
+ FAIL  compat.test.ts > AC13 #41.1d9debfb the app against an older running hub > AC13 #41.1d9debfb against the real hub of this checkout, the app finds it compatible: hub ok, no older screen
+AssertionError: #41 AC13 the app and the hub built from one checkout must agree: deep-app --hub-check against the running hub must say hub ok: exit 101, stdout "", stderr "\nthread 'main' (148705816) panicked at crates/deep-app/src/main.rs:308:22:\nunknown argument --hub-check\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ compat.test.ts:131:72
+
+ ❯ withHub ../../../../packages/hub/test/hub.ts:83:5
+ ❯ compat.test.ts:128:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/18]⎯
+
+ FAIL  compat.test.ts > AC13 #41.1d9debfb the app against an older running hub > AC13 #41.1d9debfb planted: an app that calls without checking the hello (plant-calls-unlisted) fails this test, naming the method it called
+AssertionError: #41 AC13 deep-app --hub-needs must print the app's contract and the methods it calls as one JSON line and exit 0: exit 101, stdout "", stderr "\nthread 'main' (148705825) panicked at crates/deep-app/src/main.rs:308:22:\nunknown argument --hub-needs\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ needs compat.test.ts:43:37
+
+ ❯ compat.test.ts:138:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/18]⎯
+
+ FAIL  finder.test.ts > AC17 #41.fb18eabe Set up from an app opened by Finder > AC17 #41.fb18eabe with /bin/zsh as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once
+ FAIL  finder.test.ts > AC17 #41.fb18eabe Set up from an app opened by Finder > AC17 #41.fb18eabe with /bin/bash as the login shell and deep and its runtime only on its PATH, Set up succeeds, running that deep with that runtime, reading the login shell once
+AssertionError: #41 AC17 Set up from an app opened by Finder must succeed when deep and its runtime are on the login shell's PATH: exit 1, stdout "", stderr "deep-app: deep setup didn't start: No such file or directory (os error 2)\n"
+ ❯ finder.test.ts:86:34
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/18]⎯
+
+ FAIL  finder.test.ts > AC17 #41.fb18eabe Set up from an app opened by Finder > AC17 #41.fb18eabe with a login shell that is missing, Set up names it, within 60 s
+AssertionError: #41 AC17 with a login shell that is missing, Set up must name it (/private/tmp/da41-gaErne/shells/no-such-shell), never skip it quietly: exit 1, stdout "", stderr "deep-app: deep setup didn't start: No such file or directory (os error 2)\n"
+ ❯ finder.test.ts:109:67
+    107|       const ran = await setUpFromFinder(a, shell);
+    108|       if (ran.timedOut || ran.ms > 60_000) expect.fail(`#41 AC17 with …
+    109|       if (!`${ran.stdout}\n${ran.stderr}`.includes(shell)) expect.fail…
+       |                                                                   ^
+    110|     }, BUILD);
+    111|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/18]⎯
+
+ FAIL  finder.test.ts > AC17 #41.fb18eabe Set up from an app opened by Finder > AC17 #41.fb18eabe with a login shell that exits non-zero, Set up names it, within 60 s
+AssertionError: #41 AC17 with a login shell that exits non-zero, Set up must name it (/private/tmp/da41-e3dCnL/shells/failing-shell), never skip it quietly: exit 1, stdout "", stderr "deep-app: deep setup didn't start: No such file or directory (os error 2)\n"
+ ❯ finder.test.ts:109:67
+    107|       const ran = await setUpFromFinder(a, shell);
+    108|       if (ran.timedOut || ran.ms > 60_000) expect.fail(`#41 AC17 with …
+    109|       if (!`${ran.stdout}\n${ran.stderr}`.includes(shell)) expect.fail…
+       |                                                                   ^
+    110|     }, BUILD);
+    111|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/18]⎯
+
+ FAIL  finder.test.ts > AC17 #41.fb18eabe Set up from an app opened by Finder > AC17 #41.fb18eabe with a login shell that never answers, Set up names it, within 60 s
+AssertionError: #41 AC17 with a login shell that never answers, Set up must name it (/private/tmp/da41-61yLtd/shells/hung-shell), never skip it quietly: exit 1, stdout "", stderr "deep-app: deep setup didn't start: No such file or directory (os error 2)\n"
+ ❯ finder.test.ts:109:67
+    107|       const ran = await setUpFromFinder(a, shell);
+    108|       if (ran.timedOut || ran.ms > 60_000) expect.fail(`#41 AC17 with …
+    109|       if (!`${ran.stdout}\n${ran.stderr}`.includes(shell)) expect.fail…
+       |                                                                   ^
+    110|     }, BUILD);
+    111|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/18]⎯
+
+ FAIL  screens.test.ts > AC22 #41.bff357be the three screenshots, shown to you > AC22 #41.bff357be the check run from the app takes the Set up screen, the older-hub screen and the update check line at the reference window, and stays INCONCLUSIVE until a taste call on them is recorded
+AssertionError: #41 AC22 deep-app --screenshot /private/tmp/da41-2RqJzG/set-up.png must write the window as a PNG and print one JSON line: exit 101, stdout "", stderr "\nthread 'main' (148704791) panicked at crates/deep-app/src/main.rs:308:22:\nunknown argument --screenshot\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ screenshot screens.test.ts:44:37
+
+ ❯ screens.test.ts:62:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/18]⎯
+
+ FAIL  update-line.test.ts > AC14 #41.3e1f79e3 `deep update --check` with the network down > AC14 #41.3e1f79e3 deep: after a check that succeeded, with the update server's port closed, it says it couldn't check and gives that check's time, never up to date
+AssertionError: #41 AC14 `deep update --check` must fetch the manifest at DEEP_UPDATE_URL (http://127.0.0.1:53050/deepbuild/manifest.json); it made no request: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ ❯ succeedThenGoOffline update-line.test.ts:63:33
+     61|   const ok = await checkNow(s, h, server.url);
+     62|   const to = Date.now();
+     63|   if (server.hits() < 1) expect.fail(`#41 AC14 ${who(s)} must fetch th…
+       |                                 ^
+     64|   if (COULDNT.test(ok.stdout)) expect.fail(`#41 AC14 with the manifest…
+     65|   await server.close();
+ ❯ update-line.test.ts:73:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/18]⎯
+
+ FAIL  update-line.test.ts > AC14 #41.3e1f79e3 `deep update --check` with the network down > AC14 #41.3e1f79e3 deep: after a check that succeeded, with a network that drops the connection, it says it couldn't check and gives that check's time
+AssertionError: #41 AC14 `deep update --check` must fetch the manifest at DEEP_UPDATE_URL (http://127.0.0.1:53059/deepbuild/manifest.json); it made no request: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ ❯ succeedThenGoOffline update-line.test.ts:63:33
+     61|   const ok = await checkNow(s, h, server.url);
+     62|   const to = Date.now();
+     63|   if (server.hits() < 1) expect.fail(`#41 AC14 ${who(s)} must fetch th…
+       |                                 ^
+     64|   if (COULDNT.test(ok.stdout)) expect.fail(`#41 AC14 with the manifest…
+     65|   await server.close();
+ ❯ update-line.test.ts:82:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/18]⎯
+
+ FAIL  update-line.test.ts > AC14 #41.3e1f79e3 `deep update --check` with the network down > AC14 #41.3e1f79e3 deep: offline in a home where no check ever succeeded, it says it couldn't check and that the last check was never
+AssertionError: #41 AC14 offline, `deep update --check` must say it couldn't check: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+ ❯ couldntCheck update-line.test.ts:45:35
+     43|   const line = lastLine(r.stdout);
+     44|   if (/up to date/i.test(r.stdout)) expect.fail(`#41 AC14 offline, ${w…
+     45|   if (!COULDNT.test(line)) expect.fail(`#41 AC14 offline, ${who(s)} mu…
+       |                                   ^
+     46|   const times = line.match(ISO) ?? [];
+     47|   if (last === 'never') {
+ ❯ update-line.test.ts:91:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/18]⎯
+
+ FAIL  update-line.test.ts > AC14 #41.3e1f79e3 the app's Check for updates (deep-app --check-for-updates) with the network down > AC14 #41.3e1f79e3 app: after a check that succeeded, with the update server's port closed, it says it couldn't check and gives that check's time, never up to date
+AssertionError: #41 AC14 the app's Check for updates (deep-app --check-for-updates) must fetch the manifest at DEEP_UPDATE_URL (http://127.0.0.1:53069/deepbuild/manifest.json); it made no request: exit 101, stdout "", stderr "\nthread 'main' (148704730) panicked at crates/deep-app/src/main.rs:308:22:\nunknown argument --check-for-updates\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ succeedThenGoOffline update-line.test.ts:63:33
+     61|   const ok = await checkNow(s, h, server.url);
+     62|   const to = Date.now();
+     63|   if (server.hits() < 1) expect.fail(`#41 AC14 ${who(s)} must fetch th…
+       |                                 ^
+     64|   if (COULDNT.test(ok.stdout)) expect.fail(`#41 AC14 with the manifest…
+     65|   await server.close();
+ ❯ update-line.test.ts:73:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/18]⎯
+
+ FAIL  update-line.test.ts > AC14 #41.3e1f79e3 the app's Check for updates (deep-app --check-for-updates) with the network down > AC14 #41.3e1f79e3 app: after a check that succeeded, with a network that drops the connection, it says it couldn't check and gives that check's time
+AssertionError: #41 AC14 the app's Check for updates (deep-app --check-for-updates) must fetch the manifest at DEEP_UPDATE_URL (http://127.0.0.1:53104/deepbuild/manifest.json); it made no request: exit 101, stdout "", stderr "\nthread 'main' (148704869) panicked at crates/deep-app/src/main.rs:308:22:\nunknown argument --check-for-updates\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ succeedThenGoOffline update-line.test.ts:63:33
+     61|   const ok = await checkNow(s, h, server.url);
+     62|   const to = Date.now();
+     63|   if (server.hits() < 1) expect.fail(`#41 AC14 ${who(s)} must fetch th…
+       |                                 ^
+     64|   if (COULDNT.test(ok.stdout)) expect.fail(`#41 AC14 with the manifest…
+     65|   await server.close();
+ ❯ update-line.test.ts:82:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/18]⎯
+
+ FAIL  update-line.test.ts > AC14 #41.3e1f79e3 the app's Check for updates (deep-app --check-for-updates) with the network down > AC14 #41.3e1f79e3 app: offline in a home where no check ever succeeded, it says it couldn't check and that the last check was never
+AssertionError: #41 AC14 offline, the app's Check for updates (deep-app --check-for-updates) must say it couldn't check: exit 101, stdout "", stderr "\nthread 'main' (148705079) panicked at crates/deep-app/src/main.rs:308:22:\nunknown argument --check-for-updates\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n"
+ ❯ couldntCheck update-line.test.ts:45:35
+     43|   const line = lastLine(r.stdout);
+     44|   if (/up to date/i.test(r.stdout)) expect.fail(`#41 AC14 offline, ${w…
+     45|   if (!COULDNT.test(line)) expect.fail(`#41 AC14 offline, ${who(s)} mu…
+       |                                   ^
+     46|   const times = line.match(ISO) ?? [];
+     47|   if (last === 'never') {
+ ❯ update-line.test.ts:91:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/18]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  18 failed | 2 passed (20)
+   Start at  22:55:27
+   Duration  13.88s (tests 100%)
+

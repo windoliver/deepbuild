@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 <home path>
+
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  13:06:17
+   Duration  80.77s (tests 100%)
+

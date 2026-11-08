@@ -1,0 +1,115 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/41/release-budgets/release-budgets.test.ts (5 tests | 5 failed) 18780ms
+   ❯ AC8 #41.3f039c53 AC11 #41.7e92e81e release budgets against the last release (4)
+     × AC8 #41.3f039c53 an unchanged candidate passes every recorded task against the last release 6ms
+     × AC8 #41.3f039c53 a projection rebuild 30% slower than the last release fails, naming the task and both commits, though each change stayed within its merge-base margin 1ms
+     × AC11 #41.7e92e81e a release fails when hook overhead and the hub idle CPU are worse than the last release by more than the margin, naming each 0ms
+     × AC8 #41.3f039c53 without --last-release the last release is the highest release/* tag by version 0ms
+   ❯ AC8 #41.3f039c53 no last release (1)
+     × AC8 #41.3f039c53 refuses, saying there is no last release, when no release/* tag exists 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/release-budgets/release-budgets.test.ts > AC8 #41.3f039c53 AC11 #41.7e92e81e release budgets against the last release > AC8 #41.3f039c53 an unchanged candidate passes every recorded task against the last release
+AssertionError: scripts/release-budgets.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/41/release-budgets/release-budgets.test.ts:152:70
+    150|
+    151|   it('AC8 #41.3f039c53 an unchanged candidate passes every recorded ta…
+    152|     expect(existsSync(script), 'scripts/release-budgets.mjs exists').t…
+       |                                                                      ^
+    153|     const run = release(['--repo', r.dir, '--candidate', sha.unchanged…
+    154|     expect(run.output.split('\n').filter((line) => line.includes('FAIL…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/41/release-budgets/release-budgets.test.ts > AC8 #41.3f039c53 AC11 #41.7e92e81e release budgets against the last release > AC8 #41.3f039c53 a projection rebuild 30% slower than the last release fails, naming the task and both commits, though each change stayed within its merge-base margin
+AssertionError: scripts/release-budgets.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/41/release-budgets/release-budgets.test.ts:159:70
+    157|
+    158|   it('AC8 #41.3f039c53 a projection rebuild 30% slower than the last r…
+    159|     expect(existsSync(script), 'scripts/release-budgets.mjs exists').t…
+       |                                                                      ^
+    160|     // The premise, through the merge-base comparison perf uses: each …
+    161|     // change, is within the task's 50% merge-base margin.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/41/release-budgets/release-budgets.test.ts > AC8 #41.3f039c53 AC11 #41.7e92e81e release budgets against the last release > AC11 #41.7e92e81e a release fails when hook overhead and the hub idle CPU are worse than the last release by more than the margin, naming each
+AssertionError: scripts/release-budgets.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/41/release-budgets/release-budgets.test.ts:176:70
+    174|
+    175|   it('AC11 #41.7e92e81e a release fails when hook overhead and the hub…
+    176|     expect(existsSync(script), 'scripts/release-budgets.mjs exists').t…
+       |                                                                      ^
+    177|     const run = release(['--repo', r.dir, '--candidate', sha.hooks, '-…
+    178|     expect(run.status, run.shown).not.toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/41/release-budgets/release-budgets.test.ts > AC8 #41.3f039c53 AC11 #41.7e92e81e release budgets against the last release > AC8 #41.3f039c53 without --last-release the last release is the highest release/* tag by version
+AssertionError: scripts/release-budgets.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/41/release-budgets/release-budgets.test.ts:185:70
+    183|
+    184|   it('AC8 #41.3f039c53 without --last-release the last release is the …
+    185|     expect(existsSync(script), 'scripts/release-budgets.mjs exists').t…
+       |                                                                      ^
+    186|     // release/0.10.0 (rebuild 300 ms) is the last release; release/0.…
+    187|     // newer by tag date and by text order, and comparing with it woul…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/41/release-budgets/release-budgets.test.ts > AC8 #41.3f039c53 no last release > AC8 #41.3f039c53 refuses, saying there is no last release, when no release/* tag exists
+AssertionError: scripts/release-budgets.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/41/release-budgets/release-budgets.test.ts:196:70
+    194| describe('AC8 #41.3f039c53 no last release', () => {
+    195|   it('AC8 #41.3f039c53 refuses, saying there is no last release, when …
+    196|     expect(existsSync(script), 'scripts/release-budgets.mjs exists').t…
+       |                                                                      ^
+    197|     const r = repo();
+    198|     const head = r.commit(RELEASED, 'first');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  13:06:41
+   Duration  19.42s (tests 99%)
+

@@ -1,0 +1,374 @@
+# Run against base commit 9c6005bf6 (a shallow checkout of it at /tmp/dh41-base with this folder copied in), Node v24.22.0:
+#   node node_modules/vitest/vitest.mjs run tests/acceptance/41/rehearse
+
+
+ RUN  v5.0.5 /private/tmp/dh41-base
+
+ ❯ tests/acceptance/41/rehearse/verify.test.ts (4 tests | 4 failed) 11069ms
+   ❯ AC21 #41.7e835721 Each per-platform package's runtime files are the built tree's, byte for byte and with their exec bits (4)
+     × AC21 #41.7e835721 a package whose bin/deep-hook is the built tree's, exec bit kept, passes, so the failures below come from the plant 5288ms
+     × AC21 #41.7e835721 a planted package whose deep-hook differs from the built tree by one byte fails, naming the file and the package 1683ms
+     × AC21 #41.7e835721 a planted package whose deep-hook lost its exec bit fails, naming the file and the package 2077ms
+     × AC21 #41.7e835721 a planted unsigned dylib inside the per-platform package fails the codesign step, naming the file 1859ms
+ ❯ tests/acceptance/41/rehearse/rehearse.test.ts (4 tests | 4 failed) 32587ms
+   ❯ AC19 #41.13231c35 The rehearsal publishes to a loopback registry and nowhere else, and the reinstall after it stops uses no network (4)
+     × AC19 #41.13231c35 every archive is published to the rehearsal's loopback registry, the fresh project installs deepbuild and each per-platform package from it, deep runs, the registry stops and the reinstall counts 0 network requests 9051ms
+     × AC19 #41.13231c35 a planted publishConfig.registry off loopback is refused before any upload, naming the URL: the deepbuild package publishes to an IPv4 address off loopback 7230ms
+     × AC19 #41.13231c35 a planted publishConfig.registry off loopback is refused before any upload, naming the URL: a per-platform package publishes to a URL that starts 127.0.0.1 but whose host is off loopback 6956ms
+     × AC19 #41.13231c35 a planted publishConfig.registry off loopback is refused before any upload, naming the URL: a per-platform package publishes to an IPv6 address off loopback 9247ms
+ ❯ tests/acceptance/41/rehearse/clean-machine.test.ts (3 tests | 3 failed) 139687ms
+   ❯ AC1 #41.a90a4093 npx deepbuild setup works on a clean macOS and Linux machine (2)
+     × AC1 #41.a90a4093 macOS: from the release's packages on a loopback registry, in a fresh HOME and a clean environment, npx deepbuild setup succeeds and deep --version and deep doctor run from the installed files 37764ms
+     × AC1 #41.a90a4093 Linux: the same install inside a Linux container with no network succeeds the same way, or the test reports BLOCKED when no container runtime answers 733ms
+   ❯ AC9 #41.6d07af40 the npm package under 30 MB installed (1)
+     × AC9 #41.6d07af40 deepbuild and this platform's deep-hook package, installed into a fresh project from the release's archives, take under 30 MB 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/rehearse/clean-machine.test.ts > AC1 #41.a90a4093 npx deepbuild setup works on a clean macOS and Linux machine > AC1 #41.a90a4093 macOS: from the release's packages on a loopback registry, in a fresh HOME and a clean environment, npx deepbuild setup succeeds and deep --version and deep doctor run from the installed files
+ FAIL  tests/acceptance/41/rehearse/clean-machine.test.ts > AC9 #41.6d07af40 the npm package under 30 MB installed > AC9 #41.6d07af40 deepbuild and this platform's deep-hook package, installed into a fresh project from the release's archives, take under 30 MB
+Error: the release made no deepbuild archive; it made: @deepbuild/paseo, @deepbuild/pi
+ ❯ rootArchive tests/acceptance/41/rehearse/helpers.ts:174:17
+    172| export function rootArchive(rel: Release): { file: string; version: st…
+    173|   const a = rel.manifest.archives.find((x) => x.name === 'deepbuild');
+    174|   if (!a) throw Error(`the release made no deepbuild archive; it made:…
+       |                 ^
+    175|   const meta = fromArchive(join(rel.out, a.file), 'package/package.jso…
+    176|   if (!meta) throw Error(`the deepbuild archive ${a.file} holds no pac…
+ ❯ tests/acceptance/41/rehearse/clean-machine.test.ts:56:5
+ ❯ tests/acceptance/41/rehearse/clean-machine.test.ts:116:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  tests/acceptance/41/rehearse/clean-machine.test.ts > AC1 #41.a90a4093 npx deepbuild setup works on a clean macOS and Linux machine > AC1 #41.a90a4093 Linux: the same install inside a Linux container with no network succeeds the same way, or the test reports BLOCKED when no container runtime answers
+Error: BLOCKED: no container runtime answers `docker info` (exit 1: failed to connect to the docker API at unix://~/.orbstack/run/docker.sock; check if the path is correct and if the daemon is running: dial unix ~/.orbstack/run/docker.sock: connect: no such file or directory); start one, then run this test again
+ ❯ tests/acceptance/41/rehearse/clean-machine.test.ts:123:32
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  tests/acceptance/41/rehearse/rehearse.test.ts > AC19 #41.13231c35 The rehearsal publishes to a loopback registry and nowhere else, and the reinstall after it stops uses no network > AC19 #41.13231c35 every archive is published to the rehearsal's loopback registry, the fresh project installs deepbuild and each per-platform package from it, deep runs, the registry stops and the reinstall counts 0 network requests
+AssertionError: the rehearsal of a clean release must pass:
+exit 1
+--- stdout
+
+--- stderr
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '/private/tmp/dh41-base/scripts/release-rehearse.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/41/rehearse/rehearse.test.ts:87:80
+     85|     const archives = plantedRelease();
+     86|     const { r, work, text } = await rehearse(archives);
+     87|     expect(r.code, `the rehearsal of a clean release must pass:\n${sho…
+       |                                                                                ^
+     88|
+     89|     const [url] = line(text, 'registry:');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  tests/acceptance/41/rehearse/rehearse.test.ts > AC19 #41.13231c35 The rehearsal publishes to a loopback registry and nowhere else, and the reinstall after it stops uses no network > AC19 #41.13231c35 a planted publishConfig.registry off loopback is refused before any upload, naming the URL: the deepbuild package publishes to an IPv4 address off loopback
+AssertionError: the refusal names the URL as written: expected '\nnode:internal/modules/cjs/loader:15…' to contain 'http://192.0.2.1:4873/'
+
+- Expected
++ Received
+
+- http://192.0.2.1:4873/
++
++ node:internal/modules/cjs/loader:1568
++   throw err;
++   ^
++
++ Error: Cannot find module '/private/tmp/dh41-base/scripts/release-rehearse.mjs'
++     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
++     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
++     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
++     at Module._load (node:internal/modules/cjs/loader:1341:5)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
++     at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v24.22.0
++
+
+ ❯ tests/acceptance/41/rehearse/rehearse.test.ts:136:58
+    134|     expect(r.code, `the rehearsal must refuse:\n${shown(r)}`).not.toBe…
+    135|     expect(r.code, `the rehearsal must refuse, not crash or hang:\n${s…
+    136|     expect(text, 'the refusal names the URL as written').toContain(url…
+       |                                                          ^
+    137|     expect(line(text, 'published:'), 'nothing was uploaded anywhere be…
+    138|   }, 1_800_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  tests/acceptance/41/rehearse/rehearse.test.ts > AC19 #41.13231c35 The rehearsal publishes to a loopback registry and nowhere else, and the reinstall after it stops uses no network > AC19 #41.13231c35 a planted publishConfig.registry off loopback is refused before any upload, naming the URL: a per-platform package publishes to a URL that starts 127.0.0.1 but whose host is off loopback
+AssertionError: the refusal names the URL as written: expected '\nnode:internal/modules/cjs/loader:15…' to contain 'http://127.0.0.1@192.0.2.7:4873/'
+
+- Expected
++ Received
+
+- http://127.0.0.1@192.0.2.7:4873/
++
++ node:internal/modules/cjs/loader:1568
++   throw err;
++   ^
++
++ Error: Cannot find module '/private/tmp/dh41-base/scripts/release-rehearse.mjs'
++     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
++     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
++     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
++     at Module._load (node:internal/modules/cjs/loader:1341:5)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
++     at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v24.22.0
++
+
+ ❯ tests/acceptance/41/rehearse/rehearse.test.ts:136:58
+    134|     expect(r.code, `the rehearsal must refuse:\n${shown(r)}`).not.toBe…
+    135|     expect(r.code, `the rehearsal must refuse, not crash or hang:\n${s…
+    136|     expect(text, 'the refusal names the URL as written').toContain(url…
+       |                                                          ^
+    137|     expect(line(text, 'published:'), 'nothing was uploaded anywhere be…
+    138|   }, 1_800_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  tests/acceptance/41/rehearse/rehearse.test.ts > AC19 #41.13231c35 The rehearsal publishes to a loopback registry and nowhere else, and the reinstall after it stops uses no network > AC19 #41.13231c35 a planted publishConfig.registry off loopback is refused before any upload, naming the URL: a per-platform package publishes to an IPv6 address off loopback
+AssertionError: the refusal names the URL as written: expected '\nnode:internal/modules/cjs/loader:15…' to contain 'http://[2001:db8::41]:4873/'
+
+- Expected
++ Received
+
+- http://[2001:db8::41]:4873/
++
++ node:internal/modules/cjs/loader:1568
++   throw err;
++   ^
++
++ Error: Cannot find module '/private/tmp/dh41-base/scripts/release-rehearse.mjs'
++     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
++     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
++     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
++     at Module._load (node:internal/modules/cjs/loader:1341:5)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
++     at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v24.22.0
++
+
+ ❯ tests/acceptance/41/rehearse/rehearse.test.ts:136:58
+    134|     expect(r.code, `the rehearsal must refuse:\n${shown(r)}`).not.toBe…
+    135|     expect(r.code, `the rehearsal must refuse, not crash or hang:\n${s…
+    136|     expect(text, 'the refusal names the URL as written').toContain(url…
+       |                                                          ^
+    137|     expect(line(text, 'published:'), 'nothing was uploaded anywhere be…
+    138|   }, 1_800_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  tests/acceptance/41/rehearse/verify.test.ts > AC21 #41.7e835721 Each per-platform package's runtime files are the built tree's, byte for byte and with their exec bits > AC21 #41.7e835721 a package whose bin/deep-hook is the built tree's, exec bit kept, passes, so the failures below come from the plant
+AssertionError: an identical package must pass:
+
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '/private/tmp/dh41-base/scripts/release-verify.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/41/rehearse/verify.test.ts:62:64
+     60|   it(`${AC21} a package whose bin/deep-hook is the built tree's, exec …
+     61|     const { r, text } = await verify(plant(LINUX, { 'deep-hook': exec(…
+     62|     expect(r.code, `an identical package must pass:\n${text}`).toBe(0);
+       |                                                                ^
+     63|   }, 900_000);
+     64|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  tests/acceptance/41/rehearse/verify.test.ts > AC21 #41.7e835721 Each per-platform package's runtime files are the built tree's, byte for byte and with their exec bits > AC21 #41.7e835721 a planted package whose deep-hook differs from the built tree by one byte fails, naming the file and the package
+AssertionError: the failure names the file: expected '\nnode:internal/modules/cjs/loader:15…' to contain 'bin/deep-hook'
+
+- Expected
++ Received
+
+- bin/deep-hook
++
++ node:internal/modules/cjs/loader:1568
++   throw err;
++   ^
++
++ Error: Cannot find module '/private/tmp/dh41-base/scripts/release-verify.mjs'
++     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
++     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
++     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
++     at Module._load (node:internal/modules/cjs/loader:1341:5)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
++     at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v24.22.0
++
+
+ ❯ tests/acceptance/41/rehearse/verify.test.ts:71:48
+     69|     expect(r.code, `one changed byte must fail:\n${shown(r)}`).not.toB…
+     70|     expect(r.code, shown(r)).not.toBeNull();
+     71|     expect(text, 'the failure names the file').toContain('bin/deep-hoo…
+       |                                                ^
+     72|     expect(text, 'the failure names the package').toContain(LINUX);
+     73|   }, 900_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  tests/acceptance/41/rehearse/verify.test.ts > AC21 #41.7e835721 Each per-platform package's runtime files are the built tree's, byte for byte and with their exec bits > AC21 #41.7e835721 a planted package whose deep-hook lost its exec bit fails, naming the file and the package
+AssertionError: the failure names the file: expected '\nnode:internal/modules/cjs/loader:15…' to contain 'bin/deep-hook'
+
+- Expected
++ Received
+
+- bin/deep-hook
++
++ node:internal/modules/cjs/loader:1568
++   throw err;
++   ^
++
++ Error: Cannot find module '/private/tmp/dh41-base/scripts/release-verify.mjs'
++     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
++     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
++     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
++     at Module._load (node:internal/modules/cjs/loader:1341:5)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
++     at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v24.22.0
++
+
+ ❯ tests/acceptance/41/rehearse/verify.test.ts:79:48
+     77|     expect(r.code, `a lost exec bit must fail:\n${shown(r)}`).not.toBe…
+     78|     expect(r.code, shown(r)).not.toBeNull();
+     79|     expect(text, 'the failure names the file').toContain('bin/deep-hoo…
+       |                                                ^
+     80|     expect(text, 'the failure names the package').toContain(LINUX);
+     81|   }, 900_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  tests/acceptance/41/rehearse/verify.test.ts > AC21 #41.7e835721 Each per-platform package's runtime files are the built tree's, byte for byte and with their exec bits > AC21 #41.7e835721 a planted unsigned dylib inside the per-platform package fails the codesign step, naming the file
+AssertionError: the failure names the file: expected '\nnode:internal/modules/cjs/loader:15…' to contain 'bin/libdeepplant.dylib'
+
+- Expected
++ Received
+
+- bin/libdeepplant.dylib
++
++ node:internal/modules/cjs/loader:1568
++   throw err;
++   ^
++
++ Error: Cannot find module '/private/tmp/dh41-base/scripts/release-verify.mjs'
++     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
++     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
++     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
++     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
++     at Module._load (node:internal/modules/cjs/loader:1341:5)
++     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
++     at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
++     at node:internal/main/run_main_module:33:47 {
++   code: 'MODULE_NOT_FOUND',
++   requireStack: []
++ }
++
++ Node.js v24.22.0
++
+
+ ❯ tests/acceptance/41/rehearse/verify.test.ts:102:48
+    100|     expect(r.code, `an unsigned dylib must fail:\n${shown(r)}`).not.to…
+    101|     expect(r.code, shown(r)).not.toBeNull();
+    102|     expect(text, 'the failure names the file').toContain('bin/libdeepp…
+       |                                                ^
+    103|     expect(text, 'the failure names the package').toContain(DARWIN);
+    104|     expect(text, 'the failure is codesign --verify --strict\'s own, ru…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  11 failed (11)
+   Start at  23:39:44
+   Duration  140.20s (tests 100%)
+
+
+---- Blind redraft, Nov 8: the hook-command parse in fixtures/clean-machine.mjs
+Disputed: the fixture took a settings.json command's program as its first word (or first quoted string), so DeepBuild's
+long-standing hook form `exec '<deep-hook>' claude-code <Event>` (pinned by 41/install/twins.test.ts, 567, 1202) gave
+`exec` as the program and AC1's judge could find no deep-hook whatever DeepBuild did.
+Changed: only `first(c)` and one header line. It now reads the program as a shell runs it: a leading `exec` skipped, then
+the first word, single-quoted ('\'' a quote), double-quoted or bare. Checked once by hand with node -e on
+`exec '/a b/deep-hook' claude-code SessionStart`, `'/x/deep-hook' claude-code Stop`, `/y/deep-hook claude-code Stop` and
+`exec '/it'\''s/deep-hook' claude-code Stop`: all four gave the expected path.
+No test, assertion, criterion or expected value changed. The suites were not rerun for this redraft.
