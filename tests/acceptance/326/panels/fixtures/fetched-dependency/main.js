@@ -2,7 +2,7 @@
 // manifest's Git dependencies when it loads the package, before any policy applies; DeepBuild
 // refuses the package at install, naming `pad-326`, and loading it reaches no host. The test
 // copies this folder and writes its listener's port over __PORT__ in gpui-shell.json.
-import { View, div } from "gpui-kit";
+import { View, div } from "@deepbuild/panel";
 import pad from "pad-326";
 
 export default class Fetched extends View {

@@ -1,8 +1,7 @@
 // Issue #124 criterion 5's fixture panel for the snapshot budget (tests/acceptance/124/README.md, Fixtures): 2,000
 // buttons, each its own accessibility node named "Node <i>", in 40 rows of 50, 4 points square with 1 point between,
 // so all of them fit on screen in the 260-point slot at once.
-import { View } from "gpui-kit";
-import { v_flex, h_flex, Button } from "gpui-base";
+import { View, v_flex, h_flex, Button } from "@deepbuild/panel";
 
 const ROWS = 40;
 const COLUMNS = 50;

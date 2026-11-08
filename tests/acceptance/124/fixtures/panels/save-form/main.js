@@ -9,8 +9,7 @@
 // clock, so a run on a real clock never draws the same frames twice, and one on the virtual clock always does.
 //
 // The twin, ../save-form-twin/main.js, is this file with SAVE_STAYS_DISABLED set to true and nothing else changed.
-import { View, div } from "gpui-kit";
-import { v_flex, Button, Input, InputState } from "gpui-base";
+import { View, div, v_flex, Button, Input, InputState } from "@deepbuild/panel";
 
 const SAVE_STAYS_DISABLED = false;
 const FIELD = "#36d399";
