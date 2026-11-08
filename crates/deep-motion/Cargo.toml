@@ -20,3 +20,10 @@ deep-canvas-marks = { path = "../deep-canvas-marks" }
 # Issue #491: the shaper the auto layout measures text with, for a frame's layout glide.
 deep-text = { path = "../deep-text" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+# Issue #1468: the expression parser's depth cap, acceptance tests written blind in tests/acceptance/1468. Here because
+# this package has the `deep-motion` binary a driver reaches and depends on deep-canvas (the parser and the pack check),
+# deep-canvas-marks (a text animator's field) and deep-text (its shaping); no dev-dependency added.
+[[test]]
+name = "acceptance_1468"
+path = "../../tests/acceptance/1468/depth.rs"

@@ -1,0 +1,67 @@
+#1468 on the base: main ede4b367 (Merge pull request #1284), 2026-11-08, Linux aarch64, debug build (dev profile; the
+workspace builds deep-canvas at opt-level 3 there), machine under load from other sessions (load average ~57).
+Results: AC1 fails (each of the five 1,000,000-repeat strings aborts its child with a stack overflow, signal 6); the
+AC1 planted-parser test passes (the harness fails the uncapped parser, which dies by signal 6 on all five openers);
+AC2 depth 64 passes (parses and evaluates to 1 on a 1 MB thread), depth 65 fails (all seven openers compile, no
+refusal); AC3 fails (stack overflow, signal 6); AC4 fails in all three places (driver: `deep-motion eval`'s main thread
+overflows its stack, signal 6; field and pack rule: their children overflow, signal 6). Each shallow twin is accepted.
+Lines with only white space are dropped.
+
+$ cargo test --locked -p deep-motion --test acceptance_1468
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.26s
+     Running ../../tests/acceptance/1468/depth.rs (target/debug/deps/acceptance_1468-8dffa09ba65c06ea)
+running 9 tests
+test child_entry ... ignored, the child-process entry the tests of this file run; never a test on its own
+test ac2_depth_64_parses_and_evaluates_on_a_1_mb_thread ... ok
+test ac2_depth_65_is_refused_naming_the_cap ... FAILED
+test ac3_a_power_tower_of_10000_terms_is_refused_naming_the_cap ... FAILED
+test ac4_a_pack_rule_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up ... FAILED
+test ac4_a_field_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up ... FAILED
+test ac4_a_driver_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up ... FAILED
+test ac1_a_planted_parser_with_no_cap_dies_by_signal_and_fails ... ok
+test ac1_a_million_repeats_of_each_opener_are_refused_in_under_50_ms_in_a_child ... FAILED
+failures:
+---- ac2_depth_65_is_refused_naming_the_cap stdout ----
+thread 'ac2_depth_65_is_refused_naming_the_cap' (2480028) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:320:5:
+AC2 #1468.a5827afe depth 65 is refused with a reason naming the cap 64: 7 case(s) failed:
+  case compile:(:65: no refusal: {"refused":false,"ms":0.13505599999999998,"value":1.0,"vars":[]}
+  case compile:-:65: no refusal: {"refused":false,"ms":0.077344,"value":-1.0,"vars":[]}
+  case compile:+:65: no refusal: {"refused":false,"ms":0.044192,"value":1.0,"vars":[]}
+  case compile:!:65: no refusal: {"refused":false,"ms":0.071856,"value":0.0,"vars":[]}
+  case compile:abs(:65: no refusal: {"refused":false,"ms":0.16387300000000002,"value":1.0,"vars":[]}
+  case compile:x ? y : :65: no refusal: {"refused":false,"ms":0.131104,"value":1.0,"vars":["x","y"]}
+  case compile:^:65: no refusal: {"refused":false,"ms":0.110625,"value":1.0,"vars":[]}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+---- ac3_a_power_tower_of_10000_terms_is_refused_naming_the_cap stdout ----
+thread 'ac3_a_power_tower_of_10000_terms_is_refused_naming_the_cap' (2480029) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:320:5:
+AC3 #1468.ba3528c4 `2^2^2…` at 10,000 terms is refused with a reason naming the cap 64: 1 case(s) failed:
+  case power2:10000: the process died by signal 6; stderr:  | thread 'case power2:10000' (2480044) has overflowed its stack | fatal runtime error: stack overflow, aborting
+---- ac4_a_pack_rule_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up stdout ----
+thread 'ac4_a_pack_rule_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up' (2480032) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:320:5:
+AC4 #1468.b22b517b a pack's kind rule holding 1,000,000 nested parens, through the pack check in a child: 1 case(s) failed:
+  case pack:deep: the process died by signal 6; stderr:  | thread 'case pack:deep' (2480149) has overflowed its stack | fatal runtime error: stack overflow, aborting
+---- ac4_a_field_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up stdout ----
+thread 'ac4_a_field_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up' (2480031) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:320:5:
+AC4 #1468.b22b517b a text animator's field holding 1,000,000 nested parens, laid out in a child: 1 case(s) failed:
+  case field:deep: the process died by signal 6; stderr:  | thread 'case field:deep' (2480145) has overflowed its stack | fatal runtime error: stack overflow, aborting
+---- ac4_a_driver_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up stdout ----
+thread 'ac4_a_driver_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up' (2480030) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:320:5:
+AC4 #1468.b22b517b a driver holding 1,000,000 nested parens, through deep-motion eval: 1 case(s) failed:
+  deep-motion eval: the process died by signal 6; stderr:  | thread 'main' (2480286) has overflowed its stack | fatal runtime error: stack overflow, aborting
+---- ac1_a_million_repeats_of_each_opener_are_refused_in_under_50_ms_in_a_child stdout ----
+thread 'ac1_a_million_repeats_of_each_opener_are_refused_in_under_50_ms_in_a_child' (2480025) panicked at crates/deep-motion/../../tests/acceptance/1468/depth.rs:320:5:
+AC1 #1468.ded1c18b 1,000,000 repeats each of `(`, `-`, `!`, `abs(` and `x ? y : `, refused in under 50 ms: 5 case(s) failed:
+  case compile:(:1000000: the process died by signal 6; stderr:  | thread 'case compile:(:1000000' (2480068) has overflowed its stack | fatal runtime error: stack overflow, aborting
+  case compile:-:1000000: the process died by signal 6; stderr:  | thread 'case compile:-:1000000' (2481313) has overflowed its stack | fatal runtime error: stack overflow, aborting
+  case compile:!:1000000: the process died by signal 6; stderr:  | thread 'case compile:!:1000000' (2482775) has overflowed its stack | fatal runtime error: stack overflow, aborting
+  case compile:abs(:1000000: the process died by signal 6; stderr:  | thread 'case compile:abs(:1000000' (2483361) has overflowed its stack | fatal runtime error: stack overflow, aborting
+  case compile:x ? y : :1000000: the process died by signal 6; stderr:  | thread 'case compile:x ? y : :1000000' (2484147) has overflowed its stack | fatal runtime error: stack overflow, aborting
+failures:
+    ac1_a_million_repeats_of_each_opener_are_refused_in_under_50_ms_in_a_child
+    ac2_depth_65_is_refused_naming_the_cap
+    ac3_a_power_tower_of_10000_terms_is_refused_naming_the_cap
+    ac4_a_driver_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up
+    ac4_a_field_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up
+    ac4_a_pack_rule_holding_the_string_is_refused_naming_its_path_and_the_process_stays_up
+test result: FAILED. 2 passed; 6 failed; 1 ignored; 0 measured; 0 filtered out; finished in 15.27s
+error: test failed, to rerun pass `-p deep-motion --test acceptance_1468`
