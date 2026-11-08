@@ -67,3 +67,85 @@ Not run at the base: the two live files (they need a built deep-drive too, and w
 opted in). The planted programs (DEEP_DRIVE_PLANT=answers-your-record | writes-clipboard | moves-focus | starts-sound,
 DEEP_HUB_PLANT=deep-drive-no-lease) can only run once the implementation exists; at the base their tests fail on the
 missing binary like the rest.
+
+Criteria 6 to 8 and the two Scope lines, added blind on November 6 at base commit c12a65bb (the base has deep-drive and every criterion
+1-5 surface; it has no hit test, no probe, no ui_check, no launch.fixture and none of the three new plants). Built with
+cargo build --locked -p deep-replica --bin deep-drive (Rust 1.99.1), after `npm ci`, Node on PATH, outside the Bash tool's sandbox.
+
+  npx tsc -p tests/acceptance/124/tsconfig.json          # none of the new files has an error; the errors it prints are all at the base
+                                                         # (helpers.ts:65 and files outside this folder: Buffer against string)
+  npx vitest run --root tests/acceptance/124 ac6-scrim ac7-ui-check ac8-shown scope-merge-base --no-file-parallelism --reporter=verbose
+
+Result: Test Files 4 failed (4); Tests 22 failed | 3 passed (25). Every failure is the missing surface, on an assertion or a
+BLOCKED plant, never a test error. The 3 that pass are judges on wrong programs written in the test files: no replica, no criterion.
+Durations trimmed; one line per test, then each distinct reason.
+
+ × scope-merge-base.test.ts > scope: the same views rendered at the merge base beside the change > a change that promises nothing visible changes passes on four matching pairs, rendered by the merge base's own build
+ × scope-merge-base.test.ts > scope: the same views rendered at the merge base beside the change > a visible change under that promise fails, naming the view and each pair that differs
+ × scope-merge-base.test.ts > scope: the same views rendered at the merge base beside the change > the promise with no merge base rendered is INCONCLUSIVE, never PASS
+ × scope-merge-base.test.ts > scope: the same views rendered at the merge base beside the change > the real session row: the same build matches at the merge base, and a row that draws differently there differs in all four
+ × ac7-ui-check.test.ts > ... > #124.5bbd73d9 a change to the session row renders it four ways, at the reference window and a narrow width, in light and dark, with the real row in each
+ × ac7-ui-check.test.ts > ... > #124.5bbd73d9 the honest row draws nothing past its frame, cuts nothing a screen reader can't hear in full, and gets no finding in any of the four
+ × ac7-ui-check.test.ts > ... > #124.5bbd73d9 a planted label drawn past its frame fails, naming the label's row in each of the four
+ × ac7-ui-check.test.ts > ... > #124.5bbd73d9 a planted cut-off branch name whose accessibility name lacks the full name fails, naming it in each of the four
+ × ac7-ui-check.test.ts > ... > #124.5bbd73d9 a change to a file no view loads is reported not covered, and the UI claim is INCONCLUSIVE, never PASS
+ × ac7-ui-check.test.ts > ... > #124.5bbd73d9 a clean view beside a file no view loads is still INCONCLUSIVE; an imported file counts as loaded and an unimported one in the same folder does not
+ × ac7-ui-check.test.ts > ... > #124.5bbd73d9 a finding beside a file no view loads fails, and still lists the file
+ × ac7-ui-check.test.ts > scope: the audit names an icon-only control with no name and a raw string key > the panel with both gets one finding of each in each of the four, each at the real node, and nothing else
+ × ac7-ui-check.test.ts > scope: the audit names an icon-only control with no name and a raw string key > the same panel put right gets none: a named icon button, a text button that needs no name, and words
+ × ac7-ui-check.test.ts > scope: a stress fixture set for text > long repo, branch and worktree paths with no spaces, long issue titles, model IDs and commands reach the real row whole, and launch takes the set by path
+ × ac7-ui-check.test.ts > scope: a stress fixture set for text > an honest ellipsis isn't a finding: the reading cut off in the row keeps its full value in its accessible name
+ ✓ ac7-ui-check.test.ts > the judges, on wrong programs > four renders pass; three, one size, no narrow width, one picture twice, or a dark that draws light each fail, named
+ ✓ ac7-ui-check.test.ts > the judges, on wrong programs > PASS beside an uncovered file, an unlisted file, or a claim of neither fail, named
+ × ac8-shown.test.ts > ... > #124.ca19630a the check run takes the screenshots and the recording from the replica at the reference window, and the run reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+ ✓ ac8-shown.test.ts > ... > the taste call's rule: nothing recorded, or a call on other files, is INCONCLUSIVE; looks_wrong fails; only looks_right on exactly these files passes
+ × ac6-scrim.test.ts > ... > #124.770659f5 with the scrim over Save the click is refused, naming the scrim, nothing is sent and the draft is unchanged
+ × ac6-scrim.test.ts > ... > #124.770659f5 every pointer action under the scrim is refused the same way: double click, hover, drag, scroll, and typing into the covered target
+ × ac6-scrim.test.ts > ... > #124.770659f5 with the scrim gone the click is delivered and its result says delivered, never that the target handled it
+ × ac6-scrim.test.ts > ... > #124.770659f5 the probe on Save names the scrim without dismissing it, and answers the same hit test as the click
+ × ac6-scrim.test.ts > ... > #124.770659f5 a journey that clicks under the scrim fails, its failure naming the scrim
+ × ac6-scrim.test.ts > ... > #124.770659f5 a planted driver that clicks Save's box centre without the hit test dismisses the dialog, discards the draft and fails, naming the scrim
+
+Reasons, by distinct failure:
+- AC6, the click under the scrim, each pointer action, the journey and AC8's refusal picture: the click isn't refused. The real reply is
+  {"point":[104,409],"box":[24,381,160,56],"waited_ms":16,"ok":true,...}; the base has no hit test, so the click reaches the scrim:
+  a journey with no assertion then reads `ran_nothing`, not `failed`.
+- AC6, delivered: "the dialog's button gets its click: ... expected undefined to be 'delivered'": no `result` in the reply.
+- AC6, probe: "Error: Give one of launch, act, wait_for, see, screenshot, record, expect, close.": the hub's strict check has no probe.
+- AC6, AC7 plants: "BLOCKED: deep-drive didn't say {"ready": true} with DEEP_DRIVE_PLANT=<name>: no planted replica <name>", for
+  no-hit-test, row-label-past-frame and row-branch-cut-off.
+- AC7, scope audits, scope merge base: "ui_check answers: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here:
+  launch one first"}}": no ui_check call.
+- Scope stress: "one session row starts "github.com/north": []": launch ignores launch.fixture and draws the default record.
+
+Measured at the base, by hand, on the fixtures: a plain click on Save under the scrim at the base does what the planted driver must do:
+the panel then reads "Draft discarded", "Not saved" and "Scrim events 2", and the Scrim node is gone. The real session row on the
+stress set draws past its frame: the repo row puts 106 pixels of ink in the 12 px band right of its frame at 1512 x 982, light; every
+short row of the default record puts 0, light and dark. So the honest row needs that fix (README: What the implementer owes).
+
+Criterion 9 (#124.f1263f80) and its Scope tests at base c12a65bb, run from the base root on 2026-11-07:
+node scripts/throttle.mjs test --wait 60 -- scripts/lease npx vitest run --root tests/acceptance/124 --no-file-parallelism ac9
+
+     × #124.f1263f80 a planted button under a sibling at step 3 of a journey fails, naming step 3 and the node 21066ms
+     × #124.f1263f80 the twin journey, its banner beside Publish, has nothing covered at any step and passes 76ms
+     × #124.f1263f80 the same journey with its assertions taken out ran nothing, and the check over it is INCONCLUSIVE, never PASS 114ms
+     × a button under the system bar is named at every step, and a button under the keyboard from the step that raised it 6ms
+     × the twin, clear of the bar and the keyboard, has nothing covered at any step and passes 9532ms
+     × with no device the replica has no system bar or keyboard, so the same panel gets neither finding 54ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  ac9-journey-steps.test.ts > #124.f1263f80 the UI check runs at every journey step, and a button under a sibling at step 3 fails, naming the step and the node > #124.f1263f80 a planted button under a sibling at step 3 of a journey fails, naming step 3 and the node
+AssertionError: ui_check answers a journey: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+ FAIL  ac9-journey-steps.test.ts > #124.f1263f80 the UI check runs at every journey step, and a button under a sibling at step 3 fails, naming the step and the node > #124.f1263f80 the twin journey, its banner beside Publish, has nothing covered at any step and passes
+AssertionError: ui_check answers a journey: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+ FAIL  ac9-journey-steps.test.ts > #124.f1263f80 the UI check runs at every journey step, and a button under a sibling at step 3 fails, naming the step and the node > #124.f1263f80 the same journey with its assertions taken out ran nothing, and the check over it is INCONCLUSIVE, never PASS
+AssertionError: ui_check answers a journey: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+ FAIL  scope-ac9-device.test.ts > scope: the UI check at every journey step names a node under a system bar and a node under the on-screen keyboard > a button under the system bar is named at every step, and a button under the keyboard from the step that raised it
+AssertionError: launch.device is a deep_drive launch field the hub's strict check takes: expected [Function] to not throw an error but 'Error: Leave out device: the schema l…' was thrown
+ FAIL  scope-ac9-device.test.ts > scope: the UI check at every journey step names a node under a system bar and a node under the on-screen keyboard > the twin, clear of the bar and the keyboard, has nothing covered at any step and passes
+AssertionError: ui_check answers a journey: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+ FAIL  scope-ac9-device.test.ts > scope: the UI check at every journey step names a node under a system bar and a node under the on-screen keyboard > with no device the replica has no system bar or keyboard, so the same panel gets neither finding
+AssertionError: ui_check answers a journey: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+ Test Files  2 failed (2)
+      Tests  6 failed | 3 passed (9)
+
+Every failure is the missing surface: ui_check with a journey is refused ("no replica runs here"), and the hub's strict schema refuses launch.device. The three judge tests on synthetic wrong programs pass at the base, as they must. The first test's plain-run fixture checks (banner over Publish after step 3, uncovered at the end) passed before it reached ui_check.

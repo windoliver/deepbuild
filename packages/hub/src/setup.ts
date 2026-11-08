@@ -335,6 +335,12 @@ async function undo(): Promise<number> {
     putBack(root, record, recordedConfig, () => editedCodex(recordedConfig, (text) => (server ? withoutServer(text, server.node, server.cli) : text), "DeepBuild's MCP server if it was as setup wrote it")),
     undoPaseo(root, record),
   ].filter((n): n is string => n !== undefined);
+  // Every other agent file an Agents page sync wrote (#148): its original bytes back where you haven't edited it since.
+  const handled = new Set([settingsFile, userFile, recordedHooks, recordedConfig, join(homedir(), '.paseo', 'config.json')]);
+  for (const file of Object.keys(record.files).filter((f) => !handled.has(f))) {
+    const note = putBack(root, record, file, () => `you edited ${file} since DeepBuild wrote it, so undo left it as it is; take DeepBuild's entries out by hand`);
+    if (note) notes.push(note);
+  }
   forgetEntries(root);
   for (const dir of record.created) rmSync(dir, { recursive: true, force: true });
   rmSync(installedRecord(root), { force: true });

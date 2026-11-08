@@ -1,0 +1,33 @@
+{
+  "readBy": "Cursor's files for the hub's sync (#148) only: no adapter reads its sessions yet. From Cursor's MCP documentation; no Cursor was installed where these were written, so no live list command has read them",
+  "versions": ["2026.10.1"],
+  "agent": "cursor-agent",
+  "entries": {
+    "name": "Cursor",
+    "home": "~/.cursor",
+    "mcp": {
+      "file": "~/.cursor/mcp.json",
+      "format": "json",
+      "key": "mcpServers",
+      "transports": {
+        "stdio": {
+          "fields": ["command", "args", "env"]
+        },
+        "http": {
+          "fields": ["url", "headers"]
+        }
+      },
+      "refused": [
+        {
+          "transport": "http",
+          "field": "env",
+          "reason": "a URL entry has url and headers"
+        }
+      ]
+    },
+    "skills": {
+      "write": "~/.cursor/skills",
+      "readFrom": ["~/.cursor/skills"]
+    }
+  }
+}
