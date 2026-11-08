@@ -43,7 +43,7 @@
       },
       {
         "role": "button",
-        "name": "! Session 01MCBH57 · needs you",
+        "name": "Agents: MCP servers and skills",
         "value": null,
         "bounds": [
           16,
@@ -55,7 +55,7 @@
       },
       {
         "role": "button",
-        "name": "! Session 01MCBH58 · needs you",
+        "name": "! Session 01MCBH57 · needs you",
         "value": null,
         "bounds": [
           16,
@@ -67,7 +67,7 @@
       },
       {
         "role": "button",
-        "name": "! Session 01MCBH59 · needs you",
+        "name": "! Session 01MCBH58 · needs you",
         "value": null,
         "bounds": [
           16,
@@ -79,7 +79,7 @@
       },
       {
         "role": "button",
-        "name": "! Session 01MCBH5A · needs you",
+        "name": "! Session 01MCBH59 · needs you",
         "value": null,
         "bounds": [
           16,
@@ -91,7 +91,7 @@
       },
       {
         "role": "button",
-        "name": "! Session 01MCBH5B · needs you",
+        "name": "! Session 01MCBH5A · needs you",
         "value": null,
         "bounds": [
           16,
@@ -103,7 +103,7 @@
       },
       {
         "role": "button",
-        "name": "! Session 01MCBH5C · needs you",
+        "name": "! Session 01MCBH5B · needs you",
         "value": null,
         "bounds": [
           16,
@@ -115,11 +115,23 @@
       },
       {
         "role": "button",
-        "name": "! Session 01MCBH5D · needs you",
+        "name": "! Session 01MCBH5C · needs you",
         "value": null,
         "bounds": [
           16,
           416,
+          488,
+          48
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "! Session 01MCBH5D · needs you",
+        "value": null,
+        "bounds": [
+          16,
+          464,
           488,
           48
         ],
