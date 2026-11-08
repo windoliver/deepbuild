@@ -6,7 +6,7 @@ import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync 
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { hubAddress, installedRoot, lastingNode, rootOf } from './paths.js';
+import { hubAddress, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
@@ -182,7 +182,10 @@ export async function startHub(options: { root?: string; cli: string }): Promise
   const root = rootOf(options.root ?? installedRoot());
   if (await answers(root.socket)) return 0;
   mkdirSync(root.logs, { recursive: true, mode: 0o700 });
-  const program = [options.root ? process.execPath : lastingNode(), realpathSync(options.cli), 'hub', 'run', ...(options.root ? ['--root', root.dir] : [])];
+  // An installed version's login service runs the versions folder's current link, which every update keeps, never a
+  // version's own folder (#41); a checkout's runs its own CLI through Node.
+  const installed = options.root ? undefined : installedPrograms(root.dir);
+  const program = installed ? [installed.deep, 'hub', 'run'] : [options.root ? process.execPath : lastingNode(), realpathSync(options.cli), 'hub', 'run', ...(options.root ? ['--root', root.dir] : [])];
   if (options.root) {
     // A dev hub: in a session of its own, so its terminal's hangup never reaches it.
     const log = openSync(join(root.logs, 'hub.log'), 'a', 0o600);

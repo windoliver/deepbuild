@@ -56,14 +56,31 @@ pub fn buffer(
         usage,
         mapped_at_creation: false,
     };
+    match raw(device, &desc) {
+        Some((buffer, bytes)) => (buffer, Some(bytes)),
+        None => (device.device.create_buffer(&desc), None),
+    }
+}
+
+/// A GPU-only buffer asked of the device itself, past wgpu's own size limit (#1413): `None` when
+/// the device refuses it, or off Metal, where the device can't be asked directly.
+pub fn device_buffer(device: &Device, desc: &wgpu::BufferDescriptor) -> Option<wgpu::Buffer> {
+    raw(device, desc).map(|(buffer, _)| buffer)
+}
+
+/// The raw Metal buffer for `desc` handed to wgpu, and its `allocatedSize`.
+fn raw(device: &Device, desc: &wgpu::BufferDescriptor) -> Option<(wgpu::Buffer, u64)> {
     #[cfg(target_os = "macos")]
     if device.backend == Backend::Gpu
-        && !usage.intersects(wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE)
+        && !desc
+            .usage
+            .intersects(wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE)
     {
         use objc2_metal::{MTLDevice as _, MTLResource as _, MTLResourceOptions};
+        let size = desc.size;
         // SAFETY: the raw buffer is a private GPU buffer of `size` bytes, as wgpu would make it,
         // and wgpu owns it from here on.
-        let made = unsafe {
+        return unsafe {
             device
                 .device
                 .as_hal::<wgpu::hal::api::Metal>()
@@ -79,16 +96,14 @@ pub fn buffer(
                     (
                         device
                             .device
-                            .create_buffer_from_hal::<wgpu::hal::api::Metal>(hal, &desc),
+                            .create_buffer_from_hal::<wgpu::hal::api::Metal>(hal, desc),
                         bytes,
                     )
                 })
         };
-        if let Some((buffer, bytes)) = made {
-            return (buffer, Some(bytes));
-        }
     }
-    (device.device.create_buffer(&desc), None)
+    let _ = (device, desc);
+    None
 }
 
 /// A `desc` texture laid out by rows in a private buffer of its own, and the size the device reports

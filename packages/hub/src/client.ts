@@ -4,7 +4,8 @@
 import { readFileSync } from 'node:fs';
 import net from 'node:net';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
-import { startOf, type Refusal } from './wire.js';
+import { checkCompat, type Hello } from './compat.js';
+import { CONTRACT, startOf, type Refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
 /** The hub's answer to one call: its result, or its refusal. */
@@ -33,6 +34,12 @@ export async function call(socket: string, token: string, method: string, params
         buffer = buffer.slice(i + 1);
         if (!hello) {
           hello = true;
+          // A hub on another contract is one screen naming the older side and its fix, before any call (#41).
+          const compat = checkCompat(reply as Hello, { contract: CONTRACT, features: [] });
+          if (!compat.ok) {
+            sock.destroy();
+            return reject(Error(compat.screen));
+          }
           sock.write(`${JSON.stringify({ v: 1, hello: 'cli', token, ...(peer ? { peer } : {}) })}\n`);
         } else if (reply.role !== undefined) {
           sock.write(`${JSON.stringify({ v: 1, id: 1, method, params })}\n`);
