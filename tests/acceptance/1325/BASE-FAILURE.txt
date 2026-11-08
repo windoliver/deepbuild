@@ -39,3 +39,6 @@ What was checked of the harness at the base, in throwaway runs not kept in the s
     forge-calls.mjs reached the forge (as maya, the base's token, so every call went through).
   - maya's direct push to main through the forge's bypass is recorded by the base as ref.unguarded (refs/heads/main,
     the commit, pusher maya) while a session in your terminal works in the repo.
+
+Redraft (README, Redraft): run again at the same base after the two helper fixes, same command, 2026-11-07:
+  Test Files 5 failed | 1 skipped (6); Tests 11 failed | 1 skipped (12); exit 1. Every failure and BLOCKED reads as above.

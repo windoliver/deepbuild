@@ -461,10 +461,14 @@ export class World {
       try { return [JSON.parse(readFileSync(join(dir, f), 'utf8')) as Line]; } catch { return []; }
     });
   }
-  /** The stand-in in the worktree, once its turn is done (and, with `ended`, once its session ended). */
+  /**
+   * The session's stand-in in the worktree, once its turn is done (and, with `ended`, once its session ended). Only a
+   * session's own log: one the stand-in `refused` (a subcommand such as `claude plugin list`, which the hub runs in the
+   * same folder with its own environment) is not a session (README: Redraft).
+   */
   standIn(worktree: string, o: { ended?: boolean; ms?: number } = {}): Promise<Line> {
     const want = realOr(worktree);
-    return waitFor(() => this.standIns().find((s) => realOr(String(s.cwd)) === want && s.done === true && (!o.ended || typeof s.ended === 'number')), o.ms ?? 240_000,
+    return waitFor(() => this.standIns().find((s) => realOr(String(s.cwd)) === want && !s.refused && s.done === true && (!o.ended || typeof s.ended === 'number')), o.ms ?? 240_000,
       `the claude stand-in in ${worktree} to finish (seen: ${JSON.stringify(this.standIns().map((s) => ({ cwd: s.cwd, done: s.done, bash: (s.bash as Line[]).length })))})`)
       .catch((e: Error) => { throw Error(`BLOCKED: ${e.message}`); });
   }
@@ -478,11 +482,13 @@ export class World {
     const said = await s.mcp('deep_claim', { task_ref: `task:${ulidLike()}`, attempt: 1, commit: this.head, scope: 'session', predictions: null });
     const claim = /claim:[0-9A-Z]{26}/.exec(said)?.[0];
     if (!claim) throw Error(`BLOCKED: deep_claim must answer with the claim's handle: ${said.slice(0, 1200)}`);
+    // Only a status posted after the PASS is the PASS's (README: Redraft); any poster, so a wrong one is named.
+    const passAt = Date.now();
     await this.client.call('test.verdict', { session: s.id, claim, outcome: 'PASS', requirements: [{ req: 'req:01K74G0A1B2C3D4E5F6G7H8J9K#R1', outcome: 'PASS', check: 'unit', smallest: null, points_to: null }] })
       .catch((e: Error) => { throw Error(`BLOCKED: the hub must serve test.verdict with DEEP_HUB_TEST_VERDICT=1: ${e.message}`); });
     await waitFor(async () => (await this.events('verdict.made')).some((e) => e.data?.claim === claim && e.data?.outcome === 'PASS'), 30_000, `the planted PASS on ${claim}`)
       .catch((e: Error) => { throw Error(`BLOCKED: ${e.message}`); });
-    return waitFor(() => this.forge.statusesOf(this.head).find((x) => x.context === CONTEXT), 60_000, `a ${CONTEXT} status on ${this.head} after the PASS`)
+    return waitFor(() => this.forge.statusesOf(this.head).find((x) => x.context === CONTEXT && x.at >= passAt), 60_000, `a ${CONTEXT} status on ${this.head} after the PASS`)
       .catch(() => { throw Error(`the hub posted no ${CONTEXT} status on ${this.head} within 60 s of a PASS on it`); });
   }
   /** A session in your terminal in a checkout, live while the world is. */

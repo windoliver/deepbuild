@@ -38,6 +38,21 @@ There is no `deep gate rules`, no gate identity, no credential of a session's ow
 hub posts with `GH_TOKEN`, your own forge login, and a session it starts inherits that login in its environment.
 Every test fails or reads BLOCKED; `BASE-FAILURE.txt` has the run.
 
+## Redraft: two helper defects
+
+Dispute from the implementing job on the first draft (`edca8beb`): two helpers in `helpers.ts` made tests fail
+whatever the implementation did. Both are fixed; no criterion's reading, expected value, plant or other test changed.
+
+1. **`gatePass()` took the oldest `deepbuild/verdict` status on the head.** AC1 posts the agents' app's status on that
+   head first, so `gatePass()` returned it at once and AC1 failed naming `deepbuild-agents[bot]` even when the hub
+   posted as the gate. It now waits for a status with the context posted after the planted PASS, from any poster, so a
+   hub posting as the wrong identity still fails AC1 and AC3 naming that poster.
+2. **`standIn()` could take a log that isn't the session's.** When a started session's first hook arrives, the hub runs
+   `claude plugin list --json` in the session's folder with its own environment; the stand-in logs that run too
+   (`refused: "subcommand plugin"`, `done`, no session, no Bash call). Depending on the folder's order, AC2 read the
+   hub's `GH_TOKEN` as the session's, and AC3 crashed on a log with no Bash call. `standIn()` now skips logs the
+   stand-in refused, and AC3's BLOCKED message no longer reads a Bash call that isn't there.
+
 ## Run them
 
 macOS only (the stand-in agent's sandbox is Seatbelt), with the repo's Node (`.node-version`, 24.22.0):

@@ -36,7 +36,7 @@ async function scenario(plant?: string): Promise<void> {
   must(!inArgs, `the session's arguments hold the gate credential (${inArgs})`);
   const bash = (log.bash as { stdout?: string; stderr?: string; denied?: boolean }[])[0];
   const report = /\{"scan":.*\}\s*$/.exec(bash?.stdout ?? '')?.[0];
-  if (!report) throw Error(`BLOCKED: the session's scan must run and report: ${JSON.stringify(bash).slice(0, 1500)}`);
+  if (!report) throw Error(`BLOCKED: the session's scan must run and report: ${String(JSON.stringify(bash ?? null)).slice(0, 1500)}`);
   const found = (JSON.parse(report) as { scan: { files: number; found: { path: string; label: string }[] } }).scan;
   if (found.files < 10) throw Error(`BLOCKED: the session's scan read only ${found.files} files`);
   must(!found.found.length, `the session can read the gate credential: ${found.found.map((f) => `${f.label} in ${f.path}`).join('; ')}`);
