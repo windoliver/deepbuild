@@ -40,7 +40,7 @@ use deep_canvas::template;
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
 pub const KINDS: &[&str] = &[
     "rect@1", "circle@1", "path@1", "text@1", "image@1", "marks@1", "axis@1", "scale@1", "mask@1",
-    "group@1", "star@1", "frame@1", "series@1",
+    "group@1", "star@1", "frame@1", "series@1", "matte@1",
 ];
 
 /// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
@@ -196,6 +196,46 @@ pub enum Scope {
     /// A clip to an outline, antialiased as the outline's own fill is (#160: a shade clipped to
     /// its shape).
     Shape { item: String, verbs: Arc<Vec<Verb>> },
+    /// #495: coverage from another item's evaluated pixels, `source` drawn alone, frame by frame
+    /// (Matte); only the GPU layer composites it.
+    Matte {
+        item: String,
+        source: Arc<Vec<Drawn>>,
+        mode: MatteMode,
+        /// `luma: encoded`: Rec. 709 weights on sRGB-encoded values, as Lottie players take it.
+        encoded: bool,
+    },
+}
+
+/// A matte's `mode`: where its coverage comes from, and whether it is turned over.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MatteMode {
+    Alpha,
+    AlphaInverted,
+    Luma,
+    LumaInverted,
+}
+
+impl MatteMode {
+    fn read(id: &str, v: Option<&Value>) -> Result<MatteMode, Refused> {
+        Ok(match v.and_then(Value::as_str) {
+            Some("alpha") => MatteMode::Alpha,
+            Some("alpha_inverted") => MatteMode::AlphaInverted,
+            Some("luma") => MatteMode::Luma,
+            Some("luma_inverted") => MatteMode::LumaInverted,
+            _ => return refuse("bad_doc", format!("items/{id}/params/mode")),
+        })
+    }
+
+    /// The mode's name, as a matte writes it.
+    pub fn name(self) -> &'static str {
+        match self {
+            MatteMode::Alpha => "alpha",
+            MatteMode::AlphaInverted => "alpha_inverted",
+            MatteMode::Luma => "luma",
+            MatteMode::LumaInverted => "luma_inverted",
+        }
+    }
 }
 
 /// One pass of a group (Frame and group: passes): the operator it names, with its item when the
@@ -398,7 +438,8 @@ impl Scope {
             | Scope::Mask { item, .. }
             | Scope::Opacity { item, .. }
             | Scope::Cover { item, .. }
-            | Scope::Shape { item, .. } => item,
+            | Scope::Shape { item, .. }
+            | Scope::Matte { item, .. } => item,
         }
     }
 
@@ -448,6 +489,19 @@ impl Scope {
                     if let Some(p) = &e.paint {
                         k.text(&format!("{p:?}"));
                     }
+                }
+            }
+            Scope::Matte {
+                source,
+                mode,
+                encoded,
+                ..
+            } => {
+                k.text("matte")
+                    .text(mode.name())
+                    .text(if *encoded { "encoded" } else { "linear" });
+                for d in source.iter() {
+                    k.bytes(&d.key(path::bucket(1.0)).0);
                 }
             }
             Scope::Cover { verbs, .. } | Scope::Shape { verbs, .. } => {
@@ -2392,7 +2446,7 @@ pub fn path_report(
     } else {
         None
     };
-    let scopes = scopes_of(doc, items, palette)?;
+    let scopes = scopes_of(doc, items, palette, &BTreeMap::new())?;
     let paints = Paints {
         doc,
         items,
@@ -3535,6 +3589,24 @@ fn frame_box(id: &str, item: &Value) -> Result<[f64; 4], Refused> {
         })
 }
 
+/// Whether `id` is `root` or has it among its ancestors.
+fn is_under(items: &Map<String, Value>, id: &str, root: &str) -> bool {
+    let mut at = Some(id);
+    for _ in 0..=items.len() {
+        match at {
+            Some(a) if a == root => return true,
+            Some(a) => {
+                at = items
+                    .get(a)
+                    .and_then(|i| i.get("parent"))
+                    .and_then(Value::as_str)
+            }
+            None => return false,
+        }
+    }
+    false
+}
+
 /// Each item's scopes, outermost first: its ancestors' (a mask's children are the items whose
 /// `parent` it is, at any depth), then the masks whose collection holds it. A mask never reaches
 /// another writer's items, and a fifth mask over one item is refused, naming that mask.
@@ -3542,6 +3614,7 @@ fn scopes_of(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
     palette: &Palette,
+    mattes: &BTreeMap<String, Arc<Vec<Drawn>>>,
 ) -> Result<BTreeMap<String, Vec<Scope>>, Refused> {
     let parent = |id: &str| {
         items
@@ -3578,6 +3651,58 @@ fn scopes_of(
             .filter_map(|v| v.as_str().map(str::to_string))
             .collect();
         collection_masks.push((id.clone(), members));
+    }
+    // Each matte with what it applies to: an item and everything under it, or a collection.
+    let mut matte_of: Vec<(&str, Scope, Option<BTreeSet<String>>, &str)> = Vec::new();
+    for (id, item) in items {
+        if item.get("kind").and_then(Value::as_str) != Some("matte@1") || !shown(id) {
+            continue;
+        }
+        let p = object_or_empty(item.get("params"));
+        let mode = MatteMode::read(id, p.get("mode"))?;
+        let encoded = match p.get("luma").and_then(Value::as_str) {
+            None | Some("linear") => false,
+            Some("encoded") => true,
+            Some(_) => return refuse("bad_doc", format!("items/{id}/params/luma")),
+        };
+        if p.get("resolution")
+            .and_then(Value::as_str)
+            .is_some_and(|r| r != "full")
+        {
+            return refuse("module_missing", format!("items/{id}/params/resolution"));
+        }
+        let Some(Value::String(target)) = p.get("applies_to") else {
+            return refuse("bad_doc", format!("items/{id}/params/applies_to"));
+        };
+        let members = match items.get(target) {
+            Some(_) => None,
+            None => {
+                let Some(Value::Array(m)) = doc
+                    .get("collections")
+                    .and_then(|c| c.get(target))
+                    .and_then(|c| c.get("members"))
+                else {
+                    return refuse("ref_unresolved", format!("items/{id}/params/applies_to"));
+                };
+                Some(
+                    m.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect(),
+                )
+            }
+        };
+        let source = mattes.get(id).cloned().unwrap_or_default();
+        matte_of.push((
+            id,
+            Scope::Matte {
+                item: id.clone(),
+                source,
+                mode,
+                encoded,
+            },
+            members,
+            target,
+        ));
     }
     let mut out = BTreeMap::new();
     for (id, item) in items {
@@ -3622,6 +3747,15 @@ fn scopes_of(
                 }
             }
             scopes.push(scope);
+        }
+        for (_, scope, members, target) in &matte_of {
+            let under = match members {
+                Some(m) => m.contains(id),
+                None => id == target || chain.iter().any(|a| a == target),
+            };
+            if under {
+                scopes.push(scope.clone());
+            }
         }
         out.insert(id.clone(), scopes);
     }
@@ -4554,7 +4688,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 fill: Fill::Solid([255, 255, 255]),
             }]
         }
-        "mask@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" => {
+        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" => {
             return Ok(None)
         }
         "star@1" => {
@@ -5362,7 +5496,6 @@ fn build(
             return refuse("segment_budget", format!("{ops_path}/{last}"));
         }
     }
-    let scopes = scopes_of(doc, items, palette)?;
     let paints = Paints {
         doc,
         items,
@@ -5370,6 +5503,61 @@ fn build(
         boxes,
         wants_boxes: Cell::new(false),
     };
+    // #495: each matte's source, drawn alone though hidden: the item and what is under it.
+    let mut sources: BTreeMap<String, Arc<Vec<Drawn>>> = BTreeMap::new();
+    let bare = BTreeMap::new();
+    let alone = ItemCtx {
+        items,
+        size,
+        palette,
+        ty,
+        paints: &paints,
+        scopes: &bare,
+        bound,
+        row_readings,
+        planted,
+    };
+    for (id, item) in items {
+        if item.get("kind").and_then(Value::as_str) != Some("matte@1") {
+            continue;
+        }
+        let Some(source) = item
+            .get("params")
+            .and_then(|p| p.get("source"))
+            .and_then(Value::as_str)
+        else {
+            return refuse("bad_doc", format!("items/{id}/params/source"));
+        };
+        if !items.contains_key(source) {
+            return refuse("ref_unresolved", format!("items/{id}/params/source"));
+        }
+        let mut marks: Vec<(Rank, usize, &String, Arc<Drawn>)> = Vec::new();
+        for (k, member) in items {
+            if !is_under(items, k, source) {
+                continue;
+            }
+            let mut shown = member.clone();
+            if k == source {
+                if let Some(o) = shown.as_object_mut() {
+                    o.remove("visible");
+                }
+            }
+            if let Some(p) = placed(&alone, k, &shown)? {
+                marks.extend(
+                    p.drawn
+                        .iter()
+                        .enumerate()
+                        .map(|(i, d)| (p.rank.clone(), i, k, d.clone())),
+                );
+            }
+        }
+        marks.sort_by(|a, b| (&a.0, a.1, a.2).cmp(&(&b.0, b.1, b.2)));
+        sources.insert(
+            id.clone(),
+            Arc::new(marks.into_iter().map(|m| (*m.3).clone()).collect()),
+        );
+    }
+    let scopes = scopes_of(doc, items, palette, &sources)?;
     // Each layer as (order, ID, its marks as (order, ID, mark)), sorted below.
     let mut layers: Vec<(String, String, Vec<Ordered>)> = Vec::new();
     if let Some(Value::Object(ls)) = doc.get("layers") {

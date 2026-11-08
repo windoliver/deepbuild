@@ -93,6 +93,8 @@ pub(crate) enum CoreInput {
     Rate(usize),
     /// A remap's `.active`, or with `true` its `.progress`.
     Remap(usize, bool),
+    /// #495: `lag(var, dt)`: a slot, the time or a control as it reads at t − dt flicks.
+    Lag(Box<CoreInput>, i64),
 }
 
 /// A driver's ops at most (Driver: "≤ 64 ops"), and so its stack's depth.
@@ -341,6 +343,8 @@ pub struct State {
     pub(crate) last: Vec<Option<(i64, crate::follow::Out)>>,
     /// Each constraint but `limit`: whether its aim had no direction this frame.
     pub degenerate: Vec<bool>,
+    /// An earlier chain a lag reads (#495), which leaves the lagging drivers out.
+    nested: bool,
 }
 
 fn number(v: Option<&Value>) -> Option<f64> {
@@ -380,6 +384,7 @@ impl Program {
 
     /// [`Program::compile`] with the input track, the view and a planted program.
     pub fn compile_with(doc: &Map<String, Value>, options: Options) -> Result<Program, Refused> {
+        crate::held::check(doc)?;
         let mut motion = doc::read_with(doc, options.planted == Planted::BeatGridF32, options.planted.arc())?;
         if options.planted == Planted::SpringDropsVelocity {
             for c in &mut motion.channels {
@@ -554,6 +559,39 @@ impl Program {
                 }
             };
             program.drivers.push((slot, ops));
+        }
+        // A lag evaluates the chain again at another time, so a lagged slot is never one a lagging
+        // driver writes: that chain would evaluate itself without end.
+        let lags = |program: &Program, d: usize| match program.drivers[d].1.as_slice() {
+            [Op::Core(i)] => program.cores[*i]
+                .inputs
+                .iter()
+                .any(|x| matches!(x, CoreInput::Lag(..))),
+            _ => false,
+        };
+        for (d, (_, ops)) in program.drivers.iter().enumerate() {
+            let [Op::Core(i)] = ops.as_slice() else {
+                continue;
+            };
+            for input in &program.cores[*i].inputs {
+                let CoreInput::Lag(inner, _) = input else {
+                    continue;
+                };
+                let CoreInput::Slot(s) = **inner else {
+                    continue;
+                };
+                if let Some(other) = (0..program.drivers.len())
+                    .find(|&o| program.drivers[o].0 == s && lags(&program, o))
+                {
+                    return Err(Refused {
+                        code: "lag_cycle",
+                        path: format!("drivers/{}/expr", motion.drivers[d].id),
+                        detail: Some(Box::new(
+                            json!({"driver": motion.drivers[d].id, "why": format!("it lags a slot drivers/{} writes with a lag of its own", motion.drivers[other].id)}),
+                        )),
+                    });
+                }
+            }
         }
         for limit in &motion.limits {
             let Some(i) = program.items.iter().position(|x| *x == limit.owner) else {
@@ -1186,6 +1224,7 @@ impl Program {
             reports: vec![(0, f64::NAN); self.limits.len() + self.constraints.len()],
             last: vec![None; self.motion.channels.len()],
             degenerate: vec![false; self.constraints.len()],
+            nested: false,
         }
     }
 
@@ -1359,9 +1398,15 @@ impl Program {
                 }
                 Step::Driver(d) => {
                     let (slot, ops) = &self.drivers[d];
+                    // A lag's earlier chain skips the drivers that lag themselves: none writes a slot a lag reads.
+                    if state.nested
+                        && matches!(ops.as_slice(), [Op::Core(i)] if self.cores[*i].inputs.iter().any(|x| matches!(x, CoreInput::Lag(..))))
+                    {
+                        continue;
+                    }
                     let slots = &state.slots;
                     let value = match ops.as_slice() {
-                        [Op::Core(i)] => self.evaluate_core(*i, slots, doc_t),
+                        [Op::Core(i)] => self.evaluate_core(*i, slots, doc_t, t, validity),
                         _ => evaluate_ops(ops, slots, |i, k| self.world(slots, i)[k]),
                     };
                     if value.is_finite() {
@@ -1974,7 +2019,15 @@ impl Program {
             path: format!("{path}/expr"),
             detail: Some(Box::new(json!({"driver": driver.id, "why": why}))),
         };
-        let (text, found) = crate::occurrence::rewrite(&driver.text, &lists).map_err(|r| refused(r.code, r.why))?;
+        let frame_rate = doc
+            .get("transport")
+            .and_then(|t| t.get("frame_rate"))
+            .and_then(Value::as_array)
+            .and_then(|r| Some((r.first()?.as_u64()? as u32, r.get(1)?.as_u64()? as u32)))
+            .unwrap_or_default();
+        let time = deep_canvas::grammar::TimeContext { frame_rate, ..Default::default() };
+        let (text, lagged) = crate::lag::rewrite(&driver.text, &time).map_err(|r| refused(r.code, r.why))?;
+        let (text, found) = crate::occurrence::rewrite(&text, &lists).map_err(|r| refused(r.code, r.why))?;
         for f in &found {
             let Some((_, doc::DriverInput::List(filter))) = driver.inputs.iter().find(|(n, _)| *n == f.list) else {
                 continue;
@@ -2053,6 +2106,26 @@ impl Program {
             };
             inputs_of.push((name.as_str(), input));
         }
+        for l in &lagged {
+            let Some((_, input)) = inputs_of.iter().find(|(n, _)| *n == l.var) else {
+                return Err(refused(
+                    "ref_unresolved",
+                    format!("lag reads `{}`, which is not one of its vars", l.var),
+                ));
+            };
+            let input = match input {
+                CoreInput::Control { .. } if l.dt < 0 => {
+                    let id = driver.inputs.iter().find_map(|(n, i)| match i {
+                        doc::DriverInput::Control(c) if *n == l.var => Some(c.as_str()),
+                        _ => None,
+                    });
+                    return Err(refused("look_ahead_on_control", format!("lag({}) looks ahead through the control `{}`, which the input track feeds", l.var, id.unwrap_or_default())));
+                }
+                CoreInput::Slot(_) | CoreInput::Time | CoreInput::Control { .. } => input.clone(),
+                _ => return Err(refused("lag_unsupported", format!("lag({}) reads a number, bound value, list or live simulation, which draws once", l.var))),
+            };
+            inputs_of.push((l.name.as_str(), CoreInput::Lag(Box::new(input), l.dt)));
+        }
         if self.options.planted == Planted::TableFormSamples8 {
             scope.planted = Some(deep_canvas::expr::Planted::TableFormSamples8);
         }
@@ -2094,7 +2167,14 @@ impl Program {
     }
 
     /// A core driver's value over the slots at `doc_t`.
-    fn evaluate_core(&self, c: usize, slots: &[f64], doc_t: i64) -> f64 {
+    fn evaluate_core(
+        &self,
+        c: usize,
+        slots: &[f64],
+        doc_t: i64,
+        t_run: i64,
+        validity: Validity,
+    ) -> f64 {
         let core = &self.cores[c];
         // The document's time from the transport's start, held to its span, the range its
         // bound reads.
@@ -2103,8 +2183,43 @@ impl Program {
             .saturating_sub(transport.start)
             .clamp(0, transport.span.unwrap_or(i64::MAX));
         let mut vals = [0.0f64; DRIVER_OPS];
+        // Each time a lag reaches, evaluated once: the program again at t − dt, nothing kept.
+        let mut earlier: Vec<(i64, State)> = Vec::new();
         for (v, input) in vals.iter_mut().zip(&core.inputs) {
             *v = match input {
+                CoreInput::Lag(inner, dt) => match &**inner {
+                    CoreInput::Slot(s) => {
+                        let i = match earlier.iter().position(|e| e.0 == *dt) {
+                            Some(i) => i,
+                            None => {
+                                let mut state = self.state();
+                                state.nested = true;
+                                self.run(t_run - dt, validity, &mut state, |_, _, _| {});
+                                earlier.push((*dt, state));
+                                earlier.len() - 1
+                            }
+                        };
+                        earlier[i].1.slots[*s]
+                    }
+                    CoreInput::Time => {
+                        let at = (doc_t - dt)
+                            .saturating_sub(transport.start)
+                            .clamp(0, transport.span.unwrap_or(i64::MAX));
+                        at as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
+                    }
+                    CoreInput::Control {
+                        entries,
+                        default,
+                        range,
+                    } => {
+                        let at = doc_t - dt;
+                        let i = entries.partition_point(|e| e.0 <= at);
+                        i.checked_sub(1)
+                            .map_or(*default, |i| entries[i].2)
+                            .clamp(range.0, range.1)
+                    }
+                    _ => f64::NAN,
+                },
                 CoreInput::Occurrence(read) => match read.at(t) {
                     Some(v) => v,
                     None => return core.fallback.unwrap_or(f64::NAN),
@@ -2253,6 +2368,11 @@ impl Program {
                 CoreInput::World(..) | CoreInput::Rate(_) => Iv::ENTIRE,
                 CoreInput::Remap(..) => Iv::new(0.0, 1.0),
                 CoreInput::Occurrence(read) => read.bound(span),
+                CoreInput::Lag(inner, _) => match &**inner {
+                    CoreInput::Slot(s) => self.slot_bound(*s),
+                    CoreInput::Control { range, .. } => Iv::new(range.0, range.1),
+                    _ => Iv::new(0.0, span),
+                },
             })
             .collect();
         let b = core.expr.bound_num(&vars);
