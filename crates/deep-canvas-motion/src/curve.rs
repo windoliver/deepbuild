@@ -101,6 +101,16 @@ pub struct Key {
     pub table: Option<(String, Option<Arc<EaseTable>>)>,
     /// A quat channel's key: the arc its segment turns on.
     pub turns: Option<quat::Arc>,
+    /// #494: a vec or path key's `travel`, with each point's width and each sub-path's count.
+    pub travel: Option<Arc<Travels>>,
+}
+
+/// A key's `travel` and the shape of its value: `dim` components a point, `subs` points a sub-path.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Travels {
+    pub travel: crate::travel::Travel,
+    pub dim: usize,
+    pub subs: Vec<usize>,
 }
 
 impl Key {
@@ -114,6 +124,7 @@ impl Key {
             slopes: Vec::new(),
             table: None,
             turns: None,
+            travel: None,
         }
     }
 
@@ -260,7 +271,7 @@ impl Curve {
         };
         match a.interp {
             Interp::Hold | Interp::Quantize { .. } => {}
-            Interp::Linear if a.turns.is_none() => {
+            Interp::Linear if a.turns.is_none() && a.travel.is_none() => {
                 let span = (b.t - a.t) as f64 / FLICKS_PER_SECOND as f64;
                 for (c, o) in out.iter_mut().enumerate() {
                     *o = (b.value[c] - a.value[c]) / span;
@@ -410,6 +421,10 @@ pub fn segment_into(a: &Key, b: &Key, t: i64, out: &mut [f64]) -> u32 {
     let mix = |w: f64, out: &mut [f64]| {
         if let Some(arc) = a.turns {
             out.copy_from_slice(&quat::blend(arc, quat::of(&a.value), quat::of(&b.value), w));
+            return;
+        }
+        if let Some(t) = &a.travel {
+            t.travel.mix(&a.value, &b.value, w, t.dim, &t.subs, out);
             return;
         }
         for ((o, &va), &vb) in out.iter_mut().zip(&a.value).zip(&b.value) {

@@ -2,6 +2,7 @@
 //! issue #388 lays R1's canvas out as canvas modules): each `graph@1` item's basic layered layout,
 //! kept by its layout memory, one node per item, for what draws or checks its positions.
 
+use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Cost, Dependency, Manifest, Module, Range, Registrar, Semver};
 use deep_canvas::schedule::core_ops::Fields;
 use deep_canvas::schedule::{OpError, Val, View};
@@ -89,6 +90,34 @@ fn register(
     layout: fn(&mut View<'_>) -> Result<(), OpError>,
     cost: Option<Cost>,
 ) {
+    // #494: the kind (Graph and layout memory `graph@1`), so a document's graph is kept and a
+    // match morph pairs its nodes by key; it draws as its laid-out nodes' boxes.
+    let field = |name: &'static str| Param {
+        name,
+        ty: ParamType::Json,
+        unit: "",
+        default: Value::Null,
+        min: None,
+        max: None,
+        minor: 0,
+        module: "",
+        operator: "",
+    };
+    r.kind(
+        Entry {
+            family: "",
+            name: "graph",
+            versions: vec![Version {
+                major: 1,
+                minor: 0,
+                params: ["graph", "layout", "memory", "groups"].into_iter().map(field).collect(),
+            }],
+            migrations: Vec::new(),
+        },
+        &[],
+        "path@1",
+    )
+    .drawn(drawn);
     r.array("graph.layout", "memory", "item", "geometry", "items");
     let op = r
         .operator("layout", "items", &["core.fields"], &["graph.layout"])
@@ -104,7 +133,7 @@ fn register(
         false,
     );
     r.fixture("layered", board(), None).sidecar(json!({
-        // It draws nothing yet, so its fixture is checked, not compared as pixels.
+        // It draws only its nodes' boxes (#494), so its fixture is checked, not compared as pixels.
         "checks": [{"kind": "document.validate"}],
         "oracles": ["analytic"],
         "codes": ["unknown_kind"],
@@ -114,15 +143,30 @@ fn register(
     r.fixture("tie", tie_board(), None).sidecar(json!({
         "checks": [{"kind": "document.validate"}],
         "oracles": ["analytic"],
-        "codes": ["unknown_kind"],
+        "codes": [],
     }));
     // #1417: a graph whose layout alone passes the frame CPU its board allows, refused at check.
     r.fixture("over_budget", over_budget_board(), None)
         .sidecar(json!({
             "checks": [{"kind": "document.validate"}],
             "oracles": ["analytic"],
-            "codes": ["over_budget", "unknown_kind"],
+            "codes": ["over_budget"],
         }));
+}
+
+/// What a graph item draws as (#494): one `path@1` of its laid-out nodes' boxes, in its own
+/// space, in ink outlines.
+fn drawn(params: &Value) -> Value {
+    let mut d = String::new();
+    if let Ok((_, view)) = crate::view::place(params, [0.0, 0.0]) {
+        for [x, y, w, h] in view.nodes.values() {
+            d.push_str(&format!("M{x} {y} L{} {y} L{} {} L{x} {} Z ", x + w, x + w, y + h, y + h));
+        }
+    }
+    let mut out = params.as_object().cloned().unwrap_or_default();
+    out.insert("d".into(), json!(if d.is_empty() { "M0 0".to_string() } else { d.trim_end().to_string() }));
+    out.insert("paint".into(), json!({"stroke": {"role": "ink", "width": 2}}));
+    Value::Object(out)
 }
 
 fn is_graph(_: &Value, _: &str, item: &Value) -> bool {
@@ -189,7 +233,7 @@ fn layout_with(v: &mut View<'_>, as_listed: bool) -> Result<(), OpError> {
 fn board() -> Value {
     let node = |id: &str| json!({"id": id, "w": 64, "h": 32});
     json!({
-        "format": 1, "profile": "board", "seed": 388, "title": "Flow",
+        "format": 1, "profile": "board", "seed": 388, "title": "Flow", "requires": {"modules": {"graph": "^1"}},
         "description": "Four steps and their edges laid out in layers: the graph module's fixture.",
         "size": [320, 240],
         "items": {
@@ -222,7 +266,7 @@ fn over_budget_board() -> Value {
         }
     }
     json!({
-        "format": 1, "profile": "board", "seed": 1417, "title": "Big flow",
+        "format": 1, "profile": "board", "seed": 1417, "title": "Big flow", "requires": {"modules": {"graph": "^1"}},
         "description": "Six hundred steps laid out in layers past the board's frame CPU: the graph module's over_budget fixture.",
         "size": [320, 240],
         "budget": {"class": "data_view", "frame_cpu_ms": 0.2},
@@ -238,7 +282,7 @@ fn over_budget_board() -> Value {
 fn tie_board() -> Value {
     let node = |id: &str| json!({"id": id, "w": 64, "h": 32});
     json!({
-        "format": 1, "profile": "board", "seed": 399, "title": "Tie",
+        "format": 1, "profile": "board", "seed": 399, "title": "Tie", "requires": {"modules": {"graph": "^1"}},
         "description": "A root and its two children, listed right before left: the graph module's tie fixture.",
         "size": [320, 240],
         "items": {
