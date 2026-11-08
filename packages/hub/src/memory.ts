@@ -10,7 +10,7 @@ import { cwdOf } from '@deepbuild/archive';
 import type { EvidenceStore } from '@deepbuild/evidence';
 import { ulid, type Connection, type Message, type RecordStore } from '@deepbuild/record';
 import { startOf } from './wire.js';
-import { call, type Reply } from './client.js';
+import { call, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { dropEntries, writeRejected } from './guards.js';
 
@@ -216,9 +216,9 @@ export async function memoryCommand(args: readonly string[]): Promise<number> {
     const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
     const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
     reply = overruling
-      ? await call(hubAddress().path, token, 'decision.overrule', { decision: args[1] }, peer)
+      ? await withPrompt(() => call(hubAddress().path, token, 'decision.overrule', { decision: args[1] }, peer))
       : acting
-      ? await call(hubAddress().path, token, 'memory.act', { verb: args[0], lesson: args[1] }, peer)
+      ? await withPrompt(() => call(hubAddress().path, token, 'memory.act', { verb: args[0], lesson: args[1] }, peer))
       : await call(hubAddress().path, token, 'memory.list', {});
   } catch (error) {
     process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}\n`);

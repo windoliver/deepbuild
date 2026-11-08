@@ -194,8 +194,38 @@ export function keychainStore(keychain?: string): SecretStore {
     },
   };
 }
-/** The OS secret store this platform has: the Keychain on macOS (others arrive with their platforms). */
-export const osSecrets = (): SecretStore => (process.platform === 'darwin' ? keychainStore() : noSecrets);
+const SECRET_TOOL = '/usr/bin/secret-tool';
+/**
+ * The Secret Service on Linux, through secret-tool: a value goes on its standard input and comes back on its standard
+ * output, never on a command line another process could read, under the attributes the Keychain's item names.
+ */
+export function secretServiceStore(): SecretStore {
+  const item = (key: string): string[] => { if (!/^[A-Za-z0-9._/-]+$/.test(key)) throw Error(`${key} isn't a secret's key`); return ['service', SERVICE, 'account', key]; };
+  const run = (args: string[], input?: string): Promise<{ code: number; out: string; err: string }> => new Promise((done) => {
+    const child = execFile(SECRET_TOOL, args, { timeout: 10_000 }, (error, out, err) => done({ code: error ? Number((error as { code?: unknown }).code ?? 1) : 0, out, err }));
+    child.stdin?.on('error', () => undefined);
+    child.stdin?.end(input ?? '');
+  });
+  return {
+    async get(key) {
+      const { code, out, err } = await run(['lookup', ...item(key)]);
+      // Exit 1 with nothing said is an item that isn't there.
+      if (code === 1 && !err.trim()) return undefined;
+      if (code !== 0) throw Error(`the Secret Service didn't read ${key}: ${err.trim().slice(0, 200)}`);
+      return out;
+    },
+    async set(key, value) {
+      const { code, err } = await run(['store', `--label=DeepBuild ${key}`, ...item(key)], value);
+      if (code !== 0) throw Error(`the Secret Service didn't keep ${key}: ${err.trim().slice(0, 200)}`);
+    },
+    async delete(key) {
+      const { code, err } = await run(['clear', ...item(key)]);
+      if (code !== 0 && err.trim()) throw Error(`the Secret Service didn't remove ${key}: ${err.trim().slice(0, 200)}`);
+    },
+  };
+}
+/** The OS secret store this platform has: the Keychain on macOS, the Secret Service on Linux. */
+export const osSecrets = (): SecretStore => (process.platform === 'darwin' ? keychainStore() : process.platform === 'linux' ? secretServiceStore() : noSecrets);
 /** Opens your browser at a sign-in page. */
 export const openBrowser = (url: string): Promise<void> => new Promise((done, fail) => {
   if (process.platform !== 'darwin') return fail(Error('this host opens no browser for a sign-in'));

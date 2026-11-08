@@ -150,6 +150,7 @@ WantedBy=default.target
 /** Hands the definition to the service manager, or to $DEEP_HUB_LAUNCHER where a test stands in for it. */
 function launch(file: string): string | undefined {
   const run = (command: string, args: string[]) => spawnSync(command, args, { encoding: 'utf8' });
+  const same = (a: string, b: string) => { try { return realpathSync(a) === realpathSync(b); } catch { return a === b; } };
   const launcher = process.env.DEEP_HUB_LAUNCHER;
   if (launcher) {
     const r = run(launcher, [file]);
@@ -162,17 +163,18 @@ function launch(file: string): string | undefined {
     // Already loaded: start it again, but only the job this home's plist loaded. One label serves every home, so a
     // job loaded from another home's plist (a test's, a second checkout's) is that home's hub, never this one's.
     const path = /^\s*path = (.+)$/m.exec(run('launchctl', ['print', `${domain}/${LABEL}`]).stdout ?? '')?.[1]?.trim();
-    const same = (a: string, b: string) => { try { return realpathSync(a) === realpathSync(b); } catch { return a === b; } };
     if (path && !same(path, file)) return `${LABEL} is already loaded from ${path}, another home's hub; unload it with launchctl bootout ${domain}/${LABEL} if it is yours to stop, then start this one again`;
     const kicked = run('launchctl', ['kickstart', `${domain}/${LABEL}`]);
     return kicked.status === 0 ? undefined : `launchctl: ${loaded.stderr.trim()} ${kicked.stderr.trim()}`;
   }
   if (process.platform === 'linux') {
-    for (const args of [['--user', 'daemon-reload'], ['--user', 'enable', '--now', UNIT]]) {
-      const r = run('systemctl', args);
-      if (r.status !== 0) return `systemctl ${args.join(' ')}: ${r.stderr.trim()}`;
-    }
-    return undefined;
+    const reloaded = run('systemctl', ['--user', 'daemon-reload']);
+    if (reloaded.status !== 0) return `systemctl --user daemon-reload: ${reloaded.stderr.trim()}`;
+    // The same for systemd: one unit name serves every home, and a unit loaded from another home's file is that hub.
+    const path = run('systemctl', ['--user', 'show', '--property=FragmentPath', '--value', UNIT]).stdout?.trim();
+    if (path && !same(path, file)) return `${UNIT} is loaded from ${path}, another home's hub; stop it with systemctl --user disable --now ${UNIT} if it is yours to stop, then start this one again`;
+    const started = run('systemctl', ['--user', 'enable', '--now', UNIT]);
+    return started.status === 0 ? undefined : `systemctl --user enable --now ${UNIT}: ${started.stderr.trim()}`;
   }
   return `a login service on ${process.platform} isn't supported yet`;
 }

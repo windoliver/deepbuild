@@ -255,6 +255,8 @@ export interface ExtensionHost {
    */
   revoke(connection: Connection, id: string, word: 'run_as_you'): Promise<void>;
   /** Raw input for a hosted terminal, written to its program: only from the app, which sends the panel you focused. */
+  /** A hosted terminal of the hub's own, kept past a restart (#70). */
+  openTerminal(connection: Connection, spec: OpenSpec): Promise<{ terminal: string; run: string; pid: number }>;
   rawInput(connection: Connection, terminal: string, text: string): Promise<void>;
   /** What the app's tab for a hosted terminal shows now (#989), for every terminal the hub knows, loaded or not: only for the app. */
   tab(connection: Connection, terminal: string): Promise<TerminalTab>;
@@ -1286,6 +1288,12 @@ class Host implements ExtensionHost {
     }
     // A lost one stays listed as lost: what it runs can't be proven from damaged bytes.
     await Promise.all(owned.filter((t) => !t.lost).map((t) => this.terminals.stop(t)));
+  }
+  /** A hosted terminal of the hub's own, not a piece's, kept past a restart (#70). */
+  async openTerminal(connection: Connection, spec: OpenSpec): Promise<{ terminal: string; run: string; pid: number }> {
+    if (connection.writer !== 'app') throw Error(`a hosted terminal opens only from the app, not from ${connection.writer}`);
+    const t = await this.terminals.open('hub', spec, true);
+    return { terminal: t.terminal, run: t.run, pid: t.pid };
   }
   async rawInput(connection: Connection, terminal: string, text: string): Promise<void> {
     if (connection.writer !== 'app' && this.options.plant !== 'input-from-any-writer') {

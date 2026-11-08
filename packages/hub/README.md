@@ -22,6 +22,7 @@ The top of the TypeScript stack under the CLI: the core packages and the first-p
 
 ## Deviations
 
+- `native/dev.deepbuild.confirm.policy`: the polkit action the hub asks on Linux (#70): your own password each time, never kept. Root installs it; `deep doctor` says so while it's missing.
 - `native/deep-confirm.swift`: a Swift helper, built into `dist/` on macOS only by `native/build.mjs`, through which the hub asks the OS to confirm you (#24).
 - `src/plant.ts`: every planted wrong program the tests select with `DEEP_HUB_PLANT`, in one module so a proof lane's twin can lay a wrong program over this file alone.
 - `src/vfs.ts`: the design's test VFS (`DEEP_HUB_TEST_VFS`), which numbers durable writes so a test can cut the process after any one, as a power cut would.
