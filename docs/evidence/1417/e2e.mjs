@@ -27,7 +27,7 @@ for (const [n, cls, moving] of cases) {
   const doc = `01JB1417E2E00000000000${String(n).length}${cls === 'export' ? 'X' : 'D'}${moving ? 'M' : 'S'}`;
   const document = {
     format: 1, profile: 'board', seed: 1417, title: `A ${n}-node graph`, description: `A layered graph of ${n} nodes.`,
-    size: [1280, 720], budget: { class: cls },
+    size: [1280, 720], budget: { class: cls }, requires: { modules: { graph: '^1' } },
     items: { g: { id: 'g', kind: 'graph@1', name: 'Graph', order: 'a0', params: { graph: graph(...sizes[n]), layout: { algo: 'layered', direction: 'down', seed: 1417 } } } },
   };
   if (moving) {

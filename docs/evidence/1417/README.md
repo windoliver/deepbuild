@@ -1,7 +1,8 @@
 # Evidence for #1417: graph.layout's cost and the size cap at check
 
-Taken on the Spark (Linux aarch64, 20 cores, 1-minute load about 30) at 93bf3553, which merges origin/main as of
-2026-11-08. Nothing here is visual, so there is no screenshot.
+Taken on the Spark (Linux aarch64, 20 cores, 1-minute load about 30) at 93bf3553 (acceptance-linux.txt), and at
+3df7db49 for e2e.txt and acceptance-redraft-ac1-linux.txt, which merge main d4ed7be7 (#494: a `graph@1` document names
+the graph module in `requires.modules`; the e2e boards do). Nothing here is visual, so there is no screenshot.
 
 - `e2e.mjs` / `e2e.txt`: the canvas check path, `deep-show run`'s `deep_show` call on the shipped build, with one
   `graph@1` item per board. In the data view class (2 ms of frame CPU), 1,000 nodes present (about 1.3 ms). 10,000
@@ -12,6 +13,10 @@ Taken on the Spark (Linux aarch64, 20 cores, 1-minute load about 30) at 93bf3553
   INCONCLUSIVE because this is not the reference Mac. Its printed pairs are readings off the Mac, not proof:
   estimate/measured 0.958, 0.982 and 1.024 at 100, 1,000 and 10,000 nodes. On main (the merge base), the
   100,000-node board presents with no issue.
+- `acceptance-redraft-ac1-linux.txt`: AC1's blind redraft, `tests/acceptance/1417-redraft-ac1` (it replaces
+  `tests/acceptance/1417/over-budget.test.ts`, whose board #494 made invalid; approved by the user). Both tests pass:
+  the 100,000-node board is refused with `over_budget` naming `graph.layout` and its estimate, and main's own build
+  presents the same document.
 - AC3 on the reference Mac: queued through the Mac runner; its output goes to `mac-1417-acceptance.txt` here when
   it runs.
 

@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 /home/jing/deepbuild/.claude/worktrees/issue-1523-1eb658/tests/acceptance/1417-redraft-ac1
+
+ ✓ over-budget.test.ts > #1417.52357c9c a 100,000-node graph against its class's budget > #1417.52357c9c is refused at check with over_budget, naming the operator graph.layout and its estimate 2350ms
+ ✓ over-budget.test.ts > #1417.52357c9c a 100,000-node graph against its class's budget > #1417.52357c9c on main the same document passes the check 5115ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  14:44:42
+   Duration  45.66s (tests 100%)
+
