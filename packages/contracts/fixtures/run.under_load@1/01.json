@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "run.under_load",
+  "subject": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "run": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "check": ".deepbuild/checks/speed.sh",
+    "claim": "claim:01K74G4B6D8F0H2K4M6P8R0T2V",
+    "under_load": true,
+    "load": 9.5,
+    "cores": 4
+  }
+}

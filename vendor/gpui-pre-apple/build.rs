@@ -111,7 +111,9 @@ mod apple_build {
         fn stitch_header(header: &Path, shader_path: &Path) -> std::io::Result<PathBuf> {
             let header_contents = std::fs::read_to_string(header)?;
             let shader_contents = std::fs::read_to_string(shader_path)?;
-            let stitched_contents = format!("{header_contents}\n{shader_contents}");
+            // DeepBuild patch (windoliver/deepbuild#377): our shaders follow upstream's.
+            let carried = std::fs::read_to_string("./src/shaders_carried.metal")?;
+            let stitched_contents = format!("{header_contents}\n{shader_contents}\n{carried}");
             let out_path =
                 PathBuf::from(env::var("OUT_DIR").unwrap()).join("stitched_shaders.metal");
             std::fs::write(&out_path, stitched_contents)?;
@@ -157,7 +159,10 @@ mod apple_build {
         // location is the build's canonical output directory, never the
         // checkout (corgi rejects artifacts that embed the build path).
         let staged_shader_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("shaders.metal");
-        std::fs::copy(shader_path, &staged_shader_path).unwrap();
+        // DeepBuild patch (windoliver/deepbuild#377): our shaders follow upstream's.
+        let shader = std::fs::read_to_string(shader_path).unwrap();
+        let carried = std::fs::read_to_string("./src/shaders_carried.metal").unwrap();
+        std::fs::write(&staged_shader_path, format!("{shader}\n{carried}")).unwrap();
 
         let output = Command::new("xcrun")
             .args([

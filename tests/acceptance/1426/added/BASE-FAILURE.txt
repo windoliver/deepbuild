@@ -1,0 +1,47 @@
+#1426 added criteria: the run at the base commit db917989 (main of November 7, 2026), on macOS (Darwin 27.2.0), Node
+24.22.2, cargo 1.99.1, after npm ci, trimmed to each failure's reason. Every tagged test fails for a missing surface:
+no scripts/vendor-rebase.mjs, no lint lane running it, and no carried-patch table. The wrong-program tests pass,
+29 of 29, since they test the tests.
+
+== node --test tests/acceptance/1426/added/rows.test.mjs  (exit 1; 5 tests, 0 pass, 5 fail)
+
+✖ #1426.a17e5e56 a row naming a node --test name its file holds only as text, part of a name or a file that is gone fails check, naming the row and the test; the same row passes once the file has that test
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.a17e5e56 (scope) a row's vitest test is read from vitest's own list: a name in a comment fails, naming the row and the test, and a real test passes
+  + 'no script at <repo>/scripts/vendor-rebase.mjs',  (once a case, 2 cases)
+
+✖ #1426.a17e5e56 (scope) a row's Rust test is read from cargo's own list: a missing test and a function that is no test fail, naming the row and the test, and a real test passes
+  + 'no script at <repo>/scripts/vendor-rebase.mjs',  (once a case, 3 cases)
+
+✖ #1426.a17e5e56 a row with no removal condition (empty, a dash, or "none" with no reason) fails check, naming the row; "none: <reason>" and an upstream change pass
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.a17e5e56 (scope) the real table: every row has a removal condition and names its test by a repo path whose file holds it
+  + 'vendor/gpui-pre-apple/upstream/README.md has no table under ## Carried patches'
+
+== node --test tests/acceptance/1426/added/trees.test.mjs  (exit 1; 4 tests, 0 pass, 4 fail)
+
+✖ #1426.ed3ed529 a changed file under vendor/quickjs-jit-runtime with no row, top-level, nested, its build.rs or new, fails check naming it; with a row it passes
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.ed3ed529 the lint lane runs check: a planted changed quickjs-jit-runtime file with no row fails the lane, naming the file
+  + "the lint lane doesn't run scripts/vendor-rebase.mjs"
+
+✖ #1426.ed3ed529 (scope) every tree under vendor/: a changed or new file in unicode-17.0.0, and in a crate vendored later, fails check naming it
+  + 'no script at <repo>/scripts/vendor-rebase.mjs',  (once a case, 4 cases)
+
+✖ #1426.ed3ed529 (scope) the real table has a row for quickjs-jit-runtime's src/lib.rs, which the base carries a change in
+  + 'vendor/gpui-pre-apple/upstream/README.md has no table under ## Carried patches'
+
+== node --test tests/acceptance/1426/added/pin.test.mjs  (exit 1; 2 tests, 0 pass, 2 fail)
+
+✖ #1426.fdfd6785 merge onto a stub release that applies cleanly while the gradient row's test fails leaves the pin at 0.3.9, exits non-zero and names that test alone
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+✖ #1426.fdfd6785 (scope) the same clean merge with every row's test passing moves the pin to 0.3.10
+  + 'no script at <repo>/scripts/vendor-rebase.mjs'
+
+== node --test tests/acceptance/1426/added/wrong.test.mjs  (exit 0; 29 tests, 29 pass, 0 fail; 40 s)
+
+<repo> is /Users/taofeng/dev/claude-worktrees/github-issue-1426-c1c7e4/agent-a9ab1cfb20bea2756.

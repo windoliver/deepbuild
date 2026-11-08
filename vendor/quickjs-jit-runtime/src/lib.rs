@@ -4359,16 +4359,13 @@ impl JitRuntimeBuilder {
 
     /// Constructs a QuickJS runtime with an attached JIT backend.
     pub fn build(self) -> Result<JitRuntime, JitError> {
-        // DeepBuild patch (#358): a process that denied native code gets the interpreter, whatever
-        // its caller asked for.
+        // DeepBuild patch (windoliver/deepbuild#358): a process that denied native code gets the interpreter.
         if native_code_denied() {
             return self.build_interpreter();
         }
         let runtime = Runtime::new()?;
         let jit = Jit::attach(&runtime, self.config)?;
-        LAST_ATTACHED.with(|last| {
-            *last.borrow_mut() = Some((jit.metrics.clone(), jit.fast_entry.clone()));
-        });
+        carried::attached(&jit); // DeepBuild patch (windoliver/deepbuild#358)
         Ok(JitRuntime {
             jit: Some(jit),
             runtime: Some(runtime),
@@ -4381,11 +4378,7 @@ impl JitRuntimeBuilder {
     /// interpreter baseline without profiling, snapshot, or compiler overhead.
     pub fn build_interpreter(self) -> Result<JitRuntime, JitError> {
         let runtime = Runtime::new()?;
-        // DeepBuild patch (#358): see `limit_heap`.
-        let heap = HEAP_LIMIT.load(std::sync::atomic::Ordering::SeqCst);
-        if heap > 0 {
-            runtime.set_memory_limit(heap);
-        }
+        carried::apply_heap_limit(&runtime); // DeepBuild patch (windoliver/deepbuild#358)
         Ok(JitRuntime {
             jit: None,
             runtime: Some(runtime),
@@ -4393,45 +4386,9 @@ impl JitRuntimeBuilder {
     }
 }
 
-// DeepBuild patch (#358): gpui-shell's public runtimes attach the JIT in release builds and offer no
-// way not to, and hold their `JitRuntime` privately. This one-way switch and the read below are how
-// the panel host runs them with the JIT off and proves it.
-static NATIVE_CODE_DENIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-thread_local! {
-    static LAST_ATTACHED: std::cell::RefCell<Option<(Arc<Mutex<JitMetrics>>, Arc<FastEntryShared>)>> =
-        const { std::cell::RefCell::new(None) };
-}
-
-/// DeepBuild patch (#358): every runtime this process builds from now on is an interpreter. There is
-/// no way back: a process that calls this can't attach a JIT.
-pub fn deny_native_code() {
-    NATIVE_CODE_DENIED.store(true, std::sync::atomic::Ordering::SeqCst);
-}
-
-static HEAP_LIMIT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-/// DeepBuild patch (#358): every interpreter this process builds from now on has this heap ceiling, in bytes.
-/// gpui-shell leaves the heap unbounded for a host to bound, and keeps the runtime a host would bound it on.
-pub fn limit_heap(bytes: usize) {
-    HEAP_LIMIT.store(bytes, std::sync::atomic::Ordering::SeqCst);
-}
-
-/// DeepBuild patch (#358): whether [`deny_native_code`] was called.
-pub fn native_code_denied() -> bool {
-    NATIVE_CODE_DENIED.load(std::sync::atomic::Ordering::SeqCst)
-}
-
-/// DeepBuild patch (#358): the metrics of the JIT last attached on this thread, or `None` when none was.
-pub fn last_attached_metrics() -> Option<JitMetrics> {
-    LAST_ATTACHED.with(|last| {
-        last.borrow().as_ref().map(|(metrics, fast_entry)| {
-            let mut snapshot = metrics.lock().unwrap_or_else(|p| p.into_inner()).clone();
-            fast_entry.add_to(&mut snapshot);
-            snapshot
-        })
-    })
-}
+// DeepBuild patch (windoliver/deepbuild#358): what the panel host needs, in a file of its own.
+mod carried;
+pub use carried::{deny_native_code, last_attached_metrics, limit_heap, native_code_denied};
 
 /// An owning QuickJS runtime paired with its JIT guard.
 pub struct JitRuntime {

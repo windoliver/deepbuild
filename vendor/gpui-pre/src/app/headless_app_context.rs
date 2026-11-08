@@ -8,6 +8,9 @@
 //! Optionally, a renderer factory can be provided to enable real GPU rendering
 //! and screenshot capture via [`HeadlessAppContext::capture_screenshot`].
 
+mod present_frame; // DeepBuild patch (windoliver/deepbuild#391)
+mod scale_factor; // DeepBuild patch (windoliver/deepbuild#390)
+
 use crate::{
     AnyView, AnyWindowHandle, App, AppCell, AppContext, AssetSource, BackgroundExecutor, Bounds,
     Context, Entity, EntityId, ForegroundExecutor, Global, Pixels, PlatformHeadlessRenderer,
@@ -168,46 +171,6 @@ impl HeadlessAppContext {
     pub fn capture_screenshot(&mut self, window: AnyWindowHandle) -> Result<RgbaImage> {
         let mut app = self.app.borrow_mut();
         app.update_window(window, |_, window, _| window.render_to_image())?
-    }
-
-    /// DeepBuild patch (windoliver/deepbuild#390): moves a window to a display of another scale
-    /// factor, as `TestApp::simulate_scale_factor_change` does, so a headless render can be read
-    /// at scale 1.
-    pub fn simulate_scale_factor_change(&mut self, window: AnyWindowHandle, scale_factor: f32) {
-        let test_window = {
-            let mut app = self.app.borrow_mut();
-            app.windows
-                .get_mut(window.window_id())
-                .and_then(|window| window.as_mut())
-                .and_then(|window| window.platform_window.as_test())
-                .cloned()
-        };
-        if let Some(mut test_window) = test_window {
-            test_window.simulate_scale_factor_change(scale_factor);
-        }
-        self.background_executor.run_until_parked();
-    }
-
-    /// DeepBuild patch (windoliver/deepbuild#391): delivers one frame request to a window that
-    /// must draw and present, as a display link would at a vsync, so a headless canvas presents
-    /// through GPUI's own frame path (draw, then the renderer's submission) only when its frame
-    /// clock arms a frame.
-    pub fn present_frame(&mut self, window: AnyWindowHandle) {
-        let test_window = {
-            let mut app = self.app.borrow_mut();
-            app.windows
-                .get_mut(window.window_id())
-                .and_then(|window| window.as_mut())
-                .and_then(|window| window.platform_window.as_test())
-                .cloned()
-        };
-        if let Some(test_window) = test_window {
-            test_window.simulate_frame_request(crate::RequestFrameOptions {
-                require_presentation: true,
-                force_render: true,
-                ..Default::default()
-            });
-        }
     }
 
     /// Returns the text system.
