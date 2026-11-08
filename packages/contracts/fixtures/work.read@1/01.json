@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7A",
+  "kind": "work.read",
+  "data": {
+    "source": "work:01K74FKZVK8Q2X5R7M3N9P4T6Y",
+    "position": "2026-11-02T09:00:55.000Z",
+    "state": {
+      "opened": [],
+      "taken": []
+    }
+  }
+}

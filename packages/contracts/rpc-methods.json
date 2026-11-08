@@ -312,6 +312,13 @@
     "tracking": "#965"
   },
   {
+    "method": "work.fix",
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#66",
+    "called_by": "deep fix"
+  },
+  {
     "method": "workspace.new",
     "since": "R2",
     "stability": "preview",

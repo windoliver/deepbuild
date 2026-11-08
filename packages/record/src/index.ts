@@ -178,7 +178,7 @@ const SCHEMA_VERSION = 1;
 /** Events a replay reads at a time. */
 const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
-const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
+const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'work.read', 'work.delivery', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
   'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set']);
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
