@@ -142,3 +142,11 @@ harness = false
 name = "acceptance_994_window"
 path = "../../tests/acceptance/994/window.rs"
 harness = false
+
+# Issue #1425: the pack check and the load path refusing toolkit imports, names off the panel catalog and lists that
+# run script per frame, and every catalog name drawn in light and dark, written blind in tests/acceptance/1425. The
+# rest of the suite is in vitest there. No harness, as above.
+[[test]]
+name = "acceptance_1425"
+path = "../../tests/acceptance/1425/app/panels.rs"
+harness = false
