@@ -1,0 +1,19 @@
+{
+  "criterion": "#431.6cd4c5b0",
+  "by": "Claude (claude-opus-5-5), on the owner's delegation in the #431 session (\"Yes, record it\"); not the owner's own call",
+  "screenshots": [
+    "ef582c8e7facb8cc65e38e648605f08a0b98034c7998552015778b223bdf1ee1",
+    "cf3ceaa34a145cc18f031fb974a6134a56e0cad91f5ab0fab1781c8154e5cfeb",
+    "627324d30a0068dd90706dc68d29d0531c35e5bdc7479b5fe58c65c5971dc49b",
+    "81840e7c3bba70ce803a17a944fc5bf7e93221d1599742b469c097b7f1c5b74a"
+  ],
+  "files": {
+    "polar-ring-ef582c8e7facb8cc65e38e648605f08a0b98034c7998552015778b223bdf1ee1.png": "ef582c8e7facb8cc65e38e648605f08a0b98034c7998552015778b223bdf1ee1",
+    "see-through-card-cf3ceaa34a145cc18f031fb974a6134a56e0cad91f5ab0fab1781c8154e5cfeb.png": "cf3ceaa34a145cc18f031fb974a6134a56e0cad91f5ab0fab1781c8154e5cfeb",
+    "sign-without-emission-pass-627324d30a0068dd90706dc68d29d0531c35e5bdc7479b5fe58c65c5971dc49b.png": "627324d30a0068dd90706dc68d29d0531c35e5bdc7479b5fe58c65c5971dc49b",
+    "sign-with-emission-pass-81840e7c3bba70ce803a17a944fc5bf7e93221d1599742b469c097b7f1c5b74a.png": "81840e7c3bba70ce803a17a944fc5bf7e93221d1599742b469c097b7f1c5b74a"
+  },
+  "call": "looks_right",
+  "when": "2026-11-07T09:11:47Z",
+  "note": "Taken on main's 4x MSAA (merge e20b5b9a), each viewed whole and at 3x to 6x zoom. Polar ring: the checker runs unbroken across the seam on the ring's -x side, with no grey band, and square edges show only bilinear filtering. See-through card at lod 3: light grey over the green stripes, dark over blue, mid over red, the stripe borders softened by level 3, and none of the pane's red inside the card; the pane shows around it (olive over green, magenta over blue). Sign at exposure 1/8: the visible half reads (188, 4, 4) without the pass and (255, 4, 4) with it; exactly 6,400 pixels differ between the two pictures, all inside the visible 80 x 80 half, while the wall (65, 65, 65), the hidden half and the ball's glint are identical."
+}

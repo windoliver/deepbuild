@@ -18,7 +18,7 @@ The bottom of the canvas text stack: no workspace crate but deep-canvas-seams (t
 
 ## Deviations
 
-- `fonts`: Inter, JetBrains Mono, and (#417) STIX Two Math, Caveat, Noto Sans SC, Noto Sans Arabic and Noto Emoji binaries checked in, the only fonts the canvas's text uses on every platform, each with its SIL Open Font License file beside it; the last three are the looks' fallback faces.
+- `fonts`: Inter, (#496) Inter Variable (a weight axis from 100 to 900, which a weight no static Inter face has is set on), JetBrains Mono, and (#417) STIX Two Math, Caveat, Noto Sans SC, Noto Sans Arabic and Noto Emoji binaries checked in, the only fonts the canvas's text uses on every platform, each with its SIL Open Font License file beside it; the last three are the looks' fallback faces.
 - `Cargo.toml`: fearless_simd is listed only for its `force_support_fallback` feature, so the atlas rasterizes at the scalar level and every platform computes the same alpha; icu_segmenter's `unstable` feature gives UAX #14 at Unicode 17.0, which parley's stable segmenter lacks.
 - `src/lib.rs`: `FONTS` reads the `test-fonts-next` feature, a build of the same fonts backend at its next version for #140's test that a new version misses the caches it keyed; no shipped build has it. The canvas lint reports the feature predicate.
 - `src/cache.rs`: the `Planted` caches are #856's wrong programs for the acceptance suite, each set only by the binary's `--planted`.
