@@ -3378,6 +3378,8 @@ export class Core {
   private async closesGate(session: string, command: string): Promise<string | undefined> {
     const issue = closesIssue(command);
     if (issue === undefined) return this.partOfGate(session, command);
+    // The planted wrong program judges the bootstrap's commands alone: the issue's criteria never hold a PR back.
+    if (this.options.plant === 'bootstrap-commands-only') return undefined;
     const open = await this.tasks.unproven(session, issue);
     if (!open) return undefined;
     if (!open.locked) return `DeepBuild blocked this: the pull request can't say Closes #${issue} while the definition of ${open.task_ref} hasn't locked, so nothing of it is proven yet. Say Part of #${issue} instead, and list what's left.`;
@@ -4117,6 +4119,13 @@ export class Core {
       await this.appendReading(meta.session, meta.agent, `This stop's claim could not be recorded: ${e instanceof Error ? e.message : String(e)}`).catch(() => undefined);
       return undefined;
     });
+    // A record that takes no writes (a full disk, the lock lost) turns every gate watch-only: the stop goes on
+    // unjudged, and its line says so and why (#33).
+    if (this.blocked && !judged?.claim) {
+      r.holding--;
+      const said = this.options.plant === 'failures-as-fail' ? this.blocked.replace(/^BLOCKED/, 'FAIL') : this.blocked;
+      return { message: `${said}: DeepBuild is watch-only until the record takes writes again, so this stop wasn't judged.` };
+    }
     // The claim's fast lane (#29): the hold waits for the checks the budget admitted, and no longer than the hold.
     // deep-hook stamps the stop on the wall clock; a stepped test clock's steps put it on the hub's (#965).
     const stopAt = ulidTime(meta.id) + this.stepped;
@@ -6244,13 +6253,13 @@ export class Core {
     return [...this.sessions.values()].map((s) => s.cwd).find((cwd) => cwd === real || isUnder(real, cwd));
   }
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline as the spec writes it, where it gives one. */
-  private checksOf(worktree: string): Map<string, { run: string; deadline?: unknown }> {
+  private checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string }> {
     let spec: unknown;
     try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
-      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}) }] as const];
+      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(typeof c.type === 'string' ? { type: c.type } : {}) }] as const];
     }));
   }
   private unknownCheck(worktree: string, check: unknown): Refused {
@@ -6607,7 +6616,7 @@ export class Core {
       // trusted, or one the agents' own trust records already do; an untrusted repo's spec commands never run, and
       // its claims are watch-only, so none passes. On a claim that joins its early run they ran already.
       if (!r.joins) {
-        if (spec.length && trusted) {
+        if (spec.length && trusted && this.options.plant !== 'drafted-spec-only') {
           checks.push(...spec);
           // A claim on a pull request also runs the repo's release checks, on the PR's commit merged with main (#325).
           if (await this.prOf(r.session)) checks.push(...await this.releaseChecks(r.cwd, r.commit));
@@ -6667,7 +6676,8 @@ export class Core {
       const check = checks.get(name);
       if (!check) return [];
       const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
-      return [{ check: name, approved: null, command: check.run, covers: [], depth: 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, ...(deadline ? { deadline_ms: deadline } : {}) }];
+      // A journey runs on the repo's stack, as its environment block starts it (#33, #580).
+      return [{ check: name, approved: null, command: check.run, covers: [], depth: check.type === 'journey' ? 'journey' as const : 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, ...(deadline ? { deadline_ms: deadline } : {}) }];
     });
   }
   /**
@@ -6745,6 +6755,8 @@ export class Core {
   private async judged(claim: string): Promise<void> {
     let v = this.gate.verdictOf(claim);
     if (!v || v.outcome === 'pending') return;
+    // The planted engine reads a run cut short, or one missing what lies outside the code, as a failure.
+    if (this.options.plant === 'failures-as-fail' && (v.outcome === 'BLOCKED' || v.outcome === 'INCONCLUSIVE')) v = { ...v, outcome: 'FAIL' };
     // An untrusted repo's spec commands never ran, so its claim is watch-only: it never passes (#322).
     if (v.outcome === 'PASS' && this.watchOnlyClaims.has(claim)) v = { ...v, outcome: 'BLOCKED', reasons: [...v.reasons, 'project trust: the repo\'s spec checks never run until you trust the project, so this claim is watch-only'] };
     // A target that no longer resolves makes the claim INVALID, naming it, whatever its checks show; a FAIL still goes first (#323).
@@ -6830,14 +6842,47 @@ export class Core {
       const out = await this.ledger.request(this.connection('core'), { run: id, check: r.check, inputs, issue: paid.task });
       if (out.status !== 'started') throw Error(out.status === 'BLOCKED' ? (out.cause === 'price' ? `${out.missing} is unknown` : `the budget for ${paid.task} has no room for it (${out.ask})`) : `it waits for your answer, ${out.ask}`);
     }
+    // A check your repo's spec lists under `outside` runs as you, outside the sandbox, once its checkout is built (#33).
+    const outside = this.outsideOf(r.cwd, r.check);
+    if (outside) await this.builtOutside(r.cwd, outside.build);
     // A check of another kind runs its spec through the kinds the hub holds, within its kind's budget unless it names a deadline (#1537).
     const kinded = this.kindChecks.get(r.claim)?.get(r.check);
-    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? this.checkKinds.deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.stacks.wanted(r.cwd) ? r.stack : undefined);
+    const { run } = await this.runs.start({ check: r.check, claim: r.claim, commit: r.commit, argv: ['/bin/sh', '-c', r.command], command: r.command, ...(outside ? { outside: true } : {}), env: r.env ?? {}, cwd: r.cwd, grant, lane: r.lane ?? 'slow', expected_ms: r.expected_ms ?? null, deadline_ms: r.deadline_ms ?? (kinded ? this.checkKinds.deadline(kinded.spec.kind) : null), ...(kinded ? { spec: kinded.spec } : {}), ...(r.standIns?.length ? { stand_ins: r.standIns } : {}) }, undefined, id, r.key, r.overlay !== undefined, r.stack && this.stacks.wanted(r.cwd) ? r.stack : undefined);
     if (paid) {
       const charge = () => this.ledger.charge(this.connection('core'), String(run), this.priceOf(r.check, 'costs') ?? this.priceOf(r.check) ?? 0);
       void this.runs.ended(String(run)).then(charge).catch((error: unknown) => process.stderr.write(`deep hub: ${String(run)} was not charged: ${error instanceof Error ? error.message : String(error)}\n`));
     }
     return String(run);
+  }
+  /**
+   * Whether the checkout's spec runs this check outside the sandbox (#33): `outside: { checks: [paths], build }` in
+   * .deepbuild/done.yaml, for suites that start sandboxes of their own, which macOS can't nest. Its build makes what
+   * those suites start (the workspaces, deep-hook) once per checkout.
+   */
+  private outsideOf(cwd: string, check: string): { build: string } | undefined {
+    let spec: unknown;
+    try { spec = parseYaml(readFileSync(join(cwd, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return undefined; }
+    const o = isObj(spec) && isObj(spec.outside) ? spec.outside : undefined;
+    const paths = Array.isArray(o?.checks) ? o.checks.map(String) : [];
+    return o && typeof o.build === 'string' && paths.some((p) => check === p || (p.endsWith('/') && check.startsWith(p))) ? { build: o.build } : undefined;
+  }
+  /** Each checkout's outside build, run once, as you, outside the sandbox; one that fails keeps its checks from starting, naming it. */
+  private readonly outsideBuilds = new Map<string, Promise<void>>();
+  private builtOutside(cwd: string, build: string): Promise<void> {
+    let built = this.outsideBuilds.get(cwd);
+    if (!built) {
+      built = (async () => {
+        const run = `run:${ulid(this.now())}`;
+        let tail = '';
+        const keep = (chunk: Buffer): void => { tail = `${tail}${chunk.toString('utf8')}`.slice(-2000); };
+        const started = await this.host.start({ run, argv: ['/bin/sh', '-c', build], cwd, own_sandbox: true, output: { stdout: keep, stderr: keep } });
+        if (started.status !== 'started') throw Error(`its checkout's build \`${build}\` found no ${started.kind} free`);
+        const exit = await this.host.wait(run);
+        if (exit.code !== 0) throw Error(`its checkout's build \`${build}\` exited ${String(exit.code)}: ${tail.trim().split('\n').slice(-3).join(' ')}`);
+      })();
+      this.outsideBuilds.set(cwd, built);
+    }
+    return built;
   }
   /**
    * The stop rule (#303, design: Every stop is judged): a stop whose turn did work is a claim, other than one right
