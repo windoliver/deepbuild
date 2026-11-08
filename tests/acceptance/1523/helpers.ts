@@ -11,7 +11,7 @@
 
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { availableParallelism, loadavg } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -24,6 +24,10 @@ export const NODE = process.execPath;
 export const DEEP_HOOK = join(REPO, 'target/debug/deep-hook');
 export const DEFAULT_RULES = join(REPO, 'crates/deep-hook/default-rules.json');
 export const AGENT = fileURLToPath(new URL('./fixtures/agent.mjs', import.meta.url));
+const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
+const fixture = (name: string): string => readFileSync(join(FIXTURES, name), 'utf8');
+/** The model the fake reviewer answers as: another model than the session's (claude-haiku-5-5), one the facts name. */
+export const REVIEWER_MODEL = 'claude-sonnet-5-5';
 
 /** Each criterion's ID: `#1523.` and the first 8 hex of SHA-256 of its text, trimmed, whitespace collapsed. Numbered in the issue's order. */
 export const AC1 = 'AC1 #1523.b593135b';
@@ -273,6 +277,13 @@ export interface World { tmp: string; home: string; root: string; repo: string; 
  * rules.json and config.json with your settings; `<home>/.claude.json` names the account and marks the repo
  * trusted. `<tmp>/repo` is a git repository with one commit on main (`base`), checked out on the branch PR_BRANCH. `<tmp>/confirm` says `confirmed` (DEEP_HUB_TEST_CONFIRM). `<tmp>/drafts.json` is
  * DEEP_HUB_TEST_DRAFTS, `<tmp>/work.json` DEEP_HUB_TEST_WORK.
+ *
+ * The second model (README, The second model; blind redraft for #1537): since #1537 every claim whose session has a
+ * PR gets a review check run by a second model, so the delivered thread (`delivered`) needs one or its PR stop is
+ * sent back with the review unmet. As tests/acceptance/1537 does, the fake reviewer (`fixtures/fake-reviewer.pl`,
+ * answering a clean review: no findings) is installed as `claude` in `<tmp>/bin`, first on the runner's login PATH
+ * (`runner.login_path` in config.json); `<home>/.claude/.credentials.json` is a made-up Claude Code sign-in, so no
+ * job reads a real keychain; the wiki's review rubric is `<root>/wiki/review-rubric.md`.
  */
 export function makeWorld(): World {
   const tmp = tempDir();
@@ -281,7 +292,16 @@ export function makeWorld(): World {
   mkdirSync(join(home, '.claude'), { recursive: true });
   mkdirSync(root, { recursive: true, mode: 0o700 });
   writeFileSync(join(root, 'rules.json'), readFileSync(DEFAULT_RULES, 'utf8'));
-  writeFileSync(join(root, 'config.json'), `${JSON.stringify({ asks: SETTINGS }, null, 2)}\n`);
+  const bin = join(tmp, 'bin');
+  mkdirSync(bin, { recursive: true });
+  const reviewer = join(bin, 'claude');
+  writeFileSync(reviewer, fixture('fake-reviewer.pl').replace('__CONFIG__', Buffer.from(JSON.stringify({ version: COVERED, model: REVIEWER_MODEL, findings: [] }), 'utf8').toString('base64')), { mode: 0o755 });
+  chmodSync(reviewer, 0o755);
+  writeFileSync(join(root, 'config.json'), `${JSON.stringify({ asks: SETTINGS, runner: { login_path: `${bin}:/usr/bin:/bin` }, plan: { reserve_pct: 10 } }, null, 2)}\n`);
+  writeFileSync(join(home, '.claude', '.credentials.json'), `${JSON.stringify({ claudeAiOauth: { accessToken: `sk-ant-oat01-dh1523FAKE${'x'.repeat(40)}`, refreshToken: `sk-ant-ort01-dh1523FAKE${'y'.repeat(40)}`, expiresAt: 4102444800000, scopes: ['user:inference'], subscriptionType: 'max' } })}\n`, { mode: 0o600 });
+  writeFileSync(join(home, '.claude', 'settings.json'), '{}\n');
+  mkdirSync(join(root, 'wiki'), { recursive: true });
+  writeFileSync(join(root, 'wiki', 'review-rubric.md'), fixture('rubric.md'));
   const confirm = join(tmp, 'confirm');
   writeFileSync(confirm, 'confirmed\n');
   const repo = join(tmp, 'repo');
@@ -756,14 +776,21 @@ export async function expectPass(hub: Hub, commit: string, who: string): Promise
   if (loaded()) throw new Inconclusive(`${who} no PASS on ${commit} within 120 s, ${loadReading()}: ${seen}`);
   throw Error(`BLOCKED: ${who} the claim on ${commit} must PASS for a merge to be allowed at all: ${seen}`);
 }
+/** The account's five-hour window, as the runner reads it (`windows.report`): `used` percent, resetting at `resetsAt`. */
+export async function reportWindow(hub: Hub, used: number, resetsAt: number): Promise<void> {
+  await control(hub, 'windows.report', { agent: 'claude-code', account: ACCOUNT, rate_limits: { five_hour: { used_percentage: used, resets_at: Math.round(resetsAt / 1000) } } });
+}
 /**
  * The thread every merge test starts from: you type `Fix <link>, then create PR.`, the agent makes the fix, commits,
  * pushes and opens the pull request (each of which must go through), and its stop's claim is PASS, pinned to the head it
- * returns.
+ * returns. Since #1537 the claim of a session with a PR needs a review by a second model (README, The second model):
+ * the world's fake reviewer answers it, once the account's window is read with room (5% used, as #1537's suite reports
+ * it), since the runner starts no job before the account's first window reading.
  */
 export async function delivered(hub: Hub, s: Session, who: string): Promise<string> {
   const text = `Fix ${WORK_LINK}, then ${CREATE_PR}.`;
   s.hub = hub;
+  await reportWindow(hub, 5, Date.now() + 3 * 3_600_000);
   await s.start();
   await s.typed(text);
   await s.read('src/auth.js');
