@@ -29,6 +29,7 @@ mod golden;
 mod groups;
 mod guard;
 mod host;
+mod indexed;
 mod interp_suite;
 mod levels;
 mod live;
@@ -38,6 +39,7 @@ mod marks2d;
 mod opframe;
 mod parity;
 mod plugin;
+mod print2d;
 mod reference;
 mod scene;
 mod seam;
@@ -73,6 +75,14 @@ use crate::worker::Worker;
 /// The wrong programs, each reachable only through `--planted` (README: Planted programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #431's wrong programs (tests/acceptance/431/README.md: Planted programs).
+    VelocityFromPreviousFrame,
+    EmissionThresholdsColor,
+    BuildsUnreadTargets,
+    SampleGradImplicit,
+    NoDivergenceRule,
+    BackdropAfterSeeThrough,
+    PeriodFirstOctave,
     /// #430's wrong programs (tests/acceptance/430/README.md: Planted programs).
     GroupPassAtLayerEnd,
     GroupPassReadsEarlier,
@@ -285,11 +295,25 @@ pub enum Planted {
     StepsPerFrame,
     RingKeepsEveryCheckpoint,
     CarriedClassExact,
+    // #464: print and pixel looks' wrong programs (tests/acceptance/464/README.md).
+    VignettePixels,
+    GrainFromT,
+    PartialCoverage,
+    PuffFullOpacity,
+    LightAfterUpscale,
+    FlickerWallTime,
 }
 
 impl Planted {
     fn parse(name: &str) -> Option<Planted> {
         Some(match name {
+            "velocity_from_previous_frame" => Planted::VelocityFromPreviousFrame,
+            "emission_thresholds_color" => Planted::EmissionThresholdsColor,
+            "builds_unread_targets" => Planted::BuildsUnreadTargets,
+            "sample_grad_implicit" => Planted::SampleGradImplicit,
+            "no_divergence_rule" => Planted::NoDivergenceRule,
+            "backdrop_after_see_through" => Planted::BackdropAfterSeeThrough,
+            "period_first_octave" => Planted::PeriodFirstOctave,
             "group_pass_at_layer_end" => Planted::GroupPassAtLayerEnd,
             "group_pass_reads_earlier" => Planted::GroupPassReadsEarlier,
             "group_pass_past_grow" => Planted::GroupPassPastGrow,
@@ -458,6 +482,12 @@ impl Planted {
             "steps_per_frame" => Planted::StepsPerFrame,
             "ring_keeps_every_checkpoint" => Planted::RingKeepsEveryCheckpoint,
             "carried_class_exact" => Planted::CarriedClassExact,
+            "vignette_pixels" => Planted::VignettePixels,
+            "grain_from_t" => Planted::GrainFromT,
+            "partial_coverage" => Planted::PartialCoverage,
+            "puff_full_opacity" => Planted::PuffFullOpacity,
+            "light_after_upscale" => Planted::LightAfterUpscale,
+            "flicker_wall_time" => Planted::FlickerWallTime,
             _ => return None,
         })
     }
@@ -666,7 +696,7 @@ impl App {
             Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
             Some("check_operator") if opframe::wants(call) => opframe::call(self, out, call),
-            Some("check_operator") => effects::check_operator(self, call),
+            Some("check_operator") => effects::check_operator(self, out, call),
             Some("op") => effects::op(self, call),
             Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),

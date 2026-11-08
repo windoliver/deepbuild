@@ -10,7 +10,7 @@ rust-version = "1.95"
 # the live capture that reads the real app's accessibility tree. Both are tools beside the app,
 # so the app binary carries no test support.
 [dependencies]
-deep-app = { path = "../deep-app" }
+deep-app = { path = "../deep-app", features = ["plant-row"] }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
 gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
 serde_json = "1"
