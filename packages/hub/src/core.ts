@@ -668,6 +668,7 @@ export class Core {
   private readonly answers: Answers;
   /** paseo's plugin (#55): the token each agent's DeepBuild MCP server binds by, to the agent's own session. */
   private readonly binds = new Map<string, string>();
+  private readonly tokenBound = new Set<string>();
   /** The sessions paseo runs that another adapter gates: a permission prompt there shows in paseo, not a terminal. */
   private readonly inPaseo = new Set<string>();
   /** The ask each permission request paseo's plugin sent became, by session and request ID. */
@@ -3982,7 +3983,7 @@ export class Core {
    */
   paseoOwner(meta: HookMeta): Promise<string | null> {
     return this.queue(async () => {
-      if (meta.paseo?.bind && meta.session) this.binds.set(meta.paseo.bind, meta.session);
+      if (meta.paseo?.bind && meta.session) { this.binds.set(meta.paseo.bind, meta.session); this.tokenBound.add(meta.session); }
       const session = this.sessions.get(meta.session);
       const owner = session && session.agent !== 'paseo' ? session.agent : null;
       if (owner) this.inPaseo.add(meta.session);
@@ -6517,14 +6518,15 @@ export class Core {
     if (plant === 'errors-without-actual') delete out.actual;
     return new Refused(out as Refusal);
   }
-  /** Whether a paseo plugin's token names this session (#55): a deep mcp bound by it is bound by no process. */
+  /** Whether a paseo plugin's token ever named this session (#55): a deep mcp bound by it is bound by no process. */
   private byToken(session: string): boolean {
-    return [...this.binds.values()].includes(session);
+    return this.tokenBound.has(session);
   }
   /**
-   * A deep mcp whose session `/clear` rotated in its own process (#1632): a later session of the same process, by PID and
-   * start time, is live on its thread, which only a rotation joins it to. That start says so whether the old ID's
-   * SessionEnd came yet or was recorded unverified. Its calls then bind one by one by their own stamps, as an unbound
+   * A deep mcp whose session `/clear` rotated in its own process (#1632): another session of the same process, by PID and
+   * start time, is live on its thread, which only a rotation joins it to. Its start says so whether the old ID's
+   * SessionEnd came yet or was recorded unverified. Two live on one thread in one process bind no call to either but by
+   * its stamp. Its calls then bind one by one by their own stamps, as an unbound
    * connection's do, so each acts for the new ID and none for the old. A session that ended with no successor in its
    * process keeps its binding, and its calls are refused naming it.
    */
@@ -6535,9 +6537,7 @@ export class Core {
     // Forgotten past ENDED_KEPT (#824): the record keeps its thread.
     const [row] = was ? [] : (await this.record.raw(`SELECT thread_id FROM sessions WHERE id = ?`, [id])) as { thread_id: string | null }[];
     const thread = was ? was.thread : row?.thread_id ?? id;
-    // Sessions in the order they began: only one after it can have rotated it.
-    const all = [...this.sessions.values()];
-    const rotated = all.slice(was ? all.indexOf(was) + 1 : 0).some((s) => !s.ended && s.id !== id && s.thread === thread && s.pid === parent.pid && s.start === parent.start);
+    const rotated = [...this.sessions.values()].some((s) => !s.ended && s.id !== id && s.thread === thread && s.pid === parent.pid && s.start === parent.start);
     return rotated ? { ...context, session: null } : context;
   }
   /**
