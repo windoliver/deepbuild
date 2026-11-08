@@ -182,6 +182,11 @@ impl deep_canvas::schedule::Canonical for Key {
             ),
             out,
         );
+        // #494: a key's travel, only on a key that has one.
+        if let Some(t) = &self.travel {
+            format!("{:?}", t.travel).encode(out);
+            (&t.dim, &t.subs).encode(out);
+        }
         // A pack's ease table: its name and its knots, so another table keys another program.
         if let Some((name, table)) = &self.table {
             name.encode(out);
@@ -216,6 +221,13 @@ impl deep_canvas::schedule::Canonical for Channel {
         // #491's layout glide, only on a channel that has one.
         if let Some(glide) = &self.glide {
             glide.encode(out);
+        }
+        // #494: a path channel's structure and strictness.
+        if let Some(p) = &self.path {
+            p.strict.encode(out);
+            for (n, closed) in &p.structure {
+                (n, closed).encode(out);
+            }
         }
     }
 }
@@ -439,6 +451,10 @@ impl deep_canvas::schedule::Canonical for Field {
         );
         self.written.encode(out);
         self.enumerated.encode(out);
+        // #494: a path field's structure, only on a path field.
+        for (n, closed) in self.shape.iter().flatten() {
+            (n, closed).encode(out);
+        }
         // Only a keyed data value holds one, so every other field keeps its key.
         if let Some(name) = &self.data {
             name.encode(out);
