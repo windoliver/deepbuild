@@ -1,6 +1,7 @@
 // Where a hub keeps its files, and the one setting every client reads the hub's address from.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -152,8 +153,14 @@ export function installedPrograms(root: string): { deep: string; hook: string } 
   const bin = join(root, 'versions', 'current', 'bin');
   return existsSync(bin) ? { deep: join(bin, 'deep'), hook: join(bin, 'deep-hook') } : undefined;
 }
+/** deep-hook as npm installs it (#41): this platform's optional package beside `deepbuild`; else this checkout's build. */
 export function deepHook(): string {
   const repo = fileURLToPath(new URL('../../../', import.meta.url));
+  try {
+    const pkg = createRequire(join(repo, 'package.json')).resolve(`@deepbuild/deep-hook-${process.platform}-${process.arch}/package.json`);
+    const hook = join(dirname(pkg), 'bin', 'deep-hook');
+    if (existsSync(hook)) return hook;
+  } catch { /* not installed from npm: a checkout */ }
   const built = ['release', 'debug'].map((p) => join(repo, 'target', p, 'deep-hook')).filter((p) => existsSync(p));
   if (!built.length) throw Error(`no deep-hook is built under ${join(repo, 'target')}; run cargo build -p deep-hook first`);
   return built.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]!;

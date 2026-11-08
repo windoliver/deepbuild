@@ -11,6 +11,7 @@ import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const fail = (message) => {
   console.error(`release-pack: ${message}`);
@@ -78,10 +79,26 @@ try {
   mkdirSync(staged);
   const archives = [];
   const problems = [];
+  // A repo whose published packages are laid out by a build (#41) has scripts/release-stage.mjs: it runs in the
+  // clean checkout, and each folder its stage.json lists is packed and read back like a workspace package. One with a
+  // built tree must match it file for file (release-verify.mjs).
+  const stageDir = join(work, 'stage');
+  const builtOf = new Map();
+  if (existsSync(join(clean, 'scripts', 'release-stage.mjs'))) {
+    run(process.execPath, [join(clean, 'scripts', 'release-stage.mjs'), '--out', stageDir], clean);
+    for (const p of JSON.parse(readFileSync(join(stageDir, 'stage.json'), 'utf8')).packages) {
+      dirs.push(join(stageDir, p.dir));
+      if (p.built) builtOf.set(join(stageDir, p.dir), join(stageDir, p.built));
+    }
+  }
   for (const dir of dirs) {
     const meta = readJson(dir);
     if (meta.private) continue;
     const [{ filename }] = JSON.parse(run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', staged], dir));
+    if (builtOf.has(dir)) {
+      const verified = spawnSync(process.execPath, [fileURLToPath(new URL('./release-verify.mjs', import.meta.url)), '--archive', join(staged, filename), '--built', builtOf.get(dir)], { encoding: 'utf8' });
+      if (verified.status !== 0) problems.push((verified.stderr || verified.stdout).trim());
+    }
     const file = join(staged, filename);
     // The archive's own listing, never the working tree's.
     const entries = new Set(run('tar', ['-tzf', file], work).split('\n').filter((e) => e.startsWith('package/') && !e.endsWith('/')).map((e) => e.slice('package/'.length)));

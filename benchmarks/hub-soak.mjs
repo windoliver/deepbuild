@@ -62,6 +62,8 @@ function connect(socket, hello) {
     let n = 0;
     sock.setEncoding('utf8');
     sock.on('error', reject);
+    // A hub that dies mid-run answers no call: each waiting one gets an error, so the run reports it rather than hangs.
+    sock.on('close', () => { for (const done of waiting.values()) done({ error: { message: 'the hub closed the control connection' } }); waiting.clear(); });
     sock.on('data', (chunk) => {
       buffer += chunk;
       for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
@@ -158,7 +160,9 @@ try {
   code = verdict === 'PASS' ? 0 : 1;
   app.close();
 } catch (error) {
-  console.log(JSON.stringify({ verdict: 'BLOCKED', reasons: [error instanceof Error ? error.message : String(error)] }));
+  await Promise.race([exited, sleep(2000)]);
+  const died = hub.exitCode !== null || hub.signalCode !== null ? [`the hub exited ${hub.exitCode ?? hub.signalCode}: ${stderr}`] : [];
+  console.log(JSON.stringify({ verdict: 'BLOCKED', reasons: [error instanceof Error ? error.message : String(error), ...died] }));
   code = 2;
 } finally {
   await stop();
