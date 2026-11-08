@@ -9,7 +9,7 @@ use std::io::{BufRead as _, Write as _};
 use serde_json::{json, Value};
 
 use crate::panel_check::{unknown_element, Check, Host};
-use crate::panel_tree::{parse, text_arg, Node, Op};
+use crate::panel_tree::{text_arg, Node, Op};
 
 /// The text `fold` crosses as, since a host function can't make a node: key, header and body after this mark.
 pub const FOLD_MARK: char = '\u{1}';
@@ -639,8 +639,7 @@ fn unfollowable(
 }
 
 /// A tree this app can draw and follow, or why it can't.
-fn readable(text: &str) -> Result<Node, String> {
-    let tree = parse(text)?;
+fn readable(tree: Node) -> Result<Node, String> {
     if let Some(kind) = unknown_element(&without_state(&tree)) {
         return Err(format!("unknown_element {kind}"));
     }
@@ -680,7 +679,7 @@ fn run(args: &[String]) -> Result<i32, String> {
         .to_vec();
     let mut check = Check::open(&window)?;
     let mut host = Host::start(host_path.as_ref(), panel.as_ref(), false)?;
-    let (text, _) = host.update()?;
+    let (tree, _) = host.update()?;
     let mut keys = Keys {
         by_position,
         tree: Node::default(),
@@ -698,7 +697,7 @@ fn run(args: &[String]) -> Result<i32, String> {
         host_failed: false,
         scrolled: false,
     };
-    keys.take(readable(&text)?, &mut check)?;
+    keys.take(readable(tree)?, &mut check)?;
     let say = |value: Value| {
         let mut stdout = std::io::stdout().lock();
         writeln!(stdout, "{value}")
@@ -733,11 +732,6 @@ fn run(args: &[String]) -> Result<i32, String> {
 impl Host {
     /// A rebuild, as a tree this app can draw.
     fn rebuild(&mut self) -> Result<Node, String> {
-        self.send(json!({ "cmd": "rebuild" }))?;
-        let reply = self.reply()?;
-        match reply["tree"].as_str() {
-            Some(text) => readable(text),
-            None => Err(format!("the panel failed: {}", reply["error"])),
-        }
+        readable(self.tree("rebuild")?.0)
     }
 }

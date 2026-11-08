@@ -7,7 +7,12 @@ export { ulidTime } from '@deepbuild/record/ids';
 
 export const VERSION = 1;
 /** The features the hub lists in its hello; a client turns off any of its own the hub doesn't list. */
-export const FEATURES: readonly string[] = [];
+export const FEATURES: readonly string[] = [
+  // Every method the app calls (#41): crates/deep-app/src/hub.rs NEEDS checks this hello against them.
+  'inbox.read', 'stream.subscribe', 'events.read', 'notifications.report', 'views.shown', 'views.hidden', 'canvas.drawn', 'canvas.user',
+];
+/** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
+export const CONTRACT = '1.0';
 
 /** error@3: one refusal. */
 export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }
@@ -82,6 +87,10 @@ export interface HookMeta {
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
   payloadWriter?: string;
+  /** The person whose credential the hook's connection presented (#1337), set by the event loop alone; none for the owner. */
+  person?: string;
+  /** Only the actor-from-payload plant reads it. */
+  payloadActor?: string;
   /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
   denied?: string;
   /** Set by the server on a PreToolUse its guard entries blocked: the entries, by name, for a PostToolUse that shows it ran anyway (#1033). */

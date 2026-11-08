@@ -105,7 +105,9 @@ export function upstreamSources() {
   if (!shell) blocked('gpui-shell is no dependency of this workspace');
   const text = readFileSync(join(dirname(shell.manifest_path), 'src/tests/benchmark.rs'), 'utf8');
   const raw = (name) => text.match(new RegExp(`const ${name}: &str = r#"([\\s\\S]*?)"#;`))?.[1] ?? blocked(`gpui-shell's benchmark has no ${name}`);
-  return { panel: raw('TEMPLATE').replace('__ROWS__', String(ROWS)).replace('__COLUMNS__', String(COLUMNS)), compute: raw('COMPUTE_TEMPLATE') };
+  // A panel imports only @deepbuild/panel (#1425): the upstream source's imports, moved there.
+  const own = (source) => source.replace(/import \{ ([^}]*) \} from "gpui-kit";\n(?:import \{ ([^}]*) \} from "gpui-base";\n)?/, (_, kit, base) => `import { ${[kit, base].filter(Boolean).join(', ')} } from "@deepbuild/panel";\n`);
+  return { panel: own(raw('TEMPLATE')).replace('__ROWS__', String(ROWS)).replace('__COLUMNS__', String(COLUMNS)), compute: own(raw('COMPUTE_TEMPLATE')) };
 }
 
 export function keep(name, value) {

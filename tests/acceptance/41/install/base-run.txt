@@ -1,0 +1,169 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/41/install/update.test.ts (5 tests | 5 skipped) 265ms
+ ❯ tests/acceptance/41/install/installer.test.ts (11 tests | 11 failed) 725ms
+   ❯ AC6 #41.1811c1ac installVersion (11)
+     × AC6 #41.1811c1ac a signed download installs into its own folder, switched in through the current link, and runs 24ms
+     × AC6 #41.1811c1ac a download signed by another key is refused, naming the signature, and nothing on disk changes 21ms
+     × AC6 #41.1811c1ac a manifest changed after it was signed is refused, naming the signature, and nothing on disk changes 10ms
+     × AC6 #41.1811c1ac a signature that is one byte off is refused, naming the signature, and nothing on disk changes 20ms
+     × AC6 #41.1811c1ac an archive whose sha256 isn't the signed manifest's is refused, naming the sha256, and nothing on disk changes 10ms
+     × AC6 #41.1811c1ac a first download with a bad signature, into a home with no version yet, installs nothing 295ms
+     × AC6 #41.1811c1ac a failure injected after-unpack leaves current a link to the previous version, which still runs 28ms
+     × AC6 #41.1811c1ac a failure injected before-switch leaves current a link to the previous version, which still runs 8ms
+     × AC6 #41.1811c1ac a failure injected during-switch leaves current a link to the previous version, which still runs 10ms
+     × AC6 #41.1811c1ac a failure injected during the switch, with three versions kept, still leaves the newest of them running and all three kept 9ms
+     × AC6 #41.1811c1ac the last three versions stay for rollback, each runnable, and older ones go 11ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/install/update.test.ts [ tests/acceptance/41/install/update.test.ts ]
+Error: Cannot find module '/packages/hub/src/installer.js' imported from <checkout>/tests/acceptance/41/install/helpers.ts
+ ❯ installer tests/acceptance/41/install/helpers.ts:36:16
+     34| /** packages/hub/src/installer.ts's installVersion; loaded per test, s…
+     35| export async function installer(): Promise<InstallVersion> {
+     36|   const mod = (await import('../../../../packages/hub/src/installer.js…
+       |                ^
+     37|   if (typeof mod.installVersion !== 'function') throw Error('packages/…
+     38|   return mod.installVersion as InstallVersion;
+ ❯ tests/acceptance/41/install/update.test.ts:50:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac a signed download installs into its own folder, switched in through the current link, and runs
+Error: Cannot find module '/packages/hub/src/installer.js' imported from <checkout>/tests/acceptance/41/install/helpers.ts
+ ❯ installer tests/acceptance/41/install/helpers.ts:36:16
+     34| /** packages/hub/src/installer.ts's installVersion; loaded per test, s…
+     35| export async function installer(): Promise<InstallVersion> {
+     36|   const mod = (await import('../../../../packages/hub/src/installer.js…
+       |                ^
+     37|   if (typeof mod.installVersion !== 'function') throw Error('packages/…
+     38|   return mod.installVersion as InstallVersion;
+ ❯ installed tests/acceptance/41/install/installer.test.ts:33:19
+ ❯ tests/acceptance/41/install/installer.test.ts:47:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac a download signed by another key is refused, naming the signature, and nothing on disk changes
+Error: Cannot find module '/packages/hub/src/installer.js' imported from <checkout>/tests/acceptance/41/install/helpers.ts
+ ❯ installer tests/acceptance/41/install/helpers.ts:36:16
+     34| /** packages/hub/src/installer.ts's installVersion; loaded per test, s…
+     35| export async function installer(): Promise<InstallVersion> {
+     36|   const mod = (await import('../../../../packages/hub/src/installer.js…
+       |                ^
+     37|   if (typeof mod.installVersion !== 'function') throw Error('packages/…
+     38|   return mod.installVersion as InstallVersion;
+ ❯ installed tests/acceptance/41/install/installer.test.ts:33:19
+ ❯ tests/acceptance/41/install/installer.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac a manifest changed after it was signed is refused, naming the signature, and nothing on disk changes
+Error: Cannot find module '/packages/hub/src/installer.js' imported from <checkout>/tests/acceptance/41/install/helpers.ts
+ ❯ installer tests/acceptance/41/install/helpers.ts:36:16
+     34| /** packages/hub/src/installer.ts's installVersion; loaded per test, s…
+     35| export async function installer(): Promise<InstallVersion> {
+     36|   const mod = (await import('../../../../packages/hub/src/installer.js…
+       |                ^
+     37|   if (typeof mod.installVersion !== 'function') throw Error('packages/…
+     38|   return mod.installVersion as InstallVersion;
+ ❯ installed tests/acceptance/41/install/installer.test.ts:33:19
+ ❯ tests/acceptance/41/install/installer.test.ts:75:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac a signature that is one byte off is refused, naming the signature, and nothing on disk changes
+Error: Cannot find module '/packages/hub/src/installer.js' imported from <checkout>/tests/acceptance/41/install/helpers.ts
+ ❯ installer tests/acceptance/41/install/helpers.ts:36:16
+     34| /** packages/hub/src/installer.ts's installVersion; loaded per test, s…
+     35| export async function installer(): Promise<InstallVersion> {
+     36|   const mod = (await import('../../../../packages/hub/src/installer.js…
+       |                ^
+     37|   if (typeof mod.installVersion !== 'function') throw Error('packages/…
+     38|   return mod.installVersion as InstallVersion;
+ ❯ installed tests/acceptance/41/install/installer.test.ts:33:19
+ ❯ tests/acceptance/41/install/installer.test.ts:89:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac an archive whose sha256 isn't the signed manifest's is refused, naming the sha256, and nothing on disk changes
+Error: Cannot find module '/packages/hub/src/installer.js' imported from <checkout>/tests/acceptance/41/install/helpers.ts
+ ❯ installer tests/acceptance/41/install/helpers.ts:36:16
+     34| /** packages/hub/src/installer.ts's installVersion; loaded per test, s…
+     35| export async function installer(): Promise<InstallVersion> {
+     36|   const mod = (await import('../../../../packages/hub/src/installer.js…
+       |                ^
+     37|   if (typeof mod.installVersion !== 'function') throw Error('packages/…
+     38|   return mod.installVersion as InstallVersion;
+ ❯ installed tests/acceptance/41/install/installer.test.ts:33:19
+ ❯ tests/acceptance/41/install/installer.test.ts:103:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac a first download with a bad signature, into a home with no version yet, installs nothing
+Error: Cannot find module '/packages/hub/src/installer.js' imported from <checkout>/tests/acceptance/41/install/helpers.ts
+ ❯ installer tests/acceptance/41/install/helpers.ts:36:16
+     34| /** packages/hub/src/installer.ts's installVersion; loaded per test, s…
+     35| export async function installer(): Promise<InstallVersion> {
+     36|   const mod = (await import('../../../../packages/hub/src/installer.js…
+       |                ^
+     37|   if (typeof mod.installVersion !== 'function') throw Error('packages/…
+     38|   return mod.installVersion as InstallVersion;
+ ❯ tests/acceptance/41/install/installer.test.ts:119:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac a failure injected after-unpack leaves current a link to the previous version, which still runs
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac a failure injected before-switch leaves current a link to the previous version, which still runs
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac a failure injected during-switch leaves current a link to the previous version, which still runs
+Error: Cannot find module '/packages/hub/src/installer.js' imported from <checkout>/tests/acceptance/41/install/helpers.ts
+ ❯ installer tests/acceptance/41/install/helpers.ts:36:16
+     34| /** packages/hub/src/installer.ts's installVersion; loaded per test, s…
+     35| export async function installer(): Promise<InstallVersion> {
+     36|   const mod = (await import('../../../../packages/hub/src/installer.js…
+       |                ^
+     37|   if (typeof mod.installVersion !== 'function') throw Error('packages/…
+     38|   return mod.installVersion as InstallVersion;
+ ❯ installed tests/acceptance/41/install/installer.test.ts:33:19
+ ❯ tests/acceptance/41/install/installer.test.ts:129:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac a failure injected during the switch, with three versions kept, still leaves the newest of them running and all three kept
+Error: Cannot find module '/packages/hub/src/installer.js' imported from <checkout>/tests/acceptance/41/install/helpers.ts
+ ❯ installer tests/acceptance/41/install/helpers.ts:36:16
+     34| /** packages/hub/src/installer.ts's installVersion; loaded per test, s…
+     35| export async function installer(): Promise<InstallVersion> {
+     36|   const mod = (await import('../../../../packages/hub/src/installer.js…
+       |                ^
+     37|   if (typeof mod.installVersion !== 'function') throw Error('packages/…
+     38|   return mod.installVersion as InstallVersion;
+ ❯ installed tests/acceptance/41/install/installer.test.ts:33:19
+ ❯ tests/acceptance/41/install/installer.test.ts:142:50
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  tests/acceptance/41/install/installer.test.ts > AC6 #41.1811c1ac installVersion > AC6 #41.1811c1ac the last three versions stay for rollback, each runnable, and older ones go
+Error: Cannot find module '/packages/hub/src/installer.js' imported from <checkout>/tests/acceptance/41/install/helpers.ts
+ ❯ installer tests/acceptance/41/install/helpers.ts:36:16
+     34| /** packages/hub/src/installer.ts's installVersion; loaded per test, s…
+     35| export async function installer(): Promise<InstallVersion> {
+     36|   const mod = (await import('../../../../packages/hub/src/installer.js…
+       |                ^
+     37|   if (typeof mod.installVersion !== 'function') throw Error('packages/…
+     38|   return mod.installVersion as InstallVersion;
+ ❯ installed tests/acceptance/41/install/installer.test.ts:33:19
+ ❯ tests/acceptance/41/install/installer.test.ts:156:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  11 failed | 8 passed | 5 skipped (24)
+   Start at  13:06:59
+   Duration  12.78s (tests 96%, transform 2%, import 1%)
+

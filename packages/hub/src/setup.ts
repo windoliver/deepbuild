@@ -18,7 +18,7 @@ import { Confirmer } from './confirm.js';
 import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, hasCodex, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
-import { deepHook, hubAddress, installedRoot, lastingNode, rootOf } from './paths.js';
+import { deepHook, hubAddress, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { removeService, startHub, stopIfRunning } from './service.js';
 import { Devices } from './trusted.js';
@@ -102,7 +102,8 @@ async function install(cli: string, quiet = false): Promise<number> {
     recordLoginPath(root);
     installRules(root);
     await enrollConfirm(root);
-    const hook = builtHook();
+    // An installed version's fixed programs, which every update keeps (#41); a checkout's own build otherwise.
+    const hook = installedPrograms(root)?.hook ?? builtHook();
     // For an agent whose hooks run in its own process, which no settings entry names deep-hook to: the pi package.
     editConfig(root, (c) => { c.hook = { binary: hook }; });
     // The waiter waits as long as your longest ask deadline, so an answer in time can still wake the session.
@@ -128,7 +129,7 @@ async function install(cli: string, quiet = false): Promise<number> {
     const servers = isObj(user.mcpServers) ? user.mcpServers : {};
     // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
     // serves it, so a session runs one Node server, not two (#824's memory per session).
-    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: lastingNode(), args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
+    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', ...mcpServer(root, cli) }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
     noteWritten(record, userFile);
     const skill = skillDir();
     if (!existsSync(skill) || record.created.includes(skill)) {
@@ -192,6 +193,11 @@ async function readHistory(quiet: boolean): Promise<number> {
  * deep-hook as this checkout built it; from a checkout with none, or one built before it served deep-actions (#824),
  * setup builds it once (a release ships it built, #41).
  */
+/** DeepBuild's MCP server's program: the installed version's fixed deep, or Node with this checkout's CLI. */
+function mcpServer(root: string, cli: string): { command: string; args: string[] } {
+  const installed = installedPrograms(root);
+  return installed ? { command: installed.deep, args: ['mcp'] } : { command: lastingNode(), args: [cli, 'mcp'] };
+}
 function builtHook(): string {
   // Whether a build lists deep-actions; undefined when its --help can't be read, which is no reason to rebuild.
   const serves = (hook: string) => { try { return execFileSync(hook, ['--help'], { encoding: 'utf8', timeout: 10_000 }).includes('mcp actions'); } catch { return undefined; } };
@@ -226,8 +232,9 @@ function installCodex(root: string, record: ReturnType<typeof setupRecord>, cli:
   // Both are read before either is written: one that won't parse refuses the pair.
   const [hooksFile, configFile] = [codexHooks(), codexConfig()];
   const [hooksText, configText] = [read(hooksFile), read(configFile)];
-  const [hooks, config] = [withEntries(hooksText, hook), withServer(configText, lastingNode(), cli)];
-  recordEntries(root, hook, { node: lastingNode(), cli });
+  const server = mcpServer(root, cli);
+  const [hooks, config] = [withEntries(hooksText, hook), withServer(configText, server)];
+  recordEntries(root, hook, server);
   for (const [file, before, after] of [[hooksFile, hooksText, hooks], [configFile, configText, config]] as const) {
     if (after === before) continue;
     keepOriginal(root, record, file);
@@ -332,7 +339,7 @@ async function undo(): Promise<number> {
     plant() === 'undo-reserializes' ? hooksOut() : putBack(root, record, settingsFile, hooksOut),
     putBack(root, record, userFile, mcpOut),
     putBack(root, record, recordedHooks, () => editedCodex(recordedHooks, (text) => withoutEntries(root, text), "only DeepBuild's entries")),
-    putBack(root, record, recordedConfig, () => editedCodex(recordedConfig, (text) => (server ? withoutServer(text, server.node, server.cli) : text), "DeepBuild's MCP server if it was as setup wrote it")),
+    putBack(root, record, recordedConfig, () => editedCodex(recordedConfig, (text) => (server ? withoutServer(text, server) : text), "DeepBuild's MCP server if it was as setup wrote it")),
     undoPaseo(root, record),
   ].filter((n): n is string => n !== undefined);
   // Every other agent file an Agents page sync wrote (#148): its original bytes back where you haven't edited it since.

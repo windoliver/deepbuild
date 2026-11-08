@@ -248,7 +248,7 @@ pub(crate) fn compile(
         label: Some("scene3d material operator"),
         entries: &entries,
     });
-    let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
     let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("scene3d material operator"),
         source: wgpu::ShaderSource::Wgsl(source.into()),

@@ -39,7 +39,7 @@ fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
-fn geometry(shape: Shape) -> (Vec<f32>, Vec<u32>) {
+pub(crate) fn geometry(shape: Shape) -> (Vec<f32>, Vec<u32>) {
     let mut v = Vec::new();
     let mut i = Vec::new();
     match shape {
