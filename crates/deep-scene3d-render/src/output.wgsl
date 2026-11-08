@@ -157,7 +157,15 @@ fn tone_curve(linear: vec3<f32>) -> vec3<f32> {
 @fragment
 fn tone_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     let v = textureLoad(linear_target, vec2<i32>(p.xy), 0);
-    return vec4<f32>(tone_curve(v.rgb), v.a);
+    var linear = v.rgb;
+    if tone.graded == 1u {
+        linear = vec3<f32>(dot(tone.wb0.xyz, linear), dot(tone.wb1.xyz, linear), dot(tone.wb2.xyz, linear));
+    }
+    var mapped = tone_curve(linear);
+    if tone.graded == 1u {
+        mapped = clamp(cdl(mapped), vec3<f32>(0.0), vec3<f32>(1.0));
+    }
+    return vec4<f32>(mapped, v.a);
 }
 
 // A linear value through the exposure, the white balance, the tone map, the CDL and the sRGB

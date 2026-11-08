@@ -7,7 +7,7 @@ The replica (#338): a headless copy of the app on GPUI's virtual clock that chec
 ## Where new code goes
 
 - `src/replica.rs`: the app headless as paired devices (#326) and the question card (#327). `src/shell.rs`, `src/snapshot.rs` and `src/kit.rs`: opening the shell, the text snapshot and the Needs you and notifier kits.
-- `src/drive/`: deep_drive's locators, drawn-glyph reading and planted guards.
+- `src/drive/`: deep_drive's locators and hit test, drawn-glyph reading, planted guards, and the UI check (`check.rs`).
 - One binary root per `[[bin]]` in `Cargo.toml`: `src/main.rs`, `src/live.rs`, `src/deep_drive.rs`, `src/canvas.rs`.
 - Tests: `headless.rs` and `card_size.rs` at the crate root; `tests/drive.rs` drives `deep-drive`; blind acceptance suites stay in tests/acceptance/326 and 327.
 - App views and state belong in deep-app; the replica only drives and reads them.
@@ -22,5 +22,5 @@ A tool beside the app: deep-app through its crate root, gpui-kit with `test-supp
 - `headless.rs`: no libtest harness, since AppKit needs the main thread for the offscreen Metal renderer; outside tests/ because preflight's perf run drops a change's own tests/ files, as with deep-app's screens suite.
 - `card_size.rs`: outside tests/ and without the harness, for the same reasons as `headless.rs`.
 - `Cargo.toml`: its `acceptance_326_*` and `acceptance_327_*` test targets point into tests/acceptance, where blind-written acceptance tests live and are never edited; this crate only builds them.
-- `src/drive/plant.rs`: the wrong programs #124's criterion 2 fixture and #366's criteria 3 and 6 must catch, each lifting one guard, selected only by `DEEP_DRIVE_PLANT`.
+- `src/drive/plant.rs`: the wrong programs #124's criterion 2 fixture and #366's criteria 3 and 6 must catch, each lifting one guard, selected only by `DEEP_DRIVE_PLANT` in a build with the `env-plants` feature, which a release build refuses (#1408). The crate's dev-dependency on deep-app turns on the app's `env-plants` for its suites, #992's planted app among them.
 - `src/live.rs`: the crate's `unsafe` is the Objective-C messages that ask AppKit for the window's accessibility children and frames.

@@ -1969,14 +1969,15 @@ fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
     }
 }
 
-/// Each time remap (Time remap; #429): its target a recipe instance the check expanded, and its
-/// map `reverse`, the one preset this build plays, over the document's span; the other maps and a
-/// placement target land later and are refused, naming the field.
+/// Each time remap (Time remap): its target a recipe instance the check expanded, a placement or
+/// the document, and its map `reverse`, a preset or a channel of keys, whose fields the motion
+/// module reads. A reverse over anything but a placement runs over the document's span.
 fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Issue>) {
     let Some(entries) = member(doc, "time_remaps").and_then(Value::as_object) else {
         return;
     };
     let span = member(doc, "transport").and_then(|t| member(t, "span"));
+    let placements = member(doc, "placements").and_then(Value::as_object);
     for (key, entry) in entries {
         let Some(fields) = entry.as_object() else {
             continue;
@@ -1992,21 +1993,25 @@ fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Iss
             }
         }
         let target = fields.get("target").and_then(Value::as_str);
-        if !target.is_some_and(|t| expansions.iter().any(|e| e.instance == t)) {
+        let placed = target.is_some_and(|t| placements.is_some_and(|p| p.contains_key(t)));
+        let known = target.is_some_and(|t| t == "document" || expansions.iter().any(|e| e.instance == t));
+        if !known && !placed {
             bad(
                 "ref_unresolved",
                 "target",
-                "names no recipe instance of the document",
+                "names no recipe instance or placement of the document",
             );
         }
-        if fields.get("map").and_then(Value::as_str) != Some("reverse") {
+        let map = fields.get("map");
+        if !map.is_some_and(|m| m.as_str() == Some("reverse") || m.is_object()) {
             bad(
                 "out_of_range",
                 "map",
-                "this build plays a time remap's `reverse` map; the other maps land later",
+                "a time remap's map is `reverse`, a preset or a channel of keys",
             );
         }
-        if span.is_none_or(|s| s == "auto" || s == "open") {
+        let reverses = map.and_then(Value::as_str) == Some("reverse");
+        if reverses && !placed && span.is_none_or(|s| s == "auto" || s == "open") {
             bad(
                 "out_of_range",
                 "map",
@@ -2169,11 +2174,13 @@ const BOUND_VALUE_FIELDS: &[&str] = &[
     "missing",
 ];
 
-/// The transport's `frame_rate` as `[p, q]`, or as `p/q` text, when it is one.
+/// The transport's `frame_rate` as `[p, q]`, as `p/q` text, or as a whole number `p` (p/1),
+/// when it is one.
 pub fn frame_rate_of(transport: &Value) -> Option<(u32, u32)> {
     let whole = |v: &Value| u32::try_from(v.as_u64()?).ok();
     match member(transport, "frame_rate")? {
         Value::Array(pq) if pq.len() == 2 => Some((whole(&pq[0])?, whole(&pq[1])?)),
+        n @ Value::Number(_) => Some((whole(n)?, 1)),
         Value::String(s) => {
             let (p, q) = s.split_once('/').unwrap_or((s, "1"));
             Some((p.trim().parse().ok()?, q.trim().parse().ok()?))

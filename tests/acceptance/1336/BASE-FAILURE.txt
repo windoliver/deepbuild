@@ -1,0 +1,79 @@
+# #1336 acceptance tests: the run on the base, and the planted fix
+
+## The base (2c89d582, origin/main, no implementation), in this checkout, November 7
+
+$ node --test 'tests/acceptance/1336/*.test.mjs'
+(gh signed in, network on; stack-trace and assertion-object lines dropped)
+
+All five fail, each for its expected reason: the base has no heading naming the hub and the project, its Decided table
+has the base's 107 rows, and the old wording is in docs/technical-design.md. The two live tests stop at the missing
+section before they read GitHub.
+
+✖ failing tests:
+
+test at tests/acceptance/1336/ac1-section.test.mjs:17:1
+✖ #1336.4c4e63a7 criterion 1: the design holds one section, its heading naming the hub and the project, that answers each of the six Scope decisions, with at least six "Not taken" lines (4.727667ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading holding the words "hub" and "project", so it has no section for one hub for a project shared by several people
+
+test at tests/acceptance/1336/ac1-section.test.mjs:27:1
+✖ #1336.4c4e63a7 criterion 1: the Decided table has more rows than at 2c89d582, and a new row links to the new section or names the hub and the project (14.5375ms)
+  AssertionError [ERR_ASSERTION]: the Decided table has 107 rows, and had 107 at 2c89d582: it gained none
+
+test at tests/acceptance/1336/ac2-doc-lanes.live.test.mjs:42:1
+✖ #1336.94a30ea1 criterion 2 (live): with the new section in the design, the doc lanes (catalogue drift, design links and names, public text) find nothing the change brings (4.029917ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading holding the words "hub" and "project", so there is no new section for the doc lanes to hold the design against
+
+test at tests/acceptance/1336/ac2-old-wording.test.mjs:14:1
+✖ #1336.94a30ea1 criterion 2: a search of docs/ and README.md for the old wording "different people's agents writing one record" finds nothing (52.559375ms)
+  AssertionError [ERR_ASSERTION]: the old not-proposed wording is still in docs/technical-design.md
+  + [
+  +   'docs/technical-design.md'
+  + ]
+  - []
+
+test at tests/acceptance/1336/ac3-issue-links.live.test.mjs:12:1
+✖ #1336.0ffe6c3b criterion 3 (live): #1337, #1338, #1339 and #1340 each have a body link into the new section of docs/technical-design.md (4.779125ms)
+  AssertionError [ERR_ASSERTION]: docs/technical-design.md has no heading holding the words "hub" and "project", so there is no new section for the issues to link into
+
+ℹ tests 5
+ℹ pass 0
+ℹ fail 5
+
+## The planted fix and its mutants (a scratch clone, never this checkout)
+
+A `git clone` of this worktree into the session scratchpad, checked out at 2c89d582 with origin/main pointed there, the
+tests copied in, and packages/contracts built with tsc 5.9.3 for the catalogue drift lane. The planted design, written
+for the harness only, replaces "and different people's agents writing one record." in Scale later with "and merging
+copies of a record.", adds `<a id="team-hub"></a>` and `## One hub per project, shared by several people` before
+`<a id="open">` with six one-line decisions each ending "Not taken: …", and adds one Decided row linking `#team-hub`.
+
+Planted fix: AC1 (both), AC2 old wording and AC2 doc lanes (live) pass. In the lanes run, catalogue drift FAILs on 15
+open-issue kinds that the base's docs give too, so it counts as bringing nothing; design links and names and public
+text PASS. AC3 (live) fails, as it should today: the four issues link only to other sections
+(#1337: #socket-roles-and-contract-versions, #one-event-log-with-tables-built-from-it, #privacy;
+#1338: #socket-roles-and-contract-versions, #scale, #security;
+#1339: #socket-roles-and-contract-versions, #security, #blocks-for-work-on-your-other-machines;
+#1340: #an-ask-and-your-answer-getting-back, #decision-and-rule, #scale).
+With `<a id="privacy">`, `<a id="scale">` and `<a id="security">` added above the planted section, AC3 passes on the
+live bodies, which exercises its pass path.
+
+Mutants of the planted fix, each failing the test named, at the assertion named:
+- one "Not taken" removed: AC1 section, "says "Not taken" 5 times".
+- `host@1` removed: AC1 section, "doesn't answer these decisions".
+- the new Decided row removed: AC1 Decided, "has 107 rows, and had 107".
+- the new Decided row replaced with an unrelated one: AC1 Decided, "none of the Decided table's 1 new rows links".
+- the heading without "hub": AC1 section, "no heading holding the words".
+- the old wording kept, wrapped over two lines: AC2 old wording, "still in docs/technical-design.md".
+- Scale later's heading renamed and `<a id="scale">` dropped: AC2 doc lanes, design links and names brings
+  "docs/technical-design.md #scale" and open issues' `technical-design.md#scale` links (#1576, #1575, #1573, …).
+- the section naming an uncatalogued kind `ask.handoff`: AC2 doc lanes, catalogue drift brings
+  "ask.handoff (docs/technical-design.md)".
+
+A known limit: "transcripts" removed from the shared-scope line still passed AC1, because the planted "Not taken:
+sharing transcripts." holds the word. The keyword check can't tell a decision from its alternative; criterion 4's
+reader covers that.
+
+Signed out (empty GH_CONFIG_DIR, no token) on the planted fix, both live tests skip with "INCONCLUSIVE: gh …".
+
+Not verified: a public-text finding. The studied names are salted hashes, and these tests plant no real name, so no
+mutant brings one.

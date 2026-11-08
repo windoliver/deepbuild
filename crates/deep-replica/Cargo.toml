@@ -18,12 +18,22 @@ sha2 = "0.10"
 crc32fast = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+# Issue #1408: the wrong programs a test selects with DEEP_DRIVE_PLANT and, through the app, DEEP_HUB_PLANT, read only in
+# a build with this feature. A release build refuses it. Issue #1662: #124's planted session rows come through it too,
+# so a workspace build of the app carries no plant.
+[features]
+env-plants = ["deep-app/env-plants", "deep-app/plant-row"]
+
 # The live capture asks AppKit for the window's accessibility children and their frames.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 # Issue #990 adds NSRange: the text area's line of its insertion point, read as an assistive client reads it.
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSGeometry", "NSDate", "NSRunLoop", "NSRange"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSWindow", "NSView", "NSResponder", "NSRunningApplication", "NSPasteboard", "NSSound"] }
+
+# Issue #1408: the replica's suites, #992's planted app among them, read the app's plants; `cargo build` never does.
+[dev-dependencies]
+deep-app = { path = "../deep-app", features = ["env-plants"] }
 
 [[bin]]
 name = "deep-replica"

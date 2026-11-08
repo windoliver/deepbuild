@@ -1,0 +1,44 @@
+Base commit: 92aee55f95e0506614996dfced6503bfeafd0c97 (Merge pull request #1598 from windoliver/worktree-github-issue-1328-1c4cda)
+Built first: npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-hook
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1325 --no-file-parallelism
+Date: 2026-11-07  Machine: Mac17,10 (Apple M5 Max), 1-minute load about 6 to 10
+Node: ~/.local/share/fnm/node-versions/v24.22.0 (v24.22.0)  vitest 5.0.5
+Exit code: 1
+Result: Test Files 5 failed | 1 skipped (6); Tests 11 failed | 1 skipped (12). Duration 27 s.
+
+No test passed at the base. Why each fails:
+
+Missing surface, failing at a named judgement:
+  AC1 statuses.test.ts, AC2 refusals.test.ts, AC5 person-push.test.ts (main tests):
+    "deep gate rules --json must exit 0 and print { "rulesets": [...] }, the rulesets the forge needs: exit 2, stdout "",
+     stderr "Unsupported command. Run deep --help for available commands.""
+  AC3 gate-secret.test.ts (main test), after a real claim, a planted PASS and #46's poster posting:
+    "the hub's deepbuild/verdict status was posted by maya, not by the gate identity (deepbuild-gate[bot]), so it holds
+     no gate credential to keep from sessions"  (the base posts with GH_TOKEN, your own login)
+  AC4 session-end.test.ts, after a real approval and a real #1330 start of the stand-in, which pushed and ended:
+    "the session's GH_TOKEN is maya's own token, not a credential of the session's own from the agents' app"
+    (the base hands a started session the hub's whole environment, your own forge login with it)
+
+Plants the base doesn't list, BLOCKED (not yet seen failing on the wrong program):
+  AC1 rule-reads-context-alone; AC2 agent-credential-posts-statuses, agent-credential-merges,
+  agent-credential-pushes-default-branch, agent-credential-pushes-approved-tags; AC3 passes-gate-credential:
+    "BLOCKED: the hub with DEEP_HUB_PLANT=<plant> did not start (a hub that doesn't list a plant refuses to start):
+     ... DEEP_HUB_PLANT=<plant> names no planted program"
+
+Skipped:
+  live.test.ts: DEEPBUILD_1325_LIVE_* are unset. No call left 127.0.0.1.
+
+What was checked of the harness at the base, in throwaway runs not kept in the suite:
+  - the fixture forge with rules written by hand: a deepbuild/verdict status from the agents' app leaves pull request #1
+    blocked under a rule naming the gate's app and clean under a context-only rule; the gate app's status makes it clean.
+  - a token of the agents' app narrowed to contents and pull requests, run through fixtures/forge-calls.mjs: the branch
+    push goes through; the status (403), the deep/approved/ tag and the push to main (GH013) and the merge (405) are
+    refused. Unnarrowed, its status goes through. As a pull_request bypass actor, its merge goes through.
+    DELETE /installation/token answers 204, and the token then 401.
+  - a #1330 start of the stand-in in its sandbox, naming 127.0.0.1: fixtures/scan.mjs read about 30,000 files there;
+    forge-calls.mjs reached the forge (as maya, the base's token, so every call went through).
+  - maya's direct push to main through the forge's bypass is recorded by the base as ref.unguarded (refs/heads/main,
+    the commit, pusher maya) while a session in your terminal works in the repo.
+
+Redraft (README, Redraft): run again at the same base after the two helper fixes, same command, 2026-11-07:
+  Test Files 5 failed | 1 skipped (6); Tests 11 failed | 1 skipped (12); exit 1. Every failure and BLOCKED reads as above.

@@ -24,12 +24,13 @@ it('uses the supplied provider for start, health reuse and teardown, without byp
   const stacks = new Stacks({
     raw: (sql, params) => record.raw(sql, params), now: Date.now, plant: undefined, held: [], scrub: () => undefined,
     appendCore: async (kind, data, extra) => { await record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: newRun().slice(4), kind, ts: Date.now(), data: data as JsonValue, ...extra }); },
-    supervisor: () => supervisor, leases: () => leases, stopping: () => false, session: () => undefined, startOf: async () => undefined,
+    supervisor: () => supervisor, leases: () => leases, stopping: () => false, session: () => undefined, pending: () => false, idle: () => true, plantedAsk: async () => undefined,
     environment: {
       newRun,
       up: options => { calls.push('up'); return upStack(supervisor, options); },
       healthy: stack => { calls.push('health'); return answers(stack); },
       down: run => { calls.push('down'); return downStack(supervisor, run); },
+      warm: () => { throw Error('no warm stack in this test'); }, wanted: () => false, keys: () => { throw Error('no keys in this test'); },
     },
   });
   try {

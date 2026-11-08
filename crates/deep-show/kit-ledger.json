@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "9c064443b657f7d04c81282887638dd7414fa579f21ec0edbf899022a7c72c40",
+    "digest": "3bc540df5dc9643c858458caaeff72dfd107cddf62814dc218087c3e3c8a6546",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -157,7 +157,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "migration": "PASS"
     }
   },
   "record": {
@@ -189,7 +190,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "9122e71ea45241cef41111ad28694e649d2640e1382b2199a025d841bb506b6c",
+    "digest": "fcdf1b2abbf2926d953c9ccda14d8d10e2e9fa83806d3400c832a38607579193",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

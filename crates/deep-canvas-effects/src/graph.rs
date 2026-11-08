@@ -23,6 +23,8 @@ pub struct Issue {
     pub line: Option<u32>,
     pub column: Option<u32>,
     pub construct: Option<String>,
+    /// Why a kind rule refuses it, as a word (`derivative_in_divergent_flow`).
+    pub reason: Option<&'static str>,
     pub message: String,
 }
 
@@ -62,6 +64,9 @@ impl Issue {
             if let Some(v) = v {
                 o.insert(k.into(), json!(v));
             }
+        }
+        if let Some(r) = self.reason {
+            o.insert("reason".into(), json!(r));
         }
         for (k, v) in [("line", self.line), ("column", self.column)] {
             if let Some(v) = v {
@@ -228,6 +233,8 @@ impl Ty {
 pub enum From {
     Param(String),
     Channel(String),
+    /// An image by its SHA-256 (#431: `texture: sha256`), decoded as a map is, with its mips.
+    Asset(String),
     /// A core target or an earlier operator's output, read this frame.
     Target {
         op: String,
@@ -240,16 +247,23 @@ pub enum From {
         output: String,
         previous: bool,
     },
-    /// Storage an operator wrote earlier in the frame.
+    /// Storage an operator wrote earlier in the frame; with `previous` (#252), a stepped
+    /// operator's carried output as the previous fixed step left it.
     Storage {
         op: String,
         output: String,
+        previous: bool,
     },
     Time,
+    /// The fixed step a stepped operator computes, 0 for the first (#252).
+    Step,
     /// A phase in [0, 1) of `period` flicks.
     Phase(u64),
     Seed,
     Role(String),
+    /// A `spline@1`'s table, built at check from its points (#431): each piece's four cubic
+    /// coefficients in 16 slots, then its points' x in 4.
+    Spline(Vec<[f64; 4]>),
     /// A mark-set or instance column, per element: storage of its scalars.
     Column {
         item: String,
@@ -434,6 +448,17 @@ pub struct StorageOut {
     pub from: Option<Arg>,
     /// The word every row holds when the frame starts (#484); 0 unless it says.
     pub clear: u32,
+    /// Carried state (#252): kept from step to step, with a checkpoint every `every` steps in a
+    /// ring of at most `budget` bytes.
+    pub carry: Option<Carry>,
+}
+
+/// A stepped operator's carried storage output and its checkpoint ring (#252; canvas primitives:
+/// Carried state; Checkpoint ring).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Carry {
+    pub every: u32,
+    pub budget: u64,
 }
 
 /// A compute operator's `instances` output (#484; Operator output): the instancer it draws, and
@@ -476,6 +501,9 @@ pub struct Operator {
     /// Whether a count written earlier in the frame runs it (`elements: {from, max}`, #484), read
     /// through the input [`DISPATCH_COUNT`].
     pub counted: bool,
+    /// A compute operator stepped once per fixed step, `rate` steps a second, not once a frame
+    /// (#252).
+    pub stepped: Option<u32>,
     pub workgroup: u32,
     /// A WGSL-subset source's asset ID, in place of steps.
     pub source: Option<String>,
@@ -508,6 +536,7 @@ const FIELDS: &[&str] = &[
     "elements",
     "workgroup",
     "after",
+    "stepped",
 ];
 /// Fields that hold a program's text in other engines' formats.
 const CODE_FIELDS: &[&str] = &[
@@ -528,8 +557,13 @@ const LITERAL_FIELDS: &[&str] = &[
     "gain",
     // scan's operator (#483).
     "op",
-    // blend's mode (#430).
+    // blend's and adjust's mode (#430, #431).
     "mode",
+    // spline's points, homography's literal quad, cells' jitter and metric (#431).
+    "points",
+    "quad",
+    "jitter",
+    "metric",
 ];
 /// The look's status roles: no operator reads or writes one (Status guard).
 pub const STATUS_ROLES: &[&str] = &[
@@ -543,6 +577,39 @@ pub const STATUS_ROLES: &[&str] = &[
     "stale",
     "idle",
 ];
+
+/// The texture input a `backdrop@1` step reads (#431): the copy of the opaque scene that
+/// transmission samples, the core's target `backdrop`.
+pub const BACKDROP_INPUT: &str = "backdrop__";
+
+/// The slots a `spline@1`'s table takes in the input buffer: 16 of coefficients, 4 of x.
+pub const SPLINE_SLOTS: u32 = 20;
+
+/// The input a `spline@1 {points}` step reads its table from, named by its points, so equal
+/// splines share one.
+pub fn spline_input(points: &Value) -> String {
+    let h = points.to_string().bytes().fold(0x811c_9dc5u32, |h, b| {
+        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+    });
+    format!("spline__{h:08x}")
+}
+
+/// A spline's table as its input holds it: each piece's coefficients, then the points' x four
+/// to a slot.
+pub fn spline_slots(points: &Value) -> Option<Vec<[f64; 4]>> {
+    let pts = deep_canvas::steps::spline_points(points).ok()?;
+    let mut slots = vec![[0.0; 4]; SPLINE_SLOTS as usize];
+    for (k, c) in deep_canvas::steps::spline_table(&pts)
+        .into_iter()
+        .enumerate()
+    {
+        slots[k] = c;
+    }
+    for (k, p) in pts.iter().enumerate() {
+        slots[16 + k / 4][k % 4] = p[0];
+    }
+    Some(slots)
+}
 
 /// The input a `role@1 {name}` step reads its color from.
 pub fn role_input(name: &str) -> String {
@@ -641,7 +708,8 @@ fn step(id: &str, s: &Value, issues: &mut Vec<Issue>) -> Option<Step> {
     let mut args = BTreeMap::new();
     let mut fields = Map::new();
     for (port, v) in given {
-        if LITERAL_FIELDS.contains(&port.as_str()) {
+        // A quad that names a value (an array of four corners) is an argument.
+        if LITERAL_FIELDS.contains(&port.as_str()) && !(port == "quad" && v.is_string()) {
             fields.insert(port.clone(), v.clone());
         } else if !(repeat
             && ["count", "accumulate", "body", "stop_if", "index"].contains(&port.as_str()))
@@ -784,6 +852,15 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                 From::Param(p.into())
             } else if let Some(p) = f.get("channel").and_then(Value::as_str) {
                 From::Channel(p.into())
+            } else if let Some(sha) = f.get("texture").and_then(Value::as_str) {
+                if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    bad(
+                        issues,
+                        "a texture input names a target {op, output} or an image's SHA-256",
+                    );
+                    return None;
+                }
+                From::Asset(sha.to_ascii_lowercase())
             } else if let Some(t) = f.get("texture") {
                 let target = t.get("target").unwrap_or(t);
                 match (
@@ -818,6 +895,14 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                 From::Storage {
                     op: s.get("op").and_then(Value::as_str).unwrap_or("").into(),
                     output: s.get("output").and_then(Value::as_str).unwrap_or("").into(),
+                    previous: match s.get("step") {
+                        None => false,
+                        Some(Value::String(p)) if p == "previous" => true,
+                        Some(_) => {
+                            bad(issues, "a storage input's step is previous");
+                            return None;
+                        }
+                    },
                 }
             } else if let Some(p) = f.get("phase") {
                 From::Phase(p.get("period").and_then(Value::as_u64).unwrap_or(0))
@@ -837,6 +922,8 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                         _ => 1,
                     },
                 }
+            } else if f.get("time").and_then(Value::as_str) == Some("step") {
+                From::Step
             } else if f.contains_key("time") || f.contains_key("t") {
                 From::Time
             } else if f.contains_key("seed") {
@@ -868,7 +955,7 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
         }
         (_, Some(t), _) => t,
         (From::Time | From::Phase(_), None, _) => Ty::F32,
-        (From::Seed, None, _) => Ty::U32,
+        (From::Seed | From::Step, None, _) => Ty::U32,
         (From::Role(_), None, _) => Ty::V(Sc::F32, 3),
         _ => {
             bad(issues, "an input declares its type");
@@ -988,12 +1075,23 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
     // Each role a `role@1` step names is an input of the operator, theme-resolved like `from:
     // {role}`; a status role is refused by the check, naming the step.
     let mut roles = Vec::new();
+    let mut splines = Vec::new();
+    let mut backdrop = false;
     let mut stack: Vec<&BTreeMap<String, Step>> = vec![&steps];
     while let Some(st) = stack.pop() {
         for s in st.values() {
             if s.op == "role@1" {
                 if let Some(n) = s.fields.get("name").and_then(Value::as_str) {
                     roles.push(n.to_string());
+                }
+            }
+            if s.op == "backdrop@1" {
+                backdrop = true;
+            }
+            if s.op == "spline@1" {
+                let points = s.fields.get("points").cloned().unwrap_or(Value::Null);
+                if let Some(slots) = spline_slots(&points) {
+                    splines.push((spline_input(&points), slots));
                 }
             }
             if let Some(b) = &s.body {
@@ -1003,6 +1101,25 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                 stack.push(&it.steps);
             }
         }
+    }
+    if backdrop {
+        inputs.entry(BACKDROP_INPUT.into()).or_insert(Input {
+            ty: Ty::Tex(Tex::Float),
+            from: From::Target {
+                op: "core".into(),
+                output: "backdrop".into(),
+            },
+            range: None,
+            default: None,
+        });
+    }
+    for (name, slots) in splines {
+        inputs.entry(name).or_insert(Input {
+            ty: Ty::Arr(Sc::F32, 4, SPLINE_SLOTS),
+            from: From::Spline(slots),
+            range: None,
+            default: None,
+        });
     }
     for name in roles {
         inputs.entry(role_input(&name)).or_insert(Input {
@@ -1097,6 +1214,22 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                     ));
                 }
                 let sc = s.get("type").and_then(Value::as_str).and_then(Ty::parse);
+                // Carried state (#252): `carry: {every: steps ≥ 1, budget: bytes}`.
+                let carry = v.get("carry").map(|c| {
+                    let every = c.get("every").and_then(Value::as_u64).and_then(|e| u32::try_from(e).ok());
+                    match (every, c.get("budget").and_then(Value::as_u64)) {
+                        (Some(every @ 1..), Some(budget)) => Some(Carry { every, budget }),
+                        _ => {
+                            issues.push(Issue::at_path(
+                                "operator_type",
+                                &format!("outputs/{name}/carry"),
+                                "carry is {every: steps, at least 1, budget: bytes}",
+                            ));
+                            None
+                        }
+                    }
+                });
+                let carry = carry.flatten();
                 match (sc, s.get("count").and_then(Value::as_u64)) {
                     (Some(Ty::V(sc, 1)), Some(count)) => {
                         storage.insert(
@@ -1106,6 +1239,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                                 count: count as u32,
                                 from: v.get("from").map(arg),
                                 clear: s.get("clear").and_then(Value::as_u64).unwrap_or(0) as u32,
+                                carry,
                             },
                         );
                     }
@@ -1198,6 +1332,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                         from: From::Storage {
                             op: op.into(),
                             output: output.into(),
+                            previous: false,
                         },
                         range: None,
                         default: None,
@@ -1211,6 +1346,17 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             )),
         }
     }
+    // A stepped operator (#252): `stepped: {rate}`, steps a second of document time.
+    let stepped = match o.get("stepped") {
+        None => None,
+        Some(st) => match st.get("rate").and_then(Value::as_u64).and_then(|r| u32::try_from(r).ok()) {
+            Some(r @ 1..=1000) => Some(r),
+            _ => {
+                issues.push(Issue::at_path("operator_type", "stepped", "stepped is {rate: steps a second, 1 to 1,000}"));
+                None
+            }
+        },
+    };
     let origin = match o.get("origin").and_then(Value::as_str) {
         Some("shipped") => Origin::Shipped,
         Some("pack") => Origin::Pack,
@@ -1246,6 +1392,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
         size,
         elements: elements.and_then(Value::as_u64).unwrap_or(0) as u32,
         counted,
+        stepped,
         workgroup: o.get("workgroup").and_then(Value::as_u64).unwrap_or(64) as u32,
         source,
         uses,
@@ -1261,4 +1408,178 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             .unwrap_or("a0")
             .into(),
     })
+}
+
+/// A pack's step functions by name (`<pack>.<fn>@major`), each `{about, ports: {in: {name →
+/// type}, out: {name → type}}, steps}` (Shipped operators and composed graphs: pack graphs and
+/// step functions).
+pub type Functions = BTreeMap<String, Value>;
+
+/// How deep step functions may call each other.
+const USE_DEPTH: usize = 4;
+
+/// Whether a step function's body takes implicit derivatives, its own or through a function it
+/// calls: `ddx`, `ddy`, `fwidth`, `triplanar` or a `sample` with no `lod`.
+fn holds_derivative(f: &Value, functions: &Functions, depth: usize) -> bool {
+    fn any(steps: &Map<String, Value>, functions: &Functions, depth: usize) -> bool {
+        steps.values().any(|s| {
+            let op = s["op"].as_str().unwrap_or("");
+            matches!(op, "ddx@1" | "ddy@1" | "fwidth@1" | "triplanar@1")
+                || (op == "sample@1" && s["args"].get("lod").is_none())
+                || (op == "use@1"
+                    && depth < USE_DEPTH
+                    && s["args"]["name"]
+                        .as_str()
+                        .and_then(|n| functions.get(n))
+                        .is_some_and(|g| holds_derivative(g, functions, depth + 1)))
+                || s["args"]["body"]
+                    .as_object()
+                    .is_some_and(|b| any(b, functions, depth))
+        })
+    }
+    f["steps"]
+        .as_object()
+        .is_some_and(|s| any(s, functions, depth))
+}
+
+/// Each `use@1` step inlined (#431): a call `{op: "use@1", args: {name, <in port>: arg}}` becomes
+/// its function's body, each body step named `<call>__<step>`, its in ports reading the call's
+/// arguments, and every `<call>.<out port>` reading the body step of that name. A call counts as
+/// the derivatives its body holds, so where pixels may diverge (inside a repeat with a `stop_if`,
+/// or under a `when`) the call itself is refused with `operator_kind_rule {step, reason:
+/// derivative_in_divergent_flow}` while `rule` holds. A name no function has is refused.
+pub fn inline_functions(
+    op: &Value,
+    functions: &Functions,
+    rule: bool,
+) -> Result<Value, Vec<Issue>> {
+    fn expand(
+        steps: &mut Map<String, Value>,
+        functions: &Functions,
+        rule: bool,
+        divergent: bool,
+        depth: usize,
+        renames: &mut Vec<(String, String)>,
+        issues: &mut Vec<Issue>,
+    ) {
+        let ids: Vec<String> = steps.keys().cloned().collect();
+        for id in ids {
+            let step = steps[&id].clone();
+            match step["op"].as_str() {
+                Some(r) if r.starts_with("repeat@") => {
+                    let stop = step["args"].get("stop_if").is_some();
+                    if let Some(body) = steps
+                        .get_mut(&id)
+                        .and_then(|s| s["args"]["body"].as_object_mut())
+                    {
+                        expand(
+                            body,
+                            functions,
+                            rule,
+                            divergent || stop,
+                            depth,
+                            renames,
+                            issues,
+                        );
+                    }
+                    continue;
+                }
+                Some("use@1") => {}
+                _ => continue,
+            }
+            let name = step["args"]["name"].as_str().unwrap_or("");
+            let Some(f) = functions.get(name).filter(|_| depth < USE_DEPTH) else {
+                issues.push(Issue::at_step(
+                    "operator_unknown_op",
+                    &id,
+                    format!("use names {name}, which no installed pack's step function is (or calls past {USE_DEPTH} deep)"),
+                ));
+                continue;
+            };
+            if rule
+                && (divergent || step.get("when").is_some())
+                && holds_derivative(f, functions, 0)
+            {
+                issues.push(Issue {
+                    reason: Some("derivative_in_divergent_flow"),
+                    ..Issue::at_step(
+                        "operator_kind_rule",
+                        &id,
+                        format!("{name}'s body takes implicit derivatives, which need every pixel of a quad to run it together: not under a when or in a repeat with a stop_if"),
+                    )
+                });
+                continue;
+            }
+            let ins = f["ports"]["in"].as_object().cloned().unwrap_or_default();
+            let body = f["steps"].as_object().cloned().unwrap_or_default();
+            steps.remove(&id);
+            let mut inlined = Map::new();
+            for (inner, s) in &body {
+                let mut s = s.clone();
+                if let Some(args) = s["args"].as_object_mut() {
+                    for (port, v) in args.iter_mut() {
+                        if LITERAL_FIELDS.contains(&port.as_str()) {
+                            continue;
+                        }
+                        let Some(r) = v.as_str() else { continue };
+                        let head = r.split('.').next().unwrap_or(r);
+                        if ins.contains_key(r) {
+                            *v = step["args"].get(r).cloned().unwrap_or(Value::Null);
+                        } else if body.contains_key(head) {
+                            *v = json!(format!("{id}__{r}"));
+                        }
+                    }
+                }
+                inlined.insert(format!("{id}__{inner}"), s);
+            }
+            for port in f["ports"]["out"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .map(|(k, _)| k)
+            {
+                renames.push((format!("{id}.{port}"), format!("{id}__{port}")));
+            }
+            // A function that calls another is expanded in turn, one level deeper.
+            expand(
+                &mut inlined,
+                functions,
+                rule,
+                divergent,
+                depth + 1,
+                renames,
+                issues,
+            );
+            steps.extend(inlined);
+        }
+    }
+    fn rewrite(v: &mut Value, renames: &[(String, String)]) {
+        match v {
+            Value::String(s) => {
+                if let Some((_, to)) = renames.iter().find(|(from, _)| from == s) {
+                    *s = to.clone();
+                }
+            }
+            Value::Array(a) => a.iter_mut().for_each(|x| rewrite(x, renames)),
+            Value::Object(o) => o.values_mut().for_each(|x| rewrite(x, renames)),
+            _ => {}
+        }
+    }
+    let mut op = op.clone();
+    let mut renames = Vec::new();
+    let mut issues = Vec::new();
+    if let Some(steps) = op.get_mut("steps").and_then(Value::as_object_mut) {
+        expand(steps, functions, rule, false, 0, &mut renames, &mut issues);
+    }
+    if !issues.is_empty() {
+        return Err(issues);
+    }
+    if !renames.is_empty() {
+        for k in ["steps", "outputs"] {
+            if let Some(v) = op.get_mut(k) {
+                rewrite(v, &renames);
+            }
+        }
+    }
+    Ok(op)
 }
