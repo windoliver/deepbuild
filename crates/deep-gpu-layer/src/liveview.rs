@@ -748,6 +748,14 @@ impl View {
                 self.still = Some((drawing.rung, scale, still.map_or(0, |n| n + 1)));
                 true
             }
+            // #467: a 2D frame that draws what the view last drew records nothing.
+            Content::Flat(flat) if !drawing.canonical && drawing.rung != Rung::Placeholder => {
+                let still = flat.still(t).map_err(|(code, path)| Refused { code, path })?;
+                if still && self.shown.is_some() {
+                    return Ok(false);
+                }
+                false
+            }
             _ => {
                 self.still = None;
                 false
