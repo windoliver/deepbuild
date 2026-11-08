@@ -34,6 +34,7 @@ pub mod spec;
 pub mod stack;
 pub mod sweep;
 pub mod uv;
+pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.

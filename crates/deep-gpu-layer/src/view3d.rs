@@ -56,6 +56,8 @@ struct Args {
     patches: Vec<(u64, String, Value)>,
     targets: BTreeSet<String>,
     capture: Capture,
+    /// #166: each captured frame lists the rain rings alive on each water part.
+    rings: bool,
     /// Operator outputs each captured frame reads back (#483).
     read: Vec<String>,
     /// `cull: "cpu"`: the document drawn from the CPU's f64 cull, the reference a GPU frame is
@@ -299,11 +301,19 @@ fn parse(call: &Value) -> Result<Args, Value> {
     if targets.iter().any(|t| {
         !matches!(
             t.as_str(),
-            "final" | "linear" | "ids" | "pre_tone" | "dirt" | "scene" | "backdrop"
+            "final"
+                | "linear"
+                | "ids"
+                | "pre_tone"
+                | "dirt"
+                | "scene"
+                | "backdrop"
+                | "depth"
+                | "reflection"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene and backdrop",
+            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth and reflection",
         ));
     }
     let export = match call["class"].as_str() {
@@ -406,6 +416,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         patches,
         targets,
         capture,
+        rings: call["rings"].as_bool().unwrap_or(false),
         read: call["read"]
             .as_array()
             .map(|r| {
@@ -992,9 +1003,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut strokes = false;
     // Held slots, each with the frame whose present releases it.
     let mut held: Vec<(u64, usize)> = Vec::new();
-    let wants_targets = ["linear", "ids", "pre_tone", "backdrop"]
-        .iter()
-        .any(|t| args.targets.contains(*t));
+    let wants_targets = [
+        "linear",
+        "ids",
+        "pre_tone",
+        "backdrop",
+        "depth",
+        "reflection",
+    ]
+    .iter()
+    .any(|t| args.targets.contains(*t));
     // The bloom's lens dirt (#418): a PNG the assets name, its red channel ÷ 255, or seeded, made
     // once for the whole call; and as the `dirt` target, sampled at each pixel of the frame.
     let dirt = match args.look_json["bloom"]["dirt"]["texture"].as_str() {
@@ -1191,6 +1209,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if let Some(status) = status.as_ref().filter(|_| bound) {
                 status::strokes(&mut scene, status, &bindings, &args.states)?;
             }
+            // #166: each mirror part's lookup, read back as the `reflection` target.
+            scene.read_reflection = args.targets.contains("reflection");
+            let rings = (args.rings).then(|| {
+                scene.water.as_ref().map_or(Vec::new(), |w| {
+                    w.rings()
+                        .into_iter()
+                        .map(|r| json!({"part": r.part, "drop": r.drop, "at": r.at, "born": r.born, "radius": r.radius}))
+                        .collect::<Vec<_>>()
+                })
+            });
             strokes |= scene
                 .layers
                 .iter()
@@ -1736,6 +1764,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
                 if let Some(name) = &dirt_file {
                     frame.insert("dirt".into(), json!(name));
+                }
+                // #166: the view-axis depth and each mirror part's lookup.
+                if let (Some(d), true) = (&drawn.view_depth, args.targets.contains("depth")) {
+                    frame.insert("depth".into(), json!(write_named(out, d, "f32")?));
+                }
+                if let (Some(r), true) = (&drawn.reflection, args.targets.contains("reflection")) {
+                    frame.insert("reflection".into(), json!(write_named(out, r, "f32")?));
+                }
+                if let Some(rings) = &rings {
+                    frame.insert("rings".into(), json!(rings));
                 }
                 if !args.read.is_empty() {
                     // Each operator output as it stood when this frame drew (#483).
