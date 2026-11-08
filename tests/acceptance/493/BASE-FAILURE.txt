@@ -1,0 +1,1141 @@
+Base run of tests/acceptance/493 at a4d2c5d4 (origin/main, no implementation of #493), on this worktree; each file built
+its binaries in beforeAll (cargo build --locked --bin deep-motion; cargo build --locked --bin deep-show --no-default-features
+--features full | r1 | r1,test-camera-in-scene3d):
+NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/493 --no-file-parallelism --reporter=verbose
+
+47 of 50 tests fail, each on an AssertionError raised by an expect in this suite's own files; none fails on loading or a
+type error. Every failure is a missing surface: a camera pose with no position (the base reports cameras.<id>.target
+only), no projected, shots or film block, an unknown planted name (bad_input), a refusal the base doesn't raise, a
+transition kind it refuses (transition_kind), a shot whose pose it doesn't apply (both sides of a wipe and of the chip's
+cross-fade draw the same), or the planted build feature test-camera-in-scene3d that doesn't exist. AC20 fails as
+INCONCLUSIVE, its one honest reading. The 3 that pass hold behavior the base already has (README: What the base already
+does): r1 seals without scene3d with camera@1 the core's, and #490's interval forms enclose e, sin(1) and inari's cases.
+The type-check, node node_modules/typescript/bin/tsc -p tests/acceptance/493/tsconfig.json, exits 0.
+
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/493
+
+ ✓ interval.test.ts > AC11 #493.219170de interval forms round outward, and framing refuses a bound it can't settle > AC11 #493.219170de exp and sin over [1, 1] give ranges that hold e and sin(1), checked against 40 digits of each 1852ms
+ ✓ interval.test.ts > AC11 #493.219170de interval forms round outward, and framing refuses a bound it can't settle > AC11 #493.219170de the forms enclose inari's IEEE 1788 exp and sin cases (the Oracle's upstream lane), each end within 1e-12 of the tight one 91ms
+ × interval.test.ts > AC11 #493.219170de interval forms round outward, and framing refuses a bound it can't settle > AC11 #493.219170de a planted form that rounds its ends to nearest returns one double for each, on one side of the true value, and fails 92ms
+   → planted exp: bounds is an array, got undefined: expected false to be true // Object.is equality
+ × interval.test.ts > AC11 #493.219170de interval forms round outward, and framing refuses a bound it can't settle > AC11 #493.219170de a kept box whose x is 1/(t − 1.01) m in a 2 s shot is refused at check, naming the box and the span around 1.01 s its bound can't settle, though every 60 fps sample is finite 349ms
+   → the spiking box at check:
+  the box spike is framed, not refused: its bound near 1.01 s is never settled ({"ok":true,"order":["spike.driver","spike.transform"],"frames":[{"t":0,"frame":0,"doc_t":0,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"): expected [ Array(1) ] to deeply equal []
+ × interval.test.ts > AC11 #493.219170de interval forms round outward, and framing refuses a bound it can't settle > AC11 #493.219170de a planted framer that fits its samples frames the same box from its finite samples, and fails the refusal check 6ms
+   → the planted framer: the planted program framer_fits_samples answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × transitions.test.ts > AC5 #493.d8794d67 a cross-fade between two looks blends the sides, each finished through its own look > AC5 #493.d8794d67 at every frame of the window the cross-fade from an agx shot to an untoned one equals the blend of each side rendered alone through its own look, within one code value 2552ms
+   → document 0 is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"transition_kind","severity":"error","ids":[],"path":"transitions/xf/kind","actual":null,"what":"motion.compile can't evaluate this","fix":"See the issue."}],"issues_evidence":"8f3b55354750ff68331ffcf38098b8cbba78adb6a1de9278d1ab3c8a1c0b3278","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"9c064443b657f7d04c81282887638dd7414fa579f21ec0edbf899022a7c72c40"}: expected 'refused' to be 'presented' // Object.is equality
+ × transitions.test.ts > AC6 #493.7831f8ec a status chip in a cross-fade draws once, exact, from the side that holds the reveal > AC6 #493.7831f8ec at every frame of the window the chip draws once in its exact status color, unblended, from the outgoing side before the reveal and the incoming side from it 3729ms
+   → the two shots hold the chip apart (outgoing [60,60,40,40], incoming [60,60,40,40]): each shot's pose applies: expected 0 to be greater than 60
+ × transitions.test.ts > AC8 #493.55016885 a wipe's edge sits exactly where its progress puts it > AC8 #493.55016885 halfway through a 1 s linear wipe with no feather, angle 0 shows the incoming side exactly where x < 960 and angle 90 exactly where y < 540 732ms
+   → the two sides differ (26,163,200 vs 26,163,200): expected true to be false // Object.is equality
+ × reduced-motion.test.ts > AC9 #493.b76c663b reduced motion in a film: the push cuts at its midpoint, motion holds, type fades in place > AC9 #493.b76c663b under reduced motion the camera shows the push's start pose before 2 s and its framed pose from 2 s, with a 200 ms dissolve across the cut 2073ms
+   → still under reduced motion at 705600000: film is an object, got undefined: expected false to be true // Object.is equality
+ × reduced-motion.test.ts > AC9 #493.b76c663b reduced motion in a film: the push cuts at its midpoint, motion holds, type fades in place > AC9 #493.b76c663b under reduced motion the shake's offset is zero: the shaken film's camera equals the unshaken one's at every frame, though the shake moves it without reduced motion 315ms
+   → shaken under reduced motion at 705600000: film is an object, got undefined: expected false to be true // Object.is equality
+ × reduced-motion.test.ts > AC9 #493.b76c663b reduced motion in a film: the push cuts at its midpoint, motion holds, type fades in place > AC9 #493.b76c663b under reduced motion the parallax group's offset is constant, though its drift moves it without reduced motion 325ms
+   → shaken under reduced motion at 705600000: film is an object, got undefined: expected false to be true // Object.is equality
+ × reduced-motion.test.ts > AC9 #493.b76c663b reduced motion in a film: the push cuts at its midpoint, motion holds, type fades in place > AC9 #493.b76c663b under reduced motion every glyph of the title sits at its landed position at all times while only its opacity changes 318ms
+   → shaken under reduced motion at 705600000: film is an object, got undefined: expected false to be true // Object.is equality
+ × reduced-motion.test.ts > AC9 #493.b76c663b reduced motion in a film: the push cuts at its midpoint, motion holds, type fades in place > AC9 #493.b76c663b the same push marked essential plays under reduced motion as it does without it 314ms
+   → essential under reduced motion at 705600000: film is an object, got undefined: expected false to be true // Object.is equality
+ ✓ seal.test.ts > AC2 #493.872906a8 a 2D film's push needs no scene3d: the camera is the core's > AC2 #493.872906a8 the build without scene3d seals without it and holds camera@1 in the core 1764ms
+ × seal.test.ts > AC2 #493.872906a8 a 2D film's push needs no scene3d: the camera is the core's > AC2 #493.872906a8 a 2D film with a 2 s push hashes the same at every cue end, by evaluated data and Vello CPU snapshot, sealed without scene3d as in the full build 122ms
+   → r1 at the cue end 0.5 s: film is an object, got undefined: expected false to be true // Object.is equality
+ × seal.test.ts > AC2 #493.872906a8 a 2D film's push needs no scene3d: the camera is the core's > AC2 #493.872906a8 a planted build that registers camera@1 in scene3d refuses that film with module_missing, naming scene3d, and fails the check 1ms
+   → the binary builds: deep-show --no-default-features --features r1,test-camera-in-scene3d: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × shake.test.ts > AC15 #493.44160e6c a shake turns the push's pose by seeded noise of the shot's ID, bounded by its amount > AC15 #493.44160e6c at 10,000 random times the shaken push is the push turned by the shake, never more than 1.6° from it in aim or roll 2365ms
+   → shaken: cameras.cam at 229451 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × shake.test.ts > AC15 #493.44160e6c a shake turns the push's pose by seeded noise of the shot's ID, bounded by its amount > AC15 #493.44160e6c the shaken push gives one pose at each t at 24, 60 and 144 fps, and seeking to each equals playing 34ms
+   → the shaken push at 24 fps: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × shake.test.ts > AC15 #493.44160e6c a shake turns the push's pose by seeded noise of the shot's ID, bounded by its amount > AC15 #493.44160e6c the same shot ID gives the same offsets in two documents, and another ID different ones 62ms
+   → jolt: cameras.cam at 4040728 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × shake.test.ts > AC15 #493.44160e6c a shake turns the push's pose by seeded noise of the shot's ID, bounded by its amount > AC15 #493.44160e6c a planted shake that draws a new random offset each frame gives two poses at one t across 24 and 60 fps and fails, naming the shot 4ms
+   → the plant at 24 fps: the planted program shake_fresh_per_frame answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × follow-forward.test.ts > AC3 #493.f2d3692f a follow-forward camera never moves back, and seeking equals playing > AC3 #493.f2d3692f at 10,000 random times the follow-forward camera's x never decreases, it moves forward with the walker, and seeking to each time equals playing 2372ms
+   → the play: cameras.cam at 29306 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × kick.test.ts > AC19 #493.55c15e8b a camera kick: whole target pixels, bounded, seeded by time, dropped under reduced motion > AC19 #493.55c15e8b a kick at 1 s offsets the view by whole target pixels, at most 2 in x and y, nonzero in [1.000, 1.180) s and zero outside it 467ms
+   → kicked: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × kick.test.ts > AC19 #493.55c15e8b a camera kick: whole target pixels, bounded, seeded by time, dropped under reduced motion > AC19 #493.55c15e8b the kick gives the same offset at 24, 60 and 144 fps and by seeking 25ms
+   → kick: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × kick.test.ts > AC19 #493.55c15e8b a camera kick: whole target pixels, bounded, seeded by time, dropped under reduced motion > AC19 #493.55c15e8b a second kick 60 ms later keeps their sum within 2 px 55ms
+   → kicked: cameras.cam at 705600000 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × kick.test.ts > AC19 #493.55c15e8b a camera kick: whole target pixels, bounded, seeded by time, dropped under reduced motion > AC19 #493.55c15e8b under reduced motion the kick's offset is 0 124ms
+   → kicked: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × kick.test.ts > AC19 #493.55c15e8b a camera kick: whole target pixels, bounded, seeded by time, dropped under reduced motion > AC19 #493.55c15e8b a planted kick that draws a fresh random offset each frame gives two offsets at one t across 24 and 60 fps and fails, naming the camera 5ms
+   → the plant at 24 fps: the planted program kick_fresh_per_frame answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × match-cut.test.ts > AC18 #493.e1213b8a a match cut frames the incoming item where the outgoing one was > AC18 #493.e1213b8a the cut with match {from: ball, to: sun} puts the sun's projected centre within 0.5 px of the ball's and its radius within 1% on the incoming shot's first frame 373ms
+   → the match cut is accepted: {"ok":false,"code":"ref_unresolved","path":"transitions/cut1/from"}: expected false to be true // Object.is equality
+ × match-cut.test.ts > AC18 #493.e1213b8a a match cut frames the incoming item where the outgoing one was > AC18 #493.e1213b8a a planted framer that fits the sun by its keep at place [0.5, 0.5] misses by more than 450 px and fails, naming the transition 5ms
+   → the planted framer: the planted program match_framer_ignores_match answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × whip.test.ts > AC14 #493.e7031693 a whip turns away, swaps at its fastest, and blurs across the swap > AC14 #493.e7031693 the 0.8 s whip turns the outgoing yaw to 6.5° and 26° and the incoming from −26° to −6.5° and 0° within 1e-9°, at 130°/s at the swap, and the frame at the swap averages sub-samples from both sides 387ms
+   → the whip is accepted: {"ok":false,"code":"transition_kind","path":"transitions/whip/kind"}: expected false to be true // Object.is equality
+ × whip.test.ts > AC14 #493.e7031693 a whip turns away, swaps at its fastest, and blurs across the swap > AC14 #493.e7031693 a planted whip that eases each half in and out turns at 0°/s at the swap, draws that frame without blur and fails, naming the transition 7ms
+   → the planted whip: the planted program whip_eases_halves answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × roll.test.ts > AC16 #493.54b680f8 a shot's roll holds under its move, and a glide turns it the shortest way > AC16 #493.54b680f8 the push with roll 21° draws the horizon at 21° within 0.01° at every 60 fps frame while its distance eases from 4.6 m to 4.0 m 401ms
+   → the push: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × roll.test.ts > AC16 #493.54b680f8 a shot's roll holds under its move, and a glide turns it the shortest way > AC16 #493.54b680f8 a 0.8 s glide from the push into a level shot turns the roll the shortest way from 21° to 0° 14ms
+   → the glide: cameras.cam at 1411200000 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × roll.test.ts > AC16 #493.54b680f8 a shot's roll holds under its move, and a glide turns it the shortest way > AC16 #493.54b680f8 a planted shot that writes roll 0 draws the push level and fails, naming the shot 5ms
+   → the planted shot: the planted program shot_writes_roll_0 answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × log-zoom.test.ts > AC1 #493.0b1b1a95 a log zoom's view width moves by a constant ratio per frame > AC1 #493.0b1b1a95 each two consecutive 60 fps frames of a 4 s linear log zoom from 1.3e7 m to 1.3e13 m keep the ratio 10^(6/240) within 1e-9, and it ends on both widths 409ms
+   → the log zoom: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × log-zoom.test.ts > AC1 #493.0b1b1a95 a log zoom's view width moves by a constant ratio per frame > AC1 #493.0b1b1a95 a planted zoom that eases the view width instead of its logarithm makes the first step's ratio over 4,000 and fails, naming the frame 6ms
+   → the planted log zoom: the planted program log_zoom_eases_width answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × lens-zoom.test.ts > AC13 #493.d82a99aa a lens zoom narrows the field of view in log tan space from a fixed position > AC13 #493.d82a99aa lens_zoom by 2.625 over 2.9 s keeps the position bit for bit, draws the kept item √3.625 times taller at 1.45 s, and scales a post and a ridge by the kept item's ratio 454ms
+   → the framing probe: shots.zoom is an object, got undefined: expected false to be true // Object.is equality
+ × lens-zoom.test.ts > AC13 #493.d82a99aa a lens zoom narrows the field of view in log tan space from a fixed position > AC13 #493.d82a99aa a planted zoom that eases the field of view in degrees reads about 1.663 at 1.45 s and fails, naming the shot 6ms
+   → the framing probe: shots.zoom is an object, got undefined: expected false to be true // Object.is equality
+ × lens-zoom.test.ts > AC13 #493.d82a99aa a lens zoom narrows the field of view in log tan space from a fixed position > AC13 #493.d82a99aa a planted zoom that dollies scales the ridge by less than the kept item and fails, naming the shot 5ms
+   → the framing probe: shots.zoom is an object, got undefined: expected false to be true // Object.is equality
+ × defaults.test.ts > AC7 #493.5bfe22ba default move amounts, the glide in, and the pose a shot alone writes > AC7 #493.5bfe22ba push at its default comes in from 1.15 times the framed distance on the first frame and lands on it on the last, aimed at the framed target 371ms
+   → the hold shot: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × defaults.test.ts > AC7 #493.5bfe22ba default move amounts, the glide in, and the pose a shot alone writes > AC7 #493.5bfe22ba orbit at its default sweeps the azimuth from 15° before to 15° after the framed azimuth at the framed distance 7ms
+   → the hold shot: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × defaults.test.ts > AC7 #493.5bfe22ba default move amounts, the glide in, and the pose a shot alone writes > AC7 #493.5bfe22ba a shot that glides in over 0.5 s starts at the previous shot's last pose within 1e-6 m and 1e-6 rad, and is on its own pose by 0.5 s 6ms
+   → the glide: cameras.cam at 705599999 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+ × defaults.test.ts > AC7 #493.5bfe22ba default move amounts, the glide in, and the pose a shot alone writes > AC7 #493.5bfe22ba a channel on a pose path of a camera in a shot that isn't keyed is refused naming both, and accepted when the shot is keyed 5ms
+   → the channel on the camera's target in an unkeyed shot is refused: {"ok":true,"order":["cam.channels","cam.transform"],"frames":[{"t":0,"frame":0,"doc_t":0,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"a0cam","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":45,"elevation":30,"distance":10},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}},"crate":{"id":"crate","kind":"mark.box@1","layer":"main","name":"Box crate","order":"bcrate","params":{"size":[1.2,0.8,0.9],"paint":{"fill":{"role":"accent"}}},"at":{"pos":[0.3,0.4,-0.2],"rot":[0,0,0],"scale":[1,1,1]}}},"channels":{"nudge-x":{"value":0,"iterations":0}},"constraints":{},"placements":{},"cameras":{"cam":{"target":[0,0,0]}},"valid_until":1},{"t":705600000,"frame":60,"doc_t":705600000,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"a0cam","params":{"projection":"perspective","target":[0.5,0,0],"orbit":{"azimuth":45,"elevation":30,"distance":10},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}},"crate":{"id":"crate","kind":"mark.box@1","layer":"main","name":"Box crate","order":"bcrate","params":{"size":[1.2,0.8,0.9],"paint":{"fill":{"role":"accent"}}},"at":{"pos":[0.3,0.4,-0.2],"rot":[0,0,0],"scale":[1,1,1]}}},"channels":{"nudge-x":{"value":0.5,"iterations":0}},"constraints":{},"placements":{},"cameras":{"cam":{"target":[0,0,0]}},"valid_until":705600001}],"markers":{},"cuts":[],"hash":"ceb58e5d44290207400d1110a5f6e6182b870b55d: expected true to be false // Object.is equality
+ × overlap.test.ts > AC4 #493.07d4fcd4 overlapping shots are refused at check, naming both > AC4 #493.07d4fcd4 two overlapping shots on one camera are refused naming both, and on two cameras too 378ms
+   → shots overlapping on one camera is refused: {"ok":true,"order":[],"frames":[{"t":0,"frame":0,"doc_t":0,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"a0cam","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":45,"elevation":30,"distance":10},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}},"cam-2":{"id":"cam-2","kind":"camera@1","layer":"main","name":"Camera cam-2","order":"a0cam-2","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":-30,"elevation":20,"distance":12},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}},"box":{"id":"box","kind":"mark.box@1","layer":"main","name":"Box box","order":"bbox","params":{"size":1,"paint":{"fill":{"role":"accent"}}},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}}},"channels":{},"constraints":{},"placements":{},"cameras":{"cam":{"target":[0,0,0]},"cam-2":{"target":[0,0,0]}},"valid_until":null},{"t":705600000,"frame":60,"doc_t":705600000,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"a0cam","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":45,"elevation":30,"distance":10},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}},"cam-2":{"id":"cam-2","kind":"camera@1","layer":"main","name":"Camera cam-2","order":"a0cam-2","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":-30,"elevation":20,"distance":12},"fov":40},"at":{"pos":[0,0,0],"rot":[0,: expected true to be false // Object.is equality
+ × overlap.test.ts > AC4 #493.07d4fcd4 overlapping shots are refused at check, naming both > AC4 #493.07d4fcd4 adjacent shots joined by a cross-fade, and adjacent shots on two cameras joined by a cut, are accepted 4ms
+   → adjacent shots joined by a 1 s cross-fade are accepted: {"ok":false,"code":"transition_kind","path":"transitions/xf/kind"}: expected false to be true // Object.is equality
+ × place.test.ts > AC12 #493.c0595506 framing puts the kept items' center at its place > AC12 #493.c0595506 in perspective and on a 2D page, with one kept item and with two, the kept items' center lands at the shot's place within 0.5 px at every frame 368ms
+   → one box, default place: projected.crate at 0 flicks is an object, got undefined: expected false to be true // Object.is equality
+ × framing-bound.test.ts > AC10 #493.0704e790 framing fits a bound over the whole shot, not its samples > AC10 #493.0704e790 a 0.2 m box riding sin(30πt) frames to a union holding y from −1.1 to 1.1 m, at most 1% taller, and stays in the safe frame at every 60 fps frame, reaching y = 1 m at t = 1/60 s 372ms
+   → the bobbing box: shots.s is an object, got undefined: expected false to be true // Object.is equality
+ × framing-bound.test.ts > AC10 #493.0704e790 framing fits a bound over the whole shot, not its samples > AC10 #493.0704e790 a planted framer that samples 30 times a second sees the box only at y = 0 and loses it from the safe frame at t = 1/60 s 4ms
+   → the planted framer: the planted program framer_samples_30hz answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × pan-tilt.test.ts > AC17 #493.f3a08e63 a pan at 270° tilts up onto the framed aim, keeping the azimuth > AC17 #493.f3a08e63 the 2.9 s pan by 24° at angle 270 starts at −3° pitch, ends at 21°, and keeps the framed azimuth at every frame within 1e-9° 397ms
+   → the tilt: shots.tilt is an object, got undefined: expected false to be true // Object.is equality
+ × pan-tilt.test.ts > AC17 #493.f3a08e63 a pan at 270° tilts up onto the framed aim, keeping the azimuth > AC17 #493.f3a08e63 a planted pan that ignores the angle turns the azimuth by 24° and fails, naming the shot 4ms
+   → the planted pan: the planted program pan_ignores_angle answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × taste.test.ts > AC20 #493.b09e45f7 the screenshots, the shot list's recording and the one taste call on them > AC20 #493.b09e45f7 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS 3ms
+   → INCONCLUSIVE: the check run's pictures are not in docs/evidence/493/: push.png, orbit.png, cut.png, log-zoom.png, cross-fade.png, shot-list.apng; this is not a pass
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 47 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  defaults.test.ts > AC7 #493.5bfe22ba default move amounts, the glide in, and the pose a shot alone writes > AC7 #493.5bfe22ba push at its default comes in from 1.15 times the framed distance on the first frame and lands on it on the last, aimed at the framed target
+AssertionError: the hold shot: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ framed defaults.test.ts:26:16
+ ❯ defaults.test.ts:35:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/47]⎯
+
+ FAIL  defaults.test.ts > AC7 #493.5bfe22ba default move amounts, the glide in, and the pose a shot alone writes > AC7 #493.5bfe22ba orbit at its default sweeps the azimuth from 15° before to 15° after the framed azimuth at the framed distance
+AssertionError: the hold shot: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ framed defaults.test.ts:26:16
+ ❯ defaults.test.ts:48:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/47]⎯
+
+ FAIL  defaults.test.ts > AC7 #493.5bfe22ba default move amounts, the glide in, and the pose a shot alone writes > AC7 #493.5bfe22ba a shot that glides in over 0.5 s starts at the previous shot's last pose within 1e-6 m and 1e-6 rad, and is on its own pose by 0.5 s
+AssertionError: the glide: cameras.cam at 705599999 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ defaults.test.ts:66:65
+ ❯ defaults.test.ts:66:54
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/47]⎯
+
+ FAIL  defaults.test.ts > AC7 #493.5bfe22ba default move amounts, the glide in, and the pose a shot alone writes > AC7 #493.5bfe22ba a channel on a pose path of a camera in a shot that isn't keyed is refused naming both, and accepted when the shot is keyed
+AssertionError: the channel on the camera's target in an unkeyed shot is refused: {"ok":true,"order":["cam.channels","cam.transform"],"frames":[{"t":0,"frame":0,"doc_t":0,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"a0cam","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":45,"elevation":30,"distance":10},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}},"crate":{"id":"crate","kind":"mark.box@1","layer":"main","name":"Box crate","order":"bcrate","params":{"size":[1.2,0.8,0.9],"paint":{"fill":{"role":"accent"}}},"at":{"pos":[0.3,0.4,-0.2],"rot":[0,0,0],"scale":[1,1,1]}}},"channels":{"nudge-x":{"value":0,"iterations":0}},"constraints":{},"placements":{},"cameras":{"cam":{"target":[0,0,0]}},"valid_until":1},{"t":705600000,"frame":60,"doc_t":705600000,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"a0cam","params":{"projection":"perspective","target":[0.5,0,0],"orbit":{"azimuth":45,"elevation":30,"distance":10},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}},"crate":{"id":"crate","kind":"mark.box@1","layer":"main","name":"Box crate","order":"bcrate","params":{"size":[1.2,0.8,0.9],"paint":{"fill":{"role":"accent"}}},"at":{"pos":[0.3,0.4,-0.2],"rot":[0,0,0],"scale":[1,1,1]}}},"channels":{"nudge-x":{"value":0.5,"iterations":0}},"constraints":{},"placements":{},"cameras":{"cam":{"target":[0,0,0]}},"valid_until":705600001}],"markers":{},"cuts":[],"hash":"ceb58e5d44290207400d1110a5f6e6182b870b55d: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ refused helpers.ts:251:63
+    249| /** A refused document: `{ok: false, …}`, its whole JSON. */
+    250| export function refused(answer: JsonObject, what: string): JsonObject {
+    251|   expect(answer['ok'], `${what} is refused: ${show(answer)}`).toBe(fal…
+       |                                                               ^
+    252|   return answer;
+    253| }
+ ❯ defaults.test.ts:84:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/47]⎯
+
+ FAIL  follow-forward.test.ts > AC3 #493.f2d3692f a follow-forward camera never moves back, and seeking equals playing > AC3 #493.f2d3692f at 10,000 random times the follow-forward camera's x never decreases, it moves forward with the walker, and seeking to each time equals playing
+AssertionError: the play: cameras.cam at 29306 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ follow-forward.test.ts:31:39
+ ❯ follow-forward.test.ts:31:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/47]⎯
+
+ FAIL  framing-bound.test.ts > AC10 #493.0704e790 framing fits a bound over the whole shot, not its samples > AC10 #493.0704e790 a 0.2 m box riding sin(30πt) frames to a union holding y from −1.1 to 1.1 m, at most 1% taller, and stays in the safe frame at every 60 fps frame, reaching y = 1 m at t = 1/60 s
+AssertionError: the bobbing box: shots.s is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ unionY framing-bound.test.ts:24:17
+ ❯ framing-bound.test.ts:38:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/47]⎯
+
+ FAIL  framing-bound.test.ts > AC10 #493.0704e790 framing fits a bound over the whole shot, not its samples > AC10 #493.0704e790 a planted framer that samples 30 times a second sees the box only at y = 0 and loses it from the safe frame at t = 1/60 s
+AssertionError: the planted framer: the planted program framer_samples_30hz answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evalPlanted helpers.ts:257:109
+    255| export function evalPlanted(bin: string, line: EvalLine & { planted: s…
+    256|   const answer = evalOne(bin, line);
+    257|   expect(answer['ok'], `${what}: the planted program ${line.planted} a…
+       |                                                                                                             ^
+    258|   return accepted(answer, line.times, what);
+    259| }
+ ❯ framing-bound.test.ts:50:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/47]⎯
+
+ FAIL  interval.test.ts > AC11 #493.219170de interval forms round outward, and framing refuses a bound it can't settle > AC11 #493.219170de a planted form that rounds its ends to nearest returns one double for each, on one side of the true value, and fails
+AssertionError: planted exp: bounds is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ boundsOf interval.test.ts:47:16
+ ❯ interval.test.ts:92:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/47]⎯
+
+ FAIL  interval.test.ts > AC11 #493.219170de interval forms round outward, and framing refuses a bound it can't settle > AC11 #493.219170de a kept box whose x is 1/(t − 1.01) m in a 2 s shot is refused at check, naming the box and the span around 1.01 s its bound can't settle, though every 60 fps sample is finite
+AssertionError: the spiking box at check:
+  the box spike is framed, not refused: its bound near 1.01 s is never settled ({"ok":true,"order":["spike.driver","spike.transform"],"frames":[{"t":0,"frame":0,"doc_t":0,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the box spike is framed, not refused: its bound near 1.01 s is never settled ({\"ok\":true,\"order\":[\"spike.driver\",\"spike.transform\"],\"frames\":[{\"t\":0,\"frame\":0,\"doc_t\":0,\"pass\":0,\"passes\":0,\"items\":{\"cam\":{\"id\":\"cam\",\"kind\":\"camera@1\",\"layer\":\"main\",\"name\":\"Camera cam\",\"order\":\")",
++ ]
+
+ ❯ none helpers.ts:134:73
+    132| /** No failures; the message lists them. */
+    133| export function none(failures: readonly string[], what: string): void {
+    134|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+    135| }
+    136| /** A check that must fail on a planted program: at least one failure,…
+ ❯ interval.test.ts:115:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/47]⎯
+
+ FAIL  interval.test.ts > AC11 #493.219170de interval forms round outward, and framing refuses a bound it can't settle > AC11 #493.219170de a planted framer that fits its samples frames the same box from its finite samples, and fails the refusal check
+AssertionError: the planted framer: the planted program framer_fits_samples answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evalPlanted helpers.ts:257:109
+    255| export function evalPlanted(bin: string, line: EvalLine & { planted: s…
+    256|   const answer = evalOne(bin, line);
+    257|   expect(answer['ok'], `${what}: the planted program ${line.planted} a…
+       |                                                                                                             ^
+    258|   return accepted(answer, line.times, what);
+    259| }
+ ❯ interval.test.ts:119:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/47]⎯
+
+ FAIL  kick.test.ts > AC19 #493.55c15e8b a camera kick: whole target pixels, bounded, seeded by time, dropped under reduced motion > AC19 #493.55c15e8b a kick at 1 s offsets the view by whole target pixels, at most 2 in x and y, nonzero in [1.000, 1.180) s and zero outside it
+AssertionError: kicked: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ kick.test.ts:35:15
+ ❯ offsets kick.test.ts:34:24
+ ❯ kick.test.ts:50:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/47]⎯
+
+ FAIL  kick.test.ts > AC19 #493.55c15e8b a camera kick: whole target pixels, bounded, seeded by time, dropped under reduced motion > AC19 #493.55c15e8b the kick gives the same offset at 24, 60 and 144 fps and by seeking
+AssertionError: kick: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ kick.test.ts:44:83
+ ❯ kick.test.ts:44:49
+ ❯ rateFailures kick.test.ts:44:15
+ ❯ kick.test.ts:66:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/47]⎯
+
+ FAIL  kick.test.ts > AC19 #493.55c15e8b a camera kick: whole target pixels, bounded, seeded by time, dropped under reduced motion > AC19 #493.55c15e8b a second kick 60 ms later keeps their sum within 2 px
+AssertionError: kicked: cameras.cam at 705600000 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ kick.test.ts:35:15
+ ❯ offsets kick.test.ts:34:24
+ ❯ kick.test.ts:76:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/47]⎯
+
+ FAIL  kick.test.ts > AC19 #493.55c15e8b a camera kick: whole target pixels, bounded, seeded by time, dropped under reduced motion > AC19 #493.55c15e8b under reduced motion the kick's offset is 0
+AssertionError: kicked: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ kick.test.ts:35:15
+ ❯ offsets kick.test.ts:34:24
+ ❯ kick.test.ts:83:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/47]⎯
+
+ FAIL  kick.test.ts > AC19 #493.55c15e8b a camera kick: whole target pixels, bounded, seeded by time, dropped under reduced motion > AC19 #493.55c15e8b a planted kick that draws a fresh random offset each frame gives two offsets at one t across 24 and 60 fps and fails, naming the camera
+AssertionError: the plant at 24 fps: the planted program kick_fresh_per_frame answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evalPlanted helpers.ts:257:109
+    255| export function evalPlanted(bin: string, line: EvalLine & { planted: s…
+    256|   const answer = evalOne(bin, line);
+    257|   expect(answer['ok'], `${what}: the planted program ${line.planted} a…
+       |                                                                                                             ^
+    258|   return accepted(answer, line.times, what);
+    259| }
+ ❯ kick.test.ts:89:39
+ ❯ kick.test.ts:89:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/47]⎯
+
+ FAIL  lens-zoom.test.ts > AC13 #493.d82a99aa a lens zoom narrows the field of view in log tan space from a fixed position > AC13 #493.d82a99aa lens_zoom by 2.625 over 2.9 s keeps the position bit for bit, draws the kept item √3.625 times taller at 1.45 s, and scales a post and a ridge by the kept item's ratio
+AssertionError: the framing probe: shots.zoom is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ framedOf helpers.ts:287:19
+ ❯ scene lens-zoom.test.ts:31:13
+ ❯ lens-zoom.test.ts:56:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/47]⎯
+
+ FAIL  lens-zoom.test.ts > AC13 #493.d82a99aa a lens zoom narrows the field of view in log tan space from a fixed position > AC13 #493.d82a99aa a planted zoom that eases the field of view in degrees reads about 1.663 at 1.45 s and fails, naming the shot
+AssertionError: the framing probe: shots.zoom is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ framedOf helpers.ts:287:19
+ ❯ scene lens-zoom.test.ts:31:13
+ ❯ lens-zoom.test.ts:60:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/47]⎯
+
+ FAIL  lens-zoom.test.ts > AC13 #493.d82a99aa a lens zoom narrows the field of view in log tan space from a fixed position > AC13 #493.d82a99aa a planted zoom that dollies scales the ridge by less than the kept item and fails, naming the shot
+AssertionError: the framing probe: shots.zoom is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ framedOf helpers.ts:287:19
+ ❯ scene lens-zoom.test.ts:31:13
+ ❯ lens-zoom.test.ts:68:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/47]⎯
+
+ FAIL  log-zoom.test.ts > AC1 #493.0b1b1a95 a log zoom's view width moves by a constant ratio per frame > AC1 #493.0b1b1a95 each two consecutive 60 fps frames of a 4 s linear log zoom from 1.3e7 m to 1.3e13 m keep the ratio 10^(6/240) within 1e-9, and it ends on both widths
+AssertionError: the log zoom: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ log-zoom.test.ts:26:38
+ ❯ zoomFailures log-zoom.test.ts:26:27
+ ❯ log-zoom.test.ts:39:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/47]⎯
+
+ FAIL  log-zoom.test.ts > AC1 #493.0b1b1a95 a log zoom's view width moves by a constant ratio per frame > AC1 #493.0b1b1a95 a planted zoom that eases the view width instead of its logarithm makes the first step's ratio over 4,000 and fails, naming the frame
+AssertionError: the planted log zoom: the planted program log_zoom_eases_width answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evalPlanted helpers.ts:257:109
+    255| export function evalPlanted(bin: string, line: EvalLine & { planted: s…
+    256|   const answer = evalOne(bin, line);
+    257|   expect(answer['ok'], `${what}: the planted program ${line.planted} a…
+       |                                                                                                             ^
+    258|   return accepted(answer, line.times, what);
+    259| }
+ ❯ log-zoom.test.ts:43:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/47]⎯
+
+ FAIL  match-cut.test.ts > AC18 #493.e1213b8a a match cut frames the incoming item where the outgoing one was > AC18 #493.e1213b8a the cut with match {from: ball, to: sun} puts the sun's projected centre within 0.5 px of the ball's and its radius within 1% on the incoming shot's first frame
+AssertionError: the match cut is accepted: {"ok":false,"code":"ref_unresolved","path":"transitions/cut1/from"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:235:64
+    233| /** An answer that accepted its document, with one frame per time, in …
+    234| export function accepted(answer: JsonObject, times: readonly number[],…
+    235|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    236|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    237|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:247:10
+ ❯ match-cut.test.ts:39:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/47]⎯
+
+ FAIL  match-cut.test.ts > AC18 #493.e1213b8a a match cut frames the incoming item where the outgoing one was > AC18 #493.e1213b8a a planted framer that fits the sun by its keep at place [0.5, 0.5] misses by more than 450 px and fails, naming the transition
+AssertionError: the planted framer: the planted program match_framer_ignores_match answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evalPlanted helpers.ts:257:109
+    255| export function evalPlanted(bin: string, line: EvalLine & { planted: s…
+    256|   const answer = evalOne(bin, line);
+    257|   expect(answer['ok'], `${what}: the planted program ${line.planted} a…
+       |                                                                                                             ^
+    258|   return accepted(answer, line.times, what);
+    259| }
+ ❯ match-cut.test.ts:47:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/47]⎯
+
+ FAIL  overlap.test.ts > AC4 #493.07d4fcd4 overlapping shots are refused at check, naming both > AC4 #493.07d4fcd4 two overlapping shots on one camera are refused naming both, and on two cameras too
+AssertionError: shots overlapping on one camera is refused: {"ok":true,"order":[],"frames":[{"t":0,"frame":0,"doc_t":0,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"a0cam","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":45,"elevation":30,"distance":10},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}},"cam-2":{"id":"cam-2","kind":"camera@1","layer":"main","name":"Camera cam-2","order":"a0cam-2","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":-30,"elevation":20,"distance":12},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}},"box":{"id":"box","kind":"mark.box@1","layer":"main","name":"Box box","order":"bbox","params":{"size":1,"paint":{"fill":{"role":"accent"}}},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}}},"channels":{},"constraints":{},"placements":{},"cameras":{"cam":{"target":[0,0,0]},"cam-2":{"target":[0,0,0]}},"valid_until":null},{"t":705600000,"frame":60,"doc_t":705600000,"pass":0,"passes":0,"items":{"cam":{"id":"cam","kind":"camera@1","layer":"main","name":"Camera cam","order":"a0cam","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":45,"elevation":30,"distance":10},"fov":40},"at":{"pos":[0,0,0],"rot":[0,0,0],"scale":[1,1,1]}},"cam-2":{"id":"cam-2","kind":"camera@1","layer":"main","name":"Camera cam-2","order":"a0cam-2","params":{"projection":"perspective","target":[0,0,0],"orbit":{"azimuth":-30,"elevation":20,"distance":12},"fov":40},"at":{"pos":[0,0,0],"rot":[0,: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ refused helpers.ts:251:63
+    249| /** A refused document: `{ok: false, …}`, its whole JSON. */
+    250| export function refused(answer: JsonObject, what: string): JsonObject {
+    251|   expect(answer['ok'], `${what} is refused: ${show(answer)}`).toBe(fal…
+       |                                                               ^
+    252|   return answer;
+    253| }
+ ❯ overlap.test.ts:24:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/47]⎯
+
+ FAIL  overlap.test.ts > AC4 #493.07d4fcd4 overlapping shots are refused at check, naming both > AC4 #493.07d4fcd4 adjacent shots joined by a cross-fade, and adjacent shots on two cameras joined by a cut, are accepted
+AssertionError: adjacent shots joined by a 1 s cross-fade are accepted: {"ok":false,"code":"transition_kind","path":"transitions/xf/kind"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ overlap.test.ts:31:99
+     29|   it(`${AC[4]} adjacent shots joined by a cross-fade, and adjacent sho…
+     30|     const xfade = evalOne(motion.bin(), { doc: doc(shot(2, 3.5, { targ…
+     31|     expect(xfade['ok'], `adjacent shots joined by a 1 s cross-fade are…
+       |                                                                                                   ^
+     32|     const cut = evalOne(motion.bin(), { doc: doc(shot(2, 3.5, { camera…
+     33|     expect(cut['ok'], `adjacent shots on two cameras joined by a cut a…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/47]⎯
+
+ FAIL  pan-tilt.test.ts > AC17 #493.f3a08e63 a pan at 270° tilts up onto the framed aim, keeping the azimuth > AC17 #493.f3a08e63 the 2.9 s pan by 24° at angle 270 starts at −3° pitch, ends at 21°, and keeps the framed azimuth at every frame within 1e-9°
+AssertionError: the tilt: shots.tilt is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ framedOf helpers.ts:287:19
+ ❯ pan-tilt.test.ts:39:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/47]⎯
+
+ FAIL  pan-tilt.test.ts > AC17 #493.f3a08e63 a pan at 270° tilts up onto the framed aim, keeping the azimuth > AC17 #493.f3a08e63 a planted pan that ignores the angle turns the azimuth by 24° and fails, naming the shot
+AssertionError: the planted pan: the planted program pan_ignores_angle answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evalPlanted helpers.ts:257:109
+    255| export function evalPlanted(bin: string, line: EvalLine & { planted: s…
+    256|   const answer = evalOne(bin, line);
+    257|   expect(answer['ok'], `${what}: the planted program ${line.planted} a…
+       |                                                                                                             ^
+    258|   return accepted(answer, line.times, what);
+    259| }
+ ❯ pan-tilt.test.ts:44:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/47]⎯
+
+ FAIL  place.test.ts > AC12 #493.c0595506 framing puts the kept items' center at its place > AC12 #493.c0595506 in perspective and on a 2D page, with one kept item and with two, the kept items' center lands at the shot's place within 0.5 px at every frame
+AssertionError: one box, default place: projected.crate at 0 flicks is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ projOf helpers.ts:314:13
+ ❯ place.test.ts:45:48
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/47]⎯
+
+ FAIL  reduced-motion.test.ts > AC9 #493.b76c663b reduced motion in a film: the push cuts at its midpoint, motion holds, type fades in place > AC9 #493.b76c663b under reduced motion the camera shows the push's start pose before 2 s and its framed pose from 2 s, with a 200 ms dissolve across the cut
+AssertionError: still under reduced motion at 705600000: film is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ filmOf helpers.ts:433:13
+ ❯ reduced-motion.test.ts:57:34
+ ❯ rendition reduced-motion.test.ts:57:20
+ ❯ reduced-motion.test.ts:72:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/47]⎯
+
+ FAIL  reduced-motion.test.ts > AC9 #493.b76c663b reduced motion in a film: the push cuts at its midpoint, motion holds, type fades in place > AC9 #493.b76c663b under reduced motion the shake's offset is zero: the shaken film's camera equals the unshaken one's at every frame, though the shake moves it without reduced motion
+AssertionError: shaken under reduced motion at 705600000: film is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ filmOf helpers.ts:433:13
+ ❯ reduced-motion.test.ts:57:34
+ ❯ rendition reduced-motion.test.ts:57:20
+ ❯ reduced-motion.test.ts:94:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/47]⎯
+
+ FAIL  reduced-motion.test.ts > AC9 #493.b76c663b reduced motion in a film: the push cuts at its midpoint, motion holds, type fades in place > AC9 #493.b76c663b under reduced motion the parallax group's offset is constant, though its drift moves it without reduced motion
+AssertionError: shaken under reduced motion at 705600000: film is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ filmOf helpers.ts:433:13
+ ❯ reduced-motion.test.ts:57:34
+ ❯ rendition reduced-motion.test.ts:57:20
+ ❯ reduced-motion.test.ts:102:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/47]⎯
+
+ FAIL  reduced-motion.test.ts > AC9 #493.b76c663b reduced motion in a film: the push cuts at its midpoint, motion holds, type fades in place > AC9 #493.b76c663b under reduced motion every glyph of the title sits at its landed position at all times while only its opacity changes
+AssertionError: shaken under reduced motion at 705600000: film is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ filmOf helpers.ts:433:13
+ ❯ reduced-motion.test.ts:57:34
+ ❯ rendition reduced-motion.test.ts:57:20
+ ❯ reduced-motion.test.ts:110:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/47]⎯
+
+ FAIL  reduced-motion.test.ts > AC9 #493.b76c663b reduced motion in a film: the push cuts at its midpoint, motion holds, type fades in place > AC9 #493.b76c663b the same push marked essential plays under reduced motion as it does without it
+AssertionError: essential under reduced motion at 705600000: film is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ filmOf helpers.ts:433:13
+ ❯ reduced-motion.test.ts:57:34
+ ❯ rendition reduced-motion.test.ts:57:20
+ ❯ reduced-motion.test.ts:124:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/47]⎯
+
+ FAIL  roll.test.ts > AC16 #493.54b680f8 a shot's roll holds under its move, and a glide turns it the shortest way > AC16 #493.54b680f8 the push with roll 21° draws the horizon at 21° within 0.01° at every 60 fps frame while its distance eases from 4.6 m to 4.0 m
+AssertionError: the push: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ roll.test.ts:38:47
+ ❯ roll.test.ts:38:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/47]⎯
+
+ FAIL  roll.test.ts > AC16 #493.54b680f8 a shot's roll holds under its move, and a glide turns it the shortest way > AC16 #493.54b680f8 a 0.8 s glide from the push into a level shot turns the roll the shortest way from 21° to 0°
+AssertionError: the glide: cameras.cam at 1411200000 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ roll.test.ts:48:44
+ ❯ roll.test.ts:48:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/47]⎯
+
+ FAIL  roll.test.ts > AC16 #493.54b680f8 a shot's roll holds under its move, and a glide turns it the shortest way > AC16 #493.54b680f8 a planted shot that writes roll 0 draws the push level and fails, naming the shot
+AssertionError: the planted shot: the planted program shot_writes_roll_0 answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evalPlanted helpers.ts:257:109
+    255| export function evalPlanted(bin: string, line: EvalLine & { planted: s…
+    256|   const answer = evalOne(bin, line);
+    257|   expect(answer['ok'], `${what}: the planted program ${line.planted} a…
+       |                                                                                                             ^
+    258|   return accepted(answer, line.times, what);
+    259| }
+ ❯ roll.test.ts:61:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/47]⎯
+
+ FAIL  seal.test.ts > AC2 #493.872906a8 a 2D film's push needs no scene3d: the camera is the core's > AC2 #493.872906a8 a 2D film with a 2 s push hashes the same at every cue end, by evaluated data and Vello CPU snapshot, sealed without scene3d as in the full build
+AssertionError: r1 at the cue end 0.5 s: film is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:114:96
+    112| }
+    113| export function obj(value: JsonValue | undefined, what: string): JsonO…
+    114|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+    115|   return value as JsonObject;
+    116| }
+ ❯ filmOf helpers.ts:433:13
+ ❯ seal.test.ts:42:15
+ ❯ readings seal.test.ts:40:19
+ ❯ seal.test.ts:79:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/47]⎯
+
+ FAIL  seal.test.ts > AC2 #493.872906a8 a 2D film's push needs no scene3d: the camera is the core's > AC2 #493.872906a8 a planted build that registers camera@1 in scene3d refuses that film with module_missing, naming scene3d, and fails the check
+AssertionError: the binary builds: deep-show --no-default-features --features r1,test-camera-in-scene3d: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features r1,test-camera-in-scene3d failed:
++ error: none of the selected packages contains this feature: test-camera-in-scene3d
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-canvas-drawn, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-motion, deep-canvas-loop, deep-sandbox-wasmtime, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:191:107
+    189|       const entry = made.get(features);
+    190|       if (!entry) throw Error(`the file didn't list the feature set ${…
+    191|       expect(entry.error, `the binary builds: ${SHOW_NAME} --no-defaul…
+       |                                                                                                           ^
+    192|       return entry.bin;
+    193|     },
+ ❯ seal.test.ts:83:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/47]⎯
+
+ FAIL  shake.test.ts > AC15 #493.44160e6c a shake turns the push's pose by seeded noise of the shot's ID, bounded by its amount > AC15 #493.44160e6c at 10,000 random times the shaken push is the push turned by the shake, never more than 1.6° from it in aim or roll
+AssertionError: shaken: cameras.cam at 229451 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ shake.test.ts:44:17
+ ❯ shake.test.ts:43:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/47]⎯
+
+ FAIL  shake.test.ts > AC15 #493.44160e6c a shake turns the push's pose by seeded noise of the shot's ID, bounded by its amount > AC15 #493.44160e6c the shaken push gives one pose at each t at 24, 60 and 144 fps, and seeking to each equals playing
+AssertionError: the shaken push at 24 fps: cameras.cam at 0 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ shake.test.ts:60:48
+ ❯ shake.test.ts:60:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/47]⎯
+
+ FAIL  shake.test.ts > AC15 #493.44160e6c a shake turns the push's pose by seeded noise of the shot's ID, bounded by its amount > AC15 #493.44160e6c the same shot ID gives the same offsets in two documents, and another ID different ones
+AssertionError: jolt: cameras.cam at 4040728 flicks.position is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:118:100
+    116| }
+    117| export function arr(value: JsonValue | undefined, what: string): JsonV…
+    118|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+    119|   return value as JsonValue[];
+    120| }
+ ❯ v3 helpers.ts:267:13
+ ❯ poseFrom helpers.ts:276:15
+ ❯ poseOf helpers.ts:282:73
+ ❯ shake.test.ts:73:42
+ ❯ shake.test.ts:73:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/47]⎯
+
+ FAIL  shake.test.ts > AC15 #493.44160e6c a shake turns the push's pose by seeded noise of the shot's ID, bounded by its amount > AC15 #493.44160e6c a planted shake that draws a new random offset each frame gives two poses at one t across 24 and 60 fps and fails, naming the shot
+AssertionError: the plant at 24 fps: the planted program shake_fresh_per_frame answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evalPlanted helpers.ts:257:109
+    255| export function evalPlanted(bin: string, line: EvalLine & { planted: s…
+    256|   const answer = evalOne(bin, line);
+    257|   expect(answer['ok'], `${what}: the planted program ${line.planted} a…
+       |                                                                                                             ^
+    258|   return accepted(answer, line.times, what);
+    259| }
+ ❯ shake.test.ts:78:39
+ ❯ shake.test.ts:78:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/47]⎯
+
+ FAIL  taste.test.ts > AC20 #493.b09e45f7 the screenshots, the shot list's recording and the one taste call on them > AC20 #493.b09e45f7 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: INCONCLUSIVE: the check run's pictures are not in docs/evidence/493/: push.png, orbit.png, cut.png, log-zoom.png, cross-fade.png, shot-list.apng; this is not a pass
+ ❯ inconclusive helpers.ts:144:10
+    142| /** The criterion stays open, whatever the reason: never a pass (AGENT…
+    143| export function inconclusive(reason: string): never {
+    144|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+    145| }
+    146| /** Relative difference, |a − b| ÷ |b|. */
+ ❯ taste.test.ts:23:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/47]⎯
+
+ FAIL  transitions.test.ts > AC5 #493.d8794d67 a cross-fade between two looks blends the sides, each finished through its own look > AC5 #493.d8794d67 at every frame of the window the cross-fade from an agx shot to an untoned one equals the blend of each side rendered alone through its own look, within one code value
+AssertionError: document 0 is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"transition_kind","severity":"error","ids":[],"path":"transitions/xf/kind","actual":null,"what":"motion.compile can't evaluate this","fix":"See the issue."}],"issues_evidence":"8f3b55354750ff68331ffcf38098b8cbba78adb6a1de9278d1ab3c8a1c0b3278","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"9c064443b657f7d04c81282887638dd7414fa579f21ec0edbf899022a7c72c40"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:417:68
+    415| }
+    416| export function presented(reply: JsonObject, what: string): void {
+    417|   expect(reply['outcome'], `${what} is presented: ${show(reply)}`).toB…
+       |                                                                    ^
+    418| }
+    419| /** #387's `eval` call at a flick: `pixels` draws the canonical snapsh…
+ ❯ transitions.test.ts:37:26
+ ❯ draw transitions.test.ts:37:8
+ ❯ transitions.test.ts:56:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[43/47]⎯
+
+ FAIL  transitions.test.ts > AC6 #493.7831f8ec a status chip in a cross-fade draws once, exact, from the side that holds the reveal > AC6 #493.7831f8ec at every frame of the window the chip draws once in its exact status color, unblended, from the outgoing side before the reveal and the incoming side from it
+AssertionError: the two shots hold the chip apart (outgoing [60,60,40,40], incoming [60,60,40,40]): each shot's pose applies: expected 0 to be greater than 60
+ ❯ transitions.test.ts:93:211
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[44/47]⎯
+
+ FAIL  transitions.test.ts > AC8 #493.55016885 a wipe's edge sits exactly where its progress puts it > AC8 #493.55016885 halfway through a 1 s linear wipe with no feather, angle 0 shows the incoming side exactly where x < 960 and angle 90 exactly where y < 540
+AssertionError: the two sides differ (26,163,200 vs 26,163,200): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ transitions.test.ts:129:66
+    127|     const [w0, oa, ob, w90] = draw([wipe(0), lookFilm('wipe-a', size, …
+    128|     const A = pixel(picture(oa![0]!, 'the outgoing side'), 5, 5); cons…
+    129|     expect(sameRgb(A, B), `the two sides differ (${A} vs ${B})`).toBe(…
+       |                                                                  ^
+    130|     const failures: string[] = [];
+    131|     for (const [reply, angle, incoming] of [[w0![0]!, 0, (x: number) =…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[45/47]⎯
+
+ FAIL  whip.test.ts > AC14 #493.e7031693 a whip turns away, swaps at its fastest, and blurs across the swap > AC14 #493.e7031693 the 0.8 s whip turns the outgoing yaw to 6.5° and 26° and the incoming from −26° to −6.5° and 0° within 1e-9°, at 130°/s at the swap, and the frame at the swap averages sub-samples from both sides
+AssertionError: the whip is accepted: {"ok":false,"code":"transition_kind","path":"transitions/whip/kind"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:235:64
+    233| /** An answer that accepted its document, with one frame per time, in …
+    234| export function accepted(answer: JsonObject, times: readonly number[],…
+    235|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    236|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    237|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ evalOk helpers.ts:247:10
+ ❯ whip.test.ts:69:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[46/47]⎯
+
+ FAIL  whip.test.ts > AC14 #493.e7031693 a whip turns away, swaps at its fastest, and blurs across the swap > AC14 #493.e7031693 a planted whip that eases each half in and out turns at 0°/s at the swap, draws that frame without blur and fails, naming the transition
+AssertionError: the planted whip: the planted program whip_eases_halves answers with frames: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ evalPlanted helpers.ts:257:109
+    255| export function evalPlanted(bin: string, line: EvalLine & { planted: s…
+    256|   const answer = evalOne(bin, line);
+    257|   expect(answer['ok'], `${what}: the planted program ${line.planted} a…
+       |                                                                                                             ^
+    258|   return accepted(answer, line.times, what);
+    259| }
+ ❯ whip.test.ts:79:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[47/47]⎯
+
+
+ Test Files  18 failed (18)
+      Tests  47 failed | 3 passed (50)
+   Start at  11:29:06
+   Duration  51.54s (tests 99%)
+

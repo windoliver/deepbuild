@@ -25,6 +25,7 @@ import { installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { heavyDenial } from './heavy.js';
 import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
+import { People } from './people.js';
 import { plantedStart } from './plant.js';
 import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 
@@ -40,12 +41,13 @@ const MAX_LINE = 64 << 20;
 const BEHIND = 10_000;
 const STALL_MS = 100;
 
-type Role = 'hook' | 'app' | 'cli' | 'mcp';
+/** A person's connection (#1337) reads only what that person may see. */
+type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
-  ['hub.health', ['app', 'cli']], ['health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['ask.confirm', ['app']], ['views.installed', ['app']], ['command.run', ['app']],
+  ['hub.health', ['app', 'cli', 'person']], ['health', ['app', 'cli', 'person']], ['events.read', ['app', 'cli', 'person']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['ask.confirm', ['app']], ['views.installed', ['app']], ['command.run', ['app']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
-  ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
+  ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli', 'person']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
   ['numbers.read', ['app', 'cli']], ['numbers.baseline', ['cli']], ['race.start', ['cli']], ['numbers.refresh', ['cli']], ['numbers.sample', ['cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']], ['device.unpair', ['app', 'cli']], ['channel.link', ['app', 'cli']], ['confirm.enroll', ['app']],
   // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
   ['offer.save', ['app', 'cli']],
@@ -58,6 +60,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
   // Sessions started without your Send (#1330): a run you approve, and a start under it, from your own terminal.
   ['start.approve', ['cli']], ['start.session', ['cli']],
+  // A person added to a project, with a credential of their own (#1337).
+  ['person.add', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
@@ -301,6 +305,8 @@ class Conn {
   cwd: string | undefined;
   /** For an app or cli connection, the process its hello names as its own: the peer check starts there. */
   peer: { pid: number; start: string } | undefined;
+  /** The person whose credential the connection presented (#1337); none for the owner. */
+  person: string | undefined;
   first = true;
   done = false;
   /** A waiter's connection: its close tells the core the waiter is gone. */
@@ -377,7 +383,10 @@ class Hub {
   /** The hub's clock (the test clock, moved on by a restart): what the waits measure by, like the record's `ts`. */
   private now: () => number = Date.now;
 
+  /** The people this hub holds credentials for (#1337), read again when one is added. */
+  private readonly people: People;
   constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {
+    this.people = new People(root.dir);
     this.waits = new Waits({ rewrites: (agent) => this.rewrites(agent), ...(plant ? { plant } : {}) });
   }
 
@@ -692,6 +701,10 @@ class Hub {
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
     const meta = parsed.meta;
+    // The person is the connection's, never the payload's, but for the planted wrong program (#1337).
+    const person = this.plant === 'actor-from-payload' && meta.payloadActor ? meta.payloadActor : conn.person;
+    if (person) meta.person = person;
+    else delete meta.person;
     if (this.cantRun.has(meta.agent)) Object.assign(meta, { watchOnly: true, cantRun: true });
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     let ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
@@ -1086,6 +1099,24 @@ class Hub {
       conn.write({ id: null, error: versionRefusal(value) });
       return conn.end();
     }
+    // A person's credential (#1337): their reads, or their hooks, whose events are stamped with them.
+    const person = (value.hello === 'cli' || value.hello === 'hook') && !this.tokenMatches(value.token) ? this.people.holder(value.token) : undefined;
+    if (value.hello === 'hook') {
+      if (!person && !this.tokenMatches(value.token)) {
+        conn.write({ id: null, error: refusal('credential', '/token', "Present the control token or a person's credential this hub issued.") });
+        return conn.end();
+      }
+      conn.person = person;
+      // The next line is the hook's request, read as a first line is.
+      conn.first = true;
+      return;
+    }
+    if (value.hello === 'cli' && person) {
+      conn.role = 'person';
+      conn.name = `person:${person}`;
+      conn.person = person;
+      return conn.write({ role: conn.name });
+    }
     if (value.hello === 'app' || value.hello === 'cli') {
       if (!this.tokenMatches(value.token)) {
         conn.write({ id: null, error: refusal('credential', '/token', "Present the control token this hub wrote to control.token at its launch; an earlier launch's token no longer counts.") });
@@ -1168,6 +1199,11 @@ class Hub {
         // The reply is the stream's first frame: it carries the start ID, so a consumer that sees a new one redoes its reads.
         return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after, start: this.start })));
       }
+      case 'person.add':
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, ...(conn.peer ? { peer: conn.peer } : {}) } }).then((result) => {
+          this.people.load();
+          return result;
+        }));
       case 'session.wait':
         conn.waiter = true;
         return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session } }));

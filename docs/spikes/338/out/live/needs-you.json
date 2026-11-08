@@ -19,7 +19,7 @@
     "children": [
       {
         "role": "label",
-        "name": "Sessions",
+        "name": "Tasks",
         "value": null,
         "bounds": [
           16,
