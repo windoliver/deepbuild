@@ -288,6 +288,26 @@ impl Index {
         })
     }
 
+    /// #427: the hierarchy's nodes from the root down, each with its depth (the root's 0),
+    /// whether it is a leaf, and its box; the pick hierarchy mode draws them.
+    pub fn hierarchy(&self) -> Vec<(usize, bool, Aabb)> {
+        let mut out = Vec::new();
+        let mut stack = if self.nodes.is_empty() {
+            Vec::new()
+        } else {
+            vec![(0usize, 0usize)]
+        };
+        while let Some((at, depth)) = stack.pop() {
+            let n = &self.nodes[at];
+            out.push((depth, n.kids.is_none(), n.bounds));
+            if let Some((a, b)) = n.kids {
+                stack.push((b, depth + 1));
+                stack.push((a, depth + 1));
+            }
+        }
+        out
+    }
+
     /// The query's items: a view's and a box's in ID order, the nearest and those within a radius
     /// by distance, then ID.
     pub fn answer(&self, q: &Query) -> Result<Vec<String>, Refused> {

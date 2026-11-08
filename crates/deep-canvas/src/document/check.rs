@@ -483,7 +483,11 @@ fn lights_check(lowered: &Value, issues: &mut Vec<Issue>) {
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
-        .filter(|(_, item)| kind_text(item).is_some_and(|k| k.starts_with("light.")))
+        // A probe (#427) is no light: it captures light and gives none.
+        .filter(|(_, item)| {
+            kind_text(item)
+                .is_some_and(|k| k.starts_with("light.") && !k.starts_with("light.probe@"))
+        })
         .map(|(id, _)| id.clone())
         .collect();
     if lights.len() as u64 > cap {
