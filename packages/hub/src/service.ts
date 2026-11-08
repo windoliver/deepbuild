@@ -173,6 +173,11 @@ function launch(file: string): string | undefined {
     // The same for systemd: one unit name serves every home, and a unit loaded from another home's file is that hub.
     const path = run('systemctl', ['--user', 'show', '--property=FragmentPath', '--value', UNIT]).stdout?.trim();
     if (path && !same(path, file)) return `${UNIT} is loaded from ${path}, another home's hub; stop it with systemctl --user disable --now ${UNIT} if it is yours to stop, then start this one again`;
+    // The user manager reads units from its own home; a unit written under another one, as a test's home is, is linked in.
+    if (!path) {
+      const linked = run('systemctl', ['--user', 'link', file]);
+      if (linked.status !== 0) return `systemctl --user link ${file}: ${linked.stderr.trim()}`;
+    }
     const started = run('systemctl', ['--user', 'enable', '--now', UNIT]);
     return started.status === 0 ? undefined : `systemctl --user enable --now ${UNIT}: ${started.stderr.trim()}`;
   }
