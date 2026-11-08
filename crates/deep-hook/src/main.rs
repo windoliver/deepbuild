@@ -1021,8 +1021,11 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
 /// O_NOFOLLOW, which std doesn't name: opening a symlink fails rather than following it.
 #[cfg(target_os = "macos")]
 const NOFOLLOW: i32 = 0x0100;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(any(target_arch = "aarch64", target_arch = "arm"))))]
 const NOFOLLOW: i32 = 0o400000;
+// arm64 and arm number it otherwise; 0o400000 there is O_LARGEFILE, which follows the link.
+#[cfg(all(target_os = "linux", any(target_arch = "aarch64", target_arch = "arm")))]
+const NOFOLLOW: i32 = 0o100000;
 
 /// DEEP_HOOK_TEST_SPOOL_STALL in a debug build: spool only this many bytes of the line, then wait to be killed.
 #[cfg(debug_assertions)]
