@@ -342,7 +342,8 @@ fn item_ids_in<'d>(v: &'d Value, items: &Map<String, Value>, out: &mut Vec<&'d s
 /// items its own `applies` gives it (a document's operator over all of them) that the frame
 /// evaluates, while a check phase's operators run once at check and cost no frame; each pass over
 /// the frame and the items of its module's kinds; and the CPU each module's kinds register per
-/// item. An operator that declares a cost (#1417) is charged it on each item on top of its terms.
+/// item. An operator that declares a cost (#1417) is charged it on each item it applies to, on
+/// top of its terms, moving or not.
 /// GPU memory holds every item, moving or not.
 pub fn estimate(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> Estimate {
     estimate_by(doc, sealed, coefficients, |entries, work| {
@@ -424,14 +425,15 @@ pub(crate) fn estimate_by(
                 continue;
             }
             bytes += t.bytes_per_item;
-            if evaluated.as_ref().is_some_and(|e| !e[i]) {
-                continue;
+            // What it declares is work the frame that shows or changes its item holds, whatever
+            // moves after (#1417); its terms only while the frame evaluates the item.
+            let mut ns = op.op.cost.map_or(0.0, |cost| cost(item) * 1e6);
+            if evaluated.as_ref().is_none_or(|e| e[i]) {
+                let c = f.counts[i];
+                ns += t.ns_per_item
+                    + t.ns_per_vertex * c.vertices
+                    + t.ns_per_frame_glyph() * c.glyphs;
             }
-            let c = f.counts[i];
-            let ns = t.ns_per_item
-                + t.ns_per_vertex * c.vertices
-                + t.ns_per_frame_glyph() * c.glyphs
-                + op.op.cost.map_or(0.0, |cost| cost(item) * 1e6);
             cpu_ns += ns;
             op_ns += ns;
             by_item[i] += ns;
@@ -684,6 +686,41 @@ mod tests {
             .contains("the costliest operator is sized.work"));
         // Past only its GPU memory, at 0.5 ms of CPU: no operator's CPU is to blame.
         assert!(!refusal(1.0, 1e9).what.contains("costliest operator"));
+    }
+
+    fn sized_with_tick() -> crate::registry::Sealed {
+        let mut sized = tick();
+        sized.manifest.name = "sized".into();
+        sized.manifest.feature = "sized".into();
+        sized.manifest.implements = "sized@1".into();
+        sized.register = register_sized;
+        Registry::new(BuildSet::Core)
+            .with(tick())
+            .with(sized)
+            .seal()
+            .expect("seals")
+    }
+
+    #[test]
+    fn a_declared_cost_is_charged_while_another_item_moves() {
+        let sealed = sized_with_tick();
+        let mut doc = board(1, true);
+        doc["items"]["s0"]["params"]["rows"] = json!(4);
+        // The still item's 2 ms land in the frame that shows it, whatever else moves.
+        let e = estimate(&doc, &sealed, &Coefficients::reference());
+        assert!(e.cpu_ms >= 2.0, "{}", e.cpu_ms);
+    }
+
+    #[test]
+    fn a_patch_to_a_budgeted_document_nothing_costly_applies_to_is_rechecked_incrementally() {
+        let sealed = sized_with_tick();
+        let mut before = board(2, false);
+        before["budget"] = json!({"class": "data_view"});
+        let prev = crate::document::check_in(&before, &sealed).issues;
+        let mut after = before.clone();
+        after["items"]["s0"]["params"]["box"] = json!([0, 0, 2, 2]);
+        let changed = std::collections::BTreeSet::from(["s0".to_string()]);
+        assert!(crate::document::recheck(&after, &prev, &changed, &sealed).is_some());
     }
 
     #[test]
