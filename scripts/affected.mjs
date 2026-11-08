@@ -4,7 +4,7 @@
 // what the file imports, cargo test for crates. The files lanes.mjs runs alone run one at a time after everything
 // else, which runs in parallel, and those it leaves to a person don't run. Its timed files run last, one at a time
 // under a timed grant, and only with --timed: unrun, they leave the run INCONCLUSIVE. Failures main already has
-// (known-failures.json) read apart from new ones, and a timing budget missed under load reads INCONCLUSIVE. So does a
+// (known-failures.json) read apart from new ones, and a timing budget missed at a load above the core count reads INCONCLUSIVE. So does a
 // skip, or BLOCKED by its note, unless the same file's `skips` list covers it, which is printed.
 //
 //   node scripts/affected.mjs [--list] [--wide] [--record] [--timed] [--slow] [path ...]
@@ -306,13 +306,15 @@ export function lintFindings(cwd, name, output, status) {
 
 /**
  * Each failure as new, already failing on main (the baseline names it, or its lint finding as many times), or
- * INCONCLUSIVE for a timing budget the baseline names, which a loaded Mac can't measure.
+ * INCONCLUSIVE for a timing budget the baseline names when the load is above the core count, where a Mac can't measure
+ * it; at or below the core count the budget was measurable, so its failure stands.
  */
-export function classify(failures, findings, baseline) {
+export function classify(failures, findings, baseline, load = loadavg()[0]) {
+  const loaded = load > availableParallelism();
   const known = [], fresh = [], unsure = [];
   for (const failure of failures) {
     if (failure.state !== 'FAIL') unsure.push(failure);
-    else if (baseline.timing.includes(failure.id)) unsure.push({ ...failure, state: 'INCONCLUSIVE', message: `a timing budget, unmeasured at load ${loadavg()[0].toFixed(0)}` });
+    else if (loaded && baseline.timing.includes(failure.id)) unsure.push({ ...failure, state: 'INCONCLUSIVE', message: `a timing budget, unmeasured at load ${load.toFixed(0)}` });
     else if (baseline.failures[failure.id]) known.push({ ...failure, message: baseline.failures[failure.id] });
     else fresh.push(failure);
   }

@@ -82,9 +82,10 @@ pub const TERMINAL_COLORS: &str = "terminal-colors";
 /// takes them, `--appearance <light|dark>` as whether macOS is set to dark (#882) and `--bound <file>`, the runs and
 /// bound values to draw (#629); else the usage error is printed under `bin`'s name and the exit code is 2. The replica
 /// also takes the `terminal-colors` view, `--selected-row <n>` and `--focused-row <n>`, the sidebar rows it opens
-/// selected and focused (#1003), and `--click <button>` on the first screen (#1556).
+/// selected and focused (#1003), `--click <button>` on the first screen (#1556), and `--window <w>x<h>` (#1454).
 pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
-    let (mut view, mut path, mut dark, mut bound, mut click) = (None, None, None, None, None);
+    let (mut view, mut path, mut dark, mut bound, mut click, mut size) =
+        (None, None, None, None, None, None);
     let (mut selected, mut focused) = (None, None);
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -105,6 +106,19 @@ pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
             "--first-screen" => view = Some(FIRST_SCREEN.to_owned()),
             "--out" => path = args.next().map(PathBuf::from),
             "--bound" if replica => bound = args.next().map(PathBuf::from),
+            // #1454: the replica's window can be the app's opening size, so a proof runs at both.
+            "--window" if replica => {
+                let given = args.next();
+                let read = given
+                    .as_deref()
+                    .and_then(|s| s.split_once('x'))
+                    .and_then(|(w, h)| Some((w.parse::<f32>().ok()?, h.parse::<f32>().ok()?)));
+                let Some(read) = read.filter(|(w, h)| *w > 0. && *h > 0.) else {
+                    eprintln!("{bin}: --window is <width>x<height> in points, not {given:?}");
+                    return Err(2);
+                };
+                size = Some(read);
+            }
             "--click" if replica => click = args.next(),
             "--appearance" if replica => match args.next().as_deref() {
                 Some("light") => dark = Some(false),
@@ -135,16 +149,18 @@ pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
         return Err(2);
     }
     deep_app::views::start_sidebar(selected, focused);
-    Ok((view, path, dark, bound, click))
+    Ok((view, path, dark, bound, click, size))
 }
 
-/// What `view_args` reads: the view, where to write, the appearance, the bound values' file and the button to click.
+/// What `view_args` reads: the view, where to write, the appearance, the bound values' file, the button to click and
+/// the window's size.
 pub type ViewArgs = (
     String,
     PathBuf,
     Option<bool>,
     Option<PathBuf>,
     Option<String>,
+    Option<(f32, f32)>,
 );
 
 /// Issue #629: `--bound <file>`, `{"runs": [{run, check, tool, report}], "card": [{id, bind}], "panel": [{id,

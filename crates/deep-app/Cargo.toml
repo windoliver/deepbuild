@@ -23,12 +23,23 @@ plant-walks-events = []
 plant-spike-window = ["spike"]
 plant-handle-rows = []
 plant-tab-text = []
+# Issue #41's wrong program, in no shipped build (tests/acceptance/41/app): an app that takes every hub hello as covering
+# it, so it calls methods the hub doesn't list.
+plant-calls-unlisted = []
 # Issue #1408: the wrong programs a test selects with DEEP_HUB_PLANT, read only in a build with this feature. A release
 # build refuses it.
 env-plants = []
 # Issue #124's wrong session rows, in no shipped build: deep-drive turns one on when it's planted, for the UI check,
 # through deep-replica's env-plants feature (#1662).
 plant-row = []
+# Issue #1454's wrong programs, in no shipped build (tests/acceptance/1454): a card that takes a press from no hardware as
+# you, a page opened with no params, and an app that mounts every installed panel whatever its kit said.
+plant-card-skips-confirm = []
+plant-page-drops-param = []
+plant-panel-skips-kit = []
+# Issue #1454: a file stands in for the OS's prompt, in no shipped build: a test can't be you, and an environment variable
+# in the shipped app would let an agent answer for you.
+test-confirm = []
 # Issue #1172: #337's spike window, in no shipped build: the suites that keep its proof build it, through the dev
 # dependency on this crate below.
 spike = []
@@ -57,6 +68,8 @@ deep-canvas-cells = { path = "../deep-canvas-cells" }
 deep-gpu = { path = "../deep-gpu" }
 # Issue #327: the image you attach is kept by its SHA-256; the click token is one too (the version already in the tree).
 sha2 = "0.10"
+# Issue #1454: the app signs its answers as the device you paired (the version already in the tree).
+ed25519-dalek = "3"
 # Issue #883: a notification gives the default's time as a clock time in your time zone (the version gpui already uses).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 

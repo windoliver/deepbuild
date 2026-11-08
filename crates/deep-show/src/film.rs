@@ -2,13 +2,15 @@
 //! reduced motion, Frame and group: parallax): the camera each shot writes, through the motion
 //! module's compiled program, so a build without scene3d draws the same; the sides a transition
 //! or a reduced-motion dissolve draws, each through its own camera and finished in its own look,
-//! then blended as finished, display-referred pixels; and the film block an `eval` reports.
+//! then blended as finished, display-referred pixels; and the film block an `eval` reports, with
+//! #494's evaluated paths and match morphs between two items.
 
 use std::sync::Arc;
 
 use deep_canvas::schedule::{Scheduler, Session as DocSession};
 use deep_canvas_marks::finish::{srgb_decode, srgb_encode, tone, ToneMap};
 use deep_canvas_motion::eval::Validity;
+use deep_canvas_motion::morph;
 use deep_canvas_motion::program::{Planted, Program};
 use deep_canvas_motion::shots::{At, Kind, Plan, Pose};
 use serde_json::{json, Map, Value};
@@ -208,8 +210,9 @@ pub(crate) fn over(under: &mut [u8], over: &[u8]) {
 /// The film block an `eval` with `film` reports: each camera's pose, a reduced-motion cut's
 /// dissolve, each parallax group's offset and each text's glyphs.
 pub(crate) fn block(program: &Program, doc: &Value, t: i64, reduced: bool, glyphs: Map<String, Value>) -> Value {
+    let (paths, morphs) = morphs(program, doc, t);
     let Some(plan) = program.shots.as_deref() else {
-        return json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs});
+        return json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs, "paths": paths, "morphs": morphs});
     };
     let mut state = program.state();
     program.evaluate(t, Validity::Full, &mut state);
@@ -236,7 +239,61 @@ pub(crate) fn block(program: &Program, doc: &Value, t: i64, reduced: bool, glyph
         .iter()
         .filter_map(|g| Some((g.id.clone(), json!(plan.parallax(program, &g.id, t, reduced)?))))
         .collect();
-    json!({"cameras": cameras, "dissolve": dissolve, "parallax": parallax, "glyphs": glyphs})
+    json!({"cameras": cameras, "dissolve": dissolve, "parallax": parallax, "glyphs": glyphs, "paths": paths, "morphs": morphs})
+}
+
+/// #494: each item a path channel draws, its evaluated path as path@1's columns in its own
+/// space; and each match morph between two items, the pieces it draws at t.
+fn morphs(program: &Program, doc: &Value, t: i64) -> (Map<String, Value>, Map<String, Value>) {
+    let (mut paths, mut morphs) = (Map::new(), Map::new());
+    let drawn = program.motion.channels.iter().any(|c| c.path.is_some() && c.target.field == ["path"]);
+    let Some(map) = doc.as_object().filter(|_| drawn || !program.betweens.is_empty()) else {
+        return (paths, morphs);
+    };
+    let mut state = program.state();
+    program.evaluate(t, Validity::Full, &mut state);
+    let items = deep_canvas_motion::eval::items(map, program, &state);
+    for c in program.motion.channels.iter().filter(|c| c.path.is_some() && c.target.field == ["path"]) {
+        if let Some(shape) = items.get(&c.target.owner).and_then(|i| morph::of_item(i, None)) {
+            paths.insert(c.target.owner.clone(), morph::value_of(&shape));
+        }
+    }
+    for b in &program.betweens {
+        let side = |id: &str| items.get(id).map_or_else(Vec::new, |item| parts_of(id, item));
+        let pieces = morph::pieces(&side(&b.from), &side(&b.to), &b.pairs, b.unpaired, b.progress(t));
+        let pieces: Vec<Value> = pieces
+            .iter()
+            .map(|p| json!({"from": p.from, "to": p.to, "center": p.centre, "opacity": p.opacity, "path": morph::value_of(&p.shape)}))
+            .collect();
+        morphs.insert(b.id.clone(), json!({"progress": b.progress(t), "pieces": pieces}));
+    }
+    (paths, morphs)
+}
+
+/// An item's parts as a match morph pairs them: a formula's parts by id, a graph's nodes by key
+/// (laid out as the graph draws them), or the item whole.
+fn parts_of(id: &str, item: &Value) -> Vec<morph::Part> {
+    match item.get("kind").and_then(Value::as_str) {
+        Some("vector@1") => morph::vector_parts(id, item),
+        Some("graph@1") => {
+            let n = |k: usize| item.pointer(&format!("/at/pos/{k}")).and_then(Value::as_f64).unwrap_or(0.0);
+            let Some(Ok((_, drawn))) = item.get("params").map(|p| deep_canvas_graph::view::place(p, [n(0), n(1)])) else {
+                return Vec::new();
+            };
+            drawn
+                .nodes
+                .iter()
+                .map(|(key, [x, y, w, h])| morph::Part {
+                    name: format!("{id}#{key}"),
+                    key: key.clone(),
+                    shape: vec![morph::Sub { points: vec![[*x, *y], [x + w, *y], [x + w, y + h], [*x, y + h]], closed: true }],
+                })
+                .collect()
+        }
+        _ => morph::of_item(item, None)
+            .map(|shape| vec![morph::Part { name: id.to_string(), key: id.to_string(), shape: morph::placed(item, &shape) }])
+            .unwrap_or_default(),
+    }
 }
 
 /// A 3D document with its envelope camera posed as its shots write it at t (Shot: a shot alone

@@ -1,0 +1,184 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/41/update
+
+ ❯ login-service.test.ts (4 tests | 4 failed) 11ms
+   ❯ the login service points at the link every update keeps (4)
+     × after two updates and the removal of the old version folders, the definition read back still starts the hub, at the newest version 6ms
+     × the first program path goes through <home>/versions/current/ and names no version folder 2ms
+     × a definition written at 1.0.0 starts 1.0.0 then, and after the switch to 1.2.0 the same text starts 1.2.0 1ms
+     × its first program path is still there once every version but the current one is removed 1ms
+ ❯ update-check.test.ts (8 tests | 8 failed) 49ms
+   ❯ update check says up to date only after a check that succeeded (8)
+     × a successful check of the same version says up to date 6ms
+     × a successful check that finds a newer version says so and names it, never up to date 2ms
+     × offline with no earlier check says it could not check and that it never has, not up to date 1ms
+     × offline after an earlier success gives that success time, from the state file, not the time of the failed try 1ms
+     × a failed check does not move the last check: two failures in a row still give the one success time 1ms
+     × a later success moves the last check forward, so the next failure names the later time 6ms
+     × a refused answer (no usable manifest) is a check that did not succeed, not up to date 31ms
+     × a failed check on a newer current version than any recorded still never claims up to date 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  login-service.test.ts > the login service points at the link every update keeps > after two updates and the removal of the old version folders, the definition read back still starts the hub, at the newest version
+Error: Cannot find module '/packages/cli/src/login-service.ts' imported from <checkout>/tests/acceptance/41/update/login-service.test.ts
+ ❯ load login-service.test.ts:23:5
+     21| type Make = (o: { home: string }) => Def;
+     22| const load = async (): Promise<Make> =>
+     23|   ((await import('../../../../packages/cli/src/login-service.ts')) as …
+       |     ^
+     24|
+     25| const homes: string[] = [];
+ ❯ login-service.test.ts:53:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  login-service.test.ts > the login service points at the link every update keeps > the first program path goes through <home>/versions/current/ and names no version folder
+Error: Cannot find module '/packages/cli/src/login-service.ts' imported from <checkout>/tests/acceptance/41/update/login-service.test.ts
+ ❯ load login-service.test.ts:23:5
+     21| type Make = (o: { home: string }) => Def;
+     22| const load = async (): Promise<Make> =>
+     23|   ((await import('../../../../packages/cli/src/login-service.ts')) as …
+       |     ^
+     24|
+     25| const homes: string[] = [];
+ ❯ login-service.test.ts:72:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  login-service.test.ts > the login service points at the link every update keeps > a definition written at 1.0.0 starts 1.0.0 then, and after the switch to 1.2.0 the same text starts 1.2.0
+Error: Cannot find module '/packages/cli/src/login-service.ts' imported from <checkout>/tests/acceptance/41/update/login-service.test.ts
+ ❯ load login-service.test.ts:23:5
+     21| type Make = (o: { home: string }) => Def;
+     22| const load = async (): Promise<Make> =>
+     23|   ((await import('../../../../packages/cli/src/login-service.ts')) as …
+       |     ^
+     24|
+     25| const homes: string[] = [];
+ ❯ login-service.test.ts:82:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  login-service.test.ts > the login service points at the link every update keeps > its first program path is still there once every version but the current one is removed
+Error: Cannot find module '/packages/cli/src/login-service.ts' imported from <checkout>/tests/acceptance/41/update/login-service.test.ts
+ ❯ load login-service.test.ts:23:5
+     21| type Make = (o: { home: string }) => Def;
+     22| const load = async (): Promise<Make> =>
+     23|   ((await import('../../../../packages/cli/src/login-service.ts')) as …
+       |     ^
+     24|
+     25| const homes: string[] = [];
+ ❯ login-service.test.ts:94:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  update-check.test.ts > update check says up to date only after a check that succeeded > a successful check of the same version says up to date
+Error: Cannot find module '/packages/cli/src/update-check.ts' imported from <checkout>/tests/acceptance/41/update/update-check.test.ts
+ ❯ load update-check.test.ts:29:5
+     27|
+     28| const load = async (): Promise<Check> =>
+     29|   ((await import('../../../../packages/cli/src/update-check.ts')) as {…
+       |     ^
+     30|
+     31| const dirs: string[] = [];
+ ❯ update-check.test.ts:51:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  update-check.test.ts > update check says up to date only after a check that succeeded > a successful check that finds a newer version says so and names it, never up to date
+Error: Cannot find module '/packages/cli/src/update-check.ts' imported from <checkout>/tests/acceptance/41/update/update-check.test.ts
+ ❯ load update-check.test.ts:29:5
+     27|
+     28| const load = async (): Promise<Check> =>
+     29|   ((await import('../../../../packages/cli/src/update-check.ts')) as {…
+       |     ^
+     30|
+     31| const dirs: string[] = [];
+ ❯ update-check.test.ts:58:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  update-check.test.ts > update check says up to date only after a check that succeeded > offline with no earlier check says it could not check and that it never has, not up to date
+Error: Cannot find module '/packages/cli/src/update-check.ts' imported from <checkout>/tests/acceptance/41/update/update-check.test.ts
+ ❯ load update-check.test.ts:29:5
+     27|
+     28| const load = async (): Promise<Check> =>
+     29|   ((await import('../../../../packages/cli/src/update-check.ts')) as {…
+       |     ^
+     30|
+     31| const dirs: string[] = [];
+ ❯ update-check.test.ts:66:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  update-check.test.ts > update check says up to date only after a check that succeeded > offline after an earlier success gives that success time, from the state file, not the time of the failed try
+Error: Cannot find module '/packages/cli/src/update-check.ts' imported from <checkout>/tests/acceptance/41/update/update-check.test.ts
+ ❯ load update-check.test.ts:29:5
+     27|
+     28| const load = async (): Promise<Check> =>
+     29|   ((await import('../../../../packages/cli/src/update-check.ts')) as {…
+       |     ^
+     30|
+     31| const dirs: string[] = [];
+ ❯ update-check.test.ts:75:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  update-check.test.ts > update check says up to date only after a check that succeeded > a failed check does not move the last check: two failures in a row still give the one success time
+Error: Cannot find module '/packages/cli/src/update-check.ts' imported from <checkout>/tests/acceptance/41/update/update-check.test.ts
+ ❯ load update-check.test.ts:29:5
+     27|
+     28| const load = async (): Promise<Check> =>
+     29|   ((await import('../../../../packages/cli/src/update-check.ts')) as {…
+       |     ^
+     30|
+     31| const dirs: string[] = [];
+ ❯ update-check.test.ts:88:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  update-check.test.ts > update check says up to date only after a check that succeeded > a later success moves the last check forward, so the next failure names the later time
+Error: Cannot find module '/packages/cli/src/update-check.ts' imported from <checkout>/tests/acceptance/41/update/update-check.test.ts
+ ❯ load update-check.test.ts:29:5
+     27|
+     28| const load = async (): Promise<Check> =>
+     29|   ((await import('../../../../packages/cli/src/update-check.ts')) as {…
+       |     ^
+     30|
+     31| const dirs: string[] = [];
+ ❯ update-check.test.ts:98:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  update-check.test.ts > update check says up to date only after a check that succeeded > a refused answer (no usable manifest) is a check that did not succeed, not up to date
+Error: Cannot find module '/packages/cli/src/update-check.ts' imported from <checkout>/tests/acceptance/41/update/update-check.test.ts
+ ❯ load update-check.test.ts:29:5
+     27|
+     28| const load = async (): Promise<Check> =>
+     29|   ((await import('../../../../packages/cli/src/update-check.ts')) as {…
+       |     ^
+     30|
+     31| const dirs: string[] = [];
+ ❯ update-check.test.ts:108:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  update-check.test.ts > update check says up to date only after a check that succeeded > a failed check on a newer current version than any recorded still never claims up to date
+Error: Cannot find module '/packages/cli/src/update-check.ts' imported from <checkout>/tests/acceptance/41/update/update-check.test.ts
+ ❯ load update-check.test.ts:29:5
+     27|
+     28| const load = async (): Promise<Check> =>
+     29|   ((await import('../../../../packages/cli/src/update-check.ts')) as {…
+       |     ^
+     30|
+     31| const dirs: string[] = [];
+ ❯ update-check.test.ts:119:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  12 failed (12)
+   Start at  01:11:57
+   Duration  810ms (transform 41%, import 26%, worker 20%, tests 13%)
+

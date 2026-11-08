@@ -450,7 +450,7 @@ export async function shellFailures(world: World, app: App, want: { rows: readon
   const lines = await ocr(await app.capture(`shell-${want.count}`));
   const spike = [...named.map((n) => n.name), ...lines.map((l) => l.text)].find((text) => /\bSession \d{4}\b|waiting on you/.test(text));
   if (spike) out.push(`the window is the spike window: it draws "${spike}"`);
-  if (!named.some((n) => n.name === 'Sessions')) out.push(`the window has no registered sidebar: no node is named "Sessions"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
+  if (!named.some((n) => n.name === 'Tasks')) out.push(`the window has no registered sidebar: no node is named "Tasks"; its names are ${JSON.stringify(named.map((n) => n.name).slice(0, 20))}`);
   for (const s of world.sessions) {
     const rows = named.filter((n) => n.role === 'AXButton' && n.name.includes(s.task));
     if (rows.length !== 1) out.push(`the sidebar should show session "${s.task}" once, as a row; it has ${rows.length}`);

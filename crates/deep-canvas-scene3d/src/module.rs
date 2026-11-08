@@ -158,7 +158,7 @@ fn has_light(doc: &Value, _: &str, _: &Value) -> bool {
             items.values().any(|i| {
                 i.get("kind")
                     .and_then(Value::as_str)
-                    .is_some_and(|k| k.starts_with("light."))
+                    .is_some_and(|k| k.starts_with("light.") && !k.starts_with("light.probe@"))
             })
         })
 }
@@ -313,6 +313,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             ("light.point@1", "light", "point"),
             ("light.spot@1", "light", "spot"),
             ("light.area@1", "light", "area"),
+            ("light.probe@1", "light", "probe"),
             ("material@1", "", "material"),
             ("sky@1", "", "sky"),
             ("puff@1", "", "puff"),

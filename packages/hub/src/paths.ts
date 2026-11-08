@@ -1,6 +1,7 @@
 // Where a hub keeps its files, and the one setting every client reads the hub's address from.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir, userInfo } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -191,8 +192,23 @@ function worktreeHub(uses: Record<string, unknown>, cwd: string): string | undef
 }
 
 /** The deep-hook this checkout built, the newer of its release and debug builds. */
+/**
+ * An installed version's programs, through the versions folder's `current` link, which every update switches and
+ * none removes (#41): the paths setup writes into every entry, so an update leaves each entry as it was. Undefined
+ * for a checkout, which has no versions folder.
+ */
+export function installedPrograms(root: string): { deep: string; hook: string } | undefined {
+  const bin = join(root, 'versions', 'current', 'bin');
+  return existsSync(bin) ? { deep: join(bin, 'deep'), hook: join(bin, 'deep-hook') } : undefined;
+}
+/** deep-hook as npm installs it (#41): this platform's optional package beside `deepbuild`; else this checkout's build. */
 export function deepHook(): string {
   const repo = fileURLToPath(new URL('../../../', import.meta.url));
+  try {
+    const pkg = createRequire(join(repo, 'package.json')).resolve(`@deepbuild/deep-hook-${process.platform}-${process.arch}/package.json`);
+    const hook = join(dirname(pkg), 'bin', 'deep-hook');
+    if (existsSync(hook)) return hook;
+  } catch { /* not installed from npm: a checkout */ }
   const built = ['release', 'debug'].map((p) => join(repo, 'target', p, 'deep-hook')).filter((p) => existsSync(p));
   if (!built.length) throw Error(`no deep-hook is built under ${join(repo, 'target')}; run cargo build -p deep-hook first`);
   return built.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]!;
