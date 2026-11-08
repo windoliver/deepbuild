@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use crate::inline::{holds, interpreter, Program};
+use crate::inline::{holds, interpreter, Program, INTERPRETERS};
 
 /// How deep shells, substitutions and evals nest before the reader reads no further in.
 pub const DEPTH: usize = 12;
@@ -1271,6 +1271,7 @@ impl Reader {
                 *stdin = Stdin {
                     looked_up: false,
                     feed: match value.text.as_deref().and_then(|t| ctx.path(t)) {
+                        Some(path) if path == Path::new("/dev/null") => Feed::Text(String::new()),
                         Some(path) => Feed::Files(vec![path]),
                         None => Feed::Unknown,
                     },
@@ -1753,6 +1754,22 @@ impl Reader {
                 if let Some(script) = stdin.text() {
                     let words = self.split(&script, ctx);
                     argv.extend(words);
+                } else if !matches!(stdin.feed, Feed::Inherited) {
+                    // Words the line can't say, handed to a shell or an interpreter, are a program it can't read.
+                    let (next, glob) = program(&argv[i + 1 + k]);
+                    let runs = |n: &str| {
+                        if glob {
+                            self::glob(next.as_bytes(), n.as_bytes())
+                        } else {
+                            next == n
+                        }
+                    };
+                    if SHELLS.iter().chain(INTERPRETERS).any(|n| runs(n))
+                        || interpreter(&next).is_some()
+                    {
+                        unread = Some(Unread::Piped);
+                        break;
+                    }
                 }
                 i += 1 + k;
                 continue;
@@ -1781,12 +1798,7 @@ impl Reader {
                 }
                 break;
             }
-            if [
-                "sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "yash", "posh", "fish",
-            ]
-            .iter()
-            .any(|n| is(n))
-            {
+            if SHELLS.iter().any(|n| is(n)) {
                 let mut k = 0;
                 let mut command = false;
                 let mut read_stdin = false;
@@ -1830,7 +1842,7 @@ impl Reader {
                         None if given => unread = Some(Unread::Computed),
                         None => {}
                     }
-                } else if !given || read_stdin {
+                } else if !given || read_stdin || text(k).is_some_and(|f| stdin_device(&f)) {
                     unread = self.piped(&stdin, ctx, &cwd, &env);
                 } else {
                     match text(k) {
@@ -1857,14 +1869,26 @@ impl Reader {
                 self.shell(&script, ctx, &cwd, &env, stdin.clone());
                 return;
             }
-            if let Some(lang) = interpreter(&name).filter(|_| !glob) {
+            // A pattern for a name is each interpreter it may name.
+            let lang = match glob {
+                false => interpreter(&name),
+                true => INTERPRETERS
+                    .iter()
+                    .find(|n| is(n))
+                    .and_then(|n| interpreter(n)),
+            };
+            if let Some(lang) = lang {
                 if cfg!(feature = "plant-any-pipe-unread") && !matches!(stdin.feed, Feed::Inherited)
                 {
                     unread = Some(Unread::Piped);
                 }
                 let args: Vec<Option<String>> =
                     argv[i + 1..].iter().map(|v| v.text.clone()).collect();
-                match lang.program(&args) {
+                let program = match lang.program(&args) {
+                    Program::File(Some(f)) if stdin_device(&f) => Program::Stdin,
+                    program => program,
+                };
+                match program {
                     Program::Inline(texts) => match texts.into_iter().collect::<Option<Vec<_>>>() {
                         Some(texts) => {
                             for text in texts {
@@ -2036,6 +2060,16 @@ impl Reader {
             _ => {}
         }
     }
+}
+
+/// The shells the reader reads a script for.
+const SHELLS: &[&str] = &[
+    "sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "yash", "posh", "fish",
+];
+
+/// Whether `path` names the standard input: a program read from it is read from the pipe.
+fn stdin_device(path: &str) -> bool {
+    matches!(path, "/dev/stdin" | "/dev/fd/0" | "/proc/self/fd/0")
 }
 
 /// The program a word names: the last part of its path, lowercased, and whether it is a pattern.
