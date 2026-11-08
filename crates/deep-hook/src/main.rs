@@ -1837,7 +1837,8 @@ mod tests {
     use super::append;
     use super::pi_path;
     use deep_hook::shell::glob;
-    use std::fs;
+    use std::fs::{self, DirBuilder};
+    use std::os::unix::fs::DirBuilderExt;
 
     #[test]
     fn a_pi_path_is_the_file_pi_opens() {
@@ -1870,7 +1871,8 @@ mod tests {
     fn a_line_written_to_a_spool_moved_aside_is_written_again_to_the_new_one() {
         let folder = std::env::temp_dir().join(format!("dh315-append-{}", std::process::id()));
         let _ = fs::remove_dir_all(&folder);
-        fs::create_dir_all(&folder).unwrap();
+        // Yours alone, as deep-hook makes it: a umask of 002, Ubuntu's, would leave it group-writable, which it refuses.
+        DirBuilder::new().mode(0o700).create(&folder).unwrap();
         let live = folder.join("spool.jsonl");
         let moved = folder.join("replay-1.jsonl");
         // The hub moves the file aside, reads it and removes it while this write holds it open.

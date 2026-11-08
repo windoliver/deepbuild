@@ -21,8 +21,8 @@
 //! - `read:<path>…`: the call reads a path matching one of the globs, as `write:` reads them: by Read or Grep,
 //!   a redirection, or any shell run that names the path among its arguments.
 //! - `hub:stop`: `deep hub stop` of the installed hub: with no `--root`, or one that is `~/.deepbuild`.
-//! - `hub:service`: a stop, unload or removal of the hub's login service (launchd's `com.deepbuild.hub`,
-//!   systemd's `deepbuild-hub.service`).
+//! - `hub:service`: a stop, unload, removal or edit of the hub's login service (launchd's `com.deepbuild.hub`,
+//!   systemd's `deepbuild-hub.service`), or a change to the environment systemd's manager gives it.
 //! - `kill:hub`: a `kill` of the hub's process or its group, its PID read from the hub socket's peer.
 //! - `effect:<class>`: a call with that effect: `cloud-resource` (a command that creates one), `dependency`
 //!   (adds a package), `service` (starts a long-running one), `top-level-folder` (makes a folder at the
@@ -650,8 +650,10 @@ fn stops_service(run: &Run) -> bool {
         )
         && names(HUB_LABEL))
         || (run.is("systemctl")
-            && matches!(sub, "stop" | "disable" | "kill" | "mask" | "revert")
+            && matches!(sub, "stop" | "disable" | "kill" | "mask" | "revert" | "edit")
             && names(HUB_UNIT))
+        // The manager's environment becomes the hub's at its next start, unit or no unit named.
+        || (run.is("systemctl") && matches!(sub, "set-environment" | "import-environment"))
 }
 
 /// The PIDs a `kill` names: past its signal options, or every word after `--`; a negative one is a group.
@@ -1524,6 +1526,31 @@ mod tests {
     }
 
     #[test]
+    fn the_shipped_service_rule_guards_what_changes_the_hub_s_environment() {
+        let rule = include_str!("../default-rules.json")
+            .split("\"no-hub-service-write\"")
+            .nth(1)
+            .and_then(|entry| entry.split("\"match\": \"").nth(1))
+            .and_then(|tail| tail.split('"').next())
+            .unwrap();
+        let written = |path: &str| {
+            let call = Call::new(
+                "Write",
+                None,
+                (&[path.to_string()], false),
+                Some(Path::new("/w")),
+                Path::new("/h"),
+                Path::new("/h/.deepbuild/hub.sock"),
+            );
+            call.matches(rule).is_some()
+        };
+        assert!(written("/h/.config/systemd/user/deepbuild-hub.service"));
+        assert!(written("/h/.config/systemd/user/deepbuild-hub.service.d/polkit.conf"));
+        assert!(written("/h/.config/environment.d/hub.conf"));
+        assert!(!written("/h/.config/systemd/user/other.service"));
+    }
+
+    #[test]
     fn unread_matches_only_a_call_the_reader_couldnt_read_whole() {
         assert!(known("unread:push") && !known("unread:nothing"));
         let hit = bash("\"$(printf git)\" push origin main").matches("unread:push").unwrap();
@@ -1732,6 +1759,19 @@ mod tests {
         assert!(bash("systemctl --user stop deepbuild-hub.service")
             .matches("hub:service")
             .is_some());
+        // The hub's environment is its service's: a variable set for the manager reaches it at the next restart (#70).
+        assert!(bash("systemctl --user set-environment DEEP_HUB_PLANT=answer-on-token")
+            .matches("hub:service")
+            .is_some());
+        assert!(bash("systemctl --user import-environment NODE_OPTIONS")
+            .matches("hub:service")
+            .is_some());
+        assert!(bash("systemctl --user edit deepbuild-hub.service")
+            .matches("hub:service")
+            .is_some());
+        assert!(bash("systemctl --user status deepbuild-hub.service")
+            .matches("hub:service")
+            .is_none());
         assert!(bash("launchctl list").matches("hub:service").is_none());
         assert!(bash("docker compose up -d")
             .matches("effect:service")

@@ -45,12 +45,15 @@ describe('deep doctor in a home nobody set up', () => {
 describe('deep setup', () => {
   it('says in one line what it added, with no line for a timing relation that holds', () => {
     const { env, tmp } = fresh();
-    // The login service's stand-in: starts what the plist names, in a session of its own, and keeps its PID.
+    // The login service's stand-in: starts what the plist or the unit names, in a session of its own, and keeps its PID.
     const launcher = join(tmp, 'launcher');
     writeFileSync(launcher, `#!${process.execPath}
 const { spawn } = require('node:child_process'); const fs = require('node:fs');
 const text = fs.readFileSync(process.argv[2], 'utf8');
-const argv = [...(/<key>ProgramArguments<\\/key>\\s*<array>([\\s\\S]*?)<\\/array>/.exec(text)[1].matchAll(/<string>([\\s\\S]*?)<\\/string>/g))].map((m) => m[1].replace(/&amp;/g, '&'));
+const plist = /<key>ProgramArguments<\\/key>\\s*<array>([\\s\\S]*?)<\\/array>/.exec(text);
+const argv = plist
+  ? [...plist[1].matchAll(/<string>([\\s\\S]*?)<\\/string>/g)].map((m) => m[1].replace(/&amp;/g, '&'))
+  : [.../^ExecStart=(.*)$/m.exec(text)[1].matchAll(/"((?:[^"\\\\]|\\\\.)*)"/g)].map((m) => m[1].replace(/\\\\(.)/g, '$1'));
 const child = spawn(argv[0], argv.slice(1), { detached: true, stdio: 'ignore' });
 fs.appendFileSync(${JSON.stringify(join(tmp, 'pids'))}, child.pid + '\\n'); child.unref();
 `);
@@ -146,6 +149,51 @@ esac
     deep(w.env, 'hub', 'start');
     const text = readFileSync(join(w.home, 'Library', 'LaunchAgents', 'com.deepbuild.hub.plist'), 'utf8');
     expect(text).toMatch(new RegExp(`<key>HOME</key>\\s*<string>${w.home}</string>`));
+  }, 60_000);
+});
+
+describe("the hub's login service on Linux", () => {
+  /**
+   * A home whose `systemctl` stands in for the user manager, never the real one: one unit per name, kept in `<tmp>/unit`
+   * as the file it was loaded from. `show --property=FragmentPath --value` names that file, as systemd's does; every
+   * other call is logged to `<tmp>/ran`, with the loaded file after `enable`.
+   */
+  function withSystemd() {
+    const { home, env, tmp } = fresh();
+    const bin = join(tmp, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'systemctl'), `#!/bin/sh
+unit='${join(tmp, 'unit')}'; ran='${join(tmp, 'ran')}'
+case "$2" in
+  show) [ -f "$unit" ] && cat "$unit"; echo ;;
+  enable) echo "$* $(cat "$unit" 2>/dev/null)" >> "$ran" ;;
+  *) echo "$*" >> "$ran" ;;
+esac
+`);
+    chmodSync(join(bin, 'systemctl'), 0o755);
+    const ran = () => (existsSync(join(tmp, 'ran')) ? readFileSync(join(tmp, 'ran'), 'utf8') : '');
+    return { home, tmp, ran, env: { ...env, PATH: `${bin}:${env.PATH}` } };
+  }
+  const own = (home: string) => join(home, '.config', 'systemd', 'user', 'deepbuild-hub.service');
+  it.runIf(process.platform === 'linux')("never starts a unit another home's file loaded under the same name, and names that file", () => {
+    const w = withSystemd();
+    const other = join(w.tmp, 'other', 'deepbuild-hub.service');
+    writeFileSync(join(w.tmp, 'unit'), other);
+    const result = deep(w.env, 'hub', 'start');
+    expect(w.ran(), "the other home's hub unit was started").not.toContain('enable');
+    expect(result.status).toBe(3);
+    expect(result.stderr).toContain(other);
+  }, 60_000);
+  it.runIf(process.platform === 'linux')('starts its own unit again when that unit is the one loaded', () => {
+    const w = withSystemd();
+    writeFileSync(join(w.tmp, 'unit'), own(w.home));
+    deep(w.env, 'hub', 'start');
+    expect(w.ran()).toContain(`--user enable --now deepbuild-hub.service ${own(w.home)}`);
+  }, 60_000);
+  it.runIf(process.platform === 'linux')('gives the hub its own HOME, so a hub systemd starts reads and writes only its own home', () => {
+    const w = withSystemd();
+    deep(w.env, 'hub', 'start');
+    expect(readFileSync(own(w.home), 'utf8')).toMatch(new RegExp(`^Environment=.*"HOME=${w.home}"`, 'm'));
   }, 60_000);
 });
 
