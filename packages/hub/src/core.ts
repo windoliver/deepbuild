@@ -84,6 +84,7 @@ import { Stacks, type StackWant } from './stacks.js';
 import { Starts } from './starts.js';
 import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
+import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
@@ -1111,6 +1112,8 @@ export class Core {
       if (!extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
       const load = await extensions.load(pkg);
       if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
+      // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
+      else await this.panelKits(pkg.id, true);
     }
     await this.replaySpool();
     // The replay is done: the extensions start, and each that can't is unloaded and named.
@@ -5567,6 +5570,9 @@ export class Core {
       case 'confirm.enroll': return this.enrollAgain(params, context);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
+      case 'ask.confirm': return this.confirmCard(params);
+      case 'views.installed': return { views: this.extensions?.installedViews() ?? [] };
+      case 'command.run': return this.runCommand(params);
       // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
       case 'status.read':
         this.replayLate();
@@ -6203,7 +6209,8 @@ export class Core {
         const checked = await this.extensions.check(pkg);
         const load = checked.passed ? await this.extensions.load(pkg) : { status: 'refused' as const, reason: `it failed conformance: ${checked.reasons.join('; ')}` };
         plantedReload(this.options.plant);
-        return load.status === 'refused' ? { ...installed, not_loaded: load.reason } : installed;
+        const panels = load.status === 'refused' ? undefined : await this.panelKits(pkg.id);
+        return load.status === 'refused' ? { ...installed, not_loaded: load.reason } : panels ? { ...installed, not_loaded: panels } : installed;
       } catch (error) {
         return { ...installed, not_loaded: error instanceof Error ? error.message : String(error) };
       }
@@ -6212,11 +6219,45 @@ export class Core {
     }
   }
 
+  /** Each view's panel held to panel@1 (#1454), its verdict kept for the app: what failed, in words, or undefined. */
+  private async panelKits(id: string, unrun = false): Promise<string | undefined> {
+    const failed: string[] = [];
+    for (const view of this.extensions!.installedViews().filter((v) => v.extension === id && (!unrun || v.kit === null))) {
+      const { verdict, why } = await panelKit(view.folder);
+      this.extensions!.keepKit(id, { slot: 'panel@1', fill: view.name, verdict });
+      if (verdict !== 'PASS') failed.push(`${view.name} reads ${verdict} on panel@1: ${why}`);
+    }
+    return failed.length ? failed.join('; ') : undefined;
+  }
+
+  /** A view's ⌘K command, chosen in the app (#1454): the action its manifest declares, called as you. */
+  private async runCommand(params: Obj): Promise<Obj> {
+    const { action } = params;
+    const view = this.extensions?.installedViews().find((v) => v.commands.some((c) => c.action === action));
+    if (!view) throw new Refused(refusal('not_found', '/params/action', `No installed view runs ${String(action)}.`, action));
+    return { ...(await this.extensions!.callAction({ action: String(action), target: { handle: `ext:${view.extension}`, version: view.version }, input: {}, caller: this.connection('app') })) };
+  }
+
   /**
    * `deep off`, `deep on`, `deep hub stop`, `deep hub use` and `deep setup --undo` (#19): each takes effect only once
    * the OS confirms you, with a prompt naming the command. Run inside an agent's process tree it acts as that agent's
    * session, and no agent switches DeepBuild off; the peer check alone never makes one count.
    */
+  /**
+   * The OS confirming you for a press on the question card that wasn't hardware (#1454): one press, one prompt, naming
+   * the option's words the app sends and the ask the hub reads, and never cached. The app signs its answer only after this.
+   */
+  private async confirmCard(params: Obj): Promise<Obj> {
+    const { ask: handle, reason } = params;
+    if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>.', handle));
+    if (typeof reason !== 'string' || !reason) throw new Refused(refusal('required', '/params/reason', "Give the words the OS's prompt shows.", reason));
+    const [row] = (await this.record.raw("SELECT e.data AS data FROM events e WHERE e.id = ? AND e.kind = 'ask.created'", [handle.slice(4)])) as { data: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}.`, handle));
+    const why = await this.confirmer.you(reason.slice(0, 200), { handle, revision: await this.revisionOf(handle, JSON.parse(row.data) as { pinned_to?: { ref?: string } }) });
+    if (why) throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}).`, handle, true));
+    return { confirmed: handle };
+  }
+
   private async confirmCommand(params: Obj, context: CallContext): Promise<Obj> {
     const command = params.command;
     if (typeof command !== 'string' || !AUTHORITY.has(command)) throw new Refused(refusal('enum', '/params/command', `Name one of ${[...AUTHORITY].join(', ')}.`, command));
@@ -6392,6 +6433,8 @@ export class Core {
   private readonly worldFile = new WorldFile(process.env.DEEP_HUB_TEST_SHOW);
   /** Each presented revision for the app, in order; an app's `canvas.drawn` takes those after the last it took. */
   private readonly presented: Obj[] = [];
+  /** The documents deep_show has named, each on the app's canvas panel. */
+  private readonly shownDocs = new Set<string>();
   private readonly drawnUpTo = new Map<string, number>();
   /** When an app last took what was presented: an app that took it within the last 250 ms is open (it asks every 100 ms), and draws it. */
   private appSeen = 0;
@@ -6409,7 +6452,7 @@ export class Core {
       const d = JSON.parse(r.data) as Obj;
       if (typeof d.reading === 'string' && typeof d.value === 'number') record[d.reading] = { session: r.session, value: d.value, as_of: Number(d.as_of ?? 0) };
     }
-    return { sessions, record, file };
+    return { sessions, record, file, docs: [...this.shownDocs] };
   }
   private canvas(): Canvas {
     return (this.canvasCore ??= new Canvas(this.root.evidence));
@@ -6423,6 +6466,7 @@ export class Core {
    * session the peer check found, or as you: the writer is the binding's, never the payload's.
    */
   private async show(as: { session: string | null } | { you: true }, call: Obj): Promise<Obj> {
+    if (typeof call.doc === 'string') this.shownDocs.add(call.doc);
     // The planted hub stamps the writer the payload claims (#806's wrong program): a session whose thread it names.
     if (this.options.plant === 'deep-show-writer-from-payload' && 'session' in as && isObj(call.document) && typeof call.document.writer === 'string') {
       const claimed = [...this.sessions.values()].find((s) => `agent:${s.thread}` === (call.document as Obj).writer);
@@ -6483,7 +6527,7 @@ export class Core {
         hash, layer: String(p.layer), thread: writer.kind === 'agent' ? writer.id : null,
       } as JsonValue,
     });
-    this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers });
+    this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
   }
   /** `deep show` from the CLI: the peer check makes it the agent's whose process tree runs it, never by PID alone; else yours. */
   private async showCli(params: Obj, context: CallContext): Promise<Obj> {
