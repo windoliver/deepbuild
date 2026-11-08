@@ -678,7 +678,17 @@ fn lights_cameras(scene: &Scene, doc: &Value, local: bool) -> Read {
         };
         let dir = unit(l.dir);
         match l.kind {
-            LightKind::Sun => out.lines.push((pos, add(pos, mul(dir, 1.0)))),
+            // A sun has no place: a ring at its own `at.pos` facing its direction, with its rays.
+            LightKind::Sun => {
+                let (u, v) = basis(dir);
+                out.lines.extend(circle(pos, u, v, 0.25));
+                out.lines.push((pos, add(pos, mul(dir, 1.5))));
+                for k in 0..4 {
+                    let a = std::f64::consts::FRAC_PI_2 * k as f64;
+                    let rim = add(pos, add(mul(u, 0.25 * a.cos()), mul(v, 0.25 * a.sin())));
+                    out.lines.push((rim, add(rim, mul(dir, 0.75))));
+                }
+            }
             LightKind::Spot => {
                 let reach = if l.range.is_finite() && l.range > 0.0 {
                     l.range.min(3.0)
@@ -712,6 +722,10 @@ fn lights_cameras(scene: &Scene, doc: &Value, local: bool) -> Read {
                     ([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]),
                 ] {
                     out.lines.extend(circle(pos, u, v, r));
+                }
+                // Its place: a cross 0.3 m across.
+                for axis in [[0.15, 0.0, 0.0], [0.0, 0.15, 0.0], [0.0, 0.0, 0.15]] {
+                    out.lines.push((sub(pos, axis), add(pos, axis)));
                 }
             }
         }
