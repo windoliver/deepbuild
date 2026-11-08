@@ -1,0 +1,43 @@
+v_flex .size_full .gap[Number(6.0)] .p[Number(10.0)] .bg[Str("#ffffff")]
+  v_flex .gap[Number(4.0)]
+    Button "row-AAPL" .h[Number(28.0)] .px[Number(10.0)] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .rounded[Number(4.0)] :on_click(fn)
+      text "AAPL"
+      text " "
+      text "227.95"
+      text " "
+      text "+0.00%"
+    Button "row-MSFT" .h[Number(28.0)] .px[Number(10.0)] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .rounded[Number(4.0)] :on_click(fn)
+      text "MSFT"
+      text " "
+      text "432.16"
+      text " "
+      text "+0.00%"
+    Button "row-NVDA" .h[Number(28.0)] .px[Number(10.0)] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .rounded[Number(4.0)] :on_click(fn)
+      text "NVDA"
+      text " "
+      text "139.09"
+      text " "
+      text "+0.00%"
+    Button "row-TSLA" .h[Number(28.0)] .px[Number(10.0)] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .rounded[Number(4.0)] :on_click(fn)
+      text "TSLA"
+      text " "
+      text "219.28"
+      text " "
+      text "+0.00%"
+    Button "row-AMZN" .h[Number(28.0)] .px[Number(10.0)] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .rounded[Number(4.0)] :on_click(fn)
+      text "AMZN"
+      text " "
+      text "187.81"
+      text " "
+      text "+0.00%"
+  div .text_color[Str("#0a0a0a")]
+    text "Selected: AAPL"
+  h_flex .gap[Number(2.0)]
+    div .w[Number(2.0)] .h[Number(2.0)] .bg[Str("#171717")]
+  div .text_color[Str("#0a0a0a")]
+    text "Tick 0"
+  Button "next" .h[Number(28.0)] .px[Number(10.0)] .bg[Str("#171717")] .text_color[Str("#fafafa")] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .rounded[Number(4.0)] :on_click(fn)
+    text "Next"
+  Button "alert-above" .h[Number(28.0)] .px[Number(10.0)] .bg[Str("#171717")] .text_color[Str("#fafafa")] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .rounded[Number(4.0)] :on_click(fn)
+    text "Alert above"
+  v_flex .gap[Number(2.0)]

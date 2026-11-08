@@ -1,0 +1,51 @@
+h_flex .size_full .gap[Number(16.0)] .p[Number(16.0)] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")]
+  v_flex .w[Number(360.0)] .h[Str("100%")] .gap[Number(8.0)]
+    div .text_size[Number(20.0)] .font_bold
+      text "Watchlist"
+    Button "row-AAPL" .w[Str("100%")] .min_h[Number(42.0)] .px[Number(12.0)] .items_center .justify_between .rounded[Number(6.0)] .border[Number(1.0)] .border_color[Str("#171717")] .bg[Str("#f5f5f5")] .text_color[Str("#0a0a0a")] :hover(.bg[Str("#f5f5f5")]) :on_click(fn)
+      div .w[Number(70.0)] .font_semibold
+        text "AAPL"
+      div .w[Number(90.0)] .text_right
+        text "227.95"
+      div .w[Number(90.0)] .text_right .text_color[Str("#171717")]
+        text "+0.00%"
+    Button "row-MSFT" .w[Str("100%")] .min_h[Number(42.0)] .px[Number(12.0)] .items_center .justify_between .rounded[Number(6.0)] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] :hover(.bg[Str("#f5f5f5")]) :on_click(fn)
+      div .w[Number(70.0)] .font_semibold
+        text "MSFT"
+      div .w[Number(90.0)] .text_right
+        text "432.16"
+      div .w[Number(90.0)] .text_right .text_color[Str("#171717")]
+        text "+0.00%"
+    Button "row-NVDA" .w[Str("100%")] .min_h[Number(42.0)] .px[Number(12.0)] .items_center .justify_between .rounded[Number(6.0)] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] :hover(.bg[Str("#f5f5f5")]) :on_click(fn)
+      div .w[Number(70.0)] .font_semibold
+        text "NVDA"
+      div .w[Number(90.0)] .text_right
+        text "139.09"
+      div .w[Number(90.0)] .text_right .text_color[Str("#171717")]
+        text "+0.00%"
+    Button "row-TSLA" .w[Str("100%")] .min_h[Number(42.0)] .px[Number(12.0)] .items_center .justify_between .rounded[Number(6.0)] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] :hover(.bg[Str("#f5f5f5")]) :on_click(fn)
+      div .w[Number(70.0)] .font_semibold
+        text "TSLA"
+      div .w[Number(90.0)] .text_right
+        text "219.28"
+      div .w[Number(90.0)] .text_right .text_color[Str("#171717")]
+        text "+0.00%"
+    Button "row-AMZN" .w[Str("100%")] .min_h[Number(42.0)] .px[Number(12.0)] .items_center .justify_between .rounded[Number(6.0)] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] :hover(.bg[Str("#f5f5f5")]) :on_click(fn)
+      div .w[Number(70.0)] .font_semibold
+        text "AMZN"
+      div .w[Number(90.0)] .text_right
+        text "187.81"
+      div .w[Number(90.0)] .text_right .text_color[Str("#171717")]
+        text "+0.00%"
+  v_flex .flex_1 .h[Str("100%")] .gap[Number(12.0)]
+    div .text_size[Number(20.0)] .font_bold
+      text "Selected: AAPL"
+    div .h[Number(220.0)] .w[Str("100%")] .rounded[Number(8.0)] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .bg[Str("#ffffff")]
+      Canvas .size_full
+    h_flex .items_center .gap[Number(10.0)]
+      div .font_semibold
+        text "Tick 0"
+      Button "next" .h[Number(34.0)] .px[Number(14.0)] .items_center .justify_center .rounded[Number(6.0)] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] :hover(.bg[Str("#f5f5f5")]) :active(.opacity[Number(0.75)]) :on_click(fn)
+        text "Next"
+      Button "alert-above" .h[Number(34.0)] .px[Number(14.0)] .items_center .justify_center .rounded[Number(6.0)] .border[Number(1.0)] .border_color[Str("#e5e5e5")] .bg[Str("#ffffff")] .text_color[Str("#0a0a0a")] :hover(.bg[Str("#f5f5f5")]) :active(.opacity[Number(0.75)]) :on_click(fn)
+        text "Alert above"

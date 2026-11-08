@@ -1561,6 +1561,83 @@
     }
   },
   {
+    "source": "issue.twice",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "Sessions 3f2a9c1e (claude-code) and 7b0d4e22 (codex) both work on issue #77. Keep which?",
+        "options": [
+          {
+            "id": "keep-0",
+            "label": "Keep 3f2a9c1e",
+            "decision": "none"
+          },
+          {
+            "id": "keep-1",
+            "label": "Keep 7b0d4e22",
+            "decision": "none"
+          },
+          {
+            "id": "keep-both",
+            "label": "Keep both",
+            "decision": "none"
+          }
+        ],
+        "recommended": "keep-both",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "keep-both",
+        "provisional": false,
+        "owner": "you",
+        "key": "5e2b7c0d9a8f6e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "session.loop",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "Sessions 3f2a9c1e and 7b0d4e22 started 21 of each other's turns in 10 minutes with no prompt from you. Let them go on?",
+        "options": [
+          {
+            "id": "go-on",
+            "label": "Let them go on",
+            "decision": "none"
+          },
+          {
+            "id": "hold",
+            "label": "Hold them until I prompt them",
+            "decision": "none"
+          }
+        ],
+        "recommended": "hold",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "hold",
+        "provisional": false,
+        "owner": "you",
+        "key": "6f3c8d1e0b9a7f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "done.size",
     "kind": "taste",
     "fixture": {

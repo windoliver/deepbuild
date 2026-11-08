@@ -1,6 +1,4 @@
-import { View, div } from "gpui-kit";
-import { v_flex, h_flex, Button } from "gpui-base";
-import { quotes } from "deepbuild";
+import { View, div, v_flex, h_flex, Button, quotes } from "@deepbuild/panel";
 
 export default class Stocks extends View {
   init() {

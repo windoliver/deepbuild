@@ -1,6 +1,7 @@
 mod app_menu;
 mod keyboard;
 mod keystroke;
+mod mask_params; // DeepBuild patch (windoliver/deepbuild#390)
 
 #[cfg(all(target_os = "linux", feature = "wayland"))]
 #[expect(missing_docs)]
@@ -81,6 +82,7 @@ use uuid::Uuid;
 pub use app_menu::*;
 pub use keyboard::*;
 pub use keystroke::*;
+pub use mask_params::RenderMaskParams; // DeepBuild patch (windoliver/deepbuild#390)
 
 /// Whether the platform is presenting a window's frames.
 ///
@@ -1700,19 +1702,7 @@ pub enum AtlasKey {
     Glyph(RenderGlyphParams),
     Svg(RenderSvgParams),
     Image(RenderImageParams),
-    Mask(RenderMaskParams),
-}
-
-/// DeepBuild patch (windoliver/deepbuild#390): the key of one alpha page from a glyph atlas GPUI
-/// doesn't own, uploaded once per `generation` and drawn through [`Window::paint_mask_sprite`].
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct RenderMaskParams {
-    /// Which atlas the page belongs to, chosen by its owner.
-    pub atlas: u32,
-    /// The page within that atlas.
-    pub page: u32,
-    /// Bumped by the owner each time the page's bytes change, so the stale upload is replaced.
-    pub generation: u32,
+    Mask(RenderMaskParams), // DeepBuild patch (windoliver/deepbuild#390)
 }
 
 impl AtlasKey {
@@ -1730,7 +1720,7 @@ impl AtlasKey {
             }
             AtlasKey::Svg(_) => AtlasTextureKind::Monochrome,
             AtlasKey::Image(_) => AtlasTextureKind::Polychrome,
-            AtlasKey::Mask(_) => AtlasTextureKind::Monochrome,
+            AtlasKey::Mask(_) => AtlasTextureKind::Monochrome, // DeepBuild patch (windoliver/deepbuild#390)
         }
     }
 }
@@ -1750,12 +1740,6 @@ impl From<RenderSvgParams> for AtlasKey {
 impl From<RenderImageParams> for AtlasKey {
     fn from(params: RenderImageParams) -> Self {
         Self::Image(params)
-    }
-}
-
-impl From<RenderMaskParams> for AtlasKey {
-    fn from(params: RenderMaskParams) -> Self {
-        Self::Mask(params)
     }
 }
 

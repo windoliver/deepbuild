@@ -198,6 +198,14 @@ describe('a block someone else owns (#320)', () => {
   });
   const requestOf = async (handle: string) => (await asks.inbox()).find((r) => r.request?.block === handle);
 
+  it("is never a person's own task: one raised for you in bob's session is bob's, and drafts no request (#1337)", async () => {
+    await start('S1', 'T1');
+    const bob: Connection = { writer: 'mcp:S1', actor: 'bob', scope: 'person:bob', session: 'S1' };
+    const handle = await asks.raise(bob, 'deep_ask.unblock', block('db-credentials', { owner: 'you' }));
+    expect((await events('ask.created')).find((e) => e.id === handle.slice(4))?.data).toMatchObject({ owner: 'bob' });
+    expect(await requestOf(handle), 'a request drafted to someone else for bob\'s own task').toBeUndefined();
+  });
+
   it('stays BLOCKED at its deadline, by the default its raiser named, though it never showed to you', async () => {
     await start('S1', 'T1');
     const handle = await asks.raise(agent('S1'), 'deep_ask.unblock', block('db-credentials'));

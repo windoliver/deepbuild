@@ -1,6 +1,5 @@
 // Issue #338: a script panel for the shell's line slot, registered under the app's registry.
-import { View, div } from "gpui-kit";
-import { DockArea } from "gpui-base";
+import { View, div, DockArea } from "@deepbuild/panel";
 
 class Line extends View {
   render() {

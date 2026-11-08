@@ -8,8 +8,7 @@
 // runs. "Scrim events <n>" counts every pointer event the scrim is sent, moves included, so a run can see that a refused
 // action and a probe sent it nothing. "Ignores clicks" is a button with no handler: a click on it is delivered and
 // nothing handles it.
-import { View, div } from "gpui-kit";
-import { v_flex, Button } from "gpui-base";
+import { View, div, v_flex, Button } from "@deepbuild/panel";
 
 const DRAFT = "Release notes, second pass";
 
