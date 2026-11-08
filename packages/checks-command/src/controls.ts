@@ -5,10 +5,17 @@
 // shows each control of a file it ran failed at the line written for it. Controls are never tests of the check: left
 // out of its counts, failures and listing, and the file is put back as it was once the run ends.
 import { randomBytes } from 'node:crypto';
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Failure } from '@deepbuild/conformance';
 import type { Ran } from './report.js';
+
+/** Writes a file whose approved bytes the hub keeps read-only, putting its mode back after. */
+function rewrite(path: string, text: string): void {
+  const { mode } = statSync(path);
+  chmodSync(path, mode | 0o200);
+  try { writeFileSync(path, text); } finally { chmodSync(path, mode); }
+}
 
 /** Every control's name starts so, whichever run drew it: a run that shares its checkout leaves its own out too. */
 export const CONTROL = 'deepbuild control ';
@@ -67,7 +74,7 @@ export function plantControls(checkout: string): Promise<Control[]> {
       const body = text.endsWith('\n') ? text : `${text}\n`;
       // The control's assertion is the block's last line, after the file's lines and the blank one the block opens with.
       const line = body.split('\n').length - 1 + block.split('\n').length - 1;
-      writeFileSync(path, `${body}${block}`);
+      rewrite(path, `${body}${block}`);
       out.push({ file, name, line, block });
     }
     return out;
@@ -82,7 +89,7 @@ export function removeControls(checkout: string, controls: Control[]): Promise<v
       let text: string;
       try { text = readFileSync(path, 'utf8'); } catch { continue; }
       const at = text.lastIndexOf(c.block);
-      if (at >= 0) writeFileSync(path, text.slice(0, at) + text.slice(at + c.block.length));
+      if (at >= 0) rewrite(path, text.slice(0, at) + text.slice(at + c.block.length));
     }
   });
 }
