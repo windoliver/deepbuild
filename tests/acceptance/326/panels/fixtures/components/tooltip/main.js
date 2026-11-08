@@ -2,9 +2,7 @@
 // 240 x 400 point button at the center of the panel; resting the pointer there shows a tooltip
 // whose long text runs to the right of the panel, into the question card's rect unless the host
 // keeps it off.
-import { View } from "gpui-kit";
-import { v_flex } from "gpui-base";
-import { Tooltip } from "gpui-component";
+import { View, v_flex, Tooltip } from "@deepbuild/panel";
 
 const TEXT =
   "A tooltip long enough to run well past the right edge of the sidebar slot it was opened from, " +

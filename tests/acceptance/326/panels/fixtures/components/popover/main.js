@@ -2,9 +2,7 @@
 // its first frame, and its content is a 1400 x 900 point magenta block that the window-edge
 // snapping keeps inside the window, so it reaches the question card's rect unless the host keeps
 // it off.
-import { View, div } from "gpui-kit";
-import { v_flex } from "gpui-base";
-import { Popover } from "gpui-component";
+import { View, div, v_flex, Popover } from "@deepbuild/panel";
 
 export default class PopoverFixture extends View {
   render() {

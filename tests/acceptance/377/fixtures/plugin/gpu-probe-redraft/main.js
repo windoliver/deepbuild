@@ -15,11 +15,9 @@
 // are the UI toolkit, not a GPU or surface handle. They are named exactly here and not skipped:
 // their own members are searched with the same words instead, as `global:<bridge>.<member>`, so a
 // GPU or surface route hung on the bridge is still found. No other name is exempt.
-import * as kit from "gpui-kit";
-import * as base from "gpui-base";
-import * as component from "gpui-component";
+import * as panel from "@deepbuild/panel";
 import * as deepbuild from "deepbuild";
-import { View, div } from "gpui-kit";
+import { View, div } from "@deepbuild/panel";
 
 const WORDS = /gpu|wgpu|metal|iosurface|surface|texture|drawable|framebuffer|swapchain/i;
 const BRIDGE = ["__gpui", "__gpui_components"];
@@ -43,7 +41,7 @@ function probe() {
   }
   const nav = globalThis.navigator;
   lines.push(nav !== undefined && nav !== null && nav.gpu !== undefined ? "found:navigator.gpu" : "navigator.gpu:absent");
-  const modules = [["gpui-kit", kit], ["gpui-base", base], ["gpui-component", component], ["deepbuild", deepbuild]];
+  const modules = [["@deepbuild/panel", panel], ["deepbuild", deepbuild]];
   for (const [name, namespace] of modules) look(`module:${name}`, Object.keys(namespace));
   lines.push("probe:done");
   return lines;
