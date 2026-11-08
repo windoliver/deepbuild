@@ -58,7 +58,7 @@ function planFor(source: string, does: string, changes: string[], targets: Targe
  * A push's words up to the end of its command, each tool's own flags before its push skipped: git's, jj's, sl's, and
  * gt's and git town's commands that push (#1523).
  */
-const PUSH = /\b(?:(git)(?:\s+(?:-[cC]\s+\S+|-\S+))*\s+push|(jj)(?:\s+-\S+(?:\s+\S+)?)*?\s+git\s+push|(sl)\s+push|gt\s+(?:submit|ss?|(?:stack|upstack|downstack|us|ds|branch|b)\s+(?:submit|s))|git[\s-]town\s+(?:propose|new-pull-request|ship|sync))\b([^;&|)\n]*)/g;
+const PUSH = /\b(?:(git)(?:\s+(?:-[cC]\s+\S+|-\S+))*\s+push|(jj)(?:\s+-\S+(?:\s+\S+)?)*?\s+git\s+push|(sl)(?:\s+-\S+(?:\s+\S+)?)*?\s+push|gt\s+(?:submit|ss?|(?:stack|upstack|downstack|us|ds|branch|b)\s+(?:submit|s))|git[\s-]town\s+(?:propose|new-pull-request|ship|sync))\b([^;&|)\n]*)/g;
 const VALUED = { git: new Set(['-o', '--push-option', '--receive-pack', '--exec']), sl: new Set(['--to', '-t', '-r', '--rev', '-B', '--bookmark']) };
 /** How long a held push waits for its session's transcript, well inside the gate's hold. */
 const ARCHIVE_WAIT_MS = 2000;

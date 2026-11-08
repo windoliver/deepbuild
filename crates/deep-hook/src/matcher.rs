@@ -1013,8 +1013,8 @@ fn api_method(words: &[&str]) -> String {
 fn sub(run: &Run) -> (&'static str, Vec<&str>) {
     const TOOLS: &[(&str, &[&str])] = &[
         ("git", GIT_VALUED),
-        ("jj", &["-R", "--repository", "--at-op", "--at-operation", "--config", "--config-file", "--color"]),
-        ("sl", &["-R", "--repository", "--cwd", "--config"]),
+        ("jj", &["-R", "--repository", "--at-op", "--at-operation", "--config", "--config-toml", "--config-file", "--color"]),
+        ("sl", &["-R", "--repository", "--cwd", "--config", "--configfile", "--color", "--pager", "--encoding", "--encodingmode"]),
         ("gt", &["--cwd"]),
         ("glab", &["-R", "--repo"]),
         ("git-town", &[]),
@@ -1073,28 +1073,53 @@ fn town(run: &Run, commands: &[&str]) -> bool {
 fn merges(run: &Run) -> bool {
     gh(run, &[&["pr", "merge"]])
         || merge_endpoint(run).is_some_and(|_| api_method(&run.words()) != "GET")
+        || glab_merge_endpoint(run).is_some_and(|_| api_method(&run.words()) != "GET")
         || graphql_merge(run).is_some()
         || gt_merge(run)
         || town(run, &["ship"])
         || matches!(sub(run), ("glab", rest) if rest.starts_with(&["mr", "merge"]) || rest.starts_with(&["mr", "accept"]))
 }
 
+/// The word of `glab api` naming a merge request's merge endpoint, `projects/<id>/merge_requests/<n>/merge`.
+fn glab_merge_endpoint(run: &Run) -> Option<&str> {
+    let ("glab", rest) = sub(run) else { return None };
+    if rest.first() != Some(&"api") {
+        return None;
+    }
+    rest[1..].iter().copied().find(|w| {
+        let parts: Vec<&str> = w.trim_matches('/').split('/').collect();
+        parts.len() >= 3
+            && parts[parts.len() - 1] == "merge"
+            && parts[parts.len() - 3] == "merge_requests"
+            && parts[parts.len() - 2].parse::<u64>().is_ok()
+    })
+}
+
 fn gt_merge(run: &Run) -> bool {
     matches!(sub(run), ("gt", rest) if rest.first() == Some(&"merge"))
 }
 
-/// The mutations of a `gh api graphql` call that merge, arm or disarm a merge.
-const MUTATIONS: &[&str] = &["mergePullRequest", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge"];
+/// The mutations of a `gh api graphql` call that merge, arm (auto-merge or the merge queue) or disarm a merge.
+const MUTATIONS: &[&str] = &[
+    "mergePullRequest", "enablePullRequestAutoMerge", "enqueuePullRequest", "disablePullRequestAutoMerge", "dequeuePullRequest",
+];
+const ARMS: &[&str] = &["enablePullRequestAutoMerge", "enqueuePullRequest"];
+const DISARMS: &[&str] = &["disablePullRequestAutoMerge", "dequeuePullRequest"];
 
 /// The query of a `gh api graphql` call that merges, arms or disarms a merge, with its fields. A mutation's name
-/// anywhere in it counts, a comment's too, so none hides behind a `#`.
+/// anywhere in it counts, a comment's too, so none hides behind a `#`. A query deep-hook can't read, from a file
+/// (`@`), `--input`, a variable or none at all, is a merge with no head: the empty query.
 fn graphql_merge(run: &Run) -> Option<(String, Vec<(String, String)>)> {
     let words = run.words();
-    if !run.is("gh") || !plain(&words).starts_with(&["api", "graphql"]) {
+    let at = api_at(run, &words)?;
+    if !words[at..].contains(&"graphql") {
         return None;
     }
     let fields = fields(&words);
-    let query = fields.iter().find(|(k, _)| k == "query")?.1.clone();
+    let query = fields.iter().find(|(k, _)| k == "query").map(|(_, v)| v.clone());
+    let Some(query) = query.filter(|q| !q.is_empty() && !q.starts_with('@') && !q.starts_with('$')) else {
+        return Some((String::new(), fields));
+    };
     MUTATIONS.iter().any(|m| holds_word(&query, m)).then_some((query, fields))
 }
 
@@ -1105,8 +1130,11 @@ fn graphql_value(query: &str, fields: &[(String, String)], name: &str) -> Option
     let [at] = args[..] else { return None };
     let rest = query[at + name.len()..].trim_start().strip_prefix(':')?.trim_start();
     if let Some(var) = rest.strip_prefix('$') {
+        // gh keeps the last field of a name; one given twice names no head.
         let var: String = var.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        return fields.iter().find(|(k, _)| *k == var).map(|(_, v)| v.clone());
+        let values: Vec<&String> = fields.iter().filter(|(k, _)| *k == var).map(|(_, v)| v).collect();
+        let [value] = values[..] else { return None };
+        return Some(value.clone());
     }
     let value = rest.strip_prefix('"')?;
     value.find('"').map(|end| value[..end].to_string())
@@ -1118,17 +1146,20 @@ fn gh(run: &Run, subs: &[&[&str]]) -> bool {
     run.is("gh") && subs.iter().any(|s| plain.len() >= 2 && plain[..2] == **s)
 }
 
-/// The word of `gh api` naming a pull request's merge endpoint, `repos/<owner>/<repo>/pulls/<n>/merge`.
-fn merge_endpoint(run: &Run) -> Option<&str> {
+/// Where a `gh api` call's words past `api` start, gh's own options before it skipped; none for another call.
+fn api_at(run: &Run, words: &[&str]) -> Option<usize> {
     if !run.is("gh") {
         return None;
     }
-    let words = run.words();
     let at = words.iter().position(|w| !w.starts_with('-'))?;
-    if words[at] != "api" {
-        return None;
-    }
-    words[at + 1..].iter().copied().find(|w| {
+    (words[at] == "api").then_some(at + 1)
+}
+
+/// The word of `gh api` naming a pull request's merge endpoint, `repos/<owner>/<repo>/pulls/<n>/merge`.
+fn merge_endpoint(run: &Run) -> Option<&str> {
+    let words = run.words();
+    let at = api_at(run, &words)?;
+    words[at..].iter().copied().find(|w| {
         let parts: Vec<&str> = w.trim_matches('/').split('/').collect();
         parts.len() >= 3
             && parts[parts.len() - 1] == "merge"
@@ -1155,13 +1186,18 @@ fn merge_read(run: &Run) -> String {
     } else if let Some((query, fields)) = graphql_merge(run) {
         // A head covers one merge: a query that holds more than one names none.
         let one = MUTATIONS.iter().map(|m| words_at(&query, m).count()).sum::<usize>() == 1;
-        if holds_word(&query, "disablePullRequestAutoMerge") {
+        let any = |names: &[&str]| names.iter().any(|m| holds_word(&query, m));
+        // A query that disarms and also merges or arms is read as the merge, since `disable` alone skips the head rule.
+        if any(DISARMS) && !any(ARMS) && !holds_word(&query, "mergePullRequest") {
             disable = true;
         }
         // A head only a comment names is none: the argument must be there with the comments taken out too.
         let bare: String = query.lines().map(|l| l.split('#').next().unwrap_or("")).collect::<Vec<_>>().join("\n");
         let head = graphql_value(&query, &fields, "expectedHeadOid").filter(|_| one && holds_word(&bare, "expectedHeadOid"));
-        (graphql_value(&query, &fields, "pullRequestId"), head, holds_word(&query, "enablePullRequestAutoMerge"))
+        (graphql_value(&query, &fields, "pullRequestId"), head, any(ARMS))
+    } else if let Some(path) = glab_merge_endpoint(run) {
+        let pr = path.trim_matches('/').rsplit('/').nth(1).map(str::to_string);
+        (pr, words.iter().find_map(|w| w.strip_prefix("sha=")).map(str::to_string), false)
     } else if sub_name == "glab" {
         (plain(&rest).get(2).map(|p| p.to_string()), value("--sha").map(str::to_string), false)
     } else {
@@ -1400,7 +1436,7 @@ fn dispatch(run: &Run) -> Option<String> {
     None
 }
 
-/// `gh api`'s fields: `-f`/`-F`/`--field`/`--raw-field` k=v.
+/// `gh api`'s fields: `-f`/`-F`/`--field`/`--raw-field` k=v, the short flags joined to their value too (`-fk=v`).
 fn fields(words: &[&str]) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for (k, w) in words.iter().enumerate() {
@@ -1408,7 +1444,8 @@ fn fields(words: &[&str]) -> Vec<(String, String)> {
             "-f" | "-F" | "--field" | "--raw-field" => words.get(k + 1).copied(),
             _ => w
                 .strip_prefix("--field=")
-                .or(w.strip_prefix("--raw-field=")),
+                .or(w.strip_prefix("--raw-field="))
+                .or_else(|| w.strip_prefix("-f").or(w.strip_prefix("-F")).filter(|v| v.contains('='))),
         };
         if let Some((key, v)) = value.and_then(|v| v.split_once('=')) {
             out.push((key.to_string(), v.to_string()));
@@ -1982,6 +2019,36 @@ mod tests {
             "merge pr=A head=abc1234"
         );
         assert_eq!(read("glab mr merge 3 --sha abc1234"), "merge pr=3 head=abc1234");
+        // Review round at 642a592e: gh's options before `graphql`, a query deep-hook can't read, the merge queue,
+        // GitLab's REST merge, a disarm that also merges, a variable given twice, and global options before a push.
+        let m = "mutation { mergePullRequest(input: {pullRequestId: \"A\"}) { clientMutationId } }";
+        for line in [
+            format!("gh api -X POST graphql -f query='{m}'"),
+            format!("gh api --hostname ghe.example.com graphql -f query='{m}'"),
+            format!("gh api -H 'X-Github-Next-Global-ID: 1' graphql -f query='{m}'"),
+            format!("gh api graphql -fquery='{m}'"),
+            "gh api graphql -F query=@merge.graphql".into(),
+            "gh api graphql --input body.json".into(),
+            "gh api graphql -f query=\"$Q\"".into(),
+            "gh api graphql -f query='mutation { enqueuePullRequest(input: {pullRequestId: \"A\"}) { clientMutationId } }'".into(),
+            "glab api -X PUT projects/1/merge_requests/3/merge".into(),
+        ] {
+            assert!(has(&line, "merge"), "{line} as merge");
+        }
+        assert!(!has("glab api projects/1/merge_requests/3/merge", "merge"), "a GET of the endpoint");
+        assert!(has("sl --color never push --to main", "push"));
+        assert!(has("jj --config-toml 'x=1' git push", "push"));
+        let both = "gh api graphql -f query='mutation { d: disablePullRequestAutoMerge(input: {pullRequestId: \"A\"}) { clientMutationId } m: mergePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: \"abc1234\"}) { clientMutationId } }'";
+        assert_eq!(read(both), "merge", "disarming and merging at once is a merge with no head and no disable");
+        let twice = "gh api graphql -f query='mutation($h: GitObjectID) { mergePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: $h}) { clientMutationId } }' -f h=abc1234 -F h=def5678";
+        assert_eq!(read(twice), "merge pr=A", "a variable given twice names no head");
+        assert_eq!(
+            read("gh api graphql -f query='mutation { enqueuePullRequest(input: {pullRequestId: \"A\", expectedHeadOid: \"abc1234\"}) { clientMutationId } }'"),
+            "merge pr=A head=abc1234 auto"
+        );
+        assert_eq!(read("gh api graphql -f query='mutation { dequeuePullRequest(input: {id: \"A\"}) { clientMutationId } }'"), "merge disable");
+        assert_eq!(read("glab api -X PUT projects/1/merge_requests/3/merge -f sha=abc1234"), "merge pr=3 head=abc1234");
+        assert_eq!(read("gh api graphql -F query=@merge.graphql"), "merge");
         assert_eq!(read("gt merge"), "merge blind");
         assert_eq!(read("git town ship"), "merge blind");
         let unread = bash("\"$(printf jj)\" git push").matches("unread:push").unwrap();
