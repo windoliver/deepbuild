@@ -1,0 +1,18 @@
+{
+ "criterion": "#465.e3e14ecf",
+ "by": "you",
+ "who": "Claude, delegated by the owner in the session (\"create pr that can close the issue, if not close the gaps\")",
+ "when": "2026-11-08T06:25:35Z",
+ "screenshots": [
+  "83ebf4d9a7a56aee82a0dce68d6df0a71f8a3efe86ac3778753bd263f66935b0",
+  "206547e01feb83a14ba69fd0f4cbbd7a1f8c02f10ae7567e7e588734a3e72bad",
+  "e71647c8707871c4997adb9aea42415b166127a7126e47c0965a362fad303226"
+ ],
+ "named": {
+  "flare": "83ebf4d9a7a56aee82a0dce68d6df0a71f8a3efe86ac3778753bd263f66935b0",
+  "mirror": "206547e01feb83a14ba69fd0f4cbbd7a1f8c02f10ae7567e7e588734a3e72bad",
+  "flare-follows-light": "e71647c8707871c4997adb9aea42415b166127a7126e47c0965a362fad303226"
+ },
+ "call": "looks_right",
+ "note": "Flare: the halo ring, four streaks and the six-spike starburst sit on the light; six ghosts run along the line through the frame's centre, softer and larger with distance. They read clean, though more like solid discs than a real lens's faint tinted ghosts. Mirror: the front mirror shows the room behind the camera, the floor and the cube's reflection seamlessly. The back mirror inside it is flat green (its fallback) with no recursion. Recording: frames 0, 30 and 59 show the flare tracking its light across the stage, the ghosts swinging through the centre."
+}

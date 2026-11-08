@@ -1,0 +1,66 @@
+Acceptance tests for #1425 on the base 9d31efdb (main, 2026-11-07), with only tests/acceptance/1425/ and its one
+[[test]] entry in crates/deep-replica/Cargo.toml added, run on 2026-11-07 on a Mac17,10 (not a reference Mac) with
+node v24.22.0 after npm ci:
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1425 --no-file-parallelism --testTimeout=600000
+
+Trimmed to each test's result and its first error line; stack frames and local paths left out. 16 fail, each for the
+missing surface or behavior its criterion names; 2 pass, both AC1's tree halves, since the base's trees are the merge
+base's by definition (AC1 still fails on its import half).
+
+ ❯ budgets.test.ts (2 tests | 2 failed)
+   × #1425.30ab78a9 the perf lane has the task panel-module-load, a #1425 first measurement, valid against the merge base's budgets, and it runs
+     AssertionError: benchmarks/budgets.json has a task panel-module-load: expected undefined to be defined
+   × #1425.30ab78a9 on a reference Mac, each of the 12 panels updates within 4 ms and the load check adds at most 1 ms to its load
+     AssertionError: the load path has no module check to time: the panel importing "gpui-kit" loads
+     (the work runs before the reference-Mac check, so this fails here rather than reading INCONCLUSIVE)
+ ❯ lint.test.ts (6 tests | 6 failed)
+   × #1425.24afae64 the extension guide and its samples contain no "gpui-" string
+     AssertionError: docs/extension-guide/plugin/panel/main.js:1: // The weather panel, a gpui-shell script. ...
+                     docs/extension-guide/plugin/panel/main.js:3: import { View, div } from "gpui-kit";
+                     docs/extension-guide/plugin/panel/main.js:4: import { v_flex } from "gpui-base";
+   × #1425.24afae64 planted: a "gpui-" line in a guide sample fails the lint lane, naming the file and line
+     AssertionError: the lint lane in scripts/lanes.mjs runs [node, "scripts/panel-catalog.mjs"]: expected false to be true
+   × #1425.1d938ac0 every component the pinned toolkit exports is on the catalog or on its not_offered list
+     Error: no catalog at crates/deep-app/panel-catalog.json
+   × #1425.1d938ac0 planted: a toolkit bump with a new component on neither list fails the lint lane, naming it
+     AssertionError: the lint lane in scripts/lanes.mjs runs [node, "scripts/panel-catalog.mjs"]: expected false to be true
+   × #1425.859baf8e each not_offered entry has a reason
+     Error: no catalog at crates/deep-app/panel-catalog.json
+   × #1425.859baf8e planted: a not_offered entry with no reason fails the lint lane, naming it
+     AssertionError: the lint lane in scripts/lanes.mjs runs [node, "scripts/panel-catalog.mjs"]: expected false to be true
+ ❯ imports.test.ts (2 tests | 1 failed)
+   × #1425.3d839088 all 12 panels and the guide's sample import only @deepbuild/panel
+     AssertionError: crates/deep-app/panels/338-canvas/main.js:3 imports "gpui-kit"
+                     crates/deep-app/panels/338-canvas/main.js:4 imports "gpui-base"
+                     crates/deep-app/panels/338-canvas/main.js:5 imports "gpui-component"
+                     ... (every panel: "gpui-kit", "gpui-base", "gpui-component", "deepbuild")
+                     338-canvas: nothing is imported from @deepbuild/panel
+                     ... sample: nothing is imported from @deepbuild/panel
+   ✓ #1425.3d839088 each one's panel tree is byte-equal to the merge base's
+ ❯ app.test.ts (8 tests | 7 failed), the Rust half (cargo test --locked -p deep-replica --test acceptance_1425)
+   ✓ #1425.3d839088 the view each panel registers in a slot draws the merge base's tree, byte for byte
+   × #1425.782e7a69 a panel importing "gpui-kit" is refused at pack check, naming the module and line
+     imports-gpui-kit: the pack check took a panel that imports "gpui-kit" on line 3
+   × #1425.782e7a69 a panel importing "gpui-kit" is refused at load, naming the module and line
+     imports-gpui-kit: the load took a panel that imports "gpui-kit" on line 3
+   × #1425.782e7a69 planted: a host that skips the load check loads the gpui-kit panel, and the load judge fails it naming the panel
+     the real loader must refuse the panel before its plant means anything: imports-gpui-kit: the load took a panel that
+     imports "gpui-kit" on line 3
+   × #1425.229fbfbb a panel using a name off the catalog is refused at pack check and at load, naming it and the closest catalog name
+     no catalog at crates/deep-app/panel-catalog.json: No such file or directory (os error 2)
+   × #1425.229fbfbb every catalog name renders in a replica in light and dark
+     no catalog at crates/deep-app/panel-catalog.json: No such file or directory (os error 2)
+   × #1425.711d0cb9 a panel whose list runs script per frame is refused at pack check, naming the component
+     scripted-cells: the pack check refused it without naming DataTable: panel@1 refused this panel: it doesn't load:
+       cannot resolve module `@deepbuild/panel` from `<repo>/tests/acceptance/1425/fixtures/scripted-cells/main.js?v=1`
+     scripted-rows: the pack check refused it without naming list: panel@1 refused this panel: it doesn't load:
+       cannot resolve module `@deepbuild/panel` from `<repo>/tests/acceptance/1425/fixtures/scripted-rows/main.js?v=1`
+   × #1425.711d0cb9 planted: a pack check that skips the per-frame check passes the panel, and the judge fails it naming the panel
+     the real pack check must refuse it before its plant means anything: scripted-cells: the pack check refused it
+     without naming DataTable: ... cannot resolve module `@deepbuild/panel` ...
+
+ Test Files  4 failed (4)
+      Tests  16 failed | 2 passed (18)
+
+Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/1425/tsconfig.json exits 0.

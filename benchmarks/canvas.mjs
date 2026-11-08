@@ -705,6 +705,71 @@ workloads['replica-cold-start'] = () => {
   }
 };
 
+// #465: the finishes', the flare's and the mirror's GPU cost at 1080p on a release `deep-gpu`, each the difference of
+// two sides' median `gpu_ms` over 300 frames of one stage (a floor plate, twelve boxes, a sun, a point light, an orbiting
+// camera), and the indexed look's target bytes from `film2d`; one warm-up run and five, each a fresh process. The
+// stage and the finishes are tests/acceptance/465/budgets.test.ts's.
+const FLARE_SIZE = [1920, 1080];
+function flareStage({ flare = false, mirror = false } = {}) {
+  const floor = { base_color: [0.05, 0.05, 0.06, 1], metallic: 0, roughness: 0.2 };
+  if (mirror) floor.mirror = { strength: 1, blur: 0, plane: 'floor' };
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'perspective', target: [0, 0.8, 0], orbit: { azimuth: 30, elevation: 15, distance: 9 }, fov: 45, near: 0.1, far: 500 } },
+    sky: { kind: 'sky@1', params: { top: [0.15, 0.3, 0.75, 1], low: [0.45, 0.6, 0.85, 1], ambient_top: [0.25, 0.25, 0.25], ambient_low: [0.1, 0.1, 0.1] } },
+    sun: { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-45, 30, 0] } },
+    'key-light': { kind: 'light.point@1', params: { power: 4.93, radius: 0.05, color: [1, 1, 1], shadow: false }, at: { pos: [0.8, 1.6, -1] } },
+    floor_mat: { kind: 'material@1', params: floor },
+    box_mat: { kind: 'material@1', params: { base_color: [0.7, 0.45, 0.3, 1], roughness: 0.6 } },
+    floor: { kind: 'plate@1', params: { grid: [1, 1], size: [20, 20] }, at: { pos: [0, 0, 0], rot: [0, 0, 0] }, material: 'floor_mat' },
+  };
+  for (let k = 0; k < 12; k++) items[`box${k}`] = { kind: 'mark.box@1', params: { size: [0.7, 0.7 + 0.15 * (k % 4), 0.7] }, at: { pos: [3 * Math.cos((k * Math.PI) / 6), 0.35 + 0.075 * (k % 4), 3 * Math.sin((k * Math.PI) / 6)] }, material: 'box_mat' };
+  if (flare) items.flare = { kind: 'effect@1', params: { kind: 'flare', flare: { from: 'lights', ghosts: 8, halo: 0.05, streak: { count: 6, length: 0.25, anamorphic: false }, starburst: { blades: 6 }, intensity: 1 } } };
+  let order = 0;
+  for (const [id, item] of Object.entries(items)) Object.assign(item, { id, name: id, order: `a${String(order++).padStart(3, '0')}`, layer: 'main' });
+  return { format: 1, id: 'flares-mirrors', profile: 'scene', title: 'Flares and mirrors', size: FLARE_SIZE, camera: 'cam', seed: 465,
+    transport: { span: '10s' }, budget: { class: 'showpiece' }, layers: { main: { writer: 'agent:bench', title: 'main', order: 'a0' } }, items,
+    channels: { spin: { target: 'items/cam/params/orbit/azimuth', type: 'f32', keys: { k0: { t: '0s', value: 30, interp: 'linear' }, k1: { t: '10s', value: 150, interp: 'linear' } } } } };
+}
+const FLARE_FINISH = [
+  { print_wear: { flicker: '5%', weave: 1.5, scratches: { count: [1, 3], width: 2, life: 6 }, dust: { density: 0.3, size: 3 }, hair: 0.2, gate: { corner_radius: 40, softness: 8 }, rate: 24 } },
+  { tone_curve: { black: 0.04, white: 0.96, contrast: 1.15, toe: 0.2, shoulder: 0.2 } },
+  { screen: { kind: 'crt', scanlines: 240, mask: 'aperture', curvature: 0.1 } },
+  { grain: { amount: '4%', size: '1px', tone: 'flat', rate: 24 } },
+  { vignette: { color: 'ink', shape: 'round', inner: 0.45, outer: 1, amount: 0.7, aspect: 'frame' } },
+];
+workloads['flares-mirrors'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const fixtures = join(root, 'tests', 'acceptance', '465', 'fixtures');
+  const look2d = JSON.parse(readFileSync(join(fixtures, 'look.json'), 'utf8'));
+  // A physical look as the suite's FILMIC: its 2D look's palette, roles, fonts and status, a physical basis.
+  const look = { ...look2d, id: 'filmic-465', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const docs = Object.fromEntries(['plain', 'flare', 'mirror'].map((k) => {
+      const path = join(dir, `${k}.json`);
+      writeFileSync(path, JSON.stringify(flareStage({ flare: k === 'flare', mirror: k === 'mirror' })));
+      return [k, path];
+    }));
+    const side = (doc, lk) => ({ call: 'view3d', doc, look: lk, size: FLARE_SIZE, frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const indexed = { ...look2d, basis: { indexed: { size: [320, 180], scale: 6, palette: ['ground'], tables: {}, protected: [], snap: 'integer', light: { max: 255 } } } };
+    const wall = { format: 1, id: 'indexed-465', profile: 'figure', title: 'Indexed', size: FLARE_SIZE, seed: 465, transport: { span: '1s' }, budget: { class: 'showpiece' },
+      layers: { main: { writer: 'agent-a', title: 'Main', order: 'a1' } }, items: {} };
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [side(docs.plain, look), side(docs.plain, { ...look, finish: FLARE_FINISH }), side(docs.flare, look), side(docs.mirror, look),
+        { call: 'film2d', doc: wall, look: indexed, frames: 1, hash: true }] });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [plain, finish, flare, mirror] = answer.replies.slice(0, 4).map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      return { plain_gpu_ms: plain, finish_gpu_ms: Math.max(0, finish - plain), flare_gpu_ms: Math.max(0, flare - plain),
+        mirror_share: Math.max(0, (mirror - plain) / plain), indexed_target_bytes: answer.replies[4].indexed.target_bytes };
+    });
+    console.log(JSON.stringify({ task: 'canvas-flares-mirrors', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #896's two boards of a run, the 1,000-item one first; `null` for a run with any other boards.
 const pair = (r) => {
   const [small, large] = r.boards ?? [];
@@ -732,8 +797,9 @@ const EFFICIENCY = {
   'canvas-scene-read': { summary_ms: (r) => r.summary.ms, summary_tokens: (r) => r.summary.tokens, page_ms: (r) => r.page.ms, page_rows: (r) => r.page.rows },
   'canvas-idle': { frames: (r) => r.frames, wakeups: (r) => r.wakeups, cpu_fraction: (r) => r.cpu_fraction },
   'replica-cold-start': { first_settled_ms: (r) => r.ms },
+  'canvas-flares-mirrors': { finish_gpu_ms: (r) => r.finish_gpu_ms, flare_gpu_ms: (r) => r.flare_gpu_ms, mirror_share: (r) => r.mirror_share, indexed_target_bytes: (r) => r.indexed_target_bytes },
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes']);
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -843,6 +909,66 @@ workloads['look-frames'] = () => {
     }])) };
   });
   console.log(JSON.stringify({ task: 'canvas-look-frames', fingerprint, runs: measured }));
+};
+
+// #149's drawn looks (tests/acceptance/149/README.md, "AC10's reports"): a release `deep-gpu` plays each family's
+// fixture at 1080p, in 2D through `film2d` and in 3D through `view3d`, 30 warm frames then 300 timed, one warm-up run
+// and five, each run a fresh process. `paper-cost` plays the paper family's 2D film with its paper and on a flat ground.
+const DRAWN_149 = join('tests', 'acceptance', '149', 'fixtures');
+const DRAWN_SIZE = [1920, 1080];
+/** Each family fixture, with its look over the suite's base look. */
+function drawnFamilies() {
+  const base = JSON.parse(readFileSync(join(root, DRAWN_149, 'look.json'), 'utf8'));
+  return readdirSync(join(root, DRAWN_149, 'families')).filter((f) => f.endsWith('.json')).sort().map((f) => {
+    const fixture = `tests/acceptance/149/fixtures/families/${f}`;
+    const family = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+    return { name: f.replace('.json', ''), fixture, family, look: { ...base, ...family.look } };
+  });
+}
+
+workloads['drawn-frames'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const families = drawnFamilies();
+  const dir = mkdtempSync(join(tmpdir(), 'deep-drawn-'));
+  try {
+    const paths = families.map(({ name, family }) => {
+      const path = join(dir, `${name}-3d.json`);
+      writeFileSync(path, JSON.stringify(family['3d']));
+      return path;
+    });
+    const frames = WARM_UP + WARM_FRAMES;
+    const timed = (reply) => reply.frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms }));
+    const measured = runs(() => {
+      const flat = films(families.map(({ family, look }) => ({ call: 'film2d', doc: family['2d'], look, fps: 30, frames })));
+      const deep = films(families.map(({ look }, i) => ({ call: 'view3d', doc: paths[i], look, size: DRAWN_SIZE, fps: 30, frames, timings: true })));
+      return { families: Object.fromEntries(families.map(({ name, fixture }, i) => [name, {
+        '2d': { fixture, size: DRAWN_SIZE, frames: timed(flat[i]) },
+        '3d': { fixture, size: DRAWN_SIZE, frames: timed(deep[i]) },
+      }])) };
+    });
+    console.log(JSON.stringify({ task: 'canvas-drawn-frames', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+workloads['paper-cost'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const { family, look, fixture } = drawnFamilies().find((f) => f.name === 'paper');
+  const flatLook = { ...look, ground: { kind: 'flat' } };
+  const doc = family['2d'];
+  const measured = runs(() => {
+    const frames = WARM_UP + WARM_FRAMES;
+    const [paper, flat, paperHash, flatHash] = films([
+      { call: 'film2d', doc, look, fps: 30, frames },
+      { call: 'film2d', doc, look: flatLook, fps: 30, frames },
+      { call: 'film2d', doc, look, fps: 30, frames: 1, hash: true },
+      { call: 'film2d', doc, look: flatLook, fps: 30, frames: 1, hash: true },
+    ]);
+    const timed = (reply) => ({ frames: reply.frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms })) });
+    return { fixture, paper: timed(paper), flat: timed(flat), paper_hash: paperHash.frames[0].pixel_hash, flat_hash: flatHash.frames[0].pixel_hash };
+  });
+  console.log(JSON.stringify({ task: 'canvas-paper-cost', fingerprint, runs: measured }));
 };
 
 /** A walk through every ordered pair of distinct `ids` once, starting and ending at the first (Hierholzer). */

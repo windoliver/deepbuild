@@ -140,7 +140,7 @@ pub fn item_json(fields: &Fields, world: Option<&Transform>) -> Value {
     };
     let mut placed = at.to_json();
     if let (Some(own), Some(out)) = (fields.lowered.get("at"), placed.as_object_mut()) {
-        for k in ["place", "align"] {
+        for k in ["place", "align", "anchor"] {
             if let Some(v) = own.get(k) {
                 let mut v = v.clone();
                 if let Some(e) = edited.as_ref().and_then(|e| e.get(k)) {
@@ -459,62 +459,41 @@ fn shape(v: &mut View<'_>) -> Result<(), OpError> {
     v.write("text.run", Val::typed(Run { spec, shaped }))
 }
 
-/// A text animator's coverage of each unit (its glyphs, in order), mapped to a lift and an
-/// opacity: `range` with its `offset` selects units, `falloff` softens its edges and `shape`
-/// eases them; `props.y` lifts and `props.opacity` fades a covered unit. Under reduced motion
-/// only opacity is kept, so units fade in place (Transport).
+/// A text animator's amount for each unit (its glyphs, in order), mapped to a lift and an
+/// opacity: the animator's selectors as the per-glyph layout reads them (#496: its range in
+/// Lottie's shapes, then noise and field selectors by their modes); `props.y` lifts and
+/// `props.opacity` fades a covered unit. Under reduced motion only opacity is kept, so units fade
+/// in place (Transport). The operator reads no clock: a noise or field selector is read at t = 0
+/// here, and moves in the per-glyph layout drawing reads (`animator::lay_out`).
 fn animate(v: &mut View<'_>) -> Result<(), OpError> {
     let fields = fields_of(v)?;
     let run = v.typed::<Run>("text.run")?.ok_or_else(|| missing(v))?;
     let reduced = v.reduced_motion()?;
-    let units = run.shaped.glyphs.len();
-    let mut out: Vec<[f64; 2]> = vec![[0.0, 1.0]; units];
+    let t = 0;
+    let id = v.id().unwrap_or_default().to_string();
+    let mut out: Vec<[f64; 2]> = vec![[0.0, 1.0]; run.shaped.glyphs.len()];
     let animators = fields
         .get("params")
         .and_then(|p| p.get("animators"))
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    for a in &animators {
-        let num = |v: Option<&Value>, d: f64| v.and_then(Value::as_f64).unwrap_or(d);
-        let range = a.get("range");
-        let offset = num(range.and_then(|r| r.get("offset")), 0.0);
-        let (from, to) = (
-            num(range.and_then(|r| r.get("from")), 0.0) + offset,
-            num(range.and_then(|r| r.get("to")), 1.0) + offset,
-        );
-        let falloff = num(range.and_then(|r| r.get("falloff")), 0.0);
-        let shape = a.get("shape").and_then(Value::as_str).unwrap_or("square");
+    for (k, a) in animators.iter().enumerate() {
+        let Value::Object(a) = a else {
+            return Err(OpError::new(
+                "bad_doc",
+                format!("items/{id}/params/animators/{k}"),
+            ));
+        };
+        let amounts = crate::animator::amounts(&id, k, a, &run.shaped, t).map_err(refused)?;
         let props = a.get("props");
-        let lift = num(props.and_then(|p| p.get("y")), 0.0);
+        let lift = props
+            .and_then(|p| p.get("y"))
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
         let fade = props.and_then(|p| p.get("opacity")).and_then(Value::as_f64);
-        for (i, unit) in out.iter_mut().enumerate() {
-            let s = (i as f64 + 0.5) / units.max(1) as f64;
-            let d = if s < from {
-                from - s
-            } else if s > to {
-                s - to
-            } else {
-                0.0
-            };
-            let mut w = if d == 0.0 {
-                1.0
-            } else if falloff > 0.0 {
-                (1.0 - d / falloff).max(0.0)
-            } else {
-                0.0
-            };
-            w = match shape {
-                "smooth" => w * w * (3.0 - 2.0 * w),
-                "square" => {
-                    if w > 0.0 {
-                        1.0
-                    } else {
-                        0.0
-                    }
-                }
-                _ => w,
-            };
+        for (unit, g) in out.iter_mut().zip(&run.shaped.glyphs) {
+            let w = amounts.get(g.grapheme).copied().unwrap_or(0.0);
             if !reduced {
                 unit[0] += w * lift;
             }
@@ -845,9 +824,14 @@ fn look_with(r: &mut Registrar, finish: fn(&mut View<'_>) -> Result<(), OpError>
     )
     .document()
     .run(palette);
-    r.operator("finish", "items", &["self", "look.palette"], &["look.finish"])
-        .applies(is_finish)
-        .run(finish);
+    r.operator(
+        "finish",
+        "items",
+        &["self", "look.palette"],
+        &["look.finish"],
+    )
+    .applies(is_finish)
+    .run(finish);
     r.fixture("roles", roles_board(), None).sidecar(json!({
         "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
         "oracles": ["seek_play"],
@@ -1122,6 +1106,12 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
     }));
     // #399: a line of four rows in each of its three pixel columns, each column's first, min,
     // max and last rows distinct, so m4 keeps all four.
+    r.fixture("race", race_board(), None).sidecar(json!({
+        "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
+        "oracles": ["seek_play"],
+        "codes": ["unknown_kind"],
+        "twin": {"path": "items/ys/params/range", "value": [190, 30]},
+    }));
     r.fixture("decimated", decimated_board(), None)
         .sidecar(json!({
             "checks": [{"kind": "document.validate"}],
@@ -1223,6 +1213,55 @@ fn scale(v: &mut View<'_>) -> Result<(), OpError> {
             ticks: s.ticks(),
         }),
     )
+}
+
+/// A race with its labels, a growing axis and a counter on `#period`: every part reads the bars'
+/// rows at t, so a frame played and a frame sought draw the same.
+fn race_board() -> Value {
+    let i32s = |v: &[i32]| {
+        let bytes: Vec<u8> = v.iter().flat_map(|x| x.to_le_bytes()).collect();
+        json!({"dtype": "i32", "len": v.len(), "data": deep_canvas::base64::encode(&bytes)})
+    };
+    let at = "items/bars/params/transforms/0/periods/at";
+    json!({
+        "format": 1, "profile": "board", "seed": 167, "title": "Race",
+        "description": "Two periods of three keys, with labels, an axis and a year: the data module's race.",
+        "size": [320, 200],
+        "items": {
+            "slots": {"id": "slots", "kind": "scale@1", "name": "Slots", "order": "a0",
+                      "params": {"domain": [1, 4], "range": [20, 260], "nice": false}},
+            "ends": {"id": "ends", "kind": "scale@1", "name": "Ends", "order": "a1",
+                     "params": {"domain": [1, 4], "range": [80, 320], "nice": false}},
+            "ys": {"id": "ys", "kind": "scale@1", "name": "Values", "order": "a2",
+                   "params": {"domain": "periods", "range": [180, 20]}},
+            "bars": {"id": "bars", "kind": "marks@1", "name": "Bars", "order": "a3", "params": {
+                "mark": "bar", "n": 6, "key": "key",
+                "columns": {"year": i32s(&[2000, 2000, 2000, 2001, 2001, 2001]),
+                            "key": {"dtype": "str", "len": 6, "data": ["a", "b", "c", "a", "b", "c"]},
+                            "value": i32s(&[10, 20, 30, 40, 25, 15])},
+                "transforms": [{"periods": {"by": "year", "at": 2000}}, {"standing": {"by": "value"}}],
+                "encode": {"x": {"column": "standing", "scale": "slots"},
+                           "x2": {"column": "standing", "scale": "ends"},
+                           "y": {"column": "value", "scale": "ys"}},
+                "paint": {"fill": {"role": "ink"}}}},
+            "labels": {"id": "labels", "kind": "marks@1", "name": "Labels", "order": "a4", "params": {
+                "mark": "text", "rows_of": "bars",
+                "encode": {"x": {"column": "standing", "scale": "slots"},
+                           "y": {"column": "value", "scale": "ys"},
+                           "text": {"column": "value"}, "size": 11},
+                "paint": {"fill": {"role": "muted"}}}},
+            "axis": {"id": "axis", "kind": "axis@1", "name": "Axis", "order": "a5",
+                     "params": {"scale": "ys", "side": "left", "at": 16}},
+            "year": {"id": "year", "kind": "text@1", "name": "Year", "order": "a6",
+                     "params": {"text": {"counter": {"source": "items/bars#period/by", "tabular": true,
+                                                     "format": {"group": "none"}}},
+                                "size": 13, "box": {"w": 60, "h": 20}, "widest": "8888"}}
+        },
+        "channels": {"at": {"target": at, "type": "f32", "keys": {
+            "k0": {"t": "0s", "value": 2000, "interp": "linear"},
+            "k1": {"t": "1s", "value": 2001, "interp": "linear"}}}},
+        "transport": {"span": "1s"}
+    })
 }
 
 fn points_board() -> Value {
@@ -1502,9 +1541,21 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
         false,
     );
     r.code(
+        "bad_transform",
+        "A mark set's transform that isn't on the closed list, or a field of one it can't read.",
+        "Use periods, standing, reveal or emphasis, with the columns and channels they name.",
+        false,
+    );
+    r.code(
+        "log_domain",
+        "A value at or below 0 reaches a log scale, which has no place for it.",
+        "Use a symlog scale, or leave the row out of the set.",
+        false,
+    );
+    r.code(
         "scale_type",
         "A scale of a type the marks module doesn't map.",
-        "Use a linear or time scale.",
+        "Use a linear, log, symlog, time, ordinal or quantize scale.",
         false,
     );
     r.code(
@@ -1933,6 +1984,15 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         .ok_or_else(|| OpError::new("input_missing", "look"))?;
     let empty = Map::new();
     let doc = doc.as_object().unwrap_or(&empty);
+    // A text on a mark set's anchor reads rows its own operator doesn't see.
+    let locale = doc.get("locale").and_then(Value::as_str).unwrap_or("en");
+    for (id, item) in items.iter().filter(|(_, i)| scene::reads_anchor(i)) {
+        if let Some(shown) =
+            scene::text_at(doc, &items, id, item, &record, locale).map_err(refused)?
+        {
+            bound.insert(id.clone(), shown);
+        }
+    }
     let (frame, basis) =
         match scene::frame_prebuilt(doc, &items, &look.palette, 1.0, &bound, &record, &placed)
             .map_err(refused)?

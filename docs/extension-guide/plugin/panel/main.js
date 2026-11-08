@@ -1,7 +1,6 @@
-// The weather panel, a gpui-shell script. Opened as a page from ⌘K, init gets props.page: { name, params }. It reaches
+// The weather panel, a script on @deepbuild/panel, DeepBuild's module for panels. Opened as a page from ⌘K, init gets props.page: { name, params }. It reaches
 // nothing outside the app: what it shows comes from the plug-in's sources, which the hub reads.
-import { View, div } from "gpui-kit";
-import { v_flex } from "gpui-base";
+import { View, div, v_flex } from "@deepbuild/panel";
 
 export default class Weather extends View {
   init(props) {

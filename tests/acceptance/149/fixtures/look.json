@@ -1,0 +1,194 @@
+{
+ "id": "drawn-base-149",
+ "format": 1,
+ "basis": "drawing",
+ "license": "Apache-2.0",
+ "description": "The #149 acceptance look: a drawing basis over which each fixture lays its light, paper, lines and fills.",
+ "palette": {
+  "white": "#ffffff",
+  "graphite": "#1b1d22",
+  "slate": "#8b8f97",
+  "night": "#0b0c0e",
+  "snow": "#f2f3f5",
+  "lagoon": "#1aa3c8",
+  "mist": "#f5f5f6",
+  "fog": "#e3e4e6",
+  "coal": "#16171a",
+  "smoke": "#2a2c30",
+  "orchid": "#b0207f",
+  "heliotrope": "#e879f9",
+  "indigo": "#2c3e7b",
+  "periwinkle": "#6366f1",
+  "graphite_secondary": "#1b1d22d6",
+  "graphite_tertiary": "#1b1d2285",
+  "graphite_disabled": "#1b1d2233",
+  "graphite_hover": "#1b1d220f",
+  "graphite_selected": "#1b1d221a",
+  "snow_secondary": "#f2f3f5d6",
+  "snow_tertiary": "#f2f3f585",
+  "snow_disabled": "#f2f3f533",
+  "snow_hover": "#f2f3f50f",
+  "snow_selected": "#f2f3f51a",
+  "cream": "#f4ecd8",
+  "sepia": "#5b4636",
+  "vermilion": "#d9482b",
+  "moss": "#5f7f3b",
+  "ochre": "#c98f2b",
+  "wine": "#7a2d4a",
+  "lamp_warm": "#ffd9a0",
+  "lamp_cool": "#a8d8ff",
+  "umber": "#2a2320"
+ },
+ "roles": {
+  "ground": "white",
+  "ink": "graphite",
+  "muted": "slate",
+  "accent": "lagoon",
+  "raised": "mist",
+  "divider": "fog",
+  "ink_primary": "graphite",
+  "ink_secondary": "graphite_secondary",
+  "ink_tertiary": "graphite_tertiary",
+  "ink_disabled": "graphite_disabled",
+  "hover": "graphite_hover",
+  "selected": "graphite_selected",
+  "session_readout": "orchid",
+  "session_line": "indigo",
+  "math": "math",
+  "paper": "cream",
+  "sepia": "sepia",
+  "vermilion": "vermilion",
+  "indigo": "indigo",
+  "moss": "moss",
+  "ochre": "ochre",
+  "wine": "wine",
+  "lamp": "lamp_warm",
+  "lamp_cool": "lamp_cool",
+  "shade": "umber"
+ },
+ "themes": {
+  "light": {},
+  "dark": {
+   "roles": {
+    "ground": "night",
+    "ink": "snow",
+    "raised": "coal",
+    "divider": "smoke",
+    "ink_primary": "snow",
+    "ink_secondary": "snow_secondary",
+    "ink_tertiary": "snow_tertiary",
+    "ink_disabled": "snow_disabled",
+    "hover": "snow_hover",
+    "selected": "snow_selected",
+    "session_readout": "heliotrope",
+    "session_line": "periwinkle"
+   }
+  }
+ },
+ "status": {
+  "pass": "#007429",
+  "fail": "#bf232b",
+  "invalid": "#8645b0",
+  "blocked": "#a44700",
+  "inconclusive": "#666600",
+  "running": "#0063b8",
+  "needs_you": "#8a5900",
+  "stale": "#326c6f",
+  "idle": "#636464"
+ },
+ "status_treatment": {
+  "core_min_px": 4,
+  "glyph": {
+   "pass": "✓",
+   "fail": "✗",
+   "invalid": "⊘",
+   "blocked": "■",
+   "inconclusive": "?",
+   "running": "↻",
+   "needs_you": "!",
+   "stale": "◇",
+   "idle": "○"
+  }
+ },
+ "min_distance": 0.1,
+ "attention_treatment": {
+  "line": "dashed",
+  "role": "ink",
+  "glyph": "⚠"
+ },
+ "legend": "auto",
+ "lines": {
+  "line": {
+   "kind": "exact",
+   "width": 2
+  }
+ },
+ "fills": {
+  "fill": {
+   "kind": "flat"
+  }
+ },
+ "ground": {
+  "kind": "flat"
+ },
+ "fonts": {
+  "body": {
+   "family": "Inter",
+   "file": "Inter-Regular.ttf",
+   "license": "OFL-1.1",
+   "embed": true,
+   "single_line": false
+  },
+  "mono": {
+   "family": "JetBrains Mono",
+   "file": "JetBrainsMono-Regular.ttf",
+   "license": "OFL-1.1",
+   "embed": true,
+   "single_line": false
+  },
+  "math": {
+   "family": "STIX Two Math",
+   "file": "STIXTwoMath-Regular.ttf",
+   "license": "OFL-1.1",
+   "embed": true,
+   "single_line": false
+  },
+  "cjk": {
+   "family": "Noto Sans SC",
+   "file": "NotoSansSC-Regular.otf",
+   "license": "OFL-1.1",
+   "embed": true,
+   "single_line": false
+  },
+  "arabic": {
+   "family": "Noto Sans Arabic",
+   "file": "NotoSansArabic-Regular.ttf",
+   "license": "OFL-1.1",
+   "embed": true,
+   "single_line": false
+  },
+  "emoji": {
+   "family": "Noto Emoji",
+   "file": "NotoEmoji-Regular.ttf",
+   "license": "OFL-1.1",
+   "embed": true,
+   "single_line": false
+  }
+ },
+ "fallback": [
+  "cjk",
+  "arabic",
+  "emoji"
+ ],
+ "time": {
+  "state": {
+   "span": "0.25s",
+   "interp": {
+    "ease": {
+     "name": "in_out_cubic"
+    }
+   }
+  }
+ },
+ "finish": []
+}

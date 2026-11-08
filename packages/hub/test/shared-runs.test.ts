@@ -28,7 +28,9 @@ function world(o: {
   kept?: boolean | ((evidence: string[]) => boolean); hold?: boolean; dir?: string; read?: string[]; variants?: 'none' | 'unstartable' | 'second-unstartable';
   records?: (n: number, variant: boolean) => Partial<RecordedRun>; runs?: number; definition?: DefinitionState; onBase?: 'fails'; state?: (session: string) => StatePin;
   /** The check's depth, and whether the checkout's done.yaml has an environment, so a journey runs on its stack (#580). */
-  depth?: string; stacked?: boolean; variantDirs?: boolean;
+  depth?: 'unit' | 'integration' | 'journey' | 'live'; stacked?: boolean; variantDirs?: boolean;
+  /** A timing check (#352), whose result is the machine's load's as much as its files'. */
+  timing?: boolean;
 } = {}) {
   const started: { check: string; claim: string }[] = [];
   const finished: { run: string; check: string; key: KeyFacts }[] = [];
@@ -87,7 +89,7 @@ function world(o: {
     session, claim: `claim:${n}`, task: 'task:1', cwd: checkout, base: 'b', requirements: [], stopAt: now, ...(o.definition ? { definition: o.definition } : {}),
     ...(o.state ? { state: o.state(session) } : {}),
     checks: [{
-      check: 'c.sh', approved: 'a', command: "sh 'c.sh'", covers: ['R1'], depth: o.depth ?? 'unit', on_base: o.onBase ?? 'passes', asserts: [], expected_ms: 1, ...(o.runs ? { runs: o.runs } : {}),
+      check: 'c.sh', approved: 'a', command: "sh 'c.sh'", covers: ['R1'], depth: o.depth ?? 'unit', on_base: o.onBase ?? 'passes', asserts: [], expected_ms: 1, ...(o.runs ? { runs: o.runs } : {}), ...(o.timing ? { timing: true } : {}),
       ...(o.variants ? { held_out: o.variants === 'second-unstartable' ? [{ files: { 'test/fixture.json': SHA } }, { files: { 'test/fixture.json': 'b'.repeat(64) } }] : [{ files: { 'test/fixture.json': SHA } }] } : {}),
     }],
   });
@@ -117,6 +119,16 @@ describe('#1018 readings, per repo', () => {
     const waited = w.readings.filter((r) => r.source.startsWith('runs that waited') || r.source.startsWith('time waited'));
     expect(waited.map((r) => [r.source.split(' · ')[0], r.unit])).toEqual([["runs that waited on another session's run", 'runs'], ["time waited on another session's run", 'ms']]);
     expect(waited[1]!.value).toBe(1500);
+  });
+});
+
+describe("#352 a timing check on another session's files", () => {
+  it("lands on no key: the next session's claim on the same files runs its own, under its own load", async () => {
+    const w = world({ timing: true });
+    await w.claim('s1', 1);
+    await w.claim('s2', 2);
+    expect(w.started.map((s) => s.claim), 'each claim runs the timing check itself').toEqual(['claim:1', 'claim:2']);
+    expect(w.finished, 'no run of it is keyed').toEqual([]);
   });
 });
 

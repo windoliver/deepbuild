@@ -281,6 +281,20 @@ impl<'a> Hub<'a> {
             "steps": report.steps.iter().map(|s| json!({"module": s.module, "t": s.t, "count": s.count, "read": s.read})).collect::<Vec<_>>(),
             "issues": report.issues.iter().map(issue_json).collect::<Vec<_>>(),
         });
+        if !e.arrays.is_empty() {
+            // #497: each named array as this frame read it.
+            let read: Map<String, Value> = e
+                .arrays
+                .iter()
+                .map(|name| {
+                    let v = evaluated.array(&self.sched, name);
+                    let n = v.as_ref().and_then(|v| v.as_typed::<i64>()).map(|n| json!(*n));
+                    let x = v.as_ref().and_then(|v| v.as_typed::<f64>()).map(|x| json!(*x));
+                    (name.clone(), n.or(x).unwrap_or(Value::Null))
+                })
+                .collect();
+            reply["arrays"] = Value::Object(read);
+        }
         if self.startup.test_build {
             reply["access"] = json!(report
                 .access
@@ -288,11 +302,31 @@ impl<'a> Hub<'a> {
                 .map(|a| json!({"operator": a.operator, "item": a.item, "read": a.read}))
                 .collect::<Vec<_>>());
         }
-        let drawing = if e.pixels {
+        // #493: a 2D film's shots: the sides its frame draws, and the film block.
+        let reduced = e.view.get("reduced_motion").and_then(Value::as_bool).unwrap_or(false);
+        let program = crate::film::program_of(&self.sched, evaluated);
+        let document = evaluated.document().cloned();
+        let sides = match (&program, &document) {
+            (Some(p), Some(d)) => crate::film::sides(p, d, t, reduced),
+            _ => None,
+        };
+        let drawing = if e.pixels || e.film {
             drawing_of(&self.sched, evaluated)
         } else {
             None
         };
+        if e.film {
+            let glyphs = drawing
+                .as_ref()
+                .and_then(|d| self.renderer.prepare_drawing(d, &self.scenario.evidence).ok())
+                .map(|d| d.glyphs())
+                .unwrap_or_default();
+            reply["film"] = match (&program, &document) {
+                (Some(p), Some(d)) => crate::film::block(p, d, t, reduced, glyphs),
+                _ => json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs}),
+            };
+        }
+        let drawing = drawing.filter(|_| e.pixels);
         reply["hashes"] = json!(self
             .sched
             .take_hashes()
@@ -300,7 +334,11 @@ impl<'a> Hub<'a> {
             .map(|h| json!({"of": h.of, "bytes": h.bytes}))
             .collect::<Vec<_>>());
         if let Some(drawing) = drawing {
-            match self.canonical_png(&drawing, e.size) {
+            let drawn = match (&sides, &document) {
+                (Some(sides), Some(doc)) => self.film_png(&drawing, e.size, sides, doc),
+                _ => self.canonical_png(&drawing, e.size),
+            };
+            match drawn {
                 Ok((sha, drawn, size)) => {
                     reply["snapshots"] = json!([snapshot::entry(&sha, &drawn, size)]);
                 }
@@ -336,6 +374,59 @@ impl<'a> Hub<'a> {
             path: "snapshots".into(),
         })?;
         Ok((sha, drawn, size))
+    }
+
+    /// #493: [`Hub::canonical_png`] of a 2D film whose shots write its camera: each side the
+    /// frame draws through its own camera, finished in its own look, the sides blended as
+    /// finished pixels, and the status marks drawn once on top from the side that holds the
+    /// reveal, never blended (Transition).
+    pub(crate) fn film_png(
+        &mut self,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+        sides: &crate::film::Sides,
+        doc: &Value,
+    ) -> Result<(String, Drawn, [u16; 2]), Unfit> {
+        let drawn = self
+            .renderer
+            .prepare_drawing(drawing, &self.scenario.evidence)?;
+        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
+        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
+        let ink = self.look.light.get("ink").copied().unwrap_or([0; 3]);
+        let frame = drawn.frame.size;
+        let mut pictures = Vec::with_capacity(sides.sides.len());
+        for side in &sides.sides {
+            let part = drawn.part(Some(crate::film::view(&side.pose, frame)), true, false);
+            let mut rgba = self.renderer.raster(&part, size, Some(ground));
+            if let Some(map) = side.look.as_deref().and_then(|l| self.tone_of(doc, l)) {
+                crate::film::finish(&mut rgba, map);
+            }
+            pictures.push(rgba);
+        }
+        let mut rgba = match (&sides.mix, pictures.len()) {
+            (Some(mix), 2) => crate::film::blend(&pictures[0], &pictures[1], mix, size, ink),
+            _ => pictures.swap_remove(0),
+        };
+        let top = &sides.sides[sides.status.min(sides.sides.len() - 1)];
+        let status = drawn.part(Some(crate::film::view(&top.pose, frame)), false, true);
+        let over = self.renderer.raster(&status, size, None);
+        crate::film::over(&mut rgba, &over);
+        let sha = evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
+            code: "evidence_unwritable",
+            path: "snapshots".into(),
+        })?;
+        Ok((sha, status, size))
+    }
+
+    /// A shot's look's tone map: the look@1 the document names by asset, read from the evidence
+    /// store (#1162's way).
+    fn tone_of(&self, doc: &Value, name: &str) -> Option<deep_canvas_marks::finish::ToneMap> {
+        let sha = doc.pointer(&format!("/assets/{name}/sha256"))?.as_str()?;
+        let bytes = (sha.len() == 64)
+            .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
+            .flatten()?;
+        let def: Value = serde_json::from_slice(&bytes).ok()?;
+        deep_canvas_marks::finish::read_tone_map(def.get("tone_map")).ok()
     }
 
     /// [`Hub::canonical_png`] of a document with 3D writer layers: its 3D frame at `t` on the GPU,
@@ -1047,4 +1138,125 @@ fn debug_digest(values: &[Val]) -> Value {
         return Value::Null;
     }
     json!(deep_canvas::schedule::sha256_hex(texts.concat().as_bytes()))
+}
+
+#[cfg(test)]
+mod story_tests {
+    use deep_canvas::registry::{BuildSet, Registry};
+    use deep_canvas::schedule::{default_view, Options, Scheduler, Session};
+    use deep_canvas_marks::modules::{tokens, Drawing};
+    use deep_canvas_marks::scene::Mark;
+    use serde_json::{json, Value};
+
+    const SECOND: i64 = 705_600_000;
+
+    fn numbers(v: &[i32]) -> Value {
+        let bytes: Vec<u8> = v.iter().flat_map(|x| x.to_le_bytes()).collect();
+        json!({"dtype": "i32", "len": v.len(), "data": deep_canvas::base64::encode(&bytes)})
+    }
+
+    fn text(source: Value, order: &str) -> Value {
+        json!({"id": order, "kind": "text@1", "name": order, "order": order, "layer": "a",
+               "params": {"text": {"counter": {"source": source, "tabular": true,
+                                               "format": {"group": "none"}}},
+                          "size": 13, "box": {"w": 80, "h": 20}, "widest": "888888"}})
+    }
+
+    /// A race and a revealed line whose readers aren't touched as `at` and `to` move: labels
+    /// through `rows_of`, counters on both anchors and on a driver, and a dot on the head.
+    fn story() -> Value {
+        let key = |at: &str, v: i32, after: i32| {
+            json!({"target": at, "type": "f32", "keys": {
+                "k0": {"t": "0s", "value": v, "interp": "linear"},
+                "k1": {"t": "2s", "value": after, "interp": "linear"}}})
+        };
+        json!({
+            "format": 1, "profile": "board", "title": "Story", "description": "d",
+            "size": [320, 200], "transport": {"span": "2s"},
+            "layers": {"a": {"writer": "agent:t", "title": "A", "order": "a1"}},
+            "data": {"goal": {"value": 100, "source": "story"}, "share": {"value": 0, "source": "story"},
+                     "shown": {"value": 0, "source": "story"}},
+            "items": {
+                "bars": {"id": "bars", "kind": "marks@1", "name": "Bars", "order": "a0", "layer": "a",
+                         "params": {"mark": "point", "n": 2, "key": "key",
+                                    "columns": {"year": numbers(&[2000, 2002]),
+                                                "key": {"dtype": "str", "len": 2, "data": ["a", "a"]},
+                                                "value": numbers(&[10, 30])},
+                                    "transforms": [{"periods": {"by": "year", "at": 2000}}],
+                                    "encode": {"x": {"column": "value"}, "y": 10}}},
+                "labels": {"id": "labels", "kind": "marks@1", "name": "Labels", "order": "a1",
+                           "layer": "a",
+                           "params": {"mark": "text", "rows_of": "bars",
+                                      "encode": {"x": 10, "y": 40, "text": {"column": "value"}}}},
+                "line": {"id": "line", "kind": "marks@1", "name": "Line", "order": "a2", "layer": "a",
+                         "params": {"mark": "path", "n": 2, "key": "year",
+                                    "columns": {"year": numbers(&[0, 2]), "value": numbers(&[100, 140])},
+                                    "transforms": [{"reveal": {"by": "year", "to": 0}}],
+                                    "encode": {"x": {"column": "value"}, "y": 50}}},
+                "dot": {"id": "dot", "kind": "circle@1", "name": "Dot", "order": "a3", "layer": "a",
+                        "params": {"center": [0, 0], "r": 2, "paint": {"fill": {"role": "ink"}}},
+                        "at": {"pos": [0, 0, 0], "anchor": "line#head"}},
+                "p": text(json!("items/bars#period/by"), "p"),
+                "q": text(json!("items/line#head/value"), "q"),
+                "r": text(json!("climb"), "r")
+            },
+            "channels": {
+                "at": key("items/bars/params/transforms/0/periods/at", 2000, 2002),
+                "to": key("items/line/params/transforms/0/reveal/to", 0, 2),
+                "share": key("data/share", 0, 1)
+            },
+            "drivers": {"climb": {"target": "data/shown", "expr": "goal * share",
+                                  "vars": {"goal": "data/goal", "share": "data/share"}}}
+        })
+    }
+
+    /// In a live session, what each reader of the rows shows at `t`, frame after frame: the
+    /// operators of these items see no change of their own, so a stale value would stay.
+    #[test]
+    fn a_session_shows_what_the_rows_hold_at_t_in_every_reader() {
+        let mut registry = Registry::new(BuildSet::R2);
+        for m in crate::modules(BuildSet::R2) {
+            registry = registry.with(m);
+        }
+        let sealed = registry.seal().expect("seals");
+        let look = tokens(&crate::hub::shipped_look().light);
+        let mut s = Scheduler::new(&sealed, Options::default());
+        let doc = story();
+        let mut live = Session::new(0, look);
+        live.load(&mut s, &doc);
+        for (t, labels, year, head, count, dot) in [
+            (0, "10", "2000", "100", "0", 100.0),
+            (SECOND / 2, "15", "2000", "110", "25", 110.0),
+            (SECOND, "20", "2000", "120", "50", 120.0),
+            (2 * SECOND, "30", "2002", "140", "100", 140.0),
+        ] {
+            live.frame(&mut s, t, &default_view(&doc));
+            let refused: Vec<_> = live.report.issues.iter().map(|i| (i.code, &i.path)).collect();
+            assert!(refused.is_empty(), "at {t}: {refused:?}");
+            let drawing = live
+                .value(&s, "marks2d.frame", None)
+                .and_then(|v| v.as_typed::<Drawing>())
+                .expect("a drawing");
+            let shown = |item: &str| {
+                let marks = drawing.frame.layers.iter().flat_map(|l| l.marks.iter());
+                marks
+                    .filter_map(|d| match &d.mark {
+                        Mark::Text { item: i, spec, .. } if i == item => Some(spec.text.clone()),
+                        _ => None,
+                    })
+                    .next()
+                    .unwrap_or_else(|| panic!("{item} draws at {t}"))
+            };
+            let mut marks = drawing.frame.layers.iter().flat_map(|l| l.marks.iter());
+            let at_dot = marks.find_map(|d| match &d.mark {
+                Mark::Circle { item, center, .. } if item == "dot" => Some(center[0]),
+                _ => None,
+            });
+            assert_eq!(shown("labels#a"), labels, "a label through rows_of at {t}");
+            assert_eq!(shown("p"), year, "a counter on #period at {t}");
+            assert_eq!(shown("q"), head, "a counter on #head at {t}");
+            assert_eq!(shown("r"), count, "a counter on a driver at {t}");
+            assert_eq!(at_dot, Some(dot), "an item on #head at {t}");
+        }
+    }
 }

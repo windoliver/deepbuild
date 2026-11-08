@@ -1,0 +1,554 @@
+Base commit: c469fe2e ("Merge pull request #1670 from windoliver/worktree-github-issue-495-b0fc70")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/308 --testTimeout=600000 --no-file-parallelism
+Run once, in the worktree at the base commit holding only these test files (untracked); node_modules is a link to the main checkout's.
+All 23 tests fail, none skipped, none fails to load (the suite typechecks with
+node node_modules/typescript/bin/tsc -p tests/acceptance/308/tsconfig.json):
+- 16 tests drive `deep-canvas input`, which is no subcommand at the base: the binary builds and exits 2 with its usage
+  line ("usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render").
+- AC1 (sealed set): `registry` lists no module `input`; AC2 (listing): `deep://registries` lists no `control@1`; AC2 (pack):
+  the pack check refuses the entry because "this build declares no registry `control@1`", and its error names no `module`
+  (who may fill it); AC1 (film) and AC2 (test kind): cargo refuses the builds `--features full,test-leave-out-input` and
+  `--features full,test-control-kind` (no such features at the base).
+Numbering note: the run's test names were renumbered afterwards by text replacement (AC13b -> AC14, AC14 -> AC15) when
+the issue's fifteen checkboxes were counted; nothing else changed.
+Date: 2026-11-08  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1
+Exit code: 1
+Paths below have the checkout's absolute path replaced by <worktree>.
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/308
+
+ ❯ track.test.ts (10 tests | 10 failed) 273081ms
+   ❯ AC3 #308 a dragged point stays on its path, and one drag is one change (1)
+     × AC3 the pointer wanders off the rail, past both ends and around its corner: every resolved sample is on the path, the handle sits at the path's point for its value, and each drag appends one entry 310ms
+   ❯ AC4 #308 a choice reads as its option's index (1)
+     × AC4 a three-option choice with no default reads -1 before any entry and 2 after its third option is picked; one whose default is its second option reads 1 before any entry 5ms
+   ❯ AC5 #308 a press control appends one entry per press (1)
+     × AC5 three presses of yours (one held with key repeat) and two of the tour append exactly five entries, and a driver counting them reads the same by seeking as by playing 4ms
+   ❯ AC6 #308 seek versus edit (3)
+     × AC6 30 slider entries scrubbed back and forth 50 times keep all 30 entries and the hash, read the recorded values and play on to them; a planted transport that forks on a scrub alone loses entries on the first scrub 5ms
+     × AC6 a drag while paused at 20 s after a seek back forks the track there: the 20 entries after 20 s are gone, fork_at reads 20 s and the hash changes 4ms
+     × AC6 with a follow channel on a slider with 12 recorded entries, one drag after a seek back to 5 s forks at the drag's flick, drops the entries after it and rebuilds only the segments from the fork on 4ms
+   ❯ AC7 #308 the parameter tool is stamped as the agent (1)
+     × AC7 the tool sets a slider as one entry stamped agent, which a replay reads as recorded and which leaves your entries as they were; a planted tool that stamps its entry as you fails, naming the control, and the seal refuses it at the input part 3ms
+   ❯ AC9 #308 the tour (1)
+     × AC9 a tour with idle_after 1.4 s writes its first entry 1.4 s after your last gesture, writes none from your drag at 5 s, resumes 3.6 s after it ends, writes none under reduced motion, and replays to one hash; a planted tour that writes during your drag fails, naming the entry 3ms
+   ❯ AC10 #308 hover with a fixed-span transition (2)
+     × AC10 pointer in at 1.0 s and out at 2.0 s: the lift reads 8.75 u at 1.15 s, 10 u from 1.3 s, 1.25 u at 2.15 s and 0 from 2.3 s, on the out_cubic curve throughout; the golden and an export draw the card at rest 4ms
+     × AC10 a pointer that leaves at 1.1 s starts the fall from 7.037 u (10 × 19/27) and eases to 0 from there; a planted smoothing that starts the fall from 10 u jumps at 1.1 s and fails, naming the card 3ms
+ ❯ module.test.ts (6 tests | 6 failed) 13420ms
+   ❯ AC1 #308 the input module seals as input@1's implementation and passes its kit (3)
+     × AC1 a recorded session with a slider, a stages control and a drag_along handle replays at 30, 60 and 120 fps to one input-track hash; a planted implementation that computes the drag_along entry from the camera at replay fails, naming the control 316ms
+     × AC1 the sealed set holds input as the implementation of input@1, its kit passes (replay, keyboard, input), and a drag_along entry computed again from the camera is refused at the seal, naming it 1981ms
+     × AC1 a film with no controls gives the same evaluated-data on a build without the input module, where a document with a slider is refused with module_missing, naming the input module 108ms
+   ❯ AC2 #308 control@1 seals with its first nine entries; kinds come only from canvas modules and pass the kit (3)
+     × AC2 control@1 is owned by input, filled by modules at the seal, and lists exactly slider, toggle, choice, stages, transport, drag_along, turn, press and hover, each passing the kit with a role and a keyboard path, and a planted wrong entry for each kit part 116ms
+     × AC2 a planted test kind computed again from the camera at replay fails the replay part at the seal, naming the kind; one with no keyboard path is refused, naming it; one an agent's input writes is refused, naming it; the same kind unplanted seals 2ms
+     × AC2 a pack that declares an entry of control@1 is refused at pack check, naming the registry and who may fill it 93ms
+ ❯ grammar.test.ts (5 tests | 5 failed) 897ms
+   ❯ AC11 #308 grabbing the handle keeps the offset (1)
+     × AC11 a 200 px slider at 0.5 pressed 6 px right of the handle reads 0.5 until moved, and a 20 px drag right reads 0.585; the track outside the handle moves to that point; a planted absolute slider reads 0.63 196ms
+   ❯ AC12 #308 a Shift change moves the anchor (1)
+     × AC12 Shift pressed mid-drag then 40 px right moves the value by 0.01 with no jump; a planted recompute jumps 4ms
+   ❯ AC13 #308 past a limit the anchor moves by the overshoot (1)
+     × AC13 100 px past the max, then 10 px back, reads 0.95; a planted slider with no anchor move stays at 1.0 3ms
+   ❯ AC14 #308 modifiers are resolved at the gesture, never at replay (1)
+     × AC14 Shift pressed and released mid-drag replays at 30, 60 and 120 fps to one input-track hash; a planted kind that reads modifiers at replay gives another, and the seal's kit refuses it at its replay part 3ms
+   ❯ AC15 #308 keys: arrows, Shift+arrows, Page Up and Down, Home and End (1)
+     × AC15 with increment 0.05 and range 0..1, Shift+Right moves 0.005, Page Up 0.1 and End to 1, and the web player gives the same entries and hash 3ms
+ ❯ budgets.test.ts (2 tests | 2 failed) 1028ms
+   ❯ AC8 #308 budgets (2)
+     × AC8 a document with no controls gains no work per frame 380ms
+     × AC8 looking up a control's value on 100,000 entries takes under twice the time it takes on 10,000; a planted lookup that scans the track takes ten times as long and fails 5ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 23 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC8 #308 budgets > AC8 a document with no controls gains no work per frame
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ inputRun helpers.ts:219:64
+ ❯ budgets.test.ts:25:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
+
+ FAIL  budgets.test.ts > AC8 #308 budgets > AC8 looking up a control's value on 100,000 entries takes under twice the time it takes on 10,000; a planted lookup that scans the track takes ten times as long and fails
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ inputRun helpers.ts:219:64
+ ❯ perLookup budgets.test.ts:50:15
+ ❯ budgets.test.ts:73:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
+
+ FAIL  grammar.test.ts > AC11 #308 grabbing the handle keeps the offset > AC11 a 200 px slider at 0.5 pressed 6 px right of the handle reads 0.5 until moved, and a 20 px drag right reads 0.585; the track outside the handle moves to that point; a planted absolute slider reads 0.63
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ grammar.test.ts:44:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
+
+ FAIL  grammar.test.ts > AC12 #308 a Shift change moves the anchor > AC12 Shift pressed mid-drag then 40 px right moves the value by 0.01 with no jump; a planted recompute jumps
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ inputRun helpers.ts:219:64
+ ❯ grammar.test.ts:71:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
+
+ FAIL  grammar.test.ts > AC13 #308 past a limit the anchor moves by the overshoot > AC13 100 px past the max, then 10 px back, reads 0.95; a planted slider with no anchor move stays at 1.0
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ inputRun helpers.ts:219:64
+ ❯ grammar.test.ts:90:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
+
+ FAIL  grammar.test.ts > AC14 #308 modifiers are resolved at the gesture, never at replay > AC14 Shift pressed and released mid-drag replays at 30, 60 and 120 fps to one input-track hash; a planted kind that reads modifiers at replay gives another, and the seal's kit refuses it at its replay part
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ grammar.test.ts:102:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/23]⎯
+
+ FAIL  grammar.test.ts > AC15 #308 keys: arrows, Shift+arrows, Page Up and Down, Home and End > AC15 with increment 0.05 and range 0..1, Shift+Right moves 0.005, Page Up 0.1 and End to 1, and the web player gives the same entries and hash
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ grammar.test.ts:130:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/23]⎯
+
+ FAIL  module.test.ts > AC1 #308 the input module seals as input@1's implementation and passes its kit > AC1 a recorded session with a slider, a stages control and a drag_along handle replays at 30, 60 and 120 fps to one input-track hash; a planted implementation that computes the drag_along entry from the camera at replay fails, naming the control
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ module.test.ts:63:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/23]⎯
+
+ FAIL  module.test.ts > AC1 #308 the input module seals as input@1's implementation and passes its kit > AC1 the sealed set holds input as the implementation of input@1, its kit passes (replay, keyboard, input), and a drag_along entry computed again from the camera is refused at the seal, naming it
+AssertionError: the sealed set holds the module input: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ module.test.ts:75:91
+     73|     const bin = builds.bin(PLAIN);
+     74|     const [reg, sched, kit] = run(bin, scenario(evidence(), [{ call: '…
+     75|     expect(mentions(reg!['modules'], '"input"'), 'the sealed set holds…
+       |                                                                                           ^
+     76|     const iface = (sched!['interfaces'] as { [k: string]: { module?: s…
+     77|     expect(iface, `the schedule names the interface input@1: ${show(sc…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/23]⎯
+
+ FAIL  module.test.ts > AC1 #308 the input module seals as input@1's implementation and passes its kit > AC1 a film with no controls gives the same evaluated-data on a build without the input module, where a document with a slider is refused with module_missing, naming the input module
+AssertionError: the binary builds: deep-show with features full,test-leave-out-input: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-input failed:
++ error: none of the selected packages contains this feature: test-leave-out-input
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-canvas-drawn, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-motion, deep-canvas-loop, deep-sandbox-wasmtime, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:145:103
+    143|       const entry = made.get(buildName(b));
+    144|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    145|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                       ^
+    146|       return entry.bin;
+    147|     },
+ ❯ module.test.ts:95:52
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/23]⎯
+
+ FAIL  module.test.ts > AC2 #308 control@1 seals with its first nine entries; kinds come only from canvas modules and pass the kit > AC2 control@1 is owned by input, filled by modules at the seal, and lists exactly slider, toggle, choice, stages, transport, drag_along, turn, press and hover, each passing the kit with a role and a keyboard path, and a planted wrong entry for each kit part
+AssertionError: deep://registries lists the registry control@1: expected undefined to be defined
+ ❯ listedRegistry helpers.ts:429:63
+    427|   expect(uri, 'registries: published at deep://registries/<core versio…
+    428|   const row = arr(reply['registries'], 'registries: registries').map((…
+    429|   expect(row, `deep://registries lists the registry ${name}`).toBeDefi…
+       |                                                               ^
+    430|   const o = row!;
+    431|   return {
+ ❯ module.test.ts:113:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/23]⎯
+
+ FAIL  module.test.ts > AC2 #308 control@1 seals with its first nine entries; kinds come only from canvas modules and pass the kit > AC2 a planted test kind computed again from the camera at replay fails the replay part at the seal, naming the kind; one with no keyboard path is refused, naming it; one an agent's input writes is refused, naming it; the same kind unplanted seals
+AssertionError: the binary builds: deep-show with features full,test-control-kind: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-control-kind failed:
++ error: none of the selected packages contains this feature: test-control-kind
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-codecs, deep-hook, deep-app, deep-canvas-cells, deep-canvas-marks, deep-canvas-drawn, deep-text, deep-gpu, deep-marks-gpui, deep-text-gpui, deep-panel-host, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-effects-render, deep-scene3d-render, deep-marks-render, deep-marks-vello, deep-replica, deep-motion, deep-canvas-loop, deep-sandbox-wasmtime, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:145:103
+    143|       const entry = made.get(buildName(b));
+    144|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    145|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                       ^
+    146|       return entry.bin;
+    147|     },
+ ❯ module.test.ts:139:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/23]⎯
+
+ FAIL  module.test.ts > AC2 #308 control@1 seals with its first nine entries; kinds come only from canvas modules and pass the kit > AC2 a pack that declares an entry of control@1 is refused at pack check, naming the registry and who may fill it
+AssertionError: the refusal names module: [{"check":"document.validate","code":"out_of_range","severity":"error","ids":[],"path":"entries/control@1","actual":{"registry":"control@1"},"what":"this build declares no registry `control@1`","fix":"Give the field a value of its type inside its range."}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ module.test.ts:156:180
+    154|     expect(row['state'] ?? row['outcome'], `${packAt(DIALPACK)} is ref…
+    155|     const errors = ((row['issues'] as { [k: string]: unknown }[] | und…
+    156|     for (const name of ['control@1', 'module']) expect(errors.some((i)…
+       |                                                                                                                                                                                    ^
+    157|   }, 1_800_000);
+    158| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/23]⎯
+
+ FAIL  track.test.ts > AC3 #308 a dragged point stays on its path, and one drag is one change > AC3 the pointer wanders off the rail, past both ends and around its corner: every resolved sample is on the path, the handle sits at the path's point for its value, and each drag appends one entry
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ inputRun helpers.ts:219:64
+ ❯ track.test.ts:56:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/23]⎯
+
+ FAIL  track.test.ts > AC4 #308 a choice reads as its option's index > AC4 a three-option choice with no default reads -1 before any entry and 2 after its third option is picked; one whose default is its second option reads 1 before any entry
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ inputRun helpers.ts:219:64
+ ❯ track.test.ts:92:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/23]⎯
+
+ FAIL  track.test.ts > AC5 #308 a press control appends one entry per press > AC5 three presses of yours (one held with key repeat) and two of the tour append exactly five entries, and a driver counting them reads the same by seeking as by playing
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ track.test.ts:118:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/23]⎯
+
+ FAIL  track.test.ts > AC6 #308 seek versus edit > AC6 30 slider entries scrubbed back and forth 50 times keep all 30 entries and the hash, read the recorded values and play on to them; a planted transport that forks on a scrub alone loses entries on the first scrub
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ track.test.ts:179:42
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/23]⎯
+
+ FAIL  track.test.ts > AC6 #308 seek versus edit > AC6 a drag while paused at 20 s after a seek back forks the track there: the 20 entries after 20 s are gone, fork_at reads 20 s and the hash changes
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ track.test.ts:193:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/23]⎯
+
+ FAIL  track.test.ts > AC6 #308 seek versus edit > AC6 with a follow channel on a slider with 12 recorded entries, one drag after a seek back to 5 s forks at the drag's flick, drops the entries after it and rebuilds only the segments from the fork on
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ inputRun helpers.ts:219:64
+ ❯ track.test.ts:221:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/23]⎯
+
+ FAIL  track.test.ts > AC7 #308 the parameter tool is stamped as the agent > AC7 the tool sets a slider as one entry stamped agent, which a replay reads as recorded and which leaves your entries as they were; a planted tool that stamps its entry as you fails, naming the control, and the seal refuses it at the input part
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ track.test.ts:255:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/23]⎯
+
+ FAIL  track.test.ts > AC9 #308 the tour > AC9 a tour with idle_after 1.4 s writes its first entry 1.4 s after your last gesture, writes none from your drag at 5 s, resumes 3.6 s after it ends, writes none under reduced motion, and replays to one hash; a planted tour that writes during your drag fails, naming the entry
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ track.test.ts:291:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/23]⎯
+
+ FAIL  track.test.ts > AC10 #308 hover with a fixed-span transition > AC10 pointer in at 1.0 s and out at 2.0 s: the lift reads 8.75 u at 1.15 s, 10 u from 1.3 s, 1.25 u at 2.15 s and 0 from 2.3 s, on the out_cubic curve throughout; the golden and an export draw the card at rest
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ inputRun helpers.ts:219:64
+ ❯ track.test.ts:324:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/23]⎯
+
+ FAIL  track.test.ts > AC10 #308 hover with a fixed-span transition > AC10 a pointer that leaves at 1.1 s starts the fall from 7.037 u (10 × 19/27) and eases to 0 from there; a planted smoothing that starts the fall from 10 u jumps at 1.1 s and fails, naming the card
+AssertionError: deep-canvas input exits 0 (no signal); stdout: ; stderr: deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ inputRuns helpers.ts:202:149
+    200|   const s = start(bin, ['input'], lines as unknown as JsonValue[]);
+    201|   expect(s.timedOut, `${CANVAS_NAME} input finished within its timeout…
+    202|   expect(s.status, `${CANVAS_NAME} input exits 0 (${s.signal ?? 'no si…
+       |                                                                                                                                                     ^
+    203|   expect(s.lines.length, `${CANVAS_NAME} input: one output line per in…
+    204|   return s.lines.map((l, i) => {
+ ❯ inputRun helpers.ts:219:64
+ ❯ track.test.ts:352:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/23]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  23 failed (23)
+   Start at  00:05:20
+   Duration  289.17s (tests 100%)
+

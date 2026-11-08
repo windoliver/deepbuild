@@ -18,12 +18,22 @@ sha2 = "0.10"
 crc32fast = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+# Issue #1408: the wrong programs a test selects with DEEP_DRIVE_PLANT and, through the app, DEEP_HUB_PLANT, read only in
+# a build with this feature. A release build refuses it. Issue #1662: #124's planted session rows come through it too,
+# so a workspace build of the app carries no plant.
+[features]
+env-plants = ["deep-app/env-plants", "deep-app/plant-row"]
+
 # The live capture asks AppKit for the window's accessibility children and their frames.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 # Issue #990 adds NSRange: the text area's line of its insertion point, read as an assistive client reads it.
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSGeometry", "NSDate", "NSRunLoop", "NSRange"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSWindow", "NSView", "NSResponder", "NSRunningApplication", "NSPasteboard", "NSSound"] }
+
+# Issue #1408: the replica's suites, #992's planted app among them, read the app's plants; `cargo build` never does.
+[dev-dependencies]
+deep-app = { path = "../deep-app", features = ["env-plants"] }
 
 [[bin]]
 name = "deep-replica"
@@ -73,6 +83,13 @@ harness = false
 [[test]]
 name = "acceptance_326_panels_planted"
 path = "../../tests/acceptance/326/panels/planted.rs"
+harness = false
+
+# AC7's two planted hosts, redrafted blind: gpui-shell's own loader, so they load the fixtures
+# whatever the app's loader admits.
+[[test]]
+name = "acceptance_326_panels_planted_redraft"
+path = "../../tests/acceptance/326/panels/redraft-ac7/planted_redraft.rs"
 harness = false
 
 # Issue #326, criterion group "surfaces": notifications on the virtual clock and every row of States
@@ -131,4 +148,19 @@ harness = false
 [[test]]
 name = "acceptance_994_window"
 path = "../../tests/acceptance/994/window.rs"
+harness = false
+
+# Issue #1425: the pack check and the load path refusing toolkit imports, names off the panel catalog and lists that
+# run script per frame, and every catalog name drawn in light and dark, written blind in tests/acceptance/1425. The
+# rest of the suite is in vitest there. No harness, as above.
+[[test]]
+name = "acceptance_1425"
+path = "../../tests/acceptance/1425/app/panels.rs"
+harness = false
+
+# Issue #1425 AC3, redrafted blind in tests/acceptance/1425/ac3-redraft: a component off the panel catalog is
+# refused at pack check and at load, and every catalog name renders in light and dark. No harness, as above.
+[[test]]
+name = "acceptance_1425_ac3"
+path = "../../tests/acceptance/1425/ac3-redraft/ac3.rs"
 harness = false

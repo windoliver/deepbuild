@@ -1,7 +1,7 @@
 // #326 AC6, one fault: a registerView panel that runs a program. On its first frame it runs
 // `touch` on a file the test names (written over __MARKER__); the file appearing is the program
 // having run. panel@1 refuses it with a message that says "program", and the file never appears.
-import { View, div } from "gpui-kit";
+import { View, div } from "@deepbuild/panel";
 
 export default class Program extends View {
   init() {
