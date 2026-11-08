@@ -32,6 +32,8 @@ pub const LINE: &str = "deepbuild/line";
 pub const WELCOME: &str = "deepbuild/welcome";
 /// Issue #148: each agent's MCP servers and skills, the agents each is synced to, and a sync's per-file diff to approve.
 pub const AGENTS: &str = "deepbuild/agents";
+/// The rules page (#344): every rule you wrote, with its file, scope, size and what enforces it.
+pub const RULES: &str = "deepbuild/rules";
 
 /// The shipped views a replica snapshots, by the ids the record uses.
 pub const SHIPPED_VIEWS: [&str; 3] = ["needs-you", "sidebar", "session"];
@@ -91,10 +93,11 @@ pub enum Kind {
     Line,
     Welcome,
     Agents,
+    Rules,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 7] = [
+    pub const ALL: [Kind; 8] = [
         Kind::Sidebar,
         Kind::Home,
         Kind::NeedsYou,
@@ -102,6 +105,7 @@ impl Kind {
         Kind::Line,
         Kind::Welcome,
         Kind::Agents,
+        Kind::Rules,
     ];
 
     pub fn name(self) -> &'static str {
@@ -113,6 +117,7 @@ impl Kind {
             Kind::Line => LINE,
             Kind::Welcome => WELCOME,
             Kind::Agents => AGENTS,
+            Kind::Rules => RULES,
         }
     }
 }
@@ -558,7 +563,7 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
                 table.state(&session),
             )]
         }
-        Kind::Home | Kind::NeedsYou | Kind::Welcome | Kind::Agents => Vec::new(),
+        Kind::Home | Kind::NeedsYou | Kind::Welcome | Kind::Agents | Kind::Rules => Vec::new(),
     };
     let deadlines = match (kind, sessions.first()) {
         (Kind::Session, Some((first, ..))) => {
@@ -1115,6 +1120,104 @@ impl Render for Shipped {
                 )
             }
             Kind::Agents => agents_page(page, self, chrome, cx),
+            Kind::Rules => {
+                // The rules page (#344): each rule file with its total, then each rule with its scope, what enforces
+                // it and its size. A rule nothing enforces reads "text only": the list to shrink.
+                let files = crate::rules::read(&crate::hub::root().join("wiki").join("rules.md"));
+                let rules: Vec<&crate::rules::Rule> = files.iter().flat_map(|f| &f.rules).collect();
+                let text_only = rules.iter().filter(|r| r.enforcer == "text only").count();
+                let mut row: usize = 0;
+                page.child(title("rules-title", "Rules"))
+                    .child(
+                        label(
+                            "rules-count",
+                            format!("{} rules · {text_only} text only", rules.len()),
+                        )
+                        .text_color(chrome.ink_secondary),
+                    )
+                    .child(
+                        // The column heads, at the rows' widths.
+                        div()
+                            .id("rules-head")
+                            .h(px(ROW_HEIGHT))
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .pl_4()
+                            .mt_2()
+                            .text_color(chrome.ink_secondary)
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(div().w(px(480.)).child("Rule"))
+                            .child(div().w(px(160.)).child("Scope"))
+                            .child(div().w(px(180.)).child("Enforced by"))
+                            .child(div().w(px(72.)).text_right().child("Tokens")),
+                    )
+                    .children(files.iter().enumerate().map(|(f, file)| {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .mt_2()
+                            .child(
+                                label(
+                                    ("rules-file", f),
+                                    format!("{} · whole file {} tokens", file.file, file.tokens),
+                                )
+                                .font_weight(FontWeight::SEMIBOLD),
+                            )
+                            .children(file.rules.iter().map(|rule| {
+                                row += 1;
+                                let mut said = format!(
+                                    "{} · {} · {} · {} tokens",
+                                    rule.text, rule.scope, rule.enforcer, rule.tokens
+                                );
+                                if rule.yours {
+                                    said.push_str(" · typed by you");
+                                }
+                                if rule.held {
+                                    said.push_str(" · held: an agent removed its line");
+                                }
+                                div()
+                                    .id(("rules-row", row))
+                                    .test_support()
+                                    .role(Role::Label)
+                                    .aria_label(said)
+                                    .h(px(ROW_HEIGHT))
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .pl_4()
+                                    .child(div().w(px(480.)).truncate().child(rule.text.clone()))
+                                    .child(
+                                        div()
+                                            .w(px(160.))
+                                            .truncate()
+                                            .text_color(chrome.ink_secondary)
+                                            .child(rule.scope.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .w(px(180.))
+                                            .truncate()
+                                            .text_color(if rule.enforcer == "text only" {
+                                                chrome.ink_secondary
+                                            } else {
+                                                chrome.ink_primary
+                                            })
+                                            .when(rule.enforcer != "text only", |e| {
+                                                e.font_weight(FontWeight::SEMIBOLD)
+                                            })
+                                            .child(rule.enforcer.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .w(px(72.))
+                                            .text_right()
+                                            .text_color(chrome.ink_secondary)
+                                            .child(format!("{} tokens", rule.tokens)),
+                                    )
+                            }))
+                    }))
+            }
             Kind::Line => {
                 // The session's line: from its task to where it stands now.
                 let (_, task, state) = first(&record);
@@ -1591,6 +1694,7 @@ impl Layout {
             "needs-you" => NEEDS_YOU,
             "session" => SESSION,
             "home" | "sidebar" => HOME,
+            "rules" => RULES,
             other => {
                 panic!("{other} is not a shipped view; the shipped views are {SHIPPED_VIEWS:?} and home")
             }
