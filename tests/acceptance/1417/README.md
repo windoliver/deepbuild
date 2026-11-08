@@ -1,5 +1,10 @@
 # Acceptance tests for #1417: graph.layout's cost row, and a graph over its class refused at check
 
+> **Retired 2026-11-08:** `over-budget.test.ts` (AC1, `#1417.52357c9c`) is replaced by its blind redraft in
+> [`tests/acceptance/1417-redraft-ac1/`](../1417-redraft-ac1/README.md). Main's #494 made a `graph@1` document that
+> doesn't name the graph module in `requires.modules` invalid, so this file's board was refused at `out_of_range` on
+> main. Approved by the user (JingW6, "Approve (Recommended)"). Everything else in this folder is unchanged.
+
 Written first, from issue #1417 (its scope, four acceptance criteria and proof line), the design sections it touches,
 and base commit `ede4b367` ("Merge pull request #1284 …"), by a job that never saw an implementation; none existed.
 The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job
