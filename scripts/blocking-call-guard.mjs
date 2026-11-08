@@ -10,8 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { stripRust } from './rust-source.mjs';
 
 const SOURCE = 'crates/deep-app/src';
-/** std::process's waits: Command's output and status, and Child's wait and wait_with_output. */
-const CALL = /\.\s*(output|status|wait|wait_with_output)\s*\(\s*\)/g;
+/** std::process's waits: Command's output and status, and Child's wait and wait_with_output, as methods or by path. */
+const CALL = /\.\s*(output|status|wait|wait_with_output)\s*\(\s*\)|\b(?:Command|Child)\s*::\s*(output|status|wait|wait_with_output)\s*\(/g;
 const ALLOWED = /\/\/\s*blocking call:\s*\S/;
 
 const at = process.argv.indexOf('--root');
@@ -40,7 +40,7 @@ for (const file of files(join(root, SOURCE)).sort()) {
   const lines = text.split('\n');
   stripRust(text).split('\n').forEach((code, index) => {
     for (const match of code.matchAll(CALL)) {
-      if (!allowed(lines, index)) findings.push(`FAIL blocking call: ${path}:${index + 1}:${match.index + 1}: .${match[1]}() waits for a process to end, and UI code that waits freezes the window; run it on a thread of its own and hand the UI thread its result (as setup::start does), or, if it never runs on the UI thread, say why in a // blocking call: <why> comment above it`);
+      if (!allowed(lines, index)) findings.push(`FAIL blocking call: ${path}:${index + 1}:${match.index + 1}: ${match[1] ?? match[2]}() waits for a process to end, and UI code that waits freezes the window; run it on a thread of its own and hand the UI thread its result (as setup::start does), or, if it never runs on the UI thread, say why in a // blocking call: <why> comment above it`);
     }
   });
 }

@@ -721,10 +721,11 @@ impl Render for Shipped {
                                 .on_click(cx.listener(|this, _, _, cx| this.start_set_up(cx))),
                         }
                     }))
+                    // While setup runs, the last one's reason no longer stands.
                     .children(
                         self.set_up
                             .clone()
-                            .or_else(crate::setup::reason)
+                            .or_else(|| self.setting_up.is_none().then(crate::setup::reason)?)
                             .map(|line| label("set-up-reason", line).h_auto().py_1()),
                     ),
                 None => page.child(title("home-title", "Home")).child(label(
@@ -927,19 +928,30 @@ impl Render for Shipped {
                                 .aria_label(SETTING_UP)
                                 .child(SETTING_UP)
                         }))
-                        .children(said.map(|line| div().child(line.to_owned())))
-                        .children(said.is_none().then(crate::setup::reason).flatten().map(
-                            |line| {
-                                div()
-                                    .id("set-up-reason")
-                                    .test_support()
-                                    .aria_label(line.clone())
-                                    // A long path in the reason wraps inside the window, so its fix stays in view.
-                                    .max_w(px(560.))
-                                    .text_center()
-                                    .child(line)
-                            },
-                        )),
+                        .children(said.map(|line| {
+                            div()
+                                .id("set-up-said")
+                                .test_support()
+                                .aria_label(line.to_owned())
+                                .max_w(px(560.))
+                                .text_center()
+                                .child(line.to_owned())
+                        }))
+                        .children(
+                            (said.is_none() && !working)
+                                .then(crate::setup::reason)
+                                .flatten()
+                                .map(|line| {
+                                    div()
+                                        .id("set-up-reason")
+                                        .test_support()
+                                        .aria_label(line.clone())
+                                        // A long path in the reason wraps inside the window, so its fix stays in view.
+                                        .max_w(px(560.))
+                                        .text_center()
+                                        .child(line)
+                                }),
+                        ),
                 )
             }
             Kind::Line => {

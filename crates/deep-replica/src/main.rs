@@ -120,9 +120,6 @@ mod replica {
                 .expect("the menu bar's title is written");
         }
         phase("written");
-        if let Some(name) = click {
-            return click_and_watch(&mut cx, handle, &snapshot, &name, &out);
-        }
         eprintln!("deep-replica phases: {}", phases.join(", "));
         println!(
             "replica {view}: {} nodes, {} canvas items, {}x{} screenshot",
@@ -131,7 +128,10 @@ mod replica {
             image.width(),
             image.height()
         );
-        0
+        match click {
+            Some(name) => click_and_watch(&mut cx, handle, &snapshot, &name, &out),
+            None => 0,
+        }
     }
 
     /// How long the click's frames are watched for what it said.
