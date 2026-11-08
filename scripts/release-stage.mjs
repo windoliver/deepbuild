@@ -8,10 +8,10 @@
 //               (adapters/, skills/deepbuild/, deep-hook's default rules, the banner's mark), and the third-party
 //               packages they load, bundled with what they don't need at run time left out. bin/deep.mjs is
 //               scripts/npm-launcher.mjs. This platform's deep-hook package is its optional dependency.
-//   deep-hook-<platform>-<arch>/  `@deepbuild/deep-hook-<platform>-<arch>`: bin/deep-hook and SQLite's native module
-//               for this platform; built-<platform>-<arch>/ holds the same files as built, for release-verify.
-// <dir>/stage.json lists the package folders, each with its built tree when it has one. A host builds its own
-// platform's package only.
+//   deep-hook-<platform>-<arch>/  `@deepbuild/deep-hook-<platform>-<arch>`, for this host's platform and linux-x64 and
+//               linux-arm64: bin/deep-hook and SQLite's native module; built-<platform>-<arch>/ holds the same files as
+//               built, for release-verify.
+// <dir>/stage.json lists the package folders, each with its built tree when it has one.
 import { spawnSync } from 'node:child_process';
 import { chmodSync, constants, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
@@ -43,12 +43,28 @@ const home = userInfo().homedir;
 const cargoHome = process.env.CARGO_HOME ?? join(home, '.cargo');
 const cargo = existsSync(join(cargoHome, 'bin', 'cargo')) ? join(cargoHome, 'bin', 'cargo') : 'cargo';
 // No compiler wrapper (a build cache your cargo config may name): the release compiles with rustc itself.
-run(cargo, ['build', '--release', '--locked', '-q', '-p', 'deep-hook'], { ...process.env, CARGO_HOME: cargoHome, RUSTUP_HOME: process.env.RUSTUP_HOME ?? join(home, '.rustup'), RUSTC_WRAPPER: '' });
+const cargoEnv = { ...process.env, CARGO_HOME: cargoHome, RUSTUP_HOME: process.env.RUSTUP_HOME ?? join(home, '.rustup'), RUSTC_WRAPPER: '' };
+run(cargo, ['build', '--release', '--locked', '-q', '-p', 'deep-hook'], cargoEnv);
+// The release's platforms: this host's, and Linux on both architectures, whose deep-hook is a static musl build
+// linked by zig from any host. Each needs its rustup target (`rustup target add <triple>`) and zig.
+const builds = new Map([[`${process.platform}-${process.arch}`, join(REPO, 'target', 'release', 'deep-hook')]]);
+const LINUX = { x64: ['x86_64-unknown-linux-musl', 'x86_64-linux-musl'], arm64: ['aarch64-unknown-linux-musl', 'aarch64-linux-musl'] };
+const zig = [...(process.env.PATH ?? '').split(':'), '/opt/homebrew/bin', '/usr/local/bin'].map((d) => join(d, 'zig')).find((p) => existsSync(p));
+for (const [arch, [triple, zigTarget]] of Object.entries(LINUX)) {
+  if (builds.has(`linux-${arch}`)) continue;
+  if (!zig) fail(`no zig on PATH, /opt/homebrew/bin or /usr/local/bin to link deep-hook for linux-${arch}`);
+  // rustc's own musl start files are left out, since zig links its own; zig refuses one aarch64 linker flag it doesn't need.
+  const linker = join(out, `.cc-${triple}`);
+  mkdirSync(out, { recursive: true });
+  writeFileSync(linker, `#!/bin/sh\nfor a in "$@"; do shift; a=$(printf '%s' "$a" | sed 's/,--fix-cortex-a53-843419//; s/^--fix-cortex-a53-843419$//'); case "$a" in ''|-Wl) ;; *) set -- "$@" "$a";; esac; done\nexec '${zig}' cc -target ${zigTarget} "$@"\n`, { mode: 0o755 });
+  const key = triple.toUpperCase().replaceAll('-', '_');
+  run(cargo, ['build', '--release', '--locked', '-q', '-p', 'deep-hook', '--target', triple], { ...cargoEnv, [`CARGO_TARGET_${key}_LINKER`]: linker, [`CARGO_TARGET_${key}_RUSTFLAGS`]: '-C link-self-contained=no' });
+  builds.set(`linux-${arch}`, join(REPO, 'target', triple, 'release', 'deep-hook'));
+}
 
 const root = readJson(REPO);
 const version = root.version;
-const platform = `${process.platform}-${process.arch}`;
-const hookName = `@deepbuild/deep-hook-${platform}`;
+const hookName = (platform) => `@deepbuild/deep-hook-${platform}`;
 const pkg = join(out, 'deepbuild');
 
 // The packages the CLI loads, by Node's lookup from each package's folder up to the checkout.
@@ -124,21 +140,26 @@ writeFileSync(join(pkg, 'package.json'), `${JSON.stringify({
   bin: { deep: 'bin/deep.mjs' },
   files: ['bin', 'packages', 'adapters', 'skills', 'crates', 'brand', 'README.md', 'LICENSE'],
   dependencies: Object.fromEntries(names.map((n) => [n, dependencies[n]])), bundleDependencies: names,
-  optionalDependencies: { [hookName]: version },
+  optionalDependencies: Object.fromEntries([...builds.keys()].sort().map((p) => [hookName(p), version])),
 }, null, 2)}\n`);
 
-// This platform's deep-hook package, and the built tree it must match.
-const hookPkg = join(out, `deep-hook-${platform}`);
-const built = join(out, `built-${platform}`);
-const sources = { 'deep-hook': join(REPO, 'target', 'release', 'deep-hook'), 'better_sqlite3.node': join(REPO, 'node_modules', 'better-sqlite3', 'prebuilds', `${platform}.node`) };
-for (const [name, from] of Object.entries(sources)) {
-  if (!existsSync(from)) fail(`${from} is not built for ${platform}`);
-  for (const dir of [join(hookPkg, 'bin'), built]) {
-    mkdirSync(dir, { recursive: true });
-    copyFileSync(from, join(dir, name));
-    chmodSync(join(dir, name), 0o755);
+// Each platform's deep-hook package (its deep-hook and SQLite's native module), and the built tree it must match.
+const staged = [{ dir: 'deepbuild' }];
+for (const [platform, hook] of builds) {
+  const [os, cpu] = platform.split('-');
+  const hookPkg = join(out, `deep-hook-${platform}`);
+  const built = join(out, `built-${platform}`);
+  const sources = { 'deep-hook': hook, 'better_sqlite3.node': join(REPO, 'node_modules', 'better-sqlite3', 'prebuilds', `${platform}.node`) };
+  for (const [name, from] of Object.entries(sources)) {
+    if (!existsSync(from)) fail(`${from} is not built for ${platform}`);
+    for (const dir of [join(hookPkg, 'bin'), built]) {
+      mkdirSync(dir, { recursive: true });
+      copyFileSync(from, join(dir, name));
+      chmodSync(join(dir, name), 0o755);
+    }
   }
+  writeFileSync(join(hookPkg, 'package.json'), `${JSON.stringify({ name: hookName(platform), version, description: `DeepBuild's deep-hook for ${platform}`, license: root.license, os: [os], cpu: [cpu], files: ['bin'] }, null, 2)}\n`);
+  staged.push({ dir: `deep-hook-${platform}`, built: `built-${platform}` });
 }
-writeFileSync(join(hookPkg, 'package.json'), `${JSON.stringify({ name: hookName, version, description: `DeepBuild's deep-hook for ${platform}`, license: root.license, os: [process.platform], cpu: [process.arch], files: ['bin'] }, null, 2)}\n`);
-writeFileSync(join(out, 'stage.json'), `${JSON.stringify({ packages: [{ dir: 'deepbuild' }, { dir: `deep-hook-${platform}`, built: `built-${platform}` }] }, null, 2)}\n`);
-console.log(`release-stage: deepbuild ${version} and ${hookName} laid out in ${out}`);
+writeFileSync(join(out, 'stage.json'), `${JSON.stringify({ packages: staged }, null, 2)}\n`);
+console.log(`release-stage: deepbuild ${version} and deep-hook for ${[...builds.keys()].join(', ')} laid out in ${out}`);
