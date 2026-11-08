@@ -81,3 +81,30 @@ git push origin main
     -> push-needs-ask
 gh pr merge 12 --match-head-commit 0123abc
     -> merge-needs-ask; merge-names-head
+
+## Review round at 642a592e, fixed in 31f5f7aa (its deep-hook and its default-rules.json)
+
+gh api -X POST graphql -f query='mutation { mergePullRequest(input: {pullRequestId: "PR_kwDOA"}) { clientMutationId } }'
+    -> authority-merge; merge-needs-ask; merge-names-head
+gh api graphql -F query=@merge.graphql
+    -> authority-merge; merge-needs-ask; merge-names-head
+gh api graphql --input body.json
+    -> authority-merge; merge-needs-ask; merge-names-head
+gh api graphql -f query='mutation { enqueuePullRequest(input: {pullRequestId: "PR_kwDOA"}) { clientMutationId } }'
+    -> authority-merge; merge-needs-ask; merge-names-head
+gh api graphql -f query='mutation { dequeuePullRequest(input: {id: "PR_kwDOA"}) { clientMutationId } }'
+    -> authority-merge; merge-needs-ask; merge-names-head
+gh api graphql -f query='mutation { d: disablePullRequestAutoMerge(input: {pullRequestId: "PR_kwDOA"}) { clientMutationId } m: mergePullRequest(input: {pullRequestId: "PR_kwDOA"}) { clientMutationId } }'
+    -> authority-merge; merge-needs-ask; merge-names-head
+glab api -X PUT projects/1/merge_requests/3/merge -f sha=0123abc
+    -> authority-merge; merge-needs-ask; merge-names-head
+glab api projects/1/merge_requests/3/merge
+    -> goes through (no entry met)
+jj --config-toml 'x=1' git push
+    -> authority-push; push-needs-ask
+sl --color never push --to main
+    -> authority-push; push-needs-ask
+jj git push -r main
+    -> authority-push; push-needs-ask
+git push origin main
+    -> authority-push; push-needs-ask
