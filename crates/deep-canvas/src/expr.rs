@@ -2765,9 +2765,11 @@ mod tests {
 
     #[test]
     fn a_dotted_table_name_counts_once() {
-        // 171 tables of x take 3 · 171 − 1 = 512 nodes bound: at the cap, so they compile.
-        let text = vec!["table(p.t, x)"; 171].join(" + ");
+        // 7 towers of 63 tables take 454 nodes bound and 896 as written; were each part of a
+        // name counted, they would pass twice the cap of 512.
+        let tower = format!("{}x{}", "table(p.t, ".repeat(63), ")".repeat(63));
+        let text = vec![tower; 7].join(" + ");
         let e = Expr::compile(&text, &OneTable, 512).unwrap();
-        assert_eq!(e.size, 512);
+        assert_eq!(e.size, 454);
     }
 }

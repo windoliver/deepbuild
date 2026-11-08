@@ -2942,31 +2942,52 @@ impl Iterator for Tokens {
 }
 
 /// Whether `text` could be an expression, read flat in one pass: an operand after each
-/// operator, open brackets closed in order, nothing left over. It reads more than the grammar
-/// does, never less, so text a cap stops is refused only when the grammar might read it.
+/// operator, open brackets closed in order, a comma only between a call's arguments, a `:` for
+/// each `?`, at most one comparison between them, nothing left over. It reads more than the
+/// grammar does, never less, so text a cap stops is refused only when the grammar might read it.
 fn could_be_expression(text: &str) -> bool {
-    let mut open: Vec<char> = Vec::new();
+    /// One open bracket (or the whole text): its closer, whether it is a call's, its `?`s
+    /// waiting for their `:` and whether its current operand has compared already.
+    struct Open {
+        close: Option<char>,
+        call: bool,
+        asks: usize,
+        compared: bool,
+    }
+    let open = |close, call| Open {
+        close: Some(close),
+        call,
+        asks: 0,
+        compared: false,
+    };
+    let mut stack = vec![Open {
+        close: None,
+        call: false,
+        asks: 0,
+        compared: false,
+    }];
     // Whether the next token must be an operand.
     let mut operand = true;
     let mut tokens = Tokens::of(text).peekable();
     while let Some(t) = tokens.next() {
         let Ok(t) = t else { return false };
-        let name = well_named_member(&t);
+        let Some(top) = stack.last_mut() else {
+            return false;
+        };
         operand = match (operand, t.as_str()) {
             (true, "-" | "!") => true,
             (true, "(") => {
-                open.push(')');
+                stack.push(open(')', false));
                 true
             }
-            (true, _) if name => {
+            (true, _) if well_named_member(&t) => {
                 if matches!(tokens.peek(), Some(Ok(p)) if p == "(") {
                     tokens.next();
-                    open.push(')');
                     if matches!(tokens.peek(), Some(Ok(p)) if p == ")") {
                         tokens.next();
-                        open.pop();
                         false
                     } else {
+                        stack.push(open(')', true));
                         true
                     }
                 } else {
@@ -2980,26 +3001,43 @@ fn could_be_expression(text: &str) -> bool {
                 false
             }
             (false, ")" | "]") => {
-                if open.pop() != t.chars().next() {
+                if top.close != t.chars().next() || top.asks > 0 {
                     return false;
                 }
+                stack.pop();
                 false
             }
             (false, "[") => {
-                open.push(']');
+                stack.push(open(']', false));
                 true
             }
             (false, ".") => match tokens.next() {
                 Some(Ok(m)) if well_named_member(&m) => false,
                 _ => return false,
             },
-            (false, ",") if open.last() == Some(&')') => true,
-            (false, "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" | ">=")
-            | (false, "&&" | "||" | "?" | ":") => true,
+            (false, "+" | "-" | "*" | "/" | "%") => true,
+            (false, "==" | "!=" | "<" | "<=" | ">" | ">=") => {
+                if top.compared {
+                    return false;
+                }
+                top.compared = true;
+                true
+            }
+            (false, "&&" | "||" | "?" | ":" | ",") => {
+                match t.as_str() {
+                    "?" => top.asks += 1,
+                    ":" if top.asks == 0 => return false,
+                    ":" => top.asks -= 1,
+                    "," if !top.call || top.asks > 0 => return false,
+                    _ => {}
+                }
+                top.compared = false;
+                true
+            }
             _ => return false,
         };
     }
-    !operand && open.is_empty()
+    !operand && stack.len() == 1 && stack[0].asks == 0
 }
 
 struct Parser {
@@ -3303,6 +3341,11 @@ mod tests {
             "The quick brown fox jumps over the lazy dog, again. ".repeat(120),
             "-".repeat(70),
             format!("{}see note{}", "(".repeat(70), ")".repeat(70)),
+            // Read flat they look like one, but the grammar takes no list in parentheses, no
+            // chained comparison and no `?` without its `:`.
+            format!("({}(0,0))", "(0, 0), ".repeat(400)),
+            format!("{}1", "1 < ".repeat(600)),
+            format!("{}1", "1 ? ".repeat(600)),
         ];
         for text in texts {
             let got = Template::of(&json!(text)).eval(&scope());
