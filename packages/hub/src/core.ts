@@ -4848,6 +4848,8 @@ export class Core {
     for (const wake of this.waiting.get(session) ?? []) wake();
     // What its reply carried never reached the agent (#906): stalled, unless a turn shows it, and it goes by the next route.
     for (const [ask, handed] of this.handed) if (handed.hook === id) void this.queue(() => this.unwoken(handed.session, ask)).catch(() => undefined);
+    // The notices it carried wait for the session's next hook (#352).
+    this.siblings.gone(id);
   }
   /** A waiter whose connection closed: Claude Code stopped it, or it exited. */
   waiterGone(key: number): void {
