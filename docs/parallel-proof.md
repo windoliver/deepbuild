@@ -55,6 +55,39 @@ There is no fallback flag: rollback is reverting the PR.
 
 Bays are weaker than today's proof lane, and equal to today's perf kept copies. A temporary checkout cannot carry anything from a previous run; a bay carries its `target/` and `node_modules/`, guarded by the seal. The record binds the sources, not the target. This replaces #569's "runs on the merge base in a temporary checkout" for the base copy, and the record names the bay's seal check so the weaker trust is visible on every verdict that used it. `bays.mjs` joins the guard's list of the proof lanes' own code from its first PR.
 
+### Dependencies shared across worktrees: sccache, per machine
+
+Twenty worktrees on the Spark each build the workspace cold into their own `target/`. What they can share, and what they can't:
+
+- **Not a shared `CARGO_TARGET_DIR`.** One target directory for every worktree has the relocated target's flaw above, across branches: `target/debug/<bin>` is rewritten by whichever worktree built last, with `CARGO_MANIFEST_DIR` and `CARGO_BIN_EXE_*` pointing into it. `parity.mjs`, `agent-eval-run.mjs`, the `alone` block (section 7) and the 70–80 acceptance files that spawn `cargo` read `<worktree>/target/debug/<bin>`, which a shared target leaves empty; `DEEP_BIN_DIR` covers a lane's own runs, and an acceptance file only once its blind redraft reads it. Cargo's target lock would also hold every worktree's build behind every other's, under the throttle. The preflight and the bays delete the variable for these reasons, and keep doing so.
+- **sccache as the machine's `rustc-wrapper`.** A dependency from the registry or a git source compiles to the same bytes in every worktree: same source, same flags, same toolchain. sccache keys each `rustc` call on those and writes the cached artifact into the worktree's own `target/`. The workspace's crates compile incrementally, which sccache passes through, so each worktree's own crates and binaries are built in place and found where everything above reads them; `DEEP_BIN_DIR`, the bays and the throttle are untouched. The setting is the machine's, in `~/.cargo/config.toml`, never the repository's `.cargo/config.toml`: a machine without sccache would fail every build, and the reference Mac's budgets stay unwrapped.
+
+  ```toml
+  [build]
+  rustc-wrapper = "sccache"
+  ```
+
+  The cache, under `~/.cache/sccache`, is capped in `~/.config/sccache/config` (sccache's own default is 10 GiB; the full dependency set in both the check and the codegen form needs more):
+
+  ```toml
+  [cache.disk]
+  size = 42949672960
+  ```
+
+- **Off where a build must be bare.** `RUSTC_WRAPPER=` (empty) in a child's environment is no wrapper, over the config; `tests/acceptance/594`, `1016`, `1017` and `1117`–`1119` already set it for their isolated builds. cargo-mutants and cargo-semver-checks run under the wrapper like any build. Turning the wrapper on or off rebuilds nothing: cargo's fingerprints don't carry it, so a warm worktree stays warm the day the setting lands.
+- **Readings** (Spark, 2026-11-07, two detached worktrees of `8181bf85`, each build into an empty `target/`; the 1-minute load was 37–58 throughout, so the wall times are readings against each other, never budgets):
+
+  | Build | Worktree A, cache empty | Worktree B, cache warm | Rust compiles B took from the cache |
+  |---|---|---|---|
+  | `cargo clippy --all-targets -p deep-hook` | 7 s | 8 s | none to take: its two crates are the workspace's own |
+  | `cargo clippy --all-targets -p deep-text` (118 crates) | 9 s | 6 s | 150 of 162, over this row and the next |
+  | `cargo test --no-run -p deep-text` | 19 s | 20 s | |
+  | `cargo clippy --all-targets -p deep-text-gpui` (876 crates) | 39 s | 25 s | 447 of 569 |
+  | `cargo test --no-run -p deep-text-gpui` | 73 s | 56 s | 417 of 532 |
+
+  Without the wrapper the first three builds took 7, 8 and 18 s, so the wrapper's own cost on a first worktree is within the noise. The misses on B are the workspace's and `vendor/` crates, whose path is in their metadata hash. The cache held 1.2 GB after these runs.
+- **What stays.** Build scripts' runs, proc-macros, binaries, linking and the workspace's own crates are never cached, and they are most of what B still pays. Each worktree still keeps its own `target/`, so section 9's rule on idle worktrees' targets still applies. The cache under `~/.cache/sccache` is itself what a disk cleanup may delete (one did on 2026-11-02, with the config line); the next build repopulates it, and a missing cache is never a failure.
+
 ## 5. Proof-run cost cuts inside one run
 
 Once bays exist, most of a proof run's cost is work it repeats:
