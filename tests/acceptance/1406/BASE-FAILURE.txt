@@ -1,0 +1,103 @@
+# #1406 acceptance suite, run on the base da22dbe4 (2026-11-08, 12 cores, load about 54-71).
+# The worktree's scripts/ were being edited by another job, so the base was exported with
+# `git archive da22dbe4 scripts package.json` into a scratch folder, with node_modules linked from the main checkout,
+# and these test files copied in. Command, from that folder:
+#   node --test 'tests/acceptance/1406/*.test.mjs'
+# Result: 3 of 3 fail, each for the reason its criterion names.
+#   AC1: the planted judgeLimit edit passes the guard (exit 0, "PASS guard"): LANES_CODE doesn't match benchmark.mjs.
+#   AC2: at load 1 the failure is excused into unsure as INCONCLUSIVE; classify ignores the load passed in.
+#   AC3: INCONCLUSIVE, but the message names the machine's own load (71), not the 48 passed in. It passes on main
+#        only when the machine's one-minute load happens to round to cores * 4.
+# Scratch paths below are shortened to <scratch>.
+
+✖ #1406.28b2532a AC2 a baseline timing failure at a load below the core count reads FAIL from classify (0.780292ms)
+✖ #1406.9024eb9f AC3 the same failure at a load above the core count reads INCONCLUSIVE, naming the load (0.1915ms)
+✖ #1406.9a60feb9 AC1 a planted edit of judgeLimit in scripts/benchmark.mjs is refused by the proof guard without a signed tag (4932.642166ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5012.0645
+
+✖ failing tests:
+
+test at tests/acceptance/1406/classify.test.mjs:15:1
+✖ #1406.28b2532a AC2 a baseline timing failure at a load below the core count reads FAIL from classify (0.780292ms)
+  AssertionError [ERR_ASSERTION]: at load 1 on 12 cores the failure is not in fresh as FAIL
+  {
+    "known": [],
+    "fresh": [],
+    "unsure": [
+      {
+        "id": "tests/acceptance/9406/timed.test.mjs > a budget",
+        "state": "INCONCLUSIVE",
+        "message": "a timing budget, unmeasured at load 71"
+      }
+    ]
+  }
+      at TestContext.<anonymous> (file://<scratch>/base/tests/acceptance/1406/classify.test.mjs:18:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1047:25)
+      at Test.start (node:internal/test_runner/test:944:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:297:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '=='
+  }
+
+test at tests/acceptance/1406/classify.test.mjs:22:1
+✖ #1406.9024eb9f AC3 the same failure at a load above the core count reads INCONCLUSIVE, naming the load (0.1915ms)
+  AssertionError [ERR_ASSERTION]: the message doesn't name the load 48 passed in
+  {
+    "known": [],
+    "fresh": [],
+    "unsure": [
+      {
+        "id": "tests/acceptance/9406/timed.test.mjs > a budget",
+        "state": "INCONCLUSIVE",
+        "message": "a timing budget, unmeasured at load 71"
+      }
+    ]
+  }
+      at TestContext.<anonymous> (file://<scratch>/base/tests/acceptance/1406/classify.test.mjs:27:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1047:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+      at Test.postRun (node:internal/test_runner/test:1173:19)
+      at Test.run (node:internal/test_runner/test:1101:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:297:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'a timing budget, unmeasured at load 71',
+    expected: /(?<![\d.])48(?![\d])/,
+    operator: 'match'
+  }
+
+test at tests/acceptance/1406/guard.test.mjs:21:1
+✖ #1406.9a60feb9 AC1 a planted edit of judgeLimit in scripts/benchmark.mjs is refused by the proof guard without a signed tag (4932.642166ms)
+  AssertionError [ERR_ASSERTION]: an unsigned edit of judgeLimit in scripts/benchmark.mjs passed the guard
+  exit 0 
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 1.8 s
+  
+  
+      at TestContext.<anonymous> (file://<scratch>/base/tests/acceptance/1406/guard.test.mjs:47:12)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1047:25)
+      at Test.start (node:internal/test_runner/test:944:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:297:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '=='
+  }
+
+# Planted right program (scratch only, not in the repo): base plus `benchmark` in LANES_CODE and
+# classify(failures, findings, baseline, load = loadavg()[0]) excusing a timing FAIL only when load > availableParallelism(),
+# naming load.toFixed(0). Same command: 3 of 3 pass (AC1 10.8 s, AC2 and AC3 under 1 ms).

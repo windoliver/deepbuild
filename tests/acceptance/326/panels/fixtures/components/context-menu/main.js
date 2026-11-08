@@ -4,8 +4,7 @@
 // was pressed"). The trigger is a 240 x 400 point block at the center of the panel; a right press
 // there opens a 1400 x 900 point magenta menu, which the window-edge snapping keeps inside the
 // window, so it reaches the question card's rect unless the host keeps it off.
-import { View, div } from "gpui-kit";
-import { Popup, v_flex } from "gpui-base";
+import { View, div, Popup, v_flex } from "@deepbuild/panel";
 
 export default class ContextMenuFixture extends View {
   init() {
