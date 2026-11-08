@@ -484,71 +484,90 @@ enum Tok {
     Sym(&'static str),
 }
 
-fn tokens(text: &str) -> Result<Vec<(Tok, usize)>, Refusal> {
-    let chars: Vec<char> = text.chars().collect();
-    let mut out = Vec::new();
-    let mut i = 0;
-    let bad = |c: char| Refusal {
-        call: text.into(),
-        why: format!("unexpected `{c}`"),
-        missing: None,
-    };
-    while i < chars.len() {
-        let c = chars[i];
-        let start = i;
-        if c.is_whitespace() {
-            i += 1;
-            continue;
+/// The tokens of a text, read one at a time as the parser asks, so a refusal partway reads no
+/// further: nothing grows with the text past where it stops.
+struct Lexer<'a> {
+    text: &'a str,
+    /// The byte at which the next token starts its search, and the chars before it.
+    at: usize,
+    chars: usize,
+}
+
+impl Lexer<'_> {
+    fn ahead(&self, k: usize) -> Option<char> {
+        self.text[self.at..].chars().nth(k)
+    }
+
+    fn bump(&mut self) {
+        if let Some(c) = self.ahead(0) {
+            self.at += c.len_utf8();
+            self.chars += 1;
         }
-        if c.is_ascii_digit() || (c == '.' && chars.get(i + 1).is_some_and(char::is_ascii_digit)) {
-            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
-                i += 1;
+    }
+
+    /// The next token and its offset in chars, or `None` at the end.
+    fn next(&mut self) -> Result<Option<(Tok, usize)>, Refusal> {
+        while self.ahead(0).is_some_and(char::is_whitespace) {
+            self.bump();
+        }
+        let Some(c) = self.ahead(0) else {
+            return Ok(None);
+        };
+        let (from, start) = (self.at, self.chars);
+        if c.is_ascii_digit() || (c == '.' && self.ahead(1).is_some_and(|d| d.is_ascii_digit())) {
+            while self
+                .ahead(0)
+                .is_some_and(|d| d.is_ascii_digit() || d == '.')
+            {
+                self.bump();
             }
-            if i < chars.len() && (chars[i] == 'e' || chars[i] == 'E') {
-                let mut j = i + 1;
-                if j < chars.len() && (chars[j] == '+' || chars[j] == '-' || chars[j] == '−') {
+            if matches!(self.ahead(0), Some('e' | 'E')) {
+                let mut j = 1;
+                if matches!(self.ahead(j), Some('+' | '-' | '−')) {
                     j += 1;
                 }
-                if j < chars.len() && chars[j].is_ascii_digit() {
-                    i = j;
-                    while i < chars.len() && chars[i].is_ascii_digit() {
-                        i += 1;
+                if self.ahead(j).is_some_and(|d| d.is_ascii_digit()) {
+                    for _ in 0..j {
+                        self.bump();
+                    }
+                    while self.ahead(0).is_some_and(|d| d.is_ascii_digit()) {
+                        self.bump();
                     }
                 }
             }
-            let s: String = chars[start..i]
-                .iter()
-                .map(|&c| if c == '−' { '-' } else { c })
+            let s: String = self.text[from..self.at]
+                .chars()
+                .map(|c| if c == '−' { '-' } else { c })
                 .collect();
             let n: f64 = s.parse().map_err(|_| Refusal {
                 call: s.clone(),
                 why: "is not a number".into(),
                 missing: None,
             })?;
-            out.push((Tok::Num(n), start));
-            continue;
+            return Ok(Some((Tok::Num(n), start)));
         }
         if c.is_alphabetic() || c == '_' {
-            while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
-                i += 1;
+            while self
+                .ahead(0)
+                .is_some_and(|d| d.is_alphanumeric() || d == '_')
+            {
+                self.bump();
             }
-            out.push((Tok::Name(chars[start..i].iter().collect()), start));
-            continue;
+            return Ok(Some((Tok::Name(self.text[from..self.at].into()), start)));
         }
-        let two: String = chars[i..(i + 2).min(chars.len())].iter().collect();
-        let sym = match two.as_str() {
-            "==" => Some("=="),
-            "!=" => Some("!="),
-            "<=" => Some("<="),
-            ">=" => Some(">="),
-            "&&" => Some("&&"),
-            "||" => Some("||"),
+        let two = match (c, self.ahead(1)) {
+            ('=', Some('=')) => Some("=="),
+            ('!', Some('=')) => Some("!="),
+            ('<', Some('=')) => Some("<="),
+            ('>', Some('=')) => Some(">="),
+            ('&', Some('&')) => Some("&&"),
+            ('|', Some('|')) => Some("||"),
             _ => None,
         };
-        if let Some(s) = sym {
-            out.push((Tok::Sym(s), start));
-            i += 2;
-            continue;
+        if let Some(s) = two {
+            self.bump();
+            self.bump();
+            return Ok(Some((Tok::Sym(s), start)));
         }
         let one = match c {
             '+' => "+",
@@ -569,12 +588,17 @@ fn tokens(text: &str) -> Result<Vec<(Tok, usize)>, Refusal> {
             '≤' => "<=",
             '≥' => ">=",
             '≠' => "!=",
-            _ => return Err(bad(c)),
+            _ => {
+                return Err(Refusal {
+                    call: self.text.into(),
+                    why: format!("unexpected `{c}`"),
+                    missing: None,
+                })
+            }
         };
-        out.push((Tok::Sym(one), start));
-        i += 1;
+        self.bump();
+        Ok(Some((Tok::Sym(one), start)))
     }
-    Ok(out)
 }
 
 // ---- parse
@@ -593,18 +617,39 @@ enum P {
     Swizzle(Box<P>, String),
 }
 
+/// The most levels a parse nests: parentheses, unary operators, the conditional's branches, a
+/// power's exponent and a call's arguments each take one. Binding, evaluating and dropping the
+/// tree recurse over the same levels, so none of them can overflow the stack.
+pub(crate) const MAX_NEST: usize = 64;
+
 struct Parser<'a> {
+    lexer: Lexer<'a>,
+    /// The tokens read so far; the parser goes back only within a `dotted` name.
     toks: Vec<(Tok, usize)>,
+    /// A token that couldn't be read: the parse ends there, and compiling refuses with it.
+    bad: Option<Refusal>,
     at: usize,
     text: &'a str,
+    depth: usize,
+    /// The nodes made so far, and the most it may make (see `Expr::compile`).
+    nodes: usize,
+    max_nodes: usize,
+    cap: usize,
 }
 
 impl Parser<'_> {
-    fn peek(&self) -> Option<&Tok> {
+    fn peek(&mut self) -> Option<&Tok> {
+        if self.at == self.toks.len() && self.bad.is_none() {
+            match self.lexer.next() {
+                Ok(Some(t)) => self.toks.push(t),
+                Ok(None) => {}
+                Err(r) => self.bad = Some(r),
+            }
+        }
         self.toks.get(self.at).map(|(t, _)| t)
     }
 
-    fn sym(&self, s: &str) -> bool {
+    fn sym(&mut self, s: &str) -> bool {
         matches!(self.peek(), Some(Tok::Sym(x)) if *x == s)
     }
 
@@ -625,21 +670,45 @@ impl Parser<'_> {
         }
     }
 
-    fn offset(&self) -> usize {
+    fn offset(&mut self) -> usize {
+        self.peek();
         self.toks
             .get(self.at)
-            .map_or(self.text.chars().count(), |(_, o)| *o)
+            .map_or_else(|| self.text.chars().count(), |(_, o)| *o)
+    }
+
+    /// `f` one level deeper, refused past [`MAX_NEST`] before it reads anything.
+    fn nest<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, Refusal>) -> Result<T, Refusal> {
+        if self.depth == MAX_NEST {
+            return Err(self.fail(format!("nests past the cap of {MAX_NEST} levels")));
+        }
+        self.depth += 1;
+        let p = f(self);
+        self.depth -= 1;
+        p
+    }
+
+    /// A new node, counted against the most the parse may make.
+    fn node(&mut self, p: P) -> Result<P, Refusal> {
+        self.nodes += 1;
+        if self.nodes > self.max_nodes {
+            return Err(self.fail(format!(
+                "takes more than {} nodes as written, twice the cap of {}",
+                self.max_nodes, self.cap
+            )));
+        }
+        Ok(p)
     }
 
     fn expr(&mut self) -> Result<P, Refusal> {
         let c = self.or()?;
         if self.eat("?") {
-            let a = self.expr()?;
+            let a = self.nest(Self::expr)?;
             if !self.eat(":") {
                 return Err(self.fail("a `?` without its `:`"));
             }
-            let b = self.expr()?;
-            return Ok(P::If(Box::new(c), Box::new(a), Box::new(b)));
+            let b = self.nest(Self::expr)?;
+            return self.node(P::If(Box::new(c), Box::new(a), Box::new(b)));
         }
         Ok(c)
     }
@@ -654,7 +723,7 @@ impl Parser<'_> {
             for (s, op) in ops {
                 if self.eat(s) {
                     let right = next(self)?;
-                    left = P::Bin(*op, Box::new(left), Box::new(right));
+                    left = self.node(P::Bin(*op, Box::new(left), Box::new(right)))?;
                     continue 'outer;
                 }
             }
@@ -701,19 +770,21 @@ impl Parser<'_> {
                 return Ok(left);
             };
             let right = self.unary()?;
-            left = P::Bin(op, Box::new(left), Box::new(right));
+            left = self.node(P::Bin(op, Box::new(left), Box::new(right)))?;
         }
     }
 
     fn unary(&mut self) -> Result<P, Refusal> {
         if self.eat("-") {
-            return Ok(P::Neg(Box::new(self.unary()?)));
+            let a = self.nest(Self::unary)?;
+            return self.node(P::Neg(Box::new(a)));
         }
         if self.eat("+") {
-            return self.unary();
+            return self.nest(Self::unary);
         }
         if self.eat("!") {
-            return Ok(P::Not(Box::new(self.unary()?)));
+            let a = self.nest(Self::unary)?;
+            return self.node(P::Not(Box::new(a)));
         }
         self.power()
     }
@@ -722,8 +793,8 @@ impl Parser<'_> {
         let base = self.postfix()?;
         if self.eat("^") {
             // Right-associative, and binding tighter than a leading minus: −x^2 is −(x²).
-            let exp = self.unary()?;
-            return Ok(P::Bin(Op::Pow, Box::new(base), Box::new(exp)));
+            let exp = self.nest(Self::unary)?;
+            return self.node(P::Bin(Op::Pow, Box::new(base), Box::new(exp)));
         }
         Ok(base)
     }
@@ -735,7 +806,7 @@ impl Parser<'_> {
             match self.peek().cloned() {
                 Some(Tok::Name(s)) => {
                     self.at += 1;
-                    e = P::Swizzle(Box::new(e), s);
+                    e = self.node(P::Swizzle(Box::new(e), s))?;
                 }
                 _ => return Err(self.fail("a `.` names no component")),
             }
@@ -748,11 +819,11 @@ impl Parser<'_> {
         match self.peek().cloned() {
             Some(Tok::Num(n)) => {
                 self.at += 1;
-                Ok(P::Num(n))
+                self.node(P::Num(n))
             }
             Some(Tok::Sym("(")) => {
                 self.at += 1;
-                let e = self.expr()?;
+                let e = self.nest(Self::expr)?;
                 if !self.eat(")") {
                     return Err(self.fail("missing `)`"));
                 }
@@ -761,49 +832,56 @@ impl Parser<'_> {
             Some(Tok::Name(name)) => {
                 self.at += 1;
                 if !self.eat("(") {
-                    return Ok(P::Name(name));
+                    return self.node(P::Name(name));
                 }
-                let mut args = Vec::new();
-                if !self.eat(")") {
-                    loop {
-                        // `table` and `ease` name a pack's entry as `<pack>.<name>`.
-                        if (name == "table" || name == "ease") && args.is_empty() {
-                            if let Some(n) = self.dotted() {
-                                args.push(P::Name(n));
-                                if self.eat(",") {
-                                    continue;
-                                }
-                                if self.eat(")") {
-                                    break;
-                                }
-                                return Err(self.fail("missing `)`"));
-                            }
-                        }
-                        args.push(self.expr()?);
-                        if self.eat(",") {
-                            continue;
-                        }
-                        if self.eat(")") {
-                            break;
-                        }
-                        return Err(self.fail("missing `)`"));
-                    }
-                }
+                let args = self.nest(|p| p.args(&name))?;
                 let end = self.offset();
                 let call: String = self.text.chars().skip(start).take(end - start).collect();
-                Ok(P::Call(name, args, call.trim().to_string()))
+                self.node(P::Call(name, args, call.trim().to_string()))
             }
             Some(Tok::Sym(s)) => Err(self.fail(format!("unexpected `{s}`"))),
             None => Err(self.fail("the expression ends early")),
         }
     }
 
+    /// A call's arguments after its `(`, through its `)`.
+    fn args(&mut self, name: &str) -> Result<Vec<P>, Refusal> {
+        let mut args = Vec::new();
+        if self.eat(")") {
+            return Ok(args);
+        }
+        loop {
+            // `table` and `ease` name a pack's entry as `<pack>.<name>`.
+            if (name == "table" || name == "ease") && args.is_empty() {
+                if let Some(n) = self.dotted() {
+                    args.push(self.node(P::Name(n))?);
+                    if self.eat(",") {
+                        continue;
+                    }
+                    if self.eat(")") {
+                        break;
+                    }
+                    return Err(self.fail("missing `)`"));
+                }
+            }
+            args.push(self.expr()?);
+            if self.eat(",") {
+                continue;
+            }
+            if self.eat(")") {
+                break;
+            }
+            return Err(self.fail("missing `)`"));
+        }
+        Ok(args)
+    }
+
     /// A name with dots (`physics.drag`), if the next tokens are one followed by `,` or `)`.
     fn dotted(&mut self) -> Option<String> {
         let save = self.at;
         let mut out = String::new();
-        while let Some(Tok::Name(n)) = self.peek() {
-            out.push_str(n);
+        while let Some(Tok::Name(n)) = self.peek().cloned() {
+            out.push_str(&n);
             self.at += 1;
             if self.sym(".") {
                 out.push('.');
@@ -1082,10 +1160,32 @@ impl Expr {
     /// `text` parsed and checked, with `cap` the most nodes it may take once its sums expand
     /// (64 ops for a driver, 256 nodes for a field, 512 for a path function).
     pub fn compile(text: &str, resolve: &dyn Resolve, cap: usize) -> Result<Expr, Refusal> {
-        let toks = tokens(text)?;
-        let mut p = Parser { toks, at: 0, text };
-        let parsed = p.expr()?;
-        if p.at < p.toks.len() {
+        // Every node bound counts against `cap` once its sums expand, and a parsed tree has at
+        // most twice its bound nodes (a `table` name or a sum's index is a node only as written),
+        // unless an empty sum drops a term; so past twice the cap nothing is bound or kept, and
+        // binding, evaluating and dropping a tree recurse at most that deep.
+        let mut p = Parser {
+            lexer: Lexer {
+                text,
+                at: 0,
+                chars: 0,
+            },
+            toks: Vec::new(),
+            bad: None,
+            at: 0,
+            text,
+            depth: 0,
+            nodes: 0,
+            max_nodes: cap.saturating_mul(2),
+            cap,
+        };
+        let parsed = p.expr();
+        let trailing = p.peek().is_some();
+        if let Some(bad) = p.bad {
+            return Err(bad);
+        }
+        let parsed = parsed?;
+        if trailing {
             return Err(p.fail("trailing text after the expression"));
         }
         let mut b = Binder {
@@ -2575,5 +2675,60 @@ mod tests {
         holds("atan2(-x, -1)", -1.0, 0.0, &[-1.0, -0.5, 0.0]);
         holds("atan2(0, x * 0)", -1.0, -0.5, &[-1.0, -0.75, -0.5]);
         holds("carg(conj(vec2(x, 0)))", -2.0, -1.0, &[-2.0, -1.5, -1.0]);
+    }
+
+    /// `text` compiled at `cap` and evaluated with no vars, on a 1 MB thread.
+    fn on_a_small_stack(text: String, cap: usize) -> Result<f64, String> {
+        std::thread::Builder::new()
+            .stack_size(1 << 20)
+            .spawn(move || {
+                Expr::compile(&text, &Nothing, cap)
+                    .map(|e| e.eval_num(&[]))
+                    .map_err(|r| r.why)
+            })
+            .unwrap()
+            .join()
+            .unwrap()
+    }
+
+    #[test]
+    fn every_level_counts_against_the_nesting_cap() {
+        let cap = "the cap of 64 levels";
+        // A unary plus, the conditional's first branch and a power's exponent each nest too, and
+        // a minus inside a paren or an exponent adds its own level: (open, close, levels each).
+        let forms = [
+            ("+", "", 1),
+            ("1 ? ", " : 1", 1),
+            ("2^-", "", 2),
+            ("(-", ")", 2),
+        ];
+        for (open, close, levels) in forms {
+            let at = |n: usize| format!("{}1{}", open.repeat(n), close.repeat(n));
+            let n = 64 / levels;
+            assert!(on_a_small_stack(at(n), 512).is_ok(), "{open}: {n}");
+            let e = on_a_small_stack(at(n + 1), 512).unwrap_err();
+            assert!(e.contains(cap), "{open}: {e}");
+        }
+    }
+
+    #[test]
+    fn a_long_chain_is_refused_before_it_binds() {
+        // Left-associative chains nest no parse but make a tree as deep as they are long.
+        let chain = |n: usize| format!("{}1", "1+".repeat(n));
+        assert_eq!(on_a_small_stack(chain(127), 256), Ok(128.0));
+        let e = on_a_small_stack(chain(100_000), 256).unwrap_err();
+        assert!(e.contains("twice the cap of 256"), "{e}");
+    }
+
+    #[test]
+    fn a_refusal_reads_no_further_than_it_needs() {
+        // An unreadable char past the refusal is never reached, and one before it is refused.
+        let deep = format!("{}1$", "(".repeat(65));
+        let e = Expr::compile(&deep, &Nothing, 512).unwrap_err();
+        assert!(e.why.contains("levels"), "{e}");
+        let e = Expr::compile("1 + $", &Nothing, 512).unwrap_err();
+        assert_eq!(e.why, "unexpected `$`");
+        let e = Expr::compile("1 2", &Nothing, 512).unwrap_err();
+        assert_eq!(e.why, "trailing text after the expression");
     }
 }

@@ -1,0 +1,27 @@
+#1468 unit tests in crates/deep-canvas/src/expr.rs, run on the base ede4b367 with only the tests added (debug, Linux aarch64), before the fix.
+
+test expr::tests::every_level_counts_against_the_nesting_cap ... FAILED
+thread 'expr::tests::every_level_counts_against_the_nesting_cap' (2523886) panicked at crates/deep-canvas/src/expr.rs:2603:54:
+called `Result::unwrap_err()` on an `Ok` value: 1.0
+    expr::tests::every_level_counts_against_the_nesting_cap
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 264 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p deep-canvas --lib`
+thread '<unknown>' (2524199) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+error: test failed, to rerun pass `-p deep-canvas --lib`
+Caused by:
+  process didn't exit successfully: `/home/jing/deepbuild/.claude/worktrees/determined-lewin-bc0143/target/debug/deps/deep_canvas-a26bdb700a551842 'expr::tests::a_long_chain_is_refused_before_it_binds'` (signal: 6, SIGABRT: process abort signal)
+test expr::tests::a_refusal_reads_no_further_than_it_needs ... FAILED
+thread 'expr::tests::a_refusal_reads_no_further_than_it_needs' (2524949) panicked at crates/deep-canvas/src/expr.rs:2622:9:
+`(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1$`: unexpected `$`
+    expr::tests::a_refusal_reads_no_further_than_it_needs
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 264 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p deep-canvas --lib`
+
+crates/deep-canvas/src/document/packs.rs's test, on the base with only the test added:
+test document::packs::tests::a_recipe_expression_nests_at_most_64_levels_and_takes_at_most_1024_tokens ... FAILED
+thread 'document::packs::tests::a_recipe_expression_nests_at_most_64_levels_and_takes_at_most_1024_tokens' (2590182) panicked at crates/deep-canvas/src/document/packs.rs:3113:42:
+called `Result::unwrap_err()` on an `Ok` value: Num(1.0)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 265 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p deep-canvas --lib`

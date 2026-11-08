@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::{member, Issue};
+use crate::expr::MAX_NEST;
 use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
@@ -2617,7 +2618,11 @@ const MAX_SUM: f64 = 256.0;
 impl Expr {
     fn parse(text: &str) -> Result<Expr, String> {
         let tokens = tokenize(text)?;
-        let mut p = Parser { tokens, at: 0 };
+        let mut p = Parser {
+            tokens,
+            at: 0,
+            depth: 0,
+        };
         let e = p.cond()?;
         if p.at != p.tokens.len() {
             return Err(format!("unexpected `{}`", p.tokens[p.at]));
@@ -2830,11 +2835,19 @@ fn shown(v: &Value) -> String {
     }
 }
 
+/// The most tokens an expression takes. Each node takes one at least, so walking, evaluating and
+/// dropping a tree recurse at most this deep; it is twice the most nodes the core compiles an
+/// expression to (512, for a path function).
+const MAX_TOKENS: usize = 1024;
+
 fn tokenize(text: &str) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
     let chars: Vec<char> = text.chars().collect();
     let mut i = 0;
     while i < chars.len() {
+        if out.len() == MAX_TOKENS {
+            return Err(format!("takes more than the cap of {MAX_TOKENS} tokens"));
+        }
         let c = chars[i];
         let next = chars.get(i + 1).copied();
         if c.is_whitespace() {
@@ -2870,9 +2883,21 @@ fn tokenize(text: &str) -> Result<Vec<String>, String> {
 struct Parser {
     tokens: Vec<String>,
     at: usize,
+    depth: usize,
 }
 
 impl Parser {
+    /// `f` one level deeper, refused past the closed function list's nesting cap.
+    fn nest<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, String>) -> Result<T, String> {
+        if self.depth == MAX_NEST {
+            return Err(format!("nests past the cap of {MAX_NEST} levels"));
+        }
+        self.depth += 1;
+        let e = f(self);
+        self.depth -= 1;
+        e
+    }
+
     fn peek(&self) -> Option<&str> {
         self.tokens.get(self.at).map(String::as_str)
     }
@@ -2889,11 +2914,11 @@ impl Parser {
             return Ok(c);
         }
         self.at += 1;
-        let a = self.cond()?;
+        let a = self.nest(Self::cond)?;
         if self.take().as_deref() != Some(":") {
             return Err("missing `:`".into());
         }
-        let b = self.cond()?;
+        let b = self.nest(Self::cond)?;
         Ok(Expr::Cond(Box::new(c), Box::new(a), Box::new(b)))
     }
 
@@ -2956,11 +2981,11 @@ impl Parser {
         match self.peek() {
             Some("-") => {
                 self.at += 1;
-                Ok(Expr::Neg(Box::new(self.unary()?)))
+                Ok(Expr::Neg(Box::new(self.nest(Self::unary)?)))
             }
             Some("!") => {
                 self.at += 1;
-                Ok(Expr::Not(Box::new(self.unary()?)))
+                Ok(Expr::Not(Box::new(self.nest(Self::unary)?)))
             }
             _ => self.postfix(),
         }
@@ -2973,7 +2998,7 @@ impl Parser {
             match self.peek() {
                 Some("[") => {
                     self.at += 1;
-                    let i = self.cond()?;
+                    let i = self.nest(Self::cond)?;
                     if self.take().as_deref() != Some("]") {
                         return Err("missing `]`".into());
                     }
@@ -2998,7 +3023,7 @@ impl Parser {
             return Err("expression ends early".into());
         };
         if t == "(" {
-            let e = self.cond()?;
+            let e = self.nest(Self::cond)?;
             if self.take().as_deref() != Some(")") {
                 return Err("missing `)`".into());
             }
@@ -3015,24 +3040,29 @@ impl Parser {
         if well_named_member(&t) {
             if self.peek() == Some("(") {
                 self.at += 1;
-                let mut args = Vec::new();
-                if self.peek() != Some(")") {
-                    loop {
-                        args.push(self.cond()?);
-                        match self.take().as_deref() {
-                            Some(",") => continue,
-                            Some(")") => break,
-                            _ => return Err("missing `)`".into()),
-                        }
-                    }
-                } else {
-                    self.at += 1;
-                }
+                let args = self.nest(Self::args)?;
                 return Ok(Expr::Call(t, args));
             }
             return Ok(Expr::Name(t));
         }
         Err(format!("unexpected `{t}`"))
+    }
+
+    /// A call's arguments after its `(`, through its `)`.
+    fn args(&mut self) -> Result<Vec<Expr>, String> {
+        let mut args = Vec::new();
+        if self.peek() == Some(")") {
+            self.at += 1;
+            return Ok(args);
+        }
+        loop {
+            args.push(self.cond()?);
+            match self.take().as_deref() {
+                Some(",") => continue,
+                Some(")") => return Ok(args),
+                _ => return Err("missing `)`".into()),
+            }
+        }
     }
 }
 
@@ -3101,6 +3131,25 @@ mod tests {
 
     fn scope() -> Vec<(String, Value)> {
         vec![("n".into(), json!(5)), ("i".into(), json!(2))]
+    }
+
+    #[test]
+    fn a_recipe_expression_nests_at_most_64_levels_and_takes_at_most_1024_tokens() {
+        // Each opener completes to a valid expression; 64 levels parse, 65 are refused.
+        let forms = [("(", ")"), ("-", ""), ("!", ""), ("abs(", ")"), ("i ? 1 : ", ""), ("a[", "]")];
+        for (open, close) in forms {
+            let at = |n: usize| format!("{}1{}", open.repeat(n), close.repeat(n));
+            assert!(Expr::parse(&at(64)).is_ok(), "{open}");
+            let e = Expr::parse(&at(65)).unwrap_err();
+            assert!(e.contains("the cap of 64 levels"), "{open}: {e}");
+            let e = Expr::parse(&at(1_000_000)).unwrap_err();
+            assert!(e.contains("cap of"), "{open}: {e}");
+        }
+        // A chain nests no parse but a tree as deep as it is long, which a walk recurses down.
+        let chain = |n: usize| format!("{}1", "1+".repeat(n));
+        assert!(postfix(&chain(511)).is_ok());
+        let e = postfix(&chain(100_000)).unwrap_err();
+        assert!(e.contains("the cap of 1024 tokens"), "{e}");
     }
 
     #[test]
