@@ -1,0 +1,17 @@
+[package]
+name = "deep-canvas-input"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #308: the input module, `input@1` (technical design: Canvas modules, the `input` row;
+# Control and input track): controls and the input track's handling, the `control@1` registry
+# with its kit and its first nine kinds, the drag grammar, the tour and the parameter tool. Named
+# deep-canvas* so the canvas lint reads it. Its proof binary is crates/deep-input.
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+# A control's smoothing and the follow channels it feeds are motion's follow (#489), read here.
+deep-canvas-motion = { path = "../deep-canvas-motion" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
