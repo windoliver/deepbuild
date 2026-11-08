@@ -1,7 +1,8 @@
 //! `deep-drive --out <dir>` (#124): one replica an agent drives, the process the hub's `deep_drive` tool starts per
 //! launch. It prints `{"ready": true}`, then answers one JSON line per call on stdin, in order, each call the
 //! `deep_drive` tool's arguments; the files it writes (screenshots, recorded frames, the trace) go under `<dir>`. It
-//! exits when stdin ends. `DEEP_DRIVE_PLANT` names a planted replica, for the checks that must catch it.
+//! exits when stdin ends. In a build with the `env-plants` feature, `DEEP_DRIVE_PLANT` names a planted replica, for the
+//! checks that must catch it.
 
 fn main() {
     #[cfg(target_os = "macos")]
@@ -30,10 +31,12 @@ mod drive {
                 return 2;
             }
         };
-        let plant = match std::env::var("DEEP_DRIVE_PLANT")
-            .ok()
-            .filter(|p| !p.is_empty())
-        {
+        // A planted replica, in a build with the env-plants feature only (#1408).
+        #[cfg(feature = "env-plants")]
+        let named = std::env::var("DEEP_DRIVE_PLANT").ok();
+        #[cfg(not(feature = "env-plants"))]
+        let named: Option<String> = None;
+        let plant = match named.filter(|p| !p.is_empty()) {
             None => None,
             Some(name) => match Plant::parse(&name) {
                 Some(plant) => Some(plant),

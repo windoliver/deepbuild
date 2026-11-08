@@ -100,10 +100,11 @@ let built: string | undefined;
 export function buildDrive(): void {
   if (built === 'ok') return;
   if (built === undefined) {
-    const r = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', DRIVE_NAME], { cwd: REPO, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 64 * 1024 * 1024 });
+    // With the planted replicas a test selects with DEEP_DRIVE_PLANT, which only an env-plants build reads (#1408).
+    const r = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', DRIVE_NAME, '--features', 'env-plants'], { cwd: REPO, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 64 * 1024 * 1024 });
     built = r.status === 0 && existsSync(DRIVE_BIN) ? 'ok' : `${r.error?.message ?? ''}${(r.stderr ?? '').split('\n').filter((l) => /error/.test(l)).slice(0, 6).join('\n')}`;
   }
-  if (built !== 'ok') expect.fail(`BLOCKED: the ${DRIVE_NAME} binary can't be built (cargo build --locked -p deep-replica --bin ${DRIVE_NAME}): ${built}`);
+  if (built !== 'ok') expect.fail(`BLOCKED: the ${DRIVE_NAME} binary can't be built (cargo build --locked -p deep-replica --bin ${DRIVE_NAME} --features env-plants): ${built}`);
 }
 
 export interface Reply { reply: Obj; ms: number }
