@@ -205,6 +205,8 @@ pub struct RecordReader {
     setting: Option<&'static str>,
     /// Whether each new read also folds the record before it, for the window's views.
     folds: bool,
+    /// Whether it checks the hub's hello covers the app before any call (#41), as the window's reader does.
+    checks: bool,
 }
 
 impl RecordReader {
@@ -217,14 +219,17 @@ impl RecordReader {
             view: View::default(),
             setting: None,
             folds: false,
+            checks: false,
         }
     }
 
     /// Issue #1172: as [`RecordReader::unopened`], for the window: its sidebar and session pages read the folded
-    /// record, so each new read also folds what the record held before the app or the hub started.
+    /// record, so each new read also folds what the record held before the app or the hub started. Issue #41: it
+    /// calls nothing on a hub whose hello doesn't cover what the app calls.
     pub fn unopened_folded(socket: &Path, token_file: &Path) -> RecordReader {
         RecordReader {
             folds: true,
+            checks: true,
             ..RecordReader::unopened(socket, token_file)
         }
     }
@@ -258,6 +263,11 @@ impl RecordReader {
                 eprintln!("deep-app: the notification setting didn't reach the hub: {error:?}");
             }
         }
+    }
+
+    /// `deep-app --hub-check` (#41): connects as the window does, once, making the calls it makes on connect.
+    pub fn check(&mut self) -> Result<(), HubError> {
+        self.connect()
     }
 
     pub fn view(&self) -> View {
@@ -305,6 +315,16 @@ impl RecordReader {
     fn connect(&mut self) -> Result<(), HubError> {
         let token = std::fs::read_to_string(&self.token_file)?;
         let mut client = HubClient::connect(&self.socket)?;
+        if self.checks {
+            let covered = client.covers_app();
+            OLDER.with(|older| {
+                *older.borrow_mut() = match &covered {
+                    Err(HubError::Older(screen)) => Some(screen.clone()),
+                    _ => None,
+                }
+            });
+            covered?;
+        }
         client.hello_app(token.trim())?;
         let start = client.hello["start"]
             .as_str()
@@ -420,7 +440,14 @@ pub enum LocalHub {
     Refuses,
 }
 
+/// The one screen the window shows while the hub it reached is older than the app (#41): which side is older, and
+/// the one step that fixes it. `None` once a hub covers the app, or before any hub answered.
+pub fn older() -> Option<String> {
+    OLDER.with(|older| older.borrow().clone())
+}
+
 thread_local! {
+    static OLDER: RefCell<Option<String>> = const { RefCell::new(None) };
     static READER: RefCell<Option<Source>> = const { RefCell::new(None) };
 }
 
