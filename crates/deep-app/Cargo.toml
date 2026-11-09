@@ -46,6 +46,10 @@ spike = []
 # Issue #1457: the replica's fixture door, in no shipped build: AppState and its clock, the fixture record's inbox
 # (`events`), and the bound values a replica sets. deep-replica and this crate's own tests turn it on.
 fixtures = []
+# Issue #1434: the `chrome@1` fixture its acceptance tests draw (`deep-app --chrome`, `deep-replica --chrome`) and the
+# wrong programs DEEP_CHROME_PLANT selects, in no shipped build. Unlike env-plants it builds in release, which the
+# budget run needs.
+chrome-fixture = []
 
 # Issue #337: the gpui-kit spike. Pinned to one gpui-kit commit, since gpui-shell is at
 # milestone M0 and unpublished. No `webview` feature: the app has no web view.
@@ -102,6 +106,10 @@ objc2-screen-capture-kit = { version = "0.3", default-features = false, features
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMSampleBuffer"] }
 # Issue #377: the GPUI patch's surface reports, which release a GPU-layer slot.
 gpui-pre-apple = "=0.3.9"
+# Issue #1434: the chrome operators' graphs, written as Metal source for GPUI's renderer, and the chrome fixture's
+# idle reading (package-idle wakeups) and frame timing (thread CPU time). The versions already in the tree.
+deep-effects-render = { path = "../deep-effects-render" }
+libc = "0.2"
 # Issue #140: the color seam tags every Metal layer the app presents through, a surface wgpu
 # configures among them (the versions already in the tree).
 objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAMetalLayer", "objc2-core-foundation", "objc2-core-graphics"] }

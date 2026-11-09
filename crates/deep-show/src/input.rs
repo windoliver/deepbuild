@@ -4,12 +4,14 @@
 //! the latest input before it left (Frame clock and scheduler; Frame callback and presentation
 //! feedback). A view scrubbed back in time shows the revision current then, and a view comparing
 //! shows the revision it compares against as before. A revision whose parts move presents a
-//! frame at each vsync until they settle; a still one presents none after its first.
+//! frame at each vsync until they settle; a still one presents none after its first, and in a
+//! flat view only parts whose bounds meet the view count (#1487).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use deep_canvas::scope::{self, Event, Phase, Scope};
 use deep_canvas::show::{Writer, WriterKind};
+use deep_canvas_motion::clock;
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
 use serde_json::{json, Value};
@@ -24,6 +26,8 @@ use crate::shared::FLICKS;
 #[derive(Clone, PartialEq)]
 struct Seen {
     camera: Value,
+    /// #1487: the page region a flat view shows, `[x, y, w, h]` in u; `None` in 3D.
+    region: Option<[f64; 4]>,
     time: Option<i64>,
     compare: Option<u64>,
     hidden: Vec<String>,
@@ -140,8 +144,13 @@ impl Hub<'_> {
     fn seen(&self, panel: &str) -> Option<Seen> {
         let (doc, _) = self.panel_document(panel)?;
         let s = &self.scopes.get(panel)?.scope;
+        let (pose, rect) = (s.pose(), s.rect());
+        let (w, h) = (pose.view_width, pose.view_width * rect[3] / rect[2]);
         Some(Seen {
-            camera: s.pose().to_json(),
+            camera: pose.to_json(),
+            region: pose
+                .flat
+                .then(|| [pose.target[0] - w / 2.0, pose.target[1] - h / 2.0, w, h]),
             time: s.time(),
             compare: s.compare(),
             hidden: s.hidden(&doc),
@@ -579,7 +588,7 @@ impl Hub<'_> {
         let mut frames = Vec::new();
         let mut last: Option<(u64, &Seen)> = None;
         let mut until: Option<i64> = None;
-        let mut motion: BTreeMap<u64, Option<Program>> = BTreeMap::new();
+        let mut motion: BTreeMap<u64, Option<(Program, Value)>> = BTreeMap::new();
         for &vsync in slots {
             let latch = vsync - lead;
             let Some((_, view)) = seen.iter().rev().find(|(at, _)| *at <= latch) else {
@@ -600,12 +609,18 @@ impl Hub<'_> {
             last = Some((rev, view));
             until = motion
                 .entry(rev)
-                .or_insert_with(|| self.motion_at(&doc, rev))
+                .or_insert_with(|| Some((self.motion_at(&doc, rev)?, self.revision(&doc, rev)?)))
                 .as_ref()
-                .and_then(|p| {
+                .and_then(|(p, d)| {
                     let mut state = p.state();
                     p.evaluate(shows, Validity::Full, &mut state);
-                    state.valid_until
+                    // #1487: only items whose bounds meet the view count toward the next frame.
+                    let (Some(rect), Some(d)) = (view.region, d.as_object()) else {
+                        return state.valid_until;
+                    };
+                    let items = deep_canvas_motion::eval::items(d, p, &state);
+                    let meets = |id: &str| items.get(id).is_none_or(|i| clock::meets(i, &rect));
+                    p.valid_until_in_view(&state, Validity::Full, meets)
                 });
             // `t`: the document's time the frame shows (#1162: a readout reads its values there).
             let mut frame = json!({"vsync": vsync, "rev": rev, "t": shows, "camera": view.camera});

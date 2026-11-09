@@ -167,22 +167,23 @@ test('a budget counts on any reference Mac and is a reading on any other', () =>
   const air = { model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30, ...conditions };
   const max = { model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 64 * 2 ** 30, ...conditions };
   const within = [90, 92, 95, 91, 99], over = [110, 111, 110, 112, 111];
+  const loads = within.map(() => ({ start: 0.5, end: 0.5 }));
   for (const machine of [pro, air, max]) {
-    assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: machine }).status, 'PASS', machine.model);
-    assert.equal(judgeLimit({ limit: 100, runs: over, fingerprint: machine }).status, 'FAIL', machine.model);
+    assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: machine, loads }).status, 'PASS', machine.model);
+    assert.equal(judgeLimit({ limit: 100, runs: over, fingerprint: machine, loads }).status, 'FAIL', machine.model);
   }
   // The Air's chip with the Pro's memory, or the other way round, is neither machine.
   // So is the M5 Max's model with an M3's chip or memory.
   for (const mixed of [{ ...air, memoryBytes: pro.memoryBytes }, { ...pro, chip: air.chip }, { ...air, model: 'Mac15,13' },
     { ...max, chip: pro.chip }, { ...max, memoryBytes: pro.memoryBytes }]) {
-    const result = judgeLimit({ limit: 100, runs: within, fingerprint: mixed });
+    const result = judgeLimit({ limit: 100, runs: within, fingerprint: mixed, loads });
     assert.equal(result.status, 'INCONCLUSIVE', JSON.stringify(mixed));
     assert.match(result.reason, /Mac15,7/);
     assert.match(result.reason, /Mac15,12/);
     assert.match(result.reason, /Mac17,10/);
   }
   // Conditions still hold on both.
-  assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: { ...air, power: 'battery' } }).status, 'INCONCLUSIVE');
+  assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: { ...air, power: 'battery' }, loads }).status, 'INCONCLUSIVE');
 });
 
 // #1404: what the real benches do. Each of these left a parent's child time unaccounted for until it was

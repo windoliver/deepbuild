@@ -997,7 +997,9 @@ impl Render for Shipped {
                             } else {
                                 chrome.focus.opacity(0.)
                             };
-                            let row = marked(("sidebar-session", index), entry, text)
+                            // Keyed by the session's ID, never its place, so a row keeps its identity as rows come and go (#1427).
+                            let id = ElementId::Name(format!("session:{session}").into());
+                            let row = marked(id, entry, text)
                                 .role(Role::Button)
                                 .h(px(24.))
                                 // Every row leaves room for the bar and a gap after it, so opening one moves no text.
@@ -1111,35 +1113,33 @@ impl Render for Shipped {
                             .gap_2()
                             .children(screen.lines().map(|line| div().child(line.to_owned())))
                     }))
-                    .children(record.open.iter().enumerate().map(
-                        |(index, (handle, _, question, status))| {
-                            let ask = handle.clone();
-                            // The planted row shows the handle.
-                            let text = if cfg!(feature = "plant-handle-rows") {
-                                handle
-                            } else {
-                                question
-                            };
-                            let shown = if reach.not_notified(handle) {
-                                format!("{text} · not notified")
-                            } else {
-                                text.clone()
-                            };
-                            // The row reads as its question, on the screen and to a screen reader; its handle is nowhere (#1172).
-                            label(("ask", index), shown)
-                                .role(Role::Button)
-                                .rounded_sm()
-                                .hover(|style| style.bg(chrome.hover))
-                                .on_click(move |_, window, cx| {
-                                    crate::card::present_ask(&ask, window, cx)
-                                })
-                                .when(status == "folded", |row| {
-                                    row.pl_4().text_color(chrome.ink_secondary)
-                                })
-                                .when(status == "later", |row| row.text_color(chrome.ink_tertiary))
-                                .when(status == "held", |row| row.italic())
-                        },
-                    ))
+                    .children(record.open.iter().map(|(handle, _, question, status)| {
+                        let ask = handle.clone();
+                        // The planted row shows the handle.
+                        let text = if cfg!(feature = "plant-handle-rows") {
+                            handle
+                        } else {
+                            question
+                        };
+                        let shown = if reach.not_notified(handle) {
+                            format!("{text} · not notified")
+                        } else {
+                            text.clone()
+                        };
+                        // The row reads as its question, on the screen and to a screen reader; its handle is nowhere (#1172).
+                        label(ElementId::Name(handle.clone().into()), shown)
+                            .role(Role::Button)
+                            .rounded_sm()
+                            .hover(|style| style.bg(chrome.hover))
+                            .on_click(move |_, window, cx| {
+                                crate::card::present_ask(&ask, window, cx)
+                            })
+                            .when(status == "folded", |row| {
+                                row.pl_4().text_color(chrome.ink_secondary)
+                            })
+                            .when(status == "later", |row| row.text_color(chrome.ink_tertiary))
+                            .when(status == "held", |row| row.italic())
+                    }))
                     // Below the rows, so a screen reader and a keyboard reach the asks first.
                     .children((!self.popped).then(|| {
                         label("needs-you-pop-out", "Pop out")
@@ -2033,6 +2033,8 @@ impl Render for Shell {
             .bg(chrome.ground)
             .text_color(chrome.ink_primary)
             .text_sm()
+            // Issue #1434: the frame's guards go first, so every chrome effect after them is checked.
+            .child(crate::chrome_fx::guards())
             .children(self.title_bar.then(|| title_bar(window)))
             .child(div().flex_1().min_h_0().w_full().child(self.dock.clone()))
             .children(self.commands.clone())

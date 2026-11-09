@@ -770,6 +770,64 @@ workloads['flares-mirrors'] = () => {
   }
 };
 
+// #166: the water's GPU cost at 1080p on a release `deep-gpu`, each the difference of two sides' median `gpu_ms` over
+// 300 frames, the water against the same plate as a plain mirror (strength 1, blur 0, roughness 0), so the mirror's own
+// pass is in both: a 400 m lake filling the lower half of the frame (four waves, ripples, rain) seen level from 2 m, and
+// a 10 m plate of 256 × 256 cells seen 300 m away, whose difference bounds its waves' vertex cost. One warm-up run and
+// five, each a fresh process. The stages are tests/acceptance/166/budgets.test.ts's.
+const WATER_WAVES = [
+  { direction: 20, length: 9, amplitude: 0.12, steepness: 0.5 },
+  { direction: 110, length: 6, amplitude: 0.08, steepness: 0.6 },
+  { direction: 235, length: 4.5, amplitude: 0.05, steepness: 0.4 },
+  { direction: 300, length: 3.2, amplitude: 0.03, steepness: 0.7 },
+];
+function waterStage(kind, water) {
+  const plain = { base_color: [0.1, 0.12, 0.12, 1], roughness: 0, mirror: { strength: 1, blur: 0, plane: 'lake' } };
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'perspective', position: kind === 'lake' ? [0, 2, 0] : [0, 40, 300], target: kind === 'lake' ? [0, 2, -100] : [0, 0, 0], fov: 60, near: 0.1, far: 1000 } },
+    sky: { kind: 'sky@1', params: { top: [0.15, 0.3, 0.75, 1], low: [0.6, 0.7, 0.85, 1], ambient_top: [0.25, 0.25, 0.25], ambient_low: [0.1, 0.1, 0.1] } },
+    sun: { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-30, 30, 0] } },
+    'lake-water': { kind: 'material@1', params: water ? { roughness: 0, water } : plain },
+    crate: { kind: 'material@1', params: { base_color: [0.55, 0.38, 0.2, 1], roughness: 0.7 } },
+    lake: { kind: 'plate@1', params: { grid: [256, 256], size: kind === 'lake' ? [400, 400] : [10, 10] }, at: { pos: [0, 0, 0] }, material: 'lake-water' },
+  };
+  if (kind === 'lake') for (let k = 0; k < 12; k++) items[`crate${k}`] = { kind: 'mark.box@1', params: { size: [1.5, 1.5, 1.5] }, at: { pos: [-15 + 2.7 * k, 0.5, -20 - 4 * (k % 3)] }, material: 'crate' };
+  let order = 0;
+  for (const [id, item] of Object.entries(items)) Object.assign(item, { id, name: id, order: `a${String(order++).padStart(3, '0')}`, layer: 'main' });
+  return { format: 1, id: `water-${kind}`, profile: 'scene', title: 'Water', size: FLARE_SIZE, camera: 'cam', seed: 166, transport: { span: '30s' },
+    requires: { modules: { scene3d: '^1' } }, budget: { class: 'showpiece' }, layers: { main: { writer: 'agent:bench', title: 'main', order: 'a0' } }, items };
+}
+workloads.water = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'filmic-166', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const stages = {
+      lake: waterStage('lake', { waves: WATER_WAVES, ripples: { strength: 0.3 }, rain: 50 }), lakeMirror: waterStage('lake', null),
+      pond: waterStage('pond', { waves: WATER_WAVES, ripples: { strength: 0 }, rain: 0 }), pondMirror: waterStage('pond', null),
+    };
+    const docs = Object.fromEntries(Object.entries(stages).map(([k, d]) => {
+      const path = join(dir, `${k}.json`);
+      writeFileSync(path, JSON.stringify(d));
+      return [k, path];
+    }));
+    const side = (doc) => ({ call: 'view3d', doc, look, size: FLARE_SIZE, frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: ['lake', 'lakeMirror', 'pond', 'pondMirror'].map((k) => side(docs[k])) });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [lake, lakeMirror, pond, pondMirror] = answer.replies.map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      const water = answer.replies[0].frames.map((f) => f.passes_ms?.['scene3d.water'] ?? 0);
+      return { lake_gpu_ms: Math.max(0, lake - lakeMirror), waves_vertex_ms: Math.max(0, pond - pondMirror), water_pass_ms: median(water), mirror_gpu_ms: lakeMirror };
+    });
+    console.log(JSON.stringify({ task: 'canvas-water', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #896's two boards of a run, the 1,000-item one first; `null` for a run with any other boards.
 const pair = (r) => {
   const [small, large] = r.boards ?? [];
@@ -798,6 +856,7 @@ const EFFICIENCY = {
   'canvas-idle': { frames: (r) => r.frames, wakeups: (r) => r.wakeups, cpu_fraction: (r) => r.cpu_fraction },
   'replica-cold-start': { first_settled_ms: (r) => r.ms },
   'canvas-flares-mirrors': { finish_gpu_ms: (r) => r.finish_gpu_ms, flare_gpu_ms: (r) => r.flare_gpu_ms, mirror_share: (r) => r.mirror_share, indexed_target_bytes: (r) => r.indexed_target_bytes },
+  'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
 };
 const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes']);
 
@@ -873,7 +932,18 @@ function judgeEfficiency(current) {
   }
   const statuses = Object.values(judged).map((v) => v.status);
   const status = ['FAIL', 'BLOCKED', 'INCONCLUSIVE'].find((s) => statuses.includes(s)) ?? 'PASS';
-  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
+  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(task === 'canvas-idle' ? { energy: energyReading(current.runs ?? []) } : {}),
+    ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
+}
+
+/** The idle task's energy, a reading beside CPU and never a target (#1492): the counter's nanojoules a run, or BLOCKED naming it when a run reads zero. */
+function energyReading(runs) {
+  const counter = runs.find((r) => r.energy?.counter)?.energy.counter ?? 'ri_energy_nj';
+  const nj = runs.map((r) => r.energy?.nj);
+  if (nj.length === 0 || nj.some((v) => !(Number.isFinite(v) && v > 0))) {
+    return { status: 'BLOCKED', counter, reason: `the counter ${counter} read ${JSON.stringify(nj)} nJ over the runs; a reading of zero is not energy` };
+  }
+  return { status: 'READING', counter, runs: nj };
 }
 
 // #417's looks (tests/acceptance/417/README.md, "AC5's reports"): a release `deep-gpu`'s `film2d` plays a 2D film

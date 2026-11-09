@@ -57,6 +57,7 @@ mod timing;
 mod tone;
 mod validation;
 mod view3d;
+mod warm;
 mod window;
 mod worker;
 
@@ -78,6 +79,12 @@ use crate::worker::Worker;
 /// The wrong programs, each reachable only through `--planted` (README: Planted programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #432's wrong warm-ups (tests/acceptance/432/README.md: Planted programs): only the
+    /// feature sets in use at t = 0; only each variant set's default option's fused chain; only
+    /// the pipelines that draw into the view.
+    WarmsInUseAtT0,
+    FusesDefaultOptions,
+    WarmsViewOnly,
     /// #431's wrong programs (tests/acceptance/431/README.md: Planted programs).
     VelocityFromPreviousFrame,
     EmissionThresholdsColor,
@@ -152,6 +159,8 @@ pub enum Planted {
     FlareFixedGhosts,
     /// #465: the flare built as if nothing covered its light.
     FlareIgnoresOcclusion,
+    /// #166: the water's foam carried from frame to frame as simulation state.
+    WaterFoamKeepsState,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -320,6 +329,9 @@ pub enum Planted {
 impl Planted {
     fn parse(name: &str) -> Option<Planted> {
         Some(match name {
+            "warms_in_use_at_t0" => Planted::WarmsInUseAtT0,
+            "fuses_default_options" => Planted::FusesDefaultOptions,
+            "warms_view_only" => Planted::WarmsViewOnly,
             "velocity_from_previous_frame" => Planted::VelocityFromPreviousFrame,
             "emission_thresholds_color" => Planted::EmissionThresholdsColor,
             "builds_unread_targets" => Planted::BuildsUnreadTargets,
@@ -383,6 +395,7 @@ impl Planted {
             "slow_gpu_frame" => Planted::SlowGpuFrame,
             "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
+            "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,

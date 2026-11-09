@@ -1,0 +1,5 @@
+// A test package that names one secret (#70 AC3): what `deep secret add` needs a package for. It takes the handle and
+// does nothing with it; plug-ins never see a value.
+export default async function (deep: { secret(name: string): Promise<string> }): Promise<void> {
+  await deep.secret('vault_key');
+}

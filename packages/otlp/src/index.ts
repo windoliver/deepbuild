@@ -5,9 +5,9 @@
 // folds to `other` before it names a reading. Nothing here reads a clock for an event: every time comes from
 // the export, so a retried export appends nothing new.
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { gunzipSync } from 'node:zlib';
+import { readFacts } from '@deepbuild/adapters';
 import type { Connection, EventInput, RecordStore } from '@deepbuild/record';
 import { readLogs, readSpans, WireError, type Encoding, type Log, type Scalar, type Span } from './wire.js';
 
@@ -36,10 +36,10 @@ export interface Receiver {
 }
 
 // ---- Claude Code's facts: the names a reading may carry -----------------------------------------------------
-const facts = JSON.parse(readFileSync(new URL('../../../adapters/claude-code.facts.json', import.meta.url), 'utf8')) as {
+const facts = readFacts<{
   modelFamily: { families: Record<string, string> };
   toolKinds: { tools: Record<string, string> };
-};
+}>('claude-code.facts.json');
 const title = (name: string): string => (/^[0-9A-Za-z]+$/.test(name) ? name[0]!.toUpperCase() + name.slice(1) : 'Other');
 const toolReading = (tool: string): string => `reading:otlpBlocked${Object.hasOwn(facts.toolKinds.tools, tool) ? title(tool) : 'Other'}`;
 const costReading = (model: string): string => {

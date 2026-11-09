@@ -67,6 +67,9 @@ mod capture_devices;
 #[cfg(target_os = "macos")]
 #[path = "probes/capture_seam.rs"]
 mod capture_seam;
+#[cfg(all(feature = "chrome-fixture", target_os = "macos"))]
+#[path = "probes/chrome.rs"]
+mod chrome;
 #[cfg(target_os = "macos")]
 #[path = "probes/color_check.rs"]
 mod color_check;
@@ -96,6 +99,12 @@ enum Mode {
 fn main() {
     // The signed app has no allow-jit entitlement (#358), so no panel in it may ask for native code.
     rquickjs_jit::deny_native_code();
+    // Issue #1434: `--chrome <fixture> (--snapshot <png> | --idle <s> | --frames <n>)`, in a chrome-fixture build.
+    #[cfg(all(feature = "chrome-fixture", target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--chrome") {
+        chrome::run(std::env::args().skip(2).collect());
+        return;
+    }
     #[cfg(feature = "panel-check")]
     {
         let all: Vec<String> = std::env::args().skip(1).collect();

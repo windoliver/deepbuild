@@ -7,6 +7,8 @@
 #[cfg(all(feature = "env-plants", not(debug_assertions)))]
 compile_error!("the env-plants feature is for test builds only, never a release build");
 
+#[cfg(feature = "chrome-fixture")]
+pub mod chrome;
 pub mod drive;
 pub mod kit;
 mod replica;

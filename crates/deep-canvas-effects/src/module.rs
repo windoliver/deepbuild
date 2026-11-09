@@ -87,6 +87,8 @@ const OPERATOR_FIELDS: &[&str] = &[
     "elements",
     "workgroup",
     "after",
+    // Whether a pixel-wise pass may fuse with its neighbours (#432: pass fusion).
+    "fuse",
 ];
 
 fn operator_entry(name: &'static str) -> Entry {

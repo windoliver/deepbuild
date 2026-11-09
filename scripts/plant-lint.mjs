@@ -1,7 +1,7 @@
 // The plant lint (#1457): a plant or test door that the environment selects is never read by a shipped build. Under
 // crates/deep-app/src, each `env::var` / `env::var_os` read of `DEEP_*_PLANT` or `DEEP_APP_NOTIFICATION_SETTING` must sit
-// under a `#[cfg(feature = ...)]`, `#[cfg(debug_assertions)]` or `#[cfg(test)]`, on the statement or on a block around it,
-// so a release build compiles none. One `FAIL plant: <path>:<line>: ...` line per read, or one `PASS plant` line; exit 1
+// under a `#[cfg(feature = ...)]`, `#[cfg(debug_assertions)]` or `#[cfg(test)]`, on the statement, on a block around it, or
+// on the `mod` line that declares its file, so a release build compiles none. One `FAIL plant: <path>:<line>: ...` line per read, or one `PASS plant` line; exit 1
 // on a finding. `--root <dir>` checks the app's source under another checkout.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -26,11 +26,33 @@ const files = (dir) => readdirSync(dir).flatMap((name) => {
 /** A line with its comment gone and its strings emptied, so neither counts as a brace or an attribute. */
 const code = (line) => line.replace(/"(?:\\.|[^"\\])*"/g, '""').replace(/\/\/.*$/, '');
 
+/** The files whose `mod` line in lib.rs or main.rs sits under a gate: `name.rs`, or the `#[path]` it names. */
+function gatedFiles() {
+  const gated = new Set();
+  for (const top of ['lib.rs', 'main.rs']) {
+    let text;
+    try { text = readFileSync(join(root, SOURCE, top), 'utf8'); } catch { continue; }
+    let attrs = [];
+    for (const raw of text.split('\n')) {
+      const line = code(raw).trim();
+      if (line.startsWith('#[')) { attrs.push(raw.trim()); continue; }
+      const mod = /^(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*;/.exec(line);
+      if (mod && attrs.some((a) => GATE.test(a))) {
+        const path = attrs.map((a) => /#\[path\s*=\s*"([^"]+)"\]/.exec(a)?.[1]).find(Boolean);
+        gated.add(join(root, SOURCE, path ?? `${mod[1]}.rs`));
+      }
+      if (line) attrs = [];
+    }
+  }
+  return gated;
+}
+const gatedByMod = gatedFiles();
+
 let failed = false;
 for (const path of files(join(root, SOURCE))) {
   const lines = readFileSync(path, 'utf8').split('\n');
   // Each open brace's gate; an attribute gates the statement after it and every block that statement opens.
-  const stack = [lines.some((l) => /^#!\[cfg\((?:all\()?(?:feature\s*=|test\b)/.test(l))];
+  const stack = [gatedByMod.has(path) || lines.some((l) => /^#!\[cfg\((?:all\()?(?:feature\s*=|test\b)/.test(l))];
   let pending = false;
   let statement = false;
   for (let i = 0; i < lines.length; i++) {
