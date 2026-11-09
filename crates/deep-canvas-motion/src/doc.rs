@@ -468,6 +468,22 @@ impl Kind {
             Kind::RestOn { .. } => "rest_on",
         }
     }
+
+    /// The items it reads besides its owner (#1487: they count toward the clock with it).
+    pub fn reads(&self) -> Vec<&str> {
+        match self {
+            Kind::ChildOf { parent: x }
+            | Kind::LookAt { target: x }
+            | Kind::Copy { target: x, .. }
+            | Kind::FollowTip { item: x, .. }
+            | Kind::Distance { target: x, .. } => vec![x.as_str()],
+            Kind::Reach2 { chain, target, .. } => {
+                chain.iter().chain([target]).map(String::as_str).collect()
+            }
+            Kind::SpringChain { bones, .. } => bones.iter().map(String::as_str).collect(),
+            Kind::FollowPath { .. } | Kind::RestOn { .. } => Vec::new(),
+        }
+    }
 }
 
 /// The look's time feel for a change of state (#417: `time.state: {span: time = "0.25s", interp =

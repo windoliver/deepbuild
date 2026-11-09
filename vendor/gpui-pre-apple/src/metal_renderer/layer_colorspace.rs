@@ -32,6 +32,10 @@ pub fn take_frame() -> Option<RgbaImage> {
 /// Whether this frame's drawable is read back; its layer then lets the texture be read.
 pub(super) fn reading(layer: &metal::MetalLayerRef) -> bool {
     let reading = READ_NEXT.swap(false, Ordering::SeqCst);
+    // DeepBuild patch (windoliver/deepbuild#1434): a chrome backdrop copies from the drawable.
+    if gpui::chrome_reads_backdrops() {
+        layer.set_framebuffer_only(false);
+    }
     if reading {
         layer.set_framebuffer_only(false);
     }
