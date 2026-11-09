@@ -217,6 +217,11 @@ alone.push('tests/acceptance/33/');
 alone.push('tests/acceptance/1427/');
 byHand.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
+// #1434's files build deep-replica and start a replica each, and ac5 runs #377's handoff suite; its live window files
+// run by hand on the reference Mac, the budgets as a timed file.
+alone.push('tests/acceptance/1434/');
+byHand.push('tests/acceptance/1434/ac6-idle.live.test.ts', 'tests/acceptance/1434/ac7-budgets.live.test.ts', 'tests/acceptance/1434/ac8-snapshots.live.test.ts');
+timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 
