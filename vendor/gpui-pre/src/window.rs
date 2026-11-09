@@ -67,6 +67,7 @@ use uuid::Uuid;
 
 pub(crate) mod a11y;
 mod mask_sprite; // DeepBuild patch (windoliver/deepbuild#390)
+mod mask_rect; // DeepBuild patch (windoliver/deepbuild#1480)
 mod prompts;
 
 mod hits; // DeepBuild patch (windoliver/deepbuild#124)
