@@ -735,7 +735,19 @@ struct SegmentRecord {
     color: u32,
     pick: u32,
     flags: u32,
-    pad: u32,
+    /// A mesh-edge line's dash and gap in its size space, as two f16 (#1640), or 0.
+    dash: u32,
+}
+
+/// `x` ≥ 0 as an IEEE half's bits, its mantissa cut toward zero and capped at the largest half;
+/// 0 below the smallest normal half, which `unpack2x16float` reads back.
+fn half_bits(x: f64) -> u32 {
+    let x = x as f32;
+    if !(x >= 6.103_515_6e-5) {
+        return 0;
+    }
+    let b = x.min(65504.0).to_bits();
+    (((b >> 23) - 112) << 10) | ((b >> 13) & 0x3ff)
 }
 
 #[repr(C)]
@@ -2047,6 +2059,10 @@ const ROW: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![2 => Uint32];
 const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
     0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
 ];
+/// A line's segment records, with its dash (#1640).
+const LINE: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
+    0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32, 5 => Uint32
+];
 const POINT: [wgpu::VertexAttribute; 4] =
     wgpu::vertex_attr_array![0 => Float32x4, 1 => Uint32, 2 => Uint32, 3 => Uint32];
 const TEXT: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
@@ -2555,7 +2571,7 @@ impl Families {
                 draw,
                 "line_vs",
                 "line_fs",
-                instance(std::mem::size_of::<SegmentRecord>() as u64, &SEGMENT),
+                instance(std::mem::size_of::<SegmentRecord>() as u64, &LINE),
             ),
             (
                 "scene3d.point",
@@ -4149,7 +4165,7 @@ impl Renderer {
                     color: pack(stroke.color),
                     pick: 0,
                     flags,
-                    pad: 0,
+                    dash: 0,
                 };
                 set.push(&s.id, bytemuck::bytes_of(&record));
             }
@@ -5657,8 +5673,9 @@ impl Renderer {
                     flags: u32::from(l.world)
                         | (u32::from(l.edges.is_some()) << 1)
                         | (u32::from(l.over) << 2)
-                        | (u32::from(l.joined) << 3),
-                    pad: 0,
+                        | (u32::from(l.joined) << 3)
+                        | (u32::from(l.dash_world) << 4),
+                    dash: half_bits(l.dash[0]) | (half_bits(l.dash[1]) << 16),
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));
             }

@@ -211,6 +211,11 @@ pub enum Planted {
     SamplerHoldsCamera,
     EdgesUnwelded,
     EdgesSkipDepth,
+    /// #1640's: crease lines keep the edges below their angle, derive their set every frame, or
+    /// read their dash in the other size space.
+    CreaseBelowAngle,
+    EdgesDeriveEveryFrame,
+    EdgesDashOtherSpace,
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
@@ -431,6 +436,9 @@ impl Planted {
             "sampler_holds_camera" => Planted::SamplerHoldsCamera,
             "edges_unwelded" => Planted::EdgesUnwelded,
             "edges_skip_depth" => Planted::EdgesSkipDepth,
+            "crease_below_angle" => Planted::CreaseBelowAngle,
+            "edges_derive_every_frame" => Planted::EdgesDeriveEveryFrame,
+            "edges_dash_other_space" => Planted::EdgesDashOtherSpace,
             "releases_at_revision" => Planted::ReleasesAtRevision,
             "stops_at_request" => Planted::StopsAtRequest,
             "winding_ignores_determinant" => Planted::WindingIgnoresDeterminant,
