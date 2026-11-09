@@ -266,7 +266,7 @@ failure message starts with them too.
 | AC9 `#303.8c347a59` | `definition.locked` carries hash, issue revision, base commit, each required by its schema; the recomputed hash matches, an edit in the store changes it; ID-only hashing fails naming the requirement | `lock.test.ts` (3) | the newest schema's fixture; the recorded event; a claim recomputes the locked hash; R2 edited in `definitions`; the next claim recomputes another; the wrong program `hash-ids-only` |
 | AC10 `#303.fd687f1e` | the stop rule: after startup, resume, /clear and an answer, no claim; the same question with an edit, a claim; the tool-call rule fails naming the stop | `stops.test.ts` (2) | turns A to E above; `agent.stop`'s `claim`; the wrong program `claim-on-tool-calls` |
 | AC11 `#303.447eb97a` | turning a message into a task adds under 5 ms to the prompt hook, against the merge base | `budgets.test.ts` (2) | the perf lane's task naming #303, valid and running; the timing against a merge-base build, INCONCLUSIVE where it can't count |
-| AC12 `#303.323ca6a1` | a drafted check file changed by `python -c` after the lock: the next claim's hash differs, the approved bytes kept by digest, a proposal naming the file; path-only hashing fails | `checkfile.test.ts` (3) | R1's check is the drafted file; a control claim and its run of R1 (failed); `python3 -c` as an allowed Bash call; the next claim; `evidence.read`; the `*.proposed` event; the claim's run of R1 records failed; the wrong programs `hash-check-paths` and `runs-disk-bytes` |
+| AC12 `#303.ec3af335` | a drafted check file changed after the lock by a write the guard didn't recognize: the next claim's hash differs, the approved bytes kept by digest, a proposal naming the file; path-only hashing fails | `checkfile-redraft.test.ts` (3) | blind redraft for the amended criterion (`AC12-REDRAFT.md`, #1750): a child of `npm test` rewrites the check; the first draft `checkfile.test.ts` (`#303.323ca6a1`, `python -c`) was removed with the owner's approval |
 
 ## What this suite could not encode
 
@@ -299,7 +299,7 @@ the plant. Every other test and expected value is unchanged. `BASE-FAILURE.txt` 
 - `fixtures/agent.mjs`: each session's Claude Code stand-in, the parent of that session's deep-hook runs.
 - `days.test.ts` (AC1), `midturn.test.ts` (AC2, AC8), `rename.test.ts` (AC3), `survive.test.ts` (AC4),
   `outside.test.ts` (AC5), `origins.test.ts` (AC6), `first.test.ts` (AC7), `lock.test.ts` (AC9), `stops.test.ts`
-  (AC10), `budgets.test.ts` (AC11), `checkfile.test.ts` (AC12).
+  (AC10), `budgets.test.ts` (AC11), `checkfile-redraft.test.ts` (AC12).
 - `tsconfig.json`: the root's strict options with `noEmit` and `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the run on the base commit, trimmed to each test's failing assertion.
 
