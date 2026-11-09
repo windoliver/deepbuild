@@ -26,6 +26,10 @@ opt-level = 3
 # dev binary.
 [profile.dev.package.deep-canvas-graph]
 opt-level = 3
+# Issue #1436: the dev replica's pack check runs every chrome-fx@1 graph on the CPU interpreter,
+# its fixture and 48 frames of its flash rate, and twenty-four twins' checks each do it again.
+[profile.dev.package.deep-canvas-effects]
+opt-level = 3
 # Issue #499: the media module's mix, read off the dev binary: AC6 renders ten minutes of reverb
 # three times.
 [profile.dev.package.deep-canvas-media]

@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 
 use deep_canvas_effects::check::Checked;
+use deep_canvas_effects::chrome_fx;
 use deep_canvas_effects::interp;
 use deep_canvas_effects::shipped::{frost, FROST_TAPS};
 use serde_json::{json, Value};
@@ -48,11 +49,19 @@ pub struct Operator {
     pub graphs: Vec<Graph>,
 }
 
-/// The shipped operators a chrome effect may name.
+/// The shipped operators a chrome effect may name beside chrome-fx@1's (#1436), whose names are the pack's.
 pub const OPERATORS: &[&str] = &["frost@1"];
 
 /// A chrome operator, compiled and written as Metal source; `None` for a name that isn't one.
 pub fn operator(name: &str) -> Option<Result<Operator, String>> {
+    if let Some(name) = chrome_fx::NAMES.iter().find(|n| **n == name) {
+        return Some(pack_operator(name).and_then(|op| {
+            graph(&op.graph).map(|g| Operator {
+                name,
+                graphs: vec![g],
+            })
+        }));
+    }
     let (name, graphs): (_, Vec<Value>) = match name {
         // Each tap count's horizontal part, then its vertical one.
         "frost@1" => (
@@ -94,6 +103,11 @@ pub fn params(name: &str, given: &Value) -> Result<Vec<f32>, String> {
 impl Operator {
     /// The runs an effect with `params` takes, in order; the last one's output is the effect's.
     pub fn plan(&self, params: &[f32]) -> Vec<Run> {
+        if chrome_fx::NAMES.contains(&self.name) {
+            let named = chrome_fx::named(&self.graphs[0].checked, params);
+            let named: serde_json::Map<String, Value> = named.into_iter().collect();
+            return vec![self.run(0, &Value::Object(named), |_| Input::Backdrop)];
+        }
         let sigma = f64::from(params.first().copied().unwrap_or(0.0));
         let tint: Vec<f64> = (1..5)
             .map(|i| f64::from(params.get(i).copied().unwrap_or(0.0)) / 255.0)
@@ -155,6 +169,13 @@ impl Operator {
             textures: checked.textures.iter().map(|name| texture(name)).collect(),
         }
     }
+}
+
+/// A chrome-fx@1 operator from the shipped pack.
+fn pack_operator(name: &str) -> Result<chrome_fx::Operator, String> {
+    let pack: Value = serde_json::from_str(chrome_fx::PACK).map_err(|e| e.to_string())?;
+    chrome_fx::read_entry(name, &pack["operators"][name], &chrome_fx::functions(&pack))
+        .map_err(|r| r.to_string())
 }
 
 fn graph(graph: &Value) -> Result<Graph, String> {

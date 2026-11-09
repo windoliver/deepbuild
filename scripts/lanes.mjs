@@ -224,6 +224,11 @@ alone.push('tests/acceptance/1550/');
 alone.push('tests/acceptance/1434/');
 byHand.push('tests/acceptance/1434/ac6-idle.live.test.ts', 'tests/acceptance/1434/ac7-budgets.live.test.ts', 'tests/acceptance/1434/ac8-snapshots.live.test.ts');
 timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
+// #1436's files build deep-replica and drive the GPU; its live window files (reduced motion's frames, the budgets) open the
+// app's window on this Mac's screen, and its budgets are a timed file.
+alone.push('tests/acceptance/1436/');
+byHand.push('tests/acceptance/1436/ac2-still.live.test.ts', 'tests/acceptance/1436/ac9-budgets.live.test.ts');
+timed.push('tests/acceptance/1436/ac9-budgets.live.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 
