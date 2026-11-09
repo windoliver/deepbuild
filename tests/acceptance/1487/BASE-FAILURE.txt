@@ -1,0 +1,611 @@
+The #1487 suite run at the base, dd83ac2fc7c6563b2d395d154bc877032ba16ec1, on a Mac17,10 / Apple M5 Max / 64 GiB (not a
+reference Mac), with `npx vitest run --root tests/acceptance/1487 --no-file-parallelism` (home paths redacted).
+
+All 13 tests fail, each for its expected reason:
+- frames.test.ts AC1: the base presents 300 frames in the 5 s out of view (one per vsync); the planted
+  valid_until_ignores_view is unknown to the base (bad_input).
+- wakeups.test.ts AC1: deep-canvas-render idle ignores view.rect and keeps drawing the turning spinner (tens of
+  thousands of frames in 5 s, unpaced); the wakeup test fails on the same frame count before its reference-Mac gate;
+  the planted value is unknown (bad_input).
+- return.test.ts AC2: the base never stops the clock out of view, so there is no return (frames keep coming between
+  the pans); the planted return_draws_stale_value is unknown (bad_input).
+- kit.test.ts AC3: the base never sleeps (180 frames after the pan to the still note), so its armed run equals the
+  every-vsync run only because nothing is skipped; the plants are unknown (bad_input); the run ignores view and pans,
+  so malformed ones are accepted instead of refused.
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1487-246c2f/agent-a6d48296c594e1bab/tests/acceptance/1487
+
+stdout | wakeups.test.ts > AC1 a document with one looping rotation panned out of view: 0 frames and 0 wakeups over 5 s on the real clock > AC1 the window showing the card, the spinner turning out of view, draws 0 frames in each of five 5 s runs
+AC1 idle frames 13415, 18449, 12921, 23791, 34742; wakeups 0, 0, 0, 0, 0; power: Now drawing from 'AC Power' -InternalBattery-0 (id=6029411) 97%; lowpowermode unknown; load: { 44.25 72.63 60.76 }
+
+ ❯ wakeups.test.ts (3 tests | 3 failed) 34352ms
+   ❯ AC1 a document with one looping rotation panned out of view: 0 frames and 0 wakeups over 5 s on the real clock (3)
+     × AC1 the window showing the card, the spinner turning out of view, draws 0 frames in each of five 5 s runs 32795ms
+     × AC1 on a reference Mac each of the five runs makes 0 wakeups while the spinner turns out of view 1ms
+     × AC1 (wrong program) the planted valid_until_ignores_view draws a frame per vsync out of view and fails the frames check, naming the frames each run drew 158ms
+ ❯ kit.test.ts (4 tests | 4 failed) 1309ms
+   ❯ AC3 the frame clock's kit case, armed evaluation against every vsync, stays byte-identical over the visible region (4)
+     × AC3 armed and every-vsync runs agree byte for byte over the view at all 541 vsyncs, while the armed run sleeps once only still items are in view 679ms
+     × AC3 (wrong program) the planted view_meets_by_center, which counts an item only when its center is in view, stops on the card view and fails the comparison, naming edge 6ms
+     × AC3 (wrong program) the planted return_draws_stale_value fails the comparison at the first pan that brings a looping item into view, at 2 s, naming the spinner 5ms
+     × AC1 AC2 AC3 the run reads its view: a view rect that is not four numbers with a positive size, a pan off a vsync, pans out of order and an unknown planted value each answer bad_input 43ms
+ ❯ return.test.ts (3 tests | 3 failed) 945ms
+   ❯ AC2 on return, the first frame equals a straight evaluation at t by hash (3)
+     × AC2 the spinner stops the clock while out of view, the pan that brings it back arms a frame at 3.25 s, and that frame's visible data hashes to a straight evaluation at 3.25 s 428ms
+     × AC2 t stays pure: after the return every vsync presents, each frame hashing to a straight evaluation at its own t over the view 28ms
+     × AC2 (wrong program) the planted return_draws_stale_value, which redraws a returning item with what it showed when it left, fails the hash check naming the spinner 5ms
+ ❯ frames.test.ts (3 tests | 3 failed) 662ms
+   ❯ AC1 a document with one looping rotation panned out of view: 0 frames over 5 s on the virtual clock (3)
+     × AC1 the spinner turns in view and arms every frame; panned out of view at 1 s, the pan presents one frame valid for ever and nothing is presented over the next 5 s 302ms
+     × AC1 opened with the spinner already out of view, the board presents its first frame and nothing for 5 s, while a straight evaluation of the same document still reports the spinner's next change (canonical renders ignore the rule) 34ms
+     × AC1 (wrong program) the planted valid_until_ignores_view, the merge base's rule, arms a frame at every vsync out of view and fails the same check, naming the frames 5ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  frames.test.ts > AC1 a document with one looping rotation panned out of view: 0 frames over 5 s on the virtual clock > AC1 the spinner turns in view and arms every frame; panned out of view at 1 s, the pan presents one frame valid for ever and nothing is presented over the next 5 s
+AssertionError: out of view the spinner stops the clock: 0 frames over 5 s: expected '300 frames presented in (1.0000 s, 6.…' to be null
+
+- Expected:
+null
+
++ Received:
+"300 frames presented in (1.0000 s, 6.0000 s] with the spinner out of view, the first at vsyncs 61, 62, 63"
+
+ ❯ frames.test.ts:32:116
+     30|     expect(pan.presented, 'the pan is input, so it arms a frame at 1 s…
+     31|     // The issue: the merge base arms one per frame here and fails.
+     32|     expect(quietFailure(vsyncs, PAN_OUT, QUIET_END), 'out of view the …
+       |                                                                                                                    ^
+     33|     expect(pan.valid_until, 'the frame after the pan shows nothing tha…
+     34|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  frames.test.ts > AC1 a document with one looping rotation panned out of view: 0 frames over 5 s on the virtual clock > AC1 opened with the spinner already out of view, the board presents its first frame and nothing for 5 s, while a straight evaluation of the same document still reports the spinner's next change (canonical renders ignore the rule)
+AssertionError: nothing is presented after the first frame: expected '300 frames presented in (0.0000 s, 5.…' to be null
+
+- Expected:
+null
+
++ Received:
+"300 frames presented in (0.0000 s, 5.0000 s] with the spinner out of view, the first at vsyncs 1, 2, 3"
+
+ ❯ frames.test.ts:38:91
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  frames.test.ts > AC1 a document with one looping rotation panned out of view: 0 frames over 5 s on the virtual clock > AC1 (wrong program) the planted valid_until_ignores_view, the merge base's rule, arms a frame at every vsync out of view and fails the same check, naming the frames
+AssertionError: deep-motion run refused: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:106:110
+    104| export function accepted(bin: string, subcommand: string, input: JsonV…
+    105|   const out = one(bin, subcommand, input, timeoutMs);
+    106|   expect(out['ok'], `${bin.split('/').at(-1)} ${subcommand} refused: $…
+       |                                                                                                              ^
+    107|   return out;
+    108| }
+ ❯ run helpers.ts:149:15
+ ❯ frames.test.ts:49:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  kit.test.ts > AC3 the frame clock's kit case, armed evaluation against every vsync, stays byte-identical over the visible region > AC3 armed and every-vsync runs agree byte for byte over the view at all 541 vsyncs, while the armed run sleeps once only still items are in view
+AssertionError: with only the still note in view the armed run presents nothing after the pan at 6 s; it presented 180: expected 180 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 180
+
+ ❯ kit.test.ts:29:146
+     27|     // Not vacuous: the armed run must skip what the view doesn't show…
+     28|     const asleep = presentedIn(armed, sec(6), TO);
+     29|     expect(asleep.length, `with only the still note in view the armed …
+       |                                                                                                                                                  ^
+     30|     expect(compareVisible(DOC, armed, every, V_CARD, PANS), 'the armed…
+     31|     // And it presents wherever something visible moves: edge's box re…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  kit.test.ts > AC3 the frame clock's kit case, armed evaluation against every vsync, stays byte-identical over the visible region > AC3 (wrong program) the planted view_meets_by_center, which counts an item only when its center is in view, stops on the card view and fails the comparison, naming edge
+AssertionError: deep-motion run refused: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:106:110
+    104| export function accepted(bin: string, subcommand: string, input: JsonV…
+    105|   const out = one(bin, subcommand, input, timeoutMs);
+    106|   expect(out['ok'], `${bin.split('/').at(-1)} ${subcommand} refused: $…
+       |                                                                                                              ^
+    107|   return out;
+    108| }
+ ❯ run helpers.ts:149:15
+ ❯ kit kit.test.ts:20:3
+ ❯ kit.test.ts:43:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  kit.test.ts > AC3 the frame clock's kit case, armed evaluation against every vsync, stays byte-identical over the visible region > AC3 (wrong program) the planted return_draws_stale_value fails the comparison at the first pan that brings a looping item into view, at 2 s, naming the spinner
+AssertionError: deep-motion run refused: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:106:110
+    104| export function accepted(bin: string, subcommand: string, input: JsonV…
+    105|   const out = one(bin, subcommand, input, timeoutMs);
+    106|   expect(out['ok'], `${bin.split('/').at(-1)} ${subcommand} refused: $…
+       |                                                                                                              ^
+    107|   return out;
+    108| }
+ ❯ run helpers.ts:149:15
+ ❯ kit kit.test.ts:20:3
+ ❯ kit.test.ts:54:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  kit.test.ts > AC3 the frame clock's kit case, armed evaluation against every vsync, stays byte-identical over the visible region > AC1 AC2 AC3 the run reads its view: a view rect that is not four numbers with a positive size, a pan off a vsync, pans out of order and an unknown planted value each answer bad_input
+AssertionError: each malformed line is refused as bad_input: expected [ { ok: true, code: null }, …(5) ] to deeply equal [ …(6) ]
+
+- Expected
++ Received
+
+@@ -1,25 +1,25 @@
+  [
+    {
+-     "code": "bad_input",
+-     "ok": false,
++     "code": null,
++     "ok": true,
+    },
+    {
+-     "code": "bad_input",
+-     "ok": false,
++     "code": null,
++     "ok": true,
+    },
+    {
+-     "code": "bad_input",
+-     "ok": false,
++     "code": null,
++     "ok": true,
+    },
+    {
+-     "code": "bad_input",
+-     "ok": false,
++     "code": null,
++     "ok": true,
+    },
+    {
+-     "code": "bad_input",
+-     "ok": false,
++     "code": null,
++     "ok": true,
+    },
+    {
+      "code": "bad_input",
+      "ok": false,
+    },
+
+ ❯ kit.test.ts:75:69
+     73|     const answers = batch(MOTION_BIN, ['run'], lines);
+     74|     const refusals = answers.slice(0, -1).map((a) => (isObject(a) ? { …
+     75|     expect(refusals, 'each malformed line is refused as bad_input').to…
+       |                                                                     ^
+     76|     const last = answers.at(-1);
+     77|     expect(isObject(last) && last['ok'] === true, `the well-formed lin…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  return.test.ts > AC2 on return, the first frame equals a straight evaluation at t by hash > AC2 the spinner stops the clock while out of view, the pan that brings it back arms a frame at 3.25 s, and that frame's visible data hashes to a straight evaluation at 3.25 s
+AssertionError: no frame between the pan out and the pan back (the spinner left the clock); presented at 1.0167 s, 1.0333 s, 1.0500 s…: expected [ 717360000, 729120000, …(132) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   717360000,
++   729120000,
++   740880000,
++   752640000,
++   764400000,
++   776160000,
++   787920000,
++   799680000,
++   811440000,
++   823200000,
++   834960000,
++   846720000,
++   858480000,
++   870240000,
++   882000000,
++   893760000,
++   905520000,
++   917280000,
++   929040000,
++   940800000,
++   952560000,
++   964320000,
++   976080000,
++   987840000,
++   999600000,
++   1011360000,
++   1023120000,
++   1034880000,
++   1046640000,
++   1058400000,
++   1070160000,
++   1081920000,
++   1093680000,
++   1105440000,
++   1117200000,
++   1128960000,
++   1140720000,
++   1152480000,
++   1164240000,
++   1176000000,
++   1187760000,
++   1199520000,
++   1211280000,
++   1223040000,
++   1234800000,
++   1246560000,
++   1258320000,
++   1270080000,
++   1281840000,
++   1293600000,
++   1305360000,
++   1317120000,
++   1328880000,
++   1340640000,
++   1352400000,
++   1364160000,
++   1375920000,
++   1387680000,
++   1399440000,
++   1411200000,
++   1422960000,
++   1434720000,
++   1446480000,
++   1458240000,
++   1470000000,
++   1481760000,
++   1493520000,
++   1505280000,
++   1517040000,
++   1528800000,
++   1540560000,
++   1552320000,
++   1564080000,
++   1575840000,
++   1587600000,
++   1599360000,
++   1611120000,
++   1622880000,
++   1634640000,
++   1646400000,
++   1658160000,
++   1669920000,
++   1681680000,
++   1693440000,
++   1705200000,
++   1716960000,
++   1728720000,
++   1740480000,
++   1752240000,
++   1764000000,
++   1775760000,
++   1787520000,
++   1799280000,
++   1811040000,
++   1822800000,
++   1834560000,
++   1846320000,
++   1858080000,
++   1869840000,
++   1881600000,
++   1893360000,
++   1905120000,
++   1916880000,
++   1928640000,
++   1940400000,
++   1952160000,
++   1963920000,
++   1975680000,
++   1987440000,
++   1999200000,
++   2010960000,
++   2022720000,
++   2034480000,
++   2046240000,
++   2058000000,
++   2069760000,
++   2081520000,
++   2093280000,
++   2105040000,
++   2116800000,
++   2128560000,
++   2140320000,
++   2152080000,
++   2163840000,
++   2175600000,
++   2187360000,
++   2199120000,
++   2210880000,
++   2222640000,
++   2234400000,
++   2246160000,
++   2257920000,
++   2269680000,
++   2281440000,
++ ]
+
+ ❯ return.test.ts:40:157
+     38|     // A return needs the item to have left the clock: the base keeps …
+     39|     const away = presentedIn(vsyncs, PAN_OUT, BACK - VSYNC_60);
+     40|     expect(away, `no frame between the pan out and the pan back (the s…
+       |                                                                                                                                                             ^
+     41|     const [left, straight] = evalFrames(DOC, [PAN_OUT, BACK]);
+     42|     // Not vacuous: the value at t is not the value the spinner showed…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  return.test.ts > AC2 on return, the first frame equals a straight evaluation at t by hash > AC2 t stays pure: after the return every vsync presents, each frame hashing to a straight evaluation at its own t over the view
+AssertionError: no frame between the pan out and the pan back: expected [ 717360000, 729120000, …(132) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   717360000,
++   729120000,
++   740880000,
++   752640000,
++   764400000,
++   776160000,
++   787920000,
++   799680000,
++   811440000,
++   823200000,
++   834960000,
++   846720000,
++   858480000,
++   870240000,
++   882000000,
++   893760000,
++   905520000,
++   917280000,
++   929040000,
++   940800000,
++   952560000,
++   964320000,
++   976080000,
++   987840000,
++   999600000,
++   1011360000,
++   1023120000,
++   1034880000,
++   1046640000,
++   1058400000,
++   1070160000,
++   1081920000,
++   1093680000,
++   1105440000,
++   1117200000,
++   1128960000,
++   1140720000,
++   1152480000,
++   1164240000,
++   1176000000,
++   1187760000,
++   1199520000,
++   1211280000,
++   1223040000,
++   1234800000,
++   1246560000,
++   1258320000,
++   1270080000,
++   1281840000,
++   1293600000,
++   1305360000,
++   1317120000,
++   1328880000,
++   1340640000,
++   1352400000,
++   1364160000,
++   1375920000,
++   1387680000,
++   1399440000,
++   1411200000,
++   1422960000,
++   1434720000,
++   1446480000,
++   1458240000,
++   1470000000,
++   1481760000,
++   1493520000,
++   1505280000,
++   1517040000,
++   1528800000,
++   1540560000,
++   1552320000,
++   1564080000,
++   1575840000,
++   1587600000,
++   1599360000,
++   1611120000,
++   1622880000,
++   1634640000,
++   1646400000,
++   1658160000,
++   1669920000,
++   1681680000,
++   1693440000,
++   1705200000,
++   1716960000,
++   1728720000,
++   1740480000,
++   1752240000,
++   1764000000,
++   1775760000,
++   1787520000,
++   1799280000,
++   1811040000,
++   1822800000,
++   1834560000,
++   1846320000,
++   1858080000,
++   1869840000,
++   1881600000,
++   1893360000,
++   1905120000,
++   1916880000,
++   1928640000,
++   1940400000,
++   1952160000,
++   1963920000,
++   1975680000,
++   1987440000,
++   1999200000,
++   2010960000,
++   2022720000,
++   2034480000,
++   2046240000,
++   2058000000,
++   2069760000,
++   2081520000,
++   2093280000,
++   2105040000,
++   2116800000,
++   2128560000,
++   2140320000,
++   2152080000,
++   2163840000,
++   2175600000,
++   2187360000,
++   2199120000,
++   2210880000,
++   2222640000,
++   2234400000,
++   2246160000,
++   2257920000,
++   2269680000,
++   2281440000,
++ ]
+
+ ❯ return.test.ts:52:67
+     50|     const vsyncs = returning();
+     51|     const away = presentedIn(vsyncs, PAN_OUT, BACK - VSYNC_60);
+     52|     expect(away, 'no frame between the pan out and the pan back').toEq…
+       |                                                                   ^
+     53|     const after = vsyncs.filter((v) => v.t >= BACK);
+     54|     expect(after.filter((v) => !v.presented).map((v) => secondsOf(v.t)…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  return.test.ts > AC2 on return, the first frame equals a straight evaluation at t by hash > AC2 (wrong program) the planted return_draws_stale_value, which redraws a returning item with what it showed when it left, fails the hash check naming the spinner
+AssertionError: deep-motion run refused: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:106:110
+    104| export function accepted(bin: string, subcommand: string, input: JsonV…
+    105|   const out = one(bin, subcommand, input, timeoutMs);
+    106|   expect(out['ok'], `${bin.split('/').at(-1)} ${subcommand} refused: $…
+       |                                                                                                              ^
+    107|   return out;
+    108| }
+ ❯ run helpers.ts:149:15
+ ❯ returning return.test.ts:21:3
+ ❯ return.test.ts:61:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  wakeups.test.ts > AC1 a document with one looping rotation panned out of view: 0 frames and 0 wakeups over 5 s on the real clock > AC1 the window showing the card, the spinner turning out of view, draws 0 frames in each of five 5 s runs
+AssertionError: out of view the spinner draws nothing: 0 frames over 5 s (the merge base keeps drawing the turning spinner): expected 'run 1 drew 13415 frames (frame 2 at 0…' to be null
+
+- Expected:
+null
+
++ Received:
+"run 1 drew 13415 frames (frame 2 at 0.0 ms, frame 3 at 0.5 ms, frame 4 at 148.2 ms); run 2 drew 18449 frames (frame 2 at 0.0 ms, frame 3 at 0.6 ms, frame 4 at 1.0 ms); run 3 drew 12921 frames (frame 2 at 0.0 ms, frame 3 at 0.6 ms, frame 4 at 1.0 ms); run 4 drew 23791 frames (frame 2 at 0.0 ms, frame 3 at 0.5 ms, frame 4 at 1.0 ms); run 5 drew 34742 frames (frame 2 at 0.0 ms, frame 3 at 0.6 ms, frame 4 at 0.9 ms)"
+
+ ❯ wakeups.test.ts:82:144
+     80|     checkShape(runs);
+     81|     console.log(`AC1 idle frames ${runs.map((r) => r.frames).join(', '…
+     82|     expect(framesFailure(runs), 'out of view the spinner draws nothing…
+       |                                                                                                                                                ^
+     83|   }, 600_000);
+     84|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  wakeups.test.ts > AC1 a document with one looping rotation panned out of view: 0 frames and 0 wakeups over 5 s on the real clock > AC1 on a reference Mac each of the five runs makes 0 wakeups while the spinner turns out of view
+AssertionError: the window drew 0 frames: expected 'run 1 drew 13415 frames (frame 2 at 0…' to be null
+
+- Expected:
+null
+
++ Received:
+"run 1 drew 13415 frames (frame 2 at 0.0 ms, frame 3 at 0.5 ms, frame 4 at 148.2 ms); run 2 drew 18449 frames (frame 2 at 0.0 ms, frame 3 at 0.6 ms, frame 4 at 1.0 ms); run 3 drew 12921 frames (frame 2 at 0.0 ms, frame 3 at 0.6 ms, frame 4 at 1.0 ms); run 4 drew 23791 frames (frame 2 at 0.0 ms, frame 3 at 0.5 ms, frame 4 at 1.0 ms); run 5 drew 34742 frames (frame 2 at 0.0 ms, frame 3 at 0.6 ms, frame 4 at 0.9 ms)"
+
+ ❯ wakeups.test.ts:89:61
+     87|     checkShape(runs);
+     88|     // A wakeup count only means something for a window that drew noth…
+     89|     expect(framesFailure(runs), 'the window drew 0 frames').toBeNull();
+       |                                                             ^
+     90|     const wakeups = runs.map((r) => r.wakeups);
+     91|     const shown = `wakeups ${wakeups.join(', ')} over five ${SECONDS} …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+ FAIL  wakeups.test.ts > AC1 a document with one looping rotation panned out of view: 0 frames and 0 wakeups over 5 s on the real clock > AC1 (wrong program) the planted valid_until_ignores_view draws a frame per vsync out of view and fails the frames check, naming the frames each run drew
+AssertionError: idle planted valid_until_ignores_view run 1 refused: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ wakeups.test.ts:42:79
+     40|         const at = `idle${planted ? ` planted ${planted}` : ''} run ${…
+     41|         const o = obj(a, at);
+     42|         expect(o['ok'], `${at} refused: ${JSON.stringify(o).slice(0, 1…
+       |                                                                               ^
+     43|         return {
+     44|           opened: num(o['opened_frames'], `${at}: opened_frames`), sec…
+ ❯ record wakeups.test.ts:39:30
+ ❯ runsOrSkip wakeups.test.ts:56:16
+ ❯ wakeups.test.ts:102:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/13]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  13 failed (13)
+   Start at  16:31:50
+   Duration  37.75s (tests 100%)
+
