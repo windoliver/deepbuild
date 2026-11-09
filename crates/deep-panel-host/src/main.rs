@@ -11,7 +11,11 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let panel = flag(&args, "--panel").expect("--panel DIR");
     let result = match args.first().map(String::as_str) {
-        Some("serve") => serve(Path::new(&panel), args.iter().any(|arg| arg == "--draw")),
+        Some("serve") => serve(
+            Path::new(&panel),
+            args.iter().any(|arg| arg == "--draw"),
+            flag(&args, "--planted").as_deref(),
+        ),
         Some("run") => run(
             Path::new(&panel),
             flag(&args, "--renders")

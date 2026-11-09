@@ -1,0 +1,17 @@
+{
+  "format": "chrome@1",
+  "window": [400, 300],
+  "scale": 1,
+  "background": [0, 0, 0],
+  "nodes": [
+    { "id": "under", "rect": [20, 20, 360, 260], "fill": [32, 32, 32, 255] },
+    {
+      "id": "slot",
+      "rect": [60, 60, 200, 160],
+      "radius": 24,
+      "backdrop": { "scale": 1 },
+      "effect": { "operator": "frost@1", "params": { "sigma": 2, "tint": [200, 200, 200, 200] }, "place": "over" }
+    },
+    { "id": "above", "rect": [200, 100, 160, 80], "fill": [0, 160, 0, 255] }
+  ]
+}

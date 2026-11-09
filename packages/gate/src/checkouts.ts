@@ -34,7 +34,7 @@ export interface Budget { readonly since: number }
 export class OverBudget extends Error {
   constructor(message = 'snapshot over budget') { super(message); this.name = 'OverBudget'; }
 }
-export const GIT_WORK_MS = 8_000;
+const GIT_WORK_MS = 8_000;
 /** The 3 s after the git work to stop git and remove what it left: how long the count of untracked files may take. */
 const STOP_MS = 3_000;
 export interface TempCheckout { dir: string; commit: string }

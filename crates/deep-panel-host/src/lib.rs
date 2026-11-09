@@ -5,8 +5,11 @@
 
 use std::{
     collections::VecDeque,
+    cell::Cell,
+    hash::{DefaultHasher, Hash as _, Hasher as _},
     io::{BufRead as _, Write as _},
     path::Path,
+    rc::Rc,
     sync::{atomic::Ordering, mpsc, Arc},
     time::{Duration, Instant},
 };
@@ -23,6 +26,8 @@ struct Root {
     /// False until the first invalidation: GPUI draws once as a window opens, and a render no one asked for would put
     /// the script a render ahead of its trees.
     live: bool,
+    /// Renders of the panel's script this root has made, whoever asked: a command, or the panel's own timer.
+    renders: Rc<Cell<u64>>,
 }
 
 impl Render for Root {
@@ -30,6 +35,7 @@ impl Render for Root {
         let Some(view) = self.view.clone().filter(|_| self.live) else {
             return div().into_any_element();
         };
+        self.renders.set(self.renders.get() + 1);
         if self.draw {
             return div().size_full().child(view).into_any_element();
         }
@@ -44,10 +50,36 @@ struct Panel {
     view: Entity<ScriptView>,
     /// The runtime outlives the window, as the app's does.
     _runtime: std::rc::Rc<gpui_shell::ShellRuntime>,
+    renders: Rc<Cell<u64>>,
+    /// The renders already looked at, so a render nobody has hashed yet shows.
+    seen: u64,
+    /// The panel's id, from its manifest.
+    id: String,
+    /// The hash of the last render's tree.
+    hash: Option<String>,
+    /// Frame requests written, and those since the app's last invalidation.
+    frames: u64,
+    frames_since_invalidate: u64,
+    /// The wrong program: a frame request after every render, changed or not.
+    redraw_every_render: bool,
+}
+
+/// A tree's hash as hex: the same tree, the same text.
+fn hash_of(tree: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    tree.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }
 
 impl Panel {
-    fn open(dir: &Path, draw: bool) -> Result<Self, String> {
+    fn open(dir: &Path, draw: bool, redraw_every_render: bool) -> Result<Self, String> {
+        let id = std::fs::read_to_string(dir.join("gpui-shell.json"))
+            .ok()
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .and_then(|manifest| manifest["id"].as_str().map(str::to_owned))
+            .unwrap_or_default();
+        let renders = Rc::new(Cell::new(0));
+        let counted = renders.clone();
         let mut cx = HeadlessAppContext::with_platform(
             gpui_kit::platform::current_platform(true).text_system(),
             Arc::new(()),
@@ -77,6 +109,7 @@ impl Panel {
                         view: view.ok(),
                         draw,
                         live: false,
+                        renders: counted.clone(),
                     })
                 })
             })
@@ -86,7 +119,46 @@ impl Panel {
             window,
             view: mounted?,
             _runtime: runtime,
+            renders,
+            seen: 0,
+            id,
+            hash: None,
+            frames: 0,
+            frames_since_invalidate: 0,
+            redraw_every_render,
         })
+    }
+
+    /// The tree the script last built.
+    fn tree(&mut self) -> Result<String, String> {
+        let view = self.view.clone();
+        self.cx.update(|cx| {
+            let view = view.read(cx);
+            match (view.build_error(), view.snapshot()) {
+                (None, Some(snapshot)) => Ok(snapshot.debug_tree()),
+                (error, _) => Err(error.unwrap_or("the script built nothing").to_owned()),
+            }
+        })
+    }
+
+    /// Renders the panel's own timer made since the last look: hashes the tree and asks for a frame only if it
+    /// changed.
+    fn look(&mut self) -> Result<Option<Value>, String> {
+        let now = self.renders.get();
+        if now == self.seen {
+            return Ok(None);
+        }
+        self.seen = now;
+        let tree = self.tree()?;
+        let hash = hash_of(&tree);
+        let changed = self.hash.as_ref() != Some(&hash);
+        self.hash = Some(hash.clone());
+        if !changed && !self.redraw_every_render {
+            return Ok(None);
+        }
+        self.frames += 1;
+        self.frames_since_invalidate += 1;
+        Ok(Some(json!({ "frame": { "panel": self.id, "hash": hash, "tree": tree } })))
     }
 
     /// One invalidation: the script's one render, and its tree. Answers the tree and the nanoseconds the render took.
@@ -107,19 +179,24 @@ impl Panel {
         // Work the render deferred is the update's too.
         self.cx.run_until_parked();
         let nanos = started.elapsed().as_nanos() as u64;
-        let tree = self.cx.update(|cx| {
-            let view = view.read(cx);
-            match (view.build_error(), view.snapshot()) {
-                (None, Some(snapshot)) => Ok(snapshot.debug_tree()),
-                (error, _) => Err(error.unwrap_or("the script built nothing").to_owned()),
-            }
-        })?;
+        let tree = self.tree()?;
         Ok((tree, nanos))
     }
 
+    /// Lets `elapsed` of real time pass on the host's clock. A repeating timer re-arms from the moment it fired, so one
+    /// jump past its deadline makes every later tick late; short steps keep a 1 Hz timer to a second.
     fn pump(&mut self, elapsed: Duration) {
-        self.cx.advance_clock(elapsed);
-        self.cx.run_until_parked();
+        const STEP: Duration = Duration::from_micros(250);
+        let mut left = elapsed;
+        while left > Duration::ZERO {
+            let step = left.min(STEP);
+            self.cx.advance_clock(step);
+            self.cx.run_until_parked();
+            left -= step;
+        }
+        if elapsed.is_zero() {
+            self.cx.run_until_parked();
+        }
     }
 
     fn focused(&mut self) -> Option<FocusHandle> {
@@ -164,7 +241,7 @@ fn jit() -> Value {
 
 /// `run --panel DIR --renders N --out FILE`: the host alone, for the JIT's proof.
 pub fn run(dir: &Path, renders: usize, out: &Path) -> Result<(), String> {
-    let mut panel = Panel::open(dir, false)?;
+    let mut panel = Panel::open(dir, false, false)?;
     let mut times = Vec::with_capacity(renders);
     let mut tree = String::new();
     for _ in 0..renders {
@@ -191,8 +268,13 @@ fn say(value: &Value) {
 }
 
 /// `serve --panel DIR [--draw]`: takes one command a line on stdin until it closes.
-pub fn serve(dir: &Path, draw: bool) -> Result<(), String> {
-    let mut panel = Panel::open(dir, draw)?;
+pub fn serve(dir: &Path, draw: bool, planted: Option<&str>) -> Result<(), String> {
+    let redraw = match planted {
+        None => false,
+        Some("redraw_every_render") => true,
+        Some(other) => return Err(format!("no planted host {other}")),
+    };
+    let mut panel = Panel::open(dir, draw, redraw)?;
     let (commands, inbox) = mpsc::channel();
     std::thread::spawn(move || {
         for line in std::io::stdin().lock().lines().map_while(Result::ok) {
@@ -220,9 +302,36 @@ pub fn serve(dir: &Path, draw: bool) -> Result<(), String> {
                     serde_json::from_str(&line).map_err(|error| error.to_string())?;
                 match command["cmd"].as_str().unwrap_or_default() {
                     "invalidate" => match panel.update() {
-                        Ok((tree, nanos)) => say(&json!({ "tree": tree, "scriptNs": nanos })),
+                        Ok((tree, nanos)) => {
+                            // The app asked for this draw: it is the baseline later renders are compared with.
+                            let hash = hash_of(&tree);
+                            panel.hash = Some(hash.clone());
+                            panel.seen = panel.renders.get();
+                            panel.frames_since_invalidate = 0;
+                            say(&json!({ "tree": tree, "scriptNs": nanos, "hash": hash }));
+                        }
                         Err(error) => say(&json!({ "error": error })),
                     },
+                    "stats" => say(&json!({
+                        "panel": panel.id,
+                        "renders": panel.renders.get(),
+                        "frames": panel.frames,
+                        "hash": panel.hash,
+                    })),
+                    "verdict" => {
+                        let max = command["max_frames"].as_u64().unwrap_or(0);
+                        let frames = panel.frames_since_invalidate;
+                        let fail = frames > max;
+                        say(&json!({
+                            "status": if fail { "FAIL" } else { "PASS" },
+                            "panel": panel.id,
+                            "frames": frames,
+                            "reason": format!(
+                                "panel {} drew {frames} frames since its last invalidation against {max} allowed",
+                                panel.id
+                            ),
+                        }));
+                    }
                     "rebuild" => {
                         deep_app::REBUILDS.fetch_add(1, Ordering::Relaxed);
                         match panel.update() {
@@ -233,8 +342,10 @@ pub fn serve(dir: &Path, draw: bool) -> Result<(), String> {
                     "jit" => say(&jit()),
                     "press" => {
                         // Whatever was already going to move focus isn't this press's.
-                        panel.pump(last.elapsed());
-                        last = Instant::now();
+                        // What the pump itself takes is the next one's to count, or the host's clock runs slow.
+                        let now = Instant::now();
+                        panel.pump(now - last);
+                        last = now;
                         held = report_move(&mut panel, &inbox, &mut pending, &serial, held)?;
                         serial = command["serial"].clone();
                         match panel.press(command["id"].as_str().unwrap_or_default()) {
@@ -255,8 +366,14 @@ pub fn serve(dir: &Path, draw: bool) -> Result<(), String> {
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                panel.pump(last.elapsed());
-                last = Instant::now();
+                // What the pump itself takes is the next one's to count, or the host's clock runs slow.
+                let now = Instant::now();
+                panel.pump(now - last);
+                last = now;
+                // A render the panel's own timer made: a frame only if the tree changed.
+                if let Some(frame) = panel.look()? {
+                    say(&frame);
+                }
                 held = report_move(&mut panel, &inbox, &mut pending, &serial, held)?;
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(()),

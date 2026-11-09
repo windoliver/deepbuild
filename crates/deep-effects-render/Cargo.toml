@@ -16,7 +16,8 @@ deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-gpu = { path = "../deep-gpu" }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
-naga = { version = "30", default-features = false, features = ["wgsl-in"] }
+# Issue #1434 adds msl-out: a chrome effect's operator, written as Metal source for GPUI's renderer.
+naga = { version = "30", default-features = false, features = ["wgsl-in", "msl-out"] }
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
 wgpu-profiler = "0.28"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

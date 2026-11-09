@@ -9,7 +9,7 @@
 
 /** One call of a page: the tool, its arguments, who calls it and whether the hub runs. */
 export interface CodeCall { tool: string; arguments: Record<string, unknown>; from: 'session' | 'unbound'; hub: 'running' | 'stopped' }
-export interface CodePage { code: string; meaning: string; planted: CodeCall; clean: CodeCall; fix: string }
+interface CodePage { code: string; meaning: string; planted: CodeCall; clean: CodeCall; fix: string }
 
 const call = (tool: string, args: Record<string, unknown>, from: CodeCall['from'] = 'session', hub: CodeCall['hub'] = 'running'): CodeCall => ({ tool, arguments: args, from, hub });
 

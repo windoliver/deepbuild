@@ -1975,6 +1975,7 @@ dependencies = [
  "deep-app",
  "deep-canvas-cells",
  "deep-canvas-marks",
+ "deep-effects-render",
  "deep-gpu",
  "deep-marks-gpui",
  "deep-text-gpui",
@@ -1983,6 +1984,7 @@ dependencies = [
  "gpui-pre-apple",
  "gpui-shell",
  "image",
+ "libc",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
@@ -2208,6 +2210,7 @@ dependencies = [
  "deep-canvas-drawn",
  "deep-canvas-effects",
  "deep-canvas-graph",
+ "deep-canvas-input",
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-canvas-record",
@@ -2241,6 +2244,8 @@ name = "deep-hook"
 version = "0.0.0"
 dependencies = [
  "deep-contracts",
+ "ring",
+ "rustls",
 ]
 
 [[package]]
@@ -2249,6 +2254,22 @@ version = "0.0.0"
 dependencies = [
  "deep-canvas-input",
  "serde_json",
+]
+
+[[package]]
+name = "deep-logic"
+version = "0.0.0"
+dependencies = [
+ "addr2line 0.26.1",
+ "base64 0.22.1",
+ "deep-canvas",
+ "deep-canvas-sandbox",
+ "deep-sandbox-wasmtime",
+ "gimli 0.33.0",
+ "serde_json",
+ "sha2 0.10.9",
+ "wasmparser 0.258.3",
+ "wasmtime",
 ]
 
 [[package]]
@@ -2432,6 +2453,7 @@ dependencies = [
 name = "deep-text-gpui"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas-marks",
  "deep-text",
  "gpui-kit",
 ]
