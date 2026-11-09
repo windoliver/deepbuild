@@ -20,9 +20,11 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
-use crate::events::FOLD_AFTER;
 use crate::hub::{HubClient, HubError};
 use crate::states::{closes, handle, Table};
+
+/// Once a session holds this many open asks, its further asks fold into one exception.
+pub const FOLD_AFTER: usize = 5;
 
 /// The kinds that close an ask, and the outcome the inbox shows for each, as the asks core names them.
 const CLOSING: [(&str, &str); 7] = [

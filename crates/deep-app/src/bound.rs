@@ -3,6 +3,7 @@
 //! one assertion, `run:<id>#<assertion>` with `select: expected | received`, resolved natively by
 //! the app from the run's record entry, never from what an agent said about the run.
 
+#[cfg(feature = "fixtures")]
 use std::cell::RefCell;
 
 use deep_canvas_marks::runs::{self, Assertion};
@@ -64,12 +65,15 @@ impl Run {
     }
 }
 
+#[cfg(feature = "fixtures")]
 thread_local! {
     static BOUND: RefCell<Vec<Shown>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Resolves each bind against the runs and keeps what the views draw. `None` for a bind that
-/// isn't one: its source not a run's assertion, its select neither value, or its format refused.
+/// isn't one: its source not a run's assertion, its select neither value, or its format refused. A replica's door,
+/// in no shipped build (#1457).
+#[cfg(feature = "fixtures")]
 pub fn set(runs: &[Run], binds: &[(Surface, String, Value)]) -> Option<()> {
     let shown = binds
         .iter()
@@ -79,7 +83,14 @@ pub fn set(runs: &[Run], binds: &[(Surface, String, Value)]) -> Option<()> {
     Some(())
 }
 
+/// What the views draw on `surface`: nothing in a build without the replica's door.
+#[cfg(not(feature = "fixtures"))]
+pub fn on(_: Surface) -> Vec<Shown> {
+    Vec::new()
+}
+
 /// What the views draw on `surface`.
+#[cfg(feature = "fixtures")]
 pub fn on(surface: Surface) -> Vec<Shown> {
     BOUND.with(|cell| {
         cell.borrow()
@@ -90,6 +101,7 @@ pub fn on(surface: Surface) -> Vec<Shown> {
     })
 }
 
+#[cfg(feature = "fixtures")]
 fn resolve(runs: &[Run], surface: Surface, id: &str, bind: &Value) -> Option<Shown> {
     let source = bind.get("source")?.as_str()?;
     let (run, assertion) = runs::source(source)?;

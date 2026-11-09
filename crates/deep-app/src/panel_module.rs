@@ -95,16 +95,7 @@ fn data() -> Vec<&'static str> {
     names
 }
 
-/// Whether a test build runs the named wrong program (#1408's plants): never outside a build with `env-plants`.
-pub(crate) fn planted(plant: &str) -> bool {
-    #[cfg(feature = "env-plants")]
-    return std::env::var("DEEP_HUB_PLANT").as_deref() == Ok(plant);
-    #[cfg(not(feature = "env-plants"))]
-    {
-        let _ = plant;
-        false
-    }
-}
+use crate::plain::planted;
 
 /// The module's source: each name on the catalog re-exported from the toolkit module that serves it. A panel that
 /// imports the module whole gets those names and no others. Only #1425's planted pack check, which lets a component
