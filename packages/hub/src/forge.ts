@@ -7,7 +7,7 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const BUDGET_MS = 5000;
 
 type PrState = 'open' | 'checks running' | 'merged' | 'released';
-export interface Pr { owner: string; repo: string; number: number }
+interface Pr { owner: string; repo: string; number: number }
 /** The parts of a pull request's web URL, or undefined when it isn't one. */
 export function parsePrUrl(url: string): Pr | undefined {
   const m = /^https:\/\/[^/]+\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/.exec(url);

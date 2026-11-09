@@ -20,6 +20,9 @@ pub mod canvas;
 pub mod card;
 pub mod cells;
 pub mod chrome;
+pub mod chrome_fx;
+#[cfg(feature = "chrome-fixture")]
+pub mod chrome_fixture;
 pub mod commands;
 pub mod confirm;
 pub mod device;

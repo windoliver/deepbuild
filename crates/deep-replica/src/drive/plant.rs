@@ -32,6 +32,9 @@ pub enum Plant {
     RowBranchCutOff,
     /// After each action the whole tree draws 30% of the window to the right for one step (#1427 criterion 7).
     JumpsOnAct,
+    /// Before every frame it asks GPUI for, the replica notifies the window's root, so every frame draws (#1546
+    /// criterion 3).
+    NotifiesEveryStep,
 }
 
 impl Plant {
@@ -47,6 +50,7 @@ impl Plant {
             "row-label-past-frame" => Some(Plant::RowLabelPastFrame),
             "row-branch-cut-off" => Some(Plant::RowBranchCutOff),
             "jumps-on-act" => Some(Plant::JumpsOnAct),
+            "notifies-every-step" => Some(Plant::NotifiesEveryStep),
             _ => None,
         }
     }

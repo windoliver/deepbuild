@@ -1,5 +1,6 @@
 //! The effects module's render side (issue #380): see the crate manifest.
 
+pub mod chrome;
 pub mod compile;
 pub mod docops;
 pub mod frame;

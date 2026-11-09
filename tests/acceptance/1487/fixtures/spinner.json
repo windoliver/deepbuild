@@ -1,0 +1,36 @@
+{
+  "format": 1,
+  "id": "spinner-board",
+  "profile": "board",
+  "title": "A board with one spinner off to the side",
+  "description": "Two still rects and one rect that turns 0 to 360 every 2 s for ever (extrapolate cycle), far from both.",
+  "size": [2400, 1400],
+  "transport": { "span": "4s" },
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "card": {
+      "id": "card", "kind": "rect@1", "layer": "main", "name": "Card", "order": "a0",
+      "params": { "box": [40, 40, 400, 240], "radius": 8, "paint": { "fill": { "role": "muted" } } }
+    },
+    "note": {
+      "id": "note", "kind": "rect@1", "layer": "main", "name": "Note", "order": "a1",
+      "params": { "box": [100, 1000, 300, 100], "radius": 4, "paint": { "fill": { "role": "ink" } } }
+    },
+    "spinner": {
+      "id": "spinner", "kind": "rect@1", "layer": "main", "name": "Spinner", "order": "a2",
+      "params": { "box": [-50, -50, 100, 100], "radius": 12, "paint": { "fill": { "role": "accent" } } },
+      "at": { "pos": [1600, 800, 0] }
+    }
+  },
+  "channels": {
+    "spin": {
+      "target": "items/spinner/at/rot/2", "type": "f32", "extrapolate": "cycle",
+      "keys": {
+        "k0": { "t": "0s", "value": 0, "interp": "linear" },
+        "k1": { "t": "2s", "value": 360, "interp": "linear" }
+      }
+    }
+  }
+}

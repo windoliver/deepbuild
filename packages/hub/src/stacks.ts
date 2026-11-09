@@ -16,10 +16,10 @@ import { refusal, Refused, type Plant } from './wire.js';
 type Obj = Record<string, unknown>;
 type Rows = (query: string, params?: readonly (string | number | bigint | null)[]) => Promise<unknown[]>;
 /** Where a refusal points for the caller's surface, and what starts a stack there. */
-export interface At { path: string; remedy: string }
+interface At { path: string; remedy: string }
 
 /** The runtime stack lifecycle supplied by the composition root; stack policy never selects a concrete provider. */
-export interface StackEnvironment {
+interface StackEnvironment {
   newRun(at: number): string;
   up(options: Parameters<typeof upStack>[1]): Promise<Up>;
   down(run: string): Promise<void>;
@@ -31,7 +31,7 @@ export interface StackEnvironment {
   keys(folder: string): Promise<Keys>;
 }
 
-export interface StacksOptions {
+interface StacksOptions {
   raw: Rows;
   now: () => number;
   plant: Plant | undefined;

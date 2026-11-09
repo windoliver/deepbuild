@@ -1,0 +1,48 @@
+{
+  "format": 1,
+  "id": "kit-view-board",
+  "profile": "board",
+  "title": "The frame clock's kit case under a moving view",
+  "description": "The spinner board plus a second looping item, edge, whose center lies just outside the card view's right edge while its box reaches 20 u into it.",
+  "size": [2400, 1400],
+  "transport": { "span": "4s" },
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "card": {
+      "id": "card", "kind": "rect@1", "layer": "main", "name": "Card", "order": "a0",
+      "params": { "box": [40, 40, 400, 240], "radius": 8, "paint": { "fill": { "role": "muted" } } }
+    },
+    "note": {
+      "id": "note", "kind": "rect@1", "layer": "main", "name": "Note", "order": "a1",
+      "params": { "box": [100, 1000, 300, 100], "radius": 4, "paint": { "fill": { "role": "ink" } } }
+    },
+    "spinner": {
+      "id": "spinner", "kind": "rect@1", "layer": "main", "name": "Spinner", "order": "a2",
+      "params": { "box": [-50, -50, 100, 100], "radius": 12, "paint": { "fill": { "role": "accent" } } },
+      "at": { "pos": [1600, 800, 0] }
+    },
+    "edge": {
+      "id": "edge", "kind": "rect@1", "layer": "main", "name": "Edge", "order": "a3",
+      "params": { "box": [-60, -60, 120, 120], "radius": 12, "paint": { "fill": { "role": "live" } } },
+      "at": { "pos": [1000, 270, 0] }
+    }
+  },
+  "channels": {
+    "spin": {
+      "target": "items/spinner/at/rot/2", "type": "f32", "extrapolate": "cycle",
+      "keys": {
+        "k0": { "t": "0s", "value": 0, "interp": "linear" },
+        "k1": { "t": "2s", "value": 360, "interp": "linear" }
+      }
+    },
+    "tilt": {
+      "target": "items/edge/at/rot/2", "type": "f32", "extrapolate": "cycle",
+      "keys": {
+        "k0": { "t": "0s", "value": 0, "interp": "linear" },
+        "k1": { "t": "3s", "value": -360, "interp": "linear" }
+      }
+    }
+  }
+}
