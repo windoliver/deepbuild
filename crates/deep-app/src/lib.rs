@@ -20,12 +20,13 @@ pub mod canvas;
 pub mod card;
 pub mod cells;
 pub mod chrome;
-pub mod chrome_fx;
 #[cfg(feature = "chrome-fixture")]
 pub mod chrome_fixture;
+pub mod chrome_fx;
 pub mod commands;
 pub mod confirm;
 pub mod device;
+#[cfg(feature = "fixtures")]
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
@@ -50,6 +51,7 @@ pub mod single;
 #[cfg(feature = "spike")]
 pub mod spike;
 pub mod states;
+pub mod table;
 pub mod text;
 pub mod views;
 
@@ -223,13 +225,21 @@ fn needs_you() -> Result<HostValue, HostError> {
         ("moot".into(), handles(&|row| row["outcome"] == "moot")),
         (
             "held".into(),
-            // The hub records no event for a hold yet, so only a replica's fixture names one (#1454).
-            views::current_state()
-                .and_then(|state| state.held.clone())
-                .map(HostValue::Str)
-                .unwrap_or(HostValue::Null),
+            // The hub records no event for a hold yet, so only a replica's fixture names one (#1454), and the shipped
+            // app, which has no fixture (#1457), names none.
+            held().map(HostValue::Str).unwrap_or(HostValue::Null),
         ),
     ]))
+}
+
+#[cfg(feature = "fixtures")]
+fn held() -> Option<String> {
+    views::current_state().and_then(|state| state.held.clone())
+}
+
+#[cfg(not(feature = "fixtures"))]
+fn held() -> Option<String> {
+    None
 }
 
 /// The sessions as the sidebar lists them, in its order, for a view replacing its rows (`session.row@1`): each one's
@@ -342,7 +352,7 @@ fn admit(dir: &Path) -> anyhow::Result<()> {
         anyhow::bail!("{}", fetch_refusal(&dependency));
     }
     // #1425's planted loader skips the module check, as the merge base's did.
-    if !panel_module::planted("panel-load-unchecked") {
+    if !plain::planted("panel-load-unchecked") {
         panel_module::check(dir).map_err(anyhow::Error::msg)?;
     }
     Ok(panel_module::serve(dir)?)

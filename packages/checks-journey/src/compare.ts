@@ -3,7 +3,7 @@
 // least one of those changes happened during it where the last PASS saw one, and the first step whose route or
 // changes differ from the last PASS is the one a regression names. A comparison by raw URL names the confirmation
 // step on its order ID: the planted wrong program the tests select.
-export interface Control { role: string; name: string; testId?: string }
+interface Control { role: string; name: string; testId?: string }
 export interface ComparedStep { id: string; outcome: string; route: string; raw?: string; controls: { appeared: Control[]; left: Control[]; changed: Control[] } }
 
 const show = (c: Control): string => `${c.role} "${c.name}"`;

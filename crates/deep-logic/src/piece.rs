@@ -24,9 +24,9 @@ pub const PER_STEP: usize = 16;
 pub const SLOT: u32 = 8 + PER_STEP as u32 * 16;
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 11] = [
-    "fires", "assets", "links", "clock", "due", "emits", "preview", "pages", "parallel",
-    "services", "mirrors",
+const LATER: [&str; 10] = [
+    "fires", "links", "clock", "due", "emits", "preview", "pages", "parallel", "services",
+    "mirrors",
 ];
 
 /// A refusal as `check` answers it.
@@ -195,12 +195,29 @@ pub struct Item {
     pub fuel: i64,
     pub stack: i32,
     pub every: i64,
+    /// The checkpoint ring's byte budget.
+    pub ring: u64,
     pub lines: Option<Lines>,
+    /// The data assets it names, in order, by hash, and where they're copied: `assets_at`.
+    pub assets: Vec<(String, Vec<u8>)>,
+    pub assets_at: u32,
+    /// What the item's bake key covers of it: its rewritten program, its fields as given and
+    /// its assets' hashes (Logic: checkpoints and bake).
+    pub content: String,
 }
 
 impl Item {
     pub fn checked(&self) -> Value {
-        json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json()})
+        json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at})
+    }
+    /// The assets as memory holds them from `assets_at`: each after a u32 of its length.
+    pub fn asset_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        for (_, b) in &self.assets {
+            out.extend((b.len() as u32).to_le_bytes());
+            out.extend(b);
+        }
+        out
     }
     /// The write entry of an array, by name.
     pub fn write(&self, name: &str) -> Option<&Region> {
@@ -334,6 +351,10 @@ struct Declared {
     memory: u64,
     stack: i32,
     every: i64,
+    ring: u64,
+    assets: Vec<String>,
+    /// The item's fields as given, for its bake key.
+    given: String,
 }
 
 fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> {
@@ -352,6 +373,7 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             "writes",
             "budget",
             "checkpoint",
+            "assets",
         ]
         .contains(&k.as_str())
         {
@@ -455,6 +477,24 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             )
         })?,
     };
+    let ring = match get(params.get("checkpoint"), "budget") {
+        None => 64 * MIB,
+        Some(v) => v.as_u64().filter(|n| *n >= 1).ok_or_else(|| {
+            bad(
+                "checkpoint/budget",
+                "checkpoint.budget is a number of bytes".into(),
+            )
+        })?,
+    };
+    let assets: Vec<String> = match params.get("assets") {
+        None => Vec::new(),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|r| r.as_str().map(str::to_string))
+            .collect::<Option<_>>()
+            .ok_or_else(|| bad("assets", "assets is a list of asset IDs".into()))?,
+        Some(_) => return Err(bad("assets", "assets is a list of asset IDs".into())),
+    };
     Ok(Declared {
         program,
         debug,
@@ -465,6 +505,9 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         memory,
         stack,
         every,
+        ring,
+        assets,
+        given: Value::Object(params.clone()).to_string(),
     })
 }
 
@@ -687,6 +730,27 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
                 json!({"region": "writes"}),
             ));
         }
+        let assets_at = global_at(&given, "assets_at");
+        let mut assets = Vec::new();
+        for sha in &d.assets {
+            assets.push((sha.clone(), asset(sha).ok_or_else(|| missing("data", sha))?));
+        }
+        if !assets.is_empty() {
+            match assets_at {
+                None => refused.push(refusal(
+                    "region",
+                    "an item with assets exports assets_at, an immutable i32 global holding an address".into(),
+                    json!({"field": "assets"}),
+                )),
+                Some(at) => {
+                    let regions = [
+                        ("the read region", reads_at, layout.size("reads")),
+                        ("the write region", writes_at, layout.size("writes")),
+                    ];
+                    refused.extend(placed(&assets, at, memory, &regions, &data_segments(&given)));
+                }
+            }
+        }
         match regions_digest(&given) {
             Err(e) => refused.push(refusal("regions_digest", e, json!({}))),
             Ok(Some(v)) if v != layout.digest => {
@@ -697,6 +761,16 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         if !refused.is_empty() {
             return Err(logic_refused(id, refused));
         }
+        let content = {
+            let mut b = hash.clone().into_bytes();
+            b.push(0);
+            b.extend(d.given.as_bytes());
+            for (sha, _) in &assets {
+                b.push(0);
+                b.extend(sha.as_bytes());
+            }
+            format!("{:016x}", h64(&b))
+        };
         items.push(Item {
             id: id.clone(),
             program: d.program.clone(),
@@ -712,7 +786,11 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
             fuel: d.fuel,
             stack: d.stack,
             every: d.every,
+            ring: d.ring,
             lines,
+            content,
+            assets,
+            assets_at: assets_at.unwrap_or(0),
         });
     }
     Ok(Piece {
@@ -721,6 +799,65 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         tour: piece.get("tour").cloned(),
         items,
     })
+}
+
+/// Each active data segment's bytes in memory, `[start, end)`.
+fn data_segments(bytes: &[u8]) -> Vec<(u64, u64)> {
+    let mut out = Vec::new();
+    for payload in Parser::new(0).parse_all(bytes) {
+        if let Ok(Payload::DataSection(s)) = payload {
+            for d in s.into_iter().flatten() {
+                if let wasmparser::DataKind::Active { offset_expr, .. } = d.kind {
+                    if let Ok(Operator::I32Const { value }) =
+                        offset_expr.get_operators_reader().read()
+                    {
+                        let start = u64::from(value as u32);
+                        out.push((start, start + d.data.len() as u64));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// A refusal naming each asset, in order, whose copy (a u32 of its length, then its bytes, from
+/// `at`) would pass the end of memory or overlap a region or an active data segment.
+fn placed(
+    assets: &[(String, Vec<u8>)],
+    at: u32,
+    memory: u64,
+    regions: &[(&str, u32, u32)],
+    segments: &[(u64, u64)],
+) -> Vec<Value> {
+    let mut out = Vec::new();
+    let mut start = u64::from(at);
+    for (sha, bytes) in assets {
+        let end = start + 4 + bytes.len() as u64;
+        let overlaps = |a: u64, b: u64| a < b && start < b && a < end;
+        let why = if end > memory {
+            Some(format!("passes the end of memory at {memory}"))
+        } else if let Some((name, r, n)) = regions
+            .iter()
+            .find(|(_, r, n)| overlaps(u64::from(*r), u64::from(*r) + u64::from(*n)))
+        {
+            Some(format!("overlaps {name}, {n} bytes at {r}"))
+        } else {
+            segments
+                .iter()
+                .find(|(a, b)| overlaps(*a, *b))
+                .map(|(a, b)| format!("overlaps an active data segment, bytes {a} to {b}"))
+        };
+        if let Some(why) = why {
+            out.push(refusal(
+                "assets",
+                format!("asset {sha}, copied to bytes {start} to {end} from assets_at, {why}"),
+                json!({"asset": sha}),
+            ));
+        }
+        start = end;
+    }
+    out
 }
 
 /// A program built for another layout of the item: the first entry, in the item's declaration

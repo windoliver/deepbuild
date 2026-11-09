@@ -116,7 +116,7 @@ export const scopeOf = (people: People, actor: string, project: string | undefin
   project && people.projects(OWNER).has(project) ? `repo:${project}` : actor === OWNER ? OWNER : `person:${actor}`;
 
 /** What an invite carries (#1338): where the hub is reached, its ID, the one-time secret, and the project and person. */
-export interface InviteText { v: 1; address: string; hub: string; secret: string; project: string; person: string }
+interface InviteText { v: 1; address: string; hub: string; secret: string; project: string; person: string }
 const INVITE_PREFIX = 'deepbuild-invite:';
 export const inviteText = (invite: InviteText): string => `${INVITE_PREFIX}${Buffer.from(JSON.stringify(invite)).toString('base64url')}`;
 /** An invite's text read back, or why it isn't one. */
