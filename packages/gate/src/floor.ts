@@ -61,7 +61,7 @@ export interface FloorInput {
   session: SessionLog;
 }
 export type FloorResult = { ok: true } | { ok: false; action: 'send_back' | 'INVALID'; findings: Finding[]; claim: string };
-export type FloorPlant = 'run-happened-only' | 'leaves-to-done-gate' | 'no-deliverable-check' | 'no-read-check';
+type FloorPlant = 'run-happened-only' | 'leaves-to-done-gate' | 'no-deliverable-check' | 'no-read-check';
 
 /**
  * A run as the agent typed it: deep-hook rewrites a heavy command into `deep lease [kinds] -- <command>`, or through

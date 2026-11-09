@@ -20,7 +20,7 @@ import { startOf } from './wire.js';
 import { claimState, newestClaim } from './verdict-chat.js';
 import { verdictLine } from '@deepbuild/verdicts';
 
-export type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
+type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
 export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; verdict?: string; calls?: string[]; commits?: string[]; readings?: string[] }
 const ORDER: readonly State[] = ['needs you', 'stuck', 'flagged', 'working', 'finished', 'quiet'];
@@ -42,9 +42,9 @@ const CALLS_SHOWN = 20;
  * Why a session is in its state: one of a closed set, so a surface that draws the state from the record (the app's
  * sidebar, from `session.state`) says the same as this listing.
  */
-export type Cause = 'ask' | 'gone' | 'waiting' | 'stuck' | 'promised' | 'failed' | 'quiet' | 'interrupted' | 'finished' | 'working';
+type Cause = 'ask' | 'gone' | 'waiting' | 'stuck' | 'promised' | 'failed' | 'quiet' | 'interrupted' | 'finished' | 'working';
 /** A session's state as the record reads it, with why. */
-export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; note?: string }
+interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; note?: string }
 
 /**
  * Each session's state, from the record's tables through `query` (the hub's record, or its database read-only): the
