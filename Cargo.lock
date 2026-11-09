@@ -2254,6 +2254,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-logic"
+version = "0.0.0"
+dependencies = [
+ "addr2line 0.26.1",
+ "base64 0.22.1",
+ "deep-canvas",
+ "deep-canvas-sandbox",
+ "deep-sandbox-wasmtime",
+ "gimli 0.33.0",
+ "serde_json",
+ "sha2 0.10.9",
+ "wasmparser 0.258.3",
+ "wasmtime",
+]
+
+[[package]]
 name = "deep-marks-gpui"
 version = "0.0.0"
 dependencies = [
