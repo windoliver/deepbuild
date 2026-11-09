@@ -14,7 +14,7 @@ export const canonical = stableText;
 export const same = (a: unknown, b: unknown): boolean => canonical(a) === canonical(b);
 
 /** A refusal of an answer's shape, in error@1's closed codes: `what` is the answer or member refused. */
-export const shape = (what: string, code: 'type' | 'required' | 'enum' | 'unlisted_field', actual: unknown): Finding =>
+const shape = (what: string, code: 'type' | 'required' | 'enum' | 'unlisted_field', actual: unknown): Finding =>
   new Finding('FAIL', `${what} refused: ${code} (${JSON.stringify(actual) ?? String(actual)})`, [code]);
 
 /** The answer as a plain object, or the shape refusal. */

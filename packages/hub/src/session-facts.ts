@@ -9,7 +9,7 @@ import { run } from './children.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-export interface Load { kind: 'instructions' | 'skill' | 'hooks' | 'mcp'; name: string; source: string; digest: string }
+interface Load { kind: 'instructions' | 'skill' | 'hooks' | 'mcp'; name: string; source: string; digest: string }
 
 const sha = (parts: (string | Buffer)[]): string => {
   const hash = createHash('sha256');
