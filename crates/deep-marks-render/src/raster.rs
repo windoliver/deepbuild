@@ -64,6 +64,8 @@ pub struct Request {
     /// nearest static face.
     pub text_plant: deep_canvas_marks::animator::Plant,
     pub snaps_weight: bool,
+    /// #1646: the look's CRT afterglow, flicks.
+    pub afterglow: Option<i64>,
 }
 
 /// What a text's per-glyph layout reads at a frame (#496): the document, its evaluated items,
@@ -78,6 +80,8 @@ pub(crate) struct Anim {
     snaps_weight: bool,
     /// The look's roles, which a glyph's color and stroke props name.
     palette: scene::Palette,
+    /// #1646: the look's CRT afterglow, flicks.
+    afterglow: Option<i64>,
 }
 
 /// The host a text's layout asks for shaped strings and a counter's other strings.
@@ -616,6 +620,12 @@ impl<C: Glyphs> Painter<'_, C> {
                     .and_then(Value::as_object)
                     .filter(|p| deep_canvas_marks::animator::animated(p));
                 if let (Some(a), Some(params)) = (anim.as_deref(), params) {
+                    let levels = deep_canvas_marks::animator::reveal_levels(params, &shaped, item)
+                        .map_err(|r| refused(r.code, &r.path))?;
+                    let reveal_times = match levels {
+                        Some(levels) => reveal_times(&a.doc, item, &levels)?,
+                        None => Vec::new(),
+                    };
                     let input = deep_canvas_marks::animator::Input {
                         id: item,
                         params,
@@ -626,6 +636,8 @@ impl<C: Glyphs> Painter<'_, C> {
                         items: &a.items,
                         bound: spec.bound,
                         plant: a.plant,
+                        reveal_times: &reveal_times,
+                        afterglow: a.afterglow,
                     };
                     let mut host = Host {
                         label: &label,
@@ -639,10 +651,15 @@ impl<C: Glyphs> Painter<'_, C> {
                         (role.as_deref(), *color),
                         (runs, spec.lang.as_deref()),
                     );
-                    self.texts.insert(
-                        item.clone(),
-                        json!({"shown": shaped.shown, "glyphs": glyphs, "coverage": laid.coverage}),
-                    );
+                    let mut text =
+                        json!({"shown": shaped.shown, "glyphs": glyphs, "coverage": laid.coverage});
+                    if !laid.reveal.is_empty() {
+                        text["reveal"] = json!(laid.reveal);
+                        if a.afterglow.is_some() {
+                            text["afterglow"] = json!(laid.afterglow);
+                        }
+                    }
+                    self.texts.insert(item.clone(), text);
                     return Ok(());
                 }
                 let glyphs = self.glyphs(
@@ -751,6 +768,64 @@ impl<C: Glyphs> Painter<'_, C> {
 /// The document's evaluated items at `t`, placed by their relations (#221), each vector item
 /// drawn as marks2d's items (#398), and each graph laid out and drawn as them (#399), with each
 /// graph's view.
+/// #1646: each revealed unit's reveal time, compiled from the document: the first whole flick at
+/// which the reveal's progress reaches the unit's level ([`animator::reveal_levels`]), searched
+/// through the program between the progress's key times (as a reveal's progress is keyed to run
+/// forward), never from the frame drawn. A unit the progress never reaches reveals at no time.
+///
+/// [`animator::reveal_levels`]: deep_canvas_marks::animator::reveal_levels
+fn reveal_times(doc: &Map<String, Value>, id: &str, levels: &[f64]) -> Result<Vec<i64>, Value> {
+    let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
+    let field = ["params", "reveal", "progress"].map(String::from);
+    let Some(slot) = program.slot_of(id, &field) else {
+        // An unkeyed progress is the same at every time: each unit revealed from the start, or
+        // never.
+        let p = doc
+            .get("items")
+            .and_then(|i| i.get(id))
+            .and_then(|i| i.pointer("/params/reveal/progress"))
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
+        return Ok(levels
+            .iter()
+            .map(|l| if p >= *l { 0 } else { i64::MAX })
+            .collect());
+    };
+    let mut state = program.state();
+    let mut at = |t: i64| {
+        program.evaluate(t, deep_canvas_motion::eval::Validity::Full, &mut state);
+        state.slots[slot]
+    };
+    let mut keys = program.slot_key_times(slot);
+    keys.sort_unstable();
+    keys.dedup();
+    let (Some(&first), Some(&last)) = (keys.first(), keys.last()) else {
+        return Ok(vec![i64::MAX; levels.len()]);
+    };
+    let mut out = Vec::with_capacity(levels.len());
+    for level in levels {
+        if at(first) >= *level {
+            out.push(0);
+            continue;
+        }
+        if at(last) < *level {
+            out.push(i64::MAX);
+            continue;
+        }
+        let (mut lo, mut hi) = (first, last);
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            if at(mid) >= *level {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+        out.push(hi);
+    }
+    Ok(out)
+}
+
 fn items_at(
     doc: &Map<String, Value>,
     t: i64,
@@ -967,6 +1042,7 @@ fn draw(req: &Request) -> Result<Value, Value> {
             plant: req.text_plant,
             snaps_weight: req.snaps_weight,
             palette: palette.clone(),
+            afterglow: req.afterglow,
         })),
         resources: Resources::new(),
         store: req.store.as_deref(),

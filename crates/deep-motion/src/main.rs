@@ -62,6 +62,7 @@ fn planted_of(v: Option<&Value>) -> Option<Planted> {
             "per_loop_rounds_period_to_flick" => Planted::PerLoopRoundsPeriod,
             "transition_restarts_from_old_target" => Planted::TransitionRestarts,
             "table_form_samples_8" => Planted::TableFormSamples8,
+            "cells_seeded_from_t" => Planted::CellsSeededFromT,
             "pulse_leaves_residue" => Planted::PulseLeavesResidue,
             "back_ignores_params" => Planted::BackIgnoresParams,
             "beat_grid_f32_seconds" => Planted::BeatGridF32,
