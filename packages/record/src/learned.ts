@@ -485,7 +485,7 @@ export function placingTranscript(store: EvidenceStore | undefined, placing: Pla
       total -= e.bytes;
       placing.delete(oldest);
     }
-    return [...readTranscript(b)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
+    return messagesOf(b);
   }, () => { placing.delete(sha); return undefined; });
   placing.set(sha, entry);
   return entry.messages;
@@ -530,6 +530,13 @@ function parsedTranscript(store: EvidenceStore | undefined, transcripts: Transcr
 
 /** One message of an archived transcript: its ID (`session:<id>#<message>`) and what it holds. */
 export interface Message extends Entry { id: string }
+/** Each message of a transcript copy that holds text, in order. */
+const messagesOf = (bytes: Uint8Array): Message[] => [...readTranscript(bytes)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
+/** A copy's messages, read now and kept nowhere: the archive's index reads each copy once (#1515). */
+export async function copyMessages(store: EvidenceStore | undefined, sha: string): Promise<Message[] | undefined> {
+  const bytes = store && (await store.get(sha)) ? await store.read(sha) : undefined;
+  return bytes ? messagesOf(bytes) : undefined;
+}
 /**
  * A session's archived transcript (design: Reading by reference): the evidence its newest transcript.archived event
  * links, and each message that holds text, in order. Undefined for a session no such event links.
