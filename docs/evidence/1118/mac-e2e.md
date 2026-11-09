@@ -1,8 +1,8 @@
 # #1118 on the Mac: three proof runs of one fixed input in bays, and main's proof code on the same input
 
 Reported by the Mac's Remote Control session. The 2026-11-04 runs are committed unchanged, apart from this note; their
-logs were on the Mac under /tmp/db1118-logs and were lost when that folder was emptied. The 2026-11-09 "before" run's
-files are committed under mac-before/.
+logs were on the Mac under /tmp/db1118-logs and were lost when that folder was emptied, so their numbers (the "after"
+readings) survive only as this reported text. The 2026-11-09 "before" run's files are committed under mac-before/.
 
 A manual end-to-end run on the Mac (Mac15,12, 8 cores, macOS 14.7.7, Node 24.22.0, cargo 1.99.1) on 2026-11-04, of the
 real repository. The proof code is claude/issue-1118-040190 at f17ae5c1, with origin/main at fde376f0 pinned for the
@@ -31,7 +31,7 @@ A detached worktree at f17ae5c1 with one untracked tagged test, tests/acceptance
 | run1-cold | 1172 s | 2: base bay 1, change bay 1 | base 1, change 1 | 761 / 761 | 771 / 771 | none, cold (both) |
 | run2-same | 155 s | **0** | base 1, change 1 | **0 / 0** | **0 / 0** | intact, warm (both) |
 | run3-lock (one newline appended to package-lock.json) | 156 s | **1, in the change bay** | base 1, change 1 | 0 / 0 | 0 / 0 | intact, warm (both) |
-| main's proof.mjs (`fde376f0`), 2026-11-09, below | 1065 s | 2: one per temporary copy | 2 | 761 / 761 | 771 / 771 | n/a (temporary copies) |
+| main's proof.mjs (`fde376f0`), 2026-11-09, below | 1065 s | 2: the first checkout, then the modules folder | 2 | 761 / 761 | 771 / 771 | n/a (temporary copies) |
 
 - **AC1.** run2-same runs npm ci 0 times. With the change's lock edited (run3-lock), it runs once, in the change
   bay: installed:true on the change claim only. `npm run build` runs once in each bay on every run; that is the bay's
@@ -54,7 +54,7 @@ A detached worktree at f17ae5c1 with one untracked tagged test, tests/acceptance
 
 Run by the Mac's Remote Control session; its files are in [mac-before/](mac-before/) (`runA.log` and `npm.log` saved as `.txt`, since the repository ignores `*.log`), with the macOS temporary
 folder written `$TMPDIR` and home paths `~`. Same machine (Mac15,12, M3, 8 cores, macOS 14.7.7, Node 24.22.0), on AC
-power, alone (the next timed job waited for it).
+power. The Mac session reports that it ran alone, with the next timed job waiting for it.
 
 - **Input, the same as run1..run3.** The bays' isolated HOME and the /tmp worktree from 2026-11-04 were gone, and
   f17ae5c1 is now an ancestor of origin/main, so the real repository would have compared f17ae5c1 with itself. So a
@@ -71,11 +71,12 @@ power, alone (the next timed job waited for it).
   `RUSTUP_HOME=~/.rustup CARGO_HOME=~/.cargo npm_config_cache=~/.npm GH_CONFIG_DIR=~/.config/gh`
   `GIT_CONFIG_GLOBAL=~/.gitconfig PATH=~/h1118a/shim:… NPM_LOG=… E2E_LOG=…`. fde376f0's proof prints no wall-time
   line, so the wall time is `/usr/bin/time`'s.
-- **When and load.** 09:14:52 to 09:32:52 UTC. It started once the 1-minute load fell under 8 (the gate's last wait,
-  09:13:52, read 9.54 after a #1417 build); at start the load averages were 5.32 / 8.59 / 7.53, at the end
-  17.80 / 26.74 / 23.95, the run's own cold builds on 8 cores. run1..run3 used the same gate.
-- **Disk.** 75.2 GB free at start (`df -k /`), lowest 60-second sample 35.8 GB (09:31:52), 74.2 GB at the end: the
-  temporary copies were removed.
+- **When and load.** 09:14:52 to 09:32:52 UTC. It started once the 1-minute load fell under 8: the gate's last wait
+  ([gate.txt](mac-before/gate.txt), local time 03:13:52, which is 09:13:52 UTC) read 9.54. At start the load averages
+  were 5.32 / 8.59 / 7.53, at the end 17.80 / 26.74 / 23.95; the Mac session reports that its own cold builds were the
+  load, and that run1..run3 used the same gate.
+- **Disk** (`df -k /`, 1 KiB blocks): 71.7 GiB free at start, lowest 60-second sample 34.2 GiB (09:31:52), 70.7 GiB
+  at the end, so the temporary copies were removed.
 
 | | Wall | npm ci | npm run build | Crates compiled per copy | Compiling lines per copy | Verdicts |
 |---|---|---|---|---|---|---|
@@ -84,7 +85,8 @@ power, alone (the next timed job waited for it).
 | this branch, warm (run2, run3) | 154.8 s, 155.3 s | 0, then 1 with the lock edited | 2 | 0 / 0 | 0 / 0 | the same |
 
 - **AC5 `#1118.e7117f8d`, a reading:** on the same commit and input, main's proof code took 1065 s; this branch took
-  1172 s cold and 155 s warm. The before and after were run five days apart from different isolated HOMEs at a
+  1172 s cold and 155 s warm. The before is `/usr/bin/time`'s real time and the after the proof's own `proof: wall
+  time` line, a few seconds apart at most. The two were run five days apart from different isolated HOMEs at a
   1-minute load under 8, so the cold pair's 107 s gap is not read as a difference either way. The warm runs are what
   the bays change: 155 s against 1065 s.
 - The verdicts are the same 8 PASS and 1 FAIL as run1..run3 ([runA.txt](mac-before/runA.txt)), so both readings did
