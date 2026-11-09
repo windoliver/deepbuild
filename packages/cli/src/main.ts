@@ -213,6 +213,7 @@ const usage = [
   'deep undo sync:<id>   an Agents page sync undone: each file put back where you haven\'t edited it since',
   'deep mcp-exec <name>   what an agent\'s entry for a synced MCP server runs: its command, its secrets by handle',
   'deep secret add <package> <name> | list [--json]   a package\'s secret, typed at your terminal and kept in the OS secret store',
+  'deep join <repo link> --invite <invite>   a project\'s hub on another machine, from a clone of its repo',
   'deep backup <folder>   the record, its evidence and its wiki, copied through the running hub',
   'deep restore <folder>   a backup put back with the hub stopped, once the OS confirms you',
   'deep update --check   whether a newer DeepBuild is out',
@@ -350,6 +351,10 @@ if (help) {
 } else if (args[0] === 'undo') {
   const { undoCommand } = await import('@deepbuild/hub');
   process.exitCode = await undoCommand(args.slice(1));
+} else if (args[0] === 'join') {
+  // A project's hub on another machine, joined with the repo link and an invite (#1338).
+  const { joinCommand } = await import('@deepbuild/hub');
+  process.exitCode = await joinCommand(args.slice(1));
 } else if (args[0] === 'backup' || args[0] === 'restore') {
   const { backupCommand, restoreCommand } = await import('@deepbuild/hub');
   process.exitCode = await (args[0] === 'backup' ? backupCommand : restoreCommand)(args.slice(1));

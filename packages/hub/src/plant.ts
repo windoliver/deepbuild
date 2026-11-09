@@ -26,6 +26,8 @@ export type Plant =
   | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
   // #1337's: a hub that takes an event's actor from its payload, and a person's reads without the scope filter.
   | 'actor-from-payload' | 'reads-unfiltered'
+  // #1338: a hub that listens on its network listener with no project members.
+  | 'listen-without-members'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
@@ -266,7 +268,7 @@ const PLANTS: readonly string[] = [
   'kind-without-route',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
-  'actor-from-payload', 'reads-unfiltered',
+  'actor-from-payload', 'reads-unfiltered', 'listen-without-members',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
