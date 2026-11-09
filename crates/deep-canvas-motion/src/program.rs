@@ -4,6 +4,7 @@
 //! frame evaluates into a [`State`] the program sized up front. After the first frame, evaluating
 //! allocates nothing: no map, string or vector is made per frame.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use deep_canvas::expr::{Expr, Scope};
@@ -1520,16 +1521,118 @@ impl Program {
                 }
             }
         }
-        let timeline = crate::eval::valid_until(motion, t, shown, validity);
+        state.valid_until = self.next_change(t, doc_t, validity, Default::default());
+    }
+
+    /// The earliest `t` after a frame at `t` (timeline position `doc_t`) at which what `counts`
+    /// keeps, or the input track, changes next.
+    fn next_change(
+        &self,
+        t: i64,
+        doc_t: i64,
+        validity: Validity,
+        counts: crate::eval::Counts<'_>,
+    ) -> Option<i64> {
+        let shown = self
+            .quantize
+            .map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
+        let timeline = crate::eval::valid_until(&self.motion, t, shown, validity, counts);
         // Under the look's steps a change shows only on the next step.
         let timeline = match self.quantize {
             Some(rate) => timeline.map(|n| n.max(crate::eval::next_grid(doc_t, rate) + t - doc_t)),
             None => timeline,
         };
-        state.valid_until = match (timeline, self.inputs.next_change(t)) {
+        match (timeline, self.inputs.next_change(t)) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
+        }
+    }
+
+    /// #1487: the `valid_until` of the frame `state` holds, counting only items a view shows
+    /// (Frame clock and scheduler: "A document's `valid_until` takes only items whose bounds meet
+    /// the view"). `meets` says whether an item's bounds meet the view; it answers true for an
+    /// item it can't bound. An item out of view still counts when it can move into view (by a
+    /// channel, driver or constraint on anything but its own rotation or paint, or a turn that
+    /// carries children), and when the driver of an item that counts reads it. The evaluation
+    /// is unchanged; only the time the clock next arms is.
+    pub fn valid_until_in_view(
+        &self,
+        state: &State,
+        validity: Validity,
+        meets: impl Fn(&str) -> bool,
+    ) -> Option<i64> {
+        let motion = &self.motion;
+        // A rotation about the item's own origin or a paint keeps it within the bounds a view
+        // reads for it, unless it carries children with it.
+        let parents: BTreeSet<&str> = motion.parents.iter().map(|(_, p)| p.as_str()).collect();
+        let stays = |owner: &str, field: &[String]| {
+            let rotation = field.len() >= 2 && field[0] == "at" && field[1] == "rot";
+            let paint = field.len() >= 2 && field[0] == "params" && field[1] == "paint";
+            paint || (rotation && !parents.contains(owner))
         };
+        let mut kept: BTreeSet<&str> = self
+            .items
+            .iter()
+            .map(String::as_str)
+            .filter(|i| meets(i))
+            .collect();
+        for c in &motion.channels {
+            if !stays(&c.target.owner, &c.target.field) {
+                kept.insert(&c.target.owner);
+            }
+        }
+        for p in &motion.placements {
+            let clip = motion.clip(&p.clip);
+            for b in &p.bindings {
+                let moves = clip.is_some_and(|c| {
+                    c.channels
+                        .iter()
+                        .filter(|ch| ch.target.owner == b.slot)
+                        .any(|ch| !stays(&b.item, &ch.target.field))
+                });
+                if moves {
+                    kept.insert(&b.item);
+                }
+            }
+        }
+        for d in &motion.drivers {
+            if !stays(&d.target.owner, &d.target.field) {
+                kept.insert(&d.target.owner);
+            }
+        }
+        // A constraint moves its owner by what it reads.
+        for k in &motion.constraints {
+            kept.insert(&k.owner);
+            kept.extend(k.kind.reads());
+        }
+        // What a counted item's drivers read counts, and what those read, until nothing is added.
+        loop {
+            let before = kept.len();
+            for d in &motion.drivers {
+                if kept.contains(d.target.owner.as_str()) {
+                    kept.extend(d.vars.iter().map(|(_, v)| v.owner.as_str()));
+                }
+            }
+            if kept.len() == before {
+                break;
+            }
+        }
+        let counts = |owner: &str| kept.contains(owner) || !self.items.iter().any(|i| i == owner);
+        let channels: Vec<bool> = motion
+            .channels
+            .iter()
+            .map(|c| counts(&c.target.owner))
+            .collect();
+        let placements: Vec<bool> = motion
+            .placements
+            .iter()
+            .map(|p| p.bindings.iter().any(|b| counts(&b.item)))
+            .collect();
+        let counts = crate::eval::Counts {
+            channels: Some(&channels),
+            placements: Some(&placements),
+        };
+        self.next_change(state.t, state.doc_t, validity, counts)
     }
 
     /// The item `id`'s own transform (pos, rot and scale, three each) and every field a channel
