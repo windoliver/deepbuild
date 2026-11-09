@@ -41,13 +41,49 @@ pub struct Glass {
     pipeline: wgpu::RenderPipeline,
 }
 
+/// The mip pass's layout and pipeline, made once and kept while the scene has no glass, so a part
+/// that turns transmissive later compiles nothing (#432).
+#[derive(Clone)]
+pub struct Kit {
+    layout: wgpu::BindGroupLayout,
+    pipeline: wgpu::RenderPipeline,
+}
+
+impl Kit {
+    pub fn new(d: &wgpu::Device) -> Kit {
+        let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some(PASS),
+            entries: &[texture_entry()],
+        });
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(PASS),
+            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+        });
+        let pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some(PASS),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let pipeline = pipeline(
+            d,
+            PASS,
+            Some(&pipeline_layout),
+            &module,
+            ("vs", &[]),
+            Some(("fs", &[target(LINEAR, None)])),
+            None,
+        );
+        Kit { layout, pipeline }
+    }
+}
+
 /// The mips a texture of `size` has, down to 1 × 1.
 pub fn levels(size: [u32; 2]) -> u32 {
     32 - size[0].max(size[1]).max(1).leading_zeros()
 }
 
 impl Glass {
-    pub fn new(d: &wgpu::Device, size: [u32; 2]) -> Glass {
+    pub fn new(d: &wgpu::Device, size: [u32; 2], kit: &Kit) -> Glass {
         let count = levels(size);
         let texture = d.create_texture(&wgpu::TextureDescriptor {
             label: Some(PASS),
@@ -72,32 +108,12 @@ impl Glass {
                 })
             })
             .collect();
-        let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some(PASS),
-            entries: &[texture_entry()],
-        });
+        let layout = &kit.layout;
         let binds = levels
             .iter()
-            .map(|v| bind_group(d, PASS, &layout, [wgpu::BindingResource::TextureView(v)]))
+            .map(|v| bind_group(d, PASS, layout, [wgpu::BindingResource::TextureView(v)]))
             .collect();
-        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some(PASS),
-            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
-        });
-        let pipeline_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some(PASS),
-            bind_group_layouts: &[Some(&layout)],
-            immediate_size: 0,
-        });
-        let pipeline = pipeline(
-            d,
-            PASS,
-            Some(&pipeline_layout),
-            &module,
-            ("vs", &[]),
-            Some(("fs", &[target(LINEAR, None)])),
-            None,
-        );
+        let pipeline = kit.pipeline.clone();
         Glass {
             size,
             view: texture.create_view(&Default::default()),

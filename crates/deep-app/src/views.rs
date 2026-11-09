@@ -10,7 +10,7 @@
 //! accessibility tree a screen reader sees and the observed elements a replica reads back are
 //! the same set of nodes.
 
-use std::{cell::Cell, cell::RefCell, rc::Rc, sync::mpsc::TryRecvError, sync::Arc, time::Duration};
+use std::{cell::Cell, cell::RefCell, sync::mpsc::TryRecvError, sync::Arc, time::Duration};
 
 use gpui_kit::base::dock::{
     register_panel, DockArea, DockAreaState, DockPlacement, DockState, Panel, PanelEvent,
@@ -23,8 +23,7 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 use serde_json::json;
 
 use crate::{
-    bound, brand, canvas, cells, chrome, events::Inbox, show::CanvasPanel, states,
-    states::READINGS, text,
+    bound, brand, canvas, cells, chrome, show::CanvasPanel, states, states::READINGS, text,
 };
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
@@ -69,32 +68,36 @@ const DIFF_WIDTH: f32 = 1060.;
 /// The most lines a sidebar row's problem draws under it (#1348): its one plain line, or a planted trace's.
 const PROBLEM_LINES: usize = 16;
 
-/// What a replica's fixture panels read through `deepbuild.needs_you`, and its virtual clock: the inbox projection at
+/// In no shipped build (#1457). What a replica's fixture panels read through `deepbuild.needs_you`, and its virtual clock: the inbox projection at
 /// a log position. The replica, the live capture and the registry checks set it before opening the shell. No view
 /// reads it: every view draws the record through the one reader, with the same tree in the app and in a replica
 /// (#1454). `held` stays here alone because the hub records no event for a hold yet.
 #[derive(Clone, Debug)]
+#[cfg(feature = "fixtures")]
 pub struct AppState {
-    pub inbox: Inbox,
+    pub inbox: crate::events::Inbox,
     pub now: u64,
     pub sessions: Vec<String>,
     pub held: Option<String>,
 }
 
+#[cfg(feature = "fixtures")]
 thread_local! {
-    static STATE: RefCell<Option<Rc<AppState>>> = const { RefCell::new(None) };
+    static STATE: RefCell<Option<std::rc::Rc<AppState>>> = const { RefCell::new(None) };
     /// The virtual clock, where one runs (a replica).
     static CLOCK: Cell<Option<u64>> = const { Cell::new(None) };
 }
 
 /// A replica's state and clock. Its record stands for a machine that's set up, whatever this HOME holds.
+#[cfg(feature = "fixtures")]
 pub fn set_state(state: AppState) {
     CLOCK.with(|clock| clock.set(Some(state.now)));
     crate::setup::assume_finished();
-    STATE.with(|cell| *cell.borrow_mut() = Some(Rc::new(state)));
+    STATE.with(|cell| *cell.borrow_mut() = Some(std::rc::Rc::new(state)));
 }
 
-pub fn current_state() -> Option<Rc<AppState>> {
+#[cfg(feature = "fixtures")]
+pub fn current_state() -> Option<std::rc::Rc<AppState>> {
     STATE.with(|cell| cell.borrow().clone())
 }
 
@@ -260,6 +263,8 @@ pub struct Shipped {
     agents: Option<serde_json::Value>,
     reviewing: Option<String>,
     _agents_poll: Option<Task<()>>,
+    /// When the soonest age the view shows next reads differently, and the timer that draws it then (#1546).
+    age_tick: Option<(u64, Task<()>)>,
 }
 
 /// The sidebar's open session, drawn in the selected fill with a bar at its leading edge, and the one keyboard focus
@@ -317,6 +322,8 @@ impl Shipped {
                 cx.background_executor().timer(AGENTS_TICK).await;
             })
         });
+        // The record and the bound values reach the view through the entity it observes (#1546).
+        crate::record::observe(cx);
         Self {
             kind,
             focus_handle: cx.focus_handle(),
@@ -329,7 +336,32 @@ impl Shipped {
             agents: None,
             reviewing: None,
             _agents_poll: poll,
+            age_tick: None,
         }
+    }
+
+    /// Sets the view's next tick at the moment the soonest age it drew, as of `now`, reads differently; the view
+    /// draws again then with no input, as the frame clock arms a frame when an age it shows ticks (#1546).
+    fn tick_ages(&mut self, now: u64, cx: &mut Context<Self>) {
+        let Some(wait) = states::ages_written() else {
+            self.age_tick = None;
+            return;
+        };
+        // #1546's planted app sets no next tick.
+        if crate::plain::planted("no-age-timer") {
+            return;
+        }
+        let due = now + wait;
+        if self.age_tick.as_ref().is_some_and(|(at, _)| *at == due) {
+            return;
+        }
+        let timer = cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(wait))
+                .await;
+            let _ = this.update(cx, |_, cx| cx.notify());
+        });
+        self.age_tick = Some((due, timer));
     }
 
     /// Reads the Agents page's model; a changed one draws.
@@ -353,6 +385,7 @@ impl Shipped {
                 Err(TryRecvError::Disconnected) => "deep setup stopped without a word".to_owned(),
             };
             let _ = this.update(cx, |this, cx| {
+                crate::setup::refresh();
                 this.set_up = Some(said);
                 this.setting_up = None;
                 cx.notify();
@@ -774,13 +807,22 @@ fn first(record: &Record) -> (String, String, states::State) {
     record.sessions[0].clone()
 }
 
+/// Moves the virtual clock a replica's views draw by to `now`, ms since the epoch (#1546). A replica's door, in no
+/// shipped build (#1457).
+#[cfg(feature = "fixtures")]
+pub fn set_clock(now: u64) {
+    CLOCK.with(|clock| clock.set(Some(now)));
+}
+
 /// The virtual clock's time where one runs (the replica), else the system's.
 pub fn now() -> u64 {
-    CLOCK.with(Cell::get).unwrap_or_else(|| {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |since| since.as_millis() as u64)
-    })
+    #[cfg(feature = "fixtures")]
+    if let Some(virtual_now) = CLOCK.with(Cell::get) {
+        return virtual_now;
+    }
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_millis() as u64)
 }
 
 /// A session's status mark and words, one accessibility node named by what it shows: the mark's core, a square of
@@ -907,6 +949,8 @@ fn bound_panel(chrome: &chrome::Chrome) -> Option<Stateful<Div>> {
 
 impl Render for Shipped {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The ages this frame writes, from here on, set the view's next tick (#1546).
+        states::ages_written();
         let chrome = chrome::of(window);
         // While setup hasn't finished, the count says so, never a number of asks (#1002).
         let unfinished = crate::setup::count();
@@ -922,7 +966,7 @@ impl Render for Shipped {
             .p_2()
             .text_xs()
             .text_color(chrome.ink_primary);
-        match self.kind {
+        let drawn = match self.kind {
             Kind::Sidebar => {
                 let ids: Vec<String> = record.sessions.iter().map(|(id, ..)| id.clone()).collect();
                 if let Some((selected, focused)) = self.start.take() {
@@ -1180,11 +1224,16 @@ impl Render for Shipped {
                     .iter()
                     .filter(|(_, of, ..)| *of == session)
                     .count();
+                // The hours to each deadline move with the clock a minute at a time, and the line ticks then (#1546).
+                let minute = now - now % 60_000;
                 let hours: Vec<f64> = record
                     .deadlines
                     .iter()
-                    .map(|deadline| (*deadline as f64 - now as f64) / 3_600_000.0)
+                    .map(|deadline| (*deadline as f64 - minute as f64) / 3_600_000.0)
                     .collect();
+                if !hours.is_empty() {
+                    states::changes_after(minute + 60_000 - now);
+                }
                 // The line's caption and its readout are the canvas's text (#390): the readout
                 // is a bound number, tabular and never cut, holding its widest value's room. It
                 // counts what its caption names (#1455).
@@ -1505,7 +1554,9 @@ impl Render for Shipped {
                     ))
                     .children(placed("line"))
             }
-        }
+        };
+        self.tick_ages(now, cx);
+        drawn
     }
 }
 
@@ -2091,6 +2142,8 @@ impl Render for Shell {
             .bg(chrome.ground)
             .text_color(chrome.ink_primary)
             .text_sm()
+            // Issue #1434: the frame's guards go first, so every chrome effect after them is checked.
+            .child(crate::chrome_fx::guards())
             .children(self.title_bar.then(|| title_bar(window)))
             .child(div().flex_1().min_h_0().w_full().child(self.dock.clone()))
             .children(self.commands.clone())

@@ -1,0 +1,22 @@
+{
+  "format": "chrome@1",
+  "window": [800, 500],
+  "scale": 1,
+  "background": [236, 236, 240],
+  "nodes": [
+    { "id": "gradient", "rect": [0, 0, 800, 500], "fill": { "gradient": [[220, 228, 240], [180, 196, 226]] } },
+    {
+      "id": "flare",
+      "rect": [160, 80, 480, 320],
+      "deferred": true,
+      "backdrop": { "scale": 1 },
+      "effect": { "operator": "frost@1", "params": { "sigma": 6, "tint": [0, 0, 64, 128] }, "place": "over" }
+    }
+  ],
+  "card": {
+    "ask": "ask-1434",
+    "question": "Run the migration on the staging database?",
+    "options": [{ "id": "allow", "label": "Allow" }, { "id": "deny", "label": "Deny" }],
+    "rect": [200, 120, 400, 240]
+  }
+}

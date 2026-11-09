@@ -8,8 +8,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-/// Once a session holds this many open asks, its further asks fold into one exception.
-pub const FOLD_AFTER: usize = 5;
+use crate::record::FOLD_AFTER;
 
 /// The kinds that end an ask.
 const CLOSING: [&str; 6] = [

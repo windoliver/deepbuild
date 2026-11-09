@@ -1,0 +1,44 @@
+#1434's suite at the base, dd83ac2f ("Merge pull request #1692 …"), on this Mac (Mac17,10), November 8, 2026.
+
+The surfaces don't exist at the base, so every file fails at its build, before any pixel is drawn:
+
+  $ cargo build --locked -p deep-replica --bin deep-replica --features chrome-fixture
+  error: the package 'deep-replica' does not contain this feature: chrome-fixture
+  $ cargo build --locked --release -p deep-app --bin deep-app --features chrome-fixture
+  error: the package 'deep-app' does not contain this feature: chrome-fixture
+
+Run (cargo on PATH; every file but ac5, see below):
+
+  $ npx vitest run --root tests/acceptance/1434 --no-file-parallelism ac1 ac2 ac3 ac4 ac6 ac7 ac8
+   × AC1 every pixel of the overlap is the group composited once at 0.5 over the window, within one code value
+   × AC1 a planted renderer that multiplies 0.5 per element (DEEP_CHROME_PLANT=multiplies_per_element) fails, naming the pixel
+   × AC2 frost@1 (σ 4, a 10% white tint) over the gradient and two lines of text matches its reference on the window's backdrop at every interior pixel
+   × AC3 under the slot the grey, the slot over it with its rounded corners, and the green over the slot: every pixel of `under` within one code value
+   × AC3 a planted straight-alpha path (DEEP_CHROME_PLANT=straight_alpha_slot) multiplies translucent pixels twice and fails, naming one
+   × AC4 the effect is refused, naming the effect and the card, and every pixel of the card equals the window drawn without the effect
+   × AC4 with the guard switched off (DEEP_CHROME_PLANT=no_card_guard) the effect draws over the card, and the card's pixels differ
+   × AC6 five 10 s holds of the settled window: 0 frames in every one, and at most 1 wakeup judged on the reference Mac
+   × AC6 a planted effect that redraws once settled (DEEP_CHROME_PLANT=redraws_settled_effects) presents frames in the hold, and fails
+   × AC7 a 960,000 px layer adds under 1 ms a frame
+   × AC7 a backdrop read adds under 1.5 ms a frame
+   × AC8 the replica's screenshot of all.json and the live window's presented drawable are equal at every pixel
+   Test Files  7 failed (7)
+        Tests  12 failed (12)
+
+  ac1–ac4: AssertionError: it builds: cargo build --locked -p deep-replica --bin deep-replica --features chrome-fixture
+  ac6–ac8: AssertionError: INCONCLUSIVE: … run with DEEP_1434_LIVE=1 (README: Run them). With DEEP_1434_LIVE=1 they fail
+           at the build instead: deep-app has no chrome-fixture feature (the cargo line above).
+
+By reasoning, per file, once the features exist:
+  - ac1, ac3: the base renderer has no layer and no effect slot. GPUI's opacity multiplies into each paint, which is the
+    planted program's behavior, so the overlap reads about (128, 64, 191), not (127.5, 127.5, 255); there is nothing to
+    draw a slot between two elements at all.
+  - ac2: no frost@1 among the shipped operators (crates/deep-canvas-effects/src/shipped.rs lists glow, grid.ground,
+    shadow.resolve, outline.select, particles.sparks and pixel_hash) and no backdrop read in the vendored renderer.
+  - ac4: no refusal of an effect over the question card exists to record.
+  - ac6, ac7, ac8: the app has no --chrome mode, and none of the three primitives to settle, time or snapshot.
+
+ac5 was not run at the base: it runs tests/acceptance/377/handoff.test.ts (10,000 frames at 1936 × 1584 and more) and
+the live color check unchanged. It is the regression guard criterion 5 names, so at the base it is expected to pass,
+not fail; the wrong programs it can fail on are those suites' own planted twins (divides_alpha,
+releases_before_completion, gpui_layer_untagged, wgpu_default_colorspace), which its tests run.

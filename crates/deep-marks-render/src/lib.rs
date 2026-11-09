@@ -8,7 +8,9 @@
 //! Vello CPU, and `check` with a look adding the marks2d module's own check; and #381's: `raster`
 //! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`;
 //! and #854's: `idle`, a document held on screen on the real clock for `seconds`, its frames,
-//! wakeups and CPU read from this process; and #398's: `check`, `raster` and `geometry` import
+//! wakeups and CPU read from this process, and #1487's: `idle`'s `view.rect`, the region the
+//! window shows, whose frame clock counts only items that meet it (planted
+//! `valid_until_ignores_view`); and #398's: `check`, `raster` and `geometry` import
 //! each `vector@1` item's SVG from the line's `store` and draw it as marks2d's items, `geometry`
 //! answers a vector's `parts`, and the planted `write_fades_fills_from_start` and
 //! `import_skips_clip_path`; and #1175's: `check` answers a `verdict` that stays INCONCLUSIVE
@@ -19,7 +21,10 @@
 //! each theme's roles in OKLab, `check` and `raster` hold the status distance only where the
 //! document binds status (and take the planted `status_distance_0_03`), set text in the look's
 //! fonts with its fallback list and `lang`, and refuse a grapheme no face draws with
-//! `text.glyph_missing`; a session's step may switch the look.
+//! `text.glyph_missing`; a session's step may switch the look; and #1479's: `view.zoom` up to 16,
+//! `render` answers `rasterized` (the glyphs the atlas rasterized for the line) and
+//! `from_largest` (glyphs drawn from its largest raster for want of an outline), and takes the
+//! planted `drops_glyph`.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
@@ -135,6 +140,9 @@ enum Request {
         seconds: u64,
         /// The wrong program: a frame clock that arms a frame each vsync.
         arms_each_vsync: bool,
+        /// #1487: the region of the document the window shows, `[x, y, w, h]`, and whether the
+        /// planted clock counts every item wherever the view is (the merge base's rule).
+        region: Option<([f64; 4], bool)>,
     },
     Render {
         out: String,
@@ -145,6 +153,8 @@ enum Request {
         record: Record,
         /// The AC6 wrong build: gradients through GPUI's own OKLab option.
         gpui_oklab: bool,
+        /// #1479 AC1's wrong program: each text's second grapheme left out, silently.
+        drops_glyph: bool,
         store: Option<PathBuf>,
     },
 }
@@ -267,7 +277,7 @@ fn view(value: Option<&Value>) -> Option<View> {
         None => 1.0,
         Some(z) => z
             .as_f64()
-            .filter(|z| z.is_finite() && *z > 0.0 && *z <= 8.0)?,
+            .filter(|z| z.is_finite() && *z > 0.0 && *z <= 16.0)?,
     };
     let theme = match map.get("theme").and_then(Value::as_str) {
         None | Some("light") => Theme::Light,
@@ -309,6 +319,7 @@ fn check(
     look: Option<&Look>,
     store: Option<&Path>,
     (twin, distance_0_03, twin_parallax): (Twin, bool, bool),
+    ctx: &formulas::Ctx,
 ) -> (Value, Vectors) {
     let result = deep_canvas::document::check(&Value::Object(doc.clone()));
     // This binary draws vector@1 and R1's mark sets, axes and scales itself, so their modules
@@ -328,7 +339,9 @@ fn check(
             continue;
         }
         match deep_canvas_marks::terrain::expand(id, item) {
-            Ok((name, derived)) => expansions.push(json!({"instance": id, "derived": {name: derived}})),
+            Ok((name, derived)) => {
+                expansions.push(json!({"instance": id, "derived": {name: derived}}))
+            }
             Err(r) => issues.push(deep_canvas::document::Issue::error(
                 r.code,
                 id,
@@ -380,13 +393,46 @@ fn check(
             });
         }
     }
+    // #505: the formulas at t = 0 with the request's input: their refusals and checks, the
+    // stretches drawn as estimates, and the items marks2d checks once they're lowered.
+    let mut formula_notices: Vec<Value> = Vec::new();
+    let mut curves = Map::new();
+    let mut lowered = None;
+    if formulas::has_formulas(doc) {
+        if let Ok(program) = formulas::program(doc, ctx) {
+            let mut items = doc
+                .get("items")
+                .and_then(Value::as_object)
+                .cloned()
+                .unwrap_or_default();
+            let found = formulas::lower(doc, &program, &mut items, 0, ctx);
+            for (id, p) in &found.plots {
+                if let deep_canvas_marks::function::Form::Over { .. } = p.form {
+                    curves.insert(
+                        id.clone(),
+                        json!({"bound": p.drawn.bound, "estimate": p.drawn.estimates}),
+                    );
+                }
+            }
+            issues.extend(found.issues);
+            formula_notices = found.notices;
+            lowered = Some(items);
+        }
+    }
     let ok = !issues.iter().any(|i| i.severity == "error");
     if let (true, Some(look)) = (ok, look) {
         let mut drawn = doc.clone();
-        if let Some(Value::Object(items)) = doc.get("items") {
+        if let Some(Value::Object(items)) = lowered
+            .as_ref()
+            .map(|i| Value::Object(i.clone()))
+            .as_ref()
+            .or(doc.get("items"))
+        {
             let mut items = deep_canvas_vector::lower_items(items, &vectors, Default::default());
             // A terrain draws as the atlas set it expands into, which marks2d doesn't check.
-            items.retain(|_, i| i.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND));
+            items.retain(|_, i| {
+                i.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND)
+            });
             // #399: graphs draw as marks2d's items, and labels place where the view draws them.
             let items = match graphs::lower(doc, &items, &vectors, Default::default()) {
                 Ok((mut items, _)) => {
@@ -431,7 +477,8 @@ fn check(
         // #397: every number a mark set or an axis shows, with what it traces to; #406: a
         // template's story numbers, a quote's quotation and a formula's numbers.
         "numbers": numbers,
-        "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
+        "notices": result.notices.iter().map(|n| n.to_json()).chain(formula_notices).collect::<Vec<_>>(),
+        "curves": curves,
         "lowered": result.lowered,
         "expansions": expansions,
     });
@@ -574,6 +621,15 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     let near = distance_0_03(input);
     let unwrapped = input.get("planted").and_then(Value::as_str) == Some("parallax_without_modulo");
     let store_dir = store(input.get("store"))?;
+    // #505: the input track the document's controls read, and a formula's planted program.
+    let formula_plant = input
+        .get("planted")
+        .and_then(Value::as_str)
+        .and_then(deep_canvas_marks::function::Planted::named);
+    let ctx = formulas::Ctx {
+        input: formulas::input_of(input.get("input"))?,
+        planted: formula_plant.unwrap_or_default(),
+    };
     if command == "path" {
         let planted = match input.get("planted") {
             None => Planted::None,
@@ -607,6 +663,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
             (skips, near, unwrapped),
+            &ctx,
         );
         if let Some(refused) = refused_by_check(&checked) {
             return Some(Answer::Now(refused));
@@ -630,6 +687,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             && !near
             && !(unwrapped && command == "check")
             && !(straight && command == "geometry")
+            && formula_plant.is_none()
         {
             return None;
         }
@@ -639,6 +697,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
             (skips, near, unwrapped),
+            &ctx,
         );
         let timing = input.get("timing") == Some(&Value::Bool(true));
         if command == "check" {
@@ -663,6 +722,15 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         }
         let item = input.get("item")?.as_str()?;
         let t = input.get("t").map_or(Some(0), Value::as_i64)?;
+        let color_at: Option<Vec<f64>> = match input.get("color_at") {
+            None => None,
+            Some(v) => Some(
+                v.as_array()?
+                    .iter()
+                    .map(Value::as_f64)
+                    .collect::<Option<_>>()?,
+            ),
+        };
         return Some(Answer::Now(refused_by_check(&checked).unwrap_or_else(
             || {
                 let router = if straight {
@@ -671,7 +739,15 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     deep_canvas_graph::view::Router::Orthogonal
                 };
                 let look = look.as_ref().map(|(l, _)| l);
-                raster::geometry(&doc, item, t, &vectors, router, (look, timing))
+                raster::geometry(
+                    &doc,
+                    item,
+                    t,
+                    &vectors,
+                    router,
+                    (look, timing),
+                    (&ctx, color_at.as_deref()),
+                )
             },
         )));
     }
@@ -701,6 +777,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             Some(&look),
             store_dir.as_deref(),
             (Twin::Honest, false, false),
+            &formulas::Ctx::default(),
         );
         if let Some(refusal) = refused_by_check(&checked) {
             return Some(Answer::Now(refusal));
@@ -762,7 +839,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     || p == "triangle_peaks_at_start"
                     || p == "on_curve_left_edge"
                     || p == "roll_moves_every_grapheme"
-                    || p == "weight_snaps_to_static" =>
+                    || p == "weight_snaps_to_static"
+                    || p == "stops_at_midpoint"
+                    || p == "drops_cells_by_corner_signs" =>
             {
                 (Planted::None, false, false)
             }
@@ -832,6 +911,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             },
             snaps_weight: input.get("planted").and_then(Value::as_str)
                 == Some("weight_snaps_to_static"),
+            formulas: ctx,
         };
         let mut request = request;
         // #496: the runs this line shapes, its check included, counted from here.
@@ -843,6 +923,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             Some(&request.look),
             request.store.as_deref(),
             (skips, near, unwrapped),
+            &request.formulas,
         );
         request.vectors = vectors;
         let mut answer = refused_by_check(&checked).unwrap_or_else(|| raster::answer(request));
@@ -904,7 +985,25 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             arms_each_vsync: match input.get("planted") {
                 None => false,
                 Some(Value::String(p)) if p == "arms_each_vsync" => true,
+                Some(Value::String(p)) if p == "valid_until_ignores_view" => false,
                 Some(_) => return None,
+            },
+            region: match input.get("view").and_then(|v| v.get("rect")) {
+                None => None,
+                Some(r) => {
+                    let r: Vec<f64> = r
+                        .as_array()?
+                        .iter()
+                        .map(Value::as_f64)
+                        .collect::<Option<_>>()?;
+                    let [x, y, w, h] = r[..] else { return None };
+                    if !(r.iter().all(|n| n.is_finite()) && w > 0.0 && h > 0.0) {
+                        return None;
+                    }
+                    let ignores = input.get("planted").and_then(Value::as_str)
+                        == Some("valid_until_ignores_view");
+                    Some(([x, y, w, h], ignores))
+                }
             },
         },
         "session" => {
@@ -960,9 +1059,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             }
         }
         "render" => {
-            let gpui_oklab = match input.get("planted") {
-                None => false,
-                Some(Value::String(p)) if p == "gpui_oklab_gradient" => true,
+            let (gpui_oklab, drops_glyph) = match input.get("planted") {
+                None => (false, false),
+                Some(Value::String(p)) if p == "gpui_oklab_gradient" => (true, false),
+                Some(Value::String(p)) if p == "drops_glyph" => (false, true),
                 Some(_) => return None,
             };
             Request::Render {
@@ -973,6 +1073,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 t: input.get("t").map_or(Some(0), Value::as_i64)?,
                 record: record(input)?,
                 gpui_oklab,
+                drops_glyph,
                 store: store(input.get("store"))?,
             }
         }
@@ -1044,6 +1145,7 @@ pub fn main() {
 }
 
 mod asset;
+mod formulas;
 pub mod gpu;
 mod graphs;
 pub mod layer;

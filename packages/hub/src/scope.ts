@@ -23,7 +23,7 @@ const QUESTION_MAX = 8000;
 /** A conventional commit's type, as the repo's history names the kind of change; feat is a feature. */
 const CONVENTIONAL = /^([a-z]+)(?:\([^)]*\))?!?:/;
 
-export interface ScopeOptions {
+interface ScopeOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   append(connection: Connection, input: EventInput): Promise<void>;
   /** The core's connection for a session's events. */
@@ -45,7 +45,7 @@ interface Accepted { repo: string; kind: string; base: string; commit: string; a
  * A claim at its stop: its task, base and folder, its requirements' words, and the files its checks read; whether a
  * question holds the stop's send-back (#325), and the wall-clock time past which its reply can no longer carry one.
  */
-export interface AtStop { claim: string; task: string; session: string; agent: string; cwd: string; base: string; requirements: { id: string; text: string }[]; reached: string[] | undefined; holds: boolean; deadline: number }
+interface AtStop { claim: string; task: string; session: string; agent: string; cwd: string; base: string; requirements: { id: string; text: string }[]; reached: string[] | undefined; holds: boolean; deadline: number }
 
 export class SizeScope {
   /** Each accepted change's size, by repo, base and commit: measured once. */

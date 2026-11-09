@@ -139,7 +139,8 @@ impl Host {
                 self.moves
                     .push(json!({ "serial": reply["move"]["serial"], "result": "refused" }));
                 self.send(json!({ "granted": false }))?;
-            } else if reply["released"].is_null() {
+            } else if reply["released"].is_null() && reply["frame"].is_null() {
+                // A frame request (#1492) answers no command: the host asks for a draw its timer's render changed.
                 return Ok(reply);
             }
         }
@@ -767,6 +768,10 @@ fn serve(
                 }
                 if !reply["released"].is_null() {
                     owner = false;
+                    continue;
+                }
+                // A frame request (#1492) answers no command; this check draws nothing of its own.
+                if !reply["frame"].is_null() {
                     continue;
                 }
                 match waiting

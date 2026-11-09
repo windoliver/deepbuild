@@ -116,7 +116,7 @@ export function writeThrough(file: string, text: string | Buffer): void {
 // ---- What setup changed, for undo: <root>/setup.json, with each file's bytes before its first write in <root>/originals.
 
 interface Changed { before: string | null; after: string }
-export interface SetupRecord { files: Record<string, Changed>; created: string[] }
+interface SetupRecord { files: Record<string, Changed>; created: string[] }
 const recordFile = (root: string) => join(root, 'setup.json');
 
 export function setupRecord(root: string): SetupRecord {
