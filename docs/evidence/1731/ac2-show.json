@@ -1,0 +1,45 @@
+{
+  "rev": 1,
+  "expansions": [],
+  "issues": [],
+  "issues_evidence": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "snapshots": [],
+  "changed": [],
+  "unchanged": [],
+  "created": [
+    "chair"
+  ],
+  "removed": [],
+  "outcome": "presented",
+  "result": "PASS",
+  "backends": {
+    "fonts": {
+      "name": "fonts.bundled",
+      "version": "1.0.0"
+    },
+    "cpu": {
+      "name": "aarch64",
+      "version": "1.0.0"
+    }
+  },
+  "core": "core@0.0.0",
+  "set_digest": "0189c3fcaeb309bf1a2eddaa3d6c07ee0a0290522b27252661a7a7d856e32f8c",
+  "assets": [
+    {
+      "item": "chair",
+      "asset": "2beb0c371a2478b08b32ebd9603ea2c649472db7d4275cd3aee32dc1b25886e5",
+      "license": {
+        "id": "CC-BY-4.0",
+        "terms": "https://creativecommons.org/licenses/by/4.0/",
+        "shareable": true,
+        "credit": "Ana Ruiz, Shelf"
+      },
+      "upstream": {
+        "url": "https://shelf.example/a/oak-chair",
+        "version": "3",
+        "modified": "2026-09-14T10:00:00Z"
+      },
+      "library": "ext.shelf.library"
+    }
+  ]
+}

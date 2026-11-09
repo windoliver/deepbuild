@@ -120,7 +120,7 @@ pub fn names(bytes: &[u8]) -> Names {
 }
 
 /// One step's items and arrays.
-type StepRow = (Map<String, Value>, Map<String, Value>);
+pub type StepRow = (Map<String, Value>, Map<String, Value>);
 
 /// What each step and checkpoint left, as a bake reports it.
 #[derive(Default)]
@@ -133,6 +133,25 @@ pub struct Record {
 }
 
 impl Record {
+    /// Each step's items (hash, fuel, failed, pages) and arrays, by step.
+    pub fn rows(&self) -> &BTreeMap<i64, StepRow> {
+        &self.steps
+    }
+    /// An item's checkpoints, as `(step, deep hash)`.
+    pub fn deep(&self, id: &str) -> Vec<(i64, String)> {
+        self.checkpoints
+            .get(id)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|c| {
+                Some((
+                    c.get("step")?.as_i64()?,
+                    c.get("deep_hash")?.as_str()?.to_string(),
+                ))
+            })
+            .collect()
+    }
     pub fn steps_json(&self, piece: &Piece) -> Value {
         let len = piece.items.first().map_or(0, |i| i.step);
         Value::Array(
@@ -181,6 +200,67 @@ struct Live {
     stored: Vec<Stored>,
     /// The last step a checkpoint was taken at.
     checked: Option<i64>,
+    /// Steps between checkpoints: `checkpoint.every`, doubled each time the ring passes its budget.
+    spacing: i64,
+}
+
+impl Stored {
+    fn bytes(&self) -> u64 {
+        let memory = match &self.memory {
+            Memory::Whole(m) => m.len(),
+            Memory::Pages(p) => p.len() * PAGE as usize,
+        };
+        (memory + self.arrays.len() + 8 * self.globals.len()) as u64
+    }
+}
+
+impl Live {
+    /// Doubles the spacing while the ring passes its budget: each checkpoint off the new spacing
+    /// is dropped, its pages merged into the next one kept (the pages it wrote are as they were
+    /// there, since nothing wrote them again before it), or, past the last one kept, into the
+    /// pages the next checkpoint takes.
+    fn thin(&mut self, budget: u64) {
+        while self.stored.len() > 1 && self.stored.iter().map(Stored::bytes).sum::<u64>() > budget {
+            self.spacing *= 2;
+            let mut kept: Vec<Stored> = Vec::new();
+            let mut carry: Option<Memory> = None;
+            for mut s in std::mem::take(&mut self.stored) {
+                if s.step % self.spacing != 0 {
+                    carry = Some(merge(carry, s.memory));
+                    continue;
+                }
+                if let Some(c) = carry.take() {
+                    s.memory = merge(Some(c), s.memory);
+                }
+                kept.push(s);
+            }
+            self.stored = kept;
+            match carry {
+                Some(Memory::Whole(m)) => {
+                    self.dirty.extend(0..(m.len() as u64).div_ceil(PAGE) as u32)
+                }
+                Some(Memory::Pages(p)) => self.dirty.extend(p.into_keys()),
+                None => {}
+            }
+        }
+    }
+}
+
+/// An earlier checkpoint's memory under a later one's: the later one's pages win.
+fn merge(earlier: Option<Memory>, later: Memory) -> Memory {
+    match (earlier, later) {
+        (None, l) | (Some(_), l @ Memory::Whole(_)) => l,
+        (Some(Memory::Whole(mut m)), Memory::Pages(p)) => {
+            for (i, b) in p {
+                m[i as usize * PAGE as usize..][..PAGE as usize].copy_from_slice(&b);
+            }
+            Memory::Whole(m)
+        }
+        (Some(Memory::Pages(mut e)), Memory::Pages(p)) => {
+            e.extend(p);
+            Memory::Pages(e)
+        }
+    }
 }
 
 impl Live {
@@ -279,6 +359,13 @@ impl World {
             let mut runner = World::runner(bytes, &item.id)?;
             let names = Rc::new(names(bytes));
             let mut failed = false;
+            // The data assets, copied once before the start function: then they're memory.
+            if !item.assets.is_empty() {
+                let at = item.assets_at as usize;
+                let bytes = item.asset_bytes();
+                runner.memory_mut("memory").expect("a memory")[at..at + bytes.len()]
+                    .copy_from_slice(&bytes);
+            }
             let mut calls = Vec::new();
             if runner.exports(START) {
                 calls.push((START, vec![]));
@@ -313,6 +400,7 @@ impl World {
                 dirty: BTreeSet::new(),
                 stored: Vec::new(),
                 checked: None,
+                spacing: item.every,
             });
         }
         let published = lives.iter().map(|l| l.arrays.clone()).collect();
@@ -351,6 +439,25 @@ impl World {
             .collect()
     }
 
+    /// Whether every item's ring holds a checkpoint at step `k`.
+    pub fn has_checkpoint(&self, k: i64) -> bool {
+        self.lives
+            .iter()
+            .all(|l| l.stored.iter().any(|s| s.step == k))
+    }
+    /// The steps every item's ring holds a checkpoint at, in order.
+    pub fn checkpoint_steps(&self) -> Vec<i64> {
+        let Some(first) = self.lives.first() else {
+            return Vec::new();
+        };
+        first
+            .stored
+            .iter()
+            .map(|s| s.step)
+            .filter(|k| self.has_checkpoint(*k))
+            .collect()
+    }
+
     /// The step every item is about to run, when they agree.
     pub fn at(&self) -> Option<i64> {
         let k = self.lives.first()?.next;
@@ -358,16 +465,17 @@ impl World {
     }
 
     fn checkpoint(&mut self, i: usize, rec: &mut Record) {
-        let (every, id) = (self.piece.items[i].every, self.piece.items[i].id.clone());
-        let store = self.store;
+        let (ring, id) = (self.piece.items[i].ring, self.piece.items[i].id.clone());
+        let (store, planted) = (self.store, self.planted);
         let l = &mut self.lives[i];
-        if l.failed || l.next % every != 0 || l.checked == Some(l.next) {
+        if l.failed || l.next % l.spacing != 0 || l.checked == Some(l.next) {
             return;
         }
         l.checked = Some(l.next);
         let deep = l.deep_hash();
         rec.checkpoint(&id, l.next, deep);
-        if !store {
+        // A seek back replays steps whose checkpoints the ring already holds.
+        if !store || l.stored.iter().any(|s| s.step == l.next) {
             return;
         }
         let memory = if l.stored.len().is_multiple_of(8) {
@@ -382,9 +490,14 @@ impl World {
                     .collect(),
             )
         };
+        let globals = if planted.checkpoint_drops_globals {
+            Vec::new()
+        } else {
+            l.globals()
+        };
         let stored = Stored {
             step: l.next,
-            globals: l.globals(),
+            globals,
             arrays: l.arrays.clone(),
             cursor: l.cursor.clone(),
             pending: l.pending.clone(),
@@ -392,6 +505,7 @@ impl World {
         };
         l.stored.push(stored);
         l.dirty.clear();
+        l.thin(ring);
     }
 
     /// Runs every item's steps below `until`, in time order; at one time, items in piece order,
@@ -552,6 +666,49 @@ impl World {
         report(rec, item, k, l, Some(h), fuel, pages);
     }
 
+    /// The nearest checkpoint every item's ring holds at or before step `k`.
+    pub fn nearest(&self, k: i64) -> Option<i64> {
+        self.checkpoint_steps()
+            .into_iter()
+            .filter(|c| *c <= k)
+            .max()
+    }
+
+    /// Seeks this world to the checkpoint at step `c`, in place: each item's state is restored
+    /// into a fresh instance, as `restore` does, and its ring is kept.
+    pub fn seek(&mut self, c: i64) -> Result<(), Failed> {
+        let mut back = self.restore(c, None)?;
+        for (l, mut r) in self.lives.iter_mut().zip(back.lives.drain(..)) {
+            r.stored = std::mem::take(&mut l.stored);
+            r.checked = Some(c);
+            r.spacing = l.spacing;
+            *l = r;
+        }
+        self.published = back.published;
+        Ok(())
+    }
+
+    /// Forks the input track at step `k`: entries stamped after step k's time are dropped,
+    /// `entries` are added, and checkpoints past step k, which didn't see them, leave the ring.
+    pub fn fork_track(&mut self, k: i64, entries: &[Entry]) {
+        let len = self.piece.items.first().map_or(0, |i| i.step);
+        let mut kept: Vec<Entry> = self
+            .track
+            .values()
+            .flatten()
+            .filter(|e| e.t <= (k - 1) * len)
+            .cloned()
+            .collect();
+        kept.extend(entries.iter().cloned());
+        self.track = track_of(&kept);
+        for l in &mut self.lives {
+            l.stored.retain(|s| s.step <= k);
+            if l.checked.is_some_and(|c| c > k) {
+                l.checked = None;
+            }
+        }
+    }
+
     /// A fresh instance per item, loaded from the checkpoint at step `c`: the last whole memory at
     /// or before it, then the pages each later one kept, and the globals and arrays; the start
     /// function and `init` never run again.
@@ -580,12 +737,28 @@ impl World {
                     }
                 }
             }
+            if self.planted.restore_keeps_regions_only {
+                let mut kept = vec![0u8; memory.len()];
+                for (at, n) in [
+                    (item.reads_at, item.layout.size("reads")),
+                    (item.writes_at, item.layout.size("writes")),
+                ] {
+                    let r = at as usize..(at + n) as usize;
+                    kept[r.clone()].copy_from_slice(&memory[r]);
+                }
+                memory = kept;
+            }
+            if self.planted.restore_copies_assets && !item.assets.is_empty() {
+                let b = item.asset_bytes();
+                memory[item.assets_at as usize..][..b.len()].copy_from_slice(&b);
+            }
             let s = &stored[j];
             let bytes = counted
                 .filter(|(x, _)| *x == i)
                 .map_or(item.bytes.as_slice(), |(_, b)| b);
             let mut live = World::load(bytes, item, &memory, &s.globals)?;
             live.next = c;
+            live.spacing = self.lives[i].spacing;
             live.arrays = s.arrays.clone();
             live.cursor = s.cursor.clone();
             live.pending = s.pending.clone();
@@ -627,6 +800,7 @@ impl World {
             dirty: (0..pages).collect(),
             stored: Vec::new(),
             checked: None,
+            spacing: item.every,
         })
     }
 
@@ -645,6 +819,7 @@ impl World {
             let mut live = World::load(&item.bytes, item, &memory, &globals)?;
             live.failed = l.failed;
             live.next = l.next;
+            live.spacing = l.spacing;
             live.arrays = l.arrays.clone();
             live.cursor = l.cursor.clone();
             live.pending = l.pending.clone();

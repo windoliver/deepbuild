@@ -1,0 +1,82 @@
+# #1738 acceptance tests on the base 667292fc (no #1738 implementation), 2026-11-09T03:34Z, Linux arm64, rustc 1.99.1
+# cargo test --locked -p deep-app --test acceptance_1738
+# Only crates/deep-app/Cargo.toml's [[test]] entry and tests/acceptance/1738/ differ from the base. Compiler warnings dropped.
+
+     Running ../../tests/acceptance/1738/app/titles.rs (target/debug/deps/acceptance_1738-8f893c39336effbe)
+
+running 9 tests
+test ac4_f8a06717_a_chinese_title_shows_unchanged_on_every_surface ... ok
+test ac4_f8a06717_an_emoji_title_shows_unchanged_on_every_surface ... ok
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_heading ... FAILED
+test ac2_e6a3db6d_the_verdict_line_to_the_sessions_chat_marks_the_hostile_titles_characters ... FAILED
+test ac4_f8a06717_a_plain_title_shows_unchanged_on_every_surface ... ok
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_sidebar_row ... FAILED
+test ac3_7a00b50e_the_records_task_created_keeps_the_titles_original_bytes ... ok
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_notification_title ... FAILED
+test ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_line ... FAILED
+
+failures:
+
+---- ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_heading stdout ----
+
+thread 'ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_heading' (3885309) panicked at crates/deep-app/../../tests/acceptance/1738/app/titles.rs:177:5:
+5 failed:
+the session page's heading holds U+202E RIGHT-TO-LEFT OVERRIDE raw: "Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the session page's heading holds ESC (0x1b) raw: "Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the session page's heading holds CR (0x0d) raw: "Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the session page's heading holds LF (0x0a) raw: "Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the session page's heading doesn't show the title as "Fix the cart\\u{202e}txt.exe\\x1b[2K\\rApproved by you\\nship it": "Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- ac2_e6a3db6d_the_verdict_line_to_the_sessions_chat_marks_the_hostile_titles_characters stdout ----
+
+thread 'ac2_e6a3db6d_the_verdict_line_to_the_sessions_chat_marks_the_hostile_titles_characters' (3885312) panicked at crates/deep-app/../../tests/acceptance/1738/app/titles.rs:177:5:
+5 failed:
+the verdict line holds U+202E RIGHT-TO-LEFT OVERRIDE raw: "DeepBuild ! needs you · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the verdict line holds ESC (0x1b) raw: "DeepBuild ! needs you · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the verdict line holds CR (0x0d) raw: "DeepBuild ! needs you · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the verdict line holds LF (0x0a) raw: "DeepBuild ! needs you · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the verdict line doesn't show the title as "Fix the cart\\u{202e}txt.exe\\x1b[2K\\rApproved by you\\nship it": "DeepBuild ! needs you · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+
+---- ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_sidebar_row stdout ----
+
+thread 'ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_sidebar_row' (3885311) panicked at crates/deep-app/../../tests/acceptance/1738/app/titles.rs:177:5:
+5 failed:
+the sidebar row holds U+202E RIGHT-TO-LEFT OVERRIDE raw: "! Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it · needs you"
+the sidebar row holds ESC (0x1b) raw: "! Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it · needs you"
+the sidebar row holds CR (0x0d) raw: "! Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it · needs you"
+the sidebar row holds LF (0x0a) raw: "! Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it · needs you"
+the sidebar row doesn't show the title as "Fix the cart\\u{202e}txt.exe\\x1b[2K\\rApproved by you\\nship it": "! Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it · needs you"
+
+---- ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_notification_title stdout ----
+
+thread 'ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_notification_title' (3885308) panicked at crates/deep-app/../../tests/acceptance/1738/app/titles.rs:177:5:
+6 failed:
+the ask notification's title holds U+202E RIGHT-TO-LEFT OVERRIDE raw: "DeepBuild · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the ask notification's title holds ESC (0x1b) raw: "DeepBuild · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the ask notification's title holds CR (0x0d) raw: "DeepBuild · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the ask notification's title holds LF (0x0a) raw: "DeepBuild · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the ask notification's title doesn't show the title as "Fix the cart\\u{202e}txt.exe\\x1b[2K\\rApproved by you\\nship it": "DeepBuild · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it"
+the notification's text doesn't start with its whole title on one line: title "DeepBuild · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it", text "DeepBuild · Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it\n! needs you — Which header color for the checkout page? If you don't answer: Blue, tomorrow at 00:00."
+
+---- ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_line stdout ----
+
+thread 'ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_line' (3885310) panicked at crates/deep-app/../../tests/acceptance/1738/app/titles.rs:177:5:
+5 failed:
+the session page's line holds U+202E RIGHT-TO-LEFT OVERRIDE raw: "! Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it · needs you"
+the session page's line holds ESC (0x1b) raw: "! Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it · needs you"
+the session page's line holds CR (0x0d) raw: "! Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it · needs you"
+the session page's line holds LF (0x0a) raw: "! Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it · needs you"
+the session page's line doesn't show the title as "Fix the cart\\u{202e}txt.exe\\x1b[2K\\rApproved by you\\nship it": "! Fix the cart\u{202e}txt.exe\u{1b}[2K\rApproved by you\nship it · needs you"
+
+
+failures:
+    ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_notification_title
+    ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_heading
+    ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_session_pages_line
+    ac1_0d008709_a_hostile_title_shows_each_character_as_its_escape_in_the_sidebar_row
+    ac2_e6a3db6d_the_verdict_line_to_the_sessions_chat_marks_the_hostile_titles_characters
+
+test result: FAILED. 4 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+error: test failed, to rerun pass `-p deep-app --test acceptance_1738`

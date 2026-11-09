@@ -12,9 +12,9 @@ export interface Action { line: number | null; goto?: string; click?: DriverLoca
 export interface Expect { line: number | null; locator?: DriverLocator; text?: string; visible?: boolean; until?: { evaluate: string; equals: string } }
 interface Request { line: number | null; method: string; path: string; body?: unknown; status: number }
 /** `timeoutMs` bounds each expect and each wait on an element, kept under the step's deadline; a navigation is bounded by the deadline alone. */
-export interface Step { id: string; line: number | null; deadlineMs: number; timeoutMs: number; actions: Action[]; expects: Expect[]; motion: MotionReq[]; request?: Request; targets: Locator[] }
-export interface EndCheck { id: string; line: number | null; oracle: 'code' | 'model' | 'person'; locator?: Locator; driverLocator?: DriverLocator; text?: string; visible?: boolean; readback?: { method: string; path: string }; equals?: unknown; count?: Record<string, number>; requirement?: string }
-export interface ExpectedError { step: string; message?: string; url?: string; status?: number }
+interface Step { id: string; line: number | null; deadlineMs: number; timeoutMs: number; actions: Action[]; expects: Expect[]; motion: MotionReq[]; request?: Request; targets: Locator[] }
+interface EndCheck { id: string; line: number | null; oracle: 'code' | 'model' | 'person'; locator?: Locator; driverLocator?: DriverLocator; text?: string; visible?: boolean; readback?: { method: string; path: string }; equals?: unknown; count?: Record<string, number>; requirement?: string }
+interface ExpectedError { step: string; message?: string; url?: string; status?: number }
 export interface Journey { id: string; feature: string | null; depth: 'journey' | 'live'; api: boolean; masks: Locator[]; steps: Step[]; endState: EndCheck[]; expectedErrors: ExpectedError[]; baseline: string | null }
 type Review = { ok: true } | { ok: false; reasons: string[] };
 
