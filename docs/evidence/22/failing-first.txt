@@ -1,35 +1,35 @@
 
  RUN  v5.0.5 <worktree>
 
- ❯ packages/hub/test/asleep.test.ts (2 tests | 1 failed | 1 skipped) 91936ms
-   × a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due 91577ms
+ ❯ packages/hub/test/asleep.test.ts (2 tests | 1 failed | 1 skipped) 64279ms
+   × a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due, after you change the batches 64253ms
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
 
- FAIL  packages/hub/test/asleep.test.ts > a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due
-AssertionError: the 2026-11-09T09:57:00.000Z batch shows it within 5 s of its time: expected [] to deeply equal [ 'batch:2026-11-09T09:57:00.000Z' ]
+ FAIL  packages/hub/test/asleep.test.ts > a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due, after you change the batches
+AssertionError: the 2026-11-09T18:23:00.000Z batch shows it within 5 s of its time: expected [] to deeply equal [ 'batch:2026-11-09T18:23:00.000Z' ]
 
 - Expected
 + Received
 
 - [
--   "batch:2026-11-09T09:57:00.000Z",
+-   "batch:2026-11-09T18:23:00.000Z",
 - ]
 + []
 
- ❯ packages/hub/test/asleep.test.ts:112:132
-    110|   // The beat is 1 s; 5 s leaves room for a loaded machine, as the hub…
-    111|   while (Date.now() < batch + 5000) await pause(250);
-    112|   expect((await batched()).map((e) => e.data.batch), `the ${new Date(b…
+ ❯ packages/hub/test/asleep.test.ts:113:132
+    111|   // The beat is 1 s; 5 s leaves room for a loaded machine, as the hub…
+    112|   while (Date.now() < batch + 5000) await pause(250);
+    113|   expect((await batched()).map((e) => e.data.batch), `the ${new Date(b…
        |                                                                                                                                    ^
-    113| }, 120_000);
-    114|
+    114| }, 120_000);
+    115|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
 
 
  Test Files  1 failed (1)
       Tests  1 failed | 1 skipped (2)
-   Start at  01:55:31
-   Duration  94.54s (tests 98%, transform 2%)
+   Start at  10:22:00
+   Duration  64.49s (tests 100%)
 

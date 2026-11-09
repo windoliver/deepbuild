@@ -968,10 +968,11 @@ export class Core {
     let beat = { wall: Date.now(), at: this.now() };
     const landed = async (): Promise<number> => Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind IN ('agent.stop', 'verdict.made')`)) as { pos: number }[])[0]?.pos ?? 0);
     let ticked = await landed();
-    let batchAt = asks.nextBatch();
+    // Asked every beat, so a change to your batches counts from the next beat.
+    let batchAt = await asks.nextBatch();
     const due = async (): Promise<boolean> => {
       const batch = batchAt !== null && this.now() >= batchAt;
-      if (batch) batchAt = asks.nextBatch();
+      batchAt = await asks.nextBatch();
       const pos = await landed();
       if (pos > ticked) { ticked = pos; return true; }
       if (batch) return true;
