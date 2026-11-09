@@ -161,7 +161,7 @@ impl Record {
                 .collect(),
         )
     }
-    fn checkpoint(&mut self, id: &str, step: i64, deep: u64) {
+    pub(crate) fn checkpoint(&mut self, id: &str, step: i64, deep: u64) {
         let list = self
             .checkpoints
             .entry(id.to_string())
@@ -188,18 +188,20 @@ struct Stored {
 }
 
 /// One item's state as it steps.
-struct Live {
-    runner: Runner,
-    names: Rc<Names>,
+pub(crate) struct Live {
+    pub(crate) runner: Runner,
+    pub(crate) names: Rc<Names>,
     failed: bool,
-    next: i64,
-    arrays: Vec<u8>,
-    cursor: BTreeMap<String, usize>,
-    pending: BTreeMap<String, VecDeque<Entry>>,
+    pub(crate) next: i64,
+    pub(crate) arrays: Vec<u8>,
+    pub(crate) cursor: BTreeMap<String, usize>,
+    pub(crate) pending: BTreeMap<String, VecDeque<Entry>>,
+    /// The slot its last step asked to save, and whether as ended (Logic: saves).
+    pub(crate) asked: Option<(i32, bool)>,
     dirty: BTreeSet<u32>,
     stored: Vec<Stored>,
     /// The last step a checkpoint was taken at.
-    checked: Option<i64>,
+    pub(crate) checked: Option<i64>,
     /// Steps between checkpoints: `checkpoint.every`, doubled each time the ring passes its budget.
     spacing: i64,
 }
@@ -264,7 +266,7 @@ fn merge(earlier: Option<Memory>, later: Memory) -> Memory {
 }
 
 impl Live {
-    fn globals(&mut self) -> Vec<Val> {
+    pub(crate) fn globals(&mut self) -> Vec<Val> {
         let names = self.names.clone();
         names
             .globals
@@ -297,7 +299,7 @@ impl Live {
         }
         out
     }
-    fn memory(&mut self) -> &[u8] {
+    pub(crate) fn memory(&mut self) -> &[u8] {
         self.runner.memory("memory").unwrap_or(&[])
     }
     /// The step hash: the program's globals and the arrays it wrote.
@@ -307,7 +309,7 @@ impl Live {
         h64(&b)
     }
     /// The full state's hash: the step reached on the input track, memory, globals and arrays.
-    fn deep_hash(&mut self) -> u64 {
+    pub(crate) fn deep_hash(&mut self) -> u64 {
         let mut b = self.next.to_le_bytes().to_vec();
         let pending: usize = self.pending.values().map(VecDeque::len).sum();
         b.extend((pending as u32).to_le_bytes());
@@ -325,12 +327,15 @@ fn hex(bytes: &[u8]) -> String {
 /// The logic items of a piece, stepping on one input track.
 pub struct World {
     pub piece: Rc<Piece>,
-    track: Track,
-    lives: Vec<Live>,
+    pub(crate) track: Track,
+    pub(crate) lives: Vec<Live>,
     /// Each item's arrays as its last step left them.
-    published: Vec<Vec<u8>>,
+    pub(crate) published: Vec<Vec<u8>>,
     store: bool,
-    planted: Planted,
+    pub(crate) planted: Planted,
+    /// The folder the piece's saves are kept in, and what each save written leaves (Logic: saves).
+    pub saves_dir: Option<std::path::PathBuf>,
+    pub saved: Vec<Value>,
 }
 
 pub type Failed = Value;
@@ -397,6 +402,7 @@ impl World {
                 arrays: vec![0; size],
                 cursor: BTreeMap::new(),
                 pending: BTreeMap::new(),
+                asked: None,
                 dirty: BTreeSet::new(),
                 stored: Vec::new(),
                 checked: None,
@@ -411,6 +417,8 @@ impl World {
             published,
             store,
             planted,
+            saves_dir: None,
+            saved: Vec::new(),
         })
     }
 
@@ -523,6 +531,9 @@ impl World {
                 }
             }
             if let Some(k) = self.at() {
+                if self.saves_dir.is_some() {
+                    crate::saves::due(self, k);
+                }
                 before(self, k);
             }
             let Some(t) = t else { break };
@@ -662,6 +673,18 @@ impl World {
         let n = l.arrays.len();
         let fresh = l.runner.memory("memory").expect("a memory")[w..w + n].to_vec();
         l.arrays = fresh;
+        // A slot number in `ends`, or else in `request`, saves that slot once the step ends.
+        if let Some(s) = &item.saves {
+            let at = |o: u32| {
+                i32::from_le_bytes(l.arrays[o as usize..][..4].try_into().expect("an i32"))
+            };
+            let slot = |o: u32| Some(at(o)).filter(|n| (1..=s.slots).contains(n));
+            l.asked = s
+                .ends
+                .and_then(slot)
+                .map(|n| (n, true))
+                .or(slot(s.request).map(|n| (n, false)));
+        }
         let h = l.step_hash();
         report(rec, item, k, l, Some(h), fuel, pages);
     }
@@ -764,18 +787,35 @@ impl World {
             live.pending = s.pending.clone();
             lives.push(live);
         }
+        Ok(World::of(
+            self.piece.clone(),
+            self.track.clone(),
+            lives,
+            self.planted,
+        ))
+    }
+
+    /// A world of the piece's items in these states, as a seek or an opened save starts.
+    pub(crate) fn of(piece: Rc<Piece>, track: Track, lives: Vec<Live>, planted: Planted) -> World {
         let published = lives.iter().map(|l| l.arrays.clone()).collect();
-        Ok(World {
-            piece: self.piece.clone(),
-            track: self.track.clone(),
+        World {
+            piece,
+            track,
             lives,
             published,
             store: false,
-            planted: self.planted,
-        })
+            planted,
+            saves_dir: None,
+            saved: Vec::new(),
+        }
     }
 
-    fn load(bytes: &[u8], item: &Item, memory: &[u8], globals: &[Val]) -> Result<Live, Failed> {
+    pub(crate) fn load(
+        bytes: &[u8],
+        item: &Item,
+        memory: &[u8],
+        globals: &[Val],
+    ) -> Result<Live, Failed> {
         let mut runner = World::runner(bytes, &item.id)?;
         let names = Rc::new(names(bytes));
         runner
@@ -796,6 +836,7 @@ impl World {
             arrays: Vec::new(),
             cursor: BTreeMap::new(),
             pending: BTreeMap::new(),
+            asked: None,
             // The restore wrote every page.
             dirty: (0..pages).collect(),
             stored: Vec::new(),
@@ -841,6 +882,8 @@ impl World {
             published: self.published.clone(),
             store: false,
             planted: self.planted,
+            saves_dir: None,
+            saved: Vec::new(),
         })
     }
 

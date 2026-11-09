@@ -4,14 +4,16 @@
 //! freeze only its item, with checkpoints, restores, continuation probes, traps by source line and
 //! logic.budget. #532 adds the checkpoint ring's byte budget, bake keys, seeks, goldens,
 //! logic.determinism, logic.budget's fixed cost, data assets and a live view whose seeks run
-//! across frames. `deep-logic` serves it as JSON lines (the #531 and #532 acceptance READMEs:
-//! deep-logic), and `web/logic.mjs` is the web player's runtime for the same rewritten bytes.
+//! across frames; #534 adds saves, written whole, opened by the viewer, refused or migrated.
+//! `deep-logic` serves it as JSON lines (the #531, #532 and #534 acceptance READMEs: deep-logic),
+//! and `web/logic.mjs` is the web player's runtime for the same rewritten bytes.
 
 pub mod budget;
 pub mod checks;
 pub mod lines;
 pub mod live;
 pub mod piece;
+pub mod saves;
 pub mod world;
 
 use std::collections::BTreeMap;
@@ -42,6 +44,9 @@ pub struct Planted {
     pub restore_keeps_regions_only: bool,
     pub restore_copies_assets: bool,
     pub simulate_runs_all_steps: bool,
+    pub save_drops_globals: bool,
+    pub save_drops_input_position: bool,
+    pub open_reapplies_segments: bool,
 }
 
 impl Planted {
@@ -55,6 +60,9 @@ impl Planted {
             "restore_keeps_regions_only" => p.restore_keeps_regions_only = true,
             "restore_copies_assets" => p.restore_copies_assets = true,
             "simulate_runs_all_steps" => p.simulate_runs_all_steps = true,
+            "save_drops_globals" => p.save_drops_globals = true,
+            "save_drops_input_position" => p.save_drops_input_position = true,
+            "open_reapplies_segments" => p.open_reapplies_segments = true,
             "tracker_skips_memory_copy" => p.rewrite.skip_copy_pages = true,
             "runs_unchecked" => p.runs_unchecked = true,
             "digest_compares_total_sizes" => p.digest_total_sizes = true,
@@ -418,6 +426,7 @@ impl Logic {
             Some("frame") => self.frame(line).unwrap_or_else(|e| e),
             Some("open") => self.open(line).unwrap_or_else(|e| e),
             Some("step") => self.step(line).unwrap_or_else(|e| e),
+            Some("open_save") => self.open_save(line).unwrap_or_else(|e| e),
             _ => json!({"ok": false, "code": "bad_input"}),
         }
     }
@@ -453,6 +462,7 @@ impl Logic {
             &mut rec,
             None,
         )?;
+        world.saves_dir = saves_dir(line);
         let mut probed: Vec<(usize, Result<Value, Value>)> = Vec::new();
         world.run(steps, &mut rec, &mut |w, k| {
             for (i, p) in probes.iter().enumerate().filter(|(_, p)| p.at == k) {
@@ -498,6 +508,7 @@ impl Logic {
                 .ok_or_else(|| bad("peek"))?;
             peeks.push(json!({"item": item, "at": at, "len": len, "hex": hex}));
         }
+        let saves = saves::written(&mut world)?;
         let budgets = self.budgets(&piece, &entries, &rec)?;
         let keys: Map<String, Value> = (0..piece.items.len())
             .map(|i| {
@@ -509,7 +520,7 @@ impl Logic {
             .collect();
         Ok(json!({
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "checkpoints": rec.checkpoints,
-            "traps": rec.traps, "budgets": budgets, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
+            "traps": rec.traps, "budgets": budgets, "saves": saves, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
         }))
     }
@@ -838,7 +849,7 @@ impl Logic {
         let piece = Rc::new(self.check(line)?);
         let entries = track(&piece, line, 0).ok_or_else(|| bad("track"))?;
         let mut rec = Record::default();
-        let world = World::new(
+        let mut world = World::new(
             piece.clone(),
             track_of(&entries),
             false,
@@ -846,6 +857,7 @@ impl Logic {
             &mut rec,
             None,
         )?;
+        world.saves_dir = saves_dir(line);
         let session = format!("s{}", self.sessions.len() + 1);
         self.sessions.insert(session.clone(), world);
         Ok(json!({"ok": true, "session": session, "items": items(&piece)}))
@@ -863,6 +875,25 @@ impl Logic {
         let w = self.sessions.get_mut(s).ok_or_else(|| bad("session"))?;
         let mut rec = Record::default();
         w.run(to + 1, &mut rec, &mut |_, _| {});
-        Ok(json!({"ok": true, "step": to, "failed": w.failed()}))
+        let saves = saves::written(w)?;
+        Ok(json!({"ok": true, "step": to, "failed": w.failed(), "saves": saves}))
     }
+
+    /// The viewer opens a slot's save from the app (Logic: saves), never the piece's logic.
+    fn open_save(&mut self, line: &Value) -> Result<Value, Value> {
+        let (piece, entries, steps) = self.baked(line)?;
+        let dir = saves_dir(line).ok_or_else(|| bad("saves_dir"))?;
+        let slot = line
+            .get("slot")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| bad("slot"))?;
+        saves::open(piece, &dir, slot, &entries, steps, self.planted)
+    }
+}
+
+/// The folder a call names for the piece's saves.
+fn saves_dir(line: &Value) -> Option<std::path::PathBuf> {
+    line.get("saves_dir")
+        .and_then(Value::as_str)
+        .map(Into::into)
 }
