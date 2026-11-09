@@ -1,0 +1,65 @@
+#1455 AC4 --json redraft (doctor-json.test.ts) at base dd83ac2fc7c6563b2d395d154bc877032ba16ec1 (origin/main), no #1455 code.
+
+Machine: macOS, Node v24.22.2, cargo 1.99.1, 2026-11-08 20:32 to 20:45 local, load average 17 to 52 (other sessions),
+         disk nearly full (between 0.3 and 14 GB free while this ran, written to by other sessions).
+Setup:   npm ci; npm run build --workspaces; cargo build --locked -q -p deep-hook (the test's beforeAll builds it too).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run redraft-ac4 --root tests/acceptance/1455 --no-file-parallelism \
+           --reporter=verbose --disable-console-intercept
+         (Put the filter before --disable-console-intercept, or leave that flag out: placed just before the filter it
+         takes the filter as its value and vitest runs the whole suite. One run here did that by mistake and was stopped
+         after pictures.test.ts and shown.test.ts had started; see README, What wasn't run.)
+tsc:     node node_modules/typescript/bin/tsc -p tests/acceptance/1455/tsconfig.json   -> exit 0, no output.
+Paths:   <checkout> is this worktree (under ~), $TMPDIR the per-user temp folder.
+
+## 1. The dispute's premise, checked at the base (scratch test, not kept)
+
+One #19 healthy world. Two more extracted copies of the base, each built in its own folder ($TMPDIR/da1455r4-premise-A
+and -B, node_modules linked to this checkout's, no target/). Six runs of `deep doctor --json`, in this order:
+head1 (this checkout), A1, B1, head2, A2, B2. 30 items each.
+
+A1 against B1 (the same program in two folders), and A2 against B2: exactly two lines differ, both naming the CLI's own root:
+  27 < {"item":"canvas.gpu",...,"evidence":"no deep-gpu is built under $TMPDIR/da1455r4-premise-A/target",...}
+     > {"item":"canvas.gpu",...,"evidence":"no deep-gpu is built under $TMPDIR/da1455r4-premise-B/target",...}
+  28 < {"item":"canvas.headless",...,"evidence":"no deep-canvas-render is built under $TMPDIR/da1455r4-premise-A/target, so nothing can render headless",...}
+     > {"item":"canvas.headless",...,"evidence":"... $TMPDIR/da1455r4-premise-B/target, ..."}
+  ($TMPDIR printed resolved, as /private/var/folders/...)
+With each root replaced by one token, A1 = B1 and A2 = B2 byte for byte. Premise confirmed.
+
+Also found, not in the dispute: head1 against head2 (one program, one folder) differ in item order. The codex.binary,
+codex.sign_in and codex.billing lines came after claude.prompt in head1 and after codex.hooks in head2. doctor.ts runs
+claudeItems and codexItems under one Promise.all, and each pushes its items when its check finishes. So at the base one
+program prints more than one byte string. A1, B1, A2, B2 and head2 had one order and head1 the other.
+head1 against A1 therefore differed in that order and in the two root lines.
+
+## 2. The redraft at the base: the same program, this checkout against a tree in $TMPDIR
+
+Run 1 (20:41): PASS. "equal on try 2: 30 items, sha256 3cc0d5a8...6414 with roots as <checkout root>". 18.5 s.
+Run 2 (20:44): PASS. "equal on try 10: 30 items, sha256 5af1e961...ea86". 13.0 s.
+Run 3 (20:44): INCONCLUSIVE (fails, never passes). "deep doctor --json differs between two runs of this same program on
+       all 10 tries (line 4: hub.disk "1.1 GB free ..." healthy/ok against "1.0 GB free ..." disk_low/warn)". The disk
+       was filling while it ran.
+Run 4 (20:44): PASS. "equal on try 3: 30 items, sha256 69ebfc07...8a20". 2.7 s.
+The digest changes from run to run because each run's home is a new temp folder and the free disk moves.
+
+## 3. Wrong programs: the same test, with a planted twin of the merge base as the other side
+
+Each twin is a copy of the test's merge-base tree in a folder of its own ($TMPDIR/da1455-ac4-twin-<name>, its workspace
+links pointed at its own packages), with one edit to its built JS. The test ran unchanged except for that tree's path
+(a scratch copy, not kept). The judge is symmetric, so a twin standing for the merge base fails just as a wrong
+checkout would.
+
+same: no edit, a third folder.  PASS: "equal on try 3: 30 items, sha256 fba44cb3...6f83".
+field: doctor.js `items.push({ item, agent, ... })` -> `items.push({ agent, item, ... })` (two fields swapped).
+       FAIL: "deep doctor --json differs from the merge base dd83ac2f's, each CLI's checkout root read as
+       <checkout root>, on all 10 tries (2 with this checkout's two runs equal): line 1:
+       "{\"item\":\"hub.socket\",\"agent\":\"deepbuild\",...}" against "{\"agent\":\"deepbuild\",\"item\":\"hub.socket\",...}""
+item:  doctor.js adds one item {"item":"hub.planted",...,"level":"ok",...} after the relation items.
+       FAIL: "... on all 10 tries (2 with this checkout's two runs equal): line 14:
+       "{\"item\":\"claude.mcp\",...(... <checkout root>/packages/cli/dist/main.js mcp)...}" against
+       "{\"item\":\"hub.planted\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"a planted item\",...}""
+word:  canvas-doctor.js "no deep-gpu is built under" -> "no deep-gpu is compiled under", one word beside the root.
+       FAIL: "... on all 10 tries (6 with this checkout's two runs equal): line 27:
+       "{...\"evidence\":\"no deep-gpu is built under <checkout root>/target\"...}" against
+       "{...\"evidence\":\"no deep-gpu is compiled under <checkout root>/target\"...}""
+
+The twins were deleted after the runs.
