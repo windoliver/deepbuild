@@ -29,6 +29,7 @@ use std::{cell::Cell, ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice
 pub(crate) type PointF = gpui::Point<f32>;
 
 mod bgra_surface; // DeepBuild patch (windoliver/deepbuild#377)
+pub mod chrome_layers; // DeepBuild patch (windoliver/deepbuild#1434)
 pub mod gpu_ledger; // DeepBuild patch (windoliver/deepbuild#391)
 pub mod gpu_surfaces; // DeepBuild patch (windoliver/deepbuild#377)
 pub mod layer_colorspace; // DeepBuild patch (windoliver/deepbuild#140)
@@ -818,6 +819,7 @@ impl MetalRenderer {
                     command_encoder,
                 ),
                 PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
+                PrimitiveBatch::Chrome(i) => command_encoder = self.draw_chrome(&scene.chrome[i], writer, texture, viewport_size, command_buffer, command_encoder)?, // DeepBuild patch (windoliver/deepbuild#1434)
             }
         }
         // DeepBuild patch (windoliver/deepbuild#377): the planted twin's late draw.

@@ -1142,6 +1142,78 @@ pub fn blur(axis: &str) -> Value {
     )
 }
 
+/// The tap counts frost@1's parts come in: a part sums one of these along its axis, the longest
+/// 31 texel loads and the accumulator's one, the 32 fetches a pass may take. A kernel takes the
+/// fewest taps that cover it.
+pub const FROST_TAPS: [u32; 4] = [1, 7, 15, 31];
+
+/// One part of frost@1 along `axis` (#1434): a Gaussian's taps `first` to `first + taps - 1` of the
+/// texture `src`, each an exact texel load clamped to its bounds, weighted exp(−k²/2σ²) where
+/// |k| ≤ `reach` (and 0 beyond it), over `total`, the whole kernel's weight; added to `keep` × the
+/// part before's `acc`; then, with `tinted` 1, the premultiplied `tint` over it. A Gaussian of
+/// reach ⌈3σ⌉ takes one part an axis of the fewest taps that cover it, or ⌈(2 reach + 1) ÷ 31⌉
+/// parts of 31, horizontal then vertical, which the app lays out from σ (deep-effects-render's
+/// chrome operators).
+pub fn frost(axis: &str, taps: u32) -> Value {
+    let mut g = G::new();
+    let pix = g.s("pixel@1", json!({}));
+    let at = g.convert(&pix, "vec2<i32>");
+    let along = g.ty(if axis == "x" { json!([1, 0]) } else { json!([0, 1]) }, "vec2<i32>");
+    let mut b = G::named("b");
+    let i = b.convert("i", "f32");
+    let k = b.add(&i, "first");
+    let ki = b.convert(&k, "i32");
+    let off = b.mul(&along, &ki);
+    let tap_at = b.add(&at, &off);
+    let tap = b.s("load@1", json!({"tex": "src", "ixy": tap_at}));
+    let kk = b.mul(&k, &k);
+    let e = b.mul(&kk, "falloff");
+    let w = b.s("exp@1", json!({"x": e}));
+    let ak = b.s("abs@1", json!({"x": k}));
+    let inside = b.s("le@1", json!({"a": ak, "b": "reach"}));
+    let zero = b.c(json!(0.0));
+    let w = b.select(&zero, &w, &inside);
+    let weighted = b.mul(&tap, &w);
+    b.named_step("sum", "add@1", json!({"a": "sum", "b": weighted}));
+    let taps = g.s(
+        "repeat@1",
+        json!({"count": taps, "index": "i", "accumulate": {
+            "sum": {"type": "vec4<f32>", "init": [0, 0, 0, 0]},
+        }, "body": b.done()}),
+    );
+    let part = g.div(&format!("{taps}.sum"), "total");
+    let acc = g.s("load@1", json!({"tex": "acc", "ixy": at}));
+    let kept = g.mul(&acc, "keep");
+    let v = g.add(&kept, &part);
+    let ta = g.split("tint", "a");
+    let ta = g.mul(&ta, "tinted");
+    let one = g.c(json!(1.0));
+    let under = g.sub(&one, &ta);
+    let v = g.mul(&v, &under);
+    let over = g.mul("tint", "tinted");
+    let out = g.add(&v, &over);
+    let f = |path: &str, default: f64, range: [f64; 2]| param(path, "f32", json!(default), range);
+    pass(
+        &format!("frost.{axis}@1"),
+        "One part of frost's Gaussian along an axis, and its tint on the last part.",
+        json!({
+            "src": texture("core", "color", "texture"),
+            "acc": texture("core", "color", "texture"),
+            "first": f("first", 0.0, [-1024.0, 1024.0]),
+            "reach": f("reach", 0.0, [0.0, 1024.0]),
+            "falloff": f("falloff", 0.0, [-1e9, 0.0]),
+            "total": f("total", 1.0, [1e-9, 1e9]),
+            "keep": f("keep", 0.0, [0.0, 1.0]),
+            "tinted": f("tinted", 0.0, [0.0, 1.0]),
+            "tint": param("tint", "vec4<f32>", json!([0, 0, 0, 0]), [0.0, 1.0]),
+        }),
+        g,
+        &out,
+        json!("full"),
+        8.0,
+    )
+}
+
 /// The pixels the exactness fixture hashes: a fixed pattern of 64 × 64 RGBA8 words.
 pub const HASH_FIXTURE: u32 = 64 * 64;
 

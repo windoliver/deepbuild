@@ -34,7 +34,7 @@ import { Confirmer } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
-import { sessionStates, statusRows, WAITING_QUIET_MS } from './status.js';
+import { sessionStates, statusRows, WAITING_QUIET_MS, type StatusRow } from './status.js';
 import { addGuards, blocksCall, provenGuards, writeStanding } from './guards.js';
 import { captureRejected, decisionKey, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -58,8 +58,9 @@ import { GateRunner, type ClaimCheck, type DefinitionState, type RunKey, type St
 import { Siblings } from './siblings.js';
 import type { KeyFacts } from './shared-runs.js';
 import { argsOf, groupUnder, parents, startOf } from './children.js';
-import { deepHook, forgeOf, repoOf, rootOf, type Root } from './paths.js';
-import { OWNER, People, scopeOf } from './people.js';
+import { deepHook, forgeOf, projectIdOf, repoOf, rootOf, type Root } from './paths.js';
+import { inviteText, OWNER, People, scopeOf } from './people.js';
+import { identityAt } from './identity.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
@@ -711,7 +712,7 @@ export class Core {
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
     this.devices = new Devices(this.root.devices);
-    this.confirmer = new Confirmer({ devices: this.devices, key: this.root.confirmKey, ...(options.confirm !== undefined ? { stub: options.confirm } : {}), ...(options.plant ? { plant: options.plant } : {}) });
+    this.confirmer = new Confirmer({ devices: this.devices, key: this.root.confirmKey, ...(options.confirm !== undefined ? { stub: options.confirm } : {}), ...(options.polkit !== undefined ? { polkit: options.polkit } : {}), ...(options.plant ? { plant: options.plant } : {}) });
     this.spool = new Spool({
       dir: this.root.spool, held: options.held, plant: options.plant, durable: this.durable, stopping: () => this.stopping,
       raw: (query, params) => this.record.raw(query, params), appendCore: (kind, data) => this.appendCore(kind, data),
@@ -1045,6 +1046,8 @@ export class Core {
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
       resources: [port, compose], leases,
+      kept: join(this.root.dir, 'kept'),
+      ...(this.options.plant === 'kept-in-service-cgroup' ? { plant: 'kept-in-service-cgroup' as const } : {}),
       ...(this.options.plant === 'env-holds-lease-for-helper' ? { plant: 'holds-lease-while-taken' as const } : {}),
       ...(this.options.plant === 'standin-value-in-env' || this.options.plant === 'standin-every-host' || this.options.plant === 'run-ca-in-login-keychain' || this.options.plant === 'sandbox-any-loopback' ? { plant: this.options.plant } : {}),
       ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}),
@@ -1417,6 +1420,11 @@ export class Core {
    * One hook's events, checked and handed to the record in the order hooks arrived; the next hook waits only
    * for that, not for the commit. Resolves once each append settled.
    */
+  /** A hook another machine spooled for this hub while its link was down (#1338): recorded once, as a spool's line is. */
+  async replayed(drafts: Draft[], meta: HookMeta): Promise<void> {
+    this.track(meta);
+    await (await this.queue(() => this.handleHook(drafts, meta, 'hook', true))).settled;
+  }
   hook(drafts: Draft[], meta: HookMeta, writer: string): Promise<void> {
     this.track(meta);
     // What deep-hook spooled ran before this hook, so a replay this hook starts, or one running, goes first.
@@ -4267,7 +4275,7 @@ export class Core {
     if (!lesson) throw new Refused(refusal('not_found', '/params/lesson', `No lesson ${String(params.lesson)}; deep memory lists the lessons left.`, params.lesson));
     // An agent may start this; the OS prompt is yours to refuse, so it says so, and shows the whole rule a guard would install.
     const agent = await this.agentAbove(context.peer);
-    const why = await this.confirmer.you(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, { handle: lesson.id, revision: lesson.claim });
+    const why = await this.confirmer.you(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, { handle: lesson.id, revision: lesson.claim, process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing changed: the OS didn't confirm you (${why}).`, lesson.id, true));
     if (verb === 'remove' && lesson.claim.startsWith('wiki:rules#') && lesson.why) return this.removeRule(lesson);
     if (verb === 'remove') return { decision: await this.wikiBuild.forget(lesson.claim) };
@@ -5572,6 +5580,15 @@ export class Core {
       case 'inbox.read': return this.reflecting(() => this.inbox());
       case 'sessions.read': return this.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
       case 'person.add': return this.addPerson(params, context);
+      case 'person.invite': return this.invitePerson(params, context);
+      case 'person.revoke': return this.revokePerson(params, context);
+      // An invite spent over the network (#1338): only the server's network hello calls it, with the key the joining machine proved.
+      case 'person.join': {
+        if (context.role !== 'network' || typeof params.key !== 'string') throw new Refused(refusal('role', '/method', 'An invite is spent only over the network, by the machine that proves its key.', method));
+        const joined = this.people.redeem(params.invite, params.key);
+        if (!joined) throw new Refused(refusal('credential', '/invite', 'This invite is spent, lapsed or not one this hub issued.'));
+        return joined;
+      }
       case 'numbers.read': return this.reflecting(async () => {
         const read = await this.numbers.read() as unknown as { rows: unknown[] };
         return { ...read, rows: [...read.rows, await this.handbacks()] } as unknown as Obj;
@@ -5593,9 +5610,15 @@ export class Core {
       case 'agents.restart': await this.ready; return this.agents.restart(params);
       case 'agents.undo': return this.agents.undo(params);
       case 'mcp.exec': return this.agents.exec(params);
-      case 'device.pair': return this.pair(params);
+      // A hosted terminal the hub keeps past a restart: what the app's tab reads and types into (#70).
+      case 'terminal.open': return this.terminal().open(this.connection('app'), params as unknown as Parameters<ExtensionHost['openTerminal']>[1]);
+      case 'terminal.tab': return this.terminal().tab(this.connection('app'), String(params.terminal)) as unknown as Obj;
+      case 'terminal.input': return this.terminal().rawInput(this.connection('app'), String(params.terminal), String(params.text)).then(() => ({ sent: true }));
+      case 'secret.enter': return this.enterSecret(params, context);
+      case 'secret.list': return { held: await this.extensions?.heldSecrets() ?? [] };
+      case 'device.pair': return this.pair(params, context);
       case 'device.unpair': return this.unpair(params, context);
-      case 'channel.link': return this.link(params);
+      case 'channel.link': return this.link(params, context);
       case 'confirm.enroll': return this.enrollAgain(params, context);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
@@ -5606,7 +5629,7 @@ export class Core {
       case 'status.read':
         this.replayLate();
         // The state pass under way lands first (#992): what deep status lists is in the record the app draws from.
-        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) })));
+        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.reflecting(async () => ({ rows: await this.statusSeen(context.role) })));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);
@@ -5753,6 +5776,14 @@ export class Core {
     const only = kinds ? ` AND kind IN (${kinds.map((k) => `'${k.replace(/'/g, "''")}'`).join(',')})` : '';
     return (await this.record.raw(`SELECT log_pos, ${EVENT_TEXT} AS json FROM events WHERE log_pos > ${after}${only}${seen} ORDER BY log_pos LIMIT ${limit}`)) as { log_pos: number; json: string }[];
   }
+  /** deep status's rows, a person's only of the sessions they may see (#1338). */
+  private async statusSeen(role: string): Promise<StatusRow[]> {
+    const rows = await statusRows((sql) => this.record.raw(sql), this.now());
+    const seen = role.startsWith('person:') ? this.seenBy(role) : '';
+    if (!seen) return rows;
+    const visible = new Set(((await this.record.raw(`SELECT DISTINCT session_id AS id FROM events WHERE session_id IS NOT NULL${seen}`)) as { id: string }[]).map((r) => r.id));
+    return rows.filter((row) => visible.has(row.id));
+  }
   /**
    * The events a reader may see, as SQL (#1337): a person reads their own personal scope and the projects they are
    * on; the owner reads everything but another person's personal scope. With nobody else on the hub, everything.
@@ -5869,7 +5900,7 @@ export class Core {
     }
     const plant = this.options.plant;
     if (plant === 'answer-on-token' || plant === 'answer-on-peer-check') return;
-    const why = await this.confirmer.you(what, { handle, revision });
+    const why = await this.confirmer.you(what, { handle, revision, process: context.peer });
     if (why) {
       throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.`, handle, true));
     }
@@ -6100,11 +6131,31 @@ export class Core {
     await syncRejected(this.raw, this.root.dir).catch(() => undefined);
     return { overruled: id };
   }
+  /**
+   * A new secret for a package, on the trusted path (#70): it counts as an answer does, so a deep command in an agent's
+   * process tree can't add one, and goes straight to the OS secret store. Neither the value nor anything made from it
+   * is recorded.
+   */
+  private async enterSecret(params: Obj, context: CallContext): Promise<Obj> {
+    const { extension, name, value } = params;
+    if (typeof extension !== 'string' || typeof name !== 'string' || typeof value !== 'string' || !value) throw new Refused(refusal('required', '/params', 'Name the package and the secret, and give its value.', null));
+    if (!this.extensions) throw new Refused(refusal('unavailable', '/params/extension', `${extension} isn't loaded, so nothing can name ${name}.`, extension));
+    await this.trusted(params, context, `add the secret ${name} for ${extension}`, `secret:${extension}/${name}`, name);
+    const { saved, test } = await this.extensions.enterSecret(this.connection('cli'), extension, name, value);
+    return { saved, test };
+  }
+
+  private terminal(): { open: ExtensionHost['openTerminal']; tab: ExtensionHost['tab']; rawInput: ExtensionHost['rawInput'] } {
+    const host = this.extensions;
+    if (!host) throw new Refused(refusal('unavailable', '/method', 'This hub hosts no terminals: its extension host isn\'t open.', null));
+    return { open: (c, spec) => host.openTerminal(c, spec), tab: (c, t) => host.tab(c, t), rawInput: (c, t, text) => host.rawInput(c, t, text) };
+  }
+
   /** Pairs a device's key, once the OS confirms you, so the control token alone can't pair one. */
-  private async pair(params: Obj): Promise<Obj> {
+  private async pair(params: Obj, context: CallContext): Promise<Obj> {
     if (typeof params.name !== 'string' || !params.name) throw new Refused(refusal('required', '/params/name', 'Name the device you pair.', params.name));
     const key = checkKey(params.public_key);
-    const why = await this.confirmer.you(`pair “${params.name.slice(0, 80)}” with DeepBuild, so what it signs answers for you`, { handle: `device:${params.name.slice(0, 80)}`, revision: key });
+    const why = await this.confirmer.you(`pair “${params.name.slice(0, 80)}” with DeepBuild, so what it signs answers for you`, { handle: `device:${params.name.slice(0, 80)}`, revision: key, process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was paired: the OS didn't confirm you (${why}).`, params.name, true));
     const device = `device:${ulid(this.now())}`;
     this.devices.pair(device, params.name, key, this.now());
@@ -6142,11 +6193,11 @@ export class Core {
     return { unpaired: device };
   }
   /** Links your account on a channel, once the OS confirms you (#65): its answers count for "I did it", taste and choice. */
-  private async link(params: Obj): Promise<Obj> {
+  private async link(params: Obj, context: CallContext): Promise<Obj> {
     const { channel, account } = params;
     if (typeof channel !== 'string' || !/^[a-z][a-z0-9-]*$/.test(channel)) throw new Refused(refusal('pattern', '/params/channel', 'Name the channel as it registered.', channel));
     if (typeof account !== 'string' || !account || account.length > 200) throw new Refused(refusal('type', '/params/account', 'Name your account on the channel.', account));
-    const why = await this.confirmer.you(`link the account ${account} on ${channel}, so its "I did it", taste and choice answers count`, { handle: `channel:${channel}`, revision: account });
+    const why = await this.confirmer.you(`link the account ${account} on ${channel}, so its "I did it", taste and choice answers count`, { handle: `channel:${channel}`, revision: account, process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was linked: the OS didn't confirm you (${why}).`, channel, true));
     if (!this.channels) throw new Refused(refusal('unavailable', '', 'The hub has no channels yet; try again once it is ready.', channel, true));
     this.channels.link(channel, account);
@@ -6175,6 +6226,42 @@ export class Core {
     } catch (error) {
       throw new Refused(refusal('pattern', '/params/person', `Nobody was added: ${error instanceof Error ? error.message : String(error)}.`, person));
     }
+  }
+  /**
+   * A one-time invite to the project of a clone's repo (#1338): the address the person's machine reaches this hub at,
+   * which the inviter knows and the hub can't, this hub's ID, which that machine checks before it sends anything, and a
+   * secret kept here only as its digest. No address lives in the repo. Asked once the OS confirms you, as adding is.
+   */
+  private async invitePerson(params: Obj, context: CallContext): Promise<Obj> {
+    const { person, repo, address } = params;
+    if (typeof person !== 'string') throw new Refused(refusal('type', '/params/person', 'Name the person as their forge login.', person));
+    if (typeof repo !== 'string' || !isAbsolute(repo)) throw new Refused(refusal('type', '/params/repo', "Name a clone of the project's repo by its absolute path.", repo));
+    if (typeof address !== 'string' || !/^[^\s:]+:\d{1,5}$/.test(address)) throw new Refused(refusal('pattern', '/params/address', "Name where the person's machine reaches this hub, as <host>:<port>.", address));
+    const forge = forgeOf(repo);
+    if (!forge) throw new Refused(refusal('not_found', '/params/repo', `${repo} is in no repo with an origin remote: a repo with no remote keeps its path scope, so it can't be shared.`, repo));
+    await this.asYou(context, 'person.invite', `invite ${person} to ${forge}`, `invite:${person}`, forge);
+    try {
+      const secret = this.people.invite(person, forge);
+      const hub = identityAt(join(this.options.root, 'hub.key'), 'deep-hub').id;
+      return { invite: inviteText({ v: 1, address, hub, secret, project: forge, person }), person, project: projectIdOf(forge) };
+    } catch (error) {
+      throw new Refused(refusal('pattern', '/params/person', `Nobody was invited: ${error instanceof Error ? error.message : String(error)}.`, person));
+    }
+  }
+  /** Revokes a person's credentials and open invites (#1338); the server then closes their connections. */
+  private async revokePerson(params: Obj, context: CallContext): Promise<Obj> {
+    const { person } = params;
+    if (typeof person !== 'string' || !person) throw new Refused(refusal('type', '/params/person', 'Name the person as their forge login.', person));
+    await this.asYou(context, 'person.revoke', `revoke ${person}'s credentials`, `revoke:${person}`, person);
+    return { person, revoked: this.people.revoke(person) };
+  }
+  /** A change to who is on a project counts only from your own terminal, never an agent's, once the OS confirms you. */
+  private async asYou(context: CallContext, method: string, what: string, handle: string, revision: string): Promise<void> {
+    if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'Who is on a project changes from your own terminal, once the OS confirms you.', method));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent changes who is on a project. Run it from your own terminal.`, method));
+    const why = await this.confirmer.you(what, { handle, revision });
+    if (why) throw new Refused(refusal('unconfirmed', '/method', `${what} changed nothing: the OS didn't confirm you (${why}).`, method, true));
   }
   /** `deep race <issue>` (#352): you start a race on an issue, so its sessions settle on the first PASS and raise no "keep which?" ask. */
   private async race(params: Obj, context: CallContext): Promise<Obj> {
@@ -6226,7 +6313,7 @@ export class Core {
       .catch(() => ({ id: undefined, version: undefined, publisher_key: undefined }));
     const key = params.trust_key === true ? m.publisher_key : undefined;
     if (params.trust_key === true && (typeof key !== 'string' || typeof m.id !== 'string')) throw new Refused(refusal('required', '/params/trust_key', 'Only a signed package names a publisher key to trust.', from));
-    const why = await this.confirmer.you(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}`, { handle: `package:${String(m.id)}`, revision: String(m.version) });
+    const why = await this.confirmer.you(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}`, { handle: `package:${String(m.id)}`, revision: String(m.version), process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was installed: the OS didn't confirm you (${why}).`, from, true));
     if (!this.extensions) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', from, true));
     try {
@@ -6299,7 +6386,7 @@ export class Core {
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/params/command', `${what} changed nothing: it runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent changes what watches it. Run it from your own terminal.`, command));
     if (this.options.plant === 'acts-on-peer-check') return { confirmed: command };
-    const why = await this.confirmer.you(what, { handle: `command:${command}`, revision: what });
+    const why = await this.confirmer.you(what, { handle: `command:${command}`, revision: what, process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '/params/command', `${what} changed nothing: the OS didn't confirm you (${why}). It takes effect only once the OS confirms you; run it again and confirm.`, command, true));
     return { confirmed: command };
   }
@@ -6314,7 +6401,7 @@ export class Core {
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing was added: this deep command runs inside agent session ${agent}'s process tree, and no agent changes your rules. Add it from your own terminal.`, 'guard.add'));
     const names = isObj(params.guards) && isObj(params.guards.entries) ? Object.keys(params.guards.entries) : [];
-    const why = await this.confirmer.you(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your rules`, { handle: 'command:guard add', revision: names.join(',') });
+    const why = await this.confirmer.you(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your rules`, { handle: 'command:guard add', revision: names.join(','), process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was added: the OS didn't confirm you (${why}).`, names.join(', '), true));
     return addGuards(this.root.dir, params.guards, { deepHook: deepHook(), classes: toolClasses(), plant: this.options.plant });
   }

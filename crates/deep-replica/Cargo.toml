@@ -23,6 +23,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # so a workspace build of the app carries no plant.
 [features]
 env-plants = ["deep-app/env-plants", "deep-app/plant-row"]
+# Issue #1434: `deep-replica --chrome`, the chrome@1 fixture drawn headless, and its plants, in no shipped build.
+chrome-fixture = ["deep-app/chrome-fixture"]
 
 # The live capture asks AppKit for the window's accessibility children and their frames.
 [target.'cfg(target_os = "macos")'.dependencies]
