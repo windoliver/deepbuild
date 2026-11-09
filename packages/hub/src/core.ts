@@ -2701,10 +2701,23 @@ export class Core {
       this.letGoLive(session.id);
       const ts = this.now();
       await this.append(this.connection('core', { session: session.id, agent: session.agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(session.id)}`, data: { pid: session.pid, start: session.start } }).catch(() => undefined);
+      if (session.agent === 'codex' && this.options.plant !== 'leaves-codex-session-open') await this.closedAtExit(session).catch(() => undefined);
       this.endedOrder.delete(session.id);
       this.endedOrder.add(session.id);
       this.forgetEnded();
     }
+  }
+  /**
+   * Codex ended with Ctrl-C may fire no SessionEnd (#1023), so its process ending is its end: the core records the
+   * session.end, a reading that says so, and each answer still waiting for it goes by its task, as an ended Codex
+   * session's answer does (#39).
+   */
+  private async closedAtExit(session: Session): Promise<void> {
+    this.sessionOver(session);
+    const ts = this.now();
+    await this.append(this.connection('core', { session: session.id, agent: session.agent }), { v: 2, id: ulid(ts), kind: 'session.end', ts, subject: `session:${letters(session.id)}`, data: { reason: 'process_exited' } });
+    await this.appendReading(session.id, session.agent, `Codex fired no SessionEnd: the hub closed this session when its process (pid ${session.pid}) exited`);
+    for (const answer of await this.answers.waitingFor(session.id)) await this.answers.outcome(answer.id, 'on_task', 'waiting');
   }
   /** A session has ended, by its SessionEnd or its Archive: what it started goes with it (#342). */
   private sessionOver(session: Session): void {
@@ -5770,7 +5783,11 @@ export class Core {
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
     const claude = { relations: relations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.settingsReadings] };
     const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...modified(this.root.dir), ...trustProblems(this.root.dir).map((p) => `Codex's hook list reports ${p}`)], trust: readTrust(this.root.dir) ?? null };
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
+    // The newest sessions, each closed once an end is on record since its last start (#1023); as `deep status` does, this
+    // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
+    const sessions = ((await this.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
+      FROM sessions s WHERE s.last_seen IS NOT NULL ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {

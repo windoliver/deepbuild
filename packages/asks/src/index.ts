@@ -1844,8 +1844,9 @@ class AsksCore implements Asks {
         if (e.writer === 'core' && e.session) this.continued.set(e.session, [...(this.continued.get(e.session) ?? []), { stop: String(d.stop), because: String(d.because), ts: e.ts }]);
         return;
       case 'session.end':
-        // A session you stopped (its SessionEnd) isn't resumed by a task closing: a continue would wake nobody.
-        if (e.writer === 'hook' && e.session) this.ended.set(e.session, e.ts);
+        // A session you stopped (its SessionEnd, or the core's end for a Codex process that exited without one, #1023)
+        // isn't resumed by a task closing: a continue would wake nobody.
+        if ((e.writer === 'hook' || e.writer === 'core') && e.session) this.ended.set(e.session, e.ts);
         // Only a verified end counts toward forgetting: an unverified one ends nothing, as in the hub.
         if (e.session && !e.unverified) {
           this.endOrder.add(e.session);
