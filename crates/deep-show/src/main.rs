@@ -547,8 +547,13 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 item: c.get("item")?.as_str()?.to_string(),
             })
         }
-        // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path.
-        "deep_kinds" => return Some(Call::Kinds(Value::Object(c.clone()))),
+        // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path. It arrives on
+        // the clock at `arrives`, never one of its fields (#1718), so the check never sees it.
+        "deep_kinds" => {
+            let mut args = c.clone();
+            args.remove("arrives");
+            return Some(Call::Kinds(Value::Object(args)));
+        }
         "sandbox" => return Some(Call::Sandbox),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
         "validate" => {
@@ -1314,10 +1319,12 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .iter()
         .map(|c| {
             // deep_query's `at` is the times it reads (#411), geometry's the curve fractions it
-            // reads (#441) and fn's the points (#490): on the clock each arrives at `arrives`.
+            // reads (#441) and fn's the points (#490): on the clock each arrives at `arrives`, as
+            // deep_kinds does, which takes no `at` (#1718).
             let arrives = if c.get("call") == Some(&json!("deep_query"))
                 || c.get("call") == Some(&json!("geometry"))
                 || c.get("call") == Some(&json!("fn"))
+                || c.get("call") == Some(&json!("deep_kinds"))
             {
                 "arrives"
             } else {
@@ -1527,7 +1534,7 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if c["call"] == "deep_query" || c["call"] == "geometry" || c["call"] == "fn" {
+                let arrives = if ["deep_query", "geometry", "fn", "deep_kinds"].iter().any(|k| c["call"] == *k) {
                     "arrives"
                 } else {
                     "at"
