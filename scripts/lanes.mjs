@@ -236,6 +236,10 @@ alone.push('tests/acceptance/1348/');
 alone.push('tests/acceptance/1479/');
 // #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
 alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests/acceptance/531-redraft-ac12/');
+// #499's files build deep-show (and deep-logic, deep-canvas-render) in several feature sets, one a release build; the
+// players and out-of-view readings are timed.
+alone.push('tests/acceptance/499/');
+timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/video/out-of-view.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
