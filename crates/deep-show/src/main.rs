@@ -8,6 +8,7 @@
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
 mod access;
+mod audio;
 mod ask;
 mod capture;
 mod costs;
@@ -26,6 +27,7 @@ mod jobs;
 mod kinds;
 mod kit;
 mod media;
+mod mixdown;
 mod modes;
 mod packs;
 mod placement;
@@ -60,6 +62,7 @@ mod time;
 ))]
 mod twins;
 mod verdict;
+mod video;
 mod workers;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
@@ -783,6 +786,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(m) = media::parse_call(name, c) {
         return Some(Call::Media(Box::new(m)));
     }
+    if let Some(m) = mixdown::parse_call(name, c) {
+        return Some(Call::Mix(Box::new(m)));
+    }
+    if let Some(a) = audio::parse_call(name, c) {
+        return Some(Call::Audio(Box::new(a)));
+    }
     let via = via(name, c)?;
     let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
         (Some(_), None, None) => None,
@@ -1105,7 +1114,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .get("planted")
         .and_then(Value::as_str)
         .filter(|p| {
-            deep_canvas_scene3d::PLANTED.contains(p) || deep_canvas_loop::PLANTED.contains(p)
+            deep_canvas_scene3d::PLANTED.contains(p)
+                || deep_canvas_loop::PLANTED.contains(p)
+                || deep_canvas_media::PLANTED.contains(p)
+                // #1732's wrong programs live in the motion module's arrangement solve.
+                || deep_canvas_motion::arrange::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1238,6 +1251,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "probe_rounds_to_flicks" => Planted::ProbeRoundsToFlicks,
                 "probe_stores_normalized" => Planted::ProbeStoresNormalized,
                 "assumes_bt601" => Planted::AssumesBt601,
+                "lookup_floors_frame_rate" => Planted::LookupFloorsFrameRate,
+                "seek_reads_proxy" => Planted::SeekReadsProxy,
                 "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,
                 "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,
@@ -1251,6 +1266,16 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checker_fits_surface" => Planted::CheckerFitsSurface,
                 "deviation_one_way" => Planted::DeviationOneWay,
                 "normals_from_faces" => Planted::NormalsFromFaces,
+                // #499: the mix's wrong programs.
+                "reverb_restores_without_tail" => Planted::ReverbRestoresWithoutTail,
+                "ring_drops_oldest" => Planted::RingDropsOldest,
+                "mixer_holds_gain_per_block" => Planted::MixerHoldsGainPerBlock,
+                "emitter_always_inverse" => Planted::EmitterAlwaysInverse,
+                "cone_sign_reversed" => Planted::ConeSignReversed,
+                // #499: the clock's and the audio backend's.
+                "clock_follows_display" => Planted::ClockFollowsDisplay,
+                "backend_keeps_removed_device" => Planted::BackendKeepsRemovedDevice,
+                "clock_restarts_from_sample_0" => Planted::ClockRestartsFromSample0,
                 "arms_each_vsync" => Planted::ArmsEachVsync,
                 "link_never_stops" => Planted::LinkNeverStops,
                 "waker_ignores_schedule_frame" => Planted::WakerIgnoresScheduleFrame,
@@ -1442,6 +1467,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         machine: optional(input.get("machine"), |m| Some(m.as_object()?.clone()))?,
         devices: capture::Devices::parse(input)?,
         decode_caps: media::caps(input)?,
+        audio: audio::parse(input.get("audio"))?,
     })
 }
 
@@ -1798,8 +1824,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
         out.push(deep_canvas_scene3d::building::module());
         // Issue #453: the loop's check kinds, geometry.shading first.
         out.push(deep_canvas_loop::module());
-        // Issue #427: the media module's strips and emitters, read as data.
-        out.push(deep_canvas_scene3d::emitters::module());
+        // Issue #499: the media module, media@1; `test-media-checkpoint-without-tail` seals the
+        // planted implementation whose reverb checkpoint leaves out its tail.
+        out.push(if cfg!(feature = "test-media-checkpoint-without-tail") {
+            deep_canvas_media::module::checkpoint_without_tail()
+        } else {
+            deep_canvas_media::module::module()
+        });
         // Issue #308: controls and the input track's handling, with control@1.
         out.push(deep_canvas_input::module::module());
     }
@@ -1823,6 +1854,14 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::sandbox::prog());
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");
+    // #499: a build without the media module, and the test module that probes an asset through
+    // the decode worker (or, planted, through media).
+    #[cfg(feature = "test-leave-out-media")]
+    out.retain(|m| m.manifest.name != "media");
+    #[cfg(feature = "test-probe")]
+    out.push(deep_canvas_test_modules::probe::module(false));
+    #[cfg(feature = "test-probe-via-media")]
+    out.push(deep_canvas_test_modules::probe::module(true));
     // #308: a build without the input module, which refuses a document with a control kind.
     #[cfg(feature = "test-leave-out-input")]
     out.retain(|m| m.manifest.name != "input");
@@ -2017,6 +2056,7 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
                 "data@1" => deep_canvas_marks::modules::data(),
                 "graph@1" => deep_canvas_graph::module::module(),
                 "vector@1" => deep_canvas_vector::module::module(),
+                "media@1" => deep_canvas_media::module::module(),
                 _ if m.manifest.name == "scene3d" => deep_canvas_scene3d::module::module(),
                 _ => m,
             };

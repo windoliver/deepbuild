@@ -152,6 +152,7 @@ impl<'a> View<'a> {
                 code: "undeclared_read",
                 path: self.path(),
                 read: Some(term.to_string()),
+                actual: None,
             }),
         }
     }
@@ -438,6 +439,7 @@ impl<'a> View<'a> {
                 code: "undeclared_read",
                 path: self.path(),
                 read: Some(format!("parent:{own}")),
+                actual: None,
             });
         }
         match &self.node.reads[k] {

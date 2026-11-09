@@ -1,0 +1,33 @@
+#1436's suite at the base, a3efe5c8 ("Merge pull request #1746 …", on f1e8736e), on this Mac (Mac17,10), November 8, 2026.
+
+The shipped pack doesn't exist at the base, so every test fails before anything builds or draws:
+
+  $ ls packs
+  blender-1.0.0 composites-1.0.0 examples familiar-1.0.0 fx-1.0.0 godot-1.0.0 studio-1.0.0 unreal-1.0.0
+
+Run (cargo on PATH; nothing was built, since the builds wait for the pack):
+
+  $ npx vitest run --root tests/acceptance/1436 --no-file-parallelism
+   Test Files  11 failed (11)
+        Tests  68 failed (68)
+
+  ac1 (26 tests: the check, the gallery, 24 twins), ac2-still (2), ac3 (2), ac4 (2), ac5 (3), ac6 (2), ac7 (1),
+  ac8 (2), ac10 (1):
+    AssertionError: the shipped pack chrome-fx@1 is at <repo>/packs/chrome-fx-1.0.0/pack.json: expected false to be true
+  ac2-still.live (2), ac9 (25):
+    AssertionError: INCONCLUSIVE: the reduced-motion run / the budget run opens the app's window on this Mac's screen;
+    run with DEEP_1436_LIVE=1 (README: Run them)
+
+  $ DEEP_1436_LIVE=1 npx vitest run --root tests/acceptance/1436 --no-file-parallelism ac2-still.live ac9
+        Tests  27 failed (27)
+    AssertionError: the shipped pack chrome-fx@1 is at <repo>/packs/chrome-fx-1.0.0/pack.json: expected false to be true
+
+By reading the base (not run: a cold build of deep-replica and deep-app wasn't worth it on a machine at load ~270,
+for modes that plainly aren't there), each file would fail past the pack too:
+  - ac1, ac2, ac3, ac6, ac7, ac10: deep-replica has no --chrome-fx-check or --chrome-fx-gallery; an unknown first
+    argument goes to view_args, which exits 2 ("unknown argument").
+  - ac2-still, ac3, ac4, ac5, ac6, ac8: `deep-replica --chrome` takes --out and --omit-effect only, and exits 2 on
+    --at, --appearance, --reduce-motion or --omit-text; deep-effects-render's chrome OPERATORS is ["frost@1"] alone,
+    so no chrome-fx@1 operator draws, binds, collides or is refused; chrome.json has no `bound` or `particles`.
+  - ac2-still.live: deep-app --chrome has no --reduce-motion and no --after-first mode.
+  - ac9: --frames exists (#1434), but every operator it would time is unknown to the renderer.

@@ -354,6 +354,9 @@ pub struct OpError {
     pub path: String,
     /// The read term, for `undeclared_read`.
     pub read: Option<String>,
+    /// What the operator found, for an issue that names more than its path (#1732: the
+    /// relations an arrangement still misses).
+    pub actual: Option<Value>,
 }
 
 impl OpError {
@@ -362,7 +365,14 @@ impl OpError {
             code,
             path: path.into(),
             read: None,
+            actual: None,
         }
+    }
+
+    /// The error with what the operator found.
+    pub fn with(mut self, actual: Value) -> OpError {
+        self.actual = Some(actual);
+        self
     }
 }
 
@@ -1051,6 +1061,7 @@ pub struct OpIssue {
     pub item: Option<String>,
     pub path: String,
     pub read: Option<String>,
+    pub actual: Option<Value>,
 }
 
 /// A read an operator made through the core (test builds).
@@ -2390,6 +2401,7 @@ impl Session {
                     item: l.nodes[n].item.map(|i| l.items[i].id.clone()),
                     path: e.path.clone(),
                     read: e.read.clone(),
+                    actual: e.actual.clone(),
                 };
                 // A panic freezes this session alone: every other session goes on.
                 if e.code == "operator_panic" && mode == Mode::Live && self.frozen.is_none() {

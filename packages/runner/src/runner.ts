@@ -96,7 +96,7 @@ interface Job {
   ended: Promise<JobRecord>;
   end(rec: JobRecord): void;
   stopCause?: StopCause;
-  /** The end of a pi job's stderr. */
+  /** The end of the job's stderr. */
   failure?: string;
   /** Its result was marked an error: no answer. */
   errored?: boolean;
@@ -750,7 +750,7 @@ class LocalRunner implements Runner {
       ...(job.spec.leases ? { leases: job.spec.leases } : {}),
       output: { stdout: (chunk) => this.read(job, chunk), stderr: (chunk) => {
         job.outputAt = Date.now();
-        if (job.spec.agent === 'pi') job.failure = `${job.failure ?? ''}${chunk.toString()}`.slice(-4096);
+        job.failure = `${job.failure ?? ''}${chunk.toString()}`.slice(-4096);
       } },
     });
     if (started.status !== 'started') {
@@ -842,7 +842,7 @@ class LocalRunner implements Runner {
       delete job.stopCause;
       delete job.said;
       if (failed) {
-        job.stopCause = this.piCause(String(msg.errorMessage ?? ''));
+        job.stopCause = this.causeOf(job.spec.agent, String(msg.errorMessage ?? ''));
       } else if (Array.isArray(msg.content)) {
         job.said = msg.content.flatMap((part) => (isObj(part) && part.type === 'text' && typeof part.text === 'string' ? [part.text] : [])).join('');
       }
@@ -855,9 +855,9 @@ class LocalRunner implements Runner {
     }
   }
   /** The cause the facts name for an error's words: a status code only as a word of its own, so no token count reads as one. */
-  private piCause(error: string): StopCause {
+  private causeOf(agent: Agent, error: string): StopCause {
     const text = error.toLowerCase();
-    const causes = this.facts('pi').errorTexts.causes ?? {};
+    const causes = this.facts(agent).errorTexts.causes ?? {};
     return (Object.entries(causes).find(([needle]) => (/^\d+$/.test(needle) ? new RegExp(`\\b${needle}\\b`).test(text) : text.includes(needle.toLowerCase())))?.[1] ?? 'unknown') as StopCause;
   }
   private event(job: Job, e: Obj): void {
@@ -981,8 +981,9 @@ class LocalRunner implements Runner {
     const finished = job.resultAt !== undefined && !job.errored && !job.rec.refused;
     job.rec.state = job.rec.refused ? 'refused' : finished ? 'finished' : 'stopped';
     if (job.temp && AGENTS[job.spec.agent]?.refusedIn?.(job.temp)) job.stopCause ??= 'refusal';
-    // pi says on stderr what stops a run before its first message, as a missing key does.
-    const said = job.failure && !finished && !job.stopCause ? this.piCause(job.failure) : 'unknown';
+    // An agent whose facts name causes by an error's words, as pi's do, says on stderr what stops a run before its
+    // first message, as a missing key does.
+    const said = job.failure && !finished && !job.stopCause ? this.causeOf(job.spec.agent, job.failure) : 'unknown';
     const cause = job.stopCause ?? (finished ? undefined : said !== 'unknown' ? said : 'agent_crashed');
     if (cause) job.rec.stop = { cause };
     if (this.o.plant === 'widens-range-on-smoke' && job.spec.kind === 'smoke' && job.rec.binary) this.widened.add(job.rec.binary.version);
