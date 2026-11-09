@@ -68,6 +68,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['start.approve', ['cli']], ['start.session', ['cli']],
   // A person added to a project, with a credential of their own (#1337).
   ['person.add', ['cli']],
+  // An online model library turned on or off, and your standing rule for it (#1731).
+  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']],
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.

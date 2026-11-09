@@ -54,7 +54,7 @@ import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type 
 import { missing, SeriesStore, shownValue, type BoundValue, type Rollup, type Span } from './series.js';
 import { Sends, type SendRow, type SendRule } from './sends.js';
 import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
-import { declareSource, handleOf, NoAnswer, nodeHttp, openBrowser, osSecrets, Sources, type WorkDecl, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
+import { declareSource, handleOf, NoAnswer, nodeHttp, openBrowser, osSecrets, Sources, type LibraryDecl, type WorkDecl, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
@@ -331,6 +331,12 @@ export interface ExtensionHost {
   heldSecrets(): Promise<{ secret: string; provider: string }[]>;
   /** A reading of a loaded polled source, as what needs it would read it: from the cache while fresh, else one call. */
   readSource(name: string): Promise<SourceRead>;
+  /** The library sources loaded packages registered (#1731): each one's name and package. */
+  libraries(): { name: string; extension: string }[];
+  /** One search or fetch of a loaded library source (#1731), its calls the hub's; `noAnswer` when one got none. */
+  libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }>;
+  /** A file a library's fetch named, downloaded through its source by the hub (#1731); `status` null when its host gave no answer. */
+  libraryFile(name: string, path: string): Promise<{ status: number; bytes: Uint8Array } | { status: null; why: string }>;
   /** Every source call this host made, with its secrets stripped. */
   recording(): Recording;
   /** The readings the record holds of a source with an as-of time in the window, both ends in, in as-of order. */
@@ -513,7 +519,7 @@ interface Manifest {
   stability?: 'stable' | 'preview'; requires?: { preview?: string[] };
   host?: { runs: 'terminals'; lives: 'past_app'; owns: 'terminals'[] };
   secrets?: { name: string; for: string }[];
-  sources?: { name: string; variant: string; reading?: string }[];
+  sources?: { name: string; variant: string; reading?: string; host?: string }[];
   /** The state sources it registers (#67), each held to state-source@1's kit at install. */
   state_sources?: string[];
 }
@@ -906,7 +912,7 @@ class Host implements ExtensionHost {
   /** The work sources you switched on, their runs, tasks and deliveries (#66). */
   private readonly work: WorkSources;
   /** The work-source calls under way, by the call ID their context's fetch names (#66). */
-  private readonly workCalls = new Map<string, { ext: Ext; source: string; work: WorkDecl; noAnswer: boolean }>();
+  private readonly workCalls = new Map<string, { ext: Ext; source: string; work: Omit<WorkDecl, 'delivers'>; library?: LibraryDecl; noAnswer: boolean }>();
   private workCount = 0;
   /** The runs under way, by the scope token their job's calls carry (#365). */
   private readonly runCtx = new Map<string, RunCtx>();
@@ -1005,6 +1011,47 @@ class Host implements ExtensionHost {
       throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
     } finally {
       this.workCalls.delete(call);
+    }
+  }
+  /** The library sources loaded packages registered (#1731), asset.library@1's fills: each one's name and package. */
+  libraries(): { name: string; extension: string }[] {
+    return [...this.exts.values()].filter((e) => e.live && e.ask && e.mode === 'loaded')
+      .flatMap((e) => [...e.sources.values()].filter((d) => d.variant === 'library').map((d) => ({ name: d.name, extension: e.entry.id })));
+  }
+  private libraryOf(name: string): { ext: Ext; library: LibraryDecl } {
+    for (const ext of this.exts.values()) {
+      const d = ext.live && ext.ask && ext.mode === 'loaded' ? ext.sources.get(name) : undefined;
+      if (d?.variant === 'library') return { ext, library: d.library };
+    }
+    throw Error(`no loaded package registers the library ${name}`);
+  }
+  /**
+   * One op of a loaded library source (#1731), search or fetch, bounded by its timeout: the package's code reads the
+   * library's API through its context's fetch, the hub's call to the library's host; `noAnswer` when a call got none.
+   */
+  async libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }> {
+    const { ext, library } = this.libraryOf(name);
+    const call = `work:${++this.workCount}`;
+    const live = { ext, source: name, work: library, library, noAnswer: false };
+    this.workCalls.set(call, live);
+    try {
+      const value = await within(WORK_CALL_MS, `${ext.entry.id}'s library ${name}'s ${op}`, ext.ask!('library', { name, op, call, arg }));
+      return { value, noAnswer: live.noAnswer };
+    } catch (e) {
+      throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
+    } finally {
+      this.workCalls.delete(call);
+    }
+  }
+  /** A file a library's fetch named, downloaded through its source on its host by the hub, never by the package (#1731). */
+  async libraryFile(name: string, path: string): Promise<{ status: number; bytes: Uint8Array } | { status: null; why: string }> {
+    const { ext, library } = this.libraryOf(name);
+    try {
+      const answer = await this.sources.workFetch(ext.entry.id, name, library, { method: 'GET', path }, { timeout: library.timeout, encoding: 'base64' });
+      return { status: answer.status, bytes: Buffer.from(answer.body, 'base64') };
+    } catch (e) {
+      if (e instanceof NoAnswer) return { status: null, why: e.message };
+      throw e;
     }
   }
   /** A work source's run is BLOCKED while its package isn't loaded or the secret it needs isn't held. */
@@ -2586,7 +2633,7 @@ class Host implements ExtensionHost {
         const live = typeof call === 'string' ? this.workCalls.get(call) : undefined;
         if (!live || live.ext !== ext) throw Error(`deep.work.fetch: ${id} has no work source call under way as ${String(call)}`);
         try {
-          return await this.sources.workFetch(ext.entry.id, live.source, live.work, request as Parameters<Sources['workFetch']>[3]);
+          return await this.sources.workFetch(ext.entry.id, live.source, live.work, request as Parameters<Sources['workFetch']>[3], live.library);
         } catch (e) {
           if (e instanceof NoAnswer) live.noAnswer = true;
           throw e;
