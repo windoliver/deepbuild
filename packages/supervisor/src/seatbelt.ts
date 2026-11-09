@@ -32,10 +32,24 @@ function egress(host: string): string {
   return `localhost:${m[2]}`;
 }
 
+/** The trusted host's loaded Node libraries, not their containing folders or native add-ons. */
+let nodeLibraries: string[] | undefined;
+function nodeRuntime(read: readonly string[]): string[] {
+  const node = real(process.execPath);
+  if (!read.some((path) => { const at = real(path); return node === at || node.startsWith(at.endsWith('/') ? at : `${at}/`); })) return [];
+  // Node installations may link libuv, OpenSSL and ICU outside their own prefix. Read exact loaded library
+  // files only: granting a Homebrew prefix would expose unrelated programs and data. No process is started
+  // to discover them, and none of the report's environment, command line or other fields leaves memory.
+  nodeLibraries ??= [...new Set((process.report.getReport() as { sharedObjects: string[] }).sharedObjects
+    .filter((path) => path.endsWith('.dylib') && existsSync(path)).map(real))];
+  return nodeLibraries;
+}
+
 /** The profile that confines one process, and its children, to `grant`, with `cwd` readable. */
 export function profile(run: string, cwd: string, grant: Grant, extra: readonly string[] = []): string {
   const paths = (list: readonly string[] | undefined) => (list ?? []).map((p) => `(subpath ${quote(real(p))})`).join(' ');
   const read = [cwd, ...(grant.read ?? [])];
+  const libraries = nodeRuntime([...read, ...(grant.write ?? [])]);
   const rules = [
     '(version 1)',
     `(deny default (with message ${quote(tagOf(run))}))`,
@@ -51,6 +65,7 @@ export function profile(run: string, cwd: string, grant: Grant, extra: readonly 
     '(allow file-read* file-write-data (literal "/dev/tty") (literal "/dev/stdout") (literal "/dev/stderr") (regex #"^/dev/fd/"))',
     `(allow mach-lookup (global-name ${quote(markerOf(run))}))`,
   ];
+  if (libraries.length) rules.push(`(allow file-read* file-map-executable ${libraries.map((p) => `(literal ${quote(p)})`).join(' ')})`);
   if (grant.write?.length) rules.push(`(allow file-read* file-write* process-exec file-map-executable ${paths(grant.write)})`);
   if (grant.hosts?.length) rules.push(`(allow network-outbound ${grant.hosts.map((h) => `(remote ip ${quote(egress(h))})`).join(' ')})`);
   if (grant.listen?.length) rules.push(`(allow network-bind network-inbound ${grant.listen.map((h) => `(local ip ${quote(egress(h))})`).join(' ')})`);
@@ -76,7 +91,11 @@ export function seatbeltWith(name: string, extra: readonly string[] = []): Sandb
     async confine(launch: Launch, grant: Grant, run = 'run:0'): Promise<Launch> {
       if (process.platform !== 'darwin') throw Error(`${name} runs only on macOS`);
       const cwd = real(launch.cwd);
-      return { argv: [SANDBOX_EXEC, '-p', profile(run, cwd, grant, extra), ...launch.argv], cwd, env: launch.env };
+      // Packaged Node's OpenSSL may look for a host-wide config outside its install. A hermetic run
+      // uses compiled defaults, not an implicit read grant to that config; an explicitly supplied config stays explicit.
+      const env = nodeRuntime([cwd, ...(grant.read ?? []), ...(grant.write ?? [])]).length && launch.env.OPENSSL_CONF === undefined
+        ? { ...launch.env, OPENSSL_CONF: '/dev/null' } : launch.env;
+      return { argv: [SANDBOX_EXEC, '-p', profile(run, cwd, grant, extra), ...launch.argv], cwd, env };
     },
   };
 }
