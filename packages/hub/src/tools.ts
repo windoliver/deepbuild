@@ -138,11 +138,17 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     })),
   }),
   deep_kinds: object({
-    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page.' },
+    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
     registry: maybe(str('list: one registry or hub slot, name@major; null for all.')),
     cursor: maybe(str('The next an earlier page gave; null for the first page.')),
     word: maybe(str('word: the word, as the other tool spells it.')),
-    query: maybe(str('search: words every hit must hold.')),
+    query: maybe(str('search: words every hit must hold; assets: the words to search the libraries for.')),
+    kind: oneOf(['model', 'hdri', 'texture'], 'assets: one kind of asset; null for every kind.'),
+    size_m: maybe({ type: 'array', items: { type: 'number' }, description: 'assets: [least, most] size in metres, as the library states it; null for any size.' }),
+    license: maybe({ type: 'array', items: { type: 'string' }, description: 'assets: the licenses a row may have, by SPDX ID; null for any.' }),
+    limit: maybe({ type: 'integer', description: 'assets: at most this many rows, up to 50; null for 50.' }),
+    library: maybe(str('fetch: the library a row came from, as its from names it.')),
+    id: maybe(str('fetch: the row\'s id.')),
     example: maybe(str('read: an example, by the hash a listing or a hit gave.', '^[0-9a-f]{64}$')),
     guide: maybe(str('read: a guide, by the name a hit gave.')),
     offset: maybe({ type: 'integer', description: 'read of a guide: the next a page gave; null for its start.' }),
@@ -223,6 +229,9 @@ function check(schema: Schema, value: unknown, at: string): unknown {
       return value.map((item, i) => check(schema.items as Schema, item, `${at}/${i}`));
     case 'integer':
       if (!Number.isSafeInteger(value)) throw wrong();
+      return value;
+    case 'number':
+      if (typeof value !== 'number' || !Number.isFinite(value)) throw wrong();
       return value;
     case 'boolean':
       if (typeof value !== 'boolean') throw wrong();

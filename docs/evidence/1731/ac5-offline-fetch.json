@@ -1,0 +1,56 @@
+{
+  "first": {
+    "status": "BLOCKED",
+    "cause": "ext.shelf.library can't be reached",
+    "ask": "ask:01M6ZTFAQWBFX3RYYKND8SRQRF"
+  },
+  "second": {
+    "status": "BLOCKED",
+    "cause": "ext.shelf.library can't be reached",
+    "ask": "ask:01M6ZTFAQWBFX3RYYKND8SRQRF"
+  },
+  "raised": [
+    {
+      "handle": "ask:01M6ZTFAQWBFX3RYYKND8SRQRF",
+      "kind": "unblock",
+      "text": "{\"kind\":\"unblock\",\"question\":\"ext.shelf.library can't be reached, so oak-chair can't be fetched. Connect this machine to the network?\",\"options\":[{\"id\":\"done\",\"label\":\"I did it\",\"decision\":\"none\"},{\"id\":\"agent\",\"label\":\"The agent can do it\",\"decision\":\"none\"}],\"recommended\":\"done\",\"default\":\"done\",\"deadline\":1794303198971,\"steps\":[\"Connect to the network so ext.shelf.library's host answers\",\"Fetch oak-chair again\"],\"where\":\"this machine\",\"why\":\"a fetch needs ext.shelf.library's host, which gave no answer\",\"unblocks\":[\"req:b6541639d2575ff6\"],\"proves\":\"ext.shelf.library reachable\",\"fallback\":\"you\",\"provisional\":false,\"owner\":\"you\",\"key\":\"b6541639d2575ff69f363d4cc5afd685dff4fc1568c09cea99feed344d84132b\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"b6541639d2575ff69f363d4cc5afd685dff4fc1568c09cea99feed344d84132b\"}}",
+      "data": {
+        "kind": "unblock",
+        "question": "ext.shelf.library can't be reached, so oak-chair can't be fetched. Connect this machine to the network?",
+        "options": [
+          {
+            "id": "done",
+            "label": "I did it",
+            "decision": "none"
+          },
+          {
+            "id": "agent",
+            "label": "The agent can do it",
+            "decision": "none"
+          }
+        ],
+        "recommended": "done",
+        "default": "done",
+        "deadline": 1794303198971,
+        "steps": [
+          "Connect to the network so ext.shelf.library's host answers",
+          "Fetch oak-chair again"
+        ],
+        "where": "this machine",
+        "why": "a fetch needs ext.shelf.library's host, which gave no answer",
+        "unblocks": [
+          "req:b6541639d2575ff6"
+        ],
+        "proves": "ext.shelf.library reachable",
+        "fallback": "you",
+        "provisional": false,
+        "owner": "you",
+        "key": "b6541639d2575ff69f363d4cc5afd685dff4fc1568c09cea99feed344d84132b",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "b6541639d2575ff69f363d4cc5afd685dff4fc1568c09cea99feed344d84132b"
+        }
+      }
+    }
+  ]
+}

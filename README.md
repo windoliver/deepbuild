@@ -128,6 +128,26 @@ deep gate rules --json | jq -c '.rulesets[]' | while read -r r; do echo "$r" | g
 
 A push you make yourself through the bypass is recorded as unguarded, and never reads PASS.
 
+## Approve an edit to a check
+
+An edit that could weaken a check, such as a skipped or loosened test, passes the local guard only with a person's signed tag under `deep/approved/` on its commit. Signers come from one list in the repo, `.deepbuild/approvers`, an SSH allowed-signers file. The guard reads it from the merge base, never from your working tree, your home folder or a variable, so every checkout gets the same verdict. Any one person on it approves a commit, whoever's agent wrote it.
+
+The list takes only keys that need a touch or a biometric for every signature, `sk-ssh-ed25519@openssh.com` and `sk-ecdsa-sha2-nistp256@openssh.com`, so no agent running as you can sign. A key in a plain file is refused on the list, and a signature made without a touch approves nothing. Make one on a security key:
+
+```bash
+ssh-keygen -t ed25519-sk -f ~/.ssh/deepbuild_approver
+echo "you@example.com namespaces=\"git\" $(cat ~/.ssh/deepbuild_approver.pub)" >> .deepbuild/approvers
+```
+
+Adding or removing a key needs a signature from a key already on the list. The first list lands on the default branch by your own push. To approve a commit:
+
+```bash
+git -c gpg.format=ssh -c user.signingkey=~/.ssh/deepbuild_approver tag -s deep/approved/<name> -m 'Approves: <path>' <commit>
+git push origin refs/tags/deep/approved/<name>
+```
+
+An agent's call that signs or pushes such a tag is refused by the `no-approval-tag-sign` and `no-approval-tag-push` guards, and the forge refuses its push.
+
 ## Documentation
 
 | Goal | Start here |

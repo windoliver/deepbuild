@@ -3,7 +3,7 @@
 // proposal you approved, and a tolerance in a tagged fixture only tightens.
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, posix } from 'node:path';
-import { blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, relativeImports, removedLines, resolveModule, RUNNER_CONFIG, show, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
+import { APPROVERS, blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, relativeImports, removedLines, resolveModule, RUNNER_CONFIG, show, signersIn, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
 
 const FIX = 'Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.';
 // Your decisions: the four invariants in AGENTS.md, and each row of the tables under Decisions.
@@ -71,10 +71,31 @@ function namedByConfig(root, base) {
   return named;
 }
 
+// The approvers list (#1326): who may approve, so a change to it is guarded as a check is, and judged by the list at
+// the merge base. A key of a type that signs without a person's touch or biometric is refused on it outright.
+const LIST_FIX = `Have a person on ${APPROVERS} at the merge base approve the list's change as its own commit, with a signed tag under deep/approved/ holding Approves: ${APPROVERS}. Its keys are each a security key's or a Secure Enclave key's (sk-ssh-ed25519@openssh.com or sk-ecdsa-sha2-nistp256@openssh.com); the first list lands on the default branch by a person's own push.`;
+const listEdit = (before, after) => {
+  const was = new Set(signersIn(before).map(({ line }) => line));
+  const added = signersIn(after).filter(({ line }) => !was.has(line)).map(({ name }) => name);
+  const kept = new Set(signersIn(after).map(({ line }) => line));
+  const removed = signersIn(before).filter(({ line }) => !kept.has(line)).map(({ name }) => name);
+  return [added.length && `adds ${added.join(', ')}`, removed.length && `removes ${removed.join(', ')}`].filter(Boolean).join(' and ') || 'changes it';
+};
+
 export function guard({ root, change, issue }, approvals, say) {
   // With an issue, the guard keeps its tags; with none, every tag.
   const relevant = (text) => tagsIn(text).filter((tag) => !issue?.number || tag.startsWith(`#${issue.number}.`));
   let refused = 0;
+  // A key that signs with no person there approves nothing, and the list the change leaves holds none.
+  for (const why of approvals.refused ?? []) {
+    refused += 1;
+    say('FAIL', 'guard', why, LIST_FIX);
+  }
+  const plain = new Map([show(root, change.base, APPROVERS), show(root, null, APPROVERS)].flatMap((text) => signersIn(text)).filter(({ presence }) => !presence).map((key) => [key.line, key]));
+  for (const { name } of plain.values()) {
+    refused += 1;
+    say('FAIL', 'guard', `${APPROVERS}: ${name} is a key that signs without a touch or a biometric, so anything running as its owner could approve with it; the list refuses it`, LIST_FIX);
+  }
   const lanesOnMain = show(root, change.base, 'scripts/proof-guard.mjs') !== null;
   const configNamed = lanesOnMain ? namedByConfig(root, change.base) : new Set();
   // A node_modules folder a test's imports walk up to: one in a folder that holds, at any depth, a
@@ -107,6 +128,7 @@ export function guard({ root, change, issue }, approvals, say) {
     };
     for (const path of commit.merge?.conflicts ?? []) for (const edit of conflictEdits(root, commit, path, relevant)) judge(edit, path, ...edit.test ? [named(path, edit.test)] : []);
     if (lanesOnMain) for (const path of (commit.merge?.conflicts ?? []).filter(isCheck)) judge(checkEdit(path, ' in resolving a merge conflict'), path);
+    if (commit.merge?.conflicts.includes(APPROVERS)) judge({ detail: `${APPROVERS}: changed in resolving a merge conflict` }, APPROVERS);
     // A conflict's resolution keeps either side's list, or it is an edit of its own.
     if (lanesOnMain && commit.merge?.conflicts.includes(SKIPS_FILE) && !commit.merge.parents.some((parent) => skipsIn(show(root, parent, SKIPS_FILE)) === skipsIn(show(root, commit.sha, SKIPS_FILE)))) judge({ detail: `${SKIPS_FILE}: the skips key changed in resolving a merge conflict` }, SKIPS_FILE);
     if (lanesOnMain && commit.merge?.conflicts.includes(CARRIED_TABLE) && !commit.merge.parents.some((parent) => budgetsIn(show(root, parent, CARRIED_TABLE)) === budgetsIn(show(root, commit.sha, CARRIED_TABLE)))) judge({ detail: `${CARRIED_TABLE}: a budget number changed in resolving a merge conflict` }, CARRIED_TABLE);
@@ -117,6 +139,7 @@ export function guard({ root, change, issue }, approvals, say) {
       // Node resolves a bare import through each node_modules folder above the importing file, so a
       // package committed in one may stand in for the one installed.
       if (lanesOnMain && file.hunks.length && underTests(file.path)) judge({ detail: `${file.path}: a package committed under node_modules, which a test's import may resolve to in place of the one installed` }, file.path);
+      if (file.path === APPROVERS) judge({ detail: `${APPROVERS}: the change ${listEdit(show(root, commit.parent, file.path), commit.sha ? show(root, commit.sha, file.path) : show(root, null, file.path))}` }, file.path);
       const before = show(root, commit.parent, file.path);
       const names = lanesOnMain && LOCKS.includes(file.path) ? repointed(installedLock(root, commit.parent), installedLock(root, commit.sha), imported)
         : lanesOnMain && file.path === 'package.json' ? respecified(before, show(root, commit.sha, file.path), resolvedThrough(root, commit.sha, imported)) : [];
