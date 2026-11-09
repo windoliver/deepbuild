@@ -1,0 +1,1 @@
+        let _on_disk = crate::hub::root().join("setup-stopped.json").exists();

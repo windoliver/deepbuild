@@ -1269,6 +1269,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "clock_follows_display" => Planted::ClockFollowsDisplay,
                 "backend_keeps_removed_device" => Planted::BackendKeepsRemovedDevice,
                 "clock_restarts_from_sample_0" => Planted::ClockRestartsFromSample0,
+                "arms_each_vsync" => Planted::ArmsEachVsync,
+                "link_never_stops" => Planted::LinkNeverStops,
+                "waker_ignores_schedule_frame" => Planted::WakerIgnoresScheduleFrame,
+                "link_restarts_a_refresh_late" => Planted::LinkRestartsARefreshLate,
                 _ => return None,
             }),
         },
@@ -2830,6 +2834,8 @@ fn main() {
 
 #[cfg(target_os = "macos")]
 mod live;
+#[cfg(target_os = "macos")]
+mod idle;
 #[cfg(target_os = "macos")]
 mod watch;
 #[cfg(target_os = "macos")]
