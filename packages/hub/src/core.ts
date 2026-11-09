@@ -960,16 +960,21 @@ export class Core {
     this.gate.kept(kept.map((row) => JSON.parse(row.data) as { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }));
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
     // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
-    // it reads them for the task, the continue or the resume they call for (#85). With nothing due it reads nothing,
-    // so a backfill never feeds it. The hub takes each continue's route every beat, since an answer records them too.
+    // it reads them for the task, the continue or the resume they call for (#85), and at each of your batch times it
+    // shows what waited for that batch (#22). With nothing due it reads nothing, so a backfill never feeds it. The hub
+    // takes each continue's route every beat, since an answer records them too.
     // While the Mac sleeps no beat runs: a beat that finds the wall clock far past the last one tells the asks core the
     // hub didn't run in between, which moves the deadline of each ask that hadn't shown (#908).
     let beat = { wall: Date.now(), at: this.now() };
     const landed = async (): Promise<number> => Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind IN ('agent.stop', 'verdict.made')`)) as { pos: number }[])[0]?.pos ?? 0);
     let ticked = await landed();
+    let batchAt = asks.nextBatch();
     const due = async (): Promise<boolean> => {
+      const batch = batchAt !== null && this.now() >= batchAt;
+      if (batch) batchAt = asks.nextBatch();
       const pos = await landed();
       if (pos > ticked) { ticked = pos; return true; }
+      if (batch) return true;
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0;
     };
     // The hook programs are checked at start and every 10 minutes on the hub's clock (#993): no hook arrives to say they can't run.
