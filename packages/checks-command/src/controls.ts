@@ -18,9 +18,9 @@ function rewrite(path: string, text: string): void {
 }
 
 /** Every control's name starts so, whichever run drew it: a run that shares its checkout leaves its own out too. */
-export const CONTROL = 'deepbuild control ';
+const CONTROL = 'deepbuild control ';
 /** The words a run's evidence and its check's reason carry when a control didn't fail where it was written. */
-export const UNRECORDED = "the report can't record a failure";
+const UNRECORDED = "the report can't record a failure";
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]s$/;
 /** Folders whose test files are another tree's, never the run's: dependencies, and fixtures a test copies as a repo of its own. */
 const SKIP = new Set(['node_modules', '.git', 'fixtures', '__fixtures__', 'testdata']);

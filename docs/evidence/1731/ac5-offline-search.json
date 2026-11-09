@@ -1,0 +1,348 @@
+{
+  "online": [
+    {
+      "id": "pine-chair",
+      "name": "Pine Kitchen Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "shareable": true,
+        "credit": null
+      },
+      "size_m": 0.79,
+      "triangles": 12,
+      "thumbnail": "ac6645b90397dc589fbe713686d6d8a5a8cdc7e38bcfc755d1684d7640f0e300",
+      "url": "https://shelf.example/a/pine-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      }
+    },
+    {
+      "id": "oak-chair",
+      "name": "Oak Dining Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC-BY-4.0",
+        "terms": "https://creativecommons.org/licenses/by/4.0/",
+        "shareable": true,
+        "credit": "Ana Ruiz, Shelf"
+      },
+      "size_m": 0.82,
+      "triangles": 12,
+      "thumbnail": "fb4f51b131e3f21276f334616aed1d93305a0599baa0d0d19c3735e1cfeecead",
+      "url": "https://shelf.example/a/oak-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      }
+    },
+    {
+      "id": "shelf-armchair",
+      "name": "Shelf Armchair",
+      "kind": "model",
+      "license": {
+        "id": "LicenseRef-shelf-standard",
+        "terms": "https://shelf.example/license",
+        "shareable": false,
+        "credit": null
+      },
+      "size_m": 0.9,
+      "triangles": 12,
+      "thumbnail": "f00a0ac4df7db6054dc601aaf442ecba9832266ed1cf0812a0a81abf388d0163",
+      "url": "https://shelf.example/a/shelf-armchair",
+      "from": {
+        "library": "ext.shelf.library"
+      }
+    },
+    {
+      "id": "lawn-chair",
+      "name": "Lawn Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "shareable": true,
+        "credit": null
+      },
+      "size_m": 0.95,
+      "triangles": 12,
+      "thumbnail": "ab5d31b63c1f25546f68db1c112fbb63ba8352ae841e5b2e155959bd28900e3e",
+      "url": "https://shelf.example/a/lawn-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      }
+    },
+    {
+      "id": "bar-chair",
+      "name": "Bar Stool Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC-BY-4.0",
+        "terms": "https://creativecommons.org/licenses/by/4.0/",
+        "shareable": true,
+        "credit": "Lee Park, Shelf"
+      },
+      "size_m": 0.62,
+      "triangles": 12,
+      "thumbnail": "234000f7bf589ad00693f46302afc6f8bfd60f82776e8496e474b67d83959468",
+      "url": "https://shelf.example/a/bar-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      }
+    },
+    {
+      "id": "rocking-chair",
+      "name": "Rocking Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC-BY-4.0",
+        "terms": "https://creativecommons.org/licenses/by/4.0/",
+        "shareable": true,
+        "credit": "Mo Diallo, Shelf"
+      },
+      "size_m": 1.02,
+      "triangles": 12,
+      "thumbnail": "85bd5fe1c1cdd04705cb4e99b4c3e68fb2a8dd69ae7d6a37b1e6b87ba8e69a80",
+      "url": "https://shelf.example/a/rocking-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      }
+    },
+    {
+      "id": "office-chair",
+      "name": "Office Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "shareable": true,
+        "credit": null
+      },
+      "size_m": 1.05,
+      "triangles": 12,
+      "thumbnail": "627792057832b11e8bf92b5e3566aab09e915405b8f760ac33bcd641e821d30c",
+      "url": "https://shelf.example/a/office-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      }
+    },
+    {
+      "id": "kids-chair",
+      "name": "Kids Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "shareable": true,
+        "credit": null
+      },
+      "size_m": 0.45,
+      "triangles": 12,
+      "thumbnail": "eb3daf095b81efc8206d95d9d1555d0b78cc7ab6ce53eec4a2ad0a1332212ffc",
+      "url": "https://shelf.example/a/kids-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      }
+    },
+    {
+      "id": "wing-chair",
+      "name": "Wingback Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC-BY-4.0",
+        "terms": "https://creativecommons.org/licenses/by/4.0/",
+        "shareable": true,
+        "credit": "Ana Ruiz, Shelf"
+      },
+      "size_m": 1.18,
+      "triangles": 12,
+      "thumbnail": "71a2e5f4c39e0be3818918895442b84b6408b804f2f96261c810a00014f918cf",
+      "url": "https://shelf.example/a/wing-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      }
+    }
+  ],
+  "offline": [
+    {
+      "id": "pine-chair",
+      "name": "Pine Kitchen Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "shareable": true,
+        "credit": null
+      },
+      "size_m": 0.79,
+      "triangles": 12,
+      "thumbnail": "ac6645b90397dc589fbe713686d6d8a5a8cdc7e38bcfc755d1684d7640f0e300",
+      "url": "https://shelf.example/a/pine-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      },
+      "stale": true,
+      "age_ms": 1618
+    },
+    {
+      "id": "oak-chair",
+      "name": "Oak Dining Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC-BY-4.0",
+        "terms": "https://creativecommons.org/licenses/by/4.0/",
+        "shareable": true,
+        "credit": "Ana Ruiz, Shelf"
+      },
+      "size_m": 0.82,
+      "triangles": 12,
+      "thumbnail": "fb4f51b131e3f21276f334616aed1d93305a0599baa0d0d19c3735e1cfeecead",
+      "url": "https://shelf.example/a/oak-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      },
+      "stale": true,
+      "age_ms": 1618
+    },
+    {
+      "id": "shelf-armchair",
+      "name": "Shelf Armchair",
+      "kind": "model",
+      "license": {
+        "id": "LicenseRef-shelf-standard",
+        "terms": "https://shelf.example/license",
+        "shareable": false,
+        "credit": null
+      },
+      "size_m": 0.9,
+      "triangles": 12,
+      "thumbnail": "f00a0ac4df7db6054dc601aaf442ecba9832266ed1cf0812a0a81abf388d0163",
+      "url": "https://shelf.example/a/shelf-armchair",
+      "from": {
+        "library": "ext.shelf.library"
+      },
+      "stale": true,
+      "age_ms": 1618
+    },
+    {
+      "id": "lawn-chair",
+      "name": "Lawn Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "shareable": true,
+        "credit": null
+      },
+      "size_m": 0.95,
+      "triangles": 12,
+      "thumbnail": "ab5d31b63c1f25546f68db1c112fbb63ba8352ae841e5b2e155959bd28900e3e",
+      "url": "https://shelf.example/a/lawn-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      },
+      "stale": true,
+      "age_ms": 1618
+    },
+    {
+      "id": "bar-chair",
+      "name": "Bar Stool Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC-BY-4.0",
+        "terms": "https://creativecommons.org/licenses/by/4.0/",
+        "shareable": true,
+        "credit": "Lee Park, Shelf"
+      },
+      "size_m": 0.62,
+      "triangles": 12,
+      "thumbnail": "234000f7bf589ad00693f46302afc6f8bfd60f82776e8496e474b67d83959468",
+      "url": "https://shelf.example/a/bar-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      },
+      "stale": true,
+      "age_ms": 1618
+    },
+    {
+      "id": "rocking-chair",
+      "name": "Rocking Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC-BY-4.0",
+        "terms": "https://creativecommons.org/licenses/by/4.0/",
+        "shareable": true,
+        "credit": "Mo Diallo, Shelf"
+      },
+      "size_m": 1.02,
+      "triangles": 12,
+      "thumbnail": "85bd5fe1c1cdd04705cb4e99b4c3e68fb2a8dd69ae7d6a37b1e6b87ba8e69a80",
+      "url": "https://shelf.example/a/rocking-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      },
+      "stale": true,
+      "age_ms": 1618
+    },
+    {
+      "id": "office-chair",
+      "name": "Office Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "shareable": true,
+        "credit": null
+      },
+      "size_m": 1.05,
+      "triangles": 12,
+      "thumbnail": "627792057832b11e8bf92b5e3566aab09e915405b8f760ac33bcd641e821d30c",
+      "url": "https://shelf.example/a/office-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      },
+      "stale": true,
+      "age_ms": 1618
+    },
+    {
+      "id": "kids-chair",
+      "name": "Kids Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC0-1.0",
+        "terms": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "shareable": true,
+        "credit": null
+      },
+      "size_m": 0.45,
+      "triangles": 12,
+      "thumbnail": "eb3daf095b81efc8206d95d9d1555d0b78cc7ab6ce53eec4a2ad0a1332212ffc",
+      "url": "https://shelf.example/a/kids-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      },
+      "stale": true,
+      "age_ms": 1618
+    },
+    {
+      "id": "wing-chair",
+      "name": "Wingback Chair",
+      "kind": "model",
+      "license": {
+        "id": "CC-BY-4.0",
+        "terms": "https://creativecommons.org/licenses/by/4.0/",
+        "shareable": true,
+        "credit": "Ana Ruiz, Shelf"
+      },
+      "size_m": 1.18,
+      "triangles": 12,
+      "thumbnail": "71a2e5f4c39e0be3818918895442b84b6408b804f2f96261c810a00014f918cf",
+      "url": "https://shelf.example/a/wing-chair",
+      "from": {
+        "library": "ext.shelf.library"
+      },
+      "stale": true,
+      "age_ms": 1618
+    }
+  ]
+}

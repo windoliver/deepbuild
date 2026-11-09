@@ -1098,6 +1098,13 @@ fn set_when(g: &mut G, step: &str, cond: &str) {
 /// The px a pass of the shipped blur reaches at most.
 pub const MAX_BLUR: f64 = 64.0;
 
+/// The shipped blur's passes' cost, ns per pixel, as the calibration run measured them
+/// (`deep-gpu` `calibrate`, rows `blur.x@1` and `blur.y@1`, costed by measurement): the lowest of
+/// its five runs' 95th percentiles on Nov 8, 2026, on a reference Mac under other sessions' load
+/// (its fixture.taps@1 read about 28 times its estimate), so a high reading until an idle run
+/// replaces it. A composed pass that calls the blur costs its blur parts at these (#432).
+pub const BLUR_MEASURED_NS_PER_PX: [(&str, f64); 2] = [("blur.x@1", 3.590), ("blur.y@1", 3.641)];
+
 /// One axis of the shipped blur (Frame and group: passes): a Gaussian of `radius` px, 31 taps
 /// across twice the radius, of the premultiplied color. A group runs `x`, then `y`.
 pub fn blur(axis: &str) -> Value {

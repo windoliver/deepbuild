@@ -1,0 +1,71 @@
+
+ RUN  v5.0.5 <base-checkout>/tests/acceptance/1507
+
+ ❯ reach.test.ts (5 tests | 4 failed) 6026ms
+   × AC1 #1507.38331cb5 home-containing delete past ceiling is an authority ask saying its reach 921ms
+   × AC2 #1507.56b942ba untracked sibling is staged and undo restores it 1101ms
+   × AC3 #1507.0ecedf02 forced git clean stages ignored and untracked files and undo restores each 2249ms
+   × AC5 #1507.0f4ac05d stopped hub denies a home delete and names the guard 915ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  reach.test.ts > AC1 #1507.38331cb5 home-containing delete past ceiling is an authority ask saying its reach
+Error: AC1 #1507.38331cb5 HOME_NEVER_UNSTAGED: rm -rf tests/ plan/ ~/ was allowed and ran; command.staged=false, files kept=0/5; {"code":0,"stdout":"","stderr":"","timedOut":false,"ms":17.538749999999936}
+ ❯ must helpers.ts:24:81
+     22| export type Line = Record<string, any>;
+     23| export const sleep = (ms: number) => new Promise<void>((done) => setTi…
+     24| export function must(ok: unknown, message: string): asserts ok { if (!…
+       |                                                                                 ^
+     25| const dirs: string[] = [];
+     26| const children = new Set<ChildProcess>();
+ ❯ reach.test.ts:22:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  reach.test.ts > AC2 #1507.56b942ba untracked sibling is staged and undo restores it
+Error: AC2 #1507.56b942ba STAGED_BEFORE_RUN: rm -rf ../sibling ran without a recorded copy-on-write staging; clone=false, command.staged=false, deleted=2
+ ❯ must helpers.ts:24:81
+     22| export type Line = Record<string, any>;
+     23| export const sleep = (ms: number) => new Promise<void>((done) => setTi…
+     24| export function must(ok: unknown, message: string): asserts ok { if (!…
+       |                                                                                 ^
+     25| const dirs: string[] = [];
+     26| const children = new Set<ChildProcess>();
+ ❯ stagedUndo helpers.ts:249:3
+ ❯ reach.test.ts:39:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  reach.test.ts > AC3 #1507.0ecedf02 forced git clean stages ignored and untracked files and undo restores each
+Error: AC3 #1507.0ecedf02 STAGED_BEFORE_RUN: git clean -fdx ran without a recorded copy-on-write staging; clone=false, command.staged=false, deleted=1
+AC3 #1507.0ecedf02 STAGED_BEFORE_RUN: git clean -fd ran without a recorded copy-on-write staging; clone=false, command.staged=false, deleted=1
+ ❯ must helpers.ts:24:81
+     22| export type Line = Record<string, any>;
+     23| export const sleep = (ms: number) => new Promise<void>((done) => setTi…
+     24| export function must(ok: unknown, message: string): asserts ok { if (!…
+       |                                                                                 ^
+     25| const dirs: string[] = [];
+     26| const children = new Set<ChildProcess>();
+ ❯ reach.test.ts:53:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  reach.test.ts > AC5 #1507.0f4ac05d stopped hub denies a home delete and names the guard
+Error: AC5 #1507.0f4ac05d HUB_DOWN_DENY: rm -rf ~/ was allowed and ran with hub stopped; home file kept=false; {"code":0,"stdout":"","stderr":"","timedOut":false,"ms":15.786082999999962}
+ ❯ must helpers.ts:24:81
+     22| export type Line = Record<string, any>;
+     23| export const sleep = (ms: number) => new Promise<void>((done) => setTi…
+     24| export function must(ok: unknown, message: string): asserts ok { if (!…
+       |                                                                                 ^
+     25| const dirs: string[] = [];
+     26| const children = new Set<ChildProcess>();
+ ❯ reach.test.ts:89:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 1 passed (5)
+   Start at  21:08:53
+   Duration  6.15s (tests 99%)
+

@@ -9,8 +9,8 @@ import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseClaimLine } from '@deepbuild/record';
 
-export interface Hit { source: string; quote: string; outside?: boolean; known?: string; proof?: number; sources?: unknown[]; as_of?: number; reading?: unknown; status?: 'current' | 'STALE' }
-export interface Claim { id: string; page: string; source: string; text: string }
+interface Hit { source: string; quote: string; outside?: boolean; known?: string; proof?: number; sources?: unknown[]; as_of?: number; reading?: unknown; status?: 'current' | 'STALE' }
+interface Claim { id: string; page: string; source: string; text: string }
 interface IndexHit { claim: string; page: string; quote: string; source: string; [mark: string]: unknown }
 /** index@1's surface, as packages/conformance/src/slots/wiki-index.ts defines it; a fill that runs elsewhere answers later. */
 export interface IndexFill {
@@ -25,7 +25,7 @@ const QUOTE = 400;
 const VIEWS = 'questions/';
 
 /** The words a query asks for, runs of letters and digits in any script: every hit holds each of them as a word. */
-export const words = (text: string): string[] => text.normalize('NFC').toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
+const words = (text: string): string[] => text.normalize('NFC').toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
 /** A word in a script written without spaces has no boundaries to split on, so a hit holds it anywhere in its text. */
 const spaceless = (word: string): boolean => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u.test(word);
 const holds = (text: string, wanted: readonly string[]): boolean => {
@@ -124,7 +124,7 @@ async function wikiHits(found: IndexHit[], input: SearchIn): Promise<Hit[]> {
   return hits;
 }
 
-export interface SearchIn {
+interface SearchIn {
   query: string;
   /** A swapped-in index; undefined reads the ledger's own. */
   index: IndexFill | undefined;

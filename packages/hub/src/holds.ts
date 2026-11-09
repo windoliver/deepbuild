@@ -28,7 +28,7 @@ type Obj = Record<string, unknown>;
 const key = (v: unknown) => sha256Hex(canonicalize(v as JsonValue));
 
 
-export interface HoldOptions {
+interface HoldOptions {
   /** The session ran a held call again on your yes to this ask: it has your answer. */
   heard?(ask: string): Promise<void>;
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
@@ -172,15 +172,15 @@ export class Holds {
     const asked = await this.askOf(k);
     return asked && (asked.decision === 'allow' ? 'allow' : `ask:${asked.id}`);
   }
-  /** A delete whose reach is unknown and couldn't be staged (#347): held by one authority ask that says so, raised under `k`. */
-  async holdUnstaged(meta: HookMeta, k: string, label: string, question: string): Promise<string> {
+  /** A delete whose reach is unknown, or reaches past its worktree (`reach`, #1507), and couldn't be staged (#347): held by one authority ask that says so, raised under `k`. */
+  async holdUnstaged(meta: HookMeta, k: string, label: string, question: string, reach?: string): Promise<string> {
     try {
       const ask = await this.raise(meta.session, meta.agent, meta.cwd, 'command.unstageable', k, question, ['Run it unstaged', 'Don\'t run it'],
-        planFor('command.unstageable', `Run \`${label}\` unstaged, with its reach unknown`, [label]));
+        planFor('command.unstageable', `Run \`${label}\` unstaged, ${reach ? `reaching ${reach}` : 'with its reach unknown'}`, [label]));
       return `DeepBuild is holding this: ${question} It waits for your answer to ${ask}; once you say yes, run the same call again.`;
     } catch (error) {
       if (!(error instanceof AskRefused)) throw error;
-      return `DeepBuild held this: \`${label}\`'s reach is unknown and it can't be staged, and no ask could be raised for it (${error.message}).`;
+      return `DeepBuild held this: \`${label}\`'s reach ${reach ? `goes ${reach}` : 'is unknown'} and it can't be staged, and no ask could be raised for it (${error.message}).`;
     }
   }
   /** Why a call held by `handle` doesn't run: still waiting, or you said no. */

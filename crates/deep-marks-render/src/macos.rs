@@ -799,8 +799,18 @@ impl Renderer {
                 t,
                 record,
                 gpui_oklab,
+                drops_glyph,
                 store,
-            } => self.render(&out, &doc, &look, view, t, record, gpui_oklab, store),
+            } => self.render(
+                &out,
+                &doc,
+                &look,
+                view,
+                t,
+                record,
+                (gpui_oklab, drops_glyph),
+                store,
+            ),
         }
     }
 
@@ -1784,15 +1794,28 @@ impl Renderer {
         view: View,
         t: i64,
         mut record: Record,
-        gpui_oklab: bool,
+        (gpui_oklab, drops_glyph): (bool, bool),
         store: Option<PathBuf>,
     ) -> Value {
         let mut session = Self::new_session();
         session.store = store;
         record.pinned = t;
+        // #1479: the frame report counts the glyphs the atlas rasterized and those drawn from its
+        // largest raster for want of an outline, prepaint included.
+        let before = (deep_text_gpui::rasterized(), deep_text_gpui::from_largest());
         let result = compile(&mut session, doc).and_then(|()| {
             self.present(&mut session, doc, look, view, &record, t, gpui_oklab, false)
         });
+        if let (Ok(_), true, Some(main)) = (&result, drops_glyph, session.main.as_ref()) {
+            // #1479 AC1's wrong program: each text's second grapheme drawn clear, so it vanishes
+            // with no word, as a glyph past the atlas's limit once did.
+            for (draw, _) in main.draws.borrow_mut().iter_mut() {
+                if let Draw::Text { runs, .. } = draw {
+                    runs.insert(0, (1..2, Hsla::transparent_black()));
+                }
+            }
+            self.cx.present_frame(main.handle);
+        }
         let answer = match result {
             Err(refusal) => refusal,
             Ok(_) => {
@@ -1803,6 +1826,8 @@ impl Renderer {
                             "ok": true, "width": image.width(), "height": image.height(),
                             "marks": session.snapshot["marks"], "legend": session.snapshot["legend"],
                             "texts": session.texts, "backends": crate::backends(false),
+                            "rasterized": deep_text_gpui::rasterized() - before.0,
+                            "from_largest": deep_text_gpui::from_largest() - before.1,
                         }),
                         Err(_) => refused("not_written", out),
                     },

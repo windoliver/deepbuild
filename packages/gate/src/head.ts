@@ -54,7 +54,7 @@ export interface HeadResult {
   plan: HeadPlan;
   cause: 'untrusted head' | null;
 }
-export type HeadPlant = 'author-counts' | 'committer-counts' | 'empty-pusher-counts' | 'unvetted-reader';
+type HeadPlant = 'author-counts' | 'committer-counts' | 'empty-pusher-counts' | 'unvetted-reader';
 
 /** The kit result per reader, so a reader is replayed once. */
 const vetted = new WeakMap<PushRecordReader, boolean>();

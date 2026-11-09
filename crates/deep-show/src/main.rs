@@ -1246,6 +1246,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checker_fits_surface" => Planted::CheckerFitsSurface,
                 "deviation_one_way" => Planted::DeviationOneWay,
                 "normals_from_faces" => Planted::NormalsFromFaces,
+                "arms_each_vsync" => Planted::ArmsEachVsync,
+                "link_never_stops" => Planted::LinkNeverStops,
+                "waker_ignores_schedule_frame" => Planted::WakerIgnoresScheduleFrame,
+                "link_restarts_a_refresh_late" => Planted::LinkRestartsARefreshLate,
                 _ => return None,
             }),
         },
@@ -2795,6 +2799,8 @@ fn main() {
 
 #[cfg(target_os = "macos")]
 mod live;
+#[cfg(target_os = "macos")]
+mod idle;
 #[cfg(target_os = "macos")]
 mod watch;
 #[cfg(target_os = "macos")]

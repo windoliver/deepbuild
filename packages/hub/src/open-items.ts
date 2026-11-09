@@ -29,7 +29,7 @@ const THREADS = `query($owner: String!, $repo: String!, $number: Int!) { reposit
   number url body reviewThreads(first: 100) { totalCount pageInfo { hasNextPage endCursor } nodes { id isResolved isOutdated path line
   resolvedBy { login } comments(first: 1) { totalCount nodes { id databaseId author { login } body url createdAt } } } } } } }`;
 
-export interface OpenItemsOptions {
+interface OpenItemsOptions {
   raw(query: string, params?: readonly (string | number | null)[]): Promise<unknown[]>;
   append(connection: Connection, input: EventInput): Promise<void>;
   /** The core's connection, for the session when given. */
@@ -44,7 +44,7 @@ export interface OpenItemsOptions {
   taskList(agent: string): TaskListFacts | undefined;
 }
 /** What one claim is read for. */
-export interface ClaimRead {
+interface ClaimRead {
   session: string; agent: string; task: string; cwd: string; base: string; message: string; transcript: string | undefined; pr: string | undefined;
   /** Nothing but reads since the session's last claim (#82): the lines the change added are those it read then. */
   same?: boolean;

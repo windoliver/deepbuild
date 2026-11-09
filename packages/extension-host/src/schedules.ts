@@ -9,9 +9,9 @@
 
 /** A run's verdict on its schedule's claim. */
 export type Verdict = 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'INVALID' | 'uncounted';
-export type Cadence = { every: number } | { cron: string };
+type Cadence = { every: number } | { cron: string };
 /** What a scheduled job may do: the sources it reads, the notice, store and send kinds it may make, and whether it may end with a no-op. */
-export interface Declares { readings: string[]; notices: string[]; stores: string[]; sends: string[]; noop: boolean }
+interface Declares { readings: string[]; notices: string[]; stores: string[]; sends: string[]; noop: boolean }
 /** `cadence` is null for a job that checks notices and runs only on the schedules notices give it (#262). */
 export interface ScheduleDecl { name: string; plugin: string; cadence: Cadence | null; deadline: number; declares: Declares }
 
@@ -49,7 +49,7 @@ export interface RunEvent {
   resumed?: boolean; verdict?: Exclude<Verdict, 'uncounted'>; noop?: boolean; cause?: string | null; stopped?: boolean; changes?: string[];
 }
 /** What the scheduler needs of the host. */
-export interface RunHost {
+interface RunHost {
   now(): number;
   newRun(): string;
   append(event: RunEvent): Promise<void>;

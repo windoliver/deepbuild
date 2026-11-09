@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 /** How long a panel gets to mount, run for its half second and be read. */
 const KIT_MS = 30_000;
 
-export interface PanelKit { verdict: 'PASS' | 'FAIL' | 'BLOCKED'; why: string }
+interface PanelKit { verdict: 'PASS' | 'FAIL' | 'BLOCKED'; why: string }
 
 /** The replica's binary: the checkout's debug build, as deep_drive runs it. */
 const replica = (): string => join(fileURLToPath(new URL('../../../', import.meta.url)), 'target', 'debug', 'deep-replica');

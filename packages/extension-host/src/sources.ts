@@ -14,7 +14,7 @@ import { ulid } from '@deepbuild/record';
 import { SERIES_MAX } from './series.js';
 
 /** One outside call the hub makes for a source, as it hands it to its HTTP client. */
-export interface HttpRequest { url: string; method: string; headers: Record<string, string>; body?: string }
+export interface HttpRequest { url: string; method: string; headers: Record<string, string>; body?: string; /** A file's bytes (#1731): the answer's body as base64. */ encoding?: 'base64' }
 /** What came back, as the client got it: header names lower-case, a 3xx as it is, with its Location. */
 export interface HttpAnswer { status: number; headers: Record<string, string>; body: string }
 /** The hub's HTTP client for source calls: it never follows a redirect, rejects when the host can't be reached, and stops when `signal` aborts. */
@@ -60,7 +60,12 @@ export interface Polled {
  * host only, with its secret by handle, under its quota; `delivers` says what a delivery into its threads is.
  */
 export interface WorkDecl { host: string; secret: string | null; auth: Polled['auth']; quota: { per_minute: number; per_day: number }; delivers: 'comment' | 'chat' | 'email' }
-export type Declared = Polled | { variant: 'stream'; name: string; work: WorkDecl | null };
+/**
+ * A library source (#1731), asset.library@1's fill: its search and fetch run in the package, every call they make and
+ * every byte of a picked asset going through the hub to its one host, with its secret by handle, its quota and timeout.
+ */
+export interface LibraryDecl extends Omit<WorkDecl, 'delivers'> { timeout: number }
+export type Declared = Polled | { variant: 'stream'; name: string; work: WorkDecl | null } | { variant: 'library'; name: string; library: LibraryDecl };
 
 /** The handle `deep.secret(name)` gives: it names the secret, never holds its value. */
 export const handleOf = (name: string): string => `secret:${name}`;
@@ -69,6 +74,8 @@ const secretKey = (owner: string, name: string): string => `deepbuild/${owner}/$
 
 /** The largest answer a source call takes. */
 const ANSWER = 1024 * 1024;
+/** The largest file a library fetch downloads in one call (#1731). */
+const FILE = 512 * 1024 * 1024;
 const HOPS = 5;
 const MINUTE = 60_000;
 const DAY = 86_400_000;
@@ -91,13 +98,14 @@ const path = (p: unknown): p is string => typeof p === 'string' && p.startsWith(
  * A `deep.registerSource` call, held to what the package declared and was granted: a name and variant its manifest
  * lists, and for a polled source a host its grant names, a secret by a handle its manifest names, sent one way.
  */
-export function declareSource(name: unknown, declared: unknown, own: { sources: { name: string; variant: string; reading?: string }[]; secrets: { name: string }[]; hosts: string[] }): Declared {
+export function declareSource(name: unknown, declared: unknown, own: { sources: { name: string; variant: string; reading?: string; host?: string }[]; secrets: { name: string }[]; hosts: string[] }): Declared {
   const d = (typeof declared === 'object' && declared !== null ? declared : {}) as Record<string, unknown>;
   const refuse = (why: string): never => { throw Error(`deep.registerSource: ${String(name)} ${why}`); };
   const listed = own.sources.find((s) => s.name === name && s.variant === d.variant) ?? refuse(`isn't a ${String(d.variant)} source the manifest lists`);
   if (d.variant === 'stream' && listed.reading !== 'work.item@1') return { variant: 'stream', name: name as string, work: null };
-  if (d.variant !== 'polled' && d.variant !== 'stream') refuse(`is a ${String(d.variant)} source, which this host doesn't call yet`);
+  if (d.variant !== 'polled' && d.variant !== 'stream' && d.variant !== 'library') refuse(`is a ${String(d.variant)} source, which this host doesn't call yet`);
   if (typeof d.host !== 'string' || !own.hosts.includes(d.host)) refuse('names a host the grant doesn\'t');
+  if (d.variant === 'library' && d.host !== listed.host) refuse(`names ${String(d.host)}, not the host ${String(listed.host)} its manifest lists`);
   if (d.variant === 'polled' && !path(d.path)) refuse('gives no path on its host');
   let secret: string | null = null;
   let auth: Polled['auth'] = null;
@@ -116,6 +124,10 @@ export function declareSource(name: unknown, declared: unknown, own: { sources: 
   if (d.variant === 'stream') {
     if (d.delivers !== 'comment' && d.delivers !== 'chat' && d.delivers !== 'email') refuse('says what a delivery to it is: a comment, a chat reply or an email');
     return { variant: 'stream', name: name as string, work: { host: d.host as string, secret, auth, quota: { per_minute: quota!.per_minute as number, per_day: quota!.per_day as number }, delivers: d.delivers as WorkDecl['delivers'] } };
+  }
+  if (d.variant === 'library') {
+    if (!whole(d.timeout)) refuse('gives no timeout in ms');
+    return { variant: 'library', name: name as string, library: { host: d.host as string, secret, auth, quota: { per_minute: quota!.per_minute as number, per_day: quota!.per_day as number }, timeout: d.timeout as number } };
   }
   if (!whole(d.timeout) || !whole(d.freshFor)) refuse('gives no timeout or freshness in ms');
   const keyPath = (d.keyTest as { path?: unknown } | undefined)?.path;
@@ -151,14 +163,15 @@ export const nodeHttp: HttpClient = async (request, signal) => {
   const res = await fetch(request.url, { method: request.method, headers: request.headers, redirect: 'manual', signal, ...(request.body === undefined ? {} : { body: request.body }) });
   const chunks: Uint8Array[] = [];
   let size = 0;
+  const cap = request.encoding === 'base64' ? FILE : ANSWER;
   for await (const chunk of res.body ?? []) {
     size += chunk.byteLength;
-    if (size > ANSWER) throw Error(`the answer from ${new URL(request.url).host} is over ${ANSWER} bytes`);
+    if (size > cap) throw Error(`the answer from ${new URL(request.url).host} is over ${cap} bytes`);
     chunks.push(chunk);
   }
   const headers: Record<string, string> = {};
   res.headers.forEach((v, k) => { headers[k] = v; });
-  return { status: res.status, headers, body: Buffer.concat(chunks).toString('utf8') };
+  return { status: res.status, headers, body: Buffer.concat(chunks).toString(request.encoding === 'base64' ? 'base64' : 'utf8') };
 };
 /** No OS secret store this host can reach: nothing is held, so what needs a secret is BLOCKED, and none can be entered. */
 const noSecrets: SecretStore = {
@@ -248,7 +261,7 @@ export const openBrowser = (url: string): Promise<void> => new Promise((done, fa
 
 type Outcome = HttpAnswer | { error: string };
 /** What the record keeps of a source's calls and readings, appended as the core. */
-export type Append = (kind: 'source.called' | 'reading.recorded', data: Record<string, unknown>) => Promise<void>;
+type Append = (kind: 'source.called' | 'reading.recorded', data: Record<string, unknown>) => Promise<void>;
 
 /** The hub's side of every source: its calls, cache, quotas, back-off, recording and the secret values it holds to scrub. */
 export class Sources {
@@ -446,10 +459,11 @@ export class Sources {
    * quota (the call is refused, and made no more, once the minute's or the day's calls are spent), recorded and scrubbed
    * as any source call. `noAnswer` is set when the request went out and no answer came, so whether it landed is unknown.
    */
-  async workFetch(owner: string, name: string, work: WorkDecl, request: { method: string; path: string; headers?: Record<string, string>; body?: string }): Promise<HttpAnswer> {
+  /** A work source's call (#66), or a library source's (#1731) under its own timeout, a file's bytes as base64. */
+  async workFetch(owner: string, name: string, work: Omit<WorkDecl, 'delivers'>, request: { method: string; path: string; headers?: Record<string, string>; body?: string }, library?: { timeout: number; encoding?: 'base64' }): Promise<HttpAnswer> {
     if (!['GET', 'POST'].includes(request?.method) || !path(request.path)) throw Error(`${name}'s call names no method and path on ${work.host}`);
     const now = this.options.now();
-    const key = `work:${name}`;
+    const key = `${library ? 'library' : 'work'}:${name}`;
     const times = (this.spent.get(key) ?? []).filter((t) => now - t < DAY);
     const minute = times.filter((t) => now - t < MINUTE);
     if (minute.length >= work.quota.per_minute || times.length >= work.quota.per_day) {
@@ -464,10 +478,10 @@ export class Sources {
     this.spent.set(key, [...times, now]);
     const source: Polled = {
       variant: 'polled', name, host: work.host, path: request.path, secret: work.secret, auth: work.auth, oauth: null, quota: work.quota,
-      timeout: WORK_MS, freshFor: 1, keyTest: null, shape: 'number', whileShown: null,
+      timeout: library?.timeout ?? WORK_MS, freshFor: 1, keyTest: null, shape: 'number', whileShown: null,
     };
     const headers = { ...Object.fromEntries(Object.entries(request.headers ?? {}).filter(([k]) => typeof k === 'string' && k.toLowerCase() !== 'host').map(([k, v]) => [k, String(v)])), ...this.headers(source, value) };
-    const answer = await this.call(source, { url: `https://${work.host}${request.path}`, method: request.method, headers, ...(typeof request.body === 'string' ? { body: request.body } : {}) });
+    const answer = await this.call(source, { url: `https://${work.host}${request.path}`, method: request.method, headers, ...(typeof request.body === 'string' ? { body: request.body } : {}), ...(library?.encoding ? { encoding: library.encoding } : {}) });
     if ('error' in answer) throw new NoAnswer(`${work.host} gave no answer: ${answer.error}`);
     return answer;
   }

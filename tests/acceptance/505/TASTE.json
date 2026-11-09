@@ -1,0 +1,19 @@
+{
+  "issue": 505,
+  "criterion": "#505.c8aaffce",
+  "verdict": "looks_right",
+  "who": "Claude (Opus 5.5), delegated by the repo owner in the #505 session",
+  "when": "2026-11-09T04:44:25Z",
+  "screenshots": {
+    "filled-area.png": "2d1feda05c788de6ac55fe46debc64c393d6352334ca85419637ad1b2e5d21e2",
+    "formula-mid-write.png": "0ec84228f6b8a5f6bf2e9d06f7b24ade03c0e6ede18ec8ac754bcfbb3c9ba3e4",
+    "formula-write-on.apng": "bc4a6f43261ad27c93e3978a037c22f88e2c73723ffe0a098a3cac9a4d78f0c9",
+    "formula-written.png": "5bf7257e13164a85bc13ada09c8c5d3464ad73a1e4f955ffc4d1562fc0428312",
+    "implicit-circle.png": "093f72a836da68cf955770ac58d85556b7ec773d3b4f9daa92f4188a5f243d75",
+    "implicit-elliptic.png": "7b9662f5ce27ccf00094d2ce37ae1c7c0231e7ffb8b43da3cdfc93741610373a",
+    "implicit-small-circle.png": "a1bf9eaf6edf6817e76e1308cd685f72a555b02ad426f7d0aac3d6cd6bcf209b",
+    "parabola-slider.png": "7ff7785b1bc7bfd08c04a4b85a189aba58316bee146af5ae6b15c243eb9d0dc7",
+    "slider-moving.apng": "b2c6110a363b600b07bb07440cb5de4cb8b3560d58ba6360288fe1033aa5fd4d"
+  },
+  "note": "The owner was shown all nine files in the session and asked Claude to make the call (\"can you judge for me\", then \"validate for me\"); this is Claude's reading, not the owner's own look. Checked: the formula writes on term by term, outline then fill (stills and 37 recording frames); the parabola redraws as the slider moves 0.5 -> 2 with the knob following (31 frames); the unit circle, the oval and branch of y^2 - x^3 + 2x - 1 = 0 and the 0.02-radius circle draw as closed or open curves where they should; the area under x^2 is filled under the curve. Caveats: the formula fixture's terms are block shapes, not typeset glyphs (#220 is open), and the plots draw no axes."
+}

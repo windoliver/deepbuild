@@ -174,6 +174,111 @@ async function updateCheck(): Promise<number> {
   return check.status === 'could-not-check' ? 1 : 0;
 }
 
+// Every command's usage as `deep --help` lists it, a line each, led by the commands it names.
+const usage = [
+  'deep doctor [--json] [--prompt]   --prompt also sends each signed-in agent one test prompt, which spends plan usage',
+  'deep status  every session, what needs you first',
+  'deep off | on   every gate watch-only, or back, once the OS confirms you',
+  'deep explain <recorded session folder> [--json]',
+  'deep run --result <run.finished event file>',
+  'deep hub run | start | status [--root <folder>]',
+  'deep hub stop [--root <folder>]',
+  'deep hub use --root <folder>   this worktree\'s sessions to a dev hub, once the OS confirms you',
+  'deep fix <id>   work from an item at a source you switched on, such as LIN-42',
+  'deep workspace new <topic> [--folder <path>] | move <id> <folder> | revert <id> <commit> | diff <id> | drift <id>   a home for work outside a repo',
+  'deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you',
+  'deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins\' actions',
+  'deep env up | down [--root <folder>] [--json]   this worktree\'s stack, through the hub',
+  'deep lease [kind...] -- <command>   a heavy build or test suite run under one cpu.slot and a lease on each kind, at a lower priority',
+  'deep numbers [--json] | refresh | baseline <manifest> | sample <before date> [manifest]   your readings, each with its source and age',
+  'deep show --doc <doc ID> --document <file> [--check] [--snap] [--claim <claim>] [--json]   a canvas document drawn in your layer, or in the agent\'s whose process tree runs it',
+  'deep export --document <file> --still <frame | marker> --out <file.png>   one still of a document, drawn headless with no hub',
+  'deep kinds --dump <folder> | --diff <a> <b>   the canvas core\'s whole listing as canonical JSON named by its module-set digest, or two such dumps diffed',
+  'deep inbox  your open asks',
+  'deep inbox answer <ask> <option>   answer one, once the OS confirms you',
+  'deep race <issue>   its sessions race: they settle on the first PASS and raise no "keep which?" ask',
+  'deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you',
+  'deep start approve --repo <path> --issues <n,...> --agents <agent,...> --at-once <n> --plan-share <percent>   ask to approve a run of sessions started without your Send',
+  'deep start --repo <path> --issue <n> --agent <agent> --prompt <words>   start one under it, in its own worktree',
+  'deep gate rules [--json]   the rulesets that make only the gate\'s status count on your repo, for you to apply',
+  'deep inbox save <offer>   save a permission you said yes to as a decision for its repo, once the OS confirms you',
+  'deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you',
+  'deep guard add <file>   guard entries you wrote, each checked on its planted call and twin, added once the OS confirms you',
+  'deep memory [--json]   what every agent\'s memory taught, ranked, for you to keep or remove',
+  'deep memory keep | remove <lesson>   your decision on one, once the OS confirms you',
+  'deep memory overrule <decision>   a rejection or a kept lesson undone, once the OS confirms you',
+  'deep rules sync | reach --repo <folder> --scope <glob> | credit <rule>   the rules page: every rule you wrote and what enforces it',
+  'deep session rules <session>   the set of rules a session runs under',
+  'deep undo staged:<id>   a destructive command\'s run undone from the copy staged before it ran',
+  'deep undo sync:<id>   an Agents page sync undone: each file put back where you haven\'t edited it since',
+  'deep mcp-exec <name>   what an agent\'s entry for a synced MCP server runs: its command, its secrets by handle',
+  'deep secret add <package> <name> | list [--json]   a package\'s secret, typed at your terminal and kept in the OS secret store',
+  'deep join <repo link> --invite <invite>   a project\'s hub on another machine, from a clone of its repo',
+  'deep backup <folder>   the record, its evidence and its wiki, copied through the running hub',
+  'deep restore <folder>   a backup put back with the hub stopped, once the OS confirms you',
+  'deep update --check   whether a newer DeepBuild is out',
+  'deep debug bundle   redacted logs, versions and doctor output, for a bug report',
+  'deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names',
+  'deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it',
+];
+const commandsOf = (line: string) => /^deep ([a-z-]+(?: \| [a-z-]+)*)/.exec(line)![1]!.split(' | ');
+const commands = [...new Set(usage.flatMap(commandsOf))];
+
+// Help never acts (#1359): an agent asks a command for help before it uses it, so -h, --help or help anywhere in its
+// arguments prints that command's usage before anything runs, setup included. Arguments after -- are another program's.
+const helpWords = ['--help', '-h', 'help'];
+const asksHelp = args.length === 0 || (args.includes('--') ? args.slice(0, args.indexOf('--')) : args).some((arg) => helpWords.includes(arg));
+// The planted wrong program runs deep backup before its help check, so #1359's table must name it.
+const help = asksHelp && !(args[0] === 'backup' && (await import('@deepbuild/hub')).activePlant() === 'dispatches-before-help');
+// What a person runs first, then their work, then what developers run (#1455); a command no group names is a developer's.
+const groups: [string, string[]][] = [
+  ['Start here', ['setup', 'status', 'inbox', 'doctor', 'off', 'install', 'memory', 'secret', 'update']],
+  ['Your work', ['fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
+  ['For developers', ['explain', 'run', 'hub', 'mcp', 'env', 'lease', 'show', 'export', 'kinds', 'mcp-exec', 'read', 'find']],
+];
+const groupOf = (line: string): number => {
+  const at = groups.findIndex(([, names]) => names.includes(commandsOf(line)[0]!));
+  return at < 0 ? groups.length - 1 : at;
+};
+function printHelp(): void {
+  const lines = usage.filter((line) => commandsOf(line).includes(args[0] ?? ''));
+  if (args.length === 0 || helpWords.includes(args[0]!) || args[0] === '--version') {
+    console.log(`${banner()}\nUsage: deep [--help | --version]\n\n${groups.map(([title, names], at) => `${title}:\n${usage
+      .filter((line) => groupOf(line) === at)
+      .sort((a, b) => names.indexOf(commandsOf(a)[0]!) - names.indexOf(commandsOf(b)[0]!))
+      .map((line) => `  ${line}`)
+      .join('\n')}`).join('\n\n')}`);
+  } else if (lines.length > 0) {
+    console.log(`Usage: ${lines.join('\n       ')}`);
+  } else {
+    unsupported(args[0]!);
+  }
+}
+
+// An unknown command names the nearest listed one, by the canvas's close names' distance and reach (#412,
+// crates/deep-canvas/src/document/close.rs): an edit distance that counts a swap of two neighbours as one edit, within
+// a third of the word's length, at least 1, the nearest first, then by name.
+function distance(a: string, b: string): number {
+  const [x, y] = [[...a], [...b]];
+  const d = Array.from({ length: x.length + 1 }, (_, i) => Array.from({ length: y.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= x.length; i++) {
+    for (let j = 1; j <= y.length; j++) {
+      d[i]![j] = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + (x[i - 1] === y[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && x[i - 1] === y[j - 2] && x[i - 2] === y[j - 1]) d[i]![j] = Math.min(d[i]![j]!, d[i - 2]![j - 2]! + 1);
+    }
+  }
+  return d[x.length]![y.length]!;
+}
+function unsupported(word: string): void {
+  const reach = Math.max(1, Math.floor([...word].length / 3));
+  process.exitCode = 2;
+  // A listed command whose arguments matched none of its forms keeps the plain line.
+  if (commands.includes(word)) return console.error('Unsupported command. Run deep --help for available commands.');
+  const near = commands.map((command) => [distance(word, command), command] as const)
+    .filter(([apart]) => apart <= reach).sort(([a, x], [b, y]) => a - b || (x < y ? -1 : 1))[0]?.[1];
+  console.error(`Unsupported command ${JSON.stringify(word)}.${near ? ` Did you mean deep ${near}?` : ''} Run deep --help for available commands.`);
+}
+
 // The first `deep` command sets everything up, as the app's Set up click does (#326): in a home with nothing of
 // DeepBuild, or one where a setup started and didn't finish (#1002, setup.ts), the commands you run yourself first run
 // setup's steps without asking. The hub's modules load only then, so a set-up home starts as fast as before (#24's
@@ -183,14 +288,14 @@ const yours = ['status', 'inbox', 'secret', 'off', 'on', 'env', 'install', 'guar
 const devHub = args[0] === 'env' && args.includes('--root');
 const installed = join(homedir(), '.deepbuild');
 const unfinished = !existsSync(join(installed, 'setup-finished.json')) && (!existsSync(installed) || existsSync(join(installed, 'setup-stopped.json')));
-if (yours.includes(args[0] ?? '') && !devHub && unfinished) {
+if (!help && yours.includes(args[0] ?? '') && !devHub && unfinished) {
   const { setUpFirst } = await import('@deepbuild/hub');
   const code = await setUpFirst(fileURLToPath(import.meta.url));
   if (code !== 0) process.exit(code);
 }
 
-if (args.length === 0 || (args.length === 1 && ['--help', '-h', 'help'].includes(args[0]!))) {
-  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json] [--prompt]   --prompt also sends each signed-in agent one test prompt, which spends plan usage\n       deep status  every session, what needs you first\n       deep off | on   every gate watch-only, or back, once the OS confirms you\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop [--root <folder>]\n       deep hub use --root <folder>   this worktree's sessions to a dev hub, once the OS confirms you\n       deep fix <id>   work from an item at a source you switched on, such as LIN-42\n       deep workspace new <topic> [--folder <path>] | move <id> <folder> | revert <id> <commit> | diff <id> | drift <id>   a home for work outside a repo\n       deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you\n       deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins' actions\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep lease [kind...] -- <command>   a heavy build or test suite run under one cpu.slot and a lease on each kind, at a lower priority\n       deep numbers [--json] | refresh | baseline <manifest> | sample <before date> [manifest]   your readings, each with its source and age\n       deep show --doc <doc ID> --document <file> [--check] [--snap] [--claim <claim>] [--json]   a canvas document drawn in your layer, or in the agent's whose process tree runs it\n       deep export --document <file> --still <frame | marker> --out <file.png>   one still of a document, drawn headless with no hub\n       deep kinds --dump <folder> | --diff <a> <b>   the canvas core's whole listing as canonical JSON named by its module-set digest, or two such dumps diffed\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep race <issue>   its sessions race: they settle on the first PASS and raise no "keep which?" ask\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep start approve --repo <path> --issues <n,...> --agents <agent,...> --at-once <n> --plan-share <percent>   ask to approve a run of sessions started without your Send\n       deep start --repo <path> --issue <n> --agent <agent> --prompt <words>   start one under it, in its own worktree\n       deep gate rules [--json]   the rulesets that make only the gate's status count on your repo, for you to apply\n       deep inbox save <offer>   save a permission you said yes to as a decision for its repo, once the OS confirms you\n       deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you\n       deep guard add <file>   guard entries you wrote, each checked on its planted call and twin, added once the OS confirms you\n       deep memory [--json]   what every agent's memory taught, ranked, for you to keep or remove\n       deep memory keep | remove <lesson>   your decision on one, once the OS confirms you\n       deep memory overrule <decision>   a rejection or a kept lesson undone, once the OS confirms you\n       deep rules sync | reach --repo <folder> --scope <glob> | credit <rule>   the rules page: every rule you wrote and what enforces it\n       deep session rules <session>   the set of rules a session runs under\n       deep undo staged:<id>   a destructive command's run undone from the copy staged before it ran\n       deep undo sync:<id>   an Agents page sync undone: each file put back where you haven't edited it since\n       deep mcp-exec <name>   what an agent's entry for a synced MCP server runs: its command, its secrets by handle\n       deep join <repo link> --invite <invite>   a project's hub on another machine, from a clone of its repo\n       deep backup <folder>   the record, its evidence and its wiki, copied through the running hub\n       deep restore <folder>   a backup put back with the hub stopped, once the OS confirms you\n       deep update --check   whether a newer DeepBuild is out\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n       deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names\n       deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it\n\nRepository skeleton.`);
+if (help) {
+  printHelp();
 } else if (args[0] === 'doctor') {
   const { doctorCommand } = await import('@deepbuild/hub');
   process.exitCode = await doctorCommand(args.slice(1), telemetryItems);
@@ -199,8 +304,9 @@ if (args.length === 0 || (args.length === 1 && ['--help', '-h', 'help'].includes
 } else if (args[0] === 'explain' && args[1] && args.slice(2).every((arg) => arg === '--json')) {
   process.exitCode = explain(args[1], args.includes('--json'));
 } else if (args[0] === 'hub') {
-  // Loaded only for hub commands, so every other command starts without the hub's modules.
-  const { hubCommand } = await import('@deepbuild/hub');
+  // Its own entry, loaded only for hub commands: every other command starts without the hub's modules, and the
+  // running hub without the other commands'.
+  const { hubCommand } = await import('@deepbuild/hub/hub');
   process.exitCode = await hubCommand(args.slice(1), fileURLToPath(import.meta.url));
 } else if (args[0] === 'lease') {
   // Its own entry, so a leased command starts without the hub's module graph.
@@ -299,6 +405,5 @@ if (args.length === 0 || (args.length === 1 && ['--help', '-h', 'help'].includes
   console.error('Usage: deep run --result <run.finished event file>');
   process.exitCode = 2;
 } else {
-  console.error('Unsupported command. Run deep --help for available commands.');
-  process.exitCode = 2;
+  unsupported(args[0]!);
 }

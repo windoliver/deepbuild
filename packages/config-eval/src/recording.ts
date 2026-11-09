@@ -93,7 +93,7 @@ const notRecorded = (tool: string): string => `${tool}: this call is not in the 
 const shQuote = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`;
 
 /** The replay's answering server for one run. */
-export interface Answering {
+interface Answering {
   port: number;
   /** The MCP config that serves each server the recording names, over streamable HTTP on this server. */
   mcpConfig: { mcpServers: Record<string, { type: 'http'; url: string }> };

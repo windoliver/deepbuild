@@ -16,9 +16,9 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 
 /** One kind of `resources` in done.yaml: `created_by` matches a command, group 1 of `key` names what its output made. */
-export interface ResourceKind { name: string; created_by: string; key: string; cost: number; check: string }
+interface ResourceKind { name: string; created_by: string; key: string; cost: number; check: string }
 /** A resource the record holds: `key` undefined when its command's output named none. */
-export interface Resource { resource: string; session: string; agent: string; cwd: string; kind: string; key?: string; check: string }
+interface Resource { resource: string; session: string; agent: string; cwd: string; kind: string; key?: string; check: string }
 export interface Ran { session: string; agent: string; cwd: string; call: string; command: string; stdout: string }
 
 /** How long a repo's pattern may run: it runs on the core's thread, against what an agent's command printed. */
@@ -48,7 +48,7 @@ export function resourceKinds(spec: unknown): { kinds: ResourceKind[]; wrong: st
   return { kinds, wrong };
 }
 
-export interface TeardownsOptions {
+interface TeardownsOptions {
   raw: Rows;
   /** The values the hub scrubs by: a key that holds one is never recorded. */
   held: readonly string[];

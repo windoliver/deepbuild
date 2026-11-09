@@ -8,7 +8,7 @@ import { fail } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { list, object, same, text } from './shared.js';
 
-export const STATE_SOURCE = 'state-source@1';
+const STATE_SOURCE = 'state-source@1';
 
 /** One thing a source reads, and its value now. */
 export interface StateItem { id: string; value: JsonValue }

@@ -19,7 +19,7 @@ export interface Answer { status: number; headers: Record<string, string>; body:
 export type Fetch = (path: string, page: number) => Promise<Answer>;
 
 /** A reading's author: the account, its role from the membership record, and whether the provider marks it automated. */
-export interface Author { handle: string; role: 'owner' | 'collaborator' | 'outside'; automated?: boolean }
+interface Author { handle: string; role: 'owner' | 'collaborator' | 'outside'; automated?: boolean }
 /** A `work.item@2` reading as the source gives it; `body` is the text itself here, which the lock reads for nothing but a planted wrong program. */
 export interface Reading { source_id: string; link: string; title: string; body: string; criteria: string[]; authors: Author[]; updated: string }
 
