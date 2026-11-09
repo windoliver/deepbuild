@@ -4,7 +4,7 @@
 // confirmation's stand-in, a paired device's key and its signature, the judges each criterion's failure
 // message comes from, and the planted wrong hubs, which sit between a client and a real hub.
 import { execFileSync } from 'node:child_process';
-import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomUUID, sign, type KeyObject } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
@@ -126,23 +126,48 @@ export const confirmEnv = (c: Confirmer) => ({ DEEP_HUB_TEST_CONFIRM: c.path });
 
 // ---- A device's key, pairing and a signed answer.
 
-export interface Device { name: string; key: KeyObject; publicKey: string; id?: string }
+/** `hub`: the ID of the hub it pairs with, as that hub's hello names it (#1579: a signature names its hub). */
+export interface Device { name: string; key: KeyObject; publicKey: string; id?: string; hub?: string }
 /** An Ed25519 key pair, as the app keeps its own; `publicKey` is the raw 32 bytes, base64url. */
 export function newDevice(name: string): Device {
   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
   return { name, key: privateKey, publicKey: String(publicKey.export({ format: 'jwk' }).x) };
 }
-/** `device.pair`: resolves with the hub's reply line; on success the device's ID is set. */
+/** The hub each device ID was paired with, so a signature made in another key's name names the same hub. */
+const pairedWith = new Map<string, string>();
+/**
+ * `device.pair`: resolves with the hub's reply line. The device takes the hub's ID from the connection's hello
+ * (`hub`, the hub's own identity); on success its ID is set too.
+ */
 export async function pair(conn: Conn, device: Device): Promise<Line> {
+  if (typeof conn.hello?.hub === 'string') device.hub = conn.hello.hub;
   const reply = await conn.call('device.pair', { name: device.name, public_key: device.publicKey }, 20_000);
-  if (reply.result && typeof reply.result.device === 'string') device.id = reply.result.device;
+  if (reply.result && typeof reply.result.device === 'string') {
+    device.id = reply.result.device;
+    if (device.hub) pairedWith.set(device.id, device.hub);
+  }
   return reply;
 }
-/** The answer's params with `device` and `signature`: Ed25519 over the RFC 8785 bytes of every other param. */
+/**
+ * The answer's params with `device` and `signature`, in #1579's format (design: Threats, and what stops each one):
+ * the signature covers the method, the hub's ID, the time, a once-only ID and the hash of the params, as
+ * `signature: { signed: { device, method, hub, at, once, params_hash }, sig }`, the envelope the channel path signs
+ * in. `params_hash` is the SHA-256 (hex) of the RFC 8785 bytes of every param but `signature`; `sig` is Ed25519 over
+ * the RFC 8785 bytes of `signed`, base64url. `at` is now, in ms since the epoch; `once` is fresh on every call.
+ */
 export function signed(params: Line, device: Device, as: { id?: string } = {}): Line {
-  const body = { ...params, device: as.id ?? device.id ?? '' };
-  const signature = sign(null, canonicalize(body as JsonValue), device.key).toString('base64url');
-  return { ...body, signature };
+  const id = as.id ?? device.id ?? '';
+  const body = { ...params, device: id };
+  const scope = {
+    device: id,
+    method: 'ask.answer',
+    hub: device.hub ?? pairedWith.get(id) ?? '',
+    at: Date.now(),
+    once: randomUUID(),
+    params_hash: createHash('sha256').update(canonicalize(body as JsonValue)).digest('hex'),
+  };
+  const sig = sign(null, canonicalize(scope as JsonValue), device.key).toString('base64url');
+  return { ...body, signature: { signed: scope, sig } };
 }
 /** A click's token, as the question card hands one to an approval (#318). */
 export const clickToken = (): string => `click-${sha256(String(Math.random())).slice(0, 16)}`;

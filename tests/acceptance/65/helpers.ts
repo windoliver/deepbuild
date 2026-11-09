@@ -16,7 +16,7 @@ import type { TestContext } from 'vitest';
 import { askSources, openAsks, type PlanInput } from '../../../packages/asks/src/index.ts';
 import { packageDigest } from '../../../packages/extension-host/src/index.ts';
 import { openRecord } from '../../../packages/record/src/index.ts';
-import { childEnv, cleanup as cleanup16, CLI, deep, makeHome, NODE, own, REPO, sleep, startHub, tempDir, tokenOf, ulid, type Hub, type Line } from '../16/helpers.ts';
+import { childEnv, cleanup as cleanup16, CLI, Conn, deep, makeHome, NODE, own, REPO, sleep, startHub, tempDir, tokenOf, ulid, type Hub, type Line } from '../16/helpers.ts';
 import { Confirmer, newDevice, signed, type Device } from '../34/helpers.ts';
 import { Phone, Provider, type Item, type Kind } from './fixtures/providers.ts';
 
@@ -202,7 +202,12 @@ export async function world(o: WorldOptions): Promise<World> {
   worlds.push(w);
   if (o.link) await ok(w, 'channel.link', { channel: 'chat', account: YOU });
   if (o.phone) w.phone.device = String((await ok(w, 'device.pair', { name: w.phone.name, public_key: w.phone.publicKey })).device);
-  if (o.app) w.app.id = String((await ok(w, 'device.pair', { name: w.app.name, public_key: w.app.publicKey })).device);
+  if (o.app) {
+    w.app.id = String((await ok(w, 'device.pair', { name: w.app.name, public_key: w.app.publicKey })).device);
+    const hello = await Conn.open(hub.socket);   // the hub's ID, from its hello, for what the app signs (#1579)
+    w.app.hub = String(hello.hello?.hub ?? '');
+    hello.close();
+  }
   o.beforeInstall?.(w);
   for (const kind of o.channels) await install(w, join(CHANNELS, kind));
   for (const kind of o.channels) {
