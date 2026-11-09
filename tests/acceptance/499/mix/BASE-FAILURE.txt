@@ -1,0 +1,19 @@
+Base: 42319109 (a descendant of f1e8736e). Not built or run there: the disk is shared and nearly full, and the
+surfaces these tests drive don't exist at the base, so every test fails before it judges any sample.
+
+What is missing in `deep-show run` at the base (crates/deep-show/src/main.rs, gate.rs, media.rs):
+
+- No `media_mix` call: main.rs's parser has no such name, so every scenario holding one answers
+  {"ok": false, "code": "bad_input"}. AC2, AC4, AC6, AC15 and AC16 (seek.test.ts, loop.test.ts, emitter.test.ts)
+  fail at their first run with "deep-show run answers the scenario ok ... got {"ok":false,"code":"bad_input"}".
+- No `media` document on `open`: gate.rs's `open` requires `strips` (an array of track, asset, start, in, out, loop),
+  so `open` with `media` fails to parse and the scenario answers bad_input. AC9 (live.test.ts) fails at its first step.
+- No `handed` call: also unknown to the parser (bad_input).
+- None of the planted names (`reverb_restores_without_tail`, `ring_drops_oldest`, `mixer_holds_gain_per_block`,
+  `emitter_always_inverse`, `cone_sign_reversed`) is known; any of them answers bad_input.
+- Behind those surfaces: no strip IDs, rate, gain keys, `enabled`, `span`, buses, processors (EQ, reverb), checkpoint
+  rings or byte budgets, emitters, scene items or a mixer exist anywhere in the base.
+
+Expected at the base: 6 tests, 6 failed, each for that reason (the missing behaviour, not a test mistake).
+The suite type-checks at the base: `node node_modules/typescript/bin/tsc -p tests/acceptance/499/mix/tsconfig.json`
+exits 0.

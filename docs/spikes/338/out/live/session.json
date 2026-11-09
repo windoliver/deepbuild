@@ -163,7 +163,7 @@
       },
       {
         "role": "label",
-        "name": "! Session 01MCBH57 returned · needs you",
+        "name": "! Untitled task · needs you",
         "value": "needs_you",
         "id": "return-card",
         "bounds": [
@@ -189,7 +189,7 @@
       },
       {
         "role": "label",
-        "name": "Hours to each deadline 10, 10 points",
+        "name": "Asks with a deadline 10",
         "value": null,
         "id": "session-chart",
         "bounds": [
@@ -198,7 +198,21 @@
           1200,
           400
         ],
-        "children": []
+        "children": [
+          {
+            "role": "image",
+            "name": "Hours to each deadline: 5 h, 6 h, 7 h, 8 h, 4 h, 5 h, 6 h, 7 h, 8 h, 4 h",
+            "value": null,
+            "id": "session-line-figure",
+            "bounds": [
+              538,
+              204,
+              1196,
+              346
+            ],
+            "children": []
+          }
+        ]
       },
       {
         "role": "label",
@@ -219,7 +233,7 @@
     {
       "id": "session-caption",
       "value": {
-        "text": "Hours to each deadline",
+        "text": "Asks with a deadline",
         "role": "body",
         "bound": false,
         "widest": null,
@@ -228,13 +242,13 @@
           81.0
         ],
         "box": [
-          143.0,
+          127.0,
           17.0
         ],
-        "width": 142.390625,
+        "width": 126.3056640625,
         "lines": 1,
         "ellipsized": false,
-        "sprites": 19,
+        "sprites": 17,
         "pages": [
           0
         ]
@@ -281,7 +295,7 @@
     }
   ],
   "menu_bar": {
-    "title": "40"
+    "title": "40 asks need you"
   },
   "focus": null
 }

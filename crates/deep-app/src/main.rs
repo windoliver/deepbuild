@@ -199,6 +199,12 @@ fn main() {
         gpui_kit::init(cx);
         init(cx);
         menu_bar::set_dock_icon();
+        #[cfg(feature = "test-bound")]
+        if let Some(path) = std::env::var_os("DEEP_APP_TEST_BOUND") {
+            if let Err(why) = deep_app::bound::load(std::path::Path::new(&path)) {
+                eprintln!("deep-app: DEEP_APP_TEST_BOUND: {why}");
+            }
+        }
         // Every window reads the record; only the one app of a user notifies (#994). The planted build shows the spike's
         // made-up count and no record.
         #[cfg(not(feature = "plant-spike-window"))]

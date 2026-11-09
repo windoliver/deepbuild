@@ -395,6 +395,8 @@ mod live {
             "window" => "AXGroup",
             "label" => "AXStaticText",
             "button" => "AXButton",
+            // The session chart's line (#1455), as vendor/accesskit_macos/src/node.rs maps Role::Image.
+            "image" => "AXImage",
             other => {
                 return Err(format!(
                     "GPUI role {other} has no AppKit role in the live oracle; add it before trusting a tree with one"
