@@ -2080,6 +2080,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-media"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-scene3d",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "deep-canvas-motion"
 version = "0.0.0"
 dependencies = [
