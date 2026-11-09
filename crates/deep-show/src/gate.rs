@@ -17,6 +17,9 @@
 
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::Arc;
+
+use deep_canvas_media::mix::{Mix, Player};
 
 use deep_codecs::DECODE_WORKER;
 use serde_json::{json, Map, Value};
@@ -48,6 +51,9 @@ pub enum GateCall {
     Open {
         panel: String,
         strips: Vec<(u32, String, i64, i64, i64, bool)>,
+        /// #499: a media document opened in place of `strips`, and the logic piece played with it.
+        media: Option<Value>,
+        piece: Option<Value>,
     },
     Close(String),
     Play {
@@ -59,6 +65,8 @@ pub enum GateCall {
     Output {
         from: i64,
         to: i64,
+        /// #499: the test backend's device whose output is read.
+        device: Option<String>,
     },
     Reserved,
 }
@@ -69,8 +77,16 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<GateCall> {
     let s = |k: &str| Some(c.get(k)?.as_str()?.to_string());
     let t = |k: &str| c.get(k)?.as_i64();
     Some(match name {
+        "open" if s("doc").is_some() && c.get("media").is_some() => GateCall::Open {
+            panel: s("panel")?,
+            strips: Vec::new(),
+            media: Some(c.get("media").filter(|m| m.is_object())?.clone()),
+            piece: c.get("piece").cloned(),
+        },
         "open" if s("doc").is_some() => GateCall::Open {
             panel: s("panel")?,
+            media: None,
+            piece: c.get("piece").cloned(),
             strips: c
                 .get("strips")?
                 .as_array()?
@@ -104,6 +120,10 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<GateCall> {
         "output" => GateCall::Output {
             from: t("from")?,
             to: t("to")?,
+            device: match c.get("device") {
+                None => None,
+                Some(_) => Some(s("device")?),
+            },
         },
         "reserved" => GateCall::Reserved,
         _ => return None,
@@ -120,16 +140,66 @@ struct Voices {
 #[derive(Default)]
 struct Owner {
     strips: Option<Rc<Vec<Strip>>>,
+    /// #499: the media document it opened, and its live transport once Play granted it; under
+    /// the test audio backend, the mix and piece it plays and its play on the audio clock.
+    media: Option<Arc<Mix>>,
+    live: Option<Live>,
+    played: Option<(Arc<Mix>, Option<Value>)>,
+    audio: Option<crate::audio::AudioPlay>,
     /// When it last opened a document or closed: a gesture before then grants nothing.
     since: i64,
     granted_by: Option<u64>,
     voices: Vec<Voices>,
 }
 
-/// The gate's owners by panel ID, and the reserved sounds once made.
+/// A panel's live transport (#499): the media document's player from device sample `start`,
+/// and every sample it handed the device gate, the document's sample 0 first.
+pub struct Live {
+    pub rate: i64,
+    start: i64,
+    player: Player,
+    pub handed: Vec<f32>,
+}
+
+impl Live {
+    pub fn handed_frames(&self) -> i64 {
+        (self.handed.len() / 2) as i64
+    }
+}
+
+/// How many frames the device pulls a callback.
+const DEVICE_BUFFER: usize = 512;
+
+/// The gate's owners by panel ID, and the assets decoded for mixes (#499).
 #[derive(Default)]
 pub struct Gate {
     owners: BTreeMap<String, Owner>,
+    pub sources: BTreeMap<String, Arc<deep_canvas_media::mix::Source>>,
+    /// The test audio backend as the run's device changes left it.
+    pub backend: Option<crate::audio::Backend>,
+}
+
+impl Gate {
+    /// Every play under the test audio backend.
+    pub fn audio_plays(&mut self) -> impl Iterator<Item = &mut crate::audio::AudioPlay> {
+        self.owners.values_mut().filter_map(|o| o.audio.as_mut())
+    }
+
+    pub fn audio_play(&self, panel: &str) -> Option<&crate::audio::AudioPlay> {
+        self.owners.get(panel)?.audio.as_ref()
+    }
+
+    /// `panel`'s live transport, having handed the gate every device buffer due by `now`.
+    pub fn live_of(&mut self, panel: &str, now: i64) -> Option<&Live> {
+        let live = self.owners.get_mut(panel)?.live.as_mut()?;
+        let due = (sample_at(now) - live.start).max(0);
+        let mut buf = vec![0f32; 2 * DEVICE_BUFFER];
+        while live.handed_frames() < due {
+            live.player.read(&mut buf);
+            live.handed.extend_from_slice(&buf);
+        }
+        Some(live)
+    }
 }
 
 /// The first device sample at or after `t`.
@@ -407,10 +477,32 @@ impl Hub<'_> {
         let planted = self.scenario.planted;
         let now = self.now;
         match call {
-            GateCall::Open { panel, strips, .. } => {
+            GateCall::Open { panel, strips, media, piece } => {
                 if !self.scenario.panels.contains_key(panel) {
                     return refused("unknown_panel");
                 }
+                self.advance_audio();
+                let media = match media {
+                    Some(m) => match self.mix_of(m) {
+                        Ok(mix) => Some(Arc::new(mix)),
+                        Err(e) => return e,
+                    },
+                    None => None,
+                };
+                // #499: under the test audio backend, the document's strips play as a mix.
+                let played = match (&self.scenario.audio, &media) {
+                    (None, _) => None,
+                    (Some(_), Some(m)) => Some((m.clone(), piece.clone())),
+                    (Some(_), None) => {
+                        let doc = json!({"strips": strips.iter().enumerate().map(|(i, (track, sha, start, from, to, looped))| {
+                            (format!("s{i}"), json!({"track": track, "src": {"asset": sha}, "start": start, "in": from, "out": to, "loop": looped}))
+                        }).collect::<Map<String, Value>>()});
+                        match self.mix_of(&doc) {
+                            Ok(m) => Some((Arc::new(m), piece.clone())),
+                            Err(e) => return e,
+                        }
+                    }
+                };
                 let reserved: Vec<_> = reserved();
                 let mut loaded = Vec::new();
                 for (_track, sha, start, from, to, looped) in strips {
@@ -446,6 +538,10 @@ impl Hub<'_> {
                 let o = self.gate.owners.entry(panel.clone()).or_default();
                 o.granted_by = None;
                 o.strips = Some(Rc::new(loaded));
+                o.media = media;
+                o.live = None;
+                o.played = played;
+                o.audio = None;
                 o.since = now;
                 json!({"opened": true})
             }
@@ -457,6 +553,10 @@ impl Hub<'_> {
                 self.stop(panel, fade);
                 let o = self.gate.owners.entry(panel.clone()).or_default();
                 o.strips = None;
+                o.media = None;
+                o.live = None;
+                o.played = None;
+                o.audio = None;
                 o.since = now;
                 json!({"closed": true})
             }
@@ -507,20 +607,51 @@ impl Hub<'_> {
                     strips,
                     stop: None,
                 });
+                // #499: the media document plays from its time 0 on the live transport.
+                if let Some(mix) = o.media.clone() {
+                    o.live = Some(Live {
+                        rate: mix.rate,
+                        start: sample_at(now),
+                        player: Player::new(mix, crate::mixdown::planted_of(planted, true)),
+                        handed: Vec::new(),
+                    });
+                }
                 o.granted_by = *serial;
+                // #499: under the test audio backend, the play opens a stream on the default
+                // output and the transport follows its clock.
+                if let Some((mix, piece)) = o.played.clone() {
+                    self.advance_audio();
+                    match self.start_audio(panel, mix, piece) {
+                        Ok(p) => {
+                            if let Some(o) = self.gate.owners.get_mut(panel) {
+                                o.audio = Some(p);
+                            }
+                        }
+                        Err(e) => return e,
+                    }
+                }
                 json!({"playing": true})
             }
             GateCall::Gate(panel) => {
+                let audio = self.audio_gate(panel);
                 let o = self.gate.owners.get(panel);
                 let running = o.is_some_and(|o| o.voices.iter().any(|v| v.stop.is_none()));
+                let (state, notice) = match audio {
+                    Some(a) => a,
+                    None => (if running { "running" } else { "suspended" }, Value::Null),
+                };
                 json!({"gate": {
                     "owner": self.owner_of(panel),
                     "granted_by": o.and_then(|o| o.granted_by),
-                    "state": if running { "running" } else { "suspended" },
+                    "state": state,
+                    "notice": notice,
                     "reserved": reserved().iter().map(|r| r.0).collect::<Vec<_>>(),
                 }})
             }
-            GateCall::Output { from, to } => {
+            GateCall::Output { device: Some(device), from, to } => {
+                self.device_output(device, *from, *to)
+            }
+            GateCall::Output { from, to, .. } => {
                 let (first, last) = (sample_at(*from), sample_at(*to));
                 let mut mix = vec![0f32; (last - first).max(0) as usize];
                 for o in self.gate.owners.values() {

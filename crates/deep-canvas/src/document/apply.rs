@@ -918,8 +918,14 @@ fn set(
     done: &mut Patched,
 ) -> Result<(), Refused> {
     let id = op_text(j, op, "id")?;
-    let fields = op_path(&id, op)?;
     let value = member(op, "value").cloned().unwrap_or(Value::Null);
+    // #499: a strip's field (`strips/<id>/<field>…`), as the media module reads it.
+    if let Some(Value::String(text)) = member(op, "path") {
+        if let Some(rest) = text.strip_prefix("strips/") {
+            return set_strip(doc, &id, rest, value, op);
+        }
+    }
+    let fields = op_path(&id, op)?;
     let item = writable(items_mut(doc)?, &id, writing, done)?;
     let steps: Vec<&str> = fields.iter().map(String::as_str).collect();
     match steps.as_slice() {
@@ -985,6 +991,38 @@ fn set(
         }
         _ => return Err(unresolved(&id, op)),
     }
+    Ok(())
+}
+
+/// Sets a field of the strip `id` at `rest` (`<id>/<field>[/<sub>…]`).
+fn set_strip(doc: &mut Value, id: &str, rest: &str, value: Value, op: &Value) -> Result<(), Refused> {
+    let mut steps = rest.split('/');
+    if steps.next() != Some(id) {
+        return Err(Box::new(Issue::error(
+            "bad_path",
+            id,
+            format!("strips/{id}"),
+            member(op, "path").cloned().unwrap_or(Value::Null),
+            "the path's ID is not the op's id",
+        )));
+    }
+    let fields: Vec<&str> = steps.collect();
+    let Some((last, parents)) = fields.split_last().filter(|_| !fields.is_empty()) else {
+        return Err(unresolved(id, op));
+    };
+    let Some(mut at) = doc.pointer_mut(&format!("/strips/{id}")) else {
+        return Err(unresolved(id, op));
+    };
+    for step in parents {
+        let Value::Object(m) = at else {
+            return Err(unresolved(id, op));
+        };
+        at = m.entry((*step).to_string()).or_insert_with(|| Value::Object(Map::new()));
+    }
+    let Value::Object(m) = at else {
+        return Err(unresolved(id, op));
+    };
+    m.insert((*last).to_string(), value);
     Ok(())
 }
 

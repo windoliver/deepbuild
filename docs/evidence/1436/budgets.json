@@ -1,0 +1,44 @@
+{
+  "criterion": "#1436.0791f1fa",
+  "cases": [
+    {
+      "case": "halo.soft",
+      "limit_ms": 1,
+      "runs_ms": [
+        0.673,
+        0.668,
+        0.638,
+        0.632,
+        0.612
+      ],
+      "status": "INCONCLUSIVE",
+      "reason": "a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is \"fair\", not \"nominal\"; load 221.26123046875 at a run's start or end is above the 18 cores"
+    },
+    {
+      "case": "fill.grain",
+      "limit_ms": 1,
+      "runs_ms": [
+        0.44,
+        0.591,
+        0.941,
+        0.783,
+        0.746
+      ],
+      "status": "INCONCLUSIVE",
+      "reason": "a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is \"fair\", not \"nominal\"; load 395.04736328125 at a run's start or end is above the 18 cores"
+    },
+    {
+      "case": "warp.haze",
+      "limit_ms": 2,
+      "runs_ms": [
+        1.583,
+        1.558,
+        1.656,
+        1.605,
+        1.746
+      ],
+      "status": "INCONCLUSIVE",
+      "reason": "a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is \"fair\", not \"nominal\"; load 476.1591796875 at a run's start or end is above the 18 cores"
+    }
+  ]
+}
