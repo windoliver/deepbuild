@@ -217,6 +217,8 @@ alone.push('tests/acceptance/33/');
 alone.push('tests/acceptance/1427/');
 byHand.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
+// #1550's files build a GPUI text probe and deep-drive, and start replicas.
+alone.push('tests/acceptance/1550/');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 

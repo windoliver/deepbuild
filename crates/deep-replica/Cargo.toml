@@ -175,3 +175,13 @@ harness = false
 name = "acceptance_1454_panel_redraft"
 path = "../../tests/acceptance/1454/panel-redraft/app/refused.rs"
 harness = false
+
+# Issue #1550: the probe its acceptance tests run chrome's wrapper through (tests/acceptance/1550/README.md).
+[[example]]
+name = "acceptance_1550_probe"
+path = "../../tests/acceptance/1550/probe.rs"
+
+# Issue #1550's redraft of C1 and C3: shape_text's rows as the glyphs each draws (tests/acceptance/1550/redraft/REDRAFT.md).
+[[example]]
+name = "acceptance_1550_redraft_probe"
+path = "../../tests/acceptance/1550/redraft/probe.rs"
