@@ -37,3 +37,11 @@ lint lines (secrets, deps, canvas-lint, cards, record reader) name files this ch
 
 `spine-judge.txt`: #350 PASS; #349 AC5, #351 AC1 and #348 AC4 to AC6 fail only on the Linux-only causes above;
 #348 AC8 reads FAIL on its archive-checkout test and BLOCKED on its timed budget.
+
+## On main 6e7abee0
+
+This change cherry-picked onto main 6e7abee0 (59 commits on, including #1731's and #1334's host changes), built with
+`npm run build --workspaces`: `tests/acceptance/350/ac9-redraft` passed 10 of 10 runs, and
+`node scripts/conformance-lint.mjs` passes `slot kit channel@1: 3 rules, each refusing its one planted fill`. Its two
+FAIL lines aren't this change's: environment@1's lsof (Linux only, above) and `doctor service_unpromoted maps to no
+verdict`, from #1334 on main.
