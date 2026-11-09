@@ -5,7 +5,7 @@ import { deflateSync, inflateSync } from 'node:zlib';
 
 export interface Image { width: number; height: number; /** RGBA, 4 bytes per pixel. */ data: Uint8Array }
 export interface Box { x: number; y: number; width: number; height: number }
-export type Compared =
+type Compared =
   | { same: true }
   | { same: false; reason: 'size'; head: { width: number; height: number }; base: { width: number; height: number } }
   | { same: false; reason: 'pixels'; differing: number; boxes: Box[] };

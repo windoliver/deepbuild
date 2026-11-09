@@ -48,7 +48,7 @@ const READS_NOTHING = new Set(['/bin/ps', DOES_NOTHING]);
  * environment without them), `go test` only in the check's own command, and Node or Python only as files outside
  * `writable`, the folders the run can write, named so themselves: nothing the run made or linked can pass for either.
  */
-export interface Trust { node?: boolean; python?: boolean; go?: boolean; writable?: string[] }
+interface Trust { node?: boolean; python?: boolean; go?: boolean; writable?: string[] }
 /** The file a program's path comes to, by its own name, or null where the run could have made it. */
 const installed = (at: string, writable: string[]): string | null => {
   let real: string;
@@ -123,7 +123,7 @@ function pnpmShim(at: string): string | null {
 /** The shells whose script, named as their one argument, is read as the command (`sh file`, `/bin/sh file`). */
 const SCRIPT_SHELLS = new Set(['sh', 'bash', 'dash', 'zsh']);
 /** A shell script a command segment runs, and its command lines: the `#!` line, comments and blank lines left out. */
-export interface Script { file: string; lines: string[] }
+interface Script { file: string; lines: string[] }
 /**
  * The script a segment runs as `sh file`, read from the checkout, or null: a shell given options or more than the
  * file, or a file that can't be read, is a program of its own, which the tracers can't see into. The hub's drafted
@@ -152,7 +152,7 @@ const PACKAGE_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun']);
  * The package.json script a segment runs, as `npm test` or `npm run <name>` (pnpm, yarn and bun alike), read from
  * the checkout, with its `pre` and `post` scripts, which run with it; null for any other segment.
  */
-export function packageScriptOf(segment: string, cwd: string): Script | null {
+function packageScriptOf(segment: string, cwd: string): Script | null {
   const [pm, verb, name] = wordsOf(segment).filter((w) => !ASSIGNMENT.test(w));
   if (!pm || !PACKAGE_MANAGERS.has(pm.split('/').pop() ?? pm) || !verb) return null;
   const script = verb === 'test' || verb === 't' ? 'test' : (verb === 'run' || verb === 'run-script') && name && !name.startsWith('-') ? name : null;

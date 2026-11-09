@@ -7,16 +7,16 @@ import { isMap, isSeq, LineCounter, parseDocument, type Node } from 'yaml';
 export interface Locator { role?: string; name?: string; label?: string; testId?: string; within?: { role: string; name: string } }
 /** The driver's locator: `within` as the container it looks inside. */
 export interface DriverLocator { role?: string; name?: string; label?: string; testId?: string; exact?: boolean; container?: DriverLocator }
-export interface MotionReq { target: Locator; property: string; from: string; to: string; duration: number; delay: number; easing: string }
+interface MotionReq { target: Locator; property: string; from: string; to: string; duration: number; delay: number; easing: string }
 export interface Action { line: number | null; goto?: string; click?: DriverLocator; fill?: DriverLocator; text?: string; secret?: string; scrollIntoView?: DriverLocator; hover?: DriverLocator; press?: string; wait?: number }
 export interface Expect { line: number | null; locator?: DriverLocator; text?: string; visible?: boolean; until?: { evaluate: string; equals: string } }
-export interface Request { line: number | null; method: string; path: string; body?: unknown; status: number }
+interface Request { line: number | null; method: string; path: string; body?: unknown; status: number }
 /** `timeoutMs` bounds each expect and each wait on an element, kept under the step's deadline; a navigation is bounded by the deadline alone. */
-export interface Step { id: string; line: number | null; deadlineMs: number; timeoutMs: number; actions: Action[]; expects: Expect[]; motion: MotionReq[]; request?: Request; targets: Locator[] }
-export interface EndCheck { id: string; line: number | null; oracle: 'code' | 'model' | 'person'; locator?: Locator; driverLocator?: DriverLocator; text?: string; visible?: boolean; readback?: { method: string; path: string }; equals?: unknown; count?: Record<string, number>; requirement?: string }
-export interface ExpectedError { step: string; message?: string; url?: string; status?: number }
+interface Step { id: string; line: number | null; deadlineMs: number; timeoutMs: number; actions: Action[]; expects: Expect[]; motion: MotionReq[]; request?: Request; targets: Locator[] }
+interface EndCheck { id: string; line: number | null; oracle: 'code' | 'model' | 'person'; locator?: Locator; driverLocator?: DriverLocator; text?: string; visible?: boolean; readback?: { method: string; path: string }; equals?: unknown; count?: Record<string, number>; requirement?: string }
+interface ExpectedError { step: string; message?: string; url?: string; status?: number }
 export interface Journey { id: string; feature: string | null; depth: 'journey' | 'live'; api: boolean; masks: Locator[]; steps: Step[]; endState: EndCheck[]; expectedErrors: ExpectedError[]; baseline: string | null }
-export type Review = { ok: true } | { ok: false; reasons: string[] };
+type Review = { ok: true } | { ok: false; reasons: string[] };
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** The keys each map of a journey file may carry; any other is refused, never skipped, so nothing named goes unrun. */
@@ -52,7 +52,7 @@ const locatorOf = (v: unknown, where?: string, extra: readonly string[] = [], wh
   return Object.keys(l).length ? l : undefined;
 };
 /** The timeout a step asks for, or Playwright's own default of 5 s. */
-export const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_TIMEOUT_MS = 5000;
 /** The expect's own timeout, kept under the step's deadline: never more than four fifths of it. */
 export const timeoutUnder = (deadlineMs: number, asked: number | undefined): number => Math.max(50, Math.min(asked ?? DEFAULT_TIMEOUT_MS, Math.floor(deadlineMs * 0.8)));
 

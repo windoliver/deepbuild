@@ -11,10 +11,10 @@ import { fail } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { word } from './shared.js';
 
-export const ACTION = 'action@1';
+const ACTION = 'action@1';
 
-export interface ActionTarget { handle: string; version: string }
-export interface ActionFill extends SlotFill {
+interface ActionTarget { handle: string; version: string }
+interface ActionFill extends SlotFill {
   slot: 'action@1';
   name: string;
   declares: 'read' | 'change' | 'send';

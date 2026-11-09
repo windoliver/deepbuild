@@ -373,6 +373,14 @@ function deprecatedItems(root: string): Item[] {
   return items;
 }
 
+/** The one line `deep doctor` ends with: how many items, and how many of them need you. */
+function summary(items: readonly Item[]): string {
+  const count = (level: Item['level']) => items.filter((i) => i.level === level && i.code !== 'not_checked').length;
+  const parts = [[count('fail'), 'failed'], [count('warn'), 'to look at'], [items.filter((i) => i.code === 'not_checked').length, 'not checked']] as const;
+  const needs = parts.filter(([n]) => n > 0).map(([n, what]) => `${n} ${what}`);
+  return `${items.length} ${items.length === 1 ? 'item' : 'items'}: ${needs.length ? needs.join(', ') : 'all healthy'}.`;
+}
+
 /**
  * `deep doctor [--json] [--prompt]`: the items, one per line, for a person (an item not checked reading "not checked")
  * or as doctor.item@1 objects with their item and agent; `also` adds the extensions' items. The exit is the one table's:
@@ -387,12 +395,16 @@ export async function doctorCommand(args: readonly string[], also: () => Promise
   const json = args.includes('--json');
   const agents: Record<string, string> = { 'claude-code': 'Claude Code', codex: 'Codex', deepbuild: 'DeepBuild' };
   const items = [...(await doctorItems(process.env, { prompt: args.includes('--prompt'), cwd: process.cwd() })), ...(await also())];
+  // A person reads `Fix:` only where something needs fixing, and how to check an item that wasn't (#1455).
+  const fixes = (i: Item) => i.level === 'warn' || i.level === 'fail' || (plant() === 'doctor-healthy-fix' && i.item === 'hub.socket');
+  const next = (i: Item) => (fixes(i) ? `\n  Fix: ${i.fix}` : i.code === 'not_checked' ? `\n  To check: ${i.fix}` : '');
   for (const i of items) {
     const state = i.code === 'not_checked' ? 'not checked' : i.level.toUpperCase();
-    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state} (${i.code})\n  ${i.evidence}\n  Fix: ${i.fix}`);
+    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state} (${i.code})\n  ${i.evidence}${next(i)}`);
   }
   const failed = items.some((i) => i.level === 'fail');
   const unchecked = items.some((i) => i.code === 'not_checked');
+  if (!json) console.log(summary(items));
   // The planted wrong programs: one exits 0 with an item not checked, one puts not checked before a failure.
   if (plant() === 'not-checked-exits-0') return failed ? 1 : 0;
   if (plant() === 'doctor-not-checked-first' && unchecked) return 3;

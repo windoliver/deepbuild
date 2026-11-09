@@ -16,12 +16,12 @@ import { fail } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { object, word } from './shared.js';
 
-export const RESOLVER = 'resolver@1';
+const RESOLVER = 'resolver@1';
 
 /** What the core hands a resolver: the ask, where it was raised, and the decisions the record holds. */
-export interface ResolverAsk { ask: string; kind: string; key: string; session: string; repo: string; options: string[] }
-export interface HeldDecision { decision: string; key: string; scope: string; answer: string; state: 'active' | 'revoked' }
-export interface ResolverAnswer { answer: string; because: string | null }
+interface ResolverAsk { ask: string; kind: string; key: string; session: string; repo: string; options: string[] }
+interface HeldDecision { decision: string; key: string; scope: string; answer: string; state: 'active' | 'revoked' }
+interface ResolverAnswer { answer: string; because: string | null }
 export interface ResolverFill extends SlotFill {
   slot: 'resolver@1';
   resolve(ask: ResolverAsk, decisions: HeldDecision[]): ResolverAnswer | undefined;

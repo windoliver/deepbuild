@@ -10,7 +10,6 @@ import net from 'node:net';
 import tls from 'node:tls';
 import { basename, dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
-import { JUDGE_FAULTS } from '@deepbuild/gate';
 import type { HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
@@ -69,6 +68,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['start.approve', ['cli']], ['start.session', ['cli']],
   // A person added to a project, with a credential of their own (#1337).
   ['person.add', ['cli']],
+  // An online model library turned on or off, and your standing rule for it (#1731).
+  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']],
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
@@ -118,11 +119,12 @@ const PASEO_PERMISSION_HOLD_MS = 24 * 3600_000;
 const PERMISSION_TIMEOUT_MS = 60_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
 const DECIDED_MATCH = /^effect:(dependency|cloud-resource)$/;
-/** The guard entries whose calls the hub stages before they run with the hub up, or asks about (#347, #1294). */
+/** The guard entries whose calls the hub stages before they run with the hub up, or asks about (#347, #1294, #1507). */
 const STAGED_MATCH = 'effect:unknown-reach-delete';
+const PAST_MATCH = 'effect:unrestorable-delete';
 const DISCARD_MATCH = 'effect:discard-edits';
 const STASH_MATCH = 'effect:drop-stash';
-const STAGED_MATCHES: unknown[] = [STAGED_MATCH, DISCARD_MATCH, STASH_MATCH];
+const STAGED_MATCHES: unknown[] = [STAGED_MATCH, PAST_MATCH, DISCARD_MATCH, STASH_MATCH];
 /** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
 const DENYING_MODES = new Set(['dontAsk', 'plan']);
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
@@ -262,7 +264,9 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
   };
 }
 
-function parserPool(held: string[], plant: Plant | undefined): Parsers {
+function parserPool(given: readonly string[], plant: Plant | undefined): Parsers {
+  // The pool's own list: each scrub's values join it, so a parser started later begins with all its elder was sent.
+  const held = [...given];
   const pending = new Map<number, (parsed: Parsed) => void>();
   let n = 0;
   const make = () => {
@@ -273,20 +277,23 @@ function parserPool(held: string[], plant: Plant | undefined): Parsers {
     });
     return worker;
   };
-  // One parser for small lines and one kept for large ones.
+  // One parser for small lines, and one for large ones, started at the first: an idle hub holds one thread fewer.
   const small = make();
-  const big = make();
+  let big: Worker | undefined;
   return {
     parse(chunks, first) {
       const size = chunks.reduce((sum, c) => sum + c.length, 0);
-      const worker = size > BIG ? big : small;
+      const worker = size > BIG ? (big ??= make()) : small;
       return new Promise((resolve) => {
         pending.set(++n, resolve);
         worker.postMessage({ n, chunks, first });
       });
     },
-    scrub(values) { for (const worker of [small, big]) worker.postMessage({ scrub: values }); },
-    close: async () => { await Promise.all([small, big].map((w) => w.terminate())); },
+    scrub(values) {
+      held.push(...values);
+      for (const worker of [small, big]) worker?.postMessage({ scrub: values });
+    },
+    close: async () => { await Promise.all([small, big].map((w) => w?.terminate())); },
   };
 }
 /** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
@@ -823,9 +830,9 @@ class Hub {
       const n = meta.matched.find((m) => entries[m]?.match === match);
       return n === undefined ? undefined : meta.stage?.[n] ?? null;
     };
-    const [folders, edits, stash] = [reach(STAGED_MATCH), this.plant === 'stages-untracked-only' ? undefined : reach(DISCARD_MATCH), reach(STASH_MATCH)];
-    const stage: StageReach | undefined = folders !== undefined || edits !== undefined || stash !== undefined
-      ? { ...(folders !== undefined ? { folders } : {}), ...(edits !== undefined ? { edits } : {}), ...(stash !== undefined ? { stash } : {}) }
+    const [folders, past, edits, stash] = [reach(STAGED_MATCH), reach(PAST_MATCH), this.plant === 'stages-untracked-only' ? undefined : reach(DISCARD_MATCH), reach(STASH_MATCH)];
+    const stage: StageReach | undefined = folders !== undefined || past !== undefined || edits !== undefined || stash !== undefined
+      ? { ...(folders !== undefined ? { folders } : {}), ...(past !== undefined ? { past } : {}), ...(edits !== undefined ? { edits } : {}), ...(stash !== undefined ? { stash } : {}) }
       : this.plant === 'stages-unpredicted-writes' && data.kind === 'shell' && typeof data.command === 'string' ? { folders: [meta.cwd] } : undefined;
     // A computer-use or Chrome step is checked against the screens and windows its session leases (#332).
     const screen = SCREEN_TOOLS.some((prefix) => meta.call?.tool.startsWith(prefix));
@@ -1097,7 +1104,7 @@ class Hub {
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
-    // A destructive command is staged or asked about at the gate (#347, #1294), never blocked outright.
+    // A destructive command is staged or asked about at the gate (#347, #1294, #1507), never blocked outright.
     const decided = (n: string) => !watching && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
     const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!watching || floor(n)));
     if (blocks.length) {
@@ -1421,7 +1428,8 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
   // The kit gate@1's fault for rows no commit reaches (#33): only the kit sets it, and a name it doesn't know stops the hub.
   const fault = process.env.DEEP_HUB_TEST_JUDGE_FAULT;
-  if (fault && !(JUDGE_FAULTS as readonly string[]).includes(fault)) throw Error(`DEEP_HUB_TEST_JUDGE_FAULT=${fault} names no fault the kit plays`);
+  // The gate's modules load only then: the hub's thread runs none of them.
+  if (fault && !((await import('@deepbuild/gate')).JUDGE_FAULTS as readonly string[]).includes(fault)) throw Error(`DEEP_HUB_TEST_JUDGE_FAULT=${fault} names no fault the kit plays`);
   plantedStart(plant);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.

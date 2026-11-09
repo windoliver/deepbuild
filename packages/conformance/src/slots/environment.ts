@@ -17,7 +17,7 @@ import { fail, Finding } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { object, text, word } from './shared.js';
 
-export const ENVIRONMENT = 'environment@1';
+const ENVIRONMENT = 'environment@1';
 const SERVER = fileURLToPath(new URL('../../runtime/environment/server.mjs', import.meta.url));
 
 export interface EnvSpec { health: string; token: string; warmup: number }
@@ -68,7 +68,7 @@ const PS_DOWN = (): Finding => new Finding('BLOCKED', `the process table can't b
  * Whether the process still runs; an exited child not yet reaped (a zombie) counts as gone. Null when the process
  * exists but the process table can't be read: unknown, which no caller reads as gone.
  */
-export function alive(pid: number): boolean | null {
+function alive(pid: number): boolean | null {
   // A signal of 0 asks without sending; a pid no process has fails it, and then `ps` has nothing to add.
   try { process.kill(pid, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false; }
   const table = ps(['-o', 'stat=', '-p', String(pid)]);

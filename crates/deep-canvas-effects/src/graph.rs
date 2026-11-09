@@ -537,13 +537,15 @@ const FIELDS: &[&str] = &[
     "workgroup",
     "after",
     "stepped",
+    // Whether a pixel-wise pass may fuse with its neighbours (#432: pass fusion).
+    "fuse",
 ];
 /// Fields that hold a program's text in other engines' formats.
 const CODE_FIELDS: &[&str] = &[
     "wgsl", "glsl", "hlsl", "msl", "shader", "code", "spirv", "program", "fragment", "vertex",
 ];
 /// An op's own literal fields, which its args may hold beside its ports.
-const LITERAL_FIELDS: &[&str] = &[
+pub(crate) const LITERAL_FIELDS: &[&str] = &[
     "value",
     "type",
     "to",
@@ -1274,6 +1276,15 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             None
         }
     };
+    match o.get("fuse") {
+        None | Some(Value::Null) => {}
+        Some(Value::String(f)) if f == "pixel_wise" || f == "none" => {}
+        Some(other) => issues.push(Issue::at_path(
+            "operator_type",
+            "fuse",
+            format!("fuse is pixel_wise or none, not {other}"),
+        )),
+    }
     let fallback = match o.get("fallback").and_then(Value::as_str) {
         None | Some("look") => Fallback::Look,
         Some("none") => Fallback::None,

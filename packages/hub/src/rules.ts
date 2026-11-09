@@ -12,7 +12,7 @@ import type { RecordStore } from '@deepbuild/record';
 import { callAsYou } from './client.js';
 
 type Raw = RecordStore['raw'];
-export type Enforcer = { kind: 'guard'; name: string } | { kind: 'text' };
+type Enforcer = { kind: 'guard'; name: string } | { kind: 'text' };
 export interface RuleFile {
   /** Repo-relative, or `~/.codex/AGENTS.md` for a user-level file. */
   file: string;
@@ -44,11 +44,11 @@ export const sameRule = (text: string): string => text.replace(/\s+/g, ' ').trim
 export const ruleId = (file: string, text: string): string => sha256(`${file}\u0000${sameRule(text)}`).slice(0, 12);
 export const handleOf = (rule: Pick<Rule, 'id'>): string => `wiki:rules#${rule.id}`;
 /** A rule's size in tokens: each word piece of up to five letters, each number and each mark is one. */
-export const tokensOf = (text: string): number =>
+const tokensOf = (text: string): number =>
   (text.match(/[A-Za-z]+|\d+|[^\sA-Za-z\d]/g) ?? []).reduce((n, piece) => n + (/^[A-Za-z]+$/.test(piece) ? Math.ceil(piece.length / 5) : 1), 0);
 
 /** A glob as rule files write one: `**` any folders, `*` within a name, `?` one character; several apart by commas. */
-export function globMatches(glob: string, path: string): boolean {
+function globMatches(glob: string, path: string): boolean {
   return glob.split(',').map((g) => g.trim()).filter(Boolean).some((g) => {
     let re = '';
     for (let i = 0; i < g.length; i++) {
@@ -64,7 +64,7 @@ export function globMatches(glob: string, path: string): boolean {
   });
 }
 /** Whether a rule's scope covers a repo-relative path. */
-export const covers = (scope: string, path: string): boolean => scope === 'all' || globMatches(scope, path);
+const covers = (scope: string, path: string): boolean => scope === 'all' || globMatches(scope, path);
 
 /** The folder of the git repo `cwd` is in, or undefined. */
 export function repoRoot(cwd: string | undefined): string | undefined {
@@ -86,7 +86,7 @@ function frontOf(text: string): { fields: Map<string, string>; body: string } {
   return { fields, body: m ? text.slice(m[0].length) : text };
 }
 /** The bullets of a file's body, outside code fences: each one rule. */
-export function bulletsOf(body: string): string[] {
+function bulletsOf(body: string): string[] {
   const out: string[] = [];
   let fenced = false;
   for (const line of body.split('\n')) {

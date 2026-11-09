@@ -10,6 +10,7 @@
 pub mod check;
 pub mod dirt;
 pub mod emit;
+pub mod fusion;
 pub mod fx;
 pub mod graph;
 pub mod interp;

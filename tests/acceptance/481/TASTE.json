@@ -1,0 +1,13 @@
+{
+  "issue": 481,
+  "criterion": "#481.7124c07a",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation in the session (\"close the gaps taht we can create pr to close the issue\")",
+  "when": "2026-11-09T04:24:45Z",
+  "screenshots": {
+    "backlit-fin.png": "a01b7622493dd6283b2729abf16f330955f31b4508f0c3043e6d566b273eca2a",
+    "skin-wall.png": "05df45612f55f4968eaf973d521840138d81d5fe2b37c6f3a39a3c85e19ce521",
+    "slab-line.png": "a9f29d6f5b3f0b1ce2de7de2fb6ff2589228913ddc79a082727f828631b3f8a5"
+  },
+  "note": "Drawn on the Mac (Apple M5 Max, Metal) on base dd83ac2f. Skin sphere: soft falloff with no hard terminator, no red on the white wall around it, no halo at its silhouette. Backlit fins: the 6 mm fin passes less and warmer light than the 2 mm one, red carrying furthest, as exp(-d / radius) per channel gives. Slab: the line's core goes cyan-white and red spreads several times wider than green, as the 5 mm and 1 mm paths give; the red halo is grainy with faint vertical bands, because 16 hash-rotated taps gather a 1 px line of light and no light is kept between frames. That grain is the method the issue names, not a fault in it."
+}
