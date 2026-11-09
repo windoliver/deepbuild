@@ -16,7 +16,7 @@ import type { Refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
 /** A hub this machine joined: where it is reached, its ID, the person and project, and the credential bound to this machine's key. */
-export interface Joined { v: 1; hub: string; address: string; person: string; project: string; token: string }
+interface Joined { v: 1; hub: string; address: string; person: string; project: string; token: string }
 
 const hubsDir = (): string => join(installedRoot(), 'hubs');
 /** The key a machine's credential for one hub is bound to: `~/.deepbuild/keys/<hub ID>.key`, its certificate beside it. */
