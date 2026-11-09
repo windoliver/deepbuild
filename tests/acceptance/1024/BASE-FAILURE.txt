@@ -1,0 +1,52 @@
+Base commit: f1e8736e (Merge pull request #1742 from windoliver/worktree-github-issue-1359-ee77ac); the worktree ran at
+  42319109, which adds only #531's merge (logic@1), nothing this suite reaches.
+Built first: npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-hook
+Command: NO_COLOR=1 npx vitest run tests/acceptance/1024 --testTimeout=600000
+Date: 2026-11-08  Machine: this job's Mac, 1-minute load about 310 (other sessions' work)
+Node: ~/.local/share/fnm/node-versions/v24.22.0 (v24.22.0)  vitest 5.0.5
+
+THE BASE DOES NOT FAIL. Both tests pass; live.test.ts skips.
+
+Run on the base (22:42):
+  Exit code: 0
+  Test Files  1 passed | 1 skipped (2)
+       Tests  2 passed | 1 skipped (3)
+  Duration 27.52 s
+
+  At every step (before the restart; after the restart and transcript.archived; after the hooks that followed),
+  status.read listed one row for the thread, under its dashed ID, and deep status said "1 session". The record held
+  session.start under the dashed ID and transcript.archived for session:<the ID without dashes>.
+
+Why: commit 3716c626 ("List only sessions with an event of their own", #992, 2026-11-03, two days after the issue's
+run) lists only sessions rows with last_seen set. The row transcript.archived's projection makes under the dashless
+handle has none. That commit is in the base.
+
+Run on a mutant that reverts that one line (22:41), to show the suite fails on the wrong program:
+  Mutant: packages/hub/dist/status.js (build output, gitignored), in sessionStates,
+    FROM sessions WHERE last_seen IS NOT NULL${of('id')}  ->  FROM sessions WHERE 1 = 1${of('id')}
+  Restored from a copy afterwards and compared byte for byte (cmp: equal). No source file changed.
+  Exit code: 1
+  Test Files  1 failed (1)
+       Tests  2 failed (2)
+  Duration 34.74 s
+
+  AC1 #1024.f267e668:
+    AssertionError: after the restart and transcript.archived, status.read: the hub shows thread
+    30f889a5-5dba-4919-923a-0fd4ab955c36 as 2 rows, not one under its SessionStart's ID:
+    30f889a5-5dba-4919-923a-0fd4ab955c36 (agent "codex", "working") and 30f889a55dba4919923a0fd4ab955c36
+    (agent "agent", "quiet")
+  AC2 #1024.bd7d9d35:
+    AssertionError: after the restart and transcript.archived: the hub shows thread
+    30f889a5-5dba-4919-923a-0fd4ab955c36 as 2 rows, not one under its SessionStart's ID:
+    30f889a5-5dba-4919-923a-0fd4ab955c36 (agent "codex", "working") and 30f889a55dba4919923a0fd4ab955c36
+    (agent "agent", "quiet")
+
+  The second row is the issue's: the dashless form, its agent unnamed, read as quiet.
+
+Earlier attempts while drafting, not counted as the base run: one stopped at a precondition (the recording's folder
+re-keyed into the temp path; fixed by re-keying value by value), one waited for a transcript.archived after the
+restart that the first hub's pass had already recorded (the wait now matches the copy by the rollout's size). A probe
+run timed out when the machine's load passed 500.
+
+Skipped:
+  live.test.ts: DEEPBUILD_1024_LIVE_THREAD is unset. No live Codex session, no model call; nothing left the machine.

@@ -110,10 +110,17 @@ pub fn problem(table: &Table, session: &str) -> Option<(String, String)> {
     Some((happened.to_owned(), next))
 }
 
-/// Whether the test build was asked to plant `name` (`DEEP_HUB_PLANT`); never in a build without `env-plants`.
+/// Whether the test build was asked to plant `name` (`DEEP_HUB_PLANT`); never in a build without `env-plants`. The
+/// environment is read once, not on every frame that asks (#1457).
 pub fn planted(name: &str) -> bool {
     #[cfg(feature = "env-plants")]
-    return std::env::var("DEEP_HUB_PLANT").as_deref() == Ok(name);
+    {
+        static PLANT: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+        PLANT
+            .get_or_init(|| std::env::var("DEEP_HUB_PLANT").ok())
+            .as_deref()
+            == Some(name)
+    }
     #[cfg(not(feature = "env-plants"))]
     {
         let _ = name;
