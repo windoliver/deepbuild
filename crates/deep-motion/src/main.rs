@@ -2,14 +2,15 @@
 //! exit 0; a line that can't be read, lacks a required field or names an unknown `planted` value
 //! answers `{"ok":false,"code":"bad_input"}`. The surface is the #391 acceptance README's,
 //! `eval`'s `look`, `track`, `cameras` and `hash` the #417 one's, and its `input`, `view`,
-//! `unwrap`, `timing`, `order` and `constraints` the #489 one's.
+//! `unwrap`, `timing`, `order` and `constraints` the #489 one's, and `run`'s `view` and `pans`
+//! the #1487 one's.
 
 use std::io::{self, BufRead, Write};
 
 use deep_canvas::canon::revision_hash;
 use deep_canvas::document::DocShape;
 use deep_canvas::grammar::FLICKS_PER_SECOND;
-use deep_canvas_motion::clock::{run, Mode};
+use deep_canvas_motion::clock::{meets, run, Mode, Rect, View};
 use deep_canvas_motion::curve::Ease;
 use deep_canvas::expr::Scope;
 use deep_canvas_motion::doc::{feel_of, Feel, Refused};
@@ -575,6 +576,29 @@ fn insert_line(input: &Map<String, Value>) -> Value {
     }
 }
 
+/// A view's region, `[x, y, w, h]` with a size above 0.
+fn rect_of(v: &Value) -> Option<Rect> {
+    match v.as_array()?.as_slice() {
+        [x, y, w, h] => {
+            let r = [x.as_f64()?, y.as_f64()?, w.as_f64()?, h.as_f64()?];
+            (r.iter().all(|n| n.is_finite()) && r[2] > 0.0 && r[3] > 0.0).then_some(r)
+        }
+        _ => None,
+    }
+}
+
+/// #1487 AC3's wrong program: an item meets a view only when its box's center lies in it.
+fn meets_by_center(item: &Value, rect: &Rect) -> bool {
+    let n = |p: &str| item.pointer(p).and_then(Value::as_f64);
+    let Some(b) = item.pointer("/params/box").and_then(Value::as_array) else {
+        return true;
+    };
+    let b = |i: usize| b.get(i).and_then(Value::as_f64).unwrap_or(0.0);
+    let x = n("/at/pos/0").unwrap_or(0.0) + b(0) + b(2) / 2.0;
+    let y = n("/at/pos/1").unwrap_or(0.0) + b(1) + b(3) / 2.0;
+    x >= rect[0] && x <= rect[0] + rect[2] && y >= rect[1] && y <= rect[1] + rect[3]
+}
+
 fn run_line(input: &Map<String, Value>) -> Value {
     let (Some(Value::Object(doc)), Some(to)) = (input.get("doc"), flicks(input.get("to"))) else {
         return bad_input();
@@ -584,13 +608,18 @@ fn run_line(input: &Map<String, Value>) -> Value {
         Some("every_vsync") => Mode::EveryVsync,
         _ => return bad_input(),
     };
-    let validity = match input.get("planted") {
-        None => Validity::Full,
-        Some(Value::String(p)) if p == "valid_until_ignores_placements" => {
-            Validity::IgnorePlacements
-        }
+    // #1487's twins of the view's rule: the merge base's, a center test, a stale return.
+    let mut validity = Validity::Full;
+    let mut test: fn(&Value, &Rect) -> bool = meets;
+    let mut stale_return = false;
+    match input.get("planted").map(|p| p.as_str()) {
+        None => {}
+        Some(Some("valid_until_ignores_placements")) => validity = Validity::IgnorePlacements,
+        Some(Some("valid_until_ignores_view")) => test = |_, _| true,
+        Some(Some("view_meets_by_center")) => test = meets_by_center,
+        Some(Some("return_draws_stale_value")) => stale_return = true,
         Some(_) => return bad_input(),
-    };
+    }
     let hz = match input.get("refresh_hz") {
         None => 60,
         Some(v) => match v.as_i64() {
@@ -602,6 +631,41 @@ fn run_line(input: &Map<String, Value>) -> Value {
     if FLICKS_PER_SECOND % hz != 0 || to < 0 {
         return bad_input();
     }
+    let period = FLICKS_PER_SECOND / hz;
+    let rect = match input.get("view") {
+        None => None,
+        Some(v) => match v.get("rect").and_then(rect_of) {
+            Some(r) => Some(r),
+            None => return bad_input(),
+        },
+    };
+    let pans = match input.get("pans") {
+        None => Vec::new(),
+        Some(Value::Array(list)) => {
+            let pans: Option<Vec<(i64, Rect)>> = list
+                .iter()
+                .map(|p| Some((flicks(p.get("at"))?, rect_of(p.get("rect")?)?)))
+                .collect();
+            match pans {
+                // Each on a vsync, in order, after a view to pan.
+                Some(p)
+                    if rect.is_some()
+                        && p.iter().all(|(at, _)| *at > 0 && at % period == 0)
+                        && p.windows(2).all(|w| w[0].0 < w[1].0) =>
+                {
+                    p
+                }
+                _ => return bad_input(),
+            }
+        }
+        Some(_) => return bad_input(),
+    };
+    let view = rect.map(|rect| View {
+        rect,
+        pans: &pans,
+        meets: test,
+        stale_return,
+    });
     let program = match Program::compile(doc) {
         Ok(p) => p,
         Err(r) => return refusal(r),
@@ -611,9 +675,10 @@ fn run_line(input: &Map<String, Value>) -> Value {
         doc,
         &program,
         to,
-        FLICKS_PER_SECOND / hz,
+        period,
         mode,
         validity,
+        view.as_ref(),
         |v| {
             vsyncs.push(json!({
                 "t": v.t,
