@@ -3,7 +3,7 @@
 // assertion.
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import type { CheckContext, CheckResult } from '@deepbuild/conformance';
+import { isCheckResult, type CheckContext, type CheckResult } from '@deepbuild/conformance';
 import type { NumbersSpec } from './types.js';
 
 const PROBE = fileURLToPath(new URL('../runtime/probe.mjs', import.meta.url));
@@ -32,7 +32,10 @@ export function runNumbers(spec: NumbersSpec, ctx: CheckContext): Promise<CheckR
       if (late) return resolve({ outcome: 'overran', testsRun: 0, failures: [], evidence: [], read: [], mask: null });
       const line = out.trim().split('\n').at(-1);
       if (code !== 0 || !line) return resolve(crashed(err.trim().split('\n').find((l) => /Error|error:/.test(l))?.trim() || err.trim() || `exited ${code ?? signal}`));
-      resolve({ ...(JSON.parse(line) as Pick<CheckResult, 'outcome' | 'testsRun' | 'failures' | 'read'>), evidence: [], mask: null });
+      let report: unknown;
+      try { report = { ...JSON.parse(line), evidence: [], mask: null }; }
+      catch { return resolve(crashed('the probe returned invalid JSON')); }
+      resolve(isCheckResult(report) ? report : crashed('the probe returned an invalid check result'));
     });
     child.stdin.end(JSON.stringify({ spec, checkout: ctx.checkout }));
   });
