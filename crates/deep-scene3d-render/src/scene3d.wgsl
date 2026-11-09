@@ -2658,6 +2658,10 @@ struct LineOut {
     @location(4) @interpolate(flat) color: u32,
     @location(5) @interpolate(flat) pick: u32,
     @location(6) @interpolate(flat) joined: u32,
+    // A mesh-edge line's dash and gap in its size space (#1640), 0 for none; for a line in m,
+    // the segment's length in m and its ends' clip w, so the dash follows the segment in depth.
+    @location(7) @interpolate(flat) dash: vec2<f32>,
+    @location(8) @interpolate(flat) metres: vec3<f32>,
 };
 
 @vertex
@@ -2668,6 +2672,7 @@ fn line_vs(
     @location(2) color: u32,
     @location(3) pick: u32,
     @location(4) flags: u32,
+    @location(5) dash: u32,
 ) -> LineOut {
     var out: LineOut;
     let ca = frame.clip * vec4<f32>(a.xyz, 1.0);
@@ -2675,6 +2680,13 @@ fn line_vs(
     out.color = color;
     out.pick = pick;
     out.joined = (flags >> 3u) & 1u;
+    out.dash = unpack2x16float(dash);
+    out.metres = vec3<f32>(0.0);
+    if (flags & 16u) != 0u {
+        out.metres = vec3<f32>(length(b.xyz - a.xyz), ca.w, cb.w);
+    } else {
+        out.dash = out.dash * frame.px.x;
+    }
     if ca.w <= 0.0 || cb.w <= 0.0 {
         out.pos = OFF;
         return out;
@@ -2733,6 +2745,18 @@ fn line_fs(in: LineOut) -> Targets {
     let cov = clamp(mix(in.r.x, in.r.y, t) + 0.5 - dist, 0.0, 1.0);
     if cov <= 0.0 {
         discard;
+    }
+    // Dashed from the segment's start: along it in px, or in m through its depth.
+    if in.dash.x > 0.0 && in.dash.y > 0.0 {
+        var along = t * sqrt(l2);
+        if in.metres.x > 0.0 {
+            let wa = in.metres.y;
+            let wb = in.metres.z;
+            along = in.metres.x * (t / wb) / ((1.0 - t) / wa + t / wb);
+        }
+        if along - floor(along / (in.dash.x + in.dash.y)) * (in.dash.x + in.dash.y) >= in.dash.x {
+            discard;
+        }
     }
     // A joined line's pieces meet end to end: a cap's soft edge would show a seam at each joint.
     if in.joined != 0u && cov < 1.0 && (t <= 0.0 || t >= 1.0) {

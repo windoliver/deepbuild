@@ -13,7 +13,7 @@ The canvas's platform seams (#140; canvas primitives: Seam and backend): the thi
 
 ## What it may import
 
-serde_json only. It is named deep-canvas*, so the canvas lint reads it and the wasm32 lane builds it: no threads, clocks, statics or target predicates. A backend's platform facts (the CPU's architecture) come from the binary that reports them.
+deep-canvas through its crate root for the registry's module declarations, and serde_json. It is named deep-canvas*, so the canvas lint reads it and the wasm32 lane builds it: no threads, clocks, statics or target predicates. A backend's platform facts (the CPU's architecture) come from the binary that reports them.
 
 ## Deviations
 
