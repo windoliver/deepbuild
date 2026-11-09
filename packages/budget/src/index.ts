@@ -239,7 +239,7 @@ class BudgetLedger implements Ledger {
     const now = this.options.now();
     if (!Number.isSafeInteger(input.ends) || input.ends <= now) throw new BudgetRefused('a budget ends after it is approved');
     const id = ulid(now);
-    await this.append(this.core(connection), {
+    await this.append(asCore(connection), {
       v: 2, id, kind: 'spend.approved', ts: now,
       data: { scope: { kind: input.scope.kind, ref: input.scope.ref }, ...(input.runs === undefined ? {} : { runs: input.runs }), cap_usd: usd(microDown(input.cap_usd)), ends: input.ends, via },
     });
@@ -318,7 +318,7 @@ class BudgetLedger implements Ledger {
         const why = roomFor(short, waiting.run.run) < waiting.usd ? `${dollars(left(short))} left, not ${dollars(waiting.usd)}` : `no run left of its ${String(short.runs)}`;
         throw new BudgetRefused(`budget ${short.id} has ${why} for ${waiting.run.run}`, { run: waiting.run.run, budget: short.id });
       }
-      if (!recovering) await this.append(this.core(connection), { v: 1, id: ulid(now), kind: 'decision.applied', subject: ask, ts: now, data: { decision: answer.decision, ask } });
+      if (!recovering) await this.append(asCore(connection), { v: 1, id: ulid(now), kind: 'decision.applied', subject: ask, ts: now, data: { decision: answer.decision, ask } });
       return this.reserve(connection, waiting.run, budgets.map((b) => b.id), waiting.usd, { ask, decision: answer.decision }, now);
     });
   }
@@ -331,7 +331,7 @@ class BudgetLedger implements Ledger {
       if (!held || held.charged) throw new BudgetRefused(`${String(run)} holds no reservation to charge`, { run });
       if (!isPrice(cost)) throw new BudgetRefused('a cost reading is in dollars, zero or more', { run });
       const now = this.options.now();
-      await this.append(this.core(connection), { v: 1, id: ulid(now), kind: 'spend.charged', subject: run, ts: now, data: { run, usd: usd(microUp(cost)) }, ...(evidence.length ? { evidence } : {}) });
+      await this.append(asCore(connection), { v: 1, id: ulid(now), kind: 'spend.charged', subject: run, ts: now, data: { run, usd: usd(microUp(cost)) }, ...(evidence.length ? { evidence } : {}) });
     });
   }
 
@@ -375,7 +375,7 @@ class BudgetLedger implements Ledger {
    */
   private async reserve(connection: Connection, run: RunRequest, budgets: string[], cost: number, answered: { ask: string; decision: string } | null, now: number): Promise<Outcome> {
     const reserved = budgets.map((budget) => ({ budget, usd: usd(cost) }));
-    await this.append(this.core(connection), {
+    await this.append(asCore(connection), {
       v: 1, id: ulid(now), kind: 'spend.reserved', subject: run.run, ts: now,
       data: { run: run.run, check: run.check, inputs: run.inputs, issue: run.issue, resource: run.resource ?? null, budgets: reserved, ask: answered?.ask ?? null, decision: answered?.decision ?? null },
     });
@@ -390,7 +390,7 @@ class BudgetLedger implements Ledger {
     this.raising = { key, waiting };
     let ask: string;
     try {
-      ask = await this.options.asks.raise(this.core(connection), source, {
+      ask = await this.options.asks.raise(asCore(connection), source, {
         kind: 'authority', question,
         options: [{ id: 'approve', label: yes, decision: 'allow' }, { id: 'decline', label: no, decision: 'deny' }],
         recommended: null, deadline: now + RAISE_WAIT, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
@@ -399,7 +399,7 @@ class BudgetLedger implements Ledger {
     } finally {
       this.raising = undefined;
     }
-    await this.append(this.core(connection), {
+    await this.append(asCore(connection), {
       v: 1, id: ulid(now), kind: 'spend.asked', subject: run.run, ts: now,
       data: {
         run: run.run, check: run.check, inputs: run.inputs, issue: run.issue, resource: run.resource ?? null, usd: usd(waiting.usd), ask,
@@ -432,11 +432,6 @@ class BudgetLedger implements Ledger {
   private live(id: string, now: number): Budget | undefined {
     const b = this.budgets.get(id);
     return b && b.ends > now ? b : undefined;
-  }
-
-  /** The core's connection, appending for the person behind this one. */
-  private core(connection: Connection): Connection {
-    return asCore(connection);
   }
 
   private async append(connection: Connection, event: EventInput): Promise<void> {
