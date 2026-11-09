@@ -270,6 +270,10 @@ pub enum Planted {
     ProbeStoresNormalized,
     /// #498: untagged streams are assumed BT.601 at every height.
     AssumesBt601,
+    /// #499: a video frame looked up by ⌊source time × the nominal frame rate⌋.
+    LookupFloorsFrameRate,
+    /// #499: a canonical seek decodes its frame from the asset's short-GOP proxy.
+    SeekReadsProxy,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
     ShippedPanelsUngated,
     /// #498: the reserved-sound comparer refuses only an asset whose hash is a reserved sound's.
@@ -2063,6 +2067,9 @@ impl<'a> Hub<'a> {
                 issues.push(op_issue(i));
             }
             if let Some(drawing) = drawing.filter(|_| op_issues.is_empty()) {
+                // #499: a video image item draws its frame at the revision's time.
+                let (_, pictures) = self.videos_at(doc, show.t, false);
+                self.renderer.videos = pictures;
                 if let Err(Unfit { code, path }) = self
                     .renderer
                     .prepare_drawing(&drawing, &self.scenario.evidence)

@@ -315,6 +315,14 @@ impl<'a> Hub<'a> {
         } else {
             None
         };
+        // #499: each video image item's frame at t, and its picture for the snapshot.
+        if let Some(d) = &document {
+            let (video, pictures) = self.videos_at(d, t, false);
+            if !video.is_empty() {
+                reply["video"] = Value::Object(video);
+            }
+            self.renderer.videos = pictures;
+        }
         if e.film {
             let glyphs = drawing
                 .as_ref()
