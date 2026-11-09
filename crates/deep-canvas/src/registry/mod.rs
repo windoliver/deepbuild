@@ -386,6 +386,9 @@ pub struct Kind {
     pub preview: Option<String>,
     /// Its one-line description, as the sheet `deep_kinds` serves prints it (#412).
     pub description: Option<String>,
+    /// The param naming an asset whose probe the check reads (#499): the core has the decode
+    /// worker probe it, so a module reads an asset without the media module.
+    pub probes: Option<String>,
 }
 
 /// An array, with one writer: its owner (canvas primitives: Array and table).
@@ -745,7 +748,16 @@ impl Registrar {
             deprecated: None,
             preview: None,
             description: None,
+            probes: None,
         });
+        self
+    }
+
+    /// The last kind registered reads the probe of the asset its param `param` names (#499).
+    pub fn probes(&mut self, param: &str) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.probes = Some(param.into());
+        }
         self
     }
 
@@ -1430,6 +1442,16 @@ impl Sealed {
                 k.entry.is(&full) && k.entry.version(major).is_some() && !k.draws_as.is_empty()
             })
             .map(|k| k.draws_as.as_str())
+    }
+
+    /// The param of `kind_text` naming an asset the decode worker probes at check (#499).
+    pub fn probed_param(&self, kind_text: &str) -> Option<&str> {
+        let (full, major) = crate::kinds::parse_kind(kind_text)?;
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.kinds.iter())
+            .find(|k| k.entry.is(&full) && k.entry.version(major).is_some())
+            .and_then(|k| k.probes.as_deref())
     }
 
     /// The `rect@1` params a sealed module's kind draws as, when it registered a drawing.

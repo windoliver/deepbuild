@@ -435,7 +435,10 @@ fn module_checks(
                     .iter()
                     .find(|c| c.code == r.code)
                     .map(|c| c.fix.clone());
+                // An issue at a strip's field names the strip too (#499's av_unlinked).
+                let strip = r.path.strip_prefix("strips/").and_then(|p| p.split('/').next()).map(str::to_string);
                 let mut issue = Issue::error(r.code, id, r.path, actual, &r.what);
+                issue.ids.extend(strip);
                 issue.severity = if r.severity == "warning" {
                     "warning"
                 } else {

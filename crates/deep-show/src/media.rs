@@ -109,6 +109,48 @@ fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
 }
 
 impl Hub<'_> {
+    /// #499: each item whose kind reads an asset's probe has the decode worker probe it, the
+    /// trusted ring's, through the core: a module needs no media module to read an asset. The
+    /// param names the document's asset (or holds its SHA-256); its probe is kept on that asset
+    /// in `assets`. An asset the store lacks or the worker refuses is an issue on the item.
+    pub(crate) fn probe_assets(&mut self, doc: &mut Value) -> Vec<deep_canvas::document::Issue> {
+        let mut out = Vec::new();
+        let items = doc.get("items").and_then(Value::as_object).cloned().unwrap_or_default();
+        for (id, item) in &items {
+            let Some(kind) = item.get("kind").and_then(Value::as_str) else {
+                continue;
+            };
+            let Some(param) = self.startup.sealed.probed_param(kind).map(str::to_string) else {
+                continue;
+            };
+            let path = format!("items/{id}/params/{param}");
+            let named = item.pointer(&format!("/params/{param}")).and_then(Value::as_str).unwrap_or("").to_string();
+            let sha = doc
+                .pointer(&format!("/assets/{named}/sha256"))
+                .and_then(Value::as_str)
+                .unwrap_or(&named)
+                .to_string();
+            let issue = |code: &'static str, what: &str| {
+                deep_canvas::document::Issue::error(code, id, path.clone(), json!(named), what)
+            };
+            if sha.len() != 64 || crate::evidence::read(&self.scenario.evidence, &sha).is_none() {
+                out.push(issue("unknown_asset", "the asset isn't in the evidence store"));
+                continue;
+            }
+            let file = self.scenario.evidence.join(&sha[..2]).join(&sha[2..]);
+            let (reply, _) = self.media_job(DECODE_WORKER, json!({"op": "probe", "path": file}));
+            match reply.pointer("/asset/probe") {
+                Some(probe) => {
+                    if let Some(a) = doc.pointer_mut(&format!("/assets/{named}")).and_then(Value::as_object_mut) {
+                        a.insert("probe".into(), probe.clone());
+                    }
+                }
+                None => out.push(issue("unreadable_asset", "the decode worker couldn't probe the asset")),
+            }
+        }
+        out
+    }
+
     /// A job for the decode worker, or for the encode tool; with the planted `decodes_in_app`, a
     /// probe or decode runs here, in this process. Returns the reply and the pid that ran it.
     pub(crate) fn media_job(&mut self, role: &'static str, job: Value) -> (Value, u32) {

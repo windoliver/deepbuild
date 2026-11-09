@@ -201,6 +201,13 @@ test-rules-shared = ["dep:deep-canvas-test-modules"]
 test-rules-isolated = ["dep:deep-canvas-test-modules"]
 test-registries-load = ["dep:deep-canvas-test-modules"]
 test-leave-out-effects = []
+# Issue #499: a build without the media module; the test module that probes an asset through the
+# decode worker, and its planted twin that calls through media; the planted media@1 whose reverb
+# checkpoint leaves out its tail.
+test-leave-out-media = []
+test-probe = ["dep:deep-canvas-test-modules"]
+test-probe-via-media = ["dep:deep-canvas-test-modules"]
+test-media-checkpoint-without-tail = []
 # #308: the full set without the input module, and the test control kind test.dial.
 test-leave-out-input = []
 test-control-kind = []
@@ -220,6 +227,10 @@ deep-canvas-motion = { path = "../deep-canvas-motion" }
 # Issue #308: the input module, controls and control@1, in the full build set.
 deep-canvas-input = { path = "../deep-canvas-input" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+# Issue #499: the media module, media@1; the logic module's world, which a live play steps on the
+# transport's clock.
+deep-canvas-media = { path = "../deep-canvas-media" }
+deep-logic = { path = "../deep-logic" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
