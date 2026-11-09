@@ -14,6 +14,8 @@
 // claim before the change recomputes the locked hash); the approved bytes are kept by digest in the hub (the lock's R1
 // names the SHA-256 of the file's bytes at the lock, and `evidence.read` finds it); the claim's run of R1 records the
 // approved check's outcome, failed, though the file on disk now exits 0; and a `*.proposed` event names the file.
+// A positive control follows: a third turn writes the code the approved check asserts (src/auth.js exporting
+// `rejectsExpired`), the disk's file still the planted `exit 0`, and a run of R1 for that claim must record passed.
 // The wrong programs `hash-check-paths` and `runs-disk-bytes` (DEEP_HUB_PLANT) must each fail the assertion naming
 // their clause and the file.
 import { createHash } from 'node:crypto';
@@ -38,6 +40,9 @@ const HELPER_SOURCE = [
   `writeFileSync(folder + 'expired' + '-token.sh', ${JSON.stringify(PLANTED)});`,
   '',
 ].join('\n');
+/** The code change the approved check asserts (`require('./src/auth.js').rejectsExpired`), written in turn 3. */
+const FIX = 'src/auth.js';
+const FIX_SOURCE = "exports.rejectsExpired = (token) => token.exp <= Date.now() / 1000;\n";
 /** The phrases each wrong program's failure must carry (README, Wrong programs). */
 const HASH_CLAUSE = "must make the next claim's recomputed hash differ from the locked one";
 const BYTES_CLAUSE = "the claim's checks run the approved bytes";
@@ -105,18 +110,31 @@ async function scenario(plant?: string): Promise<void> {
     const changedAt = (await settle(hub, () => true)).at(-1)!.log_pos;
     await s.stop('The tests pass.');
 
-    // Both claims' runs of R1's check have finished.
+    // Turn 3, the positive control: the code change the approved check looks for (src/auth.js exporting
+    // rejectsExpired), with the disk's check file still the planted `exit 0`. Its claim's run of R1 must pass.
+    await s.typed(QUESTION);
+    const code = join(s.cwd, FIX);
+    const fixed = await s.call('Write', { file_path: code, content: FIX_SOURCE }, {
+      response: { type: 'create', filePath: code, content: FIX_SOURCE, structuredPatch: [] },
+      effect: () => writeFileSync(code, FIX_SOURCE),
+    });
+    must(fixed.allowed, `BLOCKED: ${AC12} the Write of ${FIX} must be allowed: ${shown(fixed.before)}`);
+    const stillPlanted = readFileSync(join(s.cwd, CHECK_FILE), 'utf8');
+    must(stillPlanted === PLANTED, `BLOCKED: ${AC12} ${CHECK_FILE} must still hold the planted bytes at the third claim: ${JSON.stringify(stillPlanted)}`);
+    await s.stop('auth.js now exports rejectsExpired.');
+
+    // Every run of R1's check that each of the three claims started has finished.
+    const ran3 = (all: readonly Ev[]) => {
+      const [a, b, c] = stopsOf(all, s);
+      return a && b && c ? [claimAt(all, ref, a, b.log_pos), claimAt(all, ref, b, c.log_pos), claimAt(all, ref, c, Infinity)] as const : undefined;
+    };
     events = await settle(hub, (all) => {
-      const [first, second] = stopsOf(all, s);
-      if (!first || !second) return false;
-      const a = claimAt(all, ref, first, second.log_pos);
-      const b = claimAt(all, ref, second, Infinity);
-      return a.finished.some(Boolean) && b.finished.some(Boolean) && all.some((e) => e.kind.endsWith('.proposed') && e.log_pos > changedAt);
-    }, 300_000);
-    const [first, second] = stopsOf(events, s);
-    must(first !== undefined && second !== undefined, `${AC12} both turns' stops must be recorded: ${stopsOf(events, s).map(said).join('; ') || 'none'}`);
-    const control1 = claimAt(events, ref, first!, second!.log_pos);
-    const next = claimAt(events, ref, second!, Infinity);
+      const claims = ran3(all);
+      return claims !== undefined && claims.every((c) => c.started.length > 0 && c.finished.every(Boolean)) && all.some((e) => e.kind.endsWith('.proposed') && e.log_pos > changedAt);
+    }, 420_000);
+    const [first, second, third] = stopsOf(events, s);
+    must(first !== undefined && second !== undefined && third !== undefined, `${AC12} the three turns' stops must be recorded: ${stopsOf(events, s).map(said).join('; ') || 'none'}`);
+    const [control1, next, fixedClaim] = ran3(events)!;
 
     // The control: before the change, the claim recomputes the locked hash, and the approved check fails.
     must(control1.recomputed !== undefined, `${AC12} the control claim (the stop after turn 1, ${said(first)}) must recompute ${ref}'s hash: no event after it names the task with a hash`);
@@ -142,6 +160,12 @@ async function scenario(plant?: string): Promise<void> {
     // The claim's checks run the approved bytes: the run records the approved check's outcome, though the disk's exits 0.
     must(next.started.length > 0, `${AC12} ${BYTES_CLAUSE} of ${CHECK_FILE}: the next claim must run R1's check: no run.started tied to it`);
     must(next.finished.length > 0 && next.finished.every((f) => f?.data.outcome === 'failed'), `${AC12} ${BYTES_CLAUSE} of ${CHECK_FILE} kept by digest, not the file on disk (which exits 0): R1's run must record the approved check's outcome, failed; it recorded ${next.finished.map(said).join('; ')}`);
+    // The positive control: once the code has what the approved check asserts, the claim's run of it passes, though
+    // the file on disk still differs from its approved digest. A gate that fails every changed check fails here, and
+    // one that runs the disk's `exit 0` records it uncounted. The claim may also run the approved check on the base
+    // commit ("Fail before, pass after"), where it fails, so one passed run of the claim is what is required.
+    must(fixedClaim.started.length > 0, `${AC12} ${BYTES_CLAUSE} of ${CHECK_FILE}: the third claim must run R1's check: no run.started tied to it`);
+    must(fixedClaim.finished.some((f) => f?.data.outcome === 'passed'), `${AC12} ${BYTES_CLAUSE} of ${CHECK_FILE}: with ${FIX} exporting rejectsExpired, the approved check passes, so a run of R1 for the third claim must record passed, though the file on disk still differs from its digest; it recorded ${fixedClaim.finished.map(said).join('; ')}`);
   } finally {
     await stopHub(hub);
   }

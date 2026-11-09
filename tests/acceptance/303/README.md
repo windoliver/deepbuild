@@ -180,9 +180,12 @@ a JSON file named by `DEEP_HUB_TEST_WORK`, which only tests set, holding the rea
   `claim.made`, or the event carrying the recomputed hash), and whose `data.check` names R1's check (contains
   `.deepbuild/checks/expired-token.sh`, or is `R1` or ends in `#R1` or `:R1`); and the `run.finished` whose `data.run`
   is that run's. "The claim's checks run the approved bytes": the approved file fails (`src/auth.js` has no
-  `rejectsExpired`) and python -c rewrites it to `exit 0`, so that run's `outcome` must be `failed`, the approved
-  check's, as the control claim's run of the untouched file is too. The design's Protection row: "the claim is judged
-  on the approved bytes".
+  `rejectsExpired`) and a child of `npm test` rewrites it to `exit 0` (the write the guard didn't recognize,
+  `AC12-REDRAFT.md`), so that run's `outcome` must be `failed`, the approved check's, as the control claim's run of the
+  untouched file is too. The design's Protection row: "the claim is judged on the approved bytes".
+  A positive control follows: a third claim, after the agent writes `src/auth.js` exporting `rejectsExpired` with the
+  disk's file still `exit 0`, must have a run of R1 that records `passed`. That claim may also run the approved check
+  on the base commit, where it fails, so one passed run is what is required; a disk run of `exit 0` records `uncounted`.
 - **A proposal naming the file** (AC12): an event of a kind ending in `.proposed`, after the change, whose data names
   `.deepbuild/checks/expired-token.sh`. The base's `deep_propose` records `learn.proposed`.
 
@@ -240,7 +243,7 @@ names. `failureOf` rethrows BLOCKED and INCONCLUSIVE, so neither counts as the p
 | `claim-on-tool-calls` | AC10 | the stop rule reads every stop whose turn made a tool call as a claim | `stop D, the answer to your typed question … (agent.stop <id>) must read as no claim (claim: false)`; the test requires the stop's event ID |
 | `role-from-text` | AC5 | the lock reads an author's role from the text it wrote ("the repo owner"), not from its work.item@1 reading | the signed comment's definition locks with no answer, or drive-by isn't marked outside; the test requires a failure on the wait or the role |
 | `runs-disk-bytes` | AC12 | a claim's checks run the check file as it is on disk, not the approved bytes kept by digest | `the claim's checks run the approved bytes of .deepbuild/checks/expired-token.sh … R1's run must record the approved check's outcome, failed; it recorded …`; the test requires the file's path |
-| `hash-check-paths` | AC12 | the lock hashes requirement records with their check paths but not the checks' bytes | `.deepbuild/checks/expired-token.sh, changed by python -c after the lock, must make the next claim's recomputed hash differ …`; the test requires the file's path |
+| `hash-check-paths` | AC12 | the lock hashes requirement records with their check paths but not the checks' bytes | `.deepbuild/checks/expired-token.sh, changed after the lock by npm test's child, a write the guard didn't recognize, must make the next claim's recomputed hash differ from the locked one …`; the test requires the file's path |
 
 The issue names no wrong program for AC1, AC2, AC3, AC4, AC6 and AC11. The base is theirs (`BASE-FAILURE.txt`):
 it records a `tasks` entry for every prompt a person typed, a question and a rename included, and opens no task,
@@ -266,7 +269,7 @@ failure message starts with them too.
 | AC9 `#303.8c347a59` | `definition.locked` carries hash, issue revision, base commit, each required by its schema; the recomputed hash matches, an edit in the store changes it; ID-only hashing fails naming the requirement | `lock.test.ts` (3) | the newest schema's fixture; the recorded event; a claim recomputes the locked hash; R2 edited in `definitions`; the next claim recomputes another; the wrong program `hash-ids-only` |
 | AC10 `#303.fd687f1e` | the stop rule: after startup, resume, /clear and an answer, no claim; the same question with an edit, a claim; the tool-call rule fails naming the stop | `stops.test.ts` (2) | turns A to E above; `agent.stop`'s `claim`; the wrong program `claim-on-tool-calls` |
 | AC11 `#303.447eb97a` | turning a message into a task adds under 5 ms to the prompt hook, against the merge base | `budgets.test.ts` (2) | the perf lane's task naming #303, valid and running; the timing against a merge-base build, INCONCLUSIVE where it can't count |
-| AC12 `#303.ec3af335` | a drafted check file changed after the lock by a write the guard didn't recognize: the next claim's hash differs, the approved bytes kept by digest, a proposal naming the file; path-only hashing fails | `checkfile-redraft.test.ts` (3) | blind redraft for the amended criterion (`AC12-REDRAFT.md`, #1750): a child of `npm test` rewrites the check; the first draft `checkfile.test.ts` (`#303.323ca6a1`, `python -c`) was removed with the owner's approval |
+| AC12 `#303.ec3af335` | a drafted check file changed after the lock by a write the guard didn't recognize: the next claim's hash differs, the approved bytes kept by digest, a proposal naming the file; path-only hashing fails | `checkfile-redraft.test.ts` (3) | blind redraft for the amended criterion (`AC12-REDRAFT.md`, #1750): a child of `npm test` rewrites the check; the first draft `checkfile.test.ts` (`#303.323ca6a1`, `python -c`) was removed with the owner's approval; a positive control's third claim, with the code the check asserts written, has a run of R1 that records passed |
 
 ## What this suite could not encode
 
@@ -289,6 +292,17 @@ through the run records the base's catalogue names, `run.started` and `run.finis
 (The surface under test, above), with a new wrong program, `runs-disk-bytes`. Only `checkfile.test.ts` changed: its
 scenario now also waits for each claim's run of R1's check, the first test asserts its outcome, and a third test runs
 the plant. Every other test and expected value is unchanged. `BASE-FAILURE.txt` has the AC12 run on the base.
+That draft and its criterion `#303.323ca6a1` are superseded by the 2026-11-09 entry below.
+
+**2026-11-09: AC12 redrafted blind for the amended criterion `#303.ec3af335`.** The owner amended AC12 to "a write the
+guard didn't recognize"; at base `414947b4` the shipped guard recognizes `python3 -c` writes to `.deepbuild/`
+(`no-deepbuild-spec-write`), so the redraft's write is a child of `npm test`: the agent points the repo's test script
+at a helper it wrote, whose source never spells the folder's name in one piece (`AC12-REDRAFT.md` has the guard table).
+`checkfile-redraft.test.ts` replaces `checkfile.test.ts`: the same surfaces and wrong programs (`hash-check-paths`,
+`runs-disk-bytes`), each twin required to fail on its clause naming the file, plus a positive control after a review's
+send-back: a third claim, with the code the approved check asserts written and the disk's file still `exit 0`, must
+have a run of R1 that records `passed`, so a gate that fails every changed check fails this test. Its wait now matches
+its assertions: every run of R1 each claim started has finished.
 
 ## Files
 

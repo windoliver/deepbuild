@@ -59,6 +59,9 @@ One session, the handed definition for `make the auth middleware reject expired 
 file (`asserts: [<file>:3]`) and R2 with none. Turn 1: the prompt, the lock, a Read and an Edit of `src/auth.ts`, a stop
 (the control claim). Turn 2: the issue's typed question `explain how the auth middleware checks expiry` (opens no task;
 its turn does work, so its stop is a claim, AC10), the three calls above, a stop (the next claim).
+Turn 3 (added 2026-11-09 after a review's send-back), the positive control: the same question, a Write of `src/auth.js`
+exporting `rejectsExpired` (the code the approved check asserts), the disk's check file still the planted `exit 0`, a
+stop (the third claim). The wait holds until every run of R1 each claim started has finished, as the assertions read.
 
 ## Assertion to source
 
@@ -71,6 +74,7 @@ its turn does work, so its stop is a claim, AC10), the three calls above, a stop
 | The lock's R1 names the SHA-256 of the file's bytes at the lock, and `evidence.read` finds it | criterion: "approved bytes kept by digest in the hub" |
 | A `*.proposed` event after the change names the file | criterion: "the change becomes a proposal naming the file"; design, Protection |
 | The next claim's run of R1 (`run.started` tied to the claim, `run.finished`) records `failed`, though the disk file exits 0 | criterion: "the claim's checks run the approved bytes"; README, The claim's run of R1's check |
+| Positive control: with `src/auth.js` exporting `rejectsExpired` and the disk file still `exit 0`, a run of R1 for the third claim records `passed` | criterion: "the claim's checks run the approved bytes"; without it, a gate that records `failed` for every check whose disk file differs from its digest would pass. The claim also runs the approved check on the base commit ("Fail before, pass after"), where it fails, and the record marks neither run as the base's, so one passed run is required, not every run |
 
 ## Wrong programs
 
@@ -90,6 +94,15 @@ tests/acceptance/303/checkfile-redraft.test.ts`: `Tests  3 passed (3)`. A throwa
 messages showed `hash-check-paths` failing on "must make the next claim's recomputed hash differ from the locked one …
 it recomputed the same: claim.made …" and `runs-disk-bytes` on "the claim's checks run the approved bytes of
 .deepbuild/checks/expired-token.sh … it recorded run.finished … outcome uncounted"; the copy was deleted.
+
+Rerun 2026-11-09 at `2728e6c5` (no product code differs from `414947b4`), after adding the positive control:
+`npx vitest run tests/acceptance/303/checkfile-redraft.test.ts`: `Tests  3 passed (3)`; `tsc` exit 0. The twins still
+fail on their named assertions (`hash-check-paths`: "… must make the next claim's recomputed hash differ from the
+locked one …; it recomputed the same"; `runs-disk-bytes`: "… the claim's checks run the approved bytes of
+.deepbuild/checks/expired-token.sh … it recorded run.finished … outcome uncounted"). In a first try the control required
+every run of the third claim to pass and failed on the base run (`failed`, tests_run 0), so it now requires one passed
+run. No plant or mutant of "fail every changed check" exists at the base, so the control's catch of that gate is argued
+from the record (with the approved bytes on the claim's tree it records `passed`), not shown by a twin.
 
 Not run: the rest of #303's suite, `scripts/affected.mjs`, the preflight, the Mac, and a real `claude` binary (the
 test plays Claude Code, as the suite's README says).

@@ -13,20 +13,32 @@ field); it allows `gh pr create` with any body; its send-back names the check th
 it keeps a drafted check's bytes by digest but nothing a check references; it locks a check at any path under the
 folder; and it lists none of this suite's plants.
 
-The first run had approved.test.ts's wrong-program test pass on the base (the base lists runs-disk-bytes, from #303,
-and the test asserted only the runs). The test now first requires the plant's lock to keep the expected output by
-digest, which the base doesn't; its rerun is below, in place of the first run's line.
+AC12's tests are the blind redraft, approved-redraft.test.ts (AC12-REDRAFT.md); the first draft and its run here were
+removed. The redraft was not run on 69803b94. Its fail-first evidence is its wrong programs, both of which the base
+lists, run 2026-11-09 with the product code of 414947b4 (branch head 2728e6c5):
+npx vitest run tests/acceptance/322/approved-redraft.test.ts --no-file-parallelism: Test Files 1 passed (1); Tests 6
+passed (6); about 10 s. The correct hub holds both arms (the check rewritten to `exit 0`, with its FLAG control; the
+expected output rewritten to `200`), and each plant arm requires the scenario to fail with these messages:
 
-approved.test.ts (AC12 #322.0cd8cc47)
-  x AC12 the lock's hash covers expired-token.sh, expired-status.sh and the expired-token.expected it references; ...
-    Error: AC12 #322.0cd8cc47 the locked definition's R3 must name the expected output it references by digest, sha256
-    5d94ef1d…9f84 of .deepbuild/checks/expired-token.expected, so the hash covers its bytes: {"id":"R3",...,
-    "check":".deepbuild/checks/expired-status.sh","check_sha256":"a43ac01c…1067",...,"surface":null}
-  x AC12 (wrong program) a gate that runs the files on disk (DEEP_HUB_PLANT=runs-disk-bytes) ... (rerun)
-    Error: AC12 #322.0cd8cc47 the planted gate still keeps the approved bytes of .deepbuild/checks/expired-token.expected
-    by digest (5d94ef1d…9f84): evidence.read says evidence.read refused: {"code":"not_found",...,"remediation":"The
-    store holds no evidence 5d94ef1d…9f84.",...}
-    (rerun of approved.test.ts alone, 2026-11-03 10:58 UTC: Test Files 1 failed (1); Tests 2 failed (2); 183 s)
+approved-redraft.test.ts (AC12 #322.0cd8cc47), the wrong programs
+  DEEP_HUB_PLANT=runs-disk-bytes, the check rewritten to exit 0
+    Error: AC12 #322.0cd8cc47 the claim's checks still run the approved bytes: R1's check
+    .deepbuild/checks/expired-status.sh, rewritten on disk to `exit 0` by a write the guard didn't recognize
+    (.deepbuild/checks/expired-status.sh), must run as you approved it and fail (...), but its run finished "uncounted":
+    {...,"findings":["uncounted: exit 0 in .deepbuild/checks/expired-status.sh"],...}
+  DEEP_HUB_PLANT=runs-disk-bytes, the expected output rewritten to 200
+    Error: AC12 #322.0cd8cc47 the claim's checks still run the approved bytes: R1's check
+    .deepbuild/checks/expired-status.sh, with its expected output rewritten on disk to `200`, ... by a write the guard
+    didn't recognize (.deepbuild/checks/expired-token.expected), must run as you approved it and fail (...), but its run
+    finished "passed": {...}
+  DEEP_HUB_PLANT=hash-check-paths, the check rewritten to exit 0
+    Error: AC12 #322.0cd8cc47 the definition's hash covers .deepbuild/checks/expired-status.sh's bytes: after the
+    rewrite the claim's recomputed hash must differ from the locked one, 825ad4ae…0544; the claim carries
+    "825ad4ae…0544"
+  DEEP_HUB_PLANT=hash-check-paths, the expected output rewritten to 200
+    Error: AC12 #322.0cd8cc47 the definition's hash covers .deepbuild/checks/expired-token.expected's bytes: after the
+    rewrite the claim's recomputed hash must differ from the locked one, d40fad99…d8e4; the claim carries
+    "d40fad99…d8e4"
 
 closes.test.ts (AC2 #322.91ab2030)
   x AC2 with R2 unproven, gh pr create whose body says Closes #7 is refused naming Part of and R2; ...
