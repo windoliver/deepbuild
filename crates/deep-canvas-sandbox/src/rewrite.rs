@@ -54,6 +54,37 @@ pub struct Faults {
     pub keep_nan: bool,
     /// Lets `memory.grow` run, returning −1 on a memory that can't grow.
     pub grow_returns: bool,
+    /// The page tracker leaves the pages a `memory.copy` writes unmarked (#531).
+    pub skip_copy_pages: bool,
+}
+
+/// The exported global names a logic item's program gains (#531): each mutable global of the
+/// program, by its index, so a checkpoint holds the whole state; each 64-page word of the page
+/// bitmap; and, in a counted rewrite, each block's run count.
+pub const GLOBAL: &str = "sandbox.global.";
+pub const PAGES: &str = "sandbox.pages.";
+pub const BLOCK: &str = "sandbox.block.";
+
+/// What the rewrite adds beyond fuel, stack, NaNs and growth (Logic: sandbox, `rewrite.pages`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Mode {
+    /// Providers, validators and registry programs.
+    #[default]
+    Plain,
+    /// A logic item's program: every store, `memory.fill` and `memory.copy` marks the 64 KiB pages
+    /// it wrote in the bitmap, and the program's mutable globals are exported.
+    Logic,
+    /// As `Logic`, with a run count per block, for logic.budget's report only; it never runs a
+    /// step that counts, and its hash is never an item's.
+    Counted,
+}
+
+/// One block the rewrite charges as a whole: its function and the offset, in the program as
+/// written, of each instruction its charge counts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Block {
+    pub function: u32,
+    pub ops: Vec<u32>,
 }
 
 /// A rewritten program.
@@ -62,6 +93,8 @@ pub struct Rewritten {
     pub bytes: Vec<u8>,
     /// The sha256 of `bytes`, in hex.
     pub hash: String,
+    /// Every block's charge, in order: in a counted rewrite, `sandbox.block.<i>` counts block i.
+    pub blocks: Vec<Block>,
 }
 
 pub fn hash(bytes: &[u8]) -> String {
@@ -99,7 +132,15 @@ fn err(e: impl std::fmt::Display) -> String {
 
 /// Rewrites a program the subset check admitted.
 pub fn rewrite(bytes: &[u8], faults: Faults) -> Result<Rewritten, String> {
+    rewrite_as(bytes, faults, Mode::Plain)
+}
+
+/// Rewrites a program the subset check admitted, with what `mode` adds.
+pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten, String> {
+    let logic = mode != Mode::Plain;
     let mut re = RoundtripReencoder;
+    let mut mutable: Vec<u32> = Vec::new();
+    let mut pages = 0u64;
     let mut validator = Validator::new_with_features(SUBSET);
     // (order, sequence, id, bytes); the type, global, export and code sections are built at the end.
     let mut raw: Vec<(u8, usize, u8, Vec<u8>)> = Vec::new();
@@ -129,9 +170,25 @@ pub fn rewrite(bytes: &[u8], faults: Faults) -> Result<Rewritten, String> {
                 for f in s.clone() {
                     funcs.push(f.map_err(err)?);
                 }
+                if logic {
+                    // Rebuilt at the end, with the page tracker's function after the program's.
+                    last = order(3);
+                } else {
+                    raw.push(section(&payload, bytes, &mut last));
+                }
+            }
+            Payload::MemorySection(s) => {
+                if let Some(m) = s.clone().into_iter().next() {
+                    pages = m.map_err(err)?.initial;
+                }
                 raw.push(section(&payload, bytes, &mut last));
             }
             Payload::GlobalSection(s) => {
+                for (i, g) in s.clone().into_iter().enumerate() {
+                    if g.map_err(err)?.ty.mutable {
+                        mutable.push(i as u32);
+                    }
+                }
                 re.parse_global_section(&mut globals, s.clone()).map_err(err)?;
                 last = order(6);
             }
@@ -208,6 +265,42 @@ pub fn rewrite(bytes: &[u8], faults: Faults) -> Result<Rewritten, String> {
     if let Some(f) = start {
         exports.export(START, ExportKind::Func, f);
     }
+    // A logic item's program: its mutable globals exported, the bitmap's words (one i64 a 64
+    // pages) after the counters, and in a counted rewrite one count a block after them.
+    let words = if logic {
+        pages.div_ceil(64).max(1) as u32
+    } else {
+        0
+    };
+    let bitmap = g + 4;
+    let counted = g + 4 + words;
+    let blocks_total: u32 = if mode == Mode::Counted {
+        bodies.iter().map(|b| b.starts(faults).len() as u32).sum()
+    } else {
+        0
+    };
+    for i in 0..words + blocks_total {
+        globals.global(
+            GlobalType {
+                val_type: ValType::I64,
+                mutable: true,
+                shared: false,
+            },
+            &ConstExpr::i64_const(0),
+        );
+        let name = if i < words {
+            format!("{PAGES}{i}")
+        } else {
+            format!("{BLOCK}{}", i - words)
+        };
+        exports.export(&name, ExportKind::Global, bitmap + i);
+    }
+    if logic {
+        for i in &mutable {
+            exports.export(&format!("{GLOBAL}{i}"), ExportKind::Global, *i);
+        }
+    }
+    let mark = funcs.len() as u32;
 
     // A block type for each function body's wrapper: a type of its own when it returns several.
     let mut type_section = TypeSection::new();
@@ -223,7 +316,10 @@ pub fn rewrite(bytes: &[u8], faults: Faults) -> Result<Rewritten, String> {
         stack,
         cap,
         trap,
+        mark: logic.then_some(mark),
+        counted: (mode == Mode::Counted).then_some(counted),
     };
+    let mut blocks = Vec::new();
     for (i, body) in bodies.iter().enumerate() {
         let t = &types[funcs[i] as usize];
         let results: Vec<ValType> = t
@@ -241,9 +337,26 @@ pub fn rewrite(bytes: &[u8], faults: Faults) -> Result<Rewritten, String> {
             }
         };
         let params = t.params().len() as u32;
-        let (f, t) = body.rewrite(params, wrapper, &counters, faults)?;
+        for (start, len) in body.starts(faults) {
+            blocks.push(Block {
+                function: i as u32,
+                ops: body.at[start..start + len].to_vec(),
+            });
+        }
+        let first = blocks.len() - body.starts(faults).len();
+        let (f, t) = body.rewrite(params, wrapper, &counters, faults, first as u32)?;
         code.function(&f);
         tags.push(t);
+    }
+    let mut functions = wasm_encoder::FunctionSection::new();
+    if logic {
+        type_section.ty().function([ValType::I32, ValType::I32], []);
+        code.function(&tracker(bitmap, words));
+        for f in &funcs {
+            functions.function(*f);
+        }
+        functions.function(type_section.len() - 1);
+        tags.push(Vec::new());
     }
 
     let mut built: Vec<(u8, usize, u8, Vec<u8>)> = raw;
@@ -251,6 +364,9 @@ pub fn rewrite(bytes: &[u8], faults: Faults) -> Result<Rewritten, String> {
         let n = built.len();
         built.push((order(id), n, id, data));
     };
+    if logic {
+        push(3, encoded(&functions));
+    }
     push(1, encoded(&type_section));
     push(6, encoded(&globals));
     push(7, encoded(&exports));
@@ -313,7 +429,90 @@ pub fn rewrite(bytes: &[u8], faults: Faults) -> Result<Rewritten, String> {
     Ok(Rewritten {
         hash: hash(&bytes),
         bytes,
+        blocks,
     })
+}
+
+/// The page tracker, `(addr: i32, len: i32)`: marks each 64 KiB page of `[addr, addr + len)` in
+/// the bitmap's words, globals `bitmap..bitmap + words`. It runs after the write it follows, so
+/// the range lies inside memory. It is the rewrite's own code: it charges no fuel or stack.
+fn tracker(bitmap: u32, words: u32) -> Function {
+    let (addr, len, p, end, bit) = (0, 1, 2, 3, 4);
+    let mut f = Function::new([(2, ValType::I32), (1, ValType::I64)]);
+    let mut i = |ins: I<'_>| {
+        f.instruction(&ins);
+    };
+    i(I::LocalGet(len));
+    i(I::I32Eqz);
+    i(I::If(BlockType::Empty));
+    i(I::Return);
+    i(I::End);
+    i(I::LocalGet(addr));
+    i(I::I32Const(16));
+    i(I::I32ShrU);
+    i(I::LocalSet(p));
+    i(I::LocalGet(addr));
+    i(I::LocalGet(len));
+    i(I::I32Add);
+    i(I::I32Const(1));
+    i(I::I32Sub);
+    i(I::I32Const(16));
+    i(I::I32ShrU);
+    i(I::LocalSet(end));
+    i(I::Loop(BlockType::Empty));
+    i(I::I64Const(1));
+    i(I::LocalGet(p));
+    i(I::I32Const(63));
+    i(I::I32And);
+    i(I::I64ExtendI32U);
+    i(I::I64Shl);
+    i(I::LocalSet(bit));
+    // block $done { block $w(words-1) { … block $w0 { br_table } case 0; br $done } … }
+    for _ in 0..=words {
+        i(I::Block(BlockType::Empty));
+    }
+    i(I::LocalGet(p));
+    i(I::I32Const(6));
+    i(I::I32ShrU);
+    let targets: Vec<u32> = (0..words).collect();
+    i(I::BrTable(targets.into(), words - 1));
+    for w in 0..words {
+        i(I::End);
+        i(I::GlobalGet(bitmap + w));
+        i(I::LocalGet(bit));
+        i(I::I64Or);
+        i(I::GlobalSet(bitmap + w));
+        i(I::Br(words - 1 - w));
+    }
+    i(I::End);
+    i(I::LocalGet(p));
+    i(I::I32Const(1));
+    i(I::I32Add);
+    i(I::LocalTee(p));
+    i(I::LocalGet(end));
+    i(I::I32LeU);
+    i(I::BrIf(0));
+    i(I::End);
+    i(I::End);
+    f
+}
+
+/// The bytes a store writes, and the type of the value it takes, if `op` is a store.
+fn store(op: &Operator<'_>) -> Option<(u64, u32, ValType)> {
+    use Operator::*;
+    let (m, size, t) = match op {
+        I32Store { memarg } => (memarg, 4, ValType::I32),
+        I64Store { memarg } => (memarg, 8, ValType::I64),
+        F32Store { memarg } => (memarg, 4, ValType::F32),
+        F64Store { memarg } => (memarg, 8, ValType::F64),
+        I32Store8 { memarg } => (memarg, 1, ValType::I32),
+        I32Store16 { memarg } => (memarg, 2, ValType::I32),
+        I64Store8 { memarg } => (memarg, 1, ValType::I64),
+        I64Store16 { memarg } => (memarg, 2, ValType::I64),
+        I64Store32 { memarg } => (memarg, 4, ValType::I64),
+        _ => return None,
+    };
+    Some((m.offset, size, t))
 }
 
 fn leb(out: &mut Vec<u8>, mut n: u32) {
@@ -445,6 +644,10 @@ struct Counters {
     stack: u32,
     cap: u32,
     trap: u32,
+    /// The page tracker's function, in a logic item's program.
+    mark: Option<u32>,
+    /// The first block count's global, in a counted rewrite.
+    counted: Option<u32>,
 }
 
 struct Body<'a> {
@@ -539,18 +742,43 @@ fn float_result(op: &Operator<'_>) -> u8 {
 }
 
 impl Body<'_> {
+    /// Where each block the rewrite charges starts, and how many instructions its charge counts.
+    fn starts(&self, faults: Faults) -> Vec<(usize, usize)> {
+        let mut out = Vec::new();
+        let mut loops = 0;
+        for i in 0..self.ops.len() {
+            let after_loop = i > 0 && matches!(self.ops[i - 1], Operator::Loop { .. });
+            loops += usize::from(after_loop);
+            let starts = i == 0 || ends_block(&self.ops[i - 1]);
+            if starts && !(faults.skip_loop_charge && after_loop && loops == 1) {
+                let len = self.ops[i..]
+                    .iter()
+                    .position(ends_block)
+                    .map_or(self.ops.len() - i, |j| j + 1);
+                out.push((i, len));
+            }
+        }
+        out
+    }
+
     fn rewrite(
         &self,
         params: u32,
         wrapper: BlockType,
         c: &Counters,
         faults: Faults,
+        first_block: u32,
     ) -> Result<(Function, Vec<Tag>), String> {
         let declared: u32 = self.locals.iter().map(|(n, _)| n).sum();
         let scratch = params + declared;
         let (a, b, n, f32_tmp, f64_tmp) = (scratch, scratch + 1, scratch + 2, scratch + 3, scratch + 4);
+        let i64_tmp = scratch + 5;
         let mut locals = self.locals.clone();
         locals.extend([(3, ValType::I32), (1, ValType::F32), (1, ValType::F64)]);
+        if c.mark.is_some() {
+            locals.push((1, ValType::I64));
+        }
+        let mut block = first_block;
         let mut e = Emit {
             f: Function::new(locals),
             tags: Vec::new(),
@@ -604,18 +832,30 @@ impl Body<'_> {
 
         let mut re = RoundtripReencoder;
         let mut depth = 0u32;
-        let mut loops = 0;
+        let starts = self.starts(faults);
+        let mut next = starts.iter().peekable();
+        // Marks [a, a + len) written, `a` already in its local.
+        let mark = |e: &mut Emit, len: Option<i32>| {
+            if let Some(m) = c.mark {
+                e.i(I::LocalGet(a));
+                match len {
+                    Some(l) => e.i(I::I32Const(l)),
+                    None => e.i(I::LocalGet(n)),
+                }
+                e.i(I::Call(m));
+            }
+        };
         for (i, op) in self.ops.iter().enumerate() {
             e.at = self.at[i];
-            let after_loop = i > 0 && matches!(self.ops[i - 1], Operator::Loop { .. });
-            loops += usize::from(after_loop);
-            let starts = i == 0 || ends_block(&self.ops[i - 1]);
-            if starts && !(faults.skip_loop_charge && after_loop && loops == 1) {
-                let len = self.ops[i..]
-                    .iter()
-                    .position(ends_block)
-                    .map_or(self.ops.len() - i, |j| j + 1);
+            if let Some(&(_, len)) = next.next_if(|(s, _)| *s == i) {
                 charge(&mut e, len as i64);
+                if let Some(base) = c.counted {
+                    e.i(I::GlobalGet(base + block));
+                    e.i(I::I64Const(1));
+                    e.i(I::I64Add);
+                    e.i(I::GlobalSet(base + block));
+                }
+                block += 1;
             }
             match op {
                 Operator::Block { .. } | Operator::Loop { .. } | Operator::If { .. } => {
@@ -659,6 +899,29 @@ impl Body<'_> {
                     e.i(I::LocalGet(b));
                     e.i(I::LocalGet(n));
                     e.op(re.instruction(op.clone()).map_err(err)?);
+                    let copy = matches!(op, Operator::MemoryCopy { .. });
+                    if !(copy && faults.skip_copy_pages) {
+                        mark(&mut e, None);
+                    }
+                }
+                _ if c.mark.is_some() && store(op).is_some() => {
+                    // [addr, value]: the store, then its bytes marked.
+                    let (offset, size, t) = store(op).expect("a store");
+                    let value = match t {
+                        ValType::I32 => b,
+                        ValType::I64 => i64_tmp,
+                        ValType::F32 => f32_tmp,
+                        _ => f64_tmp,
+                    };
+                    e.i(I::LocalSet(value));
+                    e.i(I::LocalTee(a));
+                    e.i(I::LocalGet(value));
+                    e.op(re.instruction(op.clone()).map_err(err)?);
+                    e.i(I::LocalGet(a));
+                    e.i(I::I32Const(offset as u32 as i32));
+                    e.i(I::I32Add);
+                    e.i(I::LocalSet(a));
+                    mark(&mut e, Some(size as i32));
                 }
                 _ => {
                     e.op(re.instruction(op.clone()).map_err(err)?);
