@@ -59,7 +59,8 @@
     "variants": [
       "stream",
       "polled",
-      "mcp"
+      "mcp",
+      "library"
     ],
     "since": "R1",
     "stability": "preview",

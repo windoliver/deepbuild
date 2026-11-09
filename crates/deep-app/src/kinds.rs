@@ -1,6 +1,6 @@
 //! Issue #327: what the question card shows for one ask, by its kind, read from the record alone. Seven card
 //! kinds: a batched authority (its plan's steps, the diff, whether the target is public, whether each step can be
-//! undone, default no), a taste call (the reference beside the live render, a sheet of options, your past calls
+//! undone, default no), a taste call (the reference, a sheet of options, your past calls
 //! on the same screen and journey step from the decisions table), a step only you can take (proven by a check),
 //! a stalled claim (split, fund or accept, with costs), a choice, an exception (what it would waive or change,
 //! default no change) and an early question about what done means (default: leave the requirement out). Every
@@ -35,6 +35,21 @@ impl Kind {
             Kind::Exception => "exception",
             Kind::Definition => "early question about done",
         }
+    }
+
+    /// The card's first line (#1455): the kind's plain word from contracts/plain-words.json (#1348), or its name
+    /// where that is already plain, never the name the usage rows keep.
+    pub fn plain(self) -> String {
+        let name = self.name();
+        let word = crate::plain::words()
+            .iter()
+            .find(|(word, _)| word == name)
+            .map_or(name, |(_, plain)| plain.as_str());
+        let mut chars = word.chars();
+        chars
+            .next()
+            .map(|first| first.to_uppercase().chain(chars).collect())
+            .unwrap_or_default()
     }
 
     /// The card kind of an ask: its `data.kind`, with a choice about a stalled claim (split, fund or accept) its
@@ -296,11 +311,12 @@ impl Model {
                 let subject = &data["subject"];
                 field(&mut fields, "screen", &subject["screen"]);
                 field(&mut fields, "element", &subject["element"]);
-                // The reference draws beside the live render: the one the call names, or the agent's own.
-                let reference = match data["reference"].as_str() {
-                    Some(reference) => format!("{reference}, beside the live render"),
-                    None => "the agent's, beside the live render".to_owned(),
-                };
+                // The reference the call names, or the agent's own. The card draws no image, so its text claims none
+                // beside the live render (#1455).
+                let reference = data["reference"]
+                    .as_str()
+                    .unwrap_or("the agent's")
+                    .to_owned();
                 fields.push(("reference".into(), reference));
                 // What DeepBuild saw beside what the agent shows: the checks on the commit the call is pinned to.
                 if let Some((passed, ran, look)) = checks_on(events, ask) {
@@ -662,8 +678,8 @@ fn same_scope<'a>(events: &'a [Value], ask: &Value) -> Option<(String, Vec<&'a V
     }
     let repo = project_of(events, &session);
     let words = match repo {
-        Some(repo) => format!("Saved for this project ({repo})"),
-        None => "Saved for this task".to_owned(),
+        Some(repo) => format!("Answering saves it for this project ({repo})"),
+        None => "Answering saves it for this task".to_owned(),
     };
     let also = states::open_asks(events, None)
         .into_iter()
@@ -951,7 +967,7 @@ mod tests {
         let scope = model.scope.clone().unwrap();
         assert_eq!(
             (scope.words.as_str(), scope.also),
-            ("Saved for this task", 1)
+            ("Answering saves it for this task", 1)
         );
         let also: Vec<String> = model
             .also_answers(&events)
@@ -1204,7 +1220,7 @@ mod tests {
         let scope = model.scope.clone().unwrap();
         assert_eq!(
             (scope.words.as_str(), scope.also),
-            ("Saved for this project (my-shop)", 1)
+            ("Answering saves it for this project (my-shop)", 1)
         );
         let also: Vec<String> = model
             .also_answers(&events)
@@ -1237,7 +1253,7 @@ mod tests {
         let scope = model.scope.clone().unwrap();
         assert_eq!(
             (scope.words.as_str(), scope.also),
-            ("Saved for this project (docs)", 1)
+            ("Answering saves it for this project (docs)", 1)
         );
 
         // The fold exception the core raised for a thread: no decision is saved from it, and it is never counted.
@@ -1282,7 +1298,10 @@ mod tests {
         odd.push(in_session("F", "s6"));
         odd.push(in_session("G", ""));
         let model = Model::read(&odd, "ask:F", 0).unwrap();
-        assert_eq!(model.scope.clone().unwrap().words, "Saved for this task");
+        assert_eq!(
+            model.scope.clone().unwrap().words,
+            "Answering saves it for this task"
+        );
         assert!(Model::read(&odd, "ask:G", 0).unwrap().scope.is_none());
 
         // No project: the core saves for the session alone, though the worktree has a name.
@@ -1290,7 +1309,7 @@ mod tests {
         let scope = model.scope.clone().unwrap();
         assert_eq!(
             (scope.words.as_str(), scope.also),
-            ("Saved for this task", 0)
+            ("Answering saves it for this task", 0)
         );
 
         // The core knows a session by its letters: "s-4" is s4.
@@ -1343,6 +1362,9 @@ mod tests {
         ];
         let model = Model::read(&events, "ask:X", 0).unwrap();
         assert_eq!(model.scope.as_ref().unwrap().also, 1);
-        assert_eq!(model.scope.as_ref().unwrap().words, "Saved for this task");
+        assert_eq!(
+            model.scope.as_ref().unwrap().words,
+            "Answering saves it for this task"
+        );
     }
 }

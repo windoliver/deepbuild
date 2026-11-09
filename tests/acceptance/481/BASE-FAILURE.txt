@@ -1,0 +1,310 @@
+# #481 acceptance suite at the base, dd83ac2f (Merge pull request #1692), before any implementation.
+#
+# Run on this Mac (Apple Silicon, macOS, Metal), deep-gpu built with
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked --bin deep-gpu    (toolchain 1.99.1)
+# then
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/481 --no-file-parallelism
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/481/tsconfig.json         -> exit 0, no errors
+#
+# Every test fails, each for the expected reason:
+#   spread.test.ts       AC1 1  material@1 ignores `subsurface`: the frame with the lobe is the line itself, red's widths
+#                               82-91% short of the reference at all 20 shares, green's equal to red's.
+#                        AC1 2  weight 0 equals the field-less frame byte for byte (as it must), but so does weight 1:
+#                               the field isn't read.
+#   furnace-wall.test.ts AC2 1  the shipped furnace passes (the field is unread; #422's white plastic stays under 1.01);
+#                               --planted subsurface_adds_to_diffuse is refused at startup (bad_input).
+#                        AC2 2  the shipped wall gains no red (37,205 wall pixels judged near the ball);
+#                               --planted subsurface_across_parts is refused at startup (bad_input).
+#   backlit-fin.test.ts  AC3    no light through any fin: the face away from the sun reads 0 in every channel.
+#   taste.test.ts        AC4    INCONCLUSIVE: no TASTE.json is recorded (and the pictures show no lobe).
+#
+# reference.ts run on its own (node --experimental-strip-types), before this commit:
+#   s(A = 1) = 0.9060, s(A = 0.8) = 1.0500
+#   stripShare(1 m, l = 5 mm) = 1.000000; radialCdf(1 m) = 1.000000
+#   the column kernel at 0.2 mm, l = 5 mm, summed over +-1000 columns = 0.999999
+#   a line one pixel wide, l = 5 mm: half its light within 4.503 mm (share 0.10: 0.409 mm; 0.86: 18.307 mm);
+#   l = 1 mm: within 0.910 mm
+#   fin ratios exp(-(d - 0.1 mm) / r), r = 12, 8, 5 mm: 2 mm 0.8536 0.7886 0.6839; 6 mm 0.6116 0.4783 0.3073
+# and a scratch CPU stand-in of the design's sampler on this fixture's line (README: Readings): 16 taps at the
+# midpoints of the profile's radial distribution, turned at random per pixel, 200 rows: all 20 widths within 1.6% of
+# the reference; 16 evenly spaced radii weighted by the profile: off by up to 27.8%.
+#
+# The vitest output at the base:
+
+
+ RUN  v5.0.5 <agent worktree>/tests/acceptance/481
+
+stdout | furnace-wall.test.ts > AC2 #481.350e172c subsurface never reflects more than it receives, and never spreads onto another part > AC2 #481.350e172c a skin sphere before a white wall puts no red on the wall's pixels; the planted pass that blurs across parts does
+AC2 #481.350e172c: judged 37205 wall pixels within 40 px of the ball
+
+ ❯ furnace-wall.test.ts (2 tests | 2 failed) 8002ms
+   ❯ AC2 #481.350e172c subsurface never reflects more than it receives, and never spreads onto another part (2)
+     × AC2 #481.350e172c in the white furnace, white parts at subsurface weight 1 read at or under 1 at every angle; the planted lobe that adds to the diffuse goes over, naming its material 4974ms
+     × AC2 #481.350e172c a skin sphere before a white wall puts no red on the wall's pixels; the planted pass that blurs across parts does 1378ms
+stdout | spread.test.ts > AC1 #481.79c5d9ee the spread of a thin line of light across a 1 cm slab > AC1 #481.79c5d9ee red spreads to the width Christensen–Burley's profile gives at a 5 mm mean free path, within 5% of the CPU reference at 20 shares, and green, at 1 mm, less at every one
+AC1 #481.79c5d9ee: the line without the lobe peaks at 1.9501, centred at column 500.00, half its light within 0.587 mm
+AC1 #481.79c5d9ee: widths about the line
+  share 0.10: reference 0.586 mm, red 0.103 mm (-82.44%), green 0.103 mm
+  share 0.14: reference 0.846 mm, red 0.144 mm (-82.96%), green 0.144 mm
+  share 0.18: reference 1.128 mm, red 0.185 mm (-83.57%), green 0.185 mm
+  share 0.22: reference 1.437 mm, red 0.230 mm (-84.01%), green 0.230 mm
+  share 0.26: reference 1.778 mm, red 0.276 mm (-84.49%), green 0.276 mm
+  share 0.30: reference 2.158 mm, red 0.322 mm (-85.08%), green 0.322 mm
+  share 0.34: reference 2.578 mm, red 0.368 mm (-85.73%), green 0.368 mm
+  share 0.38: reference 3.048 mm, red 0.417 mm (-86.31%), green 0.417 mm
+  share 0.42: reference 3.573 mm, red 0.474 mm (-86.74%), green 0.474 mm
+  share 0.46: reference 4.161 mm, red 0.530 mm (-87.26%), green 0.530 mm
+  share 0.50: reference 4.823 mm, red 0.587 mm (-87.84%), green 0.587 mm
+  share 0.54: reference 5.574 mm, red 0.656 mm (-88.23%), green 0.656 mm
+  share 0.58: reference 6.431 mm, red 0.729 mm (-88.66%), green 0.729 mm
+  share 0.62: reference 7.416 mm, red 0.803 mm (-89.17%), green 0.803 mm
+  share 0.66: reference 8.562 mm, red 0.901 mm (-89.47%), green 0.901 mm
+  share 0.70: reference 9.914 mm, red 1.000 mm (-89.92%), green 1.000 mm
+  share 0.74: reference 11.535 mm, red 1.132 mm (-90.19%), green 1.132 mm
+  share 0.78: reference 13.527 mm, red 1.286 mm (-90.50%), green 1.286 mm
+  share 0.82: reference 16.053 mm, red 1.484 mm (-90.75%), green 1.484 mm
+  share 0.86: reference 19.405 mm, red 1.757 mm (-90.94%), green 1.757 mm
+
+ ❯ spread.test.ts (2 tests | 2 failed) 6304ms
+   ❯ AC1 #481.79c5d9ee the spread of a thin line of light across a 1 cm slab (2)
+     × AC1 #481.79c5d9ee red spreads to the width Christensen–Burley's profile gives at a 5 mm mean free path, within 5% of the CPU reference at 20 shares, and green, at 1 mm, less at every one 3566ms
+     × AC1 #481.79c5d9ee at weight 0 the frame equals the frame without the lobe byte for byte, and at weight 1 it doesn't 1141ms
+stdout | taste.test.ts > AC4 #481.7124c07a the screenshots and the one taste call on them > AC4 #481.7124c07a the run writes the slab under its line of light, the skin sphere before the white wall and the backlit fin from the renderer's own output, and the owner's recorded call on exactly those says they look right
+AC4 #481.7124c07a: screenshots written from this run's pixels:
+  target/acceptance/481/slab-line.png  da33aeaae2288f24d20ff7029545c642977f6192dd68605a7d1cf18aaae16696
+  target/acceptance/481/skin-wall.png  b3cff727402487b9d5a030d94478faae48fbccef7ddafe1dc891efdc4be57462
+  target/acceptance/481/backlit-fin.png  48d26730c96db1083b0c300ea46de3112277c50fd66ebdaa12a737879c70c12b
+
+ ❯ taste.test.ts (1 test | 1 failed) 4709ms
+   ❯ AC4 #481.7124c07a the screenshots and the one taste call on them (1)
+     × AC4 #481.7124c07a the run writes the slab under its line of light, the skin sphere before the white wall and the backlit fin from the renderer's own output, and the owner's recorded call on exactly those says they look right 3382ms
+stdout | backlit-fin.test.ts > AC3 #481.9afd6b06 light through a thin fin by its thickness > AC3 #481.9afd6b06 a fin backlit by the key light lets light through by exp(−d ÷ radius) within 5% at 2 mm and 6 mm, in each channel at its own radius
+AC3 #481.9afd6b06: light through the fins at 0.1, 2 and 6 mm: [0.00000, 0.00000, 0.00000], [0.00000, 0.00000, 0.00000], [0.00000, 0.00000, 0.00000]
+
+ ❯ backlit-fin.test.ts (1 test | 1 failed) 3694ms
+   ❯ AC3 #481.9afd6b06 light through a thin fin by its thickness (1)
+     × AC3 #481.9afd6b06 a fin backlit by the key light lets light through by exp(−d ÷ radius) within 5% at 2 mm and 6 mm, in each channel at its own radius 2892ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  backlit-fin.test.ts > AC3 #481.9afd6b06 light through a thin fin by its thickness > AC3 #481.9afd6b06 a fin backlit by the key light lets light through by exp(−d ÷ radius) within 5% at 2 mm and 6 mm, in each channel at its own radius
+AssertionError: the light through the fins against exp(−d ÷ radius):
+  fin-0.1mm: lets through 0.00000 in red, under 0.01: no light through the fin to compare
+  fin-0.1mm: lets through 0.00000 in green, under 0.01: no light through the fin to compare
+  fin-0.1mm: lets through 0.00000 in blue, under 0.01: no light through the fin to compare
+  fin-2mm: red lets through NaN of the 0.1 mm fin's, not exp(−1.9 mm ÷ 12 mm) = 0.8536 within 5%
+  fin-2mm: green lets through NaN of the 0.1 mm fin's, not exp(−1.9 mm ÷ 8 mm) = 0.7886 within 5%
+  fin-2mm: blue lets through NaN of the 0.1 mm fin's, not exp(−1.9 mm ÷ 5 mm) = 0.6839 within 5%
+  fin-6mm: red lets through NaN of the 0.1 mm fin's, not exp(−5.9 mm ÷ 12 mm) = 0.6116 within 5%
+  fin-6mm: green lets through NaN of the 0.1 mm fin's, not exp(−5.9 mm ÷ 8 mm) = 0.4783 within 5%
+  fin-6mm: blue lets through NaN of the 0.1 mm fin's, not exp(−5.9 mm ÷ 5 mm) = 0.3073 within 5%: expected [ …(9) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "fin-0.1mm: lets through 0.00000 in red, under 0.01: no light through the fin to compare",
++   "fin-0.1mm: lets through 0.00000 in green, under 0.01: no light through the fin to compare",
++   "fin-0.1mm: lets through 0.00000 in blue, under 0.01: no light through the fin to compare",
++   "fin-2mm: red lets through NaN of the 0.1 mm fin's, not exp(−1.9 mm ÷ 12 mm) = 0.8536 within 5%",
++   "fin-2mm: green lets through NaN of the 0.1 mm fin's, not exp(−1.9 mm ÷ 8 mm) = 0.7886 within 5%",
++   "fin-2mm: blue lets through NaN of the 0.1 mm fin's, not exp(−1.9 mm ÷ 5 mm) = 0.6839 within 5%",
++   "fin-6mm: red lets through NaN of the 0.1 mm fin's, not exp(−5.9 mm ÷ 12 mm) = 0.6116 within 5%",
++   "fin-6mm: green lets through NaN of the 0.1 mm fin's, not exp(−5.9 mm ÷ 8 mm) = 0.4783 within 5%",
++   "fin-6mm: blue lets through NaN of the 0.1 mm fin's, not exp(−5.9 mm ÷ 5 mm) = 0.3073 within 5%",
++ ]
+
+ ❯ none helpers.ts:61:73
+     59| /** No failures; the message lists them. */
+     60| export function none(failures: readonly string[], what: string): void {
+     61|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     62| }
+     63| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ backlit-fin.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  furnace-wall.test.ts > AC2 #481.350e172c subsurface never reflects more than it receives, and never spreads onto another part > AC2 #481.350e172c in the white furnace, white parts at subsurface weight 1 read at or under 1 at every angle; the planted lobe that adds to the diffuse goes over, naming its material
+AssertionError: deep-gpu run --planted subsurface_adds_to_diffuse exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:138:151
+    136|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    137|   const stdout = run.stdout ?? '';
+    138|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    139|   const lines = stdout.split('\n').filter((l) => l !== '');
+    140|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ draw helpers.ts:392:19
+ ❯ furnace furnace-wall.test.ts:49:17
+ ❯ furnace-wall.test.ts:84:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  furnace-wall.test.ts > AC2 #481.350e172c subsurface never reflects more than it receives, and never spreads onto another part > AC2 #481.350e172c a skin sphere before a white wall puts no red on the wall's pixels; the planted pass that blurs across parts does
+AssertionError: deep-gpu run --planted subsurface_across_parts exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:138:151
+    136|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    137|   const stdout = run.stdout ?? '';
+    138|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    139|   const lines = stdout.split('\n').filter((l) => l !== '');
+    140|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ draw helpers.ts:392:19
+ ❯ wall furnace-wall.test.ts:57:31
+ ❯ furnace-wall.test.ts:93:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  spread.test.ts > AC1 #481.79c5d9ee the spread of a thin line of light across a 1 cm slab > AC1 #481.79c5d9ee red spreads to the width Christensen–Burley's profile gives at a 5 mm mean free path, within 5% of the CPU reference at 20 shares, and green, at 1 mm, less at every one
+AssertionError: red against the CPU reference of the profile, and green against red, at the 20 shares:
+  share 0.10: red's width 0.103 mm is -82.44% off the reference's 0.586 mm
+  share 0.10: green's width 0.103 mm isn't less than red's 0.103 mm
+  share 0.14: red's width 0.144 mm is -82.96% off the reference's 0.846 mm
+  share 0.14: green's width 0.144 mm isn't less than red's 0.144 mm
+  share 0.18: red's width 0.185 mm is -83.57% off the reference's 1.128 mm
+  share 0.18: green's width 0.185 mm isn't less than red's 0.185 mm
+  share 0.22: red's width 0.230 mm is -84.01% off the reference's 1.437 mm
+  share 0.22: green's width 0.230 mm isn't less than red's 0.230 mm
+  share 0.26: red's width 0.276 mm is -84.49% off the reference's 1.778 mm
+  share 0.26: green's width 0.276 mm isn't less than red's 0.276 mm
+  share 0.30: red's width 0.322 mm is -85.08% off the reference's 2.158 mm
+  share 0.30: green's width 0.322 mm isn't less than red's 0.322 mm
+  share 0.34: red's width 0.368 mm is -85.73% off the reference's 2.578 mm
+  share 0.34: green's width 0.368 mm isn't less than red's 0.368 mm
+  share 0.38: red's width 0.417 mm is -86.31% off the reference's 3.048 mm
+  share 0.38: green's width 0.417 mm isn't less than red's 0.417 mm
+  share 0.42: red's width 0.474 mm is -86.74% off the reference's 3.573 mm
+  share 0.42: green's width 0.474 mm isn't less than red's 0.474 mm
+  share 0.46: red's width 0.530 mm is -87.26% off the reference's 4.161 mm
+  share 0.46: green's width 0.530 mm isn't less than red's 0.530 mm
+  share 0.50: red's width 0.587 mm is -87.84% off the reference's 4.823 mm
+  share 0.50: green's width 0.587 mm isn't less than red's 0.587 mm
+  share 0.54: red's width 0.656 mm is -88.23% off the reference's 5.574 mm
+  share 0.54: green's width 0.656 mm isn't less than red's 0.656 mm
+  share 0.58: red's width 0.729 mm is -88.66% off the reference's 6.431 mm
+  share 0.58: green's width 0.729 mm isn't less than red's 0.729 mm
+  share 0.62: red's width 0.803 mm is -89.17% off the reference's 7.416 mm
+  share 0.62: green's width 0.803 mm isn't less than red's 0.803 mm
+  share 0.66: red's width 0.901 mm is -89.47% off the reference's 8.562 mm
+  share 0.66: green's width 0.901 mm isn't less than red's 0.901 mm
+  share 0.70: red's width 1.000 mm is -89.92% off the reference's 9.914 mm
+  share 0.70: green's width 1.000 mm isn't less than red's 1.000 mm
+  share 0.74: red's width 1.132 mm is -90.19% off the reference's 11.535 mm
+  share 0.74: green's width 1.132 mm isn't less than red's 1.132 mm
+  share 0.78: red's width 1.286 mm is -90.50% off the reference's 13.527 mm
+  share 0.78: green's width 1.286 mm isn't less than red's 1.286 mm
+  share 0.82: red's width 1.484 mm is -90.75% off the reference's 16.053 mm
+  share 0.82: green's width 1.484 mm isn't less than red's 1.484 mm
+  share 0.86: red's width 1.757 mm is -90.94% off the reference's 19.405 mm
+  share 0.86: green's width 1.757 mm isn't less than red's 1.757 mm: expected [ …(40) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "share 0.10: red's width 0.103 mm is -82.44% off the reference's 0.586 mm",
++   "share 0.10: green's width 0.103 mm isn't less than red's 0.103 mm",
++   "share 0.14: red's width 0.144 mm is -82.96% off the reference's 0.846 mm",
++   "share 0.14: green's width 0.144 mm isn't less than red's 0.144 mm",
++   "share 0.18: red's width 0.185 mm is -83.57% off the reference's 1.128 mm",
++   "share 0.18: green's width 0.185 mm isn't less than red's 0.185 mm",
++   "share 0.22: red's width 0.230 mm is -84.01% off the reference's 1.437 mm",
++   "share 0.22: green's width 0.230 mm isn't less than red's 0.230 mm",
++   "share 0.26: red's width 0.276 mm is -84.49% off the reference's 1.778 mm",
++   "share 0.26: green's width 0.276 mm isn't less than red's 0.276 mm",
++   "share 0.30: red's width 0.322 mm is -85.08% off the reference's 2.158 mm",
++   "share 0.30: green's width 0.322 mm isn't less than red's 0.322 mm",
++   "share 0.34: red's width 0.368 mm is -85.73% off the reference's 2.578 mm",
++   "share 0.34: green's width 0.368 mm isn't less than red's 0.368 mm",
++   "share 0.38: red's width 0.417 mm is -86.31% off the reference's 3.048 mm",
++   "share 0.38: green's width 0.417 mm isn't less than red's 0.417 mm",
++   "share 0.42: red's width 0.474 mm is -86.74% off the reference's 3.573 mm",
++   "share 0.42: green's width 0.474 mm isn't less than red's 0.474 mm",
++   "share 0.46: red's width 0.530 mm is -87.26% off the reference's 4.161 mm",
++   "share 0.46: green's width 0.530 mm isn't less than red's 0.530 mm",
++   "share 0.50: red's width 0.587 mm is -87.84% off the reference's 4.823 mm",
++   "share 0.50: green's width 0.587 mm isn't less than red's 0.587 mm",
++   "share 0.54: red's width 0.656 mm is -88.23% off the reference's 5.574 mm",
++   "share 0.54: green's width 0.656 mm isn't less than red's 0.656 mm",
++   "share 0.58: red's width 0.729 mm is -88.66% off the reference's 6.431 mm",
++   "share 0.58: green's width 0.729 mm isn't less than red's 0.729 mm",
++   "share 0.62: red's width 0.803 mm is -89.17% off the reference's 7.416 mm",
++   "share 0.62: green's width 0.803 mm isn't less than red's 0.803 mm",
++   "share 0.66: red's width 0.901 mm is -89.47% off the reference's 8.562 mm",
++   "share 0.66: green's width 0.901 mm isn't less than red's 0.901 mm",
++   "share 0.70: red's width 1.000 mm is -89.92% off the reference's 9.914 mm",
++   "share 0.70: green's width 1.000 mm isn't less than red's 1.000 mm",
++   "share 0.74: red's width 1.132 mm is -90.19% off the reference's 11.535 mm",
++   "share 0.74: green's width 1.132 mm isn't less than red's 1.132 mm",
++   "share 0.78: red's width 1.286 mm is -90.50% off the reference's 13.527 mm",
++   "share 0.78: green's width 1.286 mm isn't less than red's 1.286 mm",
++   "share 0.82: red's width 1.484 mm is -90.75% off the reference's 16.053 mm",
++   "share 0.82: green's width 1.484 mm isn't less than red's 1.484 mm",
++   "share 0.86: red's width 1.757 mm is -90.94% off the reference's 19.405 mm",
++   "share 0.86: green's width 1.757 mm isn't less than red's 1.757 mm",
++ ]
+
+ ❯ none helpers.ts:61:73
+     59| /** No failures; the message lists them. */
+     60| export function none(failures: readonly string[], what: string): void {
+     61|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     62| }
+     63| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ spread.test.ts:65:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  spread.test.ts > AC1 #481.79c5d9ee the spread of a thin line of light across a 1 cm slab > AC1 #481.79c5d9ee at weight 0 the frame equals the frame without the lobe byte for byte, and at weight 1 it doesn't
+AssertionError: weight 1: the lobe draws, so its linear target differs from the field-less frame's: expected '01b464ec819ee1bd63d014acb87cadde853f0…' not to be '01b464ec819ee1bd63d014acb87cadde853f0…' // Object.is equality
+ ❯ spread.test.ts:78:120
+     76|     expect(zero!.finalName, 'weight 0: the final PNG is the field-less…
+     77|     expect(zero!.linearName, 'weight 0: the linear target is the field…
+     78|     expect(one!.linearName, 'weight 1: the lobe draws, so its linear t…
+       |                                                                                                                        ^
+     79|   }, 3_600_000);
+     80| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  taste.test.ts > AC4 #481.7124c07a the screenshots and the one taste call on them > AC4 #481.7124c07a the run writes the slab under its line of light, the skin sphere before the white wall and the backlit fin from the renderer's own output, and the owner's recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner
+  target/acceptance/481/slab-line.png  da33aeaae2288f24d20ff7029545c642977f6192dd68605a7d1cf18aaae16696
+  target/acceptance/481/skin-wall.png  b3cff727402487b9d5a030d94478faae48fbccef7ddafe1dc891efdc4be57462
+  target/acceptance/481/backlit-fin.png  48d26730c96db1083b0c300ea46de3112277c50fd66ebdaa12a737879c70c12b
+and record the answer in tests/acceptance/481/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive helpers.ts:82:10
+     80| /** A test that can't be judged here fails with this, never passes. */
+     81| export function inconclusive(reason: string): never {
+     82|   expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |          ^
+     83| }
+     84| /** The GPU layer draws these pixels on macOS's Metal device; anywhere…
+ ❯ taste.test.ts:45:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  6 failed (6)
+   Start at  16:31:43
+   Duration  23.31s (tests 99%, transform 1%)
+
