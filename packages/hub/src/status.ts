@@ -7,6 +7,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { billingMode } from '@deepbuild/readings';
 import { call } from './client.js';
+import { StaleHub } from './generations.js';
+import { joinedFor, remoteCall } from './remote.js';
 import { CAN_RUN, CANT_RUN } from './hook-programs.js';
 import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
@@ -18,7 +20,7 @@ import { startOf } from './wire.js';
 import { claimState, newestClaim } from './verdict-chat.js';
 import { verdictLine } from '@deepbuild/verdicts';
 
-export type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
+type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
 export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; verdict?: string; calls?: string[]; commits?: string[]; readings?: string[] }
 const ORDER: readonly State[] = ['needs you', 'stuck', 'flagged', 'working', 'finished', 'quiet'];
@@ -40,9 +42,9 @@ const CALLS_SHOWN = 20;
  * Why a session is in its state: one of a closed set, so a surface that draws the state from the record (the app's
  * sidebar, from `session.state`) says the same as this listing.
  */
-export type Cause = 'ask' | 'gone' | 'waiting' | 'stuck' | 'promised' | 'failed' | 'quiet' | 'interrupted' | 'finished' | 'working';
+type Cause = 'ask' | 'gone' | 'waiting' | 'stuck' | 'promised' | 'failed' | 'quiet' | 'interrupted' | 'finished' | 'working';
 /** A session's state as the record reads it, with why. */
-export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; note?: string }
+interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; note?: string }
 
 /**
  * Each session's state, from the record's tables through `query` (the hub's record, or its database read-only): the
@@ -309,6 +311,21 @@ export async function statusCommand(args: readonly string[]): Promise<number> {
   }
   // The planted wrong program exits with a code the exit-code table doesn't list when it can't read a hub.
   const unread = activePlant() === 'status-exit-unmapped' ? 4 : 3;
+  // A clone of a project this machine joined reads that project's hub over the network (#1338), as its person.
+  const joined = joinedFor(process.cwd());
+  if (joined) {
+    try {
+      const reply = await remoteCall(joined, 'status.read', {});
+      if ('result' in reply) {
+        process.stdout.write(render(reply.result.rows as StatusRow[], `Reading ${joined.project}'s hub at ${joined.address} as ${joined.person}`));
+        return 0;
+      }
+      process.stderr.write(`deep status: the hub at ${joined.address} refused this read: ${reply.error.remediation}\n`);
+    } catch (error) {
+      process.stderr.write(`deep status: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+    return unread;
+  }
   let socket: string;
   try {
     socket = hubAddress().path;
@@ -328,6 +345,11 @@ export async function statusCommand(args: readonly string[]): Promise<number> {
     }
     why = reply.error.remediation;
   } catch (error) {
+    // A hub left behind isn't read in any way, its database included (#1338).
+    if (error instanceof StaleHub) {
+      process.stderr.write(`deep status: ${error.message}\n`);
+      return unread;
+    }
     why = error instanceof Error ? error.message : String(error);
   }
   // The hub's own folder holds its database: the socket's, or the installed root.

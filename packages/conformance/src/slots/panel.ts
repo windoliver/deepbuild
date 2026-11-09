@@ -9,15 +9,15 @@ import { fail } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { list, object } from './shared.js';
 
-export const PANEL = 'panel@1';
+const PANEL = 'panel@1';
 
-export interface Rect { x: number; y: number; w: number; h: number }
+interface Rect { x: number; y: number; w: number; h: number }
 /** What a draw sees: the panel's frame, the question card's place or null when none shows, and your gesture's serial in the panel or null. */
-export interface Frame { frame: Rect; card: Rect | null; gesture: number | null }
-export interface Element { kind: string; x: number; y: number; w: number; h: number }
+interface Frame { frame: Rect; card: Rect | null; gesture: number | null }
+interface Element { kind: string; x: number; y: number; w: number; h: number }
 /** What a draw gives: its elements, in the frame's coordinates, and whether it takes focus or toasts now. */
-export interface Drawn { elements: Element[]; focus: boolean; toast: boolean }
-export interface PanelFill extends SlotFill {
+interface Drawn { elements: Element[]; focus: boolean; toast: boolean }
+interface PanelFill extends SlotFill {
   slot: 'panel@1';
   name: string;
   area: string;

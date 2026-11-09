@@ -22,7 +22,7 @@ import { repoOf } from './paths.js';
 import { writeSynced } from './vfs.js';
 
 /** One entry of `environment.products`. */
-export interface Product { name: string; path: string; key: string[]; key_values: string[]; build: string }
+interface Product { name: string; path: string; key: string[]; key_values: string[]; build: string }
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -35,12 +35,12 @@ export const DISK_FLOOR = 30e9;
 /** A worktree nobody has worked in for this long, with no command running, gives up its products first. */
 const IDLE_MS = 2 * 3_600_000;
 /** The guard@1 entry that keeps the store read-only to sessions. */
-export const STORE_GUARD = 'no-product-store-write';
+const STORE_GUARD = 'no-product-store-write';
 const KEPT = 2;
 const gb = (bytes: number): string => `${(bytes / 1e9).toFixed(1)} GB`;
 
 /** The products done.yaml's text lists; none when it lists none. Throws naming what is wrong with an entry. */
-export function productsIn(text: string, file: string): Product[] {
+function productsIn(text: string, file: string): Product[] {
   const doc = parse(text) as { environment?: { products?: unknown } } | null;
   const list = doc?.environment?.products;
   if (list === undefined) return [];
@@ -88,6 +88,13 @@ async function keyIn(product: Product, top: string, read: (file: string) => Buff
   return h.digest('hex').slice(0, 24);
 }
 const fileIn = (top: string) => (k: string): Buffer | undefined => { try { return readFileSync(join(top, k)); } catch { return undefined; } };
+/** Whether `cwd` or a folder above it holds `.deepbuild/done.yaml`, the only file that lists products. */
+function specAbove(cwd: string): boolean {
+  for (let dir = cwd; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, '.deepbuild', 'done.yaml'))) return true;
+    if (dirname(dir) === dir) return false;
+  }
+}
 
 /**
  * Clones `src`, a folder, to `dst`, which must not exist, copy-on-write: one `clonefileat` on APFS (through perl's
@@ -139,7 +146,7 @@ interface Index { entries: Entry[]; placed: Placed[] }
 /** What the hub knows of the sessions in a worktree: each one's last hook, whether it ended, and its open calls. */
 interface Seen { last: number; ended: boolean; open: Map<string, number> }
 
-export interface ProductsOptions {
+interface ProductsOptions {
   /** The hub's own folder; the store is `<root>/products`. */
   root: string;
   now(): number;
@@ -265,6 +272,8 @@ export class Products {
   }
   private async start(session: string, cwd: string): Promise<string | undefined> {
     if (!cwd) return undefined;
+    // A folder with no done.yaml at or above it lists no products: no git process starts on the core's thread for it.
+    if (!specAbove(cwd)) return undefined;
     await this.ready;
     const repo = await this.repoAt(cwd);
     if (!repo || !(await this.o.trusted(cwd))) return undefined;

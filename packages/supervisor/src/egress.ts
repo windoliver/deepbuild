@@ -13,9 +13,9 @@ import { join } from 'node:path';
 import { connect as tlsConnect, createSecureContext, TLSSocket, type SecureContext } from 'node:tls';
 
 /** A credential as the run takes it: by value with no hosts, else by stand-in. */
-export interface Credential { env: string; value: string; hosts?: string[]; methods?: string[] }
+interface Credential { env: string; value: string; hosts?: string[]; methods?: string[] }
 /** What the filter refused: the sandbox's word for it, and where, never the value or the stand-in. */
-export interface Refusal { operation: string; target: string }
+interface Refusal { operation: string; target: string }
 export interface Egress {
   port: number;
   /** The folder holding the run CA's certificate (never its key): the run reads it. */
@@ -27,7 +27,7 @@ export interface Egress {
   close(): Promise<void>;
 }
 /** Tests only: the planted filter that substitutes a stand-in on every allowed host. */
-export type EgressPlant = 'standin-every-host';
+type EgressPlant = 'standin-every-host';
 
 /** Headers that steer where a request goes or say where it came from: a stand-in there could be logged or bounced elsewhere. */
 const ROUTING = /^(host|forwarded|via|referer|origin|x-forwarded-.*|x-original-.*|x-rewrite-url|x-host|x-http-method-override)$/i;
@@ -102,7 +102,7 @@ function certificate(subject: KeyObject, issuer: { key: KeyObject; id: Buffer },
 // ---- The filter.
 
 /** "Host" or "host:port" as `host:port`, lower-case, 443 when unnamed. */
-export function hostPort(h: string): string {
+function hostPort(h: string): string {
   const m = /^\[?([^\]]+?)\]?(?::(\d{1,5}))?$/.exec(h.trim().toLowerCase());
   return m ? `${m[1]}:${m[2] ?? '443'}` : h;
 }

@@ -277,6 +277,9 @@ struct Session {
     stable: Vec<(ContentKey, u32)>,
     /// The presented frame's `valid_until`, or `None` once nothing changes again.
     valid_until: Option<i64>,
+    /// #1487: the region of the document the window shows, and whether the planted clock counts
+    /// every item wherever it is: otherwise `valid_until` counts only items that meet it.
+    region: Option<([f64; 4], bool)>,
     /// The pinned time a bound value on the presented frame next changes: it goes stale, or the
     /// age it shows ticks.
     stale_at: Option<i64>,
@@ -439,6 +442,44 @@ struct Usage {
     interrupts: u64,
     /// User and system CPU, every thread's, in ns.
     cpu_ns: u64,
+    /// Energy, in nanojoules.
+    energy_nj: u64,
+}
+
+/// The kernel's `rusage_info_v6`: libc stops at v4, and v6 is where Apple Silicon's energy counter is.
+#[repr(C)]
+struct RusageV6 {
+    v4: libc::rusage_info_v4,
+    ri_flags: u64,
+    ri_user_ptime: u64,
+    ri_system_ptime: u64,
+    ri_pinstructions: u64,
+    ri_pcycles: u64,
+    ri_energy_nj: u64,
+    ri_penergy_nj: u64,
+    reserved: [u64; 14],
+}
+
+/// The counter the idle report's energy reading comes from.
+const ENERGY_COUNTER: &str = "ri_energy_nj";
+
+/// Energy this process has used, in nanojoules, as the kernel counts it; 0 when the counter reads zero or the call fails.
+fn energy_nj() -> u64 {
+    // SAFETY: an all-zero RusageV6 is valid for the call to fill.
+    let mut info: RusageV6 = unsafe { std::mem::zeroed() };
+    // SAFETY: `info` is laid out as rusage_info_v6, the flavor asked for (6).
+    let status = unsafe {
+        libc::proc_pid_rusage(
+            libc::getpid(),
+            6,
+            (&raw mut info).cast::<libc::rusage_info_t>(),
+        )
+    };
+    if status == 0 {
+        info.ri_energy_nj
+    } else {
+        0
+    }
 }
 
 fn usage() -> Usage {
@@ -459,6 +500,7 @@ fn usage() -> Usage {
         wakeups: info.ri_pkg_idle_wkups,
         interrupts: info.ri_interrupt_wkups,
         cpu_ns: ns(ru.ru_utime) + ns(ru.ru_stime),
+        energy_nj: energy_nj(),
     }
 }
 
@@ -747,7 +789,8 @@ impl Renderer {
                 record,
                 seconds,
                 arms_each_vsync,
-            } => self.idle(&doc, &look, view, record, seconds, arms_each_vsync),
+                region,
+            } => self.idle(&doc, &look, view, record, seconds, arms_each_vsync, region),
             Request::Render {
                 out,
                 doc,
@@ -1157,7 +1200,31 @@ impl Renderer {
                 .as_mut()
                 .ok_or_else(|| refused("bad_doc", ""))?;
             program.evaluate(t, eval::Validity::Full, state);
-            (eval::items(doc, program, state), state.valid_until)
+            let mut items = eval::items(doc, program, state);
+            let valid_until = match session.region {
+                Some((rect, false)) => {
+                    let meets = |id: &str| {
+                        items
+                            .get(id)
+                            .is_none_or(|i| deep_canvas_motion::clock::meets(i, &rect))
+                    };
+                    program.valid_until_in_view(state, eval::Validity::Full, meets)
+                }
+                _ => state.valid_until,
+            };
+            // The window shows the region: every item moved by its origin.
+            if let Some(([x, y, ..], _)) = session.region {
+                for item in items.values_mut() {
+                    if let Some(pos) = item.pointer_mut("/at/pos").and_then(Value::as_array_mut) {
+                        for (k, o) in [x, y].into_iter().enumerate() {
+                            if let Some(p) = pos.get(k).and_then(Value::as_f64) {
+                                pos[k] = json!(p - o);
+                            }
+                        }
+                    }
+                }
+            }
+            (items, valid_until)
         };
         let palette = palette_of(look, view.theme);
         let ty = crate::type_of(look, view.theme);
@@ -1482,6 +1549,7 @@ impl Renderer {
             layers: HashMap::new(),
             stable: Vec::new(),
             valid_until: None,
+            region: None,
             stale_at: None,
             bound: json!({}),
             snapshot: json!({"marks": [], "legend": []}),
@@ -1505,6 +1573,7 @@ impl Renderer {
     /// woken from idle for this process (Activity Monitor's Idle Wake Ups). Interrupt wakeups are
     /// reported beside them as a reading: a process that has drawn with Metal takes about 22 a
     /// minute from the driver, whatever it does after, so no frame clock can hold those to 1.
+    #[allow(clippy::too_many_arguments)]
     fn idle(
         &mut self,
         doc: &Map<String, Value>,
@@ -1513,8 +1582,16 @@ impl Renderer {
         mut record: Record,
         seconds: u64,
         arms_each_vsync: bool,
+        region: Option<([f64; 4], bool)>,
     ) -> Value {
         let mut session = Self::new_session();
+        session.region = region;
+        // The window is the region's size.
+        let mut sized = doc.clone();
+        if let Some(([.., w, h], _)) = region {
+            sized.insert("size".into(), json!([w, h]));
+        }
+        let doc = &sized;
         let result = (|| -> Result<Value, Value> {
             compile(&mut session, doc)?;
             let pinned_at_0 = record.pinned;
@@ -1562,6 +1639,8 @@ impl Renderer {
                 "drawn": drawn, "wakeups": after.wakeups - before.wakeups,
                 "interrupt_wakeups": after.interrupts - before.interrupts, "cpu_ms": cpu_ms,
                 "cpu_fraction": cpu_ms / (seconds * 1000.0),
+                // A reading only; 0 when the counter reads zero.
+                "energy": { "counter": ENERGY_COUNTER, "nj": after.energy_nj.saturating_sub(before.energy_nj) },
             }))
         })();
         self.close(session);
