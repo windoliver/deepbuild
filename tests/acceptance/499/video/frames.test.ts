@@ -9,14 +9,16 @@
 // from t + 1 s); each side's `video` block gives the SHA-256 of the decoded planes the item shows, compared with
 // ffmpeg's own decode of the same file. The crop and the push are read from the canonical snapshots `eval` draws.
 // The criterion names no wrong program; the base fails every part (BASE-FAILURE.txt).
+// The push clause's test is the blind redraft in redraft/push-redraft.test.ts, swapped in at the owner's word on
+// 2026-11-09 (redraft/DISPUTE.md); this file keeps the frames and the crop.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   AC, DOC, FLICKS, REC, TIMEOUT, asset, camera2d, compared, determinismCall, documentOf, evalCall, evaluated, fl, i420Rgb, nameFrame,
-  none, num, obj, pixel, present, presented, putEvidence, recordingMp4, referenceFrames, runShow, scenario, secs, sha256, snapshotPicture,
-  useBinary, useTemp, videoItem, type Image, type JsonObject,
+  none, pixel, present, presented, putEvidence, recordingMp4, referenceFrames, runShow, scenario, secs, sha256, snapshotPicture,
+  useBinary, useTemp, videoItem, type Image,
 } from './helpers.ts';
 
 const showBin = useBinary('deep-show');
@@ -89,77 +91,4 @@ describe(`${AC[3]} a recording's frames on image@1: retimed frames, a crop chann
     }
     expect(off(shifted, 0, 0).length, 'a quarter shifted by one pixel fails the crop check').toBeGreaterThan(500);
   }, TIMEOUT);
-
-  it(`${AC[3]} a 2D shot pushing 2× onto the recording keeps the ring keyed at the click's image anchor within 0.5 px of the click's pixel at every frame of the push`, () => {
-    const { evidence, sha } = setUp();
-    const size: [number, number] = [2 * REC.w, 2 * REC.h];
-    const anchor = [REC.click[0] / REC.w, REC.click[1] / REC.h];
-    const ring: JsonObject = {
-      id: 'ring', kind: 'circle@1', layer: 'main', name: 'Cursor ring', order: 'c0ring',
-      params: { center: [0, 0], r: 18, inner_r: 14, paint: { fill: { role: 'accent' } } }, at: { anchor: 'rec#click', pos: [0, 0, 0] },
-    };
-    const doc = documentOf('push', 'film', size, [camera2d(size), videoItem('rec', sha, [0, 0, size[0], size[1]], {}, { anchors: { click: anchor } }), ring], { rec: asset(sha) }, {
-      shots: { push: { start: '0s', end: '2s', camera: 'cam', move: 'push', by: 2, target: [size[0] / 2, size[1] / 2, 0], view_width: size[0] / 2 } },
-    }, { span: '3s', frame_rate: [30, 1] });
-    const times = Array.from({ length: 61 }, (_, k) => k * FRAME);
-    const replies = runShow(showBin(), scenario(evidence, [present(DOC.b, doc), ...times.map((t) => evalCall(DOC.b, t, { pixels: true, film: true }))]), 'the push');
-    presented(replies[0]!, 'the film with the push');
-
-    const failures: string[] = [];
-    const marks: { t: number; width: number; mark: [number, number] }[] = [];
-    times.forEach((t, i) => {
-      const r = evaluated(replies[i + 1]!, `eval at ${secs(t)}`);
-      const width = num(obj(obj(obj(r['film'], `eval at ${secs(t)}: film`)['cameras'], 'film.cameras')['cam'], 'film.cameras.cam')['view_width'], 'film.cameras.cam.view_width');
-      const img = snapshotPicture(evidence, r, `eval at ${secs(t)}`);
-      const z = img.width / width;
-      const ringAt = ringCentre(img);
-      const markAt = markCentre(img, z);
-      if (!ringAt) { failures.push(`at ${secs(t)} no ring is drawn`); return; }
-      if (!markAt) { failures.push(`at ${secs(t)} the click's mark in the recording isn't drawn`); return; }
-      const d = Math.hypot(ringAt[0] - markAt[0], ringAt[1] - markAt[1]);
-      if (d > 0.5) failures.push(`at ${secs(t)} (view width ${width}) the ring is centred at (${ringAt.map((v) => v.toFixed(2)).join(', ')}) px, ${d.toFixed(2)} px from the click's pixel at (${markAt.map((v) => v.toFixed(2)).join(', ')})`);
-      marks.push({ t, width, mark: markAt });
-    });
-    none(failures, 'the ring stays on the click through the push');
-    // The push is 2× and moves the click on screen, so a view that never moves can't pass.
-    const first = marks[0]!; const last = marks[marks.length - 1]!;
-    expect(first.width / last.width, `the push halves the view width (${first.width} → ${last.width})`).toBeCloseTo(2, 3);
-    expect(last.mark[0] - first.mark[0], `the click moves on screen through the push (${first.mark[0].toFixed(1)} → ${last.mark[0].toFixed(1)} px)`).toBeGreaterThan(60);
-  }, TIMEOUT);
 });
-
-const sat = (p: [number, number, number]): number => Math.max(...p) - Math.min(...p);
-
-/** The ring's centre: the centroid of colour (saturation above 24) over the picture; the recording is gray. */
-function ringCentre(img: Image): [number, number] | null {
-  let w = 0; let sx = 0; let sy = 0;
-  for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) {
-    const s = sat(pixel(img, x, y)) - 24;
-    if (s > 0) { w += s; sx += s * (x + 0.5); sy += s * (y + 0.5); }
-  }
-  return w > 200 * 50 ? [sx / w, sy / w] : null;
-}
-
-/** The click's mark: found by its white pixels, then the centroid of its brightness over the flat gray field around
- * it, inside a radius of 10 u (the mark reaches 4 u from the click, the ring starts at 14 u). */
-function markCentre(img: Image, z: number): [number, number] | null {
-  let n = 0; let rx = 0; let ry = 0;
-  for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) {
-    const p = pixel(img, x, y);
-    if (Math.min(...p) >= 240 && sat(p) < 24) { n++; rx += x + 0.5; ry += y + 0.5; }
-  }
-  if (n < 4) return null;
-  const [cx, cy] = [rx / n, ry / n];
-  const r = 10 * z;
-  let w = 0; let sx = 0; let sy = 0;
-  for (let y = Math.max(0, Math.floor(cy - r)); y < Math.min(img.height, Math.ceil(cy + r)); y++) {
-    for (let x = Math.max(0, Math.floor(cx - r)); x < Math.min(img.width, Math.ceil(cx + r)); x++) {
-      if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy) > r) continue;
-      const p = pixel(img, x, y);
-      if (sat(p) >= 24) continue;
-      const l = Math.min(1, Math.max(0, ((p[0] + p[1] + p[2]) / 3 - 140) / 115));
-      if (l > 0) { w += l; sx += l * (x + 0.5); sy += l * (y + 0.5); }
-    }
-  }
-  return w > 0 ? [sx / w, sy / w] : null;
-}
