@@ -242,6 +242,10 @@ alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
 alone.push('tests/acceptance/1479/');
 // #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
 alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests/acceptance/531-redraft-ac12/');
+// #499's files build deep-show (and deep-logic, deep-canvas-render) in several feature sets, one a release build; the
+// players and out-of-view readings are timed.
+alone.push('tests/acceptance/499/');
+timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/video/out-of-view.test.ts');
 // #532's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome, and read CPU times per frame and per step.
 alone.push('tests/acceptance/532/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.

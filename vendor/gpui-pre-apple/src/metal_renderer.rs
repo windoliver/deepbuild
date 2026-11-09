@@ -23,12 +23,13 @@ use objc2_core_video::{
 };
 use parking_lot::Mutex;
 
-use std::{cell::Cell, ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice, sync::Arc};
+use std::{ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice, sync::Arc};
 
 // Exported to metal
 pub(crate) type PointF = gpui::Point<f32>;
 
 mod bgra_surface; // DeepBuild patch (windoliver/deepbuild#377)
+mod ycbcr_surface; // DeepBuild patch (windoliver/deepbuild#499)
 pub mod chrome_layers; // DeepBuild patch (windoliver/deepbuild#1434)
 pub mod gpu_ledger; // DeepBuild patch (windoliver/deepbuild#391)
 pub mod gpu_surfaces; // DeepBuild patch (windoliver/deepbuild#377)
@@ -131,6 +132,11 @@ pub struct MetalRenderer {
     monochrome_sprites_pipeline_state: metal::RenderPipelineState,
     polychrome_sprites_pipeline_state: metal::RenderPipelineState,
     surfaces_pipeline_state: metal::RenderPipelineState,
+    ycbcr_pipeline_state: metal::RenderPipelineState, // DeepBuild patch (windoliver/deepbuild#499)
+    // DeepBuild patch (windoliver/deepbuild#499): committed frames' instance buffers and surface
+    // reports, and the one completed handler that releases them in order.
+    completions: Arc<Mutex<std::collections::VecDeque<(InstanceBuffer, Option<u64>)>>>,
+    completed: RcBlock<dyn Fn(ptr::NonNull<AnyObject>)>,
     /// DeepBuild patch (windoliver/deepbuild#377): the BGRA pipelines and the pixel buffers the frame samples.
     bgra_surfaces: bgra_surface::BgraSurfaces,
     sampled_surfaces: Vec<u64>,
@@ -371,6 +377,7 @@ impl MetalRenderer {
             MTLPixelFormat::BGRA8Unorm,
         );
         let bgra_surfaces = bgra_surface::BgraSurfaces::new(&device, &library); // DeepBuild patch (windoliver/deepbuild#377)
+        let ycbcr_pipeline_state = ycbcr_surface::pipeline(&device, &library); // DeepBuild patch (windoliver/deepbuild#499)
 
         let command_queue = device.new_command_queue();
         let supports_shared_storage = cfg!(target_os = "ios") || is_apple_gpu;
@@ -395,7 +402,23 @@ impl MetalRenderer {
             CFRetained::from_raw(ptr::NonNull::new(cache).expect("CoreVideo returned a null cache"))
         };
 
+        // DeepBuild patch (windoliver/deepbuild#499): one completed handler for every frame.
+        let completions: Arc<Mutex<std::collections::VecDeque<(InstanceBuffer, Option<u64>)>>> =
+            Arc::new(Mutex::new(std::collections::VecDeque::with_capacity(64)));
+        let completed = {
+            let completions = completions.clone();
+            let pool = instance_buffer_pool.clone();
+            RcBlock::new(move |buffer: ptr::NonNull<AnyObject>| {
+                let next = completions.lock().pop_front();
+                if let Some((instance_buffer, surfaces_frame)) = next {
+                    pool.lock().release(instance_buffer);
+                    bgra_surface::completed(buffer, surfaces_frame); // DeepBuild patch (windoliver/deepbuild#377)
+                }
+            })
+        };
         Self {
+            completions,
+            completed,
             device,
             layer,
             presents_with_transaction: false,
@@ -411,6 +434,7 @@ impl MetalRenderer {
             monochrome_sprites_pipeline_state,
             polychrome_sprites_pipeline_state,
             surfaces_pipeline_state,
+            ycbcr_pipeline_state, // DeepBuild patch (windoliver/deepbuild#499)
             bgra_surfaces, // DeepBuild patch (windoliver/deepbuild#377)
             sampled_surfaces: Vec::new(),
             unit_vertices,
@@ -583,19 +607,18 @@ impl MetalRenderer {
             viewport_size,
         )?;
 
-        let instance_buffer_pool = self.instance_buffer_pool.clone();
-        let instance_buffer = Cell::new(Some(writer.finish()));
+        // DeepBuild patch (windoliver/deepbuild#499): the frame's instance buffer and surfaces
+        // report wait in a queue one completed handler made once drains, in commit order, so a
+        // frame allocates no block of its own.
+        let instance_buffer = writer.finish();
         // DeepBuild patch (windoliver/deepbuild#377): reported here, before the completed handler can run.
         let surfaces_frame = self.surfaces_encoded();
-        let block = RcBlock::new(move |buffer: ptr::NonNull<AnyObject>| {
-            if let Some(instance_buffer) = instance_buffer.take() {
-                instance_buffer_pool.lock().release(instance_buffer);
-            }
-            bgra_surface::completed(buffer, surfaces_frame); // DeepBuild patch (windoliver/deepbuild#377)
-        });
+        self.completions
+            .lock()
+            .push_back((instance_buffer, surfaces_frame));
         // SAFETY: Both pointee types are opaque views of the same Objective-C block pointer ABI.
         unsafe {
-            command_buffer.add_completed_handler(&*RcBlock::as_ptr(&block).cast());
+            command_buffer.add_completed_handler(&*RcBlock::as_ptr(&self.completed).cast());
         }
 
         Ok(command_buffer)
@@ -1251,10 +1274,16 @@ impl MetalRenderer {
             if self.draw_bgra_surface(image_buffer, texture_size, first_surface + index, command_encoder) {
                 continue;
             }
+            // DeepBuild patch (windoliver/deepbuild#499): an NV12 surface draws by its own tags.
+            if self.draw_ycbcr_surface(image_buffer, texture_size, first_surface + index, command_encoder) {
+                continue;
+            }
 
-            assert_eq!(
-                CVPixelBufferGetPixelFormatType(image_buffer),
-                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+            // DeepBuild patch (windoliver/deepbuild#499): the planted stock fragment reads any NV12.
+            assert!(
+                CVPixelBufferGetPixelFormatType(image_buffer)
+                    == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+                    || gpu_surfaces::planted() == gpu_surfaces::Planted::StockFragment
             );
 
             let plane_texture = |plane, format| unsafe {
