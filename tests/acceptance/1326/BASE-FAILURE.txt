@@ -1,0 +1,403 @@
+Base: a3efe5c80f7844578c11ff5539f4943e5999e0f4
+Node: v24.22.0
+Platform: darwin/arm64
+Temporary HOME for every process; no network. Local checkout paths redacted.
+Build outputs reused from the interrupted job's successful workspace and deep-hook builds.
+
+--- Acceptance suite ---
+Command: node --test --test-concurrency=1 --test-reporter=tap tests/acceptance/1326/calls.test.mjs tests/acceptance/1326/guard.test.mjs
+TAP version 13
+# Subtest: \#1326.7ee1e41b AC5 default signing and tag-push guards hold their plants, allow the signed-commit twin, and refuse an overbroad install
+not ok 1 - \#1326.7ee1e41b AC5 default signing and tag-push guards hold their plants, allow the signed-commit twin, and refuse an overbroad install
+  ---
+  duration_ms: 2323.716459
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/calls.test.mjs:8:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    shipped guard@1 must hold approval signing and tag pushes even hub-away, but allow the own-branch signed commit
+    + actual - expected
+    
+      {
+    +   pushHeld: false,
+    +   signingHeld: false,
+    -   pushHeld: true,
+    -   signingHeld: true,
+        twinHeldBy: []
+      }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    signingHeld: true
+    pushHeld: true
+    twinHeldBy:
+  actual:
+    signingHeld: false
+    pushHeld: false
+    twinHeldBy:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/calls.test.mjs:41:10)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1409:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# default signing holds: (none); tag-push holds: (none)
+# overbroad install: exit 1\\nREFUSED: fixture-1326-holds-signed-commit: its twin `git commit -S -m "work on my branch"` is matched by run:git, so it would deny a call it must allow.\\n
+# Subtest: \#1326.f66fc8bc AC1 two checkouts ignore contradictory home lists and name the unapproved test
+not ok 2 - \#1326.f66fc8bc AC1 two checkouts ignore contradictory home lists and name the unapproved test
+  ---
+  duration_ms: 3823.266792
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/guard.test.mjs:9:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    home list must not approve a test edit: expected FAIL, not success
+    PASS guard: tests/receipt.test.mjs › #91326.5099dca9 receipt: skipped (criterion #91326.5099dca9), by approved proposal (commit e9f3c625eedc)
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 1.1 s
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    fails (file://<checkout>/tests/acceptance/1326/fixtures.mjs:83:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/guard.test.mjs:14:3)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# home trusts session: exit 0\\nPASS guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9), by approved proposal (commit e9f3c625eedc)\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 1.1 s\\n
+# home trusts listed person: exit 1\\nFAIL guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9) (commit e9f3c625eedc)\\n  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.\\nproof: wall time 0.9 s\\n
+# Subtest: \#1326.f66fc8bc AC1 either listed person really approves, independent of home, and history is not re-judged
+not ok 3 - \#1326.f66fc8bc AC1 either listed person really approves, independent of home, and history is not re-judged
+  ---
+  duration_ms: 7705.565583
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/guard.test.mjs:19:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    either listed person approves regardless of home or author
+    FAIL guard: tests/receipt.test.mjs › #91326.5099dca9 receipt: skipped (criterion #91326.5099dca9) (commit 8d7dd3a089c1)
+      Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+    proof: wall time 0.8 s
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    passes (file://<checkout>/tests/acceptance/1326/fixtures.mjs:75:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/guard.test.mjs:35:33)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# sk-ssh-ed25519@openssh.com empty home: exit 1\\nFAIL guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9) (commit 8d7dd3a089c1)\\n  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.\\nproof: wall time 0.8 s\\n
+# sk-ssh-ed25519@openssh.com unrelated home: exit 1\\nFAIL guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9) (commit 8d7dd3a089c1)\\n  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.\\nproof: wall time 1.0 s\\n
+# sk-ecdsa-sha2-nistp256@openssh.com empty home: exit 1\\nFAIL guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9) (commit 8d7dd3a089c1)\\n  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.\\nproof: wall time 0.8 s\\n
+# sk-ecdsa-sha2-nistp256@openssh.com unrelated home: exit 1\\nFAIL guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9) (commit 8d7dd3a089c1)\\n  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.\\nproof: wall time 0.8 s\\n
+# historical tag: exit 0\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.3 s\\n
+# Subtest: \#1326.be497e63 AC2 unsigned and self-signed key additions fail naming the added key
+not ok 4 - \#1326.be497e63 AC2 unsigned and self-signed key additions fail naming the added key
+  ---
+  duration_ms: 1415.695583
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/guard.test.mjs:38:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    unsigned: expected FAIL, not success
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 0.3 s
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    fails (file://<checkout>/tests/acceptance/1326/fixtures.mjs:83:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/guard.test.mjs:49:5)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# unsigned key addition: exit 0\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.3 s\\n
+# new key approves itself and a tagged edit: exit 0\\nPASS guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9), by approved proposal (commit 8b465cbfa353)\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.4 s\\n
+# Subtest: \#1326.be497e63 AC2 an uncommitted signer list cannot authorize a committed test edit
+not ok 5 - \#1326.be497e63 AC2 an uncommitted signer list cannot authorize a committed test edit
+  ---
+  duration_ms: 852.683666
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/guard.test.mjs:53:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    read the merge base, not disk: expected FAIL, not success
+    PASS guard: tests/receipt.test.mjs › #91326.5099dca9 receipt: skipped (criterion #91326.5099dca9), by approved proposal (commit c35efe7731e2)
+    PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+    proof: wall time 0.4 s
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    fails (file://<checkout>/tests/acceptance/1326/fixtures.mjs:83:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/guard.test.mjs:59:3)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# dirty working-tree list: exit 0\\nPASS guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9), by approved proposal (commit c35efe7731e2)\\nPASS guard: 2 commits checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.4 s\\n
+# Subtest: \#1326.be497e63 AC2 a listed presence key can approve a list addition
+not ok 6 - \#1326.be497e63 AC2 a listed presence key can approve a list addition
+  ---
+  duration_ms: 1255.207958
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/guard.test.mjs:62:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    a valid list change is possible
+    FAIL guard: tests/receipt.test.mjs › #91326.5099dca9 receipt: skipped (criterion #91326.5099dca9) (commit 83bb34a66673)
+      Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+    proof: wall time 0.6 s
+    
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    passes (file://<checkout>/tests/acceptance/1326/fixtures.mjs:75:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/guard.test.mjs:68:3)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# existing signer approves both proposals: exit 1\\nFAIL guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9) (commit 83bb34a66673)\\n  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.\\nproof: wall time 0.6 s\\n
+# Subtest: \#1326.fdbc77ab AC3 plain ed25519, ecdsa and rsa keys are refused on the list, naming each key
+not ok 7 - \#1326.fdbc77ab AC3 plain ed25519, ecdsa and rsa keys are refused on the list, naming each key
+  ---
+  duration_ms: 2214.757042
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/guard.test.mjs:71:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    ssh-ed25519 signs without presence: expected FAIL, not success
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 0.3 s
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    fails (file://<checkout>/tests/acceptance/1326/fixtures.mjs:83:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/guard.test.mjs:81:5)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# plain ed25519 on merge-base list: exit 0\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.3 s\\n
+# plain ecdsa on merge-base list: exit 0\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.3 s\\n
+# plain rsa on merge-base list: exit 0\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.3 s\\n
+# Subtest: \#1326.fdbc77ab AC3 a listed person cannot admit a newly added plain-file key by approval
+not ok 8 - \#1326.fdbc77ab AC3 a listed person cannot admit a newly added plain-file key by approval
+  ---
+  duration_ms: 764.642625
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/guard.test.mjs:85:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    approval cannot admit a presence-free key: expected FAIL, not success
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 0.3 s
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    fails (file://<checkout>/tests/acceptance/1326/fixtures.mjs:83:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/guard.test.mjs:90:3)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# plain key added by an otherwise valid approval: exit 0\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.3 s\\n
+# Subtest: \#1326.fdbc77ab AC3 security-key signatures without user presence cannot approve, naming the signer
+not ok 9 - \#1326.fdbc77ab AC3 security-key signatures without user presence cannot approve, naming the signer
+  ---
+  duration_ms: 1680.628791
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/guard.test.mjs:93:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    an SK key type alone does not prove presence on this signature: expected FAIL, not success
+    PASS guard: tests/receipt.test.mjs › #91326.5099dca9 receipt: skipped (criterion #91326.5099dca9), by approved proposal (commit 0640a1afd4ee)
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 0.3 s
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    fails (file://<checkout>/tests/acceptance/1326/fixtures.mjs:83:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/guard.test.mjs:103:5)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# sk-ssh-ed25519@openssh.com without presence: exit 0\\nPASS guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9), by approved proposal (commit 0640a1afd4ee)\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.3 s\\n
+# sk-ecdsa-sha2-nistp256@openssh.com without presence: exit 0\\nPASS guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9), by approved proposal (commit fdeea56a7513)\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.4 s\\n
+# Subtest: \#1326.ec731667 AC4 DEEP_APPROVERS holding a session key cannot approve a tagged-test edit
+not ok 10 - \#1326.ec731667 AC4 DEEP_APPROVERS holding a session key cannot approve a tagged-test edit
+  ---
+  duration_ms: 842.482333
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/guard.test.mjs:108:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    environment list must not grant authority: expected FAIL, not success
+    PASS guard: tests/receipt.test.mjs › #91326.5099dca9 receipt: skipped (criterion #91326.5099dca9), by approved proposal (commit b61e3b3623dd)
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 0.4 s
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    fails (file://<checkout>/tests/acceptance/1326/fixtures.mjs:83:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/guard.test.mjs:112:3)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# DEEP_APPROVERS session list: exit 0\\nPASS guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9), by approved proposal (commit b61e3b3623dd)\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.4 s\\n
+1..10
+# tests 10
+# suites 0
+# pass 0
+# fail 10
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 27968.796708
+
+Exit: 1; signal: none
+
+--- AC2 named wrong program (deliberately red, not an acceptance PASS) ---
+Command: node --test --test-reporter=tap tests/acceptance/1326/twins/working-tree.mjs
+TAP version 13
+# Subtest: \#1326.be497e63 AC2 named wrong program: working-tree signer list accepts its own new key
+not ok 1 - \#1326.be497e63 AC2 named wrong program: working-tree signer list accepts its own new key
+  ---
+  duration_ms: 1718.842583
+  type: 'test'
+  location: '<checkout>/tests/acceptance/1326/twins/working-tree.mjs:9:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    working-tree list must not authorize its own added key: expected FAIL, not success
+    PASS guard: tests/receipt.test.mjs › #91326.5099dca9 receipt: skipped (criterion #91326.5099dca9), by approved proposal (commit 2207f7449978)
+    PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+    proof: wall time 0.4 s
+    
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    fails (file://<checkout>/tests/acceptance/1326/fixtures.mjs:83:10)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/1326/twins/working-tree.mjs:27:3)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# working-tree reader: exit 0\\nPASS guard: tests/receipt.test.mjs › \#91326.5099dca9 receipt: skipped (criterion \#91326.5099dca9), by approved proposal (commit 2207f7449978)\\nPASS guard: 1 commit checked: no guarded edit lacks its own approved proposal\\nproof: wall time 0.4 s\\n
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1791.923083
+
+Exit: 1; signal: none
+
+--- Affected selection only ---
+Command: node scripts/affected.mjs --list tests/acceptance/1326/guard.test.mjs tests/acceptance/1326/calls.test.mjs
+parallel node: tests/acceptance/1326/calls.test.mjs tests/acceptance/1326/guard.test.mjs
+
+Exit: 0; signal: none
+
+Full affected executor: BLOCKED/unrun under offline constraints. It launches known-failures-check (gh) and vendor-rebase (fetch), plus unrelated lints. The selected acceptance files ran directly above. No WIDE or INCONCLUSIVE lines in selection.

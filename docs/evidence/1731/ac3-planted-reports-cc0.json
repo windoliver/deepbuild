@@ -1,0 +1,6 @@
+[
+  "row shelf-armchair reads license \"CC0-1.0\"; the library's own record (/api/assets/shelf-armchair) says LicenseRef-shelf-standard",
+  "the fetch of shelf-armchair isn't BLOCKED: {\"status\":\"held\",\"ask\":\"ask:01M6ZTEYKXJP4XWN1BVTPVFJEM\"}",
+  "two fetches of shelf-armchair raised 0 unblock asks, not one",
+  "the fetch of shelf-armchair raised an authority ask, as for a license it may take: {\"kind\":\"authority\",\"question\":\"Fetch shelf-armchair from ext.shelf.library: 1306 bytes in 2 files, under CC0-1.0?\",\"options\":[{\"id\":\"fetch\",\"label\":\"Fetch it\",\"decision\":\"allow\"},{\"id\":\"decline\",\"label\":\"Don't fetch it\",\"decision\":\"deny\"}],\"recommended\":null,\"deadline\":1794303186555,\"fallback\":\"you\",\"default\":\"decline\",\"provisional\":false,\"owner\":\"you\",\"key\":\"bafdbb11c3331ab9f807172cfacbe2e154a9b"
+]

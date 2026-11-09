@@ -39,3 +39,6 @@ plant-matcher-panic = []
 # when its program is the inline text (AC4), and one that counts every run fed from a pipe as unread (AC5).
 plant-any-pipe-unread = []
 plant-every-pipe-unread = []
+# The planted wrong program for #1676: a reader that counts every command after an earlier one on the line as running a
+# script the line wrote.
+plant-later-command-unread = []

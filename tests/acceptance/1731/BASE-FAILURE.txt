@@ -1,0 +1,37 @@
+Base commit: 259473ae (Merge pull request #1754 from windoliver/audit/kiss-dead-code), main, which has 72767cf9 (the brief's base) as its parent
+Built first: npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-hook
+  (deep-show was not built: no test reaches deep_kinds or deep show at the base, so it isn't needed to see it fail)
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1731 --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-09  Machine: macOS (Apple silicon)  Node: ~/.local/share/fnm/node-versions/v24.22.0 (v24.22.0)  vitest 5.0.5
+Result: Test Files 5 failed (5); Tests 8 failed (8). Duration 71 s. The run is short on purpose: the surfaces don't exist.
+
+No test passed at the base. Every hub started (deep hub run, ready), the fixture library answered over TLS, and the
+failures come at the first missing surface:
+
+  AC1 search.test.ts, the search: at the first assertion, before any hub:
+    "the hub-slot table has a row for asset.library@1: expected undefined to be defined"   (hub-slots.json has no such row)
+
+  AC1 planted, AC3 planted: deep install installs the fill but doesn't load it, and its reason names no request log, license or record:
+    "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /sources/0: type
+     {"name":"ext.shelf.library","variant":"library","host":"127.0.0.1:<port>"} ..."
+    so "the install refused the planted fill, naming the request log" (AC1) and "... naming the license and the record"
+    (AC3) fail.
+
+  AC2 (both tests), AC3, AC4, AC5: onWorld() throws at the same install:
+    "deep install of the fill didn't load it: exit 1, ... It is not loaded: it failed conformance: its manifest fails
+     extension.manifest@1 at /sources/0 ..."   (extension.manifest@1 has no library source; the host has no library variant)
+
+Behind those, also missing at the base (from reading the code, not reached in this run): library.on, library.off and
+library.rule (the hub serves no such methods), deep_kinds' assets and fetch ops (tools.ts's enum has list, word,
+search, read, gallery, sheet; the hub hands every op to the canvas core), and asset.game@1 (no canvas kind).
+
+Checked of the harness at the base, in throwaway runs not kept in the suite:
+  - library.ts: 30 models, 5 HDRIs and 5 textures; over HTTPS on 127.0.0.1, a child Node with NODE_EXTRA_CA_CERTS at the
+    world's CA fetched /api/search?q=chair (200, 12 chairs) and /files/oak-chair.bin (168 bytes, the record's SHA-256);
+    without the CA it was refused (UNABLE_TO_VERIFY_LEAF_SIGNATURE); once closed, ECONNREFUSED. The log held both requests.
+  - The judges on hand-made rows: judgeSearch passed the 9 chairs in order (pine, oak, shelf-armchair, lawn, bar, rocking,
+    office, kids, wing) with a log of the search and a thumbnail; it failed, naming the request log, on a log holding
+    /files/oak-chair.gltf; and failed on the rows reversed, on doll-chair added, on shelf-armchair reported CC0-1.0, and
+    on a non-chair added. namesNumber found 1234 in {"bytes":1234} and not in {"bytes":12345}; refusedItem read an
+    error issue naming the item as refused and a warning as not.
+  - tsc -p tests/acceptance/1731/tsconfig.json: no errors.

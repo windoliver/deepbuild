@@ -1,0 +1,1 @@
+{ name: 'cursor', commands: [['target/debug/deep-app', '--cursor-demo', '3']] }
