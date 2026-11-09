@@ -42,9 +42,16 @@ export function reading(items: readonly StateItem[]): { digest: string; bytes: U
 export async function diffOf(source: Pick<Source, 'compare'>, then: readonly StateItem[], now: readonly StateItem[]): Promise<{ item: string; was: JsonValue; now: JsonValue }[]> {
   const ids = [...new Set([...then, ...now].map((i) => i.id))].sort();
   const out: { item: string; was: JsonValue; now: JsonValue }[] = [];
+  // Each ID's first item, as `find` would give it, looked up once per reading and not once per ID.
+  const firstOf = (items: readonly StateItem[]): Map<string, StateItem> => {
+    const first = new Map<string, StateItem>();
+    for (const item of items) if (!first.has(item.id)) first.set(item.id, item);
+    return first;
+  };
+  const [was, is] = [firstOf(then), firstOf(now)];
   for (const id of ids) {
-    const item = now.find((i) => i.id === id) ?? { id, value: null };
-    const diff = await source.compare(item, then.find((i) => i.id === id)?.value ?? null);
+    const item = is.get(id) ?? { id, value: null };
+    const diff = await source.compare(item, was.get(id)?.value ?? null);
     for (const c of diff.changed) out.push({ item: diff.item, was: c.was, now: c.now });
   }
   return out;

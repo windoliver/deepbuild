@@ -2,10 +2,8 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import type { Verdict } from '@deepbuild/conformance';
-import { replaySession } from '../../../adapters/index.mjs';
 // The conformance table, the contracts and the telemetry doctor load only in the commands that use them, so
 // `deep inbox` starts without them (#24's budget).
 
@@ -44,7 +42,7 @@ function banner(): string {
 
 // Why each event of a recorded session was read the way it was: the facts entry that mapped it and
 // the agent version behind it. A live session's ID needs the hub's record, which doesn't exist yet.
-function explain(session: string, json: boolean): number {
+async function explain(session: string, json: boolean): Promise<number> {
   const dir = resolve(session);
   if (!existsSync(join(dir, 'session.json'))) {
     console.error(`deep explain: ${session} is not a recorded session folder; explaining a live session by ID needs the hub's record (#14, #16)`);
@@ -54,6 +52,8 @@ function explain(session: string, json: boolean): number {
   const factsPath = `adapters/${meta.agent}.facts.json`;
   const facts: unknown = JSON.parse(readFileSync(join(root, factsPath), 'utf8'));
   const cases = jsonLines(join(dir, 'events.jsonl'));
+  // The facts engine loads only here, so every other command starts without it.
+  const { replaySession } = await import('../../../adapters/index.mjs');
   const replayed = replaySession({ facts, version: meta.version, payloads: cases.map((recorded) => recorded.payload as Record<string, unknown>), transcript: jsonLines(join(dir, 'transcript.jsonl')) });
   replayed.payloads.forEach(({ events, verified }, index) => {
     const hook = String((cases[index]?.payload as Record<string, unknown>).hook_event_name);
@@ -149,6 +149,7 @@ async function debugBundle(): Promise<number> {
   const dir = join(root, 'debug');
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const path = join(dir, `bundle-${new Date().toISOString().replace(/[:.]/g, '-')}.json.gz`);
+  const { gzipSync } = await import('node:zlib');
   writeFileSync(path, gzipSync(JSON.stringify(bundle)), { mode: 0o600 });
   chmodSync(path, 0o600);
   console.log(path);
@@ -302,7 +303,7 @@ if (help) {
 } else if (args.length === 1 && args[0] === '--version') {
   console.log(version());
 } else if (args[0] === 'explain' && args[1] && args.slice(2).every((arg) => arg === '--json')) {
-  process.exitCode = explain(args[1], args.includes('--json'));
+  process.exitCode = await explain(args[1], args.includes('--json'));
 } else if (args[0] === 'hub') {
   // Its own entry, loaded only for hub commands: every other command starts without the hub's modules, and the
   // running hub without the other commands'.

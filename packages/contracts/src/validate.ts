@@ -53,7 +53,11 @@ function compile(root: Schema): Check {
     // Validation has checked the whole value is JSON first, so an opaque one is any JSON.
     if ('x-opaque' in schema) return () => {};
     if ('const' in schema) {
-      const want = canonicalText(schema.const!);
+      const fixed = schema.const!;
+      // Refuses, when the schema compiles, a const that isn't JSON.
+      const want = canonicalText(fixed);
+      // A scalar is the same JSON exactly when it is the same value (0 and -0 are both 0), so it needs no text.
+      if (fixed === null || typeof fixed !== 'object') return (value, at, out) => { if (value !== fixed) out.push(issue('const', at, value)); };
       return (value, at, out) => { if (!sameJson(value, want)) out.push(issue('const', at, value)); };
     }
     if (Array.isArray(schema.oneOf)) return union(schema.oneOf as Schema[]);

@@ -3,7 +3,8 @@
 // assertion, so a crash is never read as the work holding or as nothing to say.
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { isCheckResult, type CheckContext, type CheckResult } from '@deepbuild/conformance';
+import type { CheckContext, CheckResult } from '@deepbuild/conformance';
+import { isCheckResult } from '@deepbuild/conformance/result';
 import type { WorkKind, WorkSpec } from './types.js';
 
 const PROBE = fileURLToPath(new URL('../runtime/probe.mjs', import.meta.url));
