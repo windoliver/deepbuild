@@ -1,4 +1,8 @@
 {
+  "release": {
+    "margin": 0.1,
+    "initialReason": "Issue #41: the release preflight runs every recorded task on the candidate and on the last release (the highest release/<version> tag), rounds alternated, and fails any whose p50 rose more than 10%. Each change is judged against its merge base with its own margin, which lets a slowdown in steps through; this margin bounds the whole release."
+  },
   "preflight": {
     "margin": 0.5,
     "limits": {
@@ -946,6 +950,21 @@
         "indexed_target_bytes": 1000000
       },
       "initialReason": "Issue #465 first measurement: the merge base has no flare, no mirror and no such task. A release deep-gpu draws one 1080p stage (a floor plate, twelve boxes, a sun, a point light, an orbiting camera) for 300 frames a side, five runs after a warm-up one, each a fresh process: the fused finish (print wear, tone curve, screen, grain, vignette) against none, a full flare against none and the floor as a mirror against not, each the difference of the sides' median GPU time, the mirror's as a share of the plain stage's; and film2d's indexed look at 320 x 180, scale 6, for its target bytes. canvas.mjs judge holds the bytes on any machine and the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-water",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "water"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "lake_gpu_ms": 0.5,
+        "waves_vertex_ms": 0.1
+      },
+      "initialReason": "Issue #166 first measurement: the merge base has no water and no such task. A release deep-gpu draws two 1080p stages for 300 frames a side, five runs after a warm-up one, each a fresh process: a 400 m lake of 256 x 256 cells filling the lower half of the frame (four waves, ripples, rain at 50 drops per m2 per s) against the same plate as a plain mirror, and a 10 m plate of 256 x 256 cells seen 300 m away (four waves) against the same plate as a plain mirror, each the difference of the sides' median GPU time, so the mirror's own pass is in both sides. canvas.mjs judge holds the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "replica-cold-start",

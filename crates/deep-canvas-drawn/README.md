@@ -17,4 +17,4 @@ The core through `deep-canvas`, by crate name only, and `serde_json`. It imports
 
 ## Deviations
 
-- `tooth.rs` keeps its own `cells`: the design names public `fbm` and `cells` steps, and the closed step list holds no `cells`. The noise fill's 4D lattice is the drawn pass's own WGSL for the same reason: `fbm@1` is 2D.
+- `src/tooth.rs` keeps its own `cells`: the design names public `fbm` and `cells` steps, and the closed step list holds no `cells`. The noise fill's 4D lattice is the drawn pass's own WGSL for the same reason: `fbm@1` is 2D.

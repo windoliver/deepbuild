@@ -4,6 +4,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { openSync } from 'node:fs';
 import { close as closeInspector } from 'node:inspector';
 import { createServer, type Server } from 'node:net';
 
@@ -30,6 +31,8 @@ export type Plant =
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
   | 'stops-at-first-bad-line' | 'remove-spool-after-normal' | 'drops-post-tool-use' | 'replay-appends-twice'
   | 'answer-on-peer-check' | 'answer-on-token' | 'answer-inside-session' | 'skip-default-at-deadline'
+  // #70's: a hub that starts kept runs and terminals with no user scope of their own, in its service's cgroup.
+  | 'kept-in-service-cgroup'
   | 'evidence-checks-path-first' | 'binds-first-stamp' | 'unbound-reads-all' | 'errors-without-actual' | 'errors-unscrubbed' | 'trusts-index'
   | 'adapter-decides' | 'unknown-tool-read' | 'unplaced-is-person' | 'loop-from-origins' | 'holds-stop-anyway' | 'restores-at-session-start-only'
   | 'acts-on-peer-check' | 'off-guards-watch-only' | 'undo-reserializes' | 'gates-before-approval' | 'setup-writes-project-settings'
@@ -175,6 +178,10 @@ export type Plant =
   // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
   // reads it, a store of the newest result per key, and a carry that copies the source run's evidence whole.
   | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence'
+  // #41's: a hub that opens a record a newer version wrote for writing, as if it could read every kind in it.
+  | 'append-unknown-kind'
+  // #41's soak: a hub that opens one file each session it ends and never closes it.
+  | 'leak-file-per-session'
   // #33's: a gate that counts only a drafted spec as approved, so a repo on its maintainer's bootstrap stays watch-only,
   // one that judges a claim on the bootstrap's commands alone, so a PR says Closes past an unproven criterion, and an
   // engine that reads a stopped run, a full disk, a missing stack and an expired credential as FAIL.
@@ -188,7 +195,7 @@ const PLANTS: readonly string[] = [
   'env-clones-next-whole', 'env-starts-at-every-claim', 'pool-reclaims-running', 'sandbox-any-loopback',
   'reap-session-volumes', 'teardown-closes-on-word', 'pool-asks-which-stack', 'reap-on-kill',
   'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
-  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline',
+  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline', 'kept-in-service-cgroup',
   'evidence-checks-path-first', 'binds-first-stamp', 'unbound-reads-all', 'errors-without-actual', 'errors-unscrubbed', 'trusts-index',
   'adapter-decides', 'unknown-tool-read', 'unplaced-is-person', 'loop-from-origins', 'holds-stop-anyway', 'restores-at-session-start-only',
   'acts-on-peer-check', 'off-guards-watch-only', 'undo-reserializes', 'gates-before-approval', 'setup-writes-project-settings',
@@ -250,6 +257,7 @@ const PLANTS: readonly string[] = [
   'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
+  'append-unknown-kind', 'leak-file-per-session',
   'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
   'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
   'agent-credential-posts-statuses', 'passes-gate-credential',
@@ -273,6 +281,7 @@ const reloads = new EventEmitter().setMaxListeners(0);
 const leftSockets: Server[] = [];
 const leftTimers: NodeJS.Timeout[] = [];
 const leftChildren: ChildProcess[] = [];
+const leftFiles: number[] = [];
 /** 1 KiB no other value shares: 1 MB over 5,000 cycles is 200 bytes a cycle, so a short ID alone would stay under it. */
 const kibibyte = (): string => randomBytes(512).toString('hex');
 
@@ -282,6 +291,7 @@ export function plantedSessionEnd(plant: Plant | undefined, session: string): vo
   if (plant === 'churn-leaves-socket') leftSockets.push(createServer().listen(0, '127.0.0.1').unref());
   if (plant === 'churn-leaves-timer') leftTimers.push(setInterval(() => undefined, 2 ** 30).unref());
   if (plant === 'churn-leaves-child') leftChildren.push(spawn('/bin/sleep', ['86400'], { stdio: 'ignore' }));
+  if (plant === 'leak-file-per-session') leftFiles.push(openSync('/dev/null', 'r'));
 }
 /** What a planted hub leaves behind as an extension reloads. */
 export function plantedReload(plant: Plant | undefined): void {

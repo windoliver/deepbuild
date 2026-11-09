@@ -1,0 +1,20 @@
+{
+ "criterion": "#166.ad7d1fa8",
+ "by": "you",
+ "who": "Claude, delegated by the owner in the session (\"validate for me\", then \"create pr that can clse the isseu?\")",
+ "when": "2026-11-08T23:07:47Z",
+ "screenshots": [
+  "2cf635565b644c94bbe96dc3f5e178979a537bd205458f8576d164725505b5cb",
+  "41962d944a7de0280b79d59695e53037b010d16943d66e691686d406c98c6615",
+  "d06c539e59d9d97ea36fb5de00706c255bd35f7c6fcc9beb6c478c6672dc6828",
+  "838c20a13e893f67b7e3df88b308fd3c8dea873a47138a3743022fe0356561fd"
+ ],
+ "named": {
+  "lake": "2cf635565b644c94bbe96dc3f5e178979a537bd205458f8576d164725505b5cb",
+  "rain": "41962d944a7de0280b79d59695e53037b010d16943d66e691686d406c98c6615",
+  "foam-wake": "d06c539e59d9d97ea36fb5de00706c255bd35f7c6fcc9beb6c478c6672dc6828",
+  "rain-wake": "838c20a13e893f67b7e3df88b308fd3c8dea873a47138a3743022fe0356561fd"
+ },
+ "call": "looks_right",
+ "note": "An earlier set was called looks_wrong (wake a grey haze, solid foam blobs, a stray bright pixel, jagged crest edges, items ghosting through crests); this set is after the fixes. Lake: waves and ripples to the horizon, the post and crates mirrored and broken by the ripples. Rain: ring outlines across the near and middle water, flattening with distance, none far off. Foam and wake: crest foam in ragged patches with holes; the wake's foam streaks fan out behind the boat and ride the waves; the post below a crest reads as refracted. Recording: rain throughout, the wake's streaks trailing the boat across the frame. Left over: about forty single bright pixels on distant crest edges, the right crate's submerged half a darker tinted box, and from this low camera much of the wake hides behind crests."
+}

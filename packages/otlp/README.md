@@ -12,7 +12,7 @@ The OTLP receiver (#42), an optional first-party extension: it listens on 127.0.
 
 ## What it may import
 
-A first-party extension: only `@deepbuild/record` and `node:` built-ins, through its public entry. It never imports the hub, CLI or app, and never reads a repo's `.claude/settings.json`.
+A first-party extension: only `@deepbuild/adapters` (`readFacts`, Claude Code's tool kinds and model families), `@deepbuild/record` and `node:` built-ins, through their public entries. It never imports the hub, CLI or app, and never reads a repo's `.claude/settings.json`.
 
 ## Deviations
 

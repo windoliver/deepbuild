@@ -1021,8 +1021,11 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
 /// O_NOFOLLOW, which std doesn't name: opening a symlink fails rather than following it.
 #[cfg(target_os = "macos")]
 const NOFOLLOW: i32 = 0x0100;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(any(target_arch = "aarch64", target_arch = "arm"))))]
 const NOFOLLOW: i32 = 0o400000;
+// arm64 and arm number it otherwise; 0o400000 there is O_LARGEFILE, which follows the link.
+#[cfg(all(target_os = "linux", any(target_arch = "aarch64", target_arch = "arm")))]
+const NOFOLLOW: i32 = 0o100000;
 
 /// DEEP_HOOK_TEST_SPOOL_STALL in a debug build: spool only this many bytes of the line, then wait to be killed.
 #[cfg(debug_assertions)]
@@ -1762,9 +1765,56 @@ extern "C" {
     fn clonefile(src: *const std::ffi::c_char, dst: *const std::ffi::c_char, flags: u32) -> i32;
 }
 
+#[cfg(target_os = "linux")]
+extern "C" {
+    fn ioctl(fd: std::ffi::c_int, request: std::ffi::c_ulong, ...) -> std::ffi::c_int;
+}
+
 /// One copy-on-write clone of `from` at `to`, which must not exist: a folder whole, a link as a link (APFS's
-/// clonefile(2); the other platforms' staging isn't built yet, so they can't stage).
+/// clonefile(2); on Linux each file a reflink, FICLONE, as btrfs and XFS make; elsewhere staging isn't built yet).
+/// Unsupported, leaving nothing at `to`, where the file system can't make one.
 fn clone_one(from: &Path, to: &Path) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::io::AsRawFd;
+        const FICLONE: std::ffi::c_ulong = 0x4004_9409;
+        let meta = fs::symlink_metadata(from)?;
+        let kind = meta.file_type();
+        if kind.is_symlink() {
+            return std::os::unix::fs::symlink(fs::read_link(from)?, to);
+        }
+        if kind.is_dir() {
+            fs::create_dir(to)?;
+            let made = (|| {
+                for entry in fs::read_dir(from)? {
+                    let entry = entry?;
+                    clone_one(&entry.path(), &to.join(entry.file_name()))?;
+                }
+                fs::set_permissions(to, meta.permissions())
+            })();
+            if made.is_err() {
+                let _ = fs::remove_dir_all(to);
+            }
+            return made;
+        }
+        if !kind.is_file() {
+            // A FIFO, socket or device has no copy-on-write copy.
+            return Err(io::Error::from(ErrorKind::Unsupported));
+        }
+        let source = fs::File::open(from)?;
+        let copy = fs::OpenOptions::new().write(true).create_new(true).open(to)?;
+        // SAFETY: two open descriptors that live through the call.
+        if unsafe { ioctl(copy.as_raw_fd(), FICLONE, source.as_raw_fd()) } != 0 {
+            let e = io::Error::last_os_error();
+            drop(copy);
+            let _ = fs::remove_file(to);
+            // EOPNOTSUPP, EINVAL or EXDEV: no reflink on this file system, or not between these two.
+            return Err(if matches!(e.raw_os_error(), Some(95 | 22 | 18)) { io::Error::from(ErrorKind::Unsupported) } else { e });
+        }
+        copy.set_permissions(meta.permissions())?;
+        copy.set_modified(meta.modified()?)?;
+        Ok(())
+    }
     #[cfg(target_os = "macos")]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -1779,7 +1829,7 @@ fn clone_one(from: &Path, to: &Path) -> io::Result<()> {
         }
         Err(io::Error::last_os_error())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = (from, to);
         Err(io::Error::from(ErrorKind::Unsupported))
@@ -1867,7 +1917,8 @@ mod tests {
     use super::append;
     use super::pi_path;
     use deep_hook::shell::glob;
-    use std::fs;
+    use std::fs::{self, DirBuilder};
+    use std::os::unix::fs::DirBuilderExt;
 
     #[test]
     fn a_pi_path_is_the_file_pi_opens() {
@@ -1900,7 +1951,8 @@ mod tests {
     fn a_line_written_to_a_spool_moved_aside_is_written_again_to_the_new_one() {
         let folder = std::env::temp_dir().join(format!("dh315-append-{}", std::process::id()));
         let _ = fs::remove_dir_all(&folder);
-        fs::create_dir_all(&folder).unwrap();
+        // Yours alone, as deep-hook makes it: a umask of 002, Ubuntu's, would leave it group-writable, which it refuses.
+        DirBuilder::new().mode(0o700).create(&folder).unwrap();
         let live = folder.join("spool.jsonl");
         let moved = folder.join("replay-1.jsonl");
         // The hub moves the file aside, reads it and removes it while this write holds it open.

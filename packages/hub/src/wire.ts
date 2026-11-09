@@ -7,7 +7,12 @@ export { ulidTime } from '@deepbuild/record/ids';
 
 export const VERSION = 1;
 /** The features the hub lists in its hello; a client turns off any of its own the hub doesn't list. */
-export const FEATURES: readonly string[] = [];
+export const FEATURES: readonly string[] = [
+  // Every method the app calls (#41): crates/deep-app/src/hub.rs NEEDS checks this hello against them.
+  'inbox.read', 'stream.subscribe', 'events.read', 'notifications.report', 'views.shown', 'views.hidden', 'canvas.drawn', 'canvas.user',
+];
+/** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
+export const CONTRACT = '1.0';
 
 /** error@3: one refusal. */
 export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }
@@ -234,6 +239,8 @@ export interface CoreOptions {
   crash?: 'start-recorded' | 'spawned';
   /** The file that stands for the OS confirming you, from DEEP_HUB_TEST_CONFIRM; only tests set it. */
   confirm?: string;
+  /** The program run in pkcheck's place, from DEEP_HUB_TEST_POLKIT; only tests set it. */
+  polkit?: string;
   /** A module whose default export returns the index@1 fill deep_search reads the wiki through, from DEEP_HUB_TEST_INDEX; only tests set it. */
   index?: string;
   /** The forge's REST API the archive copies CI runs from, from DEEP_HUB_TEST_FORGE; only tests set it. */

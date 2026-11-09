@@ -3,7 +3,7 @@
 // you, which the hub asks for; run inside an agent's process tree, the command acts as that agent's session, and no
 // agent answers.
 import { readFileSync } from 'node:fs';
-import { call, UNDECIDED_CODES, type Reply } from './client.js';
+import { call, UNDECIDED_CODES, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { elapsed } from './promises.js';
 import { startOf } from './wire.js';
@@ -38,9 +38,9 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
     // Only an answer or an undo is judged by the peer check, so only they pay for the `ps` that names this process.
     const peer = answering || undoing || saving ? { pid: process.pid, start: (await startOf(process.pid)) ?? '' } : undefined;
     reply = answering
-      ? await call(hubAddress().path, token, 'ask.answer', { ask: args[1], option: args[2] }, peer)
-      : undoing ? await call(hubAddress().path, token, 'ask.undo', { ask: args[1] }, peer)
-      : saving ? await call(hubAddress().path, token, 'offer.save', { offer: args[1] }, peer)
+      ? await withPrompt(() => call(hubAddress().path, token, 'ask.answer', { ask: args[1], option: args[2] }, peer))
+      : undoing ? await withPrompt(() => call(hubAddress().path, token, 'ask.undo', { ask: args[1] }, peer))
+      : saving ? await withPrompt(() => call(hubAddress().path, token, 'offer.save', { offer: args[1] }, peer))
       : await call(hubAddress().path, token, 'inbox.read', {});
   } catch (error) {
     process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}${answering ? `; ${args[1]} stays open` : undoing ? `; ${args[1]} keeps its default` : saving ? `; ${args[1]} isn't saved` : ''}\n`);

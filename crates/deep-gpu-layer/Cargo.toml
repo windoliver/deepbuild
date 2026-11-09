@@ -21,6 +21,10 @@ path = "src/main.rs"
 [features]
 test-pool = ["deep-gpu/test-pool"]
 test-meter = ["dep:deep-canvas-test-modules"]
+# `test-faults` (#1413) adds `--fail-reopen`, `raise_errors`, the live call's `lose_device` and
+# `gpu_change`, the frames call's `fail_resize` and the test kinds `test.alloc@1` and
+# `test.pipeline@1`; no shipped build has them.
+test-faults = ["test-meter"]
 # `test-seam` (#140) adds `--adapters`, `--quirks` and the validation lane's and error channel's
 # test fixtures; no shipped build has them.
 test-seam = []

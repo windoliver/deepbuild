@@ -4,6 +4,7 @@
 //! transition follow (#489) and the look's time feel they take.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use deep_canvas::grammar::{Seeded, Time, TimeContext, FLICKS_PER_SECOND};
 use serde_json::{Map, Value};
@@ -59,6 +60,20 @@ pub enum ValueType {
     Quat,
     /// Degrees, with `space: shortest` turning each segment the shorter way.
     Angle,
+    /// #494: a path, every key on one structure of sub-paths, matched at check.
+    Path,
+}
+
+/// A path channel's keys (#494): `morph`, the structure every key's points share once matched,
+/// and the keys that take another item's evaluated path (`{of: ID[#part]}`), resolved at check.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PathKeys {
+    pub strict: bool,
+    pub structure: crate::morph::Structure,
+    /// Each key's own shape, by key index, `None` for an `{of}` key until it resolves.
+    pub shapes: Vec<Option<crate::morph::Shape>>,
+    /// The `{of}` keys: key index and the item (and part) they name.
+    pub of: Vec<(usize, String)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -76,6 +91,8 @@ pub struct Channel {
     /// On a frame's `layout` (#491): the keys' interpolations over their index, 0, 1, 2…, so a
     /// key mixes each flow child from the layout before to the layout after.
     pub glide: Option<Curve>,
+    /// #494: a path channel's keys.
+    pub path: Option<PathKeys>,
 }
 
 impl Channel {
@@ -1665,6 +1682,7 @@ fn channel_of(
         Some("angle") => ValueType::Angle,
         Some("bool") => ValueType::Bool,
         Some("enum") => ValueType::Enum,
+        Some("path") => ValueType::Path,
         _ => return refuse("bad_type", format!("{path}/type")),
     };
     let width = match c.get("type").and_then(Value::as_str) {
@@ -1706,9 +1724,17 @@ fn channel_of(
             follow: Some(follow_spec_of(f, ctx, &format!("{path}/follow"))?),
             range,
             glide: None,
+            path: None,
         });
     }
     let mut keys = Vec::new();
+    let mut path_shapes: Vec<(String, Option<crate::morph::Shape>, Option<String>)> = Vec::new();
+    let strict = match (ty, c.get("morph").and_then(Value::as_str), c.get("morph")) {
+        (_, _, None) => false,
+        (ValueType::Path, Some("match"), _) => false,
+        (ValueType::Path, Some("strict"), _) => true,
+        _ => return refuse("bad_doc", format!("{path}/morph")),
+    };
     // A frame's layout is a channel target: its keys may glide, the value itself held.
     let glides = !in_clip && ty == ValueType::Enum && target.field == ["params", "layout"];
     let mut glide: Vec<Key> = Vec::new();
@@ -1740,6 +1766,18 @@ fn channel_of(
                 .enumerate()
                 .map(|(i, p)| number(Some(p), &format!("{kpath}/value/{i}")))
                 .collect::<Result<_, _>>()?,
+            // #494: a path key's value is an SVG path string, or another item's path by `of`.
+            (ValueType::Path, Some(v)) => {
+                match v.get("of").and_then(Value::as_str) {
+                    Some(of) if !in_clip => path_shapes.push((kid.clone(), None, Some(of.to_string()))),
+                    Some(_) => return refuse("out_of_range", format!("{kpath}/value")),
+                    None => match crate::morph::of_value(v) {
+                        Some(shape) => path_shapes.push((kid.clone(), Some(shape), None)),
+                        None => return refuse("bad_path", format!("{kpath}/value")),
+                    },
+                }
+                Vec::new()
+            }
             _ => return refuse("out_of_range", format!("{kpath}/value")),
         };
         let mut interp = match (ty, key.get("interp")) {
@@ -1765,6 +1803,21 @@ fn channel_of(
         }
         let mut k = Key::new(kid, t, value, interp);
         k.turns = (ty == ValueType::Quat).then_some(ctx.arc);
+        // #494: a vec key's travel; a path key's takes its sub-paths once they're matched.
+        if let Some(v) = key.get("travel") {
+            let travel = crate::travel::Travel::of(v).map_err(|f| Refused {
+                code: "bad_doc",
+                path: if f.is_empty() { format!("{kpath}/travel") } else { format!("{kpath}/travel/{f}") },
+                detail: None,
+            })?;
+            match (ty, travel) {
+                (_, None) => {}
+                (ValueType::Vec | ValueType::Path, Some(travel)) => {
+                    k.travel = Some(Arc::new(crate::curve::Travels { travel, dim: width, subs: vec![1] }));
+                }
+                _ => return refuse("bad_doc", format!("{kpath}/travel")),
+            }
+        }
         if interp == Interp::Table {
             let name = key.get("interp").and_then(|i| i.pointer("/ease/table")).and_then(Value::as_str);
             k.table = name.map(|n| (n.to_string(), None));
@@ -1816,10 +1869,27 @@ fn channel_of(
         }
         _ => {}
     }
+    let path_keys = if ty == ValueType::Path {
+        let mut keyed = PathKeys { strict, structure: Vec::new(), shapes: Vec::new(), of: Vec::new() };
+        for (i, k) in keys.iter().enumerate() {
+            let Some((_, shape, of)) = path_shapes.iter().find(|(kid, ..)| *kid == k.id) else { continue };
+            keyed.shapes.push(shape.clone());
+            if let Some(of) = of {
+                keyed.of.push((i, of.clone()));
+            }
+        }
+        if keyed.of.is_empty() {
+            match_path(id, &mut keyed, &mut keys, path)?;
+        }
+        Some(keyed)
+    } else {
+        None
+    };
     Ok(Channel {
         id: id.to_string(),
         target,
         ty,
+        path: path_keys,
         curve: Curve::extrapolated(keys, before, after),
         modifiers,
         follow: None,
@@ -1830,6 +1900,35 @@ fn channel_of(
             Curve::extrapolated(keys, Extrapolate::Hold, Extrapolate::Hold)
         }),
     })
+}
+
+/// #494: a path channel's keys put on one structure once every key's shape is known: equal
+/// structures as they are, others matched (Channel and key: path), or refused under
+/// `morph: strict`, naming the channel. Each key's value becomes its flat points and its travel
+/// learns the sub-paths.
+pub fn match_path(id: &str, keyed: &mut PathKeys, keys: &mut [Key], path: &str) -> Result<(), Refused> {
+    let shapes: Vec<crate::morph::Shape> = keyed.shapes.iter().map(|s| s.clone().unwrap_or_default()).collect();
+    let Some(first) = shapes.first() else {
+        return Ok(());
+    };
+    let same = shapes.iter().all(|s| crate::morph::structure(s) == crate::morph::structure(first));
+    if !same && keyed.strict {
+        return Err(Refused {
+            code: "morph_strict",
+            path: format!("{path}/keys"),
+            detail: Some(Box::new(serde_json::json!({"channel": id, "why": "its path keys differ in point or sub-path counts, and morph is strict"}))),
+        });
+    }
+    let matched = if same { shapes } else { crate::morph::matched_all(&shapes) };
+    keyed.structure = crate::morph::structure(&matched[0]);
+    let subs: Vec<usize> = keyed.structure.iter().map(|(n, _)| *n).collect();
+    for (k, shape) in keys.iter_mut().zip(&matched) {
+        k.value = crate::morph::flat(shape);
+        if let Some(t) = &mut k.travel {
+            *t = Arc::new(crate::curve::Travels { travel: t.travel.clone(), dim: 2, subs: subs.clone() });
+        }
+    }
+    Ok(())
 }
 
 /// A channel's `extrapolate`: one mode for both sides, or `{before, after}`; hold when absent.
@@ -2218,6 +2317,12 @@ fn cuts_of(
         // #493: a transition between shots is the shots' (crate::shots).
         let names_shot = |f: &str| tr.get(f).and_then(Value::as_str).is_some_and(|n| shots.is_some_and(|s| s.contains_key(n)));
         if names_shot("from") || names_shot("to") {
+            continue;
+        }
+        // #494: a match morph between two items is the morph's (crate::morph).
+        let items = doc.get("items").and_then(Value::as_object);
+        let names_item = |f: &str| tr.get(f).and_then(Value::as_str).is_some_and(|n| items.is_some_and(|i| i.contains_key(n)));
+        if tr.get("kind").and_then(Value::as_str) == Some("match_morph") && (names_item("from") || names_item("to")) {
             continue;
         }
         match tr.get("kind").and_then(Value::as_str) {

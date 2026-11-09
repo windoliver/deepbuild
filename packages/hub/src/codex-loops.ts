@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { readFacts } from '@deepbuild/adapters';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -19,7 +20,7 @@ interface CodexFacts {
   goals: { tools: string[]; statuses: string[]; continuing: string[]; store: { file: string; table: string } };
   heartbeats: { folder: string; file: string; kind: string; active: string };
 }
-const facts = (): CodexFacts => (JSON.parse(readFileSync(new URL('../../../adapters/loops.facts.json', import.meta.url), 'utf8')) as { agents: { codex: CodexFacts } }).agents.codex;
+const facts = (): CodexFacts => readFacts<{ agents: { codex: CodexFacts } }>('loops.facts.json').agents.codex;
 
 /** The loop a stop reads: looping, with its next prompt's due time when one is known, or a loop with none left. */
 export type Loop = { state: 'looping'; due: number | null } | { state: 'none_left' };

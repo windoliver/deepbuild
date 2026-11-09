@@ -33,6 +33,19 @@ pub const SLOTS: u32 = 3;
 pub const HISTORY: &str = "look.history";
 pub const PLACEHOLDER: &str = "surface.placeholder";
 
+/// The placeholder a view shows while its device is lost (#1413), drawn on the CPU since no
+/// device can: BGRA, two greys in diagonal stripes, so it is never blank or flat.
+pub fn placeholder_picture(size: [u32; 2]) -> Vec<u8> {
+    let (w, h) = (size[0] as usize, size[1] as usize);
+    let mut bgra = vec![0; w * h * 4];
+    for (i, px) in bgra.chunks_exact_mut(4).enumerate() {
+        let (x, y) = (i % w, i / w);
+        let grey = if (x + y) / 16 % 2 == 0 { 96 } else { 148 };
+        px.copy_from_slice(&[grey, grey, grey, 255]);
+    }
+    bgra
+}
+
 const SHADER: &str = include_str!("effects.wgsl");
 
 /// What every live view on the device shares: the effect shader's layouts and sampler, and the

@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use deep_canvas::budget::{self, Class, Limits};
@@ -30,7 +30,7 @@ type Made = crate::testgpu::Made;
 #[cfg(not(feature = "test-meter"))]
 type Made = ();
 use deep_gpu::compile::{CompileThread, Compiling, THREAD as COMPILE_THREAD};
-use deep_gpu::device::{Backend, Device};
+use deep_gpu::device::{Backend, Device, Failure, Gpu};
 use deep_gpu::memory;
 use deep_gpu::meter::{
     self, AppMeter, Estimate, Ladder, Reason, Ring, Rung, Shape, Step, MAX_PASSES,
@@ -193,6 +193,10 @@ enum Event {
     /// A window shown or hidden, focused or not, from this frame on: the headless window has no
     /// occlusion or activation of its own, so the call says what the app's window would.
     Window(usize, Option<bool>, Option<bool>),
+    /// #1413 (test-faults): the device lost now, or just as the build of the resource it names
+    /// starts; and the platform's GPU-change notification.
+    LoseDevice(Option<String>),
+    GpuChange,
 }
 
 struct Charge {
@@ -306,6 +310,7 @@ fn history_of(look: &Value) -> Result<u32, String> {
 fn parse(call: &Value, out: &str) -> Result<Args, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let test_build = cfg!(feature = "test-meter");
+    let faults = cfg!(feature = "test-faults");
     let frames = call["frames"]
         .as_u64()
         .filter(|f| *f >= 1)
@@ -419,6 +424,10 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
                 ));
             };
             Event::Window(window, visible, focused)
+        } else if let Some(l) = e.get("lose_device").filter(|_| faults) {
+            Event::LoseDevice(l["during"].as_str().map(str::to_string))
+        } else if e.get("gpu_change").is_some() && faults {
+            Event::GpuChange
         } else {
             return Err(bad(
                 "an event is open, close, revise, input, hold, camera, rung, canonical or window_state",
@@ -800,26 +809,7 @@ fn admit(
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
     }
-    let unevaluated = |(code, path): (&str, String)| {
-        vec![issue(
-            code,
-            &path,
-            Value::Null,
-            "the document can't be evaluated",
-        )]
-    };
-    // A document with no camera is 2D, as a chart is, and draws by marks2d (#397).
-    let frames = if crate::flat::is_flat(&doc) {
-        Content::Flat(Box::new(
-            crate::flat::Flat::new(&doc, &look.roles).map_err(unevaluated)?,
-        ))
-    } else {
-        Content::Scene(Box::new(
-            program
-                .and_then(|p| Frames::with_program(&doc, p, look, labels))
-                .map_err(|r| unevaluated((r.code, r.path)))?,
-        ))
-    };
+    let frames = content_with(&doc, program, look, labels)?;
     let moving = camera_moves(&doc);
     let base_scale = if moving { limits.scale_moving } else { 1.0 };
     let effects = doc["items"]
@@ -858,6 +848,40 @@ fn admit(
         skips,
         warm,
     })
+}
+
+/// A checked document's frames, from its compiled motion program: a document with no camera is
+/// 2D, as a chart is, and draws by marks2d (#397).
+fn content_with(
+    doc: &Value,
+    program: Result<deep_canvas_motion::program::Program, deep_canvas_scene3d::scene::Refused>,
+    look: &Look3,
+    labels: &mut Labels,
+) -> Result<Content, Vec<Value>> {
+    let unevaluated = |(code, path): (&str, String)| {
+        vec![issue(
+            code,
+            &path,
+            Value::Null,
+            "the document can't be evaluated",
+        )]
+    };
+    Ok(if crate::flat::is_flat(doc) {
+        Content::Flat(Box::new(
+            crate::flat::Flat::new(doc, &look.roles).map_err(unevaluated)?,
+        ))
+    } else {
+        Content::Scene(Box::new(
+            program
+                .and_then(|p| Frames::with_program(doc, p, look, labels))
+                .map_err(|r| unevaluated((r.code, r.path)))?,
+        ))
+    })
+}
+
+/// A stamped document's frames, compiled again: a view rebuilt on a reopened device (#1413).
+fn content_of(doc: &Value, look: &Look3, labels: &mut Labels) -> Result<Content, Vec<Value>> {
+    content_with(doc, Frames::compile(doc), look, labels)
 }
 
 /// Whether a channel moves the document's camera: its view then moves, and renders at the
@@ -952,12 +976,34 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
             Ok(d) => d,
             Err(e) => return refused("no_device", e),
         };
-        Live::new(device, args, plants, path, noop).run()
+        Live::new(state.gpu.clone(), device, args, plants, path, noop).run()
     })
 }
 
+/// A lost device's reopens (#1413): attempts this long after the loss, then the placeholder.
+const REOPEN_AFTER_S: [f64; 3] = [1.0, 2.0, 4.0];
+
+/// The device lost and not yet back: when, the reopens tried, and whether they gave up.
+struct Loss {
+    at: Instant,
+    attempts: usize,
+    gave_up: bool,
+}
+
 struct Live {
+    /// The app's GPU, which reopens a lost device.
+    gpu: Arc<Gpu>,
     device: Arc<Device>,
+    /// The frame being presented.
+    frame: u64,
+    loss: Option<Loss>,
+    device_losses: u64,
+    /// Each reopen: its frame, ms from the loss, whether it opened a device, its thread.
+    reopens: Vec<Value>,
+    /// Each failed build a writer is told: frame, session and the device's record of it.
+    writer_errors: Vec<(u64, usize, Arc<Mutex<Failure>>)>,
+    /// The planted loss armed for a resource's build (test-faults).
+    lose_during: Option<String>,
     args: Args,
     plants: Plants,
     path: Path,
@@ -999,7 +1045,14 @@ struct Live {
 }
 
 impl Live {
-    fn new(device: Arc<Device>, args: Args, plants: Plants, path: Path, noop: bool) -> Live {
+    fn new(
+        gpu: Arc<Gpu>,
+        device: Arc<Device>,
+        args: Args,
+        plants: Plants,
+        path: Path,
+        noop: bool,
+    ) -> Live {
         let most = 1 + args
             .events
             .iter()
@@ -1042,7 +1095,14 @@ impl Live {
             op_told: Vec::new(),
             planted_log: Vec::new(),
             shown: vec![(true, true); args.windows.len()],
+            gpu,
             device,
+            frame: 0,
+            loss: None,
+            device_losses: 0,
+            reopens: Vec::new(),
+            writer_errors: Vec::new(),
+            lose_during: None,
             args,
             plants,
             path,
@@ -1346,7 +1406,36 @@ impl Live {
             self.results.release(rev.id);
             return;
         }
+        // #1413: the revision's resources build here, each in an out-of-memory scope, never
+        // inside a frame; a failure is its writer's error, and leaves the check result alone.
+        #[cfg(feature = "test-faults")]
+        let out_of_memory = {
+            let mut oom = false;
+            for b in crate::faults::builds(&rev.doc) {
+                if let Some(f) = crate::faults::build(&self.device, &b, &mut self.lose_during) {
+                    oom |= f.lock().unwrap_or_else(|e| e.into_inner()).code == "out_of_memory";
+                    self.writer_errors.push((self.frame, s, f));
+                }
+            }
+            oom
+        };
+        #[cfg(not(feature = "test-faults"))]
+        let out_of_memory = false;
+        let ses = &mut self.sessions[s];
+        let row = ses
+            .revisions
+            .iter_mut()
+            .find(|r| r.0 == rev.number)
+            .expect("its row");
         row.1 = "current";
+        if self.device.is_lost() {
+            // Its view builds on the reopened device, from this revision.
+            ses.view = None;
+            if let Some(old) = ses.current.replace(rev) {
+                self.results.release(old.id);
+            }
+            return;
+        }
         let before = ses.view.as_ref().map_or(0, View::pipelines);
         ses.settling = Some((rev.number, latched, before));
         let size = ses.size.expect("an admitted revision has its size");
@@ -1354,6 +1443,10 @@ impl Live {
             .frames
             .take()
             .expect("a pending revision holds its frames");
+        // The view's own targets and pipelines are a build too: one out-of-memory scope round
+        // them, popped once they're made.
+        let scope =
+            deep_gpu::device::push_scope(&self.device.device, wgpu::ErrorFilter::OutOfMemory);
         match ses.view.as_mut() {
             None => {
                 match View::new(
@@ -1376,6 +1469,7 @@ impl Live {
                         ses.view = Some(v)
                     }
                     Err(e) => {
+                        let _ = crate::effects::pollster_block(scope.pop());
                         row.1 = "failed";
                         row.2 = vec![issue("no_view", "size", Value::Null, &e)];
                         self.results.release(rev.id);
@@ -1450,11 +1544,99 @@ impl Live {
             }
         }
         let old = ses.current.replace(rev);
+        let view_oom = crate::effects::pollster_block(scope.pop()).map(|e| e.to_string());
         if let Some(old) = old {
-            let writer = ses.writer.clone();
+            let writer = self.sessions[s].writer.clone();
             for r in self.results.retire(old.id) {
                 self.retire(r, &writer);
             }
+        }
+        if let Some(e) = &view_oom {
+            // wgpu names the resource as `label = '…'`; its size isn't in the error.
+            let label = e
+                .split("label = '")
+                .nth(1)
+                .and_then(|l| l.split('\'').next());
+            let f = self.device.failed("out_of_memory", label, None);
+            self.writer_errors.push((self.frame, s, f));
+        }
+        if out_of_memory || view_oom.is_some() {
+            // The view draws the placeholder from this frame: never a resource that doesn't exist.
+            self.fail(s, Rung::Placeholder, Reason::OutOfMemory);
+        }
+    }
+
+    /// A failure sets the session's rung at once, with no pipelines to compile (#1413).
+    fn fail(&mut self, s: usize, to: Rung, reason: Reason) {
+        if let Some(step) = self.sessions[s].ladder.fail(to, reason) {
+            let c = self.record_change(self.frame, s, step, None);
+            self.changes[c].effective = Some(self.frame);
+            self.sessions[s].drawn = to;
+            self.sessions[s].change = None;
+        }
+    }
+
+    /// One reopen of the lost device, off the UI thread: on success every live view rebuilds
+    /// from its documents; after the last scheduled attempt fails, every view takes the
+    /// placeholder rung, told as `device_lost`, until a GPU change tries again.
+    fn reopen(&mut self) {
+        let Some(loss) = self.loss.as_ref() else {
+            return;
+        };
+        let ms = loss.at.elapsed().as_secs_f64() * 1e3;
+        let opened = self.gpu.recover();
+        self.reopens.push(json!({
+            "frame": self.frame, "ms": ms, "ok": opened.is_ok(),
+            "thread": std::thread::current().name().unwrap_or_default(),
+        }));
+        let Ok(device) = opened else {
+            let tight = self.plants.planted == Some(Planted::ReopensTightLoop);
+            let loss = self.loss.as_mut().expect("checked above");
+            loss.attempts += 1;
+            if loss.attempts >= REOPEN_AFTER_S.len() && !loss.gave_up && !tight {
+                loss.gave_up = true;
+                for s in 0..self.sessions.len() {
+                    if self.sessions[s].state == State::Live {
+                        self.fail(s, Rung::Placeholder, Reason::DeviceLost);
+                    }
+                }
+            }
+            return;
+        };
+        self.loss = None;
+        self.device = device;
+        self.kit = Kit::new(&self.device);
+        self.results = Cache::new(self.plants.cache);
+        self.retired.clear();
+        self.last_bound.clear();
+        self.in_flight.clear();
+        self.holds.clear();
+        self.held.clear();
+        self.warming = (!self.plants.compiles_at_swap).then(|| {
+            let device = self.device.clone();
+            self.compile
+                .compile(move || Arc::new(compile_upscale(&device)))
+        });
+        for s in 0..self.sessions.len() {
+            if self.sessions[s].state != State::Live {
+                continue;
+            }
+            let ses = &mut self.sessions[s];
+            ses.view = None;
+            // The current revision is drawn again from its document, unless a newer one waits.
+            let newer = ses.pending.is_some();
+            if let Some(mut rev) = ses.current.take().filter(|_| !newer) {
+                if rev.frames.is_none() {
+                    rev.frames = content_of(&rev.doc, &self.args.look, &mut self.labels).ok();
+                }
+                if rev.frames.is_some() {
+                    ses.pending = Some(rev);
+                }
+            }
+            if ses.ladder.reason() == Reason::DeviceLost {
+                self.fail(s, Rung::Base, Reason::Reopened);
+            }
+            self.latch(s);
         }
     }
 
@@ -1673,8 +1855,8 @@ impl Live {
         memory::drain(&self.device);
         let device_before = memory::allocated(&self.device);
         let mut timer = Timer::new(&self.device);
-        let timed = timer.timed();
-        let period = timer.period_ns().unwrap_or(1.0);
+        let mut timed = timer.timed();
+        let mut period = timer.period_ns().unwrap_or(1.0);
         let events = std::mem::take(&mut self.args.events);
         let mut next_event = 0;
         let mut canonical_queue: Vec<(usize, Purpose, u64, [u32; 2])> = Vec::with_capacity(8);
@@ -1704,6 +1886,9 @@ impl Live {
                 deep_gpu::alloc::start();
             }
             let began = Instant::now();
+            self.frame = frame;
+            let scopes = deep_gpu::device::scopes_pushed();
+            let epoch = self.device.epoch;
             canonical_queue.clear();
             for ses in &mut self.sessions {
                 if let Some(v) = ses.view.as_mut() {
@@ -1768,13 +1953,47 @@ impl Live {
                         shown.0 = visible.unwrap_or(shown.0);
                         shown.1 = focused.unwrap_or(shown.1);
                     }
+                    Event::LoseDevice(None) => self.device.force_loss(),
+                    Event::LoseDevice(Some(label)) => self.lose_during = Some(label.clone()),
+                    Event::GpuChange => self.reopen(),
                 }
                 next_event += 1;
             }
             for s in 0..self.sessions.len() {
-                if self.sessions[s].state == State::Live && self.sessions[s].pending.is_some() {
+                if self.sessions[s].state == State::Live
+                    && self.sessions[s].pending.is_some()
+                    && !self.device.is_lost()
+                {
                     self.latch(s);
                 }
+            }
+            // #1413: a lost device is reopened off the UI thread at 1, 2 and 4 s; the planted
+            // loop tries every frame.
+            if self.device.is_lost() && self.loss.is_none() {
+                self.device_losses += 1;
+                self.loss = Some(Loss {
+                    at: Instant::now(),
+                    attempts: 0,
+                    gave_up: false,
+                });
+            }
+            if let Some(loss) = self.loss.as_ref().filter(|l| !l.gave_up) {
+                let tight = self.plants.planted == Some(Planted::ReopensTightLoop);
+                let due = REOPEN_AFTER_S
+                    .get(loss.attempts)
+                    .is_some_and(|s| loss.at.elapsed().as_secs_f64() >= *s);
+                if tight || due {
+                    self.reopen();
+                }
+            }
+            if self.device.epoch != epoch {
+                timer = Timer::new(&self.device);
+                timed = timer.timed();
+                period = timer.period_ns().unwrap_or(1.0);
+            }
+            if self.loss.is_some() {
+                self.lost_frame(frame, scopes);
+                continue;
             }
 
             // Draw every live view into one encoder, each pass timed.
@@ -1953,10 +2172,10 @@ impl Live {
                 .collect();
             for i in due.into_iter().rev() {
                 let (s, of, _, buffer) = self.held.remove(i);
-                let scope = self
-                    .device
-                    .device
-                    .push_error_scope(wgpu::ErrorFilter::Validation);
+                let scope = deep_gpu::device::push_scope(
+                    &self.device.device,
+                    wgpu::ErrorFilter::Validation,
+                );
                 deep_gpu::alloc::outside(|| self.device.queue.submit([buffer]));
                 self.fence("submit", Some(s), Some(of), None);
                 let error = crate::effects::pollster_block(scope.pop());
@@ -2241,6 +2460,10 @@ impl Live {
             if self.args.reports.memory {
                 extra.insert("memory".into(), self.memory());
             }
+            if self.args.reports.errors {
+                let n = deep_gpu::device::scopes_pushed() - scopes;
+                extra.insert("error_scopes".into(), json!(n));
+            }
             for &(s, purpose, of, size) in &canonical_queue {
                 let c = self.canonical_event(s, purpose, of, size, frame);
                 self.canonicals.push(c);
@@ -2257,6 +2480,56 @@ impl Live {
             });
         }
         self.reply(device_before)
+    }
+
+    /// A frame while the device is lost (#1413): nothing reaches the GPU. Each live view keeps
+    /// what it showed, or once the reopens gave up shows the placeholder, a picture drawn on the
+    /// CPU, which a capture writes as presented.
+    fn lost_frame(&mut self, frame: u64, scopes: u64) {
+        let views_start = self.views.len();
+        let mut finals = Map::new();
+        let mut hashes = Map::new();
+        for s in 0..self.sessions.len() {
+            if self.sessions[s].state != State::Live {
+                continue;
+            }
+            let rung = self.sessions[s].drawn;
+            if rung == Rung::Placeholder && self.args.capture.contains(&frame) {
+                let size = self.sessions[s].size.unwrap_or([1, 1]);
+                let bgra = crate::liveview::placeholder_picture(size);
+                if let Ok(name) = crate::view3d::write_final(&self.args.out, &bgra, size) {
+                    finals.insert(s.to_string(), json!(name));
+                }
+            }
+            hashes.insert(s.to_string(), Value::Null);
+            self.views.push(ViewRow {
+                session: s,
+                rung: Some(rung),
+                settled: true,
+                scale: 1.0,
+                upscale: "none",
+                ..ViewRow::default()
+            });
+        }
+        let mut extra = Map::new();
+        if self.args.reports.hashes {
+            extra.insert("hashes".into(), Value::Object(hashes));
+        }
+        if !finals.is_empty() {
+            extra.insert("finals".into(), Value::Object(finals));
+        }
+        if self.args.reports.errors {
+            let n = deep_gpu::device::scopes_pushed() - scopes;
+            extra.insert("error_scopes".into(), json!(n));
+        }
+        let passes = self.passes.len();
+        self.frames.push(FrameRow {
+            frame,
+            views: (views_start, self.views.len()),
+            passes: (passes, passes),
+            extra,
+            ..FrameRow::default()
+        });
     }
 
     /// The writers' counts, the cache and the device, after the frame's queue drained.
@@ -2428,6 +2701,9 @@ impl Live {
                 if let Some(a) = f.allocs {
                     o["allocs"] = json!(a);
                 }
+                if let Some(n) = f.extra.get("error_scopes") {
+                    o["error_scopes"] = n.clone();
+                }
                 o
             })
             .collect();
@@ -2496,6 +2772,23 @@ impl Live {
         if self.args.reports.errors {
             out["errors"] = json!(self.errors);
         }
+        // #1413: what each writer was told of its failed builds, the cause first.
+        let latest = self.plants.planted == Some(Planted::KeepsLatestError);
+        out["writer_errors"] = self
+            .writer_errors
+            .iter()
+            .map(|(frame, s, f)| {
+                let f = f.lock().unwrap_or_else(|e| e.into_inner());
+                json!({
+                    "frame": frame, "session": sessions[*s].id, "writer": sessions[*s].writer,
+                    "code": if latest { f.latest } else { f.code },
+                    "label": f.label, "bytes": f.bytes, "later_validation": f.later_validation,
+                    "appended": f.appended.iter().map(|c| json!({"code": c})).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+        out["reopens"] = json!(self.reopens);
+        out["device_losses"] = json!(self.device_losses);
         if self.args.reports.meter {
             let mut rows: Vec<Value> = sessions
                 .iter()
