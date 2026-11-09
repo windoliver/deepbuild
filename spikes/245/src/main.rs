@@ -247,7 +247,7 @@ fn stray<'a>(b: usize, written: u64, mine: &[u8], s: impl Fn(usize, usize) -> Op
 #[derive(Clone, Default)]
 struct Sample {
     wall_ns: u64,
-    /// Mapping S into each block's instance, summed over the step's blocks.
+    /// Mapping S into each block's instance and dropping it after the merge, over the step's blocks.
     map_ns: u64,
     /// The page faults each block's first touches took, summed over the step's blocks.
     fault_ns: u64,
@@ -382,14 +382,16 @@ struct File {
     kind: &'static str,
 }
 
-/// An fd sized to the memory, if a private mapping of it works.
+/// An fd sized to the memory, if a private mapping of it works; else why not, on stderr.
 fn sized(fd: libc::c_int) -> Option<libc::c_int> {
     if fd < 0 || unsafe { libc::ftruncate(fd, MEM as libc::off_t) } != 0 {
+        eprintln!("memory file: {}", std::io::Error::last_os_error());
         return None;
     }
     let rw = libc::PROT_READ | libc::PROT_WRITE;
     let p = unsafe { libc::mmap(std::ptr::null_mut(), MEM, rw, libc::MAP_PRIVATE, fd, 0) };
     if p == libc::MAP_FAILED {
+        eprintln!("memory file: no private mapping: {}", std::io::Error::last_os_error());
         unsafe { libc::close(fd) };
         return None;
     }
@@ -414,7 +416,7 @@ impl File {
                 sized(fd).map(|fd| (fd, "tmpfile"))
             })
         };
-        let (fd, kind) = tried.ok_or_else(|| format!("no memory file maps privately: {}", std::io::Error::last_os_error()))?;
+        let (fd, kind) = tried.ok_or("no memory file maps privately")?;
         Ok(File { fd, kind })
     }
 }
@@ -439,6 +441,16 @@ impl Mapped {
         }
         Ok(())
     }
+}
+
+/// Maps fresh zero pages over a block's memory, dropping its private mapping of the memory file.
+fn release(base: usize) -> Result<(), String> {
+    let flags = libc::MAP_FIXED | libc::MAP_PRIVATE | libc::MAP_ANON;
+    let p = unsafe { libc::mmap(base as *mut libc::c_void, MEM, libc::PROT_READ | libc::PROT_WRITE, flags, -1, 0) };
+    if p as usize != base {
+        return Err(format!("mmap: {}", std::io::Error::last_os_error()));
+    }
+    Ok(())
 }
 
 unsafe impl LinearMemory for Mapped {
@@ -682,6 +694,19 @@ fn copy_on_write(module_bytes: &[u8], steps: usize) -> Result<Run, String> {
             for (a, z) in &allowed(b)[..2] {
                 mem[*a..*z].copy_from_slice(&theirs[*a..*z]);
             }
+        }
+        // Drop each block's mapping before join and the next step write S, so no OS charges those
+        // writes a copy for a mapping that is done; the time counts as mapping.
+        let t = Instant::now();
+        for &base in &bases {
+            if let Err(e) = release(base) {
+                failed = Some(e);
+                break;
+            }
+        }
+        x.map_ns += ns(t.elapsed());
+        if failed.is_some() {
+            break;
         }
         match main.run_join(k as i64) {
             Ok(f) => x.join_fuel = f,
