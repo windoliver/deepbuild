@@ -2455,6 +2455,7 @@ dependencies = [
 name = "deep-text-gpui"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas-marks",
  "deep-text",
  "gpui-kit",
 ]
