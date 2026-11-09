@@ -40,6 +40,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         winding_ignores_determinant: p == Some(Planted::WindingIgnoresDeterminant),
         water: deep_scene3d_render::water::Planted {
             foam_keeps_state: p == Some(Planted::WaterFoamKeepsState),
+            calm_ignores_shore: p == Some(Planted::ShoreCalmIgnoresField),
         },
         flare: deep_scene3d_render::flare::Planted {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
@@ -423,6 +424,8 @@ pub struct Drawn {
     /// #166: the view-axis depth, f32 a pixel, and each mirror part's lookup, f32 RGBA.
     pub view_depth: Option<Vec<u8>>,
     pub reflection: Option<Vec<u8>>,
+    /// #268: the water's foam share, f32 a pixel.
+    pub foam: Option<Vec<u8>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -554,6 +557,11 @@ pub fn draw_on(
                 },
                 reflection: if read_targets && !noop {
                     r.read_reflection(&device)
+                } else {
+                    None
+                },
+                foam: if read_targets && !noop {
+                    r.read_foam(&device)
                 } else {
                     None
                 },

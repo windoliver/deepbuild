@@ -693,6 +693,8 @@ pub struct Scene {
     pub water: Option<Arc<crate::water::Water>>,
     /// #166: whether the view reads back each mirror part's lookup (view3d's `reflection`).
     pub read_reflection: bool,
+    /// #268: whether the view reads back the water's foam share (view3d's `foam`).
+    pub read_foam: bool,
     /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
     /// in item order. They draw nothing in the look.
     pub probes: Vec<crate::probe::Probe>,
@@ -720,6 +722,28 @@ impl Scene {
                 .iter()
                 .flat_map(|l| &l.solids)
                 .any(|s| s.material.is_some())
+    }
+
+    /// #268's wrong field, reachable only through `deep-gpu --planted`: the water's shore baked
+    /// with each item's centre standing for where it meets the water.
+    pub fn plant_shore_from_centre(&mut self, doc: &Value) -> Result<(), Refused> {
+        let (Some(map), Some(water)) = (doc.as_object(), self.water.as_mut()) else {
+            return Ok(());
+        };
+        let w = Arc::make_mut(water);
+        let plates: Vec<[f64; 4]> = w.plates.iter().map(|(_, p)| *p).collect();
+        if let Some(shore) = &mut w.shore {
+            shore.field = Some(crate::shore::field(
+                map,
+                &w.material,
+                shore,
+                &self.layers,
+                &plates,
+                w.level,
+                crate::shore::Planted::FromCentre,
+            )?);
+        }
+        Ok(())
     }
 
     /// #420 AC6's wrong programs, reachable only through `deep-gpu --planted`: mesh-edge lines
@@ -1739,6 +1763,8 @@ fn evaluate_any(
     };
     // #166: a wake behind an item a logic array moves, refused at check before anything else.
     crate::water::logic_moved(map)?;
+    // #268: a shore item that anything moves or reshapes, refused at check.
+    crate::shore::static_items(map)?;
     let program = Program::compile(map).map_err(|r| Refused {
         code: r.code,
         path: r.path,
@@ -2876,6 +2902,7 @@ pub(crate) fn evaluate_compiled(
         flare,
         water: None,
         read_reflection: false,
+        read_foam: false,
         probes,
     };
     scene.set_cutaway(cutaway);
@@ -2888,6 +2915,19 @@ pub(crate) fn evaluate_compiled(
             wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
             let times = crate::water::wake_times(t, step, wake.span);
             wake.path = wake_path(map, program, &items, &w.material, &wake.item, &times)?;
+        }
+        // #268: the shore's field, baked once per key.
+        if let Some(shore) = &mut w.shore {
+            let plates: Vec<[f64; 4]> = w.plates.iter().map(|(_, p)| *p).collect();
+            shore.field = Some(crate::shore::field(
+                map,
+                &w.material,
+                shore,
+                &scene.layers,
+                &plates,
+                w.level,
+                crate::shore::Planted::None,
+            )?);
         }
         if scene.mirror.is_none() {
             scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &w);

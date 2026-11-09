@@ -1776,6 +1776,8 @@ pub struct Renderer {
     watering: bool,
     /// #166: view3d's `reflection` target while a frame asks for it: each mirror part's lookup.
     reflection: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
+    /// #268: view3d's `foam` target while a frame asks for it: the water's foam share.
+    foam: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
     /// The pass resolving the geometry pass's object IDs and depth (#1173), and the planted
     /// resolve_accumulates_frames' blend of the previous frame.
     resolve: wgpu::RenderPipeline,
@@ -3214,6 +3216,7 @@ impl Renderer {
             waterer: None,
             watering: false,
             reflection: None,
+            foam: None,
             resolve,
             accumulate,
             compiled: 2,
@@ -4285,6 +4288,22 @@ impl Renderer {
                     "scene3d reflection",
                     internal,
                     water::REFLECTION,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                );
+                let view = texture.create_view(&Default::default());
+                Some((texture, view, internal))
+            }
+            _ => None,
+        };
+        // #268: view3d's `foam` target, made while a frame asks for it.
+        self.foam = match self.foam.take() {
+            Some(f) if scene.read_foam && f.2 == internal => Some(f),
+            _ if scene.read_foam => {
+                let texture = texture2d(
+                    &device.device,
+                    "scene3d foam",
+                    internal,
+                    water::FOAM,
                     wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
                 );
                 let view = texture.create_view(&Default::default());
@@ -6434,9 +6453,10 @@ impl Renderer {
         let linear_texture = t.linear.clone();
         let motion = self.motion_frame.take().map(|m| (m, t.linear.clone()));
         let reflection = self.reflection.as_ref().map(|r| r.1.clone());
+        let foam = self.foam.as_ref().map(|f| f.1.clone());
         let geometry: Job = Box::new(move |encoder| {
-            // #166: the `reflection` target starts each frame at 0.
-            if let Some(view) = &reflection {
+            // #166: the `reflection` target starts each frame at 0, as #268's `foam` does.
+            for view in reflection.iter().chain(&foam) {
                 drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some(GEOMETRY_PASS),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -6626,6 +6646,7 @@ impl Renderer {
                 ids_ms: t.drawn.ids_ms.clone(),
                 depth_ms: t.drawn.depth_ms.clone(),
                 reflection: self.reflection.as_ref().map(|r| r.1.clone()),
+                foam: self.foam.as_ref().map(|f| f.1.clone()),
                 resolve: Box::new(move |encoder, timestamps| {
                     resolve_ids(encoder, &drawn, clear, Some(rect), timestamps)
                 }),
@@ -7370,6 +7391,12 @@ impl Renderer {
     pub fn read_reflection(&self, device: &Device) -> Option<Vec<u8>> {
         let r = self.reflection.as_ref()?;
         read_texture(device, &r.0, r.2, 16)
+    }
+
+    /// #268: view3d's `foam` target, f32 a pixel, rows top-down: the water's foam share.
+    pub fn read_foam(&self, device: &Device) -> Option<Vec<u8>> {
+        let f = self.foam.as_ref()?;
+        read_texture(device, &f.0, f.2, 4)
     }
 
     /// #166: view3d's `depth` target, f32 a pixel, rows top-down: at each pixel's centre, the

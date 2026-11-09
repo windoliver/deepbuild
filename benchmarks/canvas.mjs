@@ -828,6 +828,50 @@ workloads.water = () => {
   }
 };
 
+// #268: the same 1080p lake with its shore on: twelve piles, a quay and a floating deck in its shore's collection
+// (`cell: 0.25`, shade 0.5), against the same plate and items as a plain mirror, so the mirror's own pass is in both;
+// and the field's bake time, the frame row's `shore.bake_ms`, as a reading. The stage is
+// tests/acceptance/268/budgets.test.ts's.
+function shoreStage(water) {
+  const doc = waterStage('lake', water);
+  const wood = { kind: 'material@1', params: { base_color: [0.5, 0.36, 0.24, 1], roughness: 0.8 } };
+  const shapes = { wood, quay: { kind: 'mark.box@1', params: { size: [60, 3, 6] }, at: { pos: [0, -0.5, -40] }, material: 'wood' },
+    deck: { kind: 'mark.box@1', params: { size: [8, 0.2, 6] }, at: { pos: [-10, 0.6, -14] }, material: 'wood' } };
+  for (let k = 0; k < 12; k++) shapes[`pile${k}`] = { kind: 'mark.cylinder@1', params: { size: [1, 3, 1] }, at: { pos: [-15 + 2.7 * k, 0, -20 - 4 * (k % 3)] }, material: 'wood' };
+  for (const id of Object.keys(doc.items)) if (id.startsWith('crate')) delete doc.items[id];
+  let order = Object.keys(doc.items).length;
+  for (const [id, item] of Object.entries(shapes)) doc.items[id] = { ...item, id, name: id, order: `a${String(order++).padStart(3, '0')}`, layer: 'main' };
+  doc.collections = { 'lake-shore': { members: Object.keys(shapes).filter((k) => k !== 'wood') } };
+  return doc;
+}
+workloads['water-shore'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'filmic-268', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const shore = { waves: WATER_WAVES, ripples: { strength: 0.3 }, rain: 50, shore: { items: 'lake-shore', cell: 0.25, shade: 0.5 } };
+    const docs = Object.fromEntries(Object.entries({ shore: shoreStage(shore), mirror: shoreStage(null) }).map(([k, d]) => {
+      const path = join(dir, `${k}.json`);
+      writeFileSync(path, JSON.stringify(d));
+      return [k, path];
+    }));
+    const side = (doc) => ({ call: 'view3d', doc, look, size: FLARE_SIZE, frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [side(docs.shore), side(docs.mirror), { ...side(docs.shore), frames: 1, capture: [0], shore: true, timings: false }] });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [lake, mirror] = answer.replies.slice(0, 2).map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      const water = answer.replies[0].frames.map((f) => f.passes_ms?.['scene3d.water'] ?? 0);
+      return { shore_lake_gpu_ms: Math.max(0, lake - mirror), water_pass_ms: median(water), mirror_gpu_ms: mirror, bake_ms: answer.replies[2].frames[0]?.shore?.bake_ms ?? null };
+    });
+    console.log(JSON.stringify({ task: 'canvas-water-shore', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #896's two boards of a run, the 1,000-item one first; `null` for a run with any other boards.
 const pair = (r) => {
   const [small, large] = r.boards ?? [];
@@ -857,6 +901,7 @@ const EFFICIENCY = {
   'replica-cold-start': { first_settled_ms: (r) => r.ms },
   'canvas-flares-mirrors': { finish_gpu_ms: (r) => r.finish_gpu_ms, flare_gpu_ms: (r) => r.flare_gpu_ms, mirror_share: (r) => r.mirror_share, indexed_target_bytes: (r) => r.indexed_target_bytes },
   'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
+  'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
 };
 const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes']);
 
