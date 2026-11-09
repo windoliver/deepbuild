@@ -161,6 +161,10 @@ pub enum Planted {
     FlareIgnoresOcclusion,
     /// #166: the water's foam carried from frame to frame as simulation state.
     WaterFoamKeepsState,
+    /// #268: the shore's field measured from each item's centre, not where it meets the water.
+    ShoreFieldFromCentre,
+    /// #268: waves at full amplitude by the shore, ignoring its field.
+    ShoreCalmIgnoresField,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -396,6 +400,8 @@ impl Planted {
             "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
+            "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
+            "shore_calm_ignores_field" => Planted::ShoreCalmIgnoresField,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,

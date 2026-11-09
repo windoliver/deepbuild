@@ -58,6 +58,8 @@ struct Args {
     capture: Capture,
     /// #166: each captured frame lists the rain rings alive on each water part.
     rings: bool,
+    /// #268: each captured frame reports the water's shore field: its key, bytes and bake time.
+    shore: bool,
     /// Operator outputs each captured frame reads back (#483).
     read: Vec<String>,
     /// `cull: "cpu"`: the document drawn from the CPU's f64 cull, the reference a GPU frame is
@@ -310,10 +312,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
                 | "backdrop"
                 | "depth"
                 | "reflection"
+                | "foam"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth and reflection",
+            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection and foam",
         ));
     }
     let export = match call["class"].as_str() {
@@ -417,6 +420,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         targets,
         capture,
         rings: call["rings"].as_bool().unwrap_or(false),
+        shore: call["shore"].as_bool().unwrap_or(false),
         read: call["read"]
             .as_array()
             .map(|r| {
@@ -1010,6 +1014,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "backdrop",
         "depth",
         "reflection",
+        "foam",
     ]
     .iter()
     .any(|t| args.targets.contains(*t));
@@ -1191,6 +1196,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 app.planted == Some(Planted::EdgesUnwelded),
                 app.planted == Some(Planted::EdgesSkipDepth),
             );
+            // #268's wrong field: the shore measured from each item's centre.
+            if app.planted == Some(Planted::ShoreFieldFromCentre) {
+                scene
+                    .plant_shore_from_centre(&composed)
+                    .map_err(|r| refused(r.code, r.path))?;
+            }
             let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
             // Each mesh-edge line's segments, in world metres, as `counts` reports them.
             let edge_segments: Map<String, Value> = scene
@@ -1211,6 +1222,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             // #166: each mirror part's lookup, read back as the `reflection` target.
             scene.read_reflection = args.targets.contains("reflection");
+            // #268: the water's foam share, read back as the `foam` target.
+            scene.read_foam = args.targets.contains("foam");
+            let shore = (args.shore)
+                .then(|| {
+                    let w = scene.water.as_ref()?;
+                    let f = w.shore.as_ref()?.field.clone()?;
+                    Some((w.material.clone(), f))
+                })
+                .flatten();
             let rings = (args.rings).then(|| {
                 scene.water.as_ref().map_or(Vec::new(), |w| {
                     w.rings()
@@ -1774,6 +1794,21 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
                 if let Some(rings) = &rings {
                     frame.insert("rings".into(), json!(rings));
+                }
+                if let (Some(f), true) = (&drawn.foam, args.targets.contains("foam")) {
+                    frame.insert("foam".into(), json!(write_named(out, f, "f32")?));
+                }
+                if let Some((material, f)) = &shore {
+                    let bytes: Vec<u8> = f.cells.iter().flat_map(|c| c.to_le_bytes()).collect();
+                    frame.insert(
+                        "shore".into(),
+                        json!({
+                            "material": material,
+                            "key": f.key,
+                            "field": write_named(out, &bytes, "bin")?,
+                            "bake_ms": f.bake_ms,
+                        }),
+                    );
                 }
                 if !args.read.is_empty() {
                     // Each operator output as it stood when this frame drew (#483).
