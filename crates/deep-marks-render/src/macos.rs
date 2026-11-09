@@ -91,6 +91,11 @@ enum Draw {
         bounds: Option<Bounds<Pixels>>,
         image_bounds: Option<Bounds<Pixels>>,
     },
+    /// #499: a video item's frame: its player's pooled NV12 buffer, drawn by the live shader.
+    Surface {
+        buffer: objc2_core_foundation::CFRetained<objc2_core_video::CVPixelBuffer>,
+        bounds: Bounds<Pixels>,
+    },
 }
 
 /// A draw and the rect its masks clip it to.
@@ -104,6 +109,7 @@ struct Canvas {
 fn paint(draw: &Draw, view: Bounds<Pixels>, window: &mut Window) {
     match draw {
         Draw::Quad(q) => window.paint_quad(q.clone()),
+        Draw::Surface { buffer, bounds } => window.paint_surface(*bounds, buffer.clone()),
         Draw::Picture {
             image,
             bounds,
@@ -304,6 +310,12 @@ struct Session {
     /// Each text@1 item's shown string and glyph run on the presented frame, as `raster`
     /// reports them (#140: the app and headless shape the same runs).
     texts: Map<String, Value>,
+    /// #499: each video image item's player, the document time its next source frame starts at
+    /// on screen, whether the next frame shown names its planes, and the run's clock.
+    players: BTreeMap<String, crate::video::Player>,
+    video_until: Option<i64>,
+    hash_next: bool,
+    run_start: Option<Instant>,
 }
 
 fn image_key(asset: &str, crop: Option<[f64; 4]>, opacity: f64) -> ImageKey {
@@ -790,7 +802,18 @@ impl Renderer {
                 seconds,
                 arms_each_vsync,
                 region,
-            } => self.idle(&doc, &look, view, record, seconds, arms_each_vsync, region),
+                store,
+                pans,
+            } => self.idle(
+                &doc,
+                &look,
+                view,
+                record,
+                seconds,
+                arms_each_vsync,
+                region,
+                (store, pans),
+            ),
             Request::Render {
                 out,
                 doc,
@@ -801,16 +824,25 @@ impl Renderer {
                 gpui_oklab,
                 drops_glyph,
                 store,
-            } => self.render(
-                &out,
-                &doc,
-                &look,
-                view,
-                t,
-                record,
-                (gpui_oklab, drops_glyph),
-                store,
-            ),
+                stock_fragment,
+            } => {
+                use gpui_apple::metal_renderer::gpu_surfaces::{plant, Planted};
+                if stock_fragment {
+                    plant(Planted::StockFragment);
+                }
+                let answer = self.render(
+                    &out,
+                    &doc,
+                    &look,
+                    view,
+                    t,
+                    record,
+                    (gpui_oklab, drops_glyph),
+                    store,
+                );
+                plant(Planted::None);
+                answer
+            }
         }
     }
 
@@ -1143,6 +1175,15 @@ impl Renderer {
                     opacity,
                     ..
                 } => {
+                    // #499: a video item draws its player's frame through the live shader.
+                    if let Some(p) = session.players.get(item) {
+                        let to = fit.fitted(*bounds, [p.out.0 as u32, p.out.1 as u32]);
+                        push(Draw::Surface {
+                            buffer: p.surface().clone(),
+                            bounds: rect(to),
+                        });
+                        continue;
+                    }
                     let (image, size) = image_of(session, asset, *crop, *opacity, item)?;
                     let to = fit.fitted(*bounds, size);
                     let (image, image_bounds) = if *sampling == ImageSampling::Linear {
@@ -1215,6 +1256,15 @@ impl Renderer {
             // The window shows the region: every item moved by its origin.
             if let Some(([x, y, ..], _)) = session.region {
                 for item in items.values_mut() {
+                    // #499: an item with no `at.pos` sits at its origin, and moves with the rest.
+                    if item.pointer("/at/pos").is_none() {
+                        if let Some(o) = item.as_object_mut() {
+                            let at = o.entry("at").or_insert_with(|| json!({}));
+                            if let Some(at) = at.as_object_mut() {
+                                at.insert("pos".into(), json!([0.0, 0.0, 0.0]));
+                            }
+                        }
+                    }
                     if let Some(pos) = item.pointer_mut("/at/pos").and_then(Value::as_array_mut) {
                         for (k, o) in [x, y].into_iter().enumerate() {
                             if let Some(p) = pos.get(k).and_then(Value::as_f64) {
@@ -1226,6 +1276,8 @@ impl Renderer {
             }
             (items, valid_until)
         };
+        // #499: each video item in view shows its source frame at t.
+        session.video_until = Self::videos(session, doc, Some(&items), t, view.zoom)?;
         let palette = palette_of(look, view.theme);
         let ty = crate::type_of(look, view.theme);
         let frame = scene::frame_planted(
@@ -1312,7 +1364,7 @@ impl Renderer {
                 ..
             } = &drawn.mark
             {
-                if *sampling != ImageSampling::Linear {
+                if *sampling != ImageSampling::Linear && !session.players.contains_key(item) {
                     let (_, size) = image_of(session, asset, *crop, *opacity, item)?;
                     let to = fit.fitted(*bounds, size);
                     let key = image_key(asset, *crop, *opacity);
@@ -1340,6 +1392,10 @@ impl Renderer {
             .enumerate()
             .map(|(i, key)| {
                 dirty_below |= changed_layers.contains(&frame.layers[i].id);
+                // #499: a layer showing a video is never cached as a picture: its frames move.
+                dirty_below |= frame.layers[i].marks.iter().any(|m| {
+                    matches!(&m.mark, Mark::Image { item, .. } if session.players.contains_key(item))
+                });
                 match session.stable.get(i) {
                     Some((prev, n)) if prev == key && !dirty_below => (*key, n + 1),
                     _ => (*key, 0),
@@ -1485,7 +1541,7 @@ impl Renderer {
                         crop,
                         opacity,
                         ..
-                    } => {
+                    } if !session.players.contains_key(item) => {
                         let (image, _) = image_of(session, asset, *crop, *opacity, item)?;
                         let pixels = image.as_bytes(0).unwrap_or_default();
                         read.images
@@ -1537,6 +1593,114 @@ impl Renderer {
         Ok(())
     }
 
+    /// #499: every video image item of `items` (as the window shows them) at `t`: a player made
+    /// for each, decoding near the size it's drawn, and each in view put on the frame at t. An
+    /// item out of view decodes nothing. The document time the next frame on screen starts at.
+    fn videos(
+        session: &mut Session,
+        doc: &Map<String, Value>,
+        items: Option<&Map<String, Value>>,
+        t: i64,
+        zoom: f64,
+    ) -> Result<Option<i64>, Value> {
+        // A full frame: a player for each video item, holding the item as the window shows it.
+        for (id, item) in items.into_iter().flatten() {
+            let (Some(frames), Some(sha)) = (
+                item.pointer("/params/frames"),
+                item.pointer("/params/asset").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            if item["kind"] != "image@1" || !crate::video::is_video(session.store.as_deref(), sha) {
+                continue;
+            }
+            if !session.players.contains_key(id) {
+                let b = item.pointer("/params/box").and_then(Value::as_array);
+                let side = |k: usize| {
+                    b.and_then(|b| b.get(k)?.as_f64())
+                        .map_or(0, |v| ((v * zoom).round() as usize).max(2))
+                };
+                let store = session.store.clone().unwrap_or_default();
+                let mut player = crate::video::Player::start(&store.join(sha), (side(2), side(3)))
+                    .map_err(|_| {
+                        refused("asset_undecodable", &format!("items/{id}/params/asset"))
+                    })?;
+                let doc_v = Value::Object(doc.clone());
+                player.timing = (
+                    deep_canvas_media::doc::time(&doc_v, frames.get("start")).unwrap_or(0),
+                    deep_canvas_media::doc::time(&doc_v, frames.get("in")).unwrap_or(0),
+                    deep_canvas_media::doc::rate(frames.get("rate")).unwrap_or((1, 1)),
+                );
+                session.players.insert(id.clone(), player);
+            }
+            // In view or not, as the window shows the item: a frame that only a video changes
+            // keeps it, so it reads no item.
+            // The window's region moved items by their `at.pos` only; the item is read back where
+            // the document puts it, against the region, as #1487's clock reads it.
+            let visible = session
+                .region
+                .is_none_or(|([.., w, h], _)| in_view(item, [0.0, 0.0, w, h]));
+            if let Some(p) = session.players.get_mut(id) {
+                p.visible = visible;
+            }
+        }
+        let at_ms = session
+            .run_start
+            .map_or(0.0, |s| s.elapsed().as_secs_f64() * 1000.0);
+        let mut until: Option<i64> = None;
+        let mut shown_any = false;
+        let hash = session.hash_next;
+        for player in session.players.values_mut() {
+            if !player.visible {
+                continue;
+            }
+            let (start, r#in, rate) = player.timing;
+            let src = deep_canvas_media::frames::source_time(t.max(start), start, r#in, rate);
+            let k = player.frame_at(src);
+            if player.show(k, at_ms) {
+                shown_any = true;
+                let planes = hash.then(|| player.planes_hash());
+                if player.log.shown.len() < player.log.shown.capacity() {
+                    player.log.shown.push(crate::video::Shown {
+                        at_ms,
+                        t,
+                        frame: k,
+                        planes,
+                    });
+                }
+            }
+            // The next frame's start, back in document time: start + (src − in) ÷ rate, rounded up.
+            if let Some(next) = player.next_start(k) {
+                let rel = (next - r#in) as i128 * rate.1 as i128;
+                let p = rate.0.max(1) as i128;
+                let at = start as i128 + (rel + p - 1).div_euclid(p);
+                until = Some(until.map_or(at as i64, |u: i64| u.min(at as i64)));
+            }
+        }
+        if shown_any {
+            session.hash_next = false;
+        }
+        Ok(until)
+    }
+
+    /// #499: a frame that only the video items' frames change: each item in view put on its
+    /// frame at `t` and the window's last frame presented again, nothing laid out or painted.
+    fn video_tick(
+        &mut self,
+        session: &mut Session,
+        doc: &Map<String, Value>,
+        t: i64,
+    ) -> Result<(), Value> {
+        let zoom = session.main.as_ref().map_or(1.0, |m| m.zoom);
+        session.video_until = Self::videos(session, doc, None, t, zoom)?;
+        let main = session
+            .main
+            .as_ref()
+            .ok_or_else(|| refused("no_window", ""))?;
+        self.cx.present_again(main.handle);
+        Ok(())
+    }
+
     fn new_session() -> Session {
         Session {
             main: None,
@@ -1563,6 +1727,10 @@ impl Renderer {
             compiled: None,
             last_layers: BTreeMap::new(),
             texts: Map::new(),
+            players: BTreeMap::new(),
+            video_until: None,
+            hash_next: true,
+            run_start: None,
         }
     }
 
@@ -1583,15 +1751,25 @@ impl Renderer {
         seconds: u64,
         arms_each_vsync: bool,
         region: Option<([f64; 4], bool)>,
+        (store, pans): (Option<PathBuf>, Vec<(f64, [f64; 4])>),
     ) -> Value {
         let mut session = Self::new_session();
         session.region = region;
+        session.store = store;
         // The window is the region's size.
         let mut sized = doc.clone();
         if let Some(([.., w, h], _)) = region {
             sized.insert("size".into(), json!([w, h]));
         }
         let doc = &sized;
+        let opening = region.map_or_else(
+            || {
+                let s = doc.get("size").and_then(Value::as_array);
+                let n = |k: usize| s.and_then(|s| s.get(k)?.as_f64()).unwrap_or(0.0);
+                [0.0, 0.0, n(0), n(1)]
+            },
+            |(r, _)| r,
+        );
         let result = (|| -> Result<Value, Value> {
             compile(&mut session, doc)?;
             let pinned_at_0 = record.pinned;
@@ -1599,16 +1777,22 @@ impl Renderer {
             settled();
             let before = usage();
             let start = Instant::now();
+            session.run_start = Some(start);
             let end = start + Duration::from_secs(seconds);
             let vsync = Duration::from_nanos(1_000_000_000 / 60);
             // 705,600,000 flicks a second.
             let at =
                 |flicks: i64| start + Duration::from_nanos((flicks.max(0) as u64) * 10_000 / 7056);
-            let mut drawn = Vec::new();
+            // #499: frames logged into room made before the run, so logging allocates nothing.
+            let mut drawn: Vec<(u64, f64, u64)> = Vec::with_capacity(seconds as usize * 256 + 64);
+            // Each view: its rect, from, to, frames, and the wakeups at its start.
+            let mut views: Vec<([f64; 4], f64, f64, u64, u64)> =
+                vec![(opening, 0.0, 0.0, 0, before.wakeups)];
+            let mut pan = 0;
             let mut frame = 1u64;
             loop {
                 let now = Instant::now();
-                let next = if arms_each_vsync {
+                let doc_next = if arms_each_vsync {
                     Some(now + vsync)
                 } else {
                     [session.valid_until, session.stale_at]
@@ -1617,7 +1801,15 @@ impl Renderer {
                         .min()
                         .map(at)
                 };
-                let wake = next.map_or(end, |n| n.min(end));
+                let video_next = session.video_until.map(at);
+                let pan_next = pans
+                    .get(pan)
+                    .map(|p| start + Duration::from_nanos((p.0.max(0.0) * 1e6) as u64));
+                let wake = [doc_next, video_next, pan_next]
+                    .into_iter()
+                    .flatten()
+                    .min()
+                    .map_or(end, |n| n.min(end));
                 if let Some(wait) = wake.checked_duration_since(now) {
                     std::thread::sleep(wait);
                 }
@@ -1625,15 +1817,79 @@ impl Renderer {
                 if Instant::now() >= end {
                     break;
                 }
+                let at_ms = elapsed.as_secs_f64() * 1000.0;
                 let t = (elapsed.as_nanos() * 7056 / 10_000) as i64;
                 record.pinned = pinned_at_0 + t;
-                self.present(&mut session, doc, look, view, &record, t, false, true)?;
+                let allocs_before = crate::ALLOCATIONS.load(std::sync::atomic::Ordering::Relaxed);
+                let panned = pans.get(pan).filter(|p| at_ms >= p.0).map(|p| p.1);
+                if let Some(rect) = panned {
+                    // Your pan: the window shows the new region from this frame on.
+                    pan += 1;
+                    session.region = Some((rect, false));
+                    session.hash_next = true;
+                    self.present(&mut session, doc, look, view, &record, t, false, true)?;
+                } else if doc_next.is_some_and(|n| n <= Instant::now()) {
+                    self.present(&mut session, doc, look, view, &record, t, false, true)?;
+                } else if session.video_until.is_some_and(|v| v <= t) {
+                    self.video_tick(&mut session, doc, t)?;
+                } else {
+                    continue;
+                }
+                let allocs =
+                    crate::ALLOCATIONS.load(std::sync::atomic::Ordering::Relaxed) - allocs_before;
                 frame += 1;
-                drawn.push(json!({"frame": frame, "at_ms": elapsed.as_secs_f64() * 1000.0}));
+                if drawn.len() < drawn.capacity() {
+                    drawn.push((frame, at_ms, allocs));
+                }
+                match panned {
+                    Some(rect) => {
+                        let wakeups = usage().wakeups;
+                        if let Some(v) = views.last_mut() {
+                            v.2 = at_ms;
+                            v.4 = wakeups - v.4;
+                        }
+                        views.push((rect, at_ms, 0.0, 0, wakeups));
+                    }
+                    None => {
+                        if let Some(v) = views.last_mut() {
+                            v.3 += 1;
+                        }
+                    }
+                }
             }
             let seconds = start.elapsed().as_secs_f64();
             let after = usage();
+            if let Some(v) = views.last_mut() {
+                v.2 = seconds * 1000.0;
+                v.4 = after.wakeups - v.4;
+            }
             let cpu_ms = (after.cpu_ns - before.cpu_ns) as f64 / 1e6;
+            let players: Map<String, Value> = session
+                .players
+                .iter()
+                .map(|(id, p)| {
+                    let shown: Vec<Value> = p.log.shown.iter().map(|s| {
+                        json!({"at_ms": s.at_ms, "t": s.t, "frame": s.frame, "planes": s.planes})
+                    }).collect();
+                    let decodes: Vec<Value> = p
+                        .log
+                        .decodes
+                        .iter()
+                        .map(|(at_ms, k)| json!({"at_ms": at_ms, "frame": k}))
+                        .collect();
+                    (id.clone(), json!({"shown": shown, "decodes": decodes}))
+                })
+                .collect();
+            let views: Vec<Value> = views
+                .iter()
+                .map(|(rect, from, to, frames, wakeups)| {
+                    json!({"rect": rect, "from_ms": from, "to_ms": to, "frames": frames, "wakeups": wakeups})
+                })
+                .collect();
+            let drawn: Vec<Value> = drawn
+                .iter()
+                .map(|(frame, at_ms, allocs)| json!({"frame": frame, "at_ms": at_ms, "allocs": allocs}))
+                .collect();
             Ok(json!({
                 "ok": true, "opened_frames": 1, "seconds": seconds, "frames": drawn.len(),
                 "drawn": drawn, "wakeups": after.wakeups - before.wakeups,
@@ -1641,6 +1897,7 @@ impl Renderer {
                 "cpu_fraction": cpu_ms / (seconds * 1000.0),
                 // A reading only; 0 when the counter reads zero.
                 "energy": { "counter": ENERGY_COUNTER, "nj": after.energy_nj.saturating_sub(before.energy_nj) },
+                "players": players, "views": views,
             }))
         })();
         self.close(session);
@@ -1838,6 +2095,40 @@ impl Renderer {
         self.close(session);
         answer
     }
+}
+
+/// #499: whether a video item's box, at its place, meets `rect`: exactly for an item that isn't
+/// turned, else #1487's bound (a circle holding the box turned about its origin).
+fn in_view(item: &Value, rect: [f64; 4]) -> bool {
+    let n = |p: &str| item.pointer(p).and_then(Value::as_f64);
+    let turned = n("/at/rot")
+        .or_else(|| n("/at/rot/2"))
+        .is_some_and(|r| r != 0.0);
+    let (Some(x), Some(y), Some(w), Some(h)) = (
+        n("/params/box/0"),
+        n("/params/box/1"),
+        n("/params/box/2"),
+        n("/params/box/3"),
+    ) else {
+        return true;
+    };
+    if turned {
+        return deep_canvas_motion::clock::meets(item, &rect);
+    }
+    let (px, py) = (n("/at/pos/0").unwrap_or(0.0), n("/at/pos/1").unwrap_or(0.0));
+    let (sx, sy) = (
+        n("/at/scale/0").unwrap_or(1.0),
+        n("/at/scale/1").unwrap_or(1.0),
+    );
+    let (x0, x1) = (
+        px + (x * sx).min((x + w) * sx),
+        px + (x * sx).max((x + w) * sx),
+    );
+    let (y0, y1) = (
+        py + (y * sy).min((y + h) * sy),
+        py + (y * sy).max((y + h) * sy),
+    );
+    x1 > rect[0] && x0 < rect[0] + rect[2] && y1 > rect[1] && y0 < rect[1] + rect[3]
 }
 
 /// A filled quad: GPUI's `fill`, named apart from the paint's fill.

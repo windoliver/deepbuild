@@ -143,6 +143,10 @@ enum Request {
         /// #1487: the region of the document the window shows, `[x, y, w, h]`, and whether the
         /// planted clock counts every item wherever the view is (the merge base's rule).
         region: Option<([f64; 4], bool)>,
+        /// #499: the content-addressed store a video item's file is read from, and your pans: at
+        /// each run time (ms), the region the window shows from then.
+        store: Option<PathBuf>,
+        pans: Vec<(f64, [f64; 4])>,
     },
     Render {
         out: String,
@@ -156,6 +160,8 @@ enum Request {
         /// #1479 AC1's wrong program: each text's second grapheme left out, silently.
         drops_glyph: bool,
         store: Option<PathBuf>,
+        /// #499 AC14's wrong program: GPUI's stock surface fragment, full-range BT.601.
+        stock_fragment: bool,
     },
 }
 
@@ -934,6 +940,22 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     Some(([x, y, w, h], ignores))
                 }
             },
+            store: store(input.get("store"))?,
+            pans: match input.get("pans") {
+                None => Vec::new(),
+                Some(list) => list
+                    .as_array()?
+                    .iter()
+                    .map(|p| {
+                        let r: Vec<f64> = (p.get("rect")?.as_array()?.iter())
+                            .map(Value::as_f64)
+                            .collect::<Option<_>>()?;
+                        let [x, y, w, h] = r[..] else { return None };
+                        (w > 0.0 && h > 0.0).then_some(())?;
+                        Some((p.get("at_ms")?.as_f64()?, [x, y, w, h]))
+                    })
+                    .collect::<Option<Vec<_>>>()?,
+            },
         },
         "session" => {
             let steps = input
@@ -988,10 +1010,11 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             }
         }
         "render" => {
-            let (gpui_oklab, drops_glyph) = match input.get("planted") {
-                None => (false, false),
-                Some(Value::String(p)) if p == "gpui_oklab_gradient" => (true, false),
-                Some(Value::String(p)) if p == "drops_glyph" => (false, true),
+            let (gpui_oklab, drops_glyph, stock_fragment) = match input.get("planted") {
+                None => (false, false, false),
+                Some(Value::String(p)) if p == "gpui_oklab_gradient" => (true, false, false),
+                Some(Value::String(p)) if p == "drops_glyph" => (false, true, false),
+                Some(Value::String(p)) if p == "stock_bt601_fragment" => (false, false, true),
                 Some(_) => return None,
             };
             Request::Render {
@@ -1004,6 +1027,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 gpui_oklab,
                 drops_glyph,
                 store: store(input.get("store"))?,
+                stock_fragment,
             }
         }
         _ => return None,
@@ -1014,6 +1038,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
 /// The binary's entry (`src/main.rs`): reads the command and answers stdin's lines.
 pub fn main() {
     let command = std::env::args().nth(1).unwrap_or_default();
+    // #499: this binary started as a live view's decode worker.
+    #[cfg(target_os = "macos")]
+    if command == "decode-worker-live" {
+        let args: Vec<String> = std::env::args().skip(2).collect();
+        std::process::exit(deep_codecs::serve_live(&args));
+    }
     if ![
         "frames",
         "session",
@@ -1073,12 +1103,39 @@ pub fn main() {
     let _ = out.flush();
 }
 
+/// #499: the heap allocations the process has made, on every thread.
+pub static ALLOCATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The system allocator, counting each allocation (the binary installs it as the global one).
+pub struct Counting;
+
+// SAFETY: every call goes to the system allocator unchanged; only a counter is added.
+unsafe impl std::alloc::GlobalAlloc for Counting {
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        unsafe { std::alloc::System.alloc(layout) }
+    }
+    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
+        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        unsafe { std::alloc::System.alloc_zeroed(layout) }
+    }
+    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
+        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        unsafe { std::alloc::System.realloc(ptr, layout, size) }
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+        unsafe { std::alloc::System.dealloc(ptr, layout) }
+    }
+}
+
 mod asset;
 pub mod gpu;
 mod graphs;
 pub mod layer;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "macos")]
+mod video;
 mod place;
 mod raster;
 mod status;

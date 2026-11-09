@@ -27,6 +27,9 @@ pub enum Planted {
     DividesAlpha = 1,
     /// Draws every surface after the rest of the scene, over whatever was painted above it.
     AfterScene = 2,
+    /// DeepBuild patch (windoliver/deepbuild#499): an NV12 surface drawn by GPUI's stock fragment,
+    /// full-range BT.601, whatever its tags.
+    StockFragment = 3,
 }
 
 pub type Hook = Arc<dyn Fn(Event) + Send + Sync>;
@@ -53,6 +56,7 @@ pub(super) fn planted() -> Planted {
     match PLANTED.load(Ordering::SeqCst) {
         1 => Planted::DividesAlpha,
         2 => Planted::AfterScene,
+        3 => Planted::StockFragment,
         _ => Planted::None,
     }
 }
