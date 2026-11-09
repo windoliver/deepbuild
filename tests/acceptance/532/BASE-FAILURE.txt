@@ -1,0 +1,69 @@
+# #532 acceptance suite at the base: this worktree's HEAD a3efe5c80f7844578c11ff5539f4943e5999e0f4 (it holds 42319109,
+# "Merge pull request #1745 … issue-531"; clean but for tests/acceptance/532 added)
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/532 --testTimeout=600000 --no-file-parallelism
+# Result: 17 of 17 tests fail (6 of 6 files), every one for the missing surface. Nothing is BLOCKED. The base's
+# deep-logic builds and runs, and answers:
+#   - each call this suite adds (determinism, budget, golden, view) with {"ok":false,"code":"bad_input"};
+#   - an item naming `assets` with logic_refused ("assets isn't built yet in logic@1");
+#   - each planted name by exiting 2 after one {"ok":false,"code":"bad_input"} line (read as "exits 0" failing, or
+#     "exited" for the live view).
+# Skipped at the base by the tests' own order, since the Mac leg fails first on a missing call: criterion 1's big
+# bakes (an earlier run that baked first timed out after 30 minutes under a load average near 300, so the tests now
+# call determinism first), criterion 2's Linux x86_64 build and run in Docker and its headless Chrome run, and
+# criterion 5's straight bake.
+# After this run, live() in helpers.ts gained a stdin error handler (the planted ac05 test had also raised an
+# unhandled EPIPE writing to the exited process); ac05 run alone again: the same 3 failures, no unhandled error.
+
+ RUN  v5.0.5 tests/acceptance/532
+ ❯ ac01-flock-determinism.test.ts (2 tests | 2 failed) 6385ms
+   ❯ #532.9d44e928 the flock replays exactly: run twice, from each checkpoint and at 1,000 seeks (2)
+     × #532.9d44e928 run twice, replayed from each checkpoint and at 1,000 seeks in random order, the flock gives playing's full-state hashes, step hashes and continuation probes, and logic.determinism passes 1266ms
+     × #532.9d44e928 a planted checkpoint that leaves out the globals (checkpoint_drops_globals) fails on the full-state hash of the first checkpoint after the seek, and logic.determinism names that checkpoint and the first step that differs 16ms
+ ❯ ac02-budget-golden.test.ts (3 tests | 3 failed) 7982ms
+   ❯ #532.635473e1 logic.budget holds each step to half its fuel, and the flock's golden holds on Linux x86_64 and in the web player (3)
+     × #532.635473e1 logic.budget fails the program whose step 7 used more than half its fuel, naming that step, and passes the flock 1162ms
+     × #532.635473e1 the flock's golden recorded on macOS verifies on Linux x86_64 step for step, under the same bake key 1777ms
+     × #532.635473e1 the flock's golden recorded on macOS matches the web player's bake in headless Chrome step for step 95ms
+ ❯ ac03-private-flag.test.ts (3 tests | 3 failed) 5821ms
+   ❯ #532.09272844 a private flag in memory: only full-state hashes and the Reveal probe see a restore that loses it (3)
+     × #532.09272844 with A pressed and no Reveal, logic.determinism passes the program 1459ms
+     × #532.09272844 a planted restore that zeroes the flag (restore_keeps_regions_only) keeps every step hash and array and fails logic.determinism on the full-state hash of checkpoint 120 and on the Reveal probe, naming flag.shown 606ms
+     × #532.09272844 a planted check that compares step hashes alone (check_compares_step_hashes) passes that planted restore 7ms
+ ❯ ac06-fixed-cost.test.ts (2 tests | 2 failed) 9157ms
+   ❯ #532.de739d63 logic.budget counts each item's fixed cost of a step apart from its fuel (2)
+     × #532.de739d63 idle items doubled from 1,000 until their summed fixed cost passes 4 ms: every fuel share is 0, the report names the cost per item step on the app, and logic.budget on [app] fails, naming the count and the cost 1098ms
+     × #532.de739d63 a planted budget that sums only fuel (budget_sums_fuel_only) passes the items past 4 ms and fails the criterion 127ms
+ ❯ ac04-assets.test.ts (4 tests | 4 failed) 5862ms
+   ❯ #532.fb0103f2 data assets are copied into memory once, before the start function, and are then the program's state (4)
+     × #532.fb0103f2 a 64 KiB asset is read from assets_at in the start function and at step 0, and seeking from each checkpoint gives the straight run's full-state hashes 797ms
+     × #532.fb0103f2 a set of assets that passes the end of memory, or overlaps the write region, is refused at check, naming the asset 242ms
+     × #532.fb0103f2 swapping the asset for another changes the bake's key, and the same asset keeps it 110ms
+     × #532.fb0103f2 a planted restore that copies the asset again (restore_copies_assets) fails logic.determinism on the full-state hash of the first checkpoint after the seek 201ms
+ ❯ ac05-seek-frames.test.ts (3 tests | 3 failed) 9978ms
+   ❯ #532.67c825d1 a seek across a fork runs its steps across frames on the render worker, within 4 ms a frame (3)
+     × #532.67c825d1 a seek to 2 s, a wind change there and a seek to 50 s run 2,880 steps, each frame's simulate phase within 4 ms and its UI thread under 2 ms, stale until the 50 s frame lands on a straight run's full-state hash 2205ms
+     × #532.67c825d1 a second seek, to 10 s, made after the steps pass 10 s and before the 50 s frame lands, lands within one checkpoint spacing of steps 11ms
+     × #532.67c825d1 a planted simulate phase that runs all 2,880 steps in one frame (simulate_runs_all_steps) passes 4 ms in that frame and fails, naming the frame 356ms
+
+First failure of each test (in file order):
+  ac01 1: logic.determinism of the flock ran (ok: true): {"ok":false,"code":"bad_input"}
+  ac01 2: deep-logic --planted checkpoint_drops_globals on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+  ac02 1: logic.budget of hungry ran (ok: true): {"ok":false,"code":"bad_input"}
+  ac02 2: the golden recorded on this Mac recorded a golden (ok: true): {"ok":false,"code":"bad_input"}
+  ac02 3: the golden recorded on this Mac recorded a golden (ok: true): {"ok":false,"code":"bad_input"}
+  ac03 1: logic.determinism ran (ok: true): {"ok":false,"code":"bad_input"}
+  ac03 2: deep-logic --planted restore_keeps_regions_only on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+  ac03 3: deep-logic --planted restore_keeps_regions_only --planted check_compares_step_hashes on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+  ac04 1: the bake baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"atlas","refusals":[{"rule":"field","what":"assets isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"assets"}]}
+  ac04 2: an asset that fits is admitted: {"ok":false,"code":"logic_refused",… the same refusal}
+  ac04 3: the bake baked the piece (ok: true): {"ok":false,"code":"logic_refused",… the same refusal}
+  ac04 4: deep-logic --planted restore_copies_assets on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+  ac05 1: view opened the flock with no bake: {"ok":false,"code":"bad_input"}
+  ac05 2: view opened the flock with no bake: {"ok":false,"code":"bad_input"}
+  ac05 3: view opened the flock with no bake: {"ok":false,"code":"exited","stderr":""}
+  ac06 1: logic.budget of 1000 idle items ran (ok: true): {"ok":false,"code":"bad_input"}
+  ac06 2: deep-logic --planted budget_sums_fuel_only on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ Test Files  6 failed (6)
+      Tests  17 failed (17)
+   Duration  51.72s (tests 98%, transform 2%, import 1%)

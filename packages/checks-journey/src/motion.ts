@@ -5,7 +5,7 @@
 // scales or turns fails, naming the element.
 import type { Locator } from './journey.js';
 
-export interface Control { role: string; name: string; testId?: string }
+interface Control { role: string; name: string; testId?: string }
 export interface Animation { target: Control; property: string; from: string; to: string; duration: number; delay: number; easing: string }
 interface MotionRequirement { target: Locator; properties: Record<string, { from: string; to: string }>; durationMs: number; delayMs: number; easing: string }
 type MotionOutcome =

@@ -1,0 +1,23 @@
+{
+ "runs": 400,
+ "cpuMsHistogram": {
+  "10": 11,
+  "20": 164,
+  "30": 191,
+  "40": 34
+ },
+ "verdicts": {
+  "fix": {
+   "PASS": 200
+  },
+  "main": {
+   "PASS": 194,
+   "preflight: cpuMs N regressed beyond base N + N%": 6
+  }
+ },
+ "load1m": [
+  66.84,
+  58.86
+ ],
+ "node": "v24.22.0"
+}
