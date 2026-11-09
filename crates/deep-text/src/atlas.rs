@@ -20,8 +20,9 @@ const GUTTER: u32 = 1;
 /// The most pages the atlas holds: a glyph with no room on them waits for [`Atlas::make_room`],
 /// so varied sizes and texts over a long run cost 8 MB at most (canvas primitives: Text, Cost).
 pub const PAGES: usize = 8;
-/// The largest device size the atlas rasterizes; text above it is the path renderer's (R6).
-const MAX_DEVICE_SIZE: f32 = 256.;
+/// The largest device size the atlas rasterizes. Text above about 64 device px draws as paths
+/// from its outlines (#1479); a glyph with no outline draws from the atlas at this size, scaled.
+pub const MAX_DEVICE_SIZE: f32 = 256.;
 /// The smallest raster size text in depth takes.
 const MIN_RASTER: f64 = 4.;
 /// Sub-pixel steps a device pixel splits into, on each axis: a glyph rasterizes at its pen
