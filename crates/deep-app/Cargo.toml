@@ -145,6 +145,12 @@ path = "../../tests/acceptance/1141/app/memory.rs"
 name = "acceptance_1510"
 path = "../../tests/acceptance/1510/app/card.rs"
 
+# Issue #1738: a session's task title shown as data on every surface that draws it, written blind in
+# tests/acceptance/1738.
+[[test]]
+name = "acceptance_1738"
+path = "../../tests/acceptance/1738/app/titles.rs"
+
 # Issue #995: the canvas panel's acceptance test, written blind in tests/acceptance/995. A binary of its own, so its
 # process holds the one panel and nothing another test allocated; it draws the panel in a headless window, and AppKit
 # needs the main thread, so no libtest harness.
