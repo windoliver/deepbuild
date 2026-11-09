@@ -1,0 +1,126 @@
+Base: dd83ac2f ("Merge pull request #1692 ..."), with tests/acceptance/531's README.md, helpers.ts, tsconfig.json,
+wat/ and rules/ restored from 9e44bd99 (not committed). Run 2026-11-08 on macOS arm64, Node 24.22.2, rustup's cargo
+1.99.1:
+
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/531-redraft-ac11 --no-file-parallelism
+
+2 tests, 2 failed, both for the missing surface: the checkout has no deep-logic binary. Before that, in each test,
+budget/ built for wasm32-unknown-unknown with debug info, the 531 suite's assembler listed it, and the harness checks
+on it passed (the sidecar holds the .debug_* sections; step calls no function and holds three loops). Not run past
+this point: the bake, logic.budget and the twin have never run against a deep-logic that has them.
+
+----
+
+ RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/github-issue-531-dba4b3/agent-ae2eb03666889fc20/tests/acceptance/531-redraft-ac11
+
+ ❯ budget-lines.test.ts (2 tests | 2 failed) 4034ms
+   ❯ #531 criterion 11: logic.budget names the worst step's three costliest source lines (2)
+     × #531.6b6fc913 the worst step's loops at rules.rs:10, 20 and 30 (3,000, 2,000 and 1,000 iterations) are logic.budget's three lines, in that order, each with its fuel 8ms
+     × #531.6b6fc913 twin: budget_charges_function_first_line names one line, step's first, and fails 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budget-lines.test.ts > #531 criterion 11: logic.budget names the worst step's three costliest source lines > #531.6b6fc913 the worst step's loops at rules.rs:10, 20 and 30 (3,000, 2,000 and 1,000 iterations) are logic.budget's three lines, in that order, each with its fuel
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native ../531/helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin ../531/helpers.ts:298:39
+ ❯ onMac ../531/helpers.ts:304:24
+ ❯ bake budget-lines.test.ts:59:19
+ ❯ budget-lines.test.ts:109:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  budget-lines.test.ts > #531 criterion 11: logic.budget names the worst step's three costliest source lines > #531.6b6fc913 twin: budget_charges_function_first_line names one line, step's first, and fails
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native ../531/helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin ../531/helpers.ts:298:39
+ ❯ onMac ../531/helpers.ts:304:24
+ ❯ bake budget-lines.test.ts:59:19
+ ❯ budget-lines.test.ts:114:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  17:32:27
+   Duration  4.57s (tests 96%, import 2%, transform 1%)
+

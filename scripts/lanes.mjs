@@ -234,6 +234,8 @@ timed.push('tests/acceptance/1546/ac4-needs-you.live.test.ts');
 alone.push('tests/acceptance/1348/');
 // #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.
 alone.push('tests/acceptance/1479/');
+// #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
+alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests/acceptance/531-redraft-ac12/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
