@@ -49,6 +49,8 @@ pub struct Player {
     scratch: Vec<u8>,
     /// The source frame on screen.
     pub showing: Option<usize>,
+    /// The frame asked of the worker and not yet read.
+    pending: Option<usize>,
     pub log: Log,
     /// Whether the item meets the view, and its `frames` start, in and rate.
     pub visible: bool,
@@ -166,6 +168,7 @@ impl Player {
             buffer,
             scratch: vec![0; out.0 * out.1 * 3 / 2],
             showing: None,
+            pending: None,
             visible: true,
             timing: (0, 0, (1, 1)),
             log: Log {
@@ -180,24 +183,39 @@ impl Player {
         &self.buffer
     }
 
-    /// Puts source frame `k` on screen, decoding it in the worker into the buffer on screen; false when it is already there or the worker failed. Allocates nothing.
-    pub fn show(&mut self, k: usize, at_ms: f64) -> bool {
-        if self.showing == Some(k) || k >= self.pts.len() {
+    /// Asks the worker for source frame `k`, unless it is already asked for.
+    fn ask(&mut self, k: usize, at_ms: f64) -> bool {
+        if self.pending == Some(k) {
+            return true;
+        }
+        if self.pending.is_some() && !self.answer() {
             return false;
         }
         if self.log.decodes.len() < self.log.decodes.capacity() {
             self.log.decodes.push((at_ms, k));
         }
-        if self.stdin.write_all(&(k as u32).to_le_bytes()).is_err() {
-            return false;
-        }
+        let asked = self.stdin.write_all(&(k as u32).to_le_bytes()).is_ok();
+        self.pending = asked.then_some(k);
+        asked
+    }
+
+    /// Reads the worker's answer to the frame asked for into `scratch`.
+    fn answer(&mut self) -> bool {
+        self.pending = None;
         let mut head = [0u8; 8];
-        if self.stdout.read_exact(&mut head).is_err()
-            || self.stdout.read_exact(&mut self.scratch).is_err()
-        {
+        self.stdout.read_exact(&mut head).is_ok()
+            && self.stdout.read_exact(&mut self.scratch).is_ok()
+            && u32_at(&head, 4) == 1
+    }
+
+    /// Puts source frame `k` on screen, decoding it in the worker into the buffer on screen, and
+    /// asks for the frame after it, so the worker decodes that while this one shows; false when
+    /// it is already there or the worker failed. Allocates nothing.
+    pub fn show(&mut self, k: usize, at_ms: f64) -> bool {
+        if self.showing == Some(k) || k >= self.pts.len() {
             return false;
         }
-        if u32_at(&head, 4) != 1 {
+        if !self.ask(k, at_ms) || !self.answer() {
             return false;
         }
         let (w, h) = self.out;
@@ -221,6 +239,10 @@ impl Player {
             CVPixelBufferUnlockBaseAddress(buffer, CVPixelBufferLockFlags(0));
         }
         self.showing = Some(k);
+        // The next frame decodes in the worker meanwhile; `scratch` keeps this one until it's read.
+        if k + 1 < self.pts.len() {
+            self.ask(k + 1, at_ms);
+        }
         true
     }
 
@@ -253,6 +275,10 @@ impl Player {
 
 impl Drop for Player {
     fn drop(&mut self) {
+        // A frame asked ahead is read first, or the worker blocks writing it and never quits.
+        if self.pending.is_some() {
+            self.answer();
+        }
         let _ = self.stdin.write_all(&u32::MAX.to_le_bytes());
         let _ = self.child.wait();
     }
