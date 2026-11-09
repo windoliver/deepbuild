@@ -232,6 +232,8 @@ timed.push('tests/acceptance/1546/ac4-needs-you.live.test.ts');
 
 // #1348's suite runs the plain words lane, which builds and draws its fixture run in the replica: one file at a time.
 alone.push('tests/acceptance/1348/');
+// #505's files each build deep-canvas-render (and its formula file deep-show): one file at a time.
+alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
 // #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.
 alone.push('tests/acceptance/1479/');
 // #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.

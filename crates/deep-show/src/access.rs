@@ -60,7 +60,12 @@ pub(crate) fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
         "description": text(doc.get("description")),
     })];
     for (id, item) in heard(doc, hidden) {
-        nodes.push(json!({"id": id, "role": item["role"], "name": text(item.get("name"))}));
+        // #505: a formula's accessible name is its source text (Vector and formula: `alt`).
+        let alt = (item.get("kind").and_then(Value::as_str) == Some("vector@1"))
+            .then(|| item.pointer("/params/alt"))
+            .flatten();
+        let name = text(alt.or(item.get("name")));
+        nodes.push(json!({"id": id, "role": item["role"], "name": name}));
     }
     if let Some(controls) = doc.get("controls").and_then(Value::as_object) {
         for (id, control) in controls {
