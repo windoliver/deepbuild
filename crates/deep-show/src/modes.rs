@@ -412,6 +412,8 @@ impl Hub<'_> {
                     edges: None,
                     over: false,
                     joined: false,
+                    dash: [0.0; 2],
+                    dash_world: false,
                 }],
                 points: Vec::new(),
                 labels: Vec::new(),
