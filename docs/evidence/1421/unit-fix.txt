@@ -1,0 +1,24 @@
+✔ quantiles and peak memory preserve values under reordered samples (12.359659ms)
+✔ native peak RSS parses bytes on macOS and KiB on Linux without accepting missing readings (0.510066ms)
+✔ CPU time parses user plus system seconds on macOS and Linux without accepting missing readings (0.304529ms)
+✔ a measured command reports the CPU it used, not the time it waited (744.376059ms)
+✔ first measurement names its reason, while established budgets cannot disappear or change (0.547155ms)
+✔ a cap, or a p50 or peak-memory regression, fails even when another metric improves (0.114433ms)
+✔ a slow tail alone is not a regression, while p95 keeps its absolute cap (0.430962ms)
+✔ real process measurements reject a slower program and a failed command (2588.547127ms)
+✔ current and merge-base samples alternate, so both see the same machine load (287.951244ms)
+✔ a single workload measurement keeps failed check output and status for later lanes (87.048175ms)
+✔ a run stopped at its timeout or output limit leaves no process it started (5302.532791ms)
+✔ the measured preflight workload has its own frozen time and peak-memory budgets (0.938133ms)
+✔ a CPU reading of 0 is a run shorter than time's 10 ms resolution, not a missing one (#1421) (0.832916ms)
+✔ an established harness budget cannot disappear or change, so it can never switch its lane off (0.366642ms)
+✔ a budget counts on any reference Mac and is a reading on any other (1.94441ms)
+﹣ a command counts whole however its children were started (0.08864ms) # SKIP
+ℹ tests 16
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 9186.519757
