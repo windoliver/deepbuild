@@ -103,7 +103,10 @@ pub fn runs(line: &str, cwd: Option<&Path>, home: &Path) -> Vec<Run> {
     if cfg!(feature = "plant-issue-spellings") {
         return spelled(line, cwd);
     }
-    let mut reader = Reader { runs: Vec::new() };
+    let mut reader = Reader {
+        runs: Vec::new(),
+        written: Vec::new(),
+    };
     let mut ctx = Ctx {
         cwd: cwd.map(Path::to_path_buf),
         home: home.to_path_buf(),
@@ -993,6 +996,10 @@ const KEYWORDS: &[&str] = &[
 
 struct Reader {
     runs: Vec<Run>,
+    /// The files the line has written so far, in order, as their paths or, where the folder can't be known, as the
+    /// line spells them: each with the text it now holds when the reader knows all of it (a `>` of what `echo`,
+    /// `printf` or `cat` of a heredoc prints).
+    written: Vec<(PathBuf, Option<String>)>,
 }
 
 impl Reader {
@@ -1258,6 +1265,10 @@ impl Reader {
         }
         match op {
             ">" | ">>" | ">|" | "&>" | "&>>" | "<>" => {
+                if let Some(t) = value.text.as_deref() {
+                    self.written
+                        .push((ctx.path(t).unwrap_or_else(|| PathBuf::from(t)), None));
+                }
                 if let Some(path) = value.text.as_deref().and_then(|t| ctx.path(t)) {
                     writes.push(path);
                 }
@@ -1265,6 +1276,8 @@ impl Reader {
             // `>&file` writes the file; `>&2` and `>&-` only move a descriptor.
             ">&" => match value.text.as_deref() {
                 Some(t) if !t.is_empty() && t != "-" && !t.chars().all(|c| c.is_ascii_digit()) => {
+                    self.written
+                        .push((ctx.path(t).unwrap_or_else(|| PathBuf::from(t)), None));
                     if let Some(path) = ctx.path(t) {
                         writes.push(path);
                     }
@@ -1326,6 +1339,10 @@ impl Reader {
         let mut writes = Vec::new();
         let mut reads = Vec::new();
         let mut stdin = ctx.stdin.clone();
+        let from = self.written.len();
+        let plain = redirs
+            .iter()
+            .all(|(op, ..)| !op.contains('>') || matches!(*op, ">" | ">|"));
         for (op, target, body) in redirs {
             self.redirection(op, target, body, ctx, (&mut writes, &mut reads), &mut stdin);
         }
@@ -1351,6 +1368,10 @@ impl Reader {
                 .filter_map(|(name, value)| value.text.clone().map(|t| (name.clone(), t))),
         );
         let printed = printed(&argv, &stdin, ctx);
+        // What a lone `>` writes is known when the command prints known text.
+        if let (true, [(_, text)], Feed::Text(t)) = (plain, &mut self.written[from..], &printed) {
+            *text = Some(t.clone());
+        }
         self.resolve(argv.clone(), env, ctx, stdin, (writes, reads));
         self.builtin(&argv, ctx);
         printed
@@ -1519,7 +1540,7 @@ impl Reader {
                     } else if a == "-C" || a == "--chdir" {
                         cwd = text(k + 1).and_then(|d| within(&cwd, &d));
                         k += 2;
-                    } else if a == "-S" || a == "--split-string" {
+                    } else if a == "--split-string" || env_split(&a) == Some("") {
                         match text(k + 1) {
                             Some(s) => spliced = Some((s, k + 2)),
                             None if argv.get(i + 2 + k).is_some() => {
@@ -1528,10 +1549,7 @@ impl Reader {
                             None => {}
                         }
                         break;
-                    } else if let Some(s) = a
-                        .strip_prefix("--split-string=")
-                        .or(a.strip_prefix("-S").filter(|s| !s.is_empty()))
-                    {
+                    } else if let Some(s) = a.strip_prefix("--split-string=").or(env_split(&a)) {
                         spliced = Some((s.to_string(), k + 1));
                         break;
                     } else if a == "-u" || a == "--unset" || a == "-P" {
@@ -1546,6 +1564,10 @@ impl Reader {
                     } else {
                         break;
                     }
+                }
+                // A word the line computes where env reads its options may be `-S` and the program it splits.
+                if text(k).is_none() && argv.get(i + 1 + k).is_some() {
+                    unread = Some(Unread::Computed);
                 }
                 if unread.is_some() {
                     break;
@@ -1741,14 +1763,9 @@ impl Reader {
                 continue;
             }
             // A project's runner runs the command after its options in the project's environment.
-            if RUNNERS.iter().any(|n| is(n)) && text(0).as_deref() == Some("run") {
-                let mut k = 1;
+            let runner_options = |mut k: usize| {
                 while let Some(a) = text(k) {
-                    if a == "--" {
-                        k += 1;
-                        break;
-                    }
-                    if !a.starts_with('-') || a == "-" {
+                    if !a.starts_with('-') || a == "-" || a == "--" {
                         break;
                     }
                     k += if RUNNER_VALUED.contains(&a.as_str()) {
@@ -1756,6 +1773,38 @@ impl Reader {
                     } else {
                         1
                     };
+                }
+                k
+            };
+            let run = runner_options(0);
+            if RUNNERS.iter().any(|n| is(n)) && text(run).as_deref() == Some("run") {
+                let mut k = runner_options(run + 1);
+                if text(k).as_deref() == Some("--") {
+                    k += 1;
+                }
+                // `hatch run test:pytest` names the environment before the command.
+                if is("hatch") {
+                    if let Some(Val { text: Some(t), .. }) = argv.get_mut(i + 1 + k) {
+                        if let Some((_, command)) = t.split_once(':') {
+                            *t = command.to_string();
+                        }
+                    }
+                }
+                // An option the list doesn't know may take a value, so a shell or an interpreter named later is
+                // read as the command too.
+                for at in i + 2 + run..argv.len() {
+                    let (later, _) = program(&argv[at]);
+                    if at != i + 1 + k
+                        && (SHELLS.contains(&later.as_str()) || interpreter(&later).is_some())
+                    {
+                        self.resolve(
+                            argv[at..].to_vec(),
+                            env.clone(),
+                            ctx,
+                            stdin.clone(),
+                            (Vec::new(), Vec::new()),
+                        );
+                    }
                 }
                 i += 1 + k;
                 continue;
@@ -1879,7 +1928,7 @@ impl Reader {
                     unread = self.piped(&stdin, ctx, &cwd, &env);
                 } else {
                     match text(k) {
-                        Some(file) => unread = self.file(&file, ctx, &cwd, &env),
+                        Some(file) => unread = self.file(&file, true, ctx, &cwd, &env),
                         None => unread = Some(Unread::Computed),
                     }
                 }
@@ -1887,7 +1936,7 @@ impl Reader {
             }
             if is("source") || is(".") {
                 match text(0) {
-                    Some(file) => unread = self.file(&file, ctx, &cwd, &env),
+                    Some(file) => unread = self.file(&file, true, ctx, &cwd, &env),
                     None if argv.get(i + 1).is_some() => unread = Some(Unread::Computed),
                     None => {}
                 }
@@ -1939,7 +1988,9 @@ impl Reader {
                     },
                     Program::File(None) => unread = Some(Unread::Computed),
                     Program::File(Some(f))
-                        if f.starts_with("https://") || f.starts_with("http://") =>
+                        if ["https://", "http://"].iter().any(|s| {
+                            f.get(..s.len()).is_some_and(|p| p.eq_ignore_ascii_case(s))
+                        }) =>
                     {
                         unread = Some(Unread::Fetched)
                     }
@@ -1964,7 +2015,7 @@ impl Reader {
         let Some(first) = argv.get(i) else { return };
         // A program named by its path may be a script: what it runs is read from the file.
         if let Some(path) = first.text.as_deref().filter(|t| t.contains('/')) {
-            unread = unread.or(self.file(path, ctx, &cwd, &env));
+            unread = unread.or(self.file(path, false, ctx, &cwd, &env));
         }
         let (program, glob) = program(first);
         let args: Vec<Arg> = argv[i + 1..]
@@ -2006,37 +2057,68 @@ impl Reader {
     }
 
     /// Reads the script file `name` the line runs, in `cwd` with `env`, as a shell started by this line: a text
-    /// file of at most SCRIPT bytes, with no `#!` line or one that names a shell. One the line writes before it
-    /// runs it, or names before it while it doesn't exist yet, as `curl -o f … && sh f` does, is unread.
+    /// file of at most SCRIPT bytes, with no `#!` line or one that names a shell. One the line writes before it is
+    /// read as the text written when the reader knows it, and is unread otherwise. So is one an earlier command names
+    /// while it doesn't exist yet, as `curl -o f … && sh f` does: any command when a shell runs it, a fetcher's when
+    /// it runs by its path (`gcc -o hello … && ./hello` runs what it built). Where the folder can't be known, a file
+    /// whose path ends as `name` does counts as it.
     fn file(
         &mut self,
         name: &str,
+        shell: bool,
         ctx: &Ctx,
         cwd: &Option<PathBuf>,
         env: &[(String, String)],
     ) -> Option<Unread> {
         let mut at = ctx.clone();
         at.cwd = cwd.clone();
-        let path = at.path(name)?;
-        let key = same_name(&lexical(&path).to_string_lossy());
-        let is = |p: &Path| same_name(&lexical(p).to_string_lossy()) == key;
-        let written = self.runs.iter().any(|run| run.writes.iter().any(|w| is(w)));
-        let named = || {
-            self.runs.iter().any(|run| {
-                run.args.iter().filter_map(|a| a.text.as_deref()).any(|a| {
-                    let a = Path::new(a);
-                    is(&a
-                        .is_absolute()
-                        .then(|| a.to_path_buf())
-                        .or(run.cwd.as_ref().map(|c| c.join(a)))
-                        .unwrap_or_default())
-                })
-            })
+        let path = at.path(name);
+        let is = |p: &Path, from: Option<&PathBuf>| {
+            let p = match (p.is_absolute(), from) {
+                (false, Some(dir)) => dir.join(p),
+                _ => p.to_path_buf(),
+            };
+            match &path {
+                Some(path) if p.is_absolute() => {
+                    same_name(&lexical(&p).to_string_lossy())
+                        == same_name(&lexical(path).to_string_lossy())
+                }
+                _ => {
+                    let (p, n) = (lexical(&p), lexical(Path::new(name)));
+                    p.ends_with(&n) || n.ends_with(&p)
+                }
+            }
         };
-        if written || (!path.exists() && named()) {
+        if let Some((_, text)) = self.written.iter().rev().find(|(w, _)| is(w, None)) {
+            let Some(text) = text.clone() else {
+                return Some(Unread::Written);
+            };
+            return self.script_file(&text, at, cwd, env);
+        }
+        let named = self.runs.iter().any(|run| {
+            (shell || FETCHERS.iter().any(|n| run.is(n)))
+                && run
+                    .args
+                    .iter()
+                    .filter_map(|a| a.text.as_deref())
+                    .flat_map(named_paths)
+                    .any(|a| is(Path::new(a), run.cwd.as_ref()))
+        });
+        if named && !path.as_ref().is_some_and(|p| p.exists()) {
             return Some(Unread::Written);
         }
-        let text = script_text(&path, SCRIPT)?;
+        let text = script_text(&path?, SCRIPT)?;
+        self.script_file(&text, at, cwd, env)
+    }
+
+    /// Runs the text of a script file the line runs, with no `#!` line or one that names a shell.
+    fn script_file(
+        &mut self,
+        text: &str,
+        mut at: Ctx,
+        cwd: &Option<PathBuf>,
+        env: &[(String, String)],
+    ) -> Option<Unread> {
         if let Some(line) = text.strip_prefix("#!").and_then(|t| t.lines().next()) {
             let shells = ["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash"];
             if !line
@@ -2131,6 +2213,36 @@ impl Reader {
             _ => {}
         }
     }
+}
+
+/// The string an `env` option cluster splits, as `-S'…'` or `-vS '…'` (empty when it is the next word): its letters
+/// before `S` are flags that take no value.
+fn env_split(word: &str) -> Option<&str> {
+    let (flags, rest) = word.strip_prefix('-')?.split_once('S')?;
+    flags.chars().all(|c| "iv0".contains(c)).then_some(rest)
+}
+
+/// The programs that fetch or copy a file to a path an argument names, as `curl -o f` and `wget URL` do.
+const FETCHERS: &[&str] = &[
+    "curl", "wget", "aria2c", "scp", "rsync", "sftp", "cp", "mv", "install", "dd", "tee", "http",
+    "xh",
+];
+
+/// The paths an argument may name: itself, what follows `=` (`--output=f`, `of=f`), what follows a short option
+/// (`-of`), and a URL's last part (`curl -O`, `wget`).
+fn named_paths(arg: &str) -> Vec<&str> {
+    let mut out = vec![arg];
+    if let Some((_, v)) = arg.split_once('=') {
+        out.push(v);
+    }
+    if arg.starts_with('-') && !arg.starts_with("--") && arg.len() > 2 {
+        out.push(&arg[2..]);
+    }
+    if arg.contains("://") {
+        let path = arg.split(['?', '#']).next().unwrap_or(arg);
+        out.extend(path.rsplit('/').next().filter(|n| !n.is_empty()));
+    }
+    out
 }
 
 /// The project runners whose `run` runs a command in the project's environment, as `uv run python -c …` does.
