@@ -21,6 +21,7 @@ pub mod card;
 pub mod cells;
 pub mod chrome;
 pub mod chrome_fx;
+pub mod chrome_gallery;
 #[cfg(feature = "chrome-fixture")]
 pub mod chrome_fixture;
 pub mod commands;
@@ -241,6 +242,9 @@ pub fn init(cx: &mut App) {
     views::register_views(cx);
     card::init(cx);
     commands::init(cx);
+    // Chrome effects hold their still pose under macOS's Reduce Motion (#1436).
+    #[cfg(target_os = "macos")]
+    cx.set_reduce_motion(objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion());
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")

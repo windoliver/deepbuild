@@ -1976,6 +1976,7 @@ dependencies = [
  "chrono",
  "deep-app",
  "deep-canvas-cells",
+ "deep-canvas-effects",
  "deep-canvas-marks",
  "deep-effects-render",
  "deep-gpu",

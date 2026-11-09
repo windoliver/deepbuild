@@ -419,12 +419,14 @@ fn args() -> (Option<PathBuf>, Option<String>, Mode) {
     (panel, view, mode)
 }
 
-/// `--chrome <fixture> (--snapshot <png> | --idle <seconds> | --frames <n>)` (#1434): the chrome@1 fixture as the app's
-/// real window's content, one report line, then quit.
+/// `--chrome <fixture> [--reduce-motion] (--snapshot <png> | --idle <seconds> | --frames <n> | --after-first <s>)`
+/// (#1434, #1436): the chrome@1 fixture as the app's real window's content, one report line, then quit.
 #[cfg(all(feature = "chrome-fixture", target_os = "macos"))]
-fn chrome_fixture(args: Vec<String>) {
+fn chrome_fixture(mut args: Vec<String>) {
     use deep_app::chrome_fixture::{Fixture, Live};
-    let usage = "usage: deep-app --chrome <fixture> (--snapshot <png> | --idle <seconds> | --frames <n>)";
+    let usage = "usage: deep-app --chrome <fixture> [--reduce-motion] (--snapshot <png> | --idle <seconds> | --frames <n> | --after-first <s>)";
+    let reduce_motion = args.iter().any(|a| a == "--reduce-motion");
+    args.retain(|a| a != "--reduce-motion");
     let (Some(path), Some(mode), Some(value)) = (args.first(), args.get(1), args.get(2)) else {
         panic!("{usage}");
     };
@@ -433,11 +435,13 @@ fn chrome_fixture(args: Vec<String>) {
         "--snapshot" => Live::Snapshot(PathBuf::from(value)),
         "--idle" => Live::Idle(number(Some(value.clone()), "--idle takes seconds")),
         "--frames" => Live::Frames(number(Some(value.clone()), "--frames takes a count")),
+        "--after-first" => Live::AfterFirst(value.parse().expect("--after-first takes seconds")),
         _ => panic!("{usage}"),
     };
     application().run(move |cx| {
         gpui_kit::init(cx);
         init(cx);
+        cx.set_reduce_motion(reduce_motion);
         deep_app::chrome_fixture::run(fixture, live, cx);
     });
 }

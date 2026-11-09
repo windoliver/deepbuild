@@ -33,6 +33,29 @@ pub struct Chrome {
     pub session_line: Hsla,
 }
 
+impl Chrome {
+    /// A chrome role by its name in the look (`ground`, `ink_secondary`, …), if it's one.
+    pub fn named(&self, name: &str) -> Option<Hsla> {
+        Some(match name {
+            "ground" => self.ground,
+            "raised" => self.raised,
+            "divider" => self.divider,
+            "ink_primary" => self.ink_primary,
+            "ink_secondary" => self.ink_secondary,
+            "ink_tertiary" => self.ink_tertiary,
+            "ink_disabled" => self.ink_disabled,
+            "muted" => self.muted,
+            "hover" => self.hover,
+            "selected" => self.selected,
+            "focus" => self.focus,
+            "accent" => self.accent,
+            "session_readout" => self.session_readout,
+            "session_line" => self.session_line,
+            _ => return None,
+        })
+    }
+}
+
 fn look() -> &'static Look {
     static LOOK: OnceLock<Look> = OnceLock::new();
     LOOK.get_or_init(deep_canvas_marks::modules::clean)
