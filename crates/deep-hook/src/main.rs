@@ -589,7 +589,7 @@ fn denials(matched: &[(&Guard, matcher::Hit)], covered: bool) -> Vec<String> {
 
 /// The request's fields for what the matcher read of a call: `,"notes":{...}` for an entry's words, so the hub's
 /// denial says them too, and `,"stage":{...}` for what the hub stages before the call runs: the folders a delete whose
-/// reach can't be worked out names (#347), the paths a discard of tracked edits reaches and the stash a drop names (#1294).
+/// reach can't be worked out names (#347), the paths a delete past its worktree reaches (#1507), the paths a discard of tracked edits reaches and the stash a drop names (#1294).
 fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)]) -> String {
     let notes = matched
         .iter()
@@ -610,6 +610,7 @@ fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)
         let called = called?;
         let paths = match pattern {
             "effect:unknown-reach-delete" => called.stage(),
+            "effect:unrestorable-delete" => called.past(),
             "effect:discard-edits" => called.edits(),
             "effect:drop-stash" => called.stash(),
             _ => None,

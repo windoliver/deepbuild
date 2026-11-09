@@ -1,0 +1,184 @@
+{
+  "failures": [
+    "the library's rows are [\"pine-chair\",\"oak-chair\",\"shelf-armchair\",\"camp-chair\",\"lawn-chair\",\"bar-chair\",\"rocking-chair\",\"office-chair\",\"kids-chair\",\"wing-chair\"]; the chairs in [0.4,1.2] in #979's order (words matched, then size fit) are [\"pine-chair\",\"oak-chair\",\"shelf-armchair\",\"lawn-chair\",\"bar-chair\",\"rocking-chair\",\"office-chair\",\"kids-chair\",\"wing-chair\"]",
+    "row camp-chair reads {\"id\":\"camp-chair\",\"name\":\"Folding Camp Chair\",\"kind\":\"model\",\"license\":{\"id\":\"CC0-1.0\",\"terms\":\"https://creativecommons.org/publicdomain/zero/1.0/\",\"shareable\":true,\"credit\":null},\"size_m\":0.7,\"triangles\":12,\"thumbnail\":\"0e93da3e1874a9d77eb79e7f629ab590e11a124285477729540d5893342b30df\",\"url\":\"https://shelf.example/a/camp-chair\"}; the library's own record says {\"id\":\"camp-chair\",\"name\":\"Folding Camp Chair\",\"kind\":\"model\",\"license\":{\"id\":\"CC0-1.0\",\"terms\":\"https://creativecommons.org/publicdomain/zero/1.0/\",\"shareable\":true,\"credit\":null},\"size_m\":null,\"triangles\":12,\"thumbnail\":\"0e93da3e1874a9d77eb79e7f629ab590e11a124285477729540d5893342b30df\",\"url\":\"https://shelf.example/a/camp-chair\"}",
+    "the library's request log shows the search fetched 12 files: GET /files/oak-chair.gltf, GET /files/pine-chair.gltf, GET /files/office-chair.gltf, GET /files/bar-chair.gltf, GET /files/kids-chair.gltf, GET /files/wing-chair.gltf, GET /files/shelf-armchair.gltf, GET /files/lawn-chair.gltf, GET /files/rocking-chair.gltf, GET /files/doll-chair.gltf, GET /files/throne-chair.gltf, GET /files/camp-chair.gltf"
+  ],
+  "requests": [
+    {
+      "at": 1794216793212,
+      "method": "GET",
+      "path": "/api/search?q=chair"
+    },
+    {
+      "at": 1794216793219,
+      "method": "GET",
+      "path": "/api/assets/oak-chair"
+    },
+    {
+      "at": 1794216793222,
+      "method": "GET",
+      "path": "/files/oak-chair.gltf"
+    },
+    {
+      "at": 1794216793224,
+      "method": "GET",
+      "path": "/api/assets/pine-chair"
+    },
+    {
+      "at": 1794216793227,
+      "method": "GET",
+      "path": "/files/pine-chair.gltf"
+    },
+    {
+      "at": 1794216793229,
+      "method": "GET",
+      "path": "/api/assets/office-chair"
+    },
+    {
+      "at": 1794216793230,
+      "method": "GET",
+      "path": "/files/office-chair.gltf"
+    },
+    {
+      "at": 1794216793237,
+      "method": "GET",
+      "path": "/api/assets/bar-chair"
+    },
+    {
+      "at": 1794216793263,
+      "method": "GET",
+      "path": "/files/bar-chair.gltf"
+    },
+    {
+      "at": 1794216793266,
+      "method": "GET",
+      "path": "/api/assets/kids-chair"
+    },
+    {
+      "at": 1794216793268,
+      "method": "GET",
+      "path": "/files/kids-chair.gltf"
+    },
+    {
+      "at": 1794216793269,
+      "method": "GET",
+      "path": "/api/assets/wing-chair"
+    },
+    {
+      "at": 1794216793270,
+      "method": "GET",
+      "path": "/files/wing-chair.gltf"
+    },
+    {
+      "at": 1794216793271,
+      "method": "GET",
+      "path": "/api/assets/shelf-armchair"
+    },
+    {
+      "at": 1794216793272,
+      "method": "GET",
+      "path": "/files/shelf-armchair.gltf"
+    },
+    {
+      "at": 1794216793273,
+      "method": "GET",
+      "path": "/api/assets/lawn-chair"
+    },
+    {
+      "at": 1794216793275,
+      "method": "GET",
+      "path": "/files/lawn-chair.gltf"
+    },
+    {
+      "at": 1794216793276,
+      "method": "GET",
+      "path": "/api/assets/rocking-chair"
+    },
+    {
+      "at": 1794216793276,
+      "method": "GET",
+      "path": "/files/rocking-chair.gltf"
+    },
+    {
+      "at": 1794216793278,
+      "method": "GET",
+      "path": "/api/assets/doll-chair"
+    },
+    {
+      "at": 1794216793279,
+      "method": "GET",
+      "path": "/files/doll-chair.gltf"
+    },
+    {
+      "at": 1794216793279,
+      "method": "GET",
+      "path": "/api/assets/throne-chair"
+    },
+    {
+      "at": 1794216793280,
+      "method": "GET",
+      "path": "/files/throne-chair.gltf"
+    },
+    {
+      "at": 1794216793281,
+      "method": "GET",
+      "path": "/api/assets/camp-chair"
+    },
+    {
+      "at": 1794216793282,
+      "method": "GET",
+      "path": "/files/camp-chair.gltf"
+    },
+    {
+      "at": 1794216793284,
+      "method": "GET",
+      "path": "/thumbs/oak-chair.png"
+    },
+    {
+      "at": 1794216793287,
+      "method": "GET",
+      "path": "/thumbs/pine-chair.png"
+    },
+    {
+      "at": 1794216793386,
+      "method": "GET",
+      "path": "/thumbs/office-chair.png"
+    },
+    {
+      "at": 1794216793434,
+      "method": "GET",
+      "path": "/thumbs/bar-chair.png"
+    },
+    {
+      "at": 1794216793442,
+      "method": "GET",
+      "path": "/thumbs/kids-chair.png"
+    },
+    {
+      "at": 1794216793444,
+      "method": "GET",
+      "path": "/thumbs/wing-chair.png"
+    },
+    {
+      "at": 1794216793446,
+      "method": "GET",
+      "path": "/thumbs/shelf-armchair.png"
+    },
+    {
+      "at": 1794216793448,
+      "method": "GET",
+      "path": "/thumbs/lawn-chair.png"
+    },
+    {
+      "at": 1794216793450,
+      "method": "GET",
+      "path": "/thumbs/rocking-chair.png"
+    },
+    {
+      "at": 1794216793455,
+      "method": "GET",
+      "path": "/thumbs/camp-chair.png"
+    }
+  ]
+}

@@ -15,7 +15,7 @@
     },
     "label": {
       "id": "label", "kind": "text@1", "layer": "main", "name": "Label", "order": "a1",
-      "params": { "text": "Q3 revenue", "font": "body", "size": 13, "box": { "w": 200, "h": 20 } },
+      "params": { "text": "Revenue by quarter", "font": "body", "size": 13, "box": { "w": 200, "h": 20 } },
       "at": { "pos": [24, 24, 0] }
     },
     "q1": {

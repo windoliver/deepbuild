@@ -70,6 +70,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['start.approve', ['cli']], ['start.session', ['cli']],
   // A person added to a project, with a credential of their own (#1337).
   ['person.add', ['cli']],
+  // An online model library turned on or off, and your standing rule for it (#1731).
+  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']],
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
@@ -119,11 +121,12 @@ const PASEO_PERMISSION_HOLD_MS = 24 * 3600_000;
 const PERMISSION_TIMEOUT_MS = 60_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
 const DECIDED_MATCH = /^effect:(dependency|cloud-resource)$/;
-/** The guard entries whose calls the hub stages before they run with the hub up, or asks about (#347, #1294). */
+/** The guard entries whose calls the hub stages before they run with the hub up, or asks about (#347, #1294, #1507). */
 const STAGED_MATCH = 'effect:unknown-reach-delete';
+const PAST_MATCH = 'effect:unrestorable-delete';
 const DISCARD_MATCH = 'effect:discard-edits';
 const STASH_MATCH = 'effect:drop-stash';
-const STAGED_MATCHES: unknown[] = [STAGED_MATCH, DISCARD_MATCH, STASH_MATCH];
+const STAGED_MATCHES: unknown[] = [STAGED_MATCH, PAST_MATCH, DISCARD_MATCH, STASH_MATCH];
 /** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
 const DENYING_MODES = new Set(['dontAsk', 'plan']);
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
@@ -831,9 +834,9 @@ class Hub {
       const n = meta.matched.find((m) => entries[m]?.match === match);
       return n === undefined ? undefined : meta.stage?.[n] ?? null;
     };
-    const [folders, edits, stash] = [reach(STAGED_MATCH), this.plant === 'stages-untracked-only' ? undefined : reach(DISCARD_MATCH), reach(STASH_MATCH)];
-    const stage: StageReach | undefined = folders !== undefined || edits !== undefined || stash !== undefined
-      ? { ...(folders !== undefined ? { folders } : {}), ...(edits !== undefined ? { edits } : {}), ...(stash !== undefined ? { stash } : {}) }
+    const [folders, past, edits, stash] = [reach(STAGED_MATCH), reach(PAST_MATCH), this.plant === 'stages-untracked-only' ? undefined : reach(DISCARD_MATCH), reach(STASH_MATCH)];
+    const stage: StageReach | undefined = folders !== undefined || past !== undefined || edits !== undefined || stash !== undefined
+      ? { ...(folders !== undefined ? { folders } : {}), ...(past !== undefined ? { past } : {}), ...(edits !== undefined ? { edits } : {}), ...(stash !== undefined ? { stash } : {}) }
       : this.plant === 'stages-unpredicted-writes' && data.kind === 'shell' && typeof data.command === 'string' ? { folders: [meta.cwd] } : undefined;
     // A computer-use or Chrome step is checked against the screens and windows its session leases (#332).
     const screen = SCREEN_TOOLS.some((prefix) => meta.call?.tool.startsWith(prefix));
@@ -1105,7 +1108,7 @@ class Hub {
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
-    // A destructive command is staged or asked about at the gate (#347, #1294), never blocked outright.
+    // A destructive command is staged or asked about at the gate (#347, #1294, #1507), never blocked outright.
     const decided = (n: string) => !watching && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
     const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!watching || floor(n)));
     if (blocks.length) {

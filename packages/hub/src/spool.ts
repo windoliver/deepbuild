@@ -8,11 +8,11 @@ import { syncPath, type Durable } from './vfs.js';
 import { ulid, ulidTime, type Draft, type HookMeta } from './wire.js';
 
 /** The spool file every deep-hook appends to. */
-export const SPOOL = 'spool.jsonl';
+const SPOOL = 'spool.jsonl';
 /** How each request deep-hook writes begins, so one appended right after a cut line is found in it. */
 const REQUEST = Buffer.from('{"v":1,"agent":');
 
-export interface SpoolOptions {
+interface SpoolOptions {
   /** The state folder's spool directory. */
   dir: string;
   held: string[];

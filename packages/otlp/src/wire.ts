@@ -6,7 +6,7 @@
 // a resource with many attributes would otherwise cost their product. `for…in` lists both.
 
 export type Scalar = string | number | boolean;
-export type Attrs = Record<string, Scalar>;
+type Attrs = Record<string, Scalar>;
 export interface Span { traceId: string; spanId: string; parentSpanId: string; name: string; startMs: number; endMs: number; attrs: Attrs }
 export interface Log { timeMs: number; body: string | null; attrs: Attrs }
 
