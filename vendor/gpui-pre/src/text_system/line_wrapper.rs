@@ -1,6 +1,7 @@
 use crate::{FontId, Pixels, SharedString, TextRun, TextSystem, px};
 use collections::HashMap;
 use std::{borrow::Cow, iter, sync::Arc};
+pub(crate) mod breaks; // DeepBuild patch (windoliver/deepbuild#1550)
 
 /// Determines whether to truncate text from the start or end.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -63,6 +64,7 @@ impl LineWrapper {
         let mut last_wrap_ix = 0;
         let mut prev_c = '\0';
         let mut index = 0;
+        let mut breaks = breaks::Breaks::of_fragments(fragments); // DeepBuild patch (windoliver/deepbuild#1550)
         let mut candidates = fragments
             .iter()
             .flat_map(move |fragment| fragment.wrap_boundary_candidates())
@@ -78,12 +80,8 @@ impl LineWrapper {
                             continue;
                         }
 
-                        if Self::is_word_char(c) {
-                            if prev_c == ' ' && c != ' ' && first_non_whitespace_ix.is_some() {
-                                last_candidate_ix = ix;
-                                last_candidate_width = width;
-                            }
-                        } else {
+                        // DeepBuild patch (windoliver/deepbuild#1550): UAX #14 picks the breaks.
+                        if breaks.allows_from(ix, &mut first_non_whitespace_ix) {
                             // CJK may not be space separated, e.g.: `Hello world你好世界`
                             if c != ' ' && first_non_whitespace_ix.is_some() {
                                 last_candidate_ix = ix;
@@ -103,7 +101,8 @@ impl LineWrapper {
                         width: element_width,
                         ..
                     } => {
-                        if prev_c == ' ' && first_non_whitespace_ix.is_some() {
+                        // DeepBuild patch (windoliver/deepbuild#1550): UAX #14 picks the breaks.
+                        if breaks.allows_from(ix, &mut first_non_whitespace_ix) {
                             last_candidate_ix = ix;
                             last_candidate_width = width;
                         }
@@ -391,7 +390,7 @@ impl LineWrapper {
         let mut last_candidate_ix = 0usize;
         let mut last_candidate_width = px(0.);
         let mut last_wrap_ix = 0usize;
-        let mut prev_c = '\0';
+        let mut breaks = breaks::Breaks::of(&text); // DeepBuild patch (windoliver/deepbuild#1550)
         let mut indent: Option<u32> = None;
         let mut truncate_ix = 0usize;
 
@@ -420,7 +419,7 @@ impl LineWrapper {
                 last_candidate_ix = 0;
                 last_candidate_width = px(0.);
                 last_wrap_ix = ix + 1;
-                prev_c = '\0';
+                // DeepBuild patch (windoliver/deepbuild#1550): UAX #14 needs no previous character.
                 indent = None;
                 truncate_ix = ix + 1;
                 continue;
@@ -428,12 +427,8 @@ impl LineWrapper {
 
             let char_width = self.width_for_char(c);
 
-            if Self::is_word_char(c) {
-                if prev_c == ' ' && first_non_whitespace_ix.is_some() {
-                    last_candidate_ix = ix;
-                    last_candidate_width = width;
-                }
-            } else if c != ' ' && first_non_whitespace_ix.is_some() {
+            // DeepBuild patch (windoliver/deepbuild#1550): UAX #14 picks the breaks.
+            if breaks.allows_from(ix, &mut first_non_whitespace_ix) {
                 last_candidate_ix = ix;
                 last_candidate_width = width;
             }
@@ -489,7 +484,7 @@ impl LineWrapper {
                 }
             }
 
-            prev_c = c;
+            // DeepBuild patch (windoliver/deepbuild#1550): UAX #14 needs no previous character.
         }
 
         // Text fits within max_lines without truncation.
