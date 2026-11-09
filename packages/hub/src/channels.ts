@@ -54,6 +54,8 @@ const RECEIVE_MS = 1000;
 const FETCH_MS = 5000;
 const NEEDS_TRUSTED = new Set(['authority', 'exception', 'definition']);
 const LIVE = new Set(['shown', 'held']);
+/** What a card this hub never sent hashes to: equal to no signed value. */
+const NO_CARD = Symbol('no card sent');
 
 /**
  * One thread on one channel: the card it accepted last, whether any send was tried (one that timed out may have
@@ -320,9 +322,11 @@ export class Channels {
   /** Why a signed answer doesn't count, naming the field, or undefined once every part of it holds. */
   private signedWrong(c: Channel, thread: string, answer: string, signature: unknown): { field: string; reason: string } | undefined {
     const sent = c.threads.get(thread)?.sent;
-    if (!sent) return { field: 'card_hash', reason: `it signs a card this hub never sent ${c.name} on ${thread}` };
-    const why = this.deps.devices.verify(signature, this.hub, this.deps.now(), { ask: thread, revision: sent.revision, card_hash: cardHash(sent), answer }, this.deps.plant);
-    return typeof why === 'string' ? undefined : why;
+    // A card this hub never sent has no hash any signature can match; the hub, device and key are judged first.
+    const scope = sent ? { ask: thread, revision: sent.revision, card_hash: cardHash(sent), answer } : { ask: thread, card_hash: NO_CARD, answer };
+    const why = this.deps.devices.verify(signature, this.hub, this.deps.now(), scope, this.deps.plant);
+    if (typeof why === 'string') return undefined;
+    return !sent && why.field === 'card_hash' ? { field: 'card_hash', reason: `it signs a card this hub never sent ${c.name} on ${thread}` } : why;
   }
   private async refuse(c: Channel, thread: string, answer: string, reason: string, field?: string): Promise<void> {
     await this.deps.append('channel.refused', { channel: c.name, thread_key: thread.slice(0, 200), answer: answer.slice(0, 2000), ...(field ? { field } : {}), reason: reason.slice(0, 8192) }, /^ask:[0-9A-Za-z]+$/.test(thread) ? thread : undefined);

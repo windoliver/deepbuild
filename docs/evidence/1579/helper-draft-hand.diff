@@ -1,0 +1,84 @@
+commit a1e0e9454d53d24ff7d12d4008f95a962c9f77e7
+Author: JingW6 <jingwj66@gmail.com>
+Date:   Mon Nov 9 10:23:16 2026 -0800
+
+    acceptance: #34's signed() signs in #1579's format, approved by the owner
+    
+    The helper signs the method, the hub it paired with (read from the hello at pair()), now, a once-only ID and the
+    params' hash, as the hub now requires; suite 65's own pairing names the hub too. No assertion changes. Suite 34's
+    answers.test.ts passes 7/7 again; 327's redraft fails as it does at the base.
+    
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+diff --git a/tests/acceptance/34/helpers.ts b/tests/acceptance/34/helpers.ts
+index 31ce5eba..d4faccd7 100644
+--- a/tests/acceptance/34/helpers.ts
++++ b/tests/acceptance/34/helpers.ts
+@@ -4,7 +4,7 @@
+ // confirmation's stand-in, a paired device's key and its signature, the judges each criterion's failure
+ // message comes from, and the planted wrong hubs, which sit between a client and a real hub.
+ import { execFileSync } from 'node:child_process';
+-import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
++import { createHash, generateKeyPairSync, sign, X509Certificate, type KeyObject } from 'node:crypto';
+ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+ import net from 'node:net';
+ import { join } from 'node:path';
+@@ -126,23 +126,31 @@ export const confirmEnv = (c: Confirmer) => ({ DEEP_HUB_TEST_CONFIRM: c.path });
+ 
+ // ---- A device's key, pairing and a signed answer.
+ 
+-export interface Device { name: string; key: KeyObject; publicKey: string; id?: string }
++export interface Device { name: string; key: KeyObject; publicKey: string; id?: string; /** The hub it paired with, as its hello names it (#1579). */ hub?: string }
+ /** An Ed25519 key pair, as the app keeps its own; `publicKey` is the raw 32 bytes, base64url. */
+ export function newDevice(name: string): Device {
+   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+   return { name, key: privateKey, publicKey: String(publicKey.export({ format: 'jwk' }).x) };
+ }
++/** The hub's ID under `root`, as its hello names it: the SHA-256 of its certificate (#1338), what a signature is made for (#1579). */
++export const hubIdOf = (root: string): string => createHash('sha256').update(new X509Certificate(readFileSync(join(root, 'hub.key.cert'))).raw).digest('hex');
+ /** `device.pair`: resolves with the hub's reply line; on success the device's ID is set. */
+ export async function pair(conn: Conn, device: Device): Promise<Line> {
+   const reply = await conn.call('device.pair', { name: device.name, public_key: device.publicKey }, 20_000);
+   if (reply.result && typeof reply.result.device === 'string') device.id = reply.result.device;
++  device.hub = conn.hello?.hub;
+   return reply;
+ }
+-/** The answer's params with `device` and `signature`: Ed25519 over the RFC 8785 bytes of every other param. */
+-export function signed(params: Line, device: Device, as: { id?: string } = {}): Line {
+-  const body = { ...params, device: as.id ?? device.id ?? '' };
+-  const signature = sign(null, canonicalize(body as JsonValue), device.key).toString('base64url');
+-  return { ...body, signature };
++/**
++ * The answer's params with `signature`, as #1579 has it: Ed25519 over the RFC 8785 bytes of what it signs, its device,
++ * the method, the hub it paired with, now, a once-only ID and the hash of the params.
++ */
++export function signed(params: Line, device: Device, as: { id?: string; method?: string } = {}): Line {
++  const body = {
++    device: as.id ?? device.id ?? '', method: as.method ?? 'ask.answer', hub: device.hub ?? '', at: Date.now(),
++    once: sha256(String(Math.random())).slice(0, 32), params_hash: createHash('sha256').update(canonicalize(params as JsonValue)).digest('hex'),
++  };
++  return { ...params, signature: { signed: body, sig: sign(null, canonicalize(body as JsonValue), device.key).toString('base64url') } };
+ }
+ /** A click's token, as the question card hands one to an approval (#318). */
+ export const clickToken = (): string => `click-${sha256(String(Math.random())).slice(0, 16)}`;
+diff --git a/tests/acceptance/65/helpers.ts b/tests/acceptance/65/helpers.ts
+index c36700b9..86882127 100644
+--- a/tests/acceptance/65/helpers.ts
++++ b/tests/acceptance/65/helpers.ts
+@@ -17,7 +17,7 @@ import { askSources, openAsks, type PlanInput } from '../../../packages/asks/src
+ import { packageDigest } from '../../../packages/extension-host/src/index.ts';
+ import { openRecord } from '../../../packages/record/src/index.ts';
+ import { childEnv, cleanup as cleanup16, CLI, deep, makeHome, NODE, own, REPO, sleep, startHub, tempDir, tokenOf, ulid, type Hub, type Line } from '../16/helpers.ts';
+-import { Confirmer, newDevice, signed, type Device } from '../34/helpers.ts';
++import { Confirmer, hubIdOf, newDevice, signed, type Device } from '../34/helpers.ts';
+ import { Phone, Provider, type Item, type Kind } from './fixtures/providers.ts';
+ 
+ export { sleep, type Line };
+@@ -203,6 +203,7 @@ export async function world(o: WorldOptions): Promise<World> {
+   if (o.link) await ok(w, 'channel.link', { channel: 'chat', account: YOU });
+   if (o.phone) w.phone.device = String((await ok(w, 'device.pair', { name: w.phone.name, public_key: w.phone.publicKey })).device);
+   if (o.app) w.app.id = String((await ok(w, 'device.pair', { name: w.app.name, public_key: w.app.publicKey })).device);
++  w.app.hub = hubIdOf(w.hub.root);   // what the app's signature is made for (#1579)
+   o.beforeInstall?.(w);
+   for (const kind of o.channels) await install(w, join(CHANNELS, kind));
+   for (const kind of o.channels) {
