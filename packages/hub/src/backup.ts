@@ -7,11 +7,12 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync }
 import { join, resolve } from 'node:path';
 import { prepareRestore, type PreparedRestore } from '@deepbuild/record';
 import { writtenOf } from '@deepbuild/wiki';
-import { call } from './client.js';
+import { call, withPrompt } from './client.js';
 import { Confirmer } from './confirm.js';
 import { takeLock } from './lock.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { dropTestSettings, hubAddress, installedRoot, rootOf } from './paths.js';
 import { Devices } from './trusted.js';
+import { startOf } from './wire.js';
 import { copySynced, syncPath, writeSynced } from './vfs.js';
 
 /** The folders a backup holds beside the record. */
@@ -62,8 +63,10 @@ export async function restoreCommand(args: readonly string[]): Promise<number> {
   const staged = (name: string) => join(root.dir, `${name}.restoring`);
   let prepared: PreparedRestore | undefined;
   try {
-    const confirmer = new Confirmer({ devices: new Devices(root.devices), key: root.confirmKey, ...(process.env.DEEP_HUB_TEST_CONFIRM ? { stub: process.env.DEEP_HUB_TEST_CONFIRM } : {}) });
-    const why = await confirmer.you(`restore DeepBuild's record from ${folder}, replacing the one in ${root.dir}`, { handle: `restore:${folder}`, revision: root.dir });
+    dropTestSettings(root.dir);
+    const confirmer = new Confirmer({ devices: new Devices(root.devices), key: root.confirmKey, ...(process.env.DEEP_HUB_TEST_CONFIRM ? { stub: process.env.DEEP_HUB_TEST_CONFIRM } : {}), ...(process.env.DEEP_HUB_TEST_POLKIT ? { polkit: process.env.DEEP_HUB_TEST_POLKIT } : {}) });
+    const self = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
+    const why = await withPrompt(() => confirmer.you(`restore DeepBuild's record from ${folder}, replacing the one in ${root.dir}`, { handle: `restore:${folder}`, revision: root.dir, process: self }));
     if (why) {
       process.stderr.write(`deep restore changed nothing: the OS didn't confirm you (${why}). Run it again and confirm.\n`);
       return 3;

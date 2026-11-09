@@ -1469,6 +1469,410 @@ export interface AdapterFactsV4 {
   };
 }
 
+export type AdapterFactsV5Text = string;
+
+export type AdapterFactsV5Match = { [key: string]: unknown };
+
+export type AdapterFactsV5Texts = Array<AdapterFactsV5Text>;
+
+export type AdapterFactsV5Version = string;
+
+export type AdapterFactsV5TextMap = { [key: string]: AdapterFactsV5Text };
+
+export type AdapterFactsV5DataTemplate = { [key: string]: AdapterFactsV5Text };
+
+export type AdapterFactsV5FieldTypes = { [key: string]: string };
+
+export type AdapterFactsV5Payload = {
+  required: AdapterFactsV5FieldTypes;
+  optional: AdapterFactsV5FieldTypes;
+  tools?: { [key: string]: AdapterFactsV5FieldTypes };
+};
+
+export type AdapterFactsV5ToolKind = "shell" | "read" | "edit" | "write" | "search" | "fetch" | "mcp" | "unknown";
+
+export type AdapterFactsV5StopCause = "sign_in_required" | "token_refresh_failed" | "plan_window_spent" | "rate_limited" | "refusal" | "max_turns" | "context_overflow" | "tool_schema_rejected" | "agent_crashed" | "timed_out" | "unknown";
+
+export type AdapterFactsV5CauseMap = { [key: string]: AdapterFactsV5StopCause };
+
+export type AdapterFactsV5OriginRule = {
+  prompt?: AdapterFactsV5Text;
+  match?: { [key: string]: unknown };
+  from: AdapterFactsV5Text;
+};
+
+export type AdapterFactsV5HookRule = {
+  kind: string;
+  data?: AdapterFactsV5DataTemplate;
+  origin?: {
+    join?: {
+      payload: AdapterFactsV5Text;
+      transcript: AdapterFactsV5Text;
+    };
+    rules: Array<AdapterFactsV5OriginRule>;
+    otherwise: AdapterFactsV5Text;
+  };
+  call?: "kind" | "detail";
+  stop?: boolean;
+  cause?: {
+    field: AdapterFactsV5Text;
+    values: AdapterFactsV5CauseMap;
+    otherwise: AdapterFactsV5StopCause;
+  };
+  state?: {
+    field: AdapterFactsV5Text;
+    values: { [key: string]: "working" | "waiting" | "finished" };
+  };
+};
+
+export type AdapterFactsV5Operation = {
+  readBy: AdapterFactsV5Text;
+  conformance: AdapterFactsV5Text;
+};
+
+export type AdapterFactsV5MarkerMap = { [key: string]: AdapterFactsV5Text };
+
+/** adapter.facts@5 */
+export interface AdapterFactsV5 {
+  schema: "adapter.facts@5";
+  versions: Array<AdapterFactsV5Version>;
+  agent: string;
+  hookTimeouts: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    defaultMs?: number | null;
+    perHook?: { [key: string]: number };
+  };
+  routes?: {
+    network: {
+      readBy: AdapterFactsV5Text;
+      measured: AdapterFactsV5Text;
+      hookOverheadMs: number;
+      failOpenMs: number;
+    };
+  };
+  continuation: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    cap?: number;
+    field?: AdapterFactsV5Text;
+  };
+  launch: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    session?: {
+      readBy?: AdapterFactsV5Text;
+      args: AdapterFactsV5Texts;
+    };
+    readOnlyJob?: {
+      readBy?: AdapterFactsV5Text;
+      args: AdapterFactsV5Texts;
+      prompt: AdapterFactsV5Text;
+    };
+    started?: {
+      readBy?: AdapterFactsV5Text;
+      args: AdapterFactsV5Texts;
+      asks: AdapterFactsV5Text;
+      modes: AdapterFactsV5TextMap;
+      skipping: AdapterFactsV5Texts;
+      nested: AdapterFactsV5Texts;
+      home: AdapterFactsV5Text;
+      defaultHome: AdapterFactsV5Text;
+      trust?: {
+        readBy?: AdapterFactsV5Text;
+        file: AdapterFactsV5Text;
+        homeFile: AdapterFactsV5Text;
+        set: AdapterFactsV5Text;
+      };
+    };
+  };
+  sandbox?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    versions: { [key: string]: {
+      settings?: AdapterFactsV5Text;
+      args?: AdapterFactsV5Texts;
+      modes?: AdapterFactsV5TextMap;
+      walls: {
+        writes?: AdapterFactsV5Text;
+        credentials?: AdapterFactsV5Text;
+        network?: AdapterFactsV5Text;
+      };
+      wayOut: {
+        call: AdapterFactsV5Text;
+        setting: AdapterFactsV5Text;
+        off: boolean;
+      };
+    } };
+  };
+  modelFamily: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    families: AdapterFactsV5TextMap;
+  };
+  billing: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    apiKeyVariables: AdapterFactsV5Texts;
+  };
+  usage: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    cost: "reported" | "estimated" | "unpriced";
+    costFrom: AdapterFactsV5Text;
+    tokens: AdapterFactsV5Text;
+  };
+  questionTools: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    tools: AdapterFactsV5Texts;
+  };
+  transcripts: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    home: Array<AdapterFactsV5Text>;
+    path: AdapterFactsV5Text;
+    archived?: AdapterFactsV5Text;
+  };
+  appLinks: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    open: AdapterFactsV5Text;
+  };
+  errorTexts: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    causes: AdapterFactsV5CauseMap;
+  };
+  events: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    versions: { [key: string]: { [key: string]: AdapterFactsV5Payload } };
+  };
+  mapping: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    common: AdapterFactsV5DataTemplate;
+    SessionStart?: AdapterFactsV5HookRule;
+    UserPromptSubmit?: AdapterFactsV5HookRule;
+    PreToolUse?: AdapterFactsV5HookRule;
+    PermissionRequest?: AdapterFactsV5HookRule;
+    PostToolUse?: AdapterFactsV5HookRule;
+    PostToolUseFailure?: AdapterFactsV5HookRule;
+    Stop?: AdapterFactsV5HookRule;
+    StopFailure?: AdapterFactsV5HookRule;
+    SessionEnd?: AdapterFactsV5HookRule;
+    SubagentStart?: AdapterFactsV5HookRule;
+    SubagentStop?: AdapterFactsV5HookRule;
+    TaskCreated?: AdapterFactsV5HookRule;
+    TaskCompleted?: AdapterFactsV5HookRule;
+    Notification?: AdapterFactsV5HookRule;
+    Elicitation?: AdapterFactsV5HookRule;
+    ElicitationResult?: AdapterFactsV5HookRule;
+    TeammateIdle?: AdapterFactsV5HookRule;
+    WorktreeCreate?: AdapterFactsV5HookRule;
+    WorktreeRemove?: AdapterFactsV5HookRule;
+    PreCompact?: AdapterFactsV5HookRule;
+    PostCompact?: AdapterFactsV5HookRule;
+    Interrupt?: AdapterFactsV5HookRule;
+    sessionStart?: AdapterFactsV5HookRule;
+    sessionEnd?: AdapterFactsV5HookRule;
+    preToolUse?: AdapterFactsV5HookRule;
+    postToolUse?: AdapterFactsV5HookRule;
+    stop?: AdapterFactsV5HookRule;
+  };
+  toolKinds: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    tools: { [key: string]: AdapterFactsV5ToolKind };
+    prefixes?: { [key: string]: AdapterFactsV5ToolKind };
+    otherwise: AdapterFactsV5ToolKind;
+  };
+  toolDetail?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    command?: AdapterFactsV5TextMap;
+    paths?: AdapterFactsV5TextMap;
+    mcp?: {
+      tool: AdapterFactsV5Text;
+    };
+  };
+  patch?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    tools: AdapterFactsV5Texts;
+    command: AdapterFactsV5Text;
+    shell: AdapterFactsV5Text;
+  };
+  turnWithoutPrompt?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    payloadField: AdapterFactsV5Text;
+    startedBy: AdapterFactsV5Texts;
+    turnEntry: AdapterFactsV5Text;
+    turnField: AdapterFactsV5Text;
+    messageRole: {
+      path: AdapterFactsV5Text;
+      value: AdapterFactsV5Text;
+    };
+    messageText: AdapterFactsV5Text;
+    values: AdapterFactsV5MarkerMap;
+    otherwise: AdapterFactsV5Text;
+  };
+  signIn?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    args: AdapterFactsV5Texts;
+    signedIn: AdapterFactsV5Text;
+  };
+  stop?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    turn: {
+      payload: AdapterFactsV5Text;
+      transcript: AdapterFactsV5Text;
+      elsewhere?: AdapterFactsV5Text;
+    };
+    cause: {
+      readBy?: AdapterFactsV5Text;
+      payload?: {
+        field: AdapterFactsV5Text;
+        values: AdapterFactsV5CauseMap;
+      };
+      errors?: {
+        match: AdapterFactsV5Match;
+        field: AdapterFactsV5Text;
+        values: AdapterFactsV5CauseMap;
+      };
+      rateLimits?: {
+        match: AdapterFactsV5Match;
+        reached: AdapterFactsV5Text;
+        windows: AdapterFactsV5Texts;
+        used: AdapterFactsV5Text;
+        resetsAt: AdapterFactsV5Text;
+        toMs: number;
+        spent: AdapterFactsV5StopCause;
+        withoutReset: AdapterFactsV5StopCause;
+      };
+      otherwise: AdapterFactsV5StopCause;
+    };
+    usage: {
+      readBy?: AdapterFactsV5Text;
+      covers: "turn" | "session";
+      records: {
+        match: AdapterFactsV5Match;
+        has: AdapterFactsV5Text;
+        skip?: AdapterFactsV5Match;
+        once?: AdapterFactsV5Text;
+      };
+      take: "sum" | "last";
+      counts: {
+        input: AdapterFactsV5Texts;
+        cached: AdapterFactsV5Texts;
+        output: AdapterFactsV5Texts;
+      };
+      exact: boolean;
+      model: {
+        record?: AdapterFactsV5Text;
+        payload?: AdapterFactsV5Text;
+      };
+      contextFill?: {
+        used: AdapterFactsV5Texts;
+        window: AdapterFactsV5Text;
+      };
+    };
+  };
+  readUsage?: AdapterFactsV5Operation;
+  taskList?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    tool: AdapterFactsV5Text;
+    items: AdapterFactsV5Text;
+    text: AdapterFactsV5Text;
+    status: AdapterFactsV5Text;
+    open: AdapterFactsV5Texts;
+  };
+  tokenizer?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    name: AdapterFactsV5Text;
+    package: AdapterFactsV5Text;
+    version: AdapterFactsV5Version;
+  };
+  mods?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    since: {
+      terminal: AdapterFactsV5Version;
+      desktop: AdapterFactsV5Version;
+    };
+    validate: {
+      args: AdapterFactsV5Texts;
+      hooks: AdapterFactsV5Text;
+      calls: AdapterFactsV5Text;
+    };
+    overrides: {
+      event: AdapterFactsV5Text;
+      past: AdapterFactsV5Text;
+    };
+    promptCalls: AdapterFactsV5Texts;
+    holdsWhen: Array<{
+      case: "managed" | "login" | "plan" | "interactive";
+      text: AdapterFactsV5Text;
+      subscriptionTypes?: AdapterFactsV5Texts;
+      mode?: AdapterFactsV5Text;
+      since?: AdapterFactsV5Version;
+      tools?: AdapterFactsV5Texts;
+    }>;
+  };
+  classifyStop?: AdapterFactsV5Operation;
+  skills?: AdapterFactsV5Operation;
+  entries?: {
+    readBy?: string;
+    name: string;
+    home?: string;
+    mcp?: {
+      file: string;
+      format: "json" | "toml";
+      key: string;
+      perProject?: string;
+      transports: {
+        stdio?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+        http?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+      };
+      refused: Array<{
+        transport: "stdio" | "http";
+        field: string;
+        reason?: string;
+      }>;
+      list?: Array<string>;
+    };
+    skills?: {
+      write: string;
+      readFrom: Array<string>;
+    };
+  };
+  daemon?: {
+    readBy?: string;
+    restart: Array<string>;
+    picksUp: { [key: string]: {
+      "hooks.json": boolean;
+      mcp_servers: boolean;
+      readBy?: string;
+    } };
+  };
+}
+
 /** adapter.unsupported@1 */
 export type AdapterUnsupported = { [key: string]: Array<"startTurn" | "steer" | "followUp" | "interrupt" | "respond" | "history"> };
 

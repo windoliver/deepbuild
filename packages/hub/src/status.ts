@@ -7,6 +7,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { billingMode } from '@deepbuild/readings';
 import { call } from './client.js';
+import { StaleHub } from './generations.js';
+import { joinedFor, remoteCall } from './remote.js';
 import { CAN_RUN, CANT_RUN } from './hook-programs.js';
 import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
@@ -309,6 +311,21 @@ export async function statusCommand(args: readonly string[]): Promise<number> {
   }
   // The planted wrong program exits with a code the exit-code table doesn't list when it can't read a hub.
   const unread = activePlant() === 'status-exit-unmapped' ? 4 : 3;
+  // A clone of a project this machine joined reads that project's hub over the network (#1338), as its person.
+  const joined = joinedFor(process.cwd());
+  if (joined) {
+    try {
+      const reply = await remoteCall(joined, 'status.read', {});
+      if ('result' in reply) {
+        process.stdout.write(render(reply.result.rows as StatusRow[], `Reading ${joined.project}'s hub at ${joined.address} as ${joined.person}`));
+        return 0;
+      }
+      process.stderr.write(`deep status: the hub at ${joined.address} refused this read: ${reply.error.remediation}\n`);
+    } catch (error) {
+      process.stderr.write(`deep status: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+    return unread;
+  }
   let socket: string;
   try {
     socket = hubAddress().path;
@@ -328,6 +345,11 @@ export async function statusCommand(args: readonly string[]): Promise<number> {
     }
     why = reply.error.remediation;
   } catch (error) {
+    // A hub left behind isn't read in any way, its database included (#1338).
+    if (error instanceof StaleHub) {
+      process.stderr.write(`deep status: ${error.message}\n`);
+      return unread;
+    }
     why = error instanceof Error ? error.message : String(error);
   }
   // The hub's own folder holds its database: the socket's, or the installed root.
