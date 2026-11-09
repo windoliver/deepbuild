@@ -123,7 +123,7 @@ export interface CanvasWorld {
 }
 
 /** One call to the canvas core: who it writes as, and #393's call fields. */
-export type CanvasCall = Obj;
+type CanvasCall = Obj;
 
 /** The long-lived canvas core: one call at a time, in order. */
 export class Canvas {

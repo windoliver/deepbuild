@@ -8,7 +8,9 @@
 //! Vello CPU, and `check` with a look adding the marks2d module's own check; and #381's: `raster`
 //! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`;
 //! and #854's: `idle`, a document held on screen on the real clock for `seconds`, its frames,
-//! wakeups and CPU read from this process; and #398's: `check`, `raster` and `geometry` import
+//! wakeups and CPU read from this process, and #1487's: `idle`'s `view.rect`, the region the
+//! window shows, whose frame clock counts only items that meet it (planted
+//! `valid_until_ignores_view`); and #398's: `check`, `raster` and `geometry` import
 //! each `vector@1` item's SVG from the line's `store` and draw it as marks2d's items, `geometry`
 //! answers a vector's `parts`, and the planted `write_fades_fills_from_start` and
 //! `import_skips_clip_path`; and #1175's: `check` answers a `verdict` that stays INCONCLUSIVE
@@ -138,6 +140,9 @@ enum Request {
         seconds: u64,
         /// The wrong program: a frame clock that arms a frame each vsync.
         arms_each_vsync: bool,
+        /// #1487: the region of the document the window shows, `[x, y, w, h]`, and whether the
+        /// planted clock counts every item wherever the view is (the merge base's rule).
+        region: Option<([f64; 4], bool)>,
     },
     Render {
         out: String,
@@ -909,7 +914,25 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             arms_each_vsync: match input.get("planted") {
                 None => false,
                 Some(Value::String(p)) if p == "arms_each_vsync" => true,
+                Some(Value::String(p)) if p == "valid_until_ignores_view" => false,
                 Some(_) => return None,
+            },
+            region: match input.get("view").and_then(|v| v.get("rect")) {
+                None => None,
+                Some(r) => {
+                    let r: Vec<f64> = r
+                        .as_array()?
+                        .iter()
+                        .map(Value::as_f64)
+                        .collect::<Option<_>>()?;
+                    let [x, y, w, h] = r[..] else { return None };
+                    if !(r.iter().all(|n| n.is_finite()) && w > 0.0 && h > 0.0) {
+                        return None;
+                    }
+                    let ignores = input.get("planted").and_then(Value::as_str)
+                        == Some("valid_until_ignores_view");
+                    Some(([x, y, w, h], ignores))
+                }
             },
         },
         "session" => {

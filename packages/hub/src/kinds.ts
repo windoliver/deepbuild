@@ -15,7 +15,7 @@ import type { Host } from '@deepbuild/supervisor';
 import type { JobRecord, JobSpec } from '@deepbuild/runner';
 
 /** Each route a gate run names a kind by. */
-export const ROUTES = {
+const ROUTES = {
   spec: 'a check in the repo\'s .deepbuild/done.yaml',
   definition: 'a check a task\'s definition of done names',
   pr: 'every claim that opens or updates a pull request',
@@ -25,7 +25,7 @@ type Route = keyof typeof ROUTES;
 
 /** What a review run needs beyond its spec: the claim's session, to ask the second model on its agent and judge its independence. */
 export interface ReviewOf { claim: string; task: string; agent: string; transcript: string | undefined }
-export interface KindsOptions {
+interface KindsOptions {
   host: () => Host;
   /** The runner's submit, cancel and wait (#159): the review's second model runs as a `review` job. */
   submit(spec: JobSpec): Promise<JobRecord>;

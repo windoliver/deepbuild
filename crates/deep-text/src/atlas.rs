@@ -3,7 +3,7 @@
 //! writer layer draws from these pages through the GPUI patch's tinted mask sprite; it never
 //! asks GPUI's text system for a glyph (canvas primitives: Text `text@1`, Semantics).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 
 use parley::FontData;
 use vello_cpu::color::palette::css::WHITE;
@@ -15,6 +15,9 @@ use vello_cpu::{
 
 /// A page's side in pixels: 1,024² alpha bytes, 1 MB (canvas primitives: Text, Cost).
 pub const PAGE: u32 = 1024;
+/// How many changed rects a page remembers: a reader that fell further behind, or a page with more
+/// new glyphs than this since it last read, takes the whole page once (#1480).
+pub const RING: usize = 32;
 /// Clear pixels around each glyph, so a sprite's edge never samples its neighbor.
 const GUTTER: u32 = 1;
 /// The most pages the atlas holds: a glyph with no room on them waits for [`Atlas::make_room`],
@@ -58,14 +61,27 @@ pub struct Placed {
     pub top: i32,
 }
 
+/// A changed rectangle of a page, in page pixels (#1480).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Rect {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+}
+
 /// One alpha page, packed in shelves.
 pub struct Page {
     bytes: Vec<u8>,
     /// The tick the page was last drawn from ([`Atlas::tick`]).
     used: u64,
-    /// Changed each time the bytes change, to a number no page of this atlas had before; the GPUI
-    /// side uploads a generation once.
+    /// Changed only when the page starts over, to a number no page of this atlas had before; the
+    /// GPUI side uploads a generation whole, once, and the rects after it (#1480).
     generation: u32,
+    /// How many rects were written to the page since it started: a reader's position.
+    written: u64,
+    /// The last [`RING`] rects written, oldest first.
+    ring: VecDeque<Rect>,
     shelf_y: u32,
     shelf_h: u32,
     cursor_x: u32,
@@ -77,6 +93,8 @@ impl Page {
             bytes: vec![0; (PAGE * PAGE) as usize],
             used: 0,
             generation,
+            written: 0,
+            ring: VecDeque::with_capacity(RING),
             shelf_y: 0,
             shelf_h: 0,
             cursor_x: 0,
@@ -90,6 +108,20 @@ impl Page {
 
     pub fn generation(&self) -> u32 {
         self.generation
+    }
+
+    /// How many rects were written to this generation of the page; a reader keeps the number it
+    /// last read to.
+    pub fn written(&self) -> u64 {
+        self.written
+    }
+
+    /// The rects written since a reader that had read up to `read`, oldest first; `None` when it
+    /// fell more than [`RING`] behind, and takes the whole page.
+    pub fn changed_since(&self, read: u64) -> Option<impl Iterator<Item = Rect> + '_> {
+        let behind = usize::try_from(self.written.checked_sub(read)?).ok()?;
+        (behind <= self.ring.len())
+            .then(|| self.ring.iter().skip(self.ring.len() - behind).copied())
     }
 
     fn reserve(&mut self, w: u32, h: u32) -> Option<(u32, u32)> {
@@ -134,6 +166,8 @@ pub struct Atlas {
     resources: Resources,
     settings: RenderSettings,
     rasterized: u64,
+    /// The one rendering context every glyph rasterizes in, resized per glyph (#1480).
+    ctx: Option<RenderContext>,
     /// The next generation any page takes, so a page started over never repeats an old one.
     next_generation: u32,
     /// Set when a glyph found no room on [`PAGES`] full pages, until [`Atlas::make_room`].
@@ -159,6 +193,7 @@ impl Atlas {
                 num_threads: 0,
             },
             rasterized: 0,
+            ctx: None,
             next_generation: 0,
             full: false,
         }
@@ -251,7 +286,10 @@ impl Atlas {
         // Whole device pixels, so the raster and its placement agree on the baseline; the glyph's
         // pen sits `phase` along from there.
         let origin = (margin, margin + (device_size * 1.25).ceil());
-        let mut ctx = RenderContext::new_with(width, height, self.settings);
+        let ctx = self
+            .ctx
+            .get_or_insert_with(|| RenderContext::new_with(width, height, self.settings));
+        ctx.reset_and_resize(width, height);
         ctx.set_paint(WHITE);
         ctx.set_transform(Affine::IDENTITY);
         ctx.glyph_run(&mut self.resources, font)
@@ -298,8 +336,16 @@ impl Atlas {
                 target.bytes[((slot.1 + y) * PAGE + slot.0 + x) as usize] = value;
             }
         }
-        target.generation = self.next_generation;
-        self.next_generation += 1;
+        if target.ring.len() == RING {
+            target.ring.pop_front();
+        }
+        target.ring.push_back(Rect {
+            x: slot.0,
+            y: slot.1,
+            w,
+            h,
+        });
+        target.written += 1;
         Some(Placed {
             page,
             x: slot.0,
@@ -320,6 +366,7 @@ impl Atlas {
         }
         if self.pages.len() < PAGES {
             self.pages.push(Page::new(self.next_generation));
+            self.next_generation += 1;
             self.current = self.pages.len() - 1;
         } else {
             // Every page is full: the one least recently drawn from starts over, unless this
