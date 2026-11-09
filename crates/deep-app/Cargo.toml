@@ -40,6 +40,11 @@ plant-panel-skips-kit = []
 # Issue #1454: a file stands in for the OS's prompt, in no shipped build: a test can't be you, and an environment variable
 # in the shipped app would let an agent answer for you.
 test-confirm = []
+# Issue #1477's wrong programs, in no shipped build (tests/acceptance/1477): a table that builds an element per cell,
+# one that places rows by f32 offsets, and a text sort that isn't stable.
+plant-element-per-cell = []
+plant-f32-offset = []
+plant-unstable-text-sort = []
 # Issue #1172: #337's spike window, in no shipped build: the suites that keep its proof build it, through the dev
 # dependency on this crate below.
 spike = []
@@ -145,4 +150,11 @@ path = "../../tests/acceptance/1141/app/memory.rs"
 [[test]]
 name = "acceptance_995"
 path = "../../tests/acceptance/995/app/panel.rs"
+harness = false
+
+# Issue #1477: the long lists and tables bench, and the calls its acceptance tests make of our table (README in
+# tests/acceptance/1477). A real window and the headless one both need the main thread, so no libtest harness.
+[[test]]
+name = "lists_1477"
+path = "lists_1477.rs"
 harness = false
