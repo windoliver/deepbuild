@@ -1,6 +1,7 @@
 // The Linux backend (#70) against the seam's own suite, as #236's acceptance tests run Seatbelt against it on macOS
 // (tests/acceptance/236/suite.test.ts): every case holds on bubblewrap, each planted twin fails its own case and no
 // other, and a run through the supervisor is scanned, refused and recorded as the seam promises.
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
@@ -81,6 +82,47 @@ describe.skipIf(!linux)('a run through the supervisor on Linux', () => {
       expect(denied).toContainEqual({ run: 'run:BWRAP', operation: 'network-outbound', target: hub.path });
       const tracked = events.filter((e) => e.kind === 'process.tracked' && (e.data as { run: string }).run === 'run:BWRAP');
       expect(tracked.length, 'the shell and what it started, found by the marker, not only the process the supervisor spawned').toBeGreaterThan(1);
+    } finally {
+      await sup.close();
+      await record.close();
+    }
+  }, 60_000);
+
+  test('a run\'s end waits for its last output and its refusals, each time', async () => {
+    const dir = tempDir();
+    mkdirSync(join(dir, 'guarded'));
+    const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } }, guarded: [{ path: join(dir, 'guarded'), except: [] }] });
+    const tail = createHash('sha256').update('tail\n').digest('hex');
+    try {
+      // A refusal, then a last line and the end at once: the sandbox's parent reports all of it on the refusals pipe
+      // in the time the supervisor takes to read that pipe, so the end can be read before the line is.
+      for (let n = 0; n < 40; n++) {
+        const run = `run:TAIL${n}`;
+        await sup.start({ run, argv: ['/bin/sh', '-c', `mv ${dir}/guarded ${dir}/moved 2>/dev/null; echo tail >&2`], cwd: dir, grant: { run_as_you: true } });
+        const exit = await sup.wait(run);
+        expect(exit.evidence.stderr, `${run}'s last line is in its evidence`).toBe(tail);
+        const denied = ((await record.read({ after: 0, limit: 100_000 })) as Event[]).filter((e) => e.kind === 'sandbox.denied' && (e.data as { run: string }).run === run);
+        expect(denied.length, `${run}'s refusal is on the record by its end`).toBeGreaterThan(0);
+      }
+    } finally {
+      await sup.close();
+      await record.close();
+    }
+  }, 120_000);
+
+  test('a run writes the folder under a guarded path that is its own, and not the one beside it', async () => {
+    const dir = tempDir();
+    const [mine, theirs] = ['guarded/mine', 'guarded/theirs'].map((n) => { mkdirSync(join(dir, n), { recursive: true }); return join(dir, n); }) as [string, string];
+    const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    const sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } }, guarded: [{ path: join(dir, 'guarded'), except: [] }] });
+    try {
+      await sup.start({ run: 'run:OWN', argv: ['/bin/sh', '-c', `echo a > ${mine}/a; echo b > ${theirs}/b; true`], cwd: dir, grant: { run_as_you: true, own: [mine] } });
+      await sup.wait('run:OWN');
+      expect(existsSync(join(mine, 'a')), 'its own folder').toBe(true);
+      expect(existsSync(join(theirs, 'b')), 'the folder beside it stays guarded').toBe(false);
     } finally {
       await sup.close();
       await record.close();

@@ -109,12 +109,12 @@
       "match": "hub:service",
       "scope": "all_repos",
       "mode": "block",
-      "reason": "Stopping or unloading the hub's login service switches DeepBuild off, so only you do it, never an agent's call.",
+      "reason": "Stopping, unloading or changing the environment of the hub's login service can switch DeepBuild off, so only you do it, never an agent's call.",
       "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you.",
       "fail_closed": true
     },
     "no-hub-service-write": {
-      "match": "write:~/Library/LaunchAgents/com.deepbuild.hub.plist ~/.config/systemd/user/deepbuild-hub.service",
+      "match": "write:~/Library/LaunchAgents/com.deepbuild.hub.plist ~/.config/systemd/user/deepbuild-hub.service ~/.config/systemd/user/deepbuild-hub.service.d/* ~/.config/environment.d/*",
       "scope": "all_repos",
       "mode": "block",
       "reason": "The hub's login service file decides whether the hub runs, so only DeepBuild's setup or you change it, never an agent's write.",
