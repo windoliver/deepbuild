@@ -21,7 +21,7 @@ import { run } from './children.js';
 import { gitDirs, headOf } from './session-facts.js';
 import type { Draft, HookMeta, Hunk } from './wire.js';
 
-export type Kind = 'interface' | 'dependency' | 'behavior' | 'test' | 'configuration';
+type Kind = 'interface' | 'dependency' | 'behavior' | 'test' | 'configuration';
 type Obj = Record<string, unknown>;
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const handle = (id: string): string => `session:${letters(id)}`;
@@ -32,7 +32,7 @@ const TEST = /(^|\/)(tests?|__tests__|spec|e2e)\/|(^|\/)[^/]+[._-](test|spec)\.[
 const INTERFACE = /\.(d\.ts|proto|graphql|gql|idl|thrift|avsc)$|(^|\/)(openapi|swagger)[^/]*$|\.schema\.json$/;
 const CONFIGURATION = /(^|\/)\.[^/]+|(^|\/)(Dockerfile|Makefile|Procfile)$|\.(ya?ml|toml|ini|cfg|conf|env|json)$/;
 /** The kind of change a file's path says it is, read from the path alone: a manifest is a dependency, and so on. */
-export function kindOf(path: string): Kind {
+function kindOf(path: string): Kind {
   if (DEPENDENCY.test(path)) return 'dependency';
   if (TEST.test(path)) return 'test';
   if (INTERFACE.test(path)) return 'interface';
@@ -40,7 +40,7 @@ export function kindOf(path: string): Kind {
   return 'behavior';
 }
 /** A session's issue: the number its branch names as `issue-<n>`. */
-export const issueOf = (branch: string | null): number | null => {
+const issueOf = (branch: string | null): number | null => {
   const n = branch ? /(?:^|[^0-9A-Za-z])issue-(\d+)(?![0-9])/i.exec(branch)?.[1] : undefined;
   return n ? Number(n) : null;
 };
@@ -56,7 +56,7 @@ const ranges = (lines: number[]): string => {
   return out.join(', ');
 };
 /** The lines a session's change covers after one more edit: those the edit replaced go, those below it move, its own come in. */
-export function edited(lines: number[], hunks: Hunk[]): number[] {
+function edited(lines: number[], hunks: Hunk[]): number[] {
   let now = lines;
   for (const h of hunks) {
     now = now.flatMap((l) => (l < h.oldStart ? [l] : l >= h.oldStart + h.oldLines ? [l + h.newLines - h.oldLines] : []));

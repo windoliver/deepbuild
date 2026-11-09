@@ -43,6 +43,13 @@ test-confirm = []
 # Issue #1172: #337's spike window, in no shipped build: the suites that keep its proof build it, through the dev
 # dependency on this crate below.
 spike = []
+# Issue #1457: the replica's fixture door, in no shipped build: AppState and its clock, the fixture record's inbox
+# (`events`), and the bound values a replica sets. deep-replica and this crate's own tests turn it on.
+fixtures = []
+# Issue #1434: the `chrome@1` fixture its acceptance tests draw (`deep-app --chrome`, `deep-replica --chrome`) and the
+# wrong programs DEEP_CHROME_PLANT selects, in no shipped build. Unlike env-plants it builds in release, which the
+# budget run needs.
+chrome-fixture = []
 
 # Issue #337: the gpui-kit spike. Pinned to one gpui-kit commit, since gpui-shell is at
 # milestone M0 and unpublished. No `webview` feature: the app has no web view.
@@ -74,9 +81,8 @@ ed25519-dalek = "3"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # The menu-bar count: gpui-kit has no status item. Versions already in gpui's tree.
-# Issue #339 adds the event monitor (NSEvent, block2), the screen-capture access calls and the
-# one-frame capture (objc2-core-graphics), the cursor window's native move (raw-window-handle,
-# NSWindow) and the frame's pixels as a gpui image (image).
+# Issue #339 adds the screen-capture access calls and the HID table reads (objc2-core-graphics); its cursor window
+# left with #1457. block2, raw-window-handle and image serve the capture, the shown views and the color check.
 # Issue #262 adds NSScreen, NSGraphics, CGDisplayConfiguration, CGSession, NSDictionary and NSValue: whether a
 # window's display sleeps and whether the session is locked, for the views it reports shown.
 # The frame's pixels as a gpui image (`show.rs`), on every platform the app builds on.
@@ -100,6 +106,10 @@ objc2-screen-capture-kit = { version = "0.3", default-features = false, features
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMSampleBuffer"] }
 # Issue #377: the GPUI patch's surface reports, which release a GPU-layer slot.
 gpui-pre-apple = "=0.3.9"
+# Issue #1434: the chrome operators' graphs, written as Metal source for GPUI's renderer, and the chrome fixture's
+# idle reading (package-idle wakeups) and frame timing (thread CPU time). The versions already in the tree.
+deep-effects-render = { path = "../deep-effects-render" }
+libc = "0.2"
 # Issue #140: the color seam tags every Metal layer the app presents through, a surface wgpu
 # configures among them (the versions already in the tree).
 objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAMetalLayer", "objc2-core-foundation", "objc2-core-graphics"] }
@@ -107,7 +117,7 @@ wgpu = { version = "30", default-features = false, features = ["std", "metal"] }
 pollster = "0.4"
 
 [dev-dependencies]
-deep-app = { path = ".", features = ["spike"] }
+deep-app = { path = ".", features = ["spike", "fixtures"] }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
 
 # Real pixels from GPUI's offscreen Metal renderer; AppKit needs the main thread, so no libtest

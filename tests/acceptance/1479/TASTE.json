@@ -1,0 +1,14 @@
+{
+  "issue": 1479,
+  "criterion": "#1479.67deff55",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's request in the session (\"close the gaps that we can create pr to close the issue\"); not the owner's own call, and the owner may overturn it",
+  "when": "2026-11-09T04:39:48Z",
+  "screenshots": {
+    "title-1x.png": "39307e11b7919e2a9d0b5a9190622a84ec0c5125014ff19df90e685933cccaa3",
+    "title-8x.png": "a6c5be1fa23dc336813fea2a89bf1fba160b17b411322444471b7d0455f82e5c",
+    "title-16x.png": "6195c21d044a97bfe2a057432c888a4ab8761183aa514b483027f127e8f411ea",
+    "zoom-1x-16x.apng": "d3e84a25d37ad644b496302dcbc9f9ae1aa6ab1898f1c280a39f8f990026fdd5"
+  },
+  "note": "Read the three stills whole and a 520 px crop of the M at 16x on both sides, plus recording frame 80 of 120. GPUI's title matches Vello CPU's at 1x, 8x and 16x: same weight, placement and spacing. At 16x the M's vertex and inner corners are as sharp as Vello CPU's, with no notch, bulge or seam from the edge bands and no aliasing on the diagonals. The recording has all 120 frames and shows the title throughout. These are plain white glyphs on black, so this judges shape and edges, not colour."
+}

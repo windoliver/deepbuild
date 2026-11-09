@@ -192,31 +192,49 @@ pub unsafe fn post_pointer_move(ns_window: *mut AnyObject, point: NSPoint, uptim
     let _: () = msg_send![&*app, postEvent: event, atStart: false];
 }
 
-/// The process's package-idle and interrupt wakeups and its CPU, every thread's, in ns.
+/// The process's package-idle and interrupt wakeups, its CPU, every thread's, in ns, and its
+/// energy in nJ (#1492: a reading only).
 #[derive(Clone, Copy)]
 pub struct Usage {
     pub wakeups: u64,
     pub interrupts: u64,
     pub cpu_ns: u64,
+    pub energy_nj: u64,
+}
+
+/// The counter `Usage::energy_nj` comes from.
+pub const ENERGY_COUNTER: &str = "ri_energy_nj";
+
+/// The kernel's `rusage_info_v6`: libc stops at v4, and v6 is where Apple Silicon's energy counter is.
+#[repr(C)]
+struct RusageV6 {
+    v4: libc::rusage_info_v4,
+    ri_flags: u64,
+    ri_user_ptime: u64,
+    ri_system_ptime: u64,
+    ri_pinstructions: u64,
+    ri_pcycles: u64,
+    ri_energy_nj: u64,
+    ri_penergy_nj: u64,
+    reserved: [u64; 14],
 }
 
 pub fn usage() -> Usage {
-    // SAFETY: an all-zero rusage_info_v4 and rusage are valid for the calls to fill.
-    let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
+    // SAFETY: an all-zero RusageV6 and rusage are valid for the calls to fill.
+    let mut info: RusageV6 = unsafe { std::mem::zeroed() };
     let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
-    // SAFETY: `info` is a rusage_info_v4, the flavor asked for; `ru` is a rusage.
-    unsafe {
-        libc::proc_pid_rusage(
-            libc::getpid(),
-            libc::RUSAGE_INFO_V4,
-            (&raw mut info).cast::<libc::rusage_info_t>(),
-        );
+    // SAFETY: `info` is laid out as rusage_info_v6, the flavor asked for (6); `ru` is a rusage.
+    let status = unsafe {
+        let status =
+            libc::proc_pid_rusage(libc::getpid(), 6, (&raw mut info).cast::<libc::rusage_info_t>());
         libc::getrusage(libc::RUSAGE_SELF, &mut ru);
-    }
+        status
+    };
     let ns = |t: libc::timeval| t.tv_sec as u64 * 1_000_000_000 + t.tv_usec as u64 * 1_000;
     Usage {
-        wakeups: info.ri_pkg_idle_wkups,
-        interrupts: info.ri_interrupt_wkups,
+        wakeups: info.v4.ri_pkg_idle_wkups,
+        interrupts: info.v4.ri_interrupt_wkups,
         cpu_ns: ns(ru.ru_utime) + ns(ru.ru_stime),
+        energy_nj: if status == 0 { info.ri_energy_nj } else { 0 },
     }
 }
