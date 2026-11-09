@@ -51,7 +51,11 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
   deep_wait: object({ ask: str('The ask, as deep_ask returned it.', HANDLE('ask')) }),
   deep_open_item: object({ text: str('What is still open, in a sentence.') }),
   deep_status: object({}),
-  deep_search: object({ query: str('Words every hit must hold.') }),
+  deep_search: object({
+    query: str('Words every hit must hold.'),
+    file: maybe(str('A file, by its path in the repo: only past sessions whose reads and edits touched it.')),
+    cursor: maybe(str('Where to continue: the next a cut reply gave.')),
+  }),
   deep_claim: object({
     task_ref: str('The task: task:<id>, or the message that asked for it.', '^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$'),
     attempt: { type: 'integer', description: 'Which attempt at the task this is.' },

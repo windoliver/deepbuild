@@ -69,7 +69,7 @@ import { aboutCall, aboutPermission, standingRules, type About } from './standin
 import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
-import { openIndex, pageClaims, search, type IndexFill } from './search.js';
+import { aboutSessions, openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { gateTokens, openGitHub, type AppKey, type GitHub, type GitHubPlant } from '@deepbuild/github';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
 import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
@@ -1176,7 +1176,10 @@ export class Core {
         // With no token the forge's logs can't be read, so no run is asked for.
         repos.splice(0, repos.length, ...(env.GH_TOKEN ? await this.forgeRepos() : []));
         await archive.pass();
-      })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => { archiving = undefined; });
+      })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); })
+        // The archive's text index follows each pass, whatever the pass copied (#1515): a session it doesn't hold yet is read from its transcript.
+        .then(() => this.record.indexTranscripts()).catch((error: unknown) => { process.stderr.write(`deep hub: archive index: ${error instanceof Error ? error.message : String(error)}\n`); })
+        .finally(() => { archiving = undefined; });
       return archiving;
     };
     archivePass();
@@ -6511,7 +6514,7 @@ export class Core {
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_kinds': return await this.kinds(args);
         case 'deep_status': return await this.status(session);
-        case 'deep_search': return await this.find(String(args.query), session, context);
+        case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
         case 'deep_ask': return await this.askFor(session!, args);
         case 'deep_wait': return await this.waitFor(session!, String(args.ask));
         case 'deep_open_item': return await this.openItem(session!, String(args.text));
@@ -6782,8 +6785,11 @@ export class Core {
     return { session, gates, claims };
   }
 
-  /** deep_search: the wiki, decisions and the project's spec; bound to a session, its own open items and verdicts too. */
-  private async find(query: string, session: string | undefined, context: CallContext): Promise<Obj> {
+  /**
+   * deep_search: the wiki, decisions and the project's spec; bound to a session, its own open items and verdicts too,
+   * and its repo's past sessions (#1515), narrowed to those that touched `file` when it names one.
+   */
+  private async find(query: string, session: string | undefined, context: CallContext, file?: string, cursor?: string): Promise<Obj> {
     const worktree = session ? this.sessions.get(session)?.cwd : this.worktreeAt(context.cwd);
     const everyone = !session && this.options.plant === 'unbound-reads-all';
     // A claim reaches a session at its own scope, its repo's or everywhere's; a call bound to no session reads every repo's.
@@ -6794,7 +6800,21 @@ export class Core {
       query, index: await this.wikiIndex(), raw: (q, params) => this.record.raw(q, params), worktree, session: everyone ? { everyone: true } : session, covers,
       trustsIndex: this.options.plant === 'trusts-index',
       readings: (q) => this.numbers.search(q, everyone ? { everyone: true } : session),
+      ...(session ? { past: await this.pastSessions(project?.project_id ?? null, file, worktree) } : {}),
+      ...(cursor !== undefined ? { cursor } : {}),
     });
+  }
+  /**
+   * The past sessions a bound call reads (#1515): its repo's archived ones, newest first, and, naming a file, only
+   * those whose recorded reads and edits touched it. Another repo's are reached only as a wiki claim's scope allows.
+   */
+  private async pastSessions(project: string | null, file: string | undefined, worktree: string | undefined): Promise<NonNullable<Parameters<typeof search>[0]['past']>> {
+    let sessions = project === null ? [] : ((await this.record.raw('SELECT id FROM sessions WHERE project_id = ? AND transcript IS NOT NULL ORDER BY last_seen DESC, id', [project])) as { id: string }[]).map((r) => r.id);
+    if (file !== undefined) {
+      const by = new Set((await this.record.touched(file, worktree)).map((t) => t.session));
+      sessions = sessions.filter((id) => by.has(id));
+    }
+    return { sessions, messages: (terms, ids) => this.record.findMessages(terms, ids), about: (ids) => aboutSessions((sql, params) => this.record.raw(sql, params), ids) };
   }
   /** The wiki's index: a loaded package's in place of the shipped one, rebuilt from the pages when it first serves (#355). */
   private async wikiIndex(): Promise<IndexFill | undefined> {
