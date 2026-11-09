@@ -28,6 +28,7 @@ export { startCommand };
 export { gateCommand } from './gate-command.js';
 export { fixCommand, workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, raceCommand, secretCommand, memoryCommand, relationItems, rulesCommand, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { numbersCommand, statusCommand } from './status.js';
+export { joinCommand } from './remote.js';
 export { showCommand } from './show.js';
 export { exportCommand, kindsCommand } from './canvas.js';
 export { doctorCommand, doctorItems } from './doctor.js';
