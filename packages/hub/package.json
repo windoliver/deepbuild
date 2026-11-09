@@ -11,6 +11,11 @@
       "development": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./hub": {
+      "types": "./src/hub-command.ts",
+      "development": "./src/hub-command.ts",
+      "default": "./dist/hub-command.js"
+    },
     "./lease": {
       "types": "./src/heavy.ts",
       "development": "./src/heavy.ts",

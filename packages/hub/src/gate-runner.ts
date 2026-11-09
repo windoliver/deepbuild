@@ -106,7 +106,7 @@ export interface GateOptions {
  * turn, the soonest wake-up or cron job due, and what starts its checks whatever the loop does: a claim the agent made
  * in the turn, or your words since the last turn end. With none, the turn isn't a loop's.
  */
-export interface LoopReading { session: string; origin: string | undefined; due: { at: number; what: 'wake-up' | 'cron' } | null; starter: 'claim' | 'words' | 'answer' | null }
+interface LoopReading { session: string; origin: string | undefined; due: { at: number; what: 'wake-up' | 'cron' } | null; starter: 'claim' | 'words' | 'answer' | null }
 /** What started a held place, as the record names it (#965). */
 type StartedBy = 'loop_paused' | 'cap' | 'claim' | 'words' | 'answer';
 /** A held place as the record has it (`check.held`), the scheduler's HeldRecord. */

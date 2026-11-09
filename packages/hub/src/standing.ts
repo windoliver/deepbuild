@@ -10,9 +10,6 @@ import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 
-/** The effect classes a standing rule decides at PreToolUse, by their `effect:` guard entries. */
-export const DECIDED = new Set(['dependency', 'cloud-resource']);
-
 /** What a call is about, as an authority ask's subject, with the ask's source and question. */
 export interface About {
   source: string;
@@ -113,7 +110,7 @@ export function aboutPermission(tool: string, input: Obj): About {
 }
 
 /** A standing rule rules.json carries for deep-hook: a cloud owner (an AWS account) your saved yes covers. */
-export interface Standing { effect: 'cloud-resource'; owner: string; account: string | null; decision: string }
+interface Standing { effect: 'cloud-resource'; owner: string; account: string | null; decision: string }
 
 /** The standing rules for cloud resources in force: each active decision saving a yes to one, by its owner. */
 export function standingRules(rows: readonly { id: string; answer: string; subject: Obj | null; state: string }[]): Standing[] {

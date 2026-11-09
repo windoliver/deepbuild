@@ -53,6 +53,11 @@
       "what": "The items a Canvas draws, by ID, kept across renders: scene.set(id, values)."
     },
     {
+      "name": "Menu",
+      "from": "deepbuild-menu",
+      "what": "DeepBuild's menu, drawn inside the panel: new Menu(id, { label, rows: [{ id, label, disabled?, on_pick: (cx) => ... }] }). Press the trigger, slide to a row and let go, or click a row."
+    },
+    {
       "name": "Button",
       "from": "gpui-base",
       "what": "A button: Button.new(id) with its label as a child and .on_click(handler), styled like a div."
@@ -370,7 +375,7 @@
     },
     {
       "name": "Menu",
-      "reason": "It draws outside its parent, where it could cover the question card."
+      "reason": "The toolkit's menu draws outside its parent, where it could cover the question card; the name serves DeepBuild's own Menu, drawn inside the panel."
     },
     {
       "name": "MenuBar",

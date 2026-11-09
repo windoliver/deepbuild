@@ -72,7 +72,7 @@ export async function provenGuards(dir: string, deepHook: string): Promise<{ nam
   return out;
 }
 
-export type Added = { status: 'installed'; names: string[] } | { status: 'refused'; reason: string };
+type Added = { status: 'installed'; names: string[] } | { status: 'refused'; reason: string };
 
 /**
  * Installs `given`'s entries into `<dir>/rules.json` once each one's planted call matches and its twin doesn't,
