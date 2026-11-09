@@ -16,15 +16,14 @@
 // Metal; the first frame its view draws must list no created pipeline (`created`, README: The surface under test).
 // Wrong programs: a vertex stage without @invariant in one of the two passes (pixels missing); a warm-up that leaves a
 // pipeline to the first frame (named, with its items, feature set and target).
+// Its first-frame test is redraft/depth-equal.test.ts's (dispute D1: the fixtures' controls carried no role).
 import { describe, expect, it } from 'vitest';
 import {
-  AC, BALL, WRITER, ballDoc, everyFixture, firstDrawn, liveCall, liveReply, named, num, obj, payload, readF32Image, requireGpu, run, sessionRow, shown,
-  useBin, useOut, view3dCall, view3dFrame, viewsOf, writeJson, type F32Image, type Lane, type Size,
+  AC, BALL, ballDoc, readF32Image, requireGpu, run, useBin, useOut, view3dCall, view3dFrame, writeJson, type F32Image,
 } from './helpers.ts';
 
 const bin = useBin();
 const out = useOut();
-const FPS = 30;
 const expected = BALL.level * BALL.opacity;
 
 /** Every pixel off 0.4 by more than 0.004 on a channel, named; those near the sky's 0 are called missing. */
@@ -57,32 +56,5 @@ describe(`${AC[1]} a depth-equal pass leaves no missing pixel, and no fixture's 
       const caught = pixelProblems(doctored, `${what} (doctored)`);
       expect(caught.length === 1 && caught[0]!.includes('pixel (200, 300)') && caught[0]!.includes('missing'), `the check names a missing pixel: ${caught.slice(0, 3).join('; ')}`).toBe(true);
     }
-  }, 1_800_000);
-
-  it(`${AC[1]} the first frame of every fixture document compiles no pipeline, on the noop lane and on Metal`, () => {
-    const dir = out();
-    const docs = Object.entries(everyFixture());
-    const lanes: Lane[] = process.platform === 'darwin' ? ['noop', 'gpu'] : ['noop'];
-    for (const lane of lanes) {
-      const calls = docs.map(([name, doc]) => liveCall({
-        frames: 2, fps: FPS,
-        sessions: [{ session: name, writer: WRITER, doc: writeJson(dir, `${name}-${lane}.json`, payload(doc)), size: obj(doc, name)['size'] as unknown as Size }],
-      }));
-      const replies = run(bin(), dir, calls, { lane });
-      const problems: string[] = [];
-      docs.forEach(([name], i) => {
-        const live = liveReply(replies[i]!, `${name} on ${lane}`);
-        const row = sessionRow(live, name);
-        if (row['state'] !== 'live') { problems.push(`${lane}: ${name} was not admitted: ${shown(row)}`); return; }
-        const first = firstDrawn(live, name);
-        if (first === null) { problems.push(`${lane}: ${name} drew no frame`); return; }
-        const v = viewsOf(live, name).find((x) => x.frame === first)!;
-        for (const c of v.created) problems.push(`${lane}: ${name}: its first frame: ${named(c, first, FPS)}`);
-        num(v.operator_pipelines, `${name}: operator_pipelines`);
-      });
-      console.log(`${AC[1]}: ${lane}: ${docs.length} fixture documents, ${problems.length} problems${problems.length ? `, first: ${problems[0]}` : ''}`);
-      expect(problems, `${lane}: no fixture document compiles a pipeline in its first frame`).toEqual([]);
-    }
-    requireGpu();
   }, 1_800_000);
 });
