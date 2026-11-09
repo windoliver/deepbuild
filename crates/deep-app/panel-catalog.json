@@ -1,6 +1,6 @@
 {
   "module": "@deepbuild/panel",
-  "about": "The names a panel imports from @deepbuild/panel, DeepBuild's own module (#1425). `core` is the module itself: a view, an element, the layout helpers, the dock and DeepBuild's canvas. `components` is the catalog of toolkit components a panel may use, with their props and an example that renders. `not_offered` lists every other component the toolkit exports, with the reason it is not offered; `per_frame` marks one whose script runs per frame, refused at pack check and load. `from` says which toolkit module serves a name; only the app's loader reads it. The data a panel reads (needs_you, quotes) is the module's too, served by the app.",
+  "about": "The names a panel imports from @deepbuild/panel, DeepBuild's own module (#1425). `core` is the module itself: a view, an element, the layout helpers, the dock and DeepBuild's canvas. `components` is the catalog of toolkit components a panel may use, with their props and an example that renders. `not_offered` lists every other component the toolkit exports, with the reason it is not offered; `per_frame` marks one whose script runs per frame, refused at pack check and load. `from` says which toolkit module serves a name; only the app's loader reads it. The data a panel reads (needs_you, sessions, quotes) is the module's too, served by the app.",
   "core": [
     {
       "name": "View",

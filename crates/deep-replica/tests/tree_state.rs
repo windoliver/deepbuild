@@ -32,7 +32,13 @@ impl Drive {
             .expect("deep-drive starts");
         let stdin = child.stdin.take().unwrap();
         let stdout = BufReader::new(child.stdout.take().unwrap());
-        let mut drive = Drive { child, stdin, stdout, replica: Value::Null, out };
+        let mut drive = Drive {
+            child,
+            stdin,
+            stdout,
+            replica: Value::Null,
+            out,
+        };
         assert_eq!(drive.read()["ready"], true);
         let reply = drive.call(json!({"call": "launch", "launch": launch}));
         assert_eq!(reply["ok"], true, "launch: {reply}");
@@ -59,7 +65,8 @@ impl Drive {
     }
 
     fn click(&mut self, id: &str) {
-        let reply = self.call(json!({"call": "act", "locator": {"id": id}, "act": {"kind": "click"}}));
+        let reply =
+            self.call(json!({"call": "act", "locator": {"id": id}, "act": {"kind": "click"}}));
         assert_eq!(reply["ok"], true, "click {id}: {reply}");
     }
 }
@@ -109,12 +116,17 @@ fn a_state_is_read_as_its_status_map_entry() {
     assert!(!rows.is_empty(), "the sidebar has session rows");
     for row in rows {
         let name = row["name"].as_str().unwrap_or_default();
-        let (_, said) = name.split_once(" · ").unwrap_or_else(|| panic!("{name} says its state"));
+        let (_, said) = name
+            .split_once(" · ")
+            .unwrap_or_else(|| panic!("{name} says its state"));
         let (_, entry) = ENTRIES
             .iter()
             .find(|(word, _)| said.starts_with(word))
             .unwrap_or_else(|| panic!("{name} says a state's word"));
-        assert_eq!(row["value"], *entry, "the row {name} is valued by its state's entry");
+        assert_eq!(
+            row["value"], *entry,
+            "the row {name} is valued by its state's entry"
+        );
     }
     let asks = with_id(&snapshot, "ask:");
     assert!(!asks.is_empty(), "Needs you has rows");
@@ -132,21 +144,38 @@ fn the_snapshot_holds_the_menu_bar_title_and_the_ringed_row_as_focus() {
         with_id(&before, "ask:").len().to_string(),
         "the menu bar counts the asks Needs you lists"
     );
-    assert_eq!(before["focus"], Value::Null, "nothing holds the keyboard at launch");
-    let second = with_id(&before, "session:")[1]["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        before["focus"],
+        Value::Null,
+        "nothing holds the keyboard at launch"
+    );
+    let second = with_id(&before, "session:")[1]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     drive.click(&second);
-    assert_eq!(drive.see()["focus"], second.as_str(), "the clicked row is ringed and holds the keyboard");
+    assert_eq!(
+        drive.see()["focus"],
+        second.as_str(),
+        "the clicked row is ringed and holds the keyboard"
+    );
 }
 
 #[test]
 fn the_question_card_is_valued_by_its_arming_state_and_holds_the_keyboard() {
     let mut drive = Drive::launch("card", json!({"from": "fixture"}));
-    let ask = with_id(&drive.see(), "ask:")[0]["id"].as_str().unwrap().to_owned();
+    let ask = with_id(&drive.see(), "ask:")[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     drive.click(&ask);
     let shown = drive.see();
     let card = with_id(&shown, "question-card");
     assert_eq!(card.len(), 1, "one card node");
-    assert_eq!(card[0]["value"], "presented", "a card just shown isn't armed");
+    assert_eq!(
+        card[0]["value"], "presented",
+        "a card just shown isn't armed"
+    );
     assert_eq!(shown["focus"], "question-card");
     let armed = drive.call(json!({
         "call": "expect", "locator": {"id": "question-card"},
@@ -157,7 +186,10 @@ fn the_question_card_is_valued_by_its_arming_state_and_holds_the_keyboard() {
 
 #[test]
 fn what_an_agents_panel_draws_sits_under_a_node_saying_an_agent_wrote_it() {
-    let panel = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/agent-words-panel");
+    let panel = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/agent-words-panel"
+    );
     let snapshot = Drive::launch("agent", json!({"from": "fixture", "panel": panel})).see();
     let marked: Vec<&Value> = nodes(&snapshot["tree"])
         .into_iter()

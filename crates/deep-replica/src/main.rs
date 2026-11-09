@@ -86,7 +86,9 @@ mod replica {
                     "needs-you@1" => deep_replica::kit::needs_you_view(dir),
                     "session.row@1" => deep_replica::kit::session_row_view(dir),
                     _ => {
-                        eprintln!("deep-replica: --view-kit runs needs-you@1 or session.row@1, not {kit}");
+                        eprintln!(
+                            "deep-replica: --view-kit runs needs-you@1 or session.row@1, not {kit}"
+                        );
                         return 2;
                     }
                 };
