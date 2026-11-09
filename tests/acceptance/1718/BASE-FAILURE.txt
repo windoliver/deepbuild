@@ -1,0 +1,213 @@
+Base commit: f1e8736e (origin/main, "Merge pull request #1742 from windoliver/worktree-github-issue-1359-ee77ac")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1718 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (uncommitted), node_modules from npm ci, the workspaces
+built (npm run build --workspaces), and cargo build --locked --bin deep-show and --bin deep-hook done beforehand (each file
+builds them again, warm). The suite typechecks: node node_modules/typescript/bin/tsc -p tests/acceptance/1718/tsconfig.json.
+Date: 2026-11-09T06:44:50Z  Node v24.22.2  vitest 5.0.5  darwin-arm64 (Mac17,10)  cargo 1.99.1
+Exit code: 1. Paths below have the checkout's absolute path replaced by <worktree>.
+
+Result: 8 tests, 7 failed, 1 passed. Each failure is at the criterion's own assertion; the harness came up every time (hub
+started in a temp HOME, the Claude Code session's session.start recorded from its hooks, its deep mcp initialized, the
+deep-show run references taken, the installed tree laid out).
+
+- AC1 (hub.test.ts, 6 tests, all fail): every op through the hub and deep mcp answers isError with unlisted_field at
+  /params/arguments/at, each failure naming its op: sheet ("Leave out at: sheet takes only ."), list, search, word, gallery
+  and read. deep-show run answered all six calls (the references), so the base's six refusals are the hub path's alone.
+- AC2 (hub.test.ts, 1 test, passes on the base): cursor on word is refused with unlisted_field at /params/arguments/cursor.
+  kinds_reply checks the agent's fields in the order the call holds them, and the stamped at comes after cursor, so the base
+  already refuses cursor at its own path. The test guards that the fix keeps it.
+- AC3 (planted.test.ts, 1 test, fails): the planted half holds on the base (the plant's log shows a stamped deep_kinds call
+  of each op, and criterion 1's check fails each op naming it and /params/arguments/at), but the same installed tree with its
+  own canvas core fails the check for every op in the same way, so the plant can't be told from the real core: the test fails
+  at "criterion 1's check passes every op on the installed tree's own canvas core".
+- Not checked at the base, because no implementation exists: that the passing side of AC1 (a reply equal to deep-show run's
+  apart from core and set_digest) passes on a fixed hub, and that the plant's stamp still reaches kinds_reply once the real
+  core stops stamping (on the base the core overwrites the plant's at with its own).
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1718
+
+ ❯ planted.test.ts (1 test | 1 failed) 103814ms
+   ❯ AC3 a planted deep-show canvas that stamps at again fails the first criterion, naming the op (1)
+     × AC3 the planted canvas core fails criterion 1 for every op, naming it; the same installed tree with its own canvas core passes 32902ms
+ ❯ hub.test.ts (7 tests | 6 failed) 29384ms
+   ❯ AC1 through a running hub and deep mcp, with a session bound by its hooks, deep_kinds answers each op as deep-show run does (6)
+     × AC1 deep_kinds sheet answers without isError, its reply equal to deep-show run's apart from core and set_digest 1439ms
+     × AC1 deep_kinds list answers without isError, its reply equal to deep-show run's apart from core and set_digest 220ms
+     × AC1 deep_kinds search answers without isError, its reply equal to deep-show run's apart from core and set_digest 6ms
+     × AC1 deep_kinds word answers without isError, its reply equal to deep-show run's apart from core and set_digest 3ms
+     × AC1 deep_kinds gallery answers without isError, its reply equal to deep-show run's apart from core and set_digest 14ms
+     × AC1 deep_kinds read answers without isError, its reply equal to deep-show run's apart from core and set_digest 17ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  hub.test.ts > AC1 through a running hub and deep mcp, with a session bound by its hooks, deep_kinds answers each op as deep-show run does > AC1 deep_kinds sheet answers without isError, its reply equal to deep-show run's apart from core and set_digest
+AssertionError: deep_kinds sheet through the hub and deep mcp: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds sheet: answered isError: unlisted_field at /params/arguments/at: Leave out at: sheet takes only .",
++ ]
+
+ ❯ hub.test.ts:41:110
+     39|       const { live, refs } = world();
+     40|       const got = await kindsOverMcp(live.agent, argsOf(op, refs.first…
+     41|       expect(kindsFailures(op, got, refs.replies.get(op)!), `deep_kind…
+       |                                                                                                              ^
+     42|     }, 600_000);
+     43|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  hub.test.ts > AC1 through a running hub and deep mcp, with a session bound by its hooks, deep_kinds answers each op as deep-show run does > AC1 deep_kinds list answers without isError, its reply equal to deep-show run's apart from core and set_digest
+AssertionError: deep_kinds list through the hub and deep mcp: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds list: answered isError: unlisted_field at /params/arguments/at: Leave out at: list takes only registry, cursor.",
++ ]
+
+ ❯ hub.test.ts:41:110
+     39|       const { live, refs } = world();
+     40|       const got = await kindsOverMcp(live.agent, argsOf(op, refs.first…
+     41|       expect(kindsFailures(op, got, refs.replies.get(op)!), `deep_kind…
+       |                                                                                                              ^
+     42|     }, 600_000);
+     43|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  hub.test.ts > AC1 through a running hub and deep mcp, with a session bound by its hooks, deep_kinds answers each op as deep-show run does > AC1 deep_kinds search answers without isError, its reply equal to deep-show run's apart from core and set_digest
+AssertionError: deep_kinds search through the hub and deep mcp: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds search: answered isError: unlisted_field at /params/arguments/at: Leave out at: search takes only query, cursor.",
++ ]
+
+ ❯ hub.test.ts:41:110
+     39|       const { live, refs } = world();
+     40|       const got = await kindsOverMcp(live.agent, argsOf(op, refs.first…
+     41|       expect(kindsFailures(op, got, refs.replies.get(op)!), `deep_kind…
+       |                                                                                                              ^
+     42|     }, 600_000);
+     43|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  hub.test.ts > AC1 through a running hub and deep mcp, with a session bound by its hooks, deep_kinds answers each op as deep-show run does > AC1 deep_kinds word answers without isError, its reply equal to deep-show run's apart from core and set_digest
+AssertionError: deep_kinds word through the hub and deep mcp: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds word: answered isError: unlisted_field at /params/arguments/at: Leave out at: word takes only word.",
++ ]
+
+ ❯ hub.test.ts:41:110
+     39|       const { live, refs } = world();
+     40|       const got = await kindsOverMcp(live.agent, argsOf(op, refs.first…
+     41|       expect(kindsFailures(op, got, refs.replies.get(op)!), `deep_kind…
+       |                                                                                                              ^
+     42|     }, 600_000);
+     43|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  hub.test.ts > AC1 through a running hub and deep mcp, with a session bound by its hooks, deep_kinds answers each op as deep-show run does > AC1 deep_kinds gallery answers without isError, its reply equal to deep-show run's apart from core and set_digest
+AssertionError: deep_kinds gallery through the hub and deep mcp: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds gallery: answered isError: unlisted_field at /params/arguments/at: Leave out at: gallery takes only cursor.",
++ ]
+
+ ❯ hub.test.ts:41:110
+     39|       const { live, refs } = world();
+     40|       const got = await kindsOverMcp(live.agent, argsOf(op, refs.first…
+     41|       expect(kindsFailures(op, got, refs.replies.get(op)!), `deep_kind…
+       |                                                                                                              ^
+     42|     }, 600_000);
+     43|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  hub.test.ts > AC1 through a running hub and deep mcp, with a session bound by its hooks, deep_kinds answers each op as deep-show run does > AC1 deep_kinds read answers without isError, its reply equal to deep-show run's apart from core and set_digest
+AssertionError: deep_kinds read through the hub and deep mcp: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_kinds read: answered isError: unlisted_field at /params/arguments/at: Leave out at: read takes only example, guide, offset.",
++ ]
+
+ ❯ hub.test.ts:41:110
+     39|       const { live, refs } = world();
+     40|       const got = await kindsOverMcp(live.agent, argsOf(op, refs.first…
+     41|       expect(kindsFailures(op, got, refs.replies.get(op)!), `deep_kind…
+       |                                                                                                              ^
+     42|     }, 600_000);
+     43|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  planted.test.ts > AC3 a planted deep-show canvas that stamps at again fails the first criterion, naming the op > AC3 the planted canvas core fails criterion 1 for every op, naming it; the same installed tree with its own canvas core passes
+AssertionError: criterion 1's check passes every op on the installed tree's own canvas core, so the plant's failure is the stamp's: expected { …(6) } to deeply equal { sheet: [], list: [], …(4) }
+
+- Expected
++ Received
+
+  {
+-   "gallery": [],
+-   "list": [],
+-   "read": [],
+-   "search": [],
+-   "sheet": [],
+-   "word": [],
++   "gallery": [
++     "deep_kinds gallery: answered isError: unlisted_field at /params/arguments/at: Leave out at: gallery takes only cursor.",
++   ],
++   "list": [
++     "deep_kinds list: answered isError: unlisted_field at /params/arguments/at: Leave out at: list takes only registry, cursor.",
++   ],
++   "read": [
++     "deep_kinds read: answered isError: unlisted_field at /params/arguments/at: Leave out at: read takes only example, guide, offset.",
++   ],
++   "search": [
++     "deep_kinds search: answered isError: unlisted_field at /params/arguments/at: Leave out at: search takes only query, cursor.",
++   ],
++   "sheet": [
++     "deep_kinds sheet: answered isError: unlisted_field at /params/arguments/at: Leave out at: sheet takes only .",
++   ],
++   "word": [
++     "deep_kinds word: answered isError: unlisted_field at /params/arguments/at: Leave out at: word takes only word.",
++   ],
+  }
+
+ ❯ planted.test.ts:46:157
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  7 failed | 1 passed (8)
+   Start at  22:42:09
+   Duration  137.68s (tests 98%, transform 1%, import 1%)
+

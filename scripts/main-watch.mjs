@@ -2,7 +2,8 @@
 // runs a tick here, in a checkout of the watched repository:
 //
 //   node scripts/main-watch.mjs tick     one scheduled run
-//   node scripts/main-watch.mjs status   the gate a landing reads: `landings open` (exit 0) or `landings paused: …` (1)
+//   node scripts/main-watch.mjs status   the gate a landing reads: `landings open` (exit 0) or `landings paused: …` (1);
+//                                        open, a second line names the last clean run, which `deep hub promote` takes
 //
 // A tick fetches origin's main and, once 5 landings reached it or 6 hours passed since the last run, or while landings
 // are paused, runs the unit and lint lanes of that head's own scripts/lanes.mjs, in a checkout of it, through its
@@ -416,8 +417,10 @@ function run() {
 }
 
 function status() {
-  const reds = paused(load());
-  if (!reds.length) return say('landings open');
+  const state = load();
+  const reds = paused(state);
+  // The commit `deep hub promote` may take (#1334): the head of the last run that found nothing new failing.
+  if (!reds.length) return say(`landings open${state.clean ? `\nlast clean run: ${state.clean}` : ''}`);
   say(`landings paused: main is red: ${reds.map(({ id, landing, issue }) => `${id}${landing ? ` since ${short(landing)}` : ''}${issue ? ` (#${issue})` : ''}`).join('; ')}`);
   process.exitCode = 1;
 }

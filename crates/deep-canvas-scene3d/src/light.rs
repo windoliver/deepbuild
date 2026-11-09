@@ -77,6 +77,13 @@ pub struct Lobes {
     pub flake_cos_tilt: f64,
     /// Whether the specular color leaves white, which is a feature too (Material).
     pub tinted: bool,
+    /// Subsurface (#481; Material: subsurface): its weight, its color (linear; `None` for the
+    /// part's base color at the pixel), its mean free path in m per channel, and whether thin
+    /// parts let light through.
+    pub subsurface: f64,
+    pub subsurface_color: Option<Vec3>,
+    pub subsurface_radius: Vec3,
+    pub subsurface_thin: bool,
 }
 
 impl Lobes {
@@ -93,6 +100,7 @@ impl Lobes {
             || self.diffuse_roughness > 0.0
             || self.retroreflection > 0.0
             || self.flake_weight > 0.0
+            || self.subsurface > 0.0
     }
 }
 
@@ -609,6 +617,17 @@ fn lobes(p: &serde_json::Map<String, Value>, base: Vec3) -> Result<Lobes, &'stat
         }
     });
     let flake_w = unit(at("flakes", "weight", 0.0), "flakes/weight")?;
+    // Skin's mean free paths unless set, each a positive length in m (#481).
+    let radius = match sub("subsurface", "radius") {
+        None | Some(Value::Null) => [0.0036, 0.0014, 0.0007],
+        v => color3(v)
+            .filter(|r| r.iter().all(|x| *x > 0.0))
+            .ok_or("subsurface/radius")?,
+    };
+    let thin = match sub("subsurface", "thin") {
+        None | Some(Value::Null) => true,
+        Some(v) => v.as_bool().ok_or("subsurface/thin")?,
+    };
     Ok(Lobes {
         sheen: scaled(color("sheen").ok_or("sheen/color")?, sheen_w),
         sheen_roughness: at("sheen", "roughness", 0.5).clamp(0.0, 1.0),
@@ -635,6 +654,14 @@ fn lobes(p: &serde_json::Map<String, Value>, base: Vec3) -> Result<Lobes, &'stat
             .to_radians()
             .cos(),
         tinted: color3(p.get("specular_color")).is_some_and(|c| c != [1.0; 3]),
+        subsurface: unit(at("subsurface", "weight", 0.0), "subsurface/weight")?,
+        subsurface_color: match sub("subsurface", "color") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) if s == "base" => None,
+            v => Some(color3(v).ok_or("subsurface/color")?),
+        },
+        subsurface_radius: radius,
+        subsurface_thin: thin,
     })
 }
 

@@ -19,9 +19,9 @@ interface ModsFacts {
   holdsWhen: { case: 'managed' | 'login' | 'plan' | 'interactive'; text: string; subscriptionTypes?: string[]; mode?: string; since?: string; tools?: string[] }[];
 }
 /** The Claude Code facts' mods entry. */
-export const modsFacts = (): ModsFacts => readFacts<{ mods: ModsFacts }>('claude-code.facts.json').mods;
+const modsFacts = (): ModsFacts => readFacts<{ mods: ModsFacts }>('claude-code.facts.json').mods;
 
-export interface Mod {
+interface Mod {
   /** The plugin as Claude Code names it, `name@marketplace`. */
   plugin: string;
   name: string;

@@ -110,7 +110,7 @@ function exportUsage(): number {
 }
 
 /** One session as the canvas core takes it: its thread, the name its outline shows. */
-export interface CanvasSession { id: string; thread: string; name: string }
+interface CanvasSession { id: string; thread: string; name: string }
 /** What the hub knows that the canvas core reads: the world file a test gives (DEEP_HUB_TEST_SHOW) and the record. */
 export interface CanvasWorld {
   sessions: CanvasSession[];

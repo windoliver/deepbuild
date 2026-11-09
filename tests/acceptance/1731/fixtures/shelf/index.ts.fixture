@@ -1,0 +1,65 @@
+// The test library fill (#1731): an asset.library@1 fill through deep.registerSource for the fixture library "Shelf"
+// at probe.json's `host` (README, The surface under test). Every call it makes goes through the hub's ctx.fetch, the
+// Source block's, under its quota and timeout; it needs no secret. It answers search from the library's search API,
+// which has no size filter, so it keeps only rows whose stated size is in the asked range, and leaves out a row with
+// no stated size. It answers fetch from the asset's own record on the library: the file, its sidecars, the license and
+// the upstream, never downloading a byte itself. A license maps to its SPDX ID when the record has one, else to
+// `LicenseRef-shelf-<key>`.
+// probe.json may plant a wrong fill: `measures-by-download` downloads each hit's file during search to measure it;
+// `reports-cc0` reports the record's license without an SPDX ID as CC0-1.0, in search and fetch.
+import { readFileSync } from 'node:fs';
+
+interface Probe { host: string; plant?: 'measures-by-download' | 'reports-cc0' }
+interface Answer { status: number; headers: Record<string, string>; body: string }
+interface Ctx { fetch(r: { method: string; path: string; headers?: Record<string, string> }): Promise<Answer> }
+interface Query { words: string; kind: 'model' | 'hdri' | 'texture' | null; size_m: [number, number] | null; license: string[] | null; limit: number }
+interface RecordLicense { key: string; spdx: string | null; name: string; url: string; attribution: string | null }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+
+function licenseOf(l: RecordLicense): { id: string; terms: string; shareable: boolean; credit: string | null } {
+  if (probe.plant === 'reports-cc0' && l.spdx === null) return { id: 'CC0-1.0', terms: 'https://creativecommons.org/publicdomain/zero/1.0/', shareable: true, credit: null };
+  return { id: l.spdx ?? `LicenseRef-shelf-${l.key}`, terms: l.url, shareable: l.spdx !== null, credit: l.attribution };
+}
+const json = (a: Answer, what: string): any => {
+  if (a.status !== 200) throw Error(`the library answered ${a.status} to ${what}`);
+  return JSON.parse(a.body);
+};
+/** The planted measure: the model's glTF downloaded, its height read from the POSITION accessor's bounds. */
+async function measured(ctx: Ctx, id: string): Promise<number | null> {
+  const record = json(await ctx.fetch({ method: 'GET', path: `/api/assets/${encodeURIComponent(id)}` }), `the record of ${id}`);
+  const gltf = record.files.find((f: { path: string }) => f.path.endsWith('.gltf'));
+  if (!gltf) return null;
+  const doc = json(await ctx.fetch({ method: 'GET', path: gltf.path }), gltf.path);
+  const a = doc.accessors[doc.meshes[0].primitives[0].attributes.POSITION];
+  return Math.max(...a.max.map((v: number, i: number) => v - a.min[i]));
+}
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerSource('ext.shelf.library', {
+    variant: 'library',
+    host: probe.host,
+    quota: { per_minute: 600, per_day: 100_000 },
+    timeout: 10_000,
+    async search(ctx: Ctx, q: Query) {
+      const params = new URLSearchParams({ q: q.words });
+      if (q.kind) params.set('type', q.kind);
+      const found = json(await ctx.fetch({ method: 'GET', path: `/api/search?${params}` }), 'the search');
+      const rows = [];
+      for (const e of found.results) {
+        const size: number | null = probe.plant === 'measures-by-download' && e.type === 'model' ? await measured(ctx, e.id) : e.size_m;
+        if (q.size_m && (size === null || size < q.size_m[0] || size > q.size_m[1])) continue;
+        const license = licenseOf(e.license);
+        if (q.license && !q.license.includes(license.id)) continue;
+        rows.push({ id: e.id, name: e.name, kind: e.type, license, size_m: size, triangles: e.triangles, thumbnail: e.thumbnail, url: e.url });
+      }
+      return { rows: rows.slice(0, q.limit) };
+    },
+    async fetch(ctx: Ctx, q: { id: string }) {
+      const a = await ctx.fetch({ method: 'GET', path: `/api/assets/${encodeURIComponent(q.id)}` });
+      if (a.status === 404) return { failed: 'not found' };
+      const r = json(a, `the record of ${q.id}`);
+      const [file, ...sidecars] = r.files;
+      return { file, sidecars, license: licenseOf(r.license), upstream: { url: r.url, version: r.version, modified: r.modified } };
+    },
+  });
+}
