@@ -10,7 +10,7 @@ import { diffOf, follow, hunks, newSide, norm } from './diff.js';
 import type { DroppedFinding, ReviewerAnswer, ReviewFinding, ReviewResult, ReviewSpec, Reviewer, SendBackItem } from './types.js';
 
 /** The rubric page's rules, `<rule>: <text>`, in order. */
-export const rubricRules = (page: string): { rule: string; text: string }[] =>
+const rubricRules = (page: string): { rule: string; text: string }[] =>
   [...page.matchAll(/^\s*[-*]\s+([A-Za-z0-9][\w.-]*):\s*(.+)$/gm)].map(([, rule, text]) => ({ rule: rule!, text: text!.trim() }));
 
 const nothing = (): Omit<ReviewResult, 'outcome' | 'testsRun' | 'failures' | 'verdictLine'> =>

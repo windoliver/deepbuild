@@ -252,7 +252,8 @@ mod suite {
                 .unwrap_or_else(|| panic!("no {id} item in {:?}", snapshot.items))
         };
         let caption = item("session-caption");
-        assert_eq!(caption["text"], "Hours to each deadline", "{caption}");
+        // Issue #1455: the caption names what the readout counts.
+        assert_eq!(caption["text"], "Asks with a deadline", "{caption}");
         assert!(caption["sprites"].as_u64().unwrap() > 0, "{caption}");
         let readout = item("session-readout");
         // The page counts the first session's open asks, as its line does.

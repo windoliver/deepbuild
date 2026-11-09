@@ -9,6 +9,7 @@
 
 pub mod ao;
 pub mod cull;
+pub mod created;
 mod diag;
 pub mod env;
 pub mod flare;
@@ -22,6 +23,7 @@ mod oit;
 mod op;
 pub mod print;
 pub mod shadow;
+pub mod sss;
 pub mod status;
 pub mod surface;
 pub mod targets;
@@ -185,7 +187,7 @@ pub struct Planted {
     pub single_sample: bool,
     /// #1173: each frame's resolve blends in half of the previous frame's.
     pub resolve_accumulates: bool,
-    /// #428's shading plants as the shader's bits (scene3d.wgsl: `P_*`), 0 for none.
+    /// #428's and #481's shading plants as the shader's bits (scene3d.wgsl: `P_*`), 0 for none.
     pub lobes: u32,
     /// #446: the local maps' wrong programs.
     pub local: local::Planted,
@@ -463,6 +465,9 @@ impl AdjustEntry {
     }
 }
 
+/// scene3d.wgsl's `P_SSS_ACROSS` (#481): the planted spread that takes every tap.
+const PLANT_SSS_ACROSS: u32 = 8192;
+
 /// The most distinct lobe sets a frame shades with (#428): its lobe table's entries.
 const LOBE_ENTRIES: usize = 512;
 
@@ -500,9 +505,38 @@ fn lobe_entry(l: &light::Lobes, seed: u32, scale: f64) -> LobeEntry {
                 l.flake_size as f32,
             ],
             c(l.flakes, l.flake_cos_tilt),
-            [f32::from_bits(seed), l.amount as f32, 0.0, 0.0],
+            [
+                f32::from_bits(seed),
+                l.amount as f32,
+                l.subsurface as f32,
+                0.0,
+            ],
         ],
     }
+}
+
+/// A subsurface part's second entry (#481), right after its [`lobe_entry`]: the lobe's color
+/// (w 1 when set, 0 for the base color), its mean free paths in m and whether it's thin.
+fn subsurface_entry(l: &light::Lobes) -> Option<LobeEntry> {
+    let c = |v: [f64; 3], w: f32| [v[0] as f32, v[1] as f32, v[2] as f32, w];
+    (l.subsurface > 0.0).then(|| {
+        let mut v = [[0.0; 4]; 8];
+        v[0] = c(
+            l.subsurface_color.unwrap_or([0.0; 3]),
+            f32::from(u8::from(l.subsurface_color.is_some())),
+        );
+        v[1] = c(l.subsurface_radius, f32::from(u8::from(l.subsurface_thin)));
+        LobeEntry { v }
+    })
+}
+
+/// Where a material's entries sit in the lobe table: its [`lobe_entry`], with its
+/// [`subsurface_entry`] right after it when it has one.
+fn lobes_at(table: &[LobeEntry], e: &LobeEntry, sub: Option<&LobeEntry>) -> Option<usize> {
+    let same = |a: &LobeEntry, b: &LobeEntry| bytemuck::bytes_of(a) == bytemuck::bytes_of(b);
+    (0..table.len()).find(|&k| {
+        same(&table[k], e) && sub.is_none_or(|s| table.get(k + 1).is_some_and(|t| same(t, s)))
+    })
 }
 
 /// scene3d.wgsl's `Lights`: the view, the light count and the lights the policy shades (#421).
@@ -1013,6 +1047,28 @@ fn transmits(s: &Solid) -> bool {
     })
 }
 
+/// Whether a solid's subsurface lobe spreads (#481): an opaque or masked lit part drawn in the
+/// geometry pass by the scene shader, which the share pass draws again. Any other keeps its
+/// diffuse whole.
+fn spreads(s: &Solid) -> bool {
+    s.material.is_some_and(|m| {
+        m.lobes.subsurface > 0.0 && !m.unlit && m.catch.is_none() && !m.alpha_mode.see_through()
+    }) && !s.per_pixel
+        && !faded(s)
+        && !transmits(s)
+        && s.op.is_none()
+        && s.batch == 0
+}
+
+/// A solid's lobes as its draw shades them: its subsurface off where it doesn't spread.
+fn drawn_lobes(s: &Solid, l: &light::Lobes) -> light::Lobes {
+    let mut l = *l;
+    if !spreads(s) {
+        l.subsurface = 0.0;
+    }
+    l
+}
+
 fn pack(c: [u8; 3]) -> u32 {
     u32::from_le_bytes([c[0], c[1], c[2], 255])
 }
@@ -1267,13 +1323,35 @@ fn culled(
     depth_stencil: Option<wgpu::DepthStencilState>,
     cull: Option<wgpu::Face>,
 ) -> wgpu::RenderPipeline {
+    specialized(d, samples, label, layout, module, (vs, buffers), fragment, depth_stencil, cull, &[])
+}
+
+/// [`culled`] with the module's pipeline-overridable `constants` set (#432: a feature set's
+/// pipeline).
+#[allow(clippy::too_many_arguments)]
+fn specialized(
+    d: &wgpu::Device,
+    samples: u32,
+    label: &str,
+    layout: Option<&wgpu::PipelineLayout>,
+    module: &wgpu::ShaderModule,
+    (vs, buffers): (&str, &[Option<wgpu::VertexBufferLayout<'_>>]),
+    fragment: Option<(&str, &[Option<wgpu::ColorTargetState>])>,
+    depth_stencil: Option<wgpu::DepthStencilState>,
+    cull: Option<wgpu::Face>,
+    constants: &[(&str, f64)],
+) -> wgpu::RenderPipeline {
+    let options = wgpu::PipelineCompilationOptions {
+        constants,
+        ..Default::default()
+    };
     d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(label),
         layout,
         vertex: wgpu::VertexState {
             module,
             entry_point: Some(vs),
-            compilation_options: Default::default(),
+            compilation_options: options.clone(),
             buffers,
         },
         primitive: wgpu::PrimitiveState {
@@ -1288,7 +1366,7 @@ fn culled(
         fragment: fragment.map(|(fs, targets)| wgpu::FragmentState {
             module,
             entry_point: Some(fs),
-            compilation_options: Default::default(),
+            compilation_options: options.clone(),
             targets,
         }),
         multiview_mask: None,
@@ -1344,6 +1422,8 @@ struct Set {
     new_owners: Option<Vec<String>>,
     /// It holds a less detailed band's draw inside a margin (#425), which draws last.
     lower: bool,
+    /// It holds a part whose subsurface spreads (#481), which the share pass draws again.
+    subsurface: bool,
     /// Bumped whenever a record changes, which culls every view again (#484).
     revision: u64,
     /// An instancer's batch: its prototype's bounds, each record's row in the instancer, its
@@ -1360,6 +1440,7 @@ impl Set {
         self.count = 0;
         self.new_owners = None;
         self.lower = false;
+        self.subsurface = false;
         self.elements.clear();
         self.models.clear();
     }
@@ -1462,7 +1543,11 @@ type Slot = (SetKey, u32, u32, u32);
 /// The bits of a slot's maps word above its maps' group index: which faces its opaque draw culls
 /// (0 none, 1 back, 2 front).
 const CULL_SHIFT: u32 = 30;
-const MAPS_INDEX: u32 = (1 << CULL_SHIFT) - 1;
+/// A set's bit for a part that shades extra lobes (#432: its feature set's pipeline), and for a
+/// mask-alpha part (its caster kind in a shadow map).
+const LOBES_BIT: u32 = 1 << 29;
+const MASK_BIT: u32 = 1 << 28;
+const MAPS_INDEX: u32 = MASK_BIT - 1;
 
 /// A 3D writer layer's batch: its instance sets and its encoding.
 #[derive(Default)]
@@ -1534,7 +1619,10 @@ struct Drawn {
 
 /// The key light's shadow map and what draws it.
 struct Shadow {
-    pipeline: wgpu::RenderPipeline,
+    /// The opaque casters' depth pipeline, and the mask-alpha casters', each made the first time
+    /// a frame draws that caster kind into a shadow map (#432).
+    pipeline: Option<wgpu::RenderPipeline>,
+    mask: Option<wgpu::RenderPipeline>,
     buffer: wgpu::Buffer,
     bind: wgpu::BindGroup,
     view: Option<wgpu::TextureView>,
@@ -1685,6 +1773,9 @@ pub struct Renderer {
     /// texel that stands in for it.
     glass: Option<glass::Glass>,
     glass_stub: wgpu::TextureView,
+    /// The subsurface share and spread while a scene holds a part whose subsurface spreads
+    /// (#481).
+    subsurface: Option<sss::Subsurface>,
     /// Whether the DFG buffer holds the sheen table yet (#428).
     sheen_written: bool,
     /// The per-pixel resolve's lists (#424), and its resolve and sorted-fallback pipelines once
@@ -1754,6 +1845,20 @@ pub struct Renderer {
     compiled: u32,
     /// Each pipeline it compiled, by name, in the order it compiled them (#854).
     names: Vec<&'static str>,
+    /// Each pipeline made, with its items, feature set and target (#432); how many of `names`
+    /// it has logged; and what the next new names were made for, by name.
+    pub log: created::Log,
+    logged: usize,
+    made_for: BTreeMap<&'static str, (Vec<String>, String, String)>,
+    /// Whether the warm-up makes the shadow maps' pipelines: not under the planted
+    /// warms_view_only, which leaves them to the first frame (#432).
+    pub warm_shadows: bool,
+    /// The opaque solids' pipelines that shade extra lobes, by cull: none, back, front (#432).
+    lobed: [Option<wgpu::RenderPipeline>; 3],
+    /// The glass copy's mip pass, kept once made (#432).
+    glass_kit: Option<glass::Kit>,
+    /// Whether a mask-alpha part casts this frame: its sets draw into shadow maps only then.
+    mask_casts: bool,
     meshes: BTreeMap<Shape, Mesh>,
     batches: BTreeMap<String, Batch>,
     atlas: AtlasTexture,
@@ -2126,6 +2231,39 @@ fn clear_pipeline(
     kind: usize,
     after_resolve: bool,
 ) -> wgpu::RenderPipeline {
+    shaded_clear_pipeline(d, samples, module, layout, planted, kind, after_resolve, "mesh_fs")
+}
+
+/// A fade's two pipelines through a material operator's fragment stage (#432): its depth pass,
+/// then its color where that depth is equal, both from the solids' one @invariant vertex stage.
+pub(crate) fn fade_pipelines(
+    d: &wgpu::Device,
+    samples: u32,
+    module: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    forward_z: bool,
+    fs: &str,
+) -> [wgpu::RenderPipeline; 2] {
+    let planted = Planted {
+        forward_z,
+        ..Planted::default()
+    };
+    [usize::from(FADE), usize::from(FADE) + 1]
+        .map(|k| shaded_clear_pipeline(d, samples, module, layout, &planted, k, false, fs))
+}
+
+/// [`clear_pipeline`] with `fs` as the color kinds' fragment stage.
+#[allow(clippy::too_many_arguments)]
+fn shaded_clear_pipeline(
+    d: &wgpu::Device,
+    samples: u32,
+    module: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    planted: &Planted,
+    kind: usize,
+    after_resolve: bool,
+    fs: &str,
+) -> wgpu::RenderPipeline {
     // A pass after the resolve draws into the one-sample targets, the IDs whole (#1173).
     let (samples, ids) = if after_resolve {
         (1, IDS)
@@ -2210,7 +2348,7 @@ fn clear_pipeline(
             } else if glass {
                 "glass_fs"
             } else {
-                "mesh_fs"
+                fs
             },
             &targets,
         )),
@@ -2318,6 +2456,48 @@ fn draw_pipeline(
         Some((fs, &targets)),
         Some(depth),
         cull,
+    )
+}
+
+/// An opaque solid's pipeline for its feature set (#432): with `lobes` off its extra lobes'
+/// code folds away; a part with lobes draws through the one with it on.
+#[allow(clippy::too_many_arguments)]
+fn opaque_pipeline(
+    d: &wgpu::Device,
+    samples: u32,
+    module: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    forward_z: bool,
+    cull: Option<wgpu::Face>,
+    buffers: &[Option<wgpu::VertexBufferLayout<'_>>],
+    lobes: bool,
+) -> wgpu::RenderPipeline {
+    let depth = wgpu::DepthStencilState {
+        format: DEPTH,
+        depth_write_enabled: Some(true),
+        depth_compare: Some(if forward_z {
+            wgpu::CompareFunction::Less
+        } else {
+            wgpu::CompareFunction::GreaterEqual
+        }),
+        stencil: Default::default(),
+        bias: Default::default(),
+    };
+    let targets = [
+        target(LINEAR, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING)),
+        target(IDS_MS, None),
+    ];
+    specialized(
+        d,
+        samples,
+        if lobes { "scene3d.opaque_lobes" } else { "scene3d.opaque" },
+        Some(layout),
+        module,
+        ("mesh_vs", buffers),
+        Some(("mesh_fs", &targets)),
+        Some(depth),
+        cull,
+        &[("LOBES", if lobes { 1.0 } else { 0.0 })],
     )
 }
 
@@ -2481,6 +2661,11 @@ impl Renderer {
     /// Render pipelines it compiled so far.
     pub fn pipelines(&self) -> u32 {
         self.compiled
+    }
+
+    /// The material operators' pipelines it holds (#432).
+    pub fn material_ops(&self) -> usize {
+        self.materials.values().filter(|m| m.is_ok()).count()
     }
 
     /// Each pipeline it compiled so far, by name (#854).
@@ -2765,16 +2950,15 @@ impl Renderer {
         let mesh_buffers = mesh_buffers();
         let samples = if planted.single_sample { 1 } else { MSAA };
         let mesh = |cull| {
-            draw_pipeline(
+            opaque_pipeline(
                 d,
                 samples,
                 &module,
                 &mesh_layout,
                 planted.forward_z,
                 cull,
-                "mesh_vs",
-                "mesh_fs",
                 &mesh_buffers,
+                false,
             )
         };
         // Opaque material solids have their back faces culled before they shade (front faces for
@@ -2786,14 +2970,6 @@ impl Renderer {
         // nearest the light kept.
         // Its fragment stage only discards what a cutaway removes (#424), and a band's texels
         // outside its mask (#425).
-        let shadow_pipeline = shadow_pipeline(
-            d,
-            SHADOW_PASS,
-            &draw_layout,
-            &module,
-            ("mesh_vs", &mesh_buffers),
-            "shadow_fs",
-        );
         // Depth clamps through wgpu's unclipped depth; without it the vertex stage pancakes what
         // lies before the near plane onto it (Light policy: cascades).
         let shadow_mark = if d.features().contains(wgpu::Features::DEPTH_CLIP_CONTROL) {
@@ -3056,6 +3232,7 @@ impl Renderer {
             lobe_table: Vec::new(),
             glass: None,
             glass_stub,
+            subsurface: None,
             sheen_written: false,
             oit,
             oit_pipelines: None,
@@ -3101,10 +3278,16 @@ impl Renderer {
             reflection: None,
             resolve,
             accumulate,
-            compiled: 3,
+            compiled: 2,
+            log: created::Log::default(),
+            logged: 0,
+            made_for: BTreeMap::new(),
+            warm_shadows: true,
+            lobed: [None, None, None],
+            glass_kit: None,
+            mask_casts: false,
             names: vec![
                 "scene3d.mesh",
-                "scene3d.shadow",
                 "scene3d.output",
                 "scene3d.output_f32",
                 OUTLINE_PASS,
@@ -3127,9 +3310,10 @@ impl Renderer {
             counts: Counts::default(),
             busy,
             shadow: Shadow {
-                pipeline: shadow_pipeline,
+                pipeline: None,
                 buffer: light_buffer,
                 bind: light_bind,
+                mask: None,
                 view: None,
                 clip: None,
             },
@@ -4266,7 +4450,7 @@ impl Renderer {
             self.batches.retain(|id, _| order.contains(id));
         }
         self.update_culls(device);
-        // Motion blur by velocity (#419), once every solid's mesh is built.
+        self.ensure_casters(device, scene);
         self.motion_frame = match (&scene.motion, self.targets.as_ref()) {
             (Some(m), Some(t)) => {
                 self.motion
@@ -4331,6 +4515,92 @@ impl Renderer {
             }
             None => false,
         };
+        self.log_new();
+    }
+
+    /// The shadow maps' pipelines for each caster kind the frame draws into them (#432): the
+    /// opaque casters' and the mask-alpha casters', each made the first time a frame casts that
+    /// kind, named by its casters and the maps it draws into. The planted warms_view_only's
+    /// warm-up leaves them to the first frame.
+    fn ensure_casters(&mut self, device: &Device, scene: &Scene) {
+        let mask = |s: &Solid| {
+            s.material
+                .as_ref()
+                .is_some_and(|m| m.alpha_mode == AlphaMode::Mask)
+        };
+        let casting = || scene.layers.iter().flat_map(|l| &l.solids).filter(|s| s.cast_shadow);
+        self.mask_casts = casting().any(mask);
+        let mut maps: Vec<String> = Vec::new();
+        if let Some(sun) = scene.sun.as_ref().filter(|s| s.shadow) {
+            if !self.cascaded.list.is_empty() {
+                maps.push(format!("{}/cascades", sun.id));
+            } else if self.shadow.clip.is_some() {
+                maps.push(format!("{}/shadow", sun.id));
+            }
+        }
+        for m in &self.locals.list {
+            if let Some(l) = scene.lights.get(m.light) {
+                if !maps.contains(&l.id) {
+                    maps.push(l.id.clone());
+                }
+            }
+        }
+        if maps.is_empty() || (self.log.warming && !self.warm_shadows) {
+            return;
+        }
+        let target = maps.join(", ");
+        for kind_mask in [false, true] {
+            let made = if kind_mask { self.shadow.mask.is_some() } else { self.shadow.pipeline.is_some() };
+            let casters: Vec<&Solid> = casting().filter(|s| mask(s) == kind_mask).collect();
+            if made || casters.is_empty() {
+                continue;
+            }
+            let (name, fs) = if kind_mask {
+                ("scene3d.shadow_mask", "shadow_mask_fs")
+            } else {
+                (SHADOW_PASS, "shadow_fs")
+            };
+            let p = shadow_pipeline(
+                &device.device,
+                name,
+                &self.families.draw_layout,
+                &self.scene_module,
+                ("mesh_vs", &mesh_buffers()),
+                fs,
+            );
+            if kind_mask {
+                self.shadow.mask = Some(p);
+            } else {
+                self.shadow.pipeline = Some(p);
+            }
+            let mut sets: Vec<&str> = casters.iter().map(|s| created::caster_set(s)).collect();
+            sets.sort_unstable();
+            sets.dedup();
+            let items = casters.iter().map(|s| created::item_of(&s.id).to_string()).collect();
+            self.made_for.insert(name, (items, sets.join(","), target.clone()));
+            self.compiled += 1;
+            self.names.push(name);
+        }
+    }
+
+    /// Logs each pipeline compiled since the last call, with what it was made for (#432).
+    fn log_new(&mut self) {
+        while self.logged < self.names.len() {
+            let name = self.names[self.logged];
+            let (mut items, set, target) = self.made_for.remove(name).unwrap_or_else(|| {
+                (Vec::new(), name.trim_start_matches("scene3d.").to_string(), "view".into())
+            });
+            let mut seen = BTreeSet::new();
+            items.retain(|i| seen.insert(i.clone()));
+            let samples = self.families.samples.to_le_bytes();
+            self.log.push(created::Created {
+                key: created::key128(&[name.as_bytes(), set.as_bytes(), target.as_bytes(), &samples]),
+                items,
+                feature_set: set,
+                target,
+            });
+            self.logged += 1;
+        }
     }
 
     /// The core targets this frame reads (#431), made at the internal size, and their draws:
@@ -4504,7 +4774,8 @@ impl Renderer {
     /// A solid's lobe table index above the adjust's, 0 without lobes, or `None` when its lobes
     /// aren't in this frame's table (#428).
     fn lobe_slot(&self, s: &Solid) -> Option<u32> {
-        let Some(m) = s.material.as_ref().filter(|m| m.lobes.on()) else {
+        let lobes = s.material.as_ref().map(|m| drawn_lobes(s, &m.lobes));
+        let (Some(m), Some(lobes)) = (s.material.as_ref(), lobes.filter(|l| l.on())) else {
             return Some(0);
         };
         let scale = if s.mesh.is_some() {
@@ -4512,12 +4783,8 @@ impl Renderer {
         } else {
             1.0
         };
-        let e = lobe_entry(&m.lobes, m.pattern_seed, scale);
-        let bytes = bytemuck::bytes_of(&e);
-        let k = self
-            .lobe_table
-            .iter()
-            .position(|x| bytemuck::bytes_of(x) == bytes)?;
+        let e = lobe_entry(&lobes, m.pattern_seed, scale);
+        let k = lobes_at(&self.lobe_table, &e, subsurface_entry(&lobes).as_ref())?;
         Some((k as u32 + 1) << 16)
     }
 
@@ -4833,12 +5100,29 @@ impl Renderer {
             .flat_map(|l| &l.solids)
             .any(|s| transmits(s) || s.op.as_ref().is_some_and(op::reads_backdrop));
         if glass != self.glass.as_ref().is_some_and(|g| g.size == internal) {
-            self.glass = glass.then(|| glass::Glass::new(&device.device, internal));
+            if glass && self.glass_kit.is_none() {
+                self.glass_kit = Some(glass::Kit::new(&device.device));
+                let items = scene
+                    .layers
+                    .iter()
+                    .flat_map(|l| &l.solids)
+                    .filter(|s| transmits(s) || s.op.as_ref().is_some_and(op::reads_backdrop))
+                    .map(|s| created::item_of(&s.id).to_string())
+                    .collect();
+                self.made_for.insert(glass::PASS, (items, "transmission".into(), "view".into()));
+                self.compiled += 1;
+                self.names.push(glass::PASS);
+            }
+            let kit = self.glass_kit.as_ref();
+            self.glass = glass
+                .then(|| kit.map(|k| glass::Glass::new(&device.device, internal, k)))
+                .flatten();
             self.rebind_lights(device);
             // A material operator that reads the copy binds the new one.
             self.op_binds.clear();
         }
         let k = f64::from(internal[0]) / f64::from(scene.size[0].max(1));
+        self.prepare_subsurface(device, scene, internal, k);
         self.upload_pages(device, &scene.pages);
         let cam = &scene.camera;
         let depth = if self.planted.forward_z {
@@ -5065,6 +5349,64 @@ impl Renderer {
         ];
     }
 
+    /// The subsurface share and spread while a part's subsurface spreads (#481), made at the
+    /// internal size from the geometry's targets.
+    fn prepare_subsurface(&mut self, device: &Device, scene: &Scene, internal: [u32; 2], k: f64) {
+        let spreading: Vec<&Solid> = scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.solids)
+            .filter(|s| spreads(s))
+            .collect();
+        let made = self.subsurface.as_ref().is_some_and(|s| s.size == internal);
+        if made == spreading.is_empty() {
+            self.subsurface = match (spreading.is_empty(), &self.targets) {
+                (false, Some(t)) => Some(sss::Subsurface::new(
+                    &device.device,
+                    internal,
+                    sss::Inputs {
+                        ids: &t.ids_view,
+                        samples: self.families.samples,
+                        ids_ms: &t.drawn.ids_ms,
+                        depth_ms: &t.drawn.depth_ms,
+                        module: &self.scene_module,
+                        layout: &self.solid_layout,
+                    },
+                )),
+                _ => None,
+            };
+        }
+        let Some(sub) = &self.subsurface else {
+            return;
+        };
+        // The planted pass that takes every tap spreads at the widest mean free path of the
+        // scene's parts, at the pixel size of the nearest one's centre.
+        let across = (self.planted.lobes & PLANT_SSS_ACROSS != 0).then(|| {
+            let cam = &scene.camera;
+            let widest = spreading
+                .iter()
+                .filter_map(|s| s.material)
+                .flat_map(|m| m.lobes.subsurface_radius)
+                .fold(0.0, f64::max);
+            let near = spreading
+                .iter()
+                .map(|s| {
+                    let c = [s.model[0][3], s.model[1][3], s.model[2][3]];
+                    (0..3)
+                        .map(|i| (c[i] - cam.eye[i]) * cam.forward[i])
+                        .sum::<f64>()
+                })
+                .fold(f64::INFINITY, f64::min);
+            let px = if cam.perspective {
+                near / (cam.scale * k)
+            } else {
+                1.0 / (cam.scale * k)
+            };
+            (widest * 1000.0, px * 1000.0)
+        });
+        sub.write(&device.queue, across);
+    }
+
     fn prepare_batch(
         &mut self,
         device: &Device,
@@ -5093,10 +5435,14 @@ impl Renderer {
             }
         };
         for k in 0..6 {
-            let wanted = layer.solids.iter().any(|s| {
+            let of_kind = |s: &&Solid| {
                 clear(s) && usize::from(kind_of(s)) == if k == 3 { usize::from(FADE) } else { k }
-            });
+            };
+            let wanted = layer.solids.iter().any(|s| of_kind(&s));
             if wanted && self.clear_pipelines[k].is_none() {
+                let items: Vec<String> = layer.solids.iter().filter(of_kind).map(|s| created::item_of(&s.id).to_string()).collect();
+                let set = layer.solids.iter().find(of_kind).map(created::feature_set).unwrap_or_default();
+                self.made_for.insert(CLEAR_NAMES[k], (items, set, "view".into()));
                 self.clear_pipelines[k] = Some(clear_pipeline(
                     &device.device,
                     self.families.samples,
@@ -5115,6 +5461,9 @@ impl Renderer {
         let glass = self.clear_pipelines[usize::from(GLASS)].is_some() || self.glass.is_some();
         for k in [BLEND, ADD].map(usize::from) {
             if glass && self.clear_pipelines[k].is_some() && self.late_pipelines[k].is_none() {
+                let items: Vec<String> = layer.solids.iter().filter(|s| clear(s) && usize::from(kind_of(s)) == k).map(|s| created::item_of(&s.id).to_string()).collect();
+                let set = if k == usize::from(ADD) { "add+over_glass" } else { "blend+over_glass" };
+                self.made_for.insert(LATE_NAMES[k], (items, set.into(), "view".into()));
                 self.late_pipelines[k] = Some(clear_pipeline(
                     &device.device,
                     self.families.samples,
@@ -5158,7 +5507,7 @@ impl Renderer {
             let tie = self.ties.get(&s.id).copied().unwrap_or(0);
             // A see-through part blends through its material operator (#431); the other
             // see-through kinds still refuse one.
-            let op = self.material_op(device, s, clear(s) && kind_of(s) != BLEND);
+            let op = self.material_op(device, s, clear(s) && !matches!(kind_of(s), BLEND | FADE));
             let maps = match (&s.maps, &s.material) {
                 (Some(m), Some(_)) => self.maps.group(&device.device, &device.queue, m, taps),
                 _ => 0,
@@ -5207,8 +5556,41 @@ impl Renderer {
                 }
                 _ => 0,
             };
+            // Its feature set's bits (#432): an opaque part that shades extra lobes draws through
+            // the lobes pipeline, and a mask-alpha part casts through the mask caster's.
+            let lobed = !clear(s)
+                && op == 0
+                && s.batch == 0
+                && s.material.as_ref().is_some_and(|m| m.lobes.on());
+            let mask = s
+                .material
+                .as_ref()
+                .is_some_and(|m| m.alpha_mode == AlphaMode::Mask);
+            if lobed && self.lobed[cull as usize].is_none() {
+                self.lobed[cull as usize] = Some(opaque_pipeline(
+                    &device.device,
+                    self.families.samples,
+                    &self.scene_module,
+                    &self.solid_layout,
+                    self.planted.forward_z,
+                    [None, Some(wgpu::Face::Back), Some(wgpu::Face::Front)][cull as usize],
+                    &mesh_buffers(),
+                    true,
+                ));
+                let name = ["scene3d.opaque_lobes", "scene3d.opaque_lobes_back", "scene3d.opaque_lobes_front"][cull as usize];
+                let items: Vec<String> = layer
+                    .solids
+                    .iter()
+                    .filter(|x| !clear(x) && x.material.as_ref().is_some_and(|m| m.lobes.on()))
+                    .map(|x| created::item_of(&x.id).to_string())
+                    .collect();
+                self.made_for.insert(name, (items, created::feature_set(s), "view".into()));
+                self.compiled += 1;
+                self.names.push(name);
+            }
+            let bits = if lobed { LOBES_BIT } else { 0 } | if mask { MASK_BIT } else { 0 };
             slots.push((
-                (s.shape, maps | cull << CULL_SHIFT, op, s.batch),
+                (s.shape, maps | bits | cull << CULL_SHIFT, op, s.batch),
                 0,
                 self.pick(&s.id),
                 tie,
@@ -5250,7 +5632,8 @@ impl Renderer {
         // Its lobes' entry in the frame's lobe table, 0 for none (#428), above the adjust's.
         let lobe_table = &mut self.lobe_table;
         let mut lobes_of = |s: &Solid| -> u32 {
-            let Some(m) = s.material.as_ref().filter(|m| m.lobes.on()) else {
+            let lobes = s.material.as_ref().map(|m| drawn_lobes(s, &m.lobes));
+            let (Some(m), Some(lobes)) = (s.material.as_ref(), lobes.filter(|l| l.on())) else {
                 return 0;
             };
             // The flakes hash the material's pattern seed with the cell.
@@ -5261,16 +5644,14 @@ impl Renderer {
             } else {
                 1.0
             };
-            let e = lobe_entry(&m.lobes, m.pattern_seed, scale);
-            let bytes = bytemuck::bytes_of(&e);
-            let k = match lobe_table
-                .iter()
-                .position(|x| bytemuck::bytes_of(x) == bytes)
-            {
+            let e = lobe_entry(&lobes, m.pattern_seed, scale);
+            let sub = subsurface_entry(&lobes);
+            let k = match lobes_at(lobe_table, &e, sub.as_ref()) {
                 Some(k) => k,
-                None if lobe_table.len() < LOBE_ENTRIES => {
+                None if lobe_table.len() + usize::from(sub.is_some()) < LOBE_ENTRIES => {
                     lobe_table.push(e);
-                    lobe_table.len() - 1
+                    lobe_table.extend(sub);
+                    lobe_table.len() - 1 - usize::from(sub.is_some())
                 }
                 None => return 0,
             };
@@ -5316,6 +5697,7 @@ impl Renderer {
             };
             let set = sets.entry(slot.0).or_default();
             set.lower |= s.mask.is_some_and(|m| m.lower);
+            set.subsurface |= spreads(s);
             slot.1 = set.count as u32;
             if slot.0 .3 != 0 {
                 set.bounds = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
@@ -5517,6 +5899,32 @@ impl Renderer {
         remade
     }
 
+    /// The opaque sets holding a part whose subsurface spreads, for the share pass (#481).
+    fn share_draws(&self) -> Vec<sss::ShareDraw> {
+        let mut draws = Vec::new();
+        for id in &self.order {
+            for ((shape, maps, _, _), set) in &self.batches[id].solids {
+                let (true, None, Some(buffer), Some(mesh)) = (
+                    set.subsurface,
+                    &set.cull,
+                    &set.buffer,
+                    self.meshes.get(shape),
+                ) else {
+                    continue;
+                };
+                draws.push((
+                    mesh.vertices.clone(),
+                    mesh.indices.clone(),
+                    mesh.count,
+                    buffer.clone(),
+                    set.len(),
+                    self.maps.by_index(*maps & MAPS_INDEX).clone(),
+                ));
+            }
+        }
+        draws
+    }
+
     /// The per-pixel items' draws in see-through order, for the sorted fallback (#424).
     #[allow(clippy::type_complexity)]
     fn per_pixel_draws(
@@ -5685,14 +6093,15 @@ impl Renderer {
                 }
                 _ => {
                     // A capped cutaway draws its caps from back faces, so nothing culls then.
-                    enc.set_pipeline(
-                        match (&self.cut_pipeline, self.capped, *maps >> CULL_SHIFT) {
-                            (Some(cut), true, _) => cut,
-                            (_, _, 1) => &self.mesh_culled[0],
-                            (_, _, 2) => &self.mesh_culled[1],
-                            _ => &self.mesh_pipeline,
-                        },
-                    );
+                    let cull = (*maps >> CULL_SHIFT) as usize;
+                    let lobed = self.lobed[cull].as_ref().filter(|_| *maps & LOBES_BIT != 0);
+                    enc.set_pipeline(match (&self.cut_pipeline, self.capped, lobed, cull) {
+                        (Some(cut), true, _, _) => cut,
+                        (_, _, Some(p), _) => p,
+                        (_, _, _, 1) => &self.mesh_culled[0],
+                        (_, _, _, 2) => &self.mesh_culled[1],
+                        _ => &self.mesh_pipeline,
+                    });
                     enc.set_bind_group(3, self.maps.by_index(index), &[]);
                 }
             }
@@ -5725,8 +6134,20 @@ impl Renderer {
                 } else {
                     &[usize::from(*kind)][..]
                 };
-                // A blend part with a material operator draws through it (#431).
+                // A blend part with a material operator draws through it (#431); a fade's two
+                // passes through its fade pipelines (#432).
                 let op = batch.clear_ops.get(k as usize).copied().unwrap_or(0);
+                if let (Some((m, g)), FADE) = (self.see_through_op(op, *maps), *kind) {
+                    enc.set_bind_group(3, g, &[]);
+                    for pipeline in &m.fade {
+                        enc.set_pipeline(pipeline);
+                        enc.set_vertex_buffer(0, mesh.vertices.slice(..));
+                        enc.set_vertex_buffer(1, buffer.slice(..));
+                        enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
+                        enc.draw_indexed(0..mesh.count, 0, k..k + 1);
+                    }
+                    continue;
+                }
                 if let (Some((m, g)), BLEND) = (self.see_through_op(op, *maps), *kind) {
                     enc.set_bind_group(3, g, &[]);
                     enc.set_pipeline(&m.blend);
@@ -5889,6 +6310,12 @@ impl Renderer {
                 if rows && set.cull.is_some() && cuts.is_none() {
                     continue;
                 }
+                // A mask-alpha set draws through the mask caster's pipeline, and only while one
+                // of its parts casts.
+                let mask = *maps & MASK_BIT != 0;
+                if mask && !self.mask_casts && cuts.is_none() {
+                    continue;
+                }
                 for range in local::runs(&set.owners, only) {
                     draws.push(local::Draw {
                         vertices: mesh.vertices.clone(),
@@ -5897,6 +6324,7 @@ impl Renderer {
                         instances: buffer.clone(),
                         range,
                         cuts: cuts.clone(),
+                        mask,
                     });
                 }
             }
@@ -5916,6 +6344,7 @@ impl Renderer {
                             instances: buffer.clone(),
                             range: k..k + 1,
                             cuts: None,
+                            mask: false,
                         });
                     }
                 }
@@ -5983,6 +6412,7 @@ impl Renderer {
         let rows = culled.map_or_else(Vec::new, |k| self.row_draws(k));
         let row_pipeline = self.rows.as_ref().map(|r| r.shadow.clone());
         let pipeline = self.shadow.pipeline.clone();
+        let mask_pipeline = self.shadow.mask.clone();
         let profiler = self.profiler.clone();
         Box::new(move |encoder| {
             timed(&profiler, label, encoder, |encoder, timestamp_writes| {
@@ -6002,12 +6432,15 @@ impl Renderer {
                 });
                 pass.set_bind_group(0, &bind, &[]);
                 for d in &draws {
-                    match &d.cuts {
-                        Some((cut, group)) => {
+                    match (&d.cuts, &pipeline, &mask_pipeline, d.mask) {
+                        (Some((cut, group)), _, _, _) => {
                             pass.set_pipeline(cut);
                             pass.set_bind_group(3, group, &[]);
                         }
-                        None => pass.set_pipeline(&pipeline),
+                        (None, _, Some(p), true) | (None, Some(p), _, false) => pass.set_pipeline(p),
+                        // Its caster kind's pipeline isn't made: the prepare that would make it
+                        // didn't run for this frame.
+                        _ => continue,
                     }
                     pass.set_vertex_buffer(0, d.vertices.slice(..));
                     pass.set_vertex_buffer(1, d.instances.slice(..));
@@ -6141,6 +6574,15 @@ impl Renderer {
         };
         let copy_late = self.planted.backdrop_after_see_through;
         let glass_copy = glass.as_ref().and(self.glass.clone());
+        // The subsurface share and spread after the resolve (#481).
+        let subsurface = self.subsurface.clone().map(|sub| {
+            let binds = [
+                self.frame_bind.clone(),
+                self.lights_bind.clone(),
+                self.ao.shade().clone(),
+            ];
+            (sub, binds, self.share_draws())
+        });
         let core = self.core_draws();
         let linear_texture = t.linear.clone();
         let motion = self.motion_frame.take().map(|m| (m, t.linear.clone()));
@@ -6236,6 +6678,9 @@ impl Renderer {
                 if let Some(staging) = &staging {
                     encoder.copy_buffer_to_buffer(info, 0, staging, 0, 16);
                 }
+            }
+            if let Some((sub, binds, draws)) = &subsurface {
+                sub.record(encoder, &linear, binds, draws, &profiler);
             }
             // The core's targets an effect or operator reads, from what the geometry left (#431).
             if let Some(core) = &core {

@@ -23,7 +23,7 @@ const TONIGHT = /\b(tonight|this\s+evening|this\s+afternoon|at\s+noon|after\s+lu
 const AT_CLOCK = /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?\b/i;
 const NEXT_WEEK = /\bnext\s+week\b/i;
 
-export interface Promised { quote: string; due: number }
+interface Promised { quote: string; due: number }
 
 /** The hour of a part of the day at or after `now`, local time: today's if still ahead, else tomorrow's. */
 function nextHour(now: number, hour: number, minute = 0, daysAhead = 0): number {

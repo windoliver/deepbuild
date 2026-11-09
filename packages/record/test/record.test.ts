@@ -600,6 +600,20 @@ describe('raw refuses statements that change the database', () => {
   }
 });
 
+describe('raw reads the projections as they are now', () => {
+  it('a read made before a rebuild reads the rebuilt tables after it, and a refused statement stays refused', async () => {
+    const { record: r, S } = await record();
+    const read = 'SELECT id FROM sessions ORDER BY id';
+    expect(await r.raw(read)).toEqual([{ id: S }]);
+    const T = ulidAt(T0 + 5);
+    await r.append(hook(T), event('session.start', T0 + 5, undefined));
+    // Every projection is dropped and made again from the log.
+    await r.rebuild();
+    expect(await r.raw(read), 'the same read after a rebuild').toEqual([{ id: S }, { id: T }].sort((a, b) => a.id.localeCompare(b.id)));
+    for (let i = 0; i < 2; i++) await expect(r.raw('PRAGMA synchronous = OFF')).rejects.toThrow();
+  });
+});
+
 describe('raw binds its parameters', () => {
   it('a value with a quote in it is read as that value, never as SQL', async () => {
     const { record: r, S } = await record();

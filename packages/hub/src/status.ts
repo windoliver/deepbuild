@@ -16,11 +16,12 @@ import { numbersLines } from './numbers.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
+import { visible } from './visible.js';
 import { startOf } from './wire.js';
 import { claimState, newestClaim } from './verdict-chat.js';
 import { verdictLine } from '@deepbuild/verdicts';
 
-export type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
+type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
 export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; verdict?: string; calls?: string[]; commits?: string[]; readings?: string[] }
 const ORDER: readonly State[] = ['needs you', 'stuck', 'flagged', 'working', 'finished', 'quiet'];
@@ -42,9 +43,9 @@ const CALLS_SHOWN = 20;
  * Why a session is in its state: one of a closed set, so a surface that draws the state from the record (the app's
  * sidebar, from `session.state`) says the same as this listing.
  */
-export type Cause = 'ask' | 'gone' | 'waiting' | 'stuck' | 'promised' | 'failed' | 'quiet' | 'interrupted' | 'finished' | 'working';
+type Cause = 'ask' | 'gone' | 'waiting' | 'stuck' | 'promised' | 'failed' | 'quiet' | 'interrupted' | 'finished' | 'working';
 /** A session's state as the record reads it, with why. */
-export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; note?: string }
+interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; note?: string }
 
 /**
  * Each session's state, from the record's tables through `query` (the hub's record, or its database read-only): the
@@ -205,10 +206,13 @@ type Obj = Record<string, unknown>;
 /** One tool call: its kind, its command or the files it touched, and how it ended. */
 function callLine(call: Obj, after: Obj | undefined, worktree: string): string {
   const paths = Array.isArray(call.paths) ? call.paths.filter((p): p is string => typeof p === 'string') : [];
-  const what = typeof call.command === 'string' ? call.command.replace(/\s+/g, ' ').trim()
+  // Runs of spaces fold to one; any other white space is a character `render` marks (#1510), never a space.
+  const what = typeof call.command === 'string' ? call.command.replace(/ +/g, ' ').replace(/^ | $/g, '')
     : paths.length ? paths.map((p) => (worktree && isAbsolute(p) && p.startsWith(`${worktree}/`) ? relative(worktree, p) : p)).join(', ')
     : typeof call.tool === 'string' ? call.tool : '';
-  const shortened = what.length > 72 ? `${what.slice(0, 71)}…` : what;
+  // By code point, so an emoji or a tag character is never cut in half.
+  const points = [...what];
+  const shortened = points.length > 72 ? `${points.slice(0, 71).join('')}…` : what;
   const ended = !after ? 'no result' : after.outcome !== 'failed' ? 'ok'
     : ['failed', ...(typeof after.exit_code === 'number' ? [`exit ${after.exit_code}`] : []), ...(typeof after.signature === 'string' ? [after.signature] : [])].join(', ');
   return `${String(call.kind ?? 'call')} ${shortened}  ${ended}`;
@@ -268,7 +272,8 @@ export function render(rows: readonly StatusRow[], from: string): string {
   const quiet = rows.filter((r) => r.state === 'quiet');
   const byRepo = [...new Set(quiet.map((r) => r.repo))].sort().map((repo) => `${repo} ${quiet.filter((r) => r.repo === repo).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
-  return `${out.join('\n')}\n`;
+  // Each line names sessions, notes and calls from the record, so each prints through `visible` (#1510).
+  return `${out.map(visible).join('\n')}\n`;
 }
 
 /** `deep numbers`: your readings through the hub, or what changes them; a hub that can't be read shows no numbers at all. */

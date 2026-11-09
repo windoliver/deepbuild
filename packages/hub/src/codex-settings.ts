@@ -15,14 +15,14 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Codex's Stop hook timeout, set once at setup: its default is 600 s, with no ceiling. */
-export const STOP_TIMEOUT_S = 45 * 60;
+const STOP_TIMEOUT_S = 45 * 60;
 /** What Codex gives an MCP server's tool call unless `tool_timeout_sec` says otherwise. */
 const TOOL_TIMEOUT_S = 60;
 /** The slow lane's expected time unless `lanes.slow.expected_ms` in config.json says otherwise. */
 const SLOW_LANE_MS = 20 * 60_000;
 /** The MCP server's name in config.toml: its tools reach PreToolUse as `mcp__deep__<tool>`. */
 const MCP_SERVER = 'deep';
-export const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PreCompact', 'PostCompact', 'SubagentStart', 'SubagentStop', 'Stop', 'Interrupt', 'SessionEnd'];
+const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PreCompact', 'PostCompact', 'SubagentStart', 'SubagentStop', 'Stop', 'Interrupt', 'SessionEnd'];
 
 const home = (): string => process.env.CODEX_HOME || join(homedir(), '.codex');
 /** Whether Codex has a home here: setup leaves a machine without one alone. */
@@ -115,7 +115,7 @@ export const recordedEntries = (root: string): { event: string; command: string 
 
 // ---- config.toml: read as far as DeepBuild needs it, by table; what TOML itself refuses refuses the file.
 
-export type Tables = Map<string, Map<string, string>>;
+type Tables = Map<string, Map<string, string>>;
 /** Where the string starting at `i` ends, one past its closing quote; -1 if it never closes. */
 function stringEnd(s: string, i: number): number {
   const quote = s[i]!;
@@ -259,7 +259,7 @@ const configTables = (file = codexConfig()): Tables | undefined => {
 };
 /** `text` with our MCP server added at its end, or the same bytes once a server of that name is there. */
 /** DeepBuild's MCP server as setup writes it into Codex's config.toml: the program and its arguments. */
-export interface Server { command: string; args: string[] }
+interface Server { command: string; args: string[] }
 /** A server given as Node and the CLI's script, as setup wrote it before installed versions, or as its program and arguments. */
 const serverOf = (server: Server | string, cli?: string): Server => (typeof server === 'string' ? { command: server, args: [cli ?? '', 'mcp'] } : server);
 export function withServer(text: string, given: Server | string, cli?: string): string {
@@ -340,7 +340,7 @@ const slowLaneMs = (root: string): number => {
 /** Whether a stop can be held for a check whose deadline is `deadlineMs`: it must end at least 5 s before the timeout. */
 export const holdsFor = (deadlineMs: number, timeoutS: number): boolean => deadlineMs + HOLD_MARGIN_MS <= timeoutS * 1000;
 
-export interface CodexRelation { name: 'slow lane' | 'deep_ask'; holds: boolean; text: string; waitMs: number }
+interface CodexRelation { name: 'slow lane' | 'deep_ask'; holds: boolean; text: string; waitMs: number }
 export function codexRelations(root: string): CodexRelation[] {
   if (!installedCodex(root)) return [];
   const out: CodexRelation[] = [];
@@ -361,7 +361,7 @@ export function codexRelations(root: string): CodexRelation[] {
   return out;
 }
 
-export interface Listed { command: string; eventName: string; trustStatus: string; enabled: boolean }
+interface Listed { command: string; eventName: string; trustStatus: string; enabled: boolean }
 /** Where the hub keeps DeepBuild's entries as Codex's hook list last reported them. */
 const trustFile = (root: string): string => join(root, 'codex-trust.json');
 /** Reads Codex's hook list and keeps DeepBuild's entries of it, for health and doctor; a list it can't get changes nothing. */

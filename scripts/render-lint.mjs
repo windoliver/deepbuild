@@ -1,14 +1,17 @@
 // The render lint (#1454): the replica draws the app's tree, so no view's `render` reads whether a fixture is loaded. It
 // checks every `fn render` of an `impl Render for …` under crates/deep-app/src, and fails each read there of
-// `current_state()`, the fixture's state, or of a variable named `decorations`, as the views held it. One
-// `FAIL render: <path>:<line>: ...` line per read, or one `PASS render` line; exit 1 on a finding. `--root <dir>` checks
-// the app's source under another checkout.
+// `current_state()`, the fixture's state, or of a variable named `decorations`, as the views held it. Issue #1457: it
+// fails each file-system call there too (`exists()`, `fs::`, `read_to_string`, `read_dir`, `metadata()`, `is_file()`,
+// `is_dir()`, `File::open`), since a frame reads what a tick kept, never the disk. One `FAIL render: <path>:<line>: ...`
+// line per read, or one `PASS render` line; exit 1 on a finding. `--root <dir>` checks the app's source under another
+// checkout.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SOURCE = 'crates/deep-app/src';
 const READS = /\bcurrent_state\s*\(|\bdecorations\b/;
+const DISK = /\.exists\s*\(\s*\)|\bfs::|\bread_to_string\b|\bread_dir\b|\.metadata\s*\(|\.is_file\s*\(\s*\)|\.is_dir\s*\(\s*\)|\bFile::open\b/;
 
 const at = process.argv.indexOf('--root');
 if (at !== -1 && (!process.argv[at + 1] || process.argv[at + 1].startsWith('--'))) {
@@ -50,13 +53,19 @@ let failed = false;
 for (const path of files(join(root, SOURCE))) {
   const lines = readFileSync(path, 'utf8').split('\n');
   for (const line of renderLines(lines)) {
-    if (!READS.test(code(lines[line]))) continue;
-    failed = true;
-    console.log(`FAIL render: ${relative(root, path)}:${line + 1}: a view's render reads fixture state; a fixture supplies the record and nothing else`);
+    const text = code(lines[line]);
+    if (READS.test(text)) {
+      failed = true;
+      console.log(`FAIL render: ${relative(root, path)}:${line + 1}: a view's render reads fixture state; a fixture supplies the record and nothing else`);
+    }
+    if (DISK.test(text)) {
+      failed = true;
+      console.log(`FAIL render: ${relative(root, path)}:${line + 1}: a view's render calls the file system; a frame reads what a tick kept (#1457)`);
+    }
   }
 }
 if (failed) {
-  console.log('  Fix: draw from the one record reader, and let the replica supply the record alone (#1454).');
+  console.log('  Fix: draw from the one record reader, and let the replica supply the record alone (#1454); read the disk on a tick, off the frame, and draw what it kept (#1457).');
   process.exit(1);
 }
 console.log('PASS render');

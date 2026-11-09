@@ -31,7 +31,7 @@ const ASKS = {
 const ACCOUNT = 'acct-gate-kit-0001';
 const BILLING = /^(ANTHROPIC_|CLAUDE|CODEX|OPENAI_API_KEY|AWS_BEARER|GH_TOKEN|GITHUB_TOKEN|DEEP_|XDG_|GIT_|OTEL_|npm_)/;
 
-export type Obj = { [key: string]: any };
+type Obj = { [key: string]: any };
 export interface Ran { code: number | null; stdout: string; stderr: string }
 export interface Ev { id: string; kind: string; log_pos: number; session?: string; subject?: string; data: Obj }
 
@@ -61,7 +61,7 @@ function alive(pid: number): boolean {
 }
 
 /** The environment every process of a world gets: HOME the world's, none of this process's agent, forge or DeepBuild settings. */
-export function worldEnv(home: string, extra: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
+function worldEnv(home: string, extra: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) if (!BILLING.test(key) && key !== 'NODE_OPTIONS') env[key] = value;
   Object.assign(env, { HOME: home, XDG_CONFIG_HOME: join(home, '.config'), XDG_CACHE_HOME: join(home, '.cache'), PATH: `${dirname(NODE)}:${process.env.PATH ?? '/usr/bin:/bin'}`, LC_ALL: 'C' });
@@ -69,7 +69,7 @@ export function worldEnv(home: string, extra: Record<string, string | undefined>
   return env;
 }
 
-export function git(cwd: string, args: string[]): string {
+function git(cwd: string, args: string[]): string {
   return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], {
     cwd, encoding: 'utf8',
     env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: cwd, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', GIT_AUTHOR_NAME: 'T', GIT_AUTHOR_EMAIL: 't@example.test', GIT_COMMITTER_NAME: 'T', GIT_COMMITTER_EMAIL: 't@example.test' },
@@ -148,7 +148,7 @@ export async function killHub(hub: Hub): Promise<void> {
 }
 
 /** One call on the hub's socket as the CLI makes it: the cli role with the control token. */
-export function control(hub: Hub, method: string, params: Obj, timeoutMs = 30_000): Promise<Obj> {
+function control(hub: Hub, method: string, params: Obj, timeoutMs = 30_000): Promise<Obj> {
   const token = readFileSync(join(hub.root, 'control.token'), 'utf8').trim();
   return new Promise((resolve, reject) => {
     const sock = connect(hub.socket);
@@ -219,7 +219,7 @@ class Agent {
 }
 
 /** What deep-hook's reply tells Claude Code: a deny or block, or exit 2, stops the call or the stop. */
-export function denied(r: Ran): boolean {
+function denied(r: Ran): boolean {
   const out = parse(r.stdout.trim());
   const d = out?.hookSpecificOutput?.permissionDecision ?? out?.decision;
   return r.code === 2 || d === 'deny' || d === 'block';

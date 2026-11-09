@@ -1,0 +1,314 @@
+The #505 Oracle-lane suite run once at base commit dd83ac2f (main, before any implementation of #505), on macOS arm64,
+with `NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/505-oracle
+--no-file-parallelism` (the checkout's path redacted to `<checkout>`; lines past 400 characters cut). Both builds compile.
+15 of 25 tests fail, every one on an assertion or a missing answer, none in the harness:
+- area-boost.test.ts (8): the base draws the path fn but answers no `area` (`expected null not to be null`).
+- color-wpt-palette.test.ts (2): the base answers no `color_at` (0 colors for the x values asked).
+- implicit-graphest.test.ts (2): the base check refuses the implicit form (`bad_doc` at `items/curve/params/fn/y`).
+- plots-graphest.test.ts (3): the base draws sin(40/x) with no estimate notice, and its check answers no `curves`.
+10 pass at the base, for reasons outside #505's change:
+- write-on-manim.test.ts (3: the DrawBorderThenFill control frames, Write's lag at n = 5 and at n = 40): #398 already
+  writes a formula on term by term as manim does (outline over the first half of a unit's span, then the fill's
+  opacity 2·alpha − 1, composited in encoded sRGB; lag min(4 ÷ n, 0.2)); the #505 suite's own AC1 test likewise passes
+  its write-on half at the base and fails on the screen reader, which is not this lane's. These hold that behavior to
+  manim's frames and formula as #505's criterion 1 relies on it.
+- interval-itf1788.test.ts (7: minimal_{sin, cos, sqr, pown, pow, div, recip}_test with context "path"): #490's interval
+  forms are at the base, and the plots of criteria 3 and 4 rest on them; these hold them to the IEEE 1788 enclosures in
+  the context the plots evaluate in.
+The default reporter lists only failing files; the 10 passing tests are those of the two files the summary line counts
+as passed.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/505-oracle
+
+ ❯ plots-graphest.test.ts (3 tests | 3 failed) 2128ms
+   ❯ AC3 #505.5e6d3319 graphest's reference plots, run against our drawn line at the reference's pixel scale (3)
+     × AC3 #505.5e6d3319 y = sin(40 / x) (graphest "Infinite Frequency"): the stretch ours can't bound starts at 0.01 and lies inside the reference's unresolved stretch near 0, and the rest is bounded 1179ms
+     × AC3 #505.5e6d3319 y = sin(40 / x): where ours is bounded, every drawn point is within 0.5 px of a pixel the reference leaves black, and every black pixel there within 0.5 px of the line 118ms
+     × AC3 #505.5e6d3319 y = sin(x) / x (graphest "Wave") over [0.1, 10]: bounded throughout as the reference is resolved throughout, every drawn point within 0.5 px of a black pixel and every black pixel within 0.5 px of the line 228ms
+ ❯ color-wpt-palette.test.ts (2 tests | 2 failed) 1860ms
+   ❯ AC7 #505.6af13a53 WPT's color-mix in oklab and palette's OKLab references, as a two-role ramp read by color_at (2)
+     × AC7 #505.6af13a53 for white→blue, red→green, green→blue, blue→red, red→white: the stroke at x = 0 and 1 is palette's a and b, and at x = 0.5 their OKLab mean, within 0.001 ΔEOK 1178ms
+     × AC7 #505.6af13a53 white→blue: the stroke at x = 0.5 and 0.9 reads WPT's color-mix(in oklab, white, blue) and (white 10%, blue) within WPT's 0.01 a coordinate 130ms
+ ❯ implicit-graphest.test.ts (2 tests | 2 failed) 1871ms
+   ❯ AC4 #505.00692b98 graphest's reference plots of products of circles, run against our traced curve (2)
+     × AC4 #505.00692b98 twenty-five circles of radius √0.4 (graphest t_0b3b446edb104b2680bdb05fcdbef602): every drawn point within 0.5 px of a black reference pixel and every black pixel within 0.5 px of the line 1038ms
+     × AC4 #505.00692b98 four lines and three circles (graphest t_b8b04a37eaf64d0491cc2b1e6ee7bb1b): every drawn point within 0.5 px of a black reference pixel and every black pixel within 0.5 px of the line 136ms
+ ❯ area-boost.test.ts (8 tests | 8 failed) 3354ms
+   ❯ AC6 #505.80c4ff9d Boost.Math's Gauss-Kronrod integrals (f12be767c0) as the area under a path fn (8)
+     × AC6 #505.80c4ff9d test_linear: 5x + 7 over [0, 1] (lines 265-271): #area.value within 2.22e-15 relative of 9.5, and its interval bound holds it 1067ms
+     × AC6 #505.80c4ff9d test_quadratic: 5x² + 7x + 12 over [0, 1] (lines 289-292): #area.value within 2.22e-15 relative of 17.166666666666668, and its interval bound holds it 177ms
+     × AC6 #505.80c4ff9d test_ca f2: atan(√(x² + 1)) ÷ ((x² + 1)·√(x² + 1)) over [0, 1] (lines 312-315): #area.value within 1.00e-7 relative of 0.5904892708863851, and its interval bound holds it 184ms
+     × AC6 #505.80c4ff9d test_three_quadrature_schemes_examples 1: t·log1p(t) over [0, 1] (lines 334-337): #area.value within 1.00e-8 relative of 0.25, and its interval bound holds it 181ms
+     × AC6 #505.80c4ff9d test_three_quadrature_schemes_examples 2: t²·atan(t) over [0, 1] (lines 341-344): #area.value within 2.00e-8 relative of 0.210657251225807, and its interval bound holds it 211ms
+     × AC6 #505.80c4ff9d test_three_quadrature_schemes_examples 3: eᵗ·cos(t) over [0, π/2] (lines 347-350): #area.value within 1.00e-8 relative of 1.9052386904826757, and its interval bound holds it 263ms
+     × AC6 #505.80c4ff9d test_three_quadrature_schemes_examples 4: atan(√(x² + 2)) ÷ (√(x² + 2)·(x² + 1)) over [0, 1] (lines 353-356): #area.value within 1.00e-8 relative of 0.5140418958900707, and its interval bound holds it 255ms
+     × AC6 #505.80c4ff9d test_three_quadrature_schemes_examples 6: √(1 − t²) over [0, 1] (lines 366-369): #area.value within 3.50e-3 relative of 0.7853981633974483, and its interval bound holds it 285ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  area-boost.test.ts > AC6 #505.80c4ff9d Boost.Math's Gauss-Kronrod integrals (f12be767c0) as the area under a path fn > AC6 #505.80c4ff9d test_linear: 5x + 7 over [0, 1] (lines 265-271): #area.value within 2.22e-15 relative of 9.5, and its interval bound holds it
+AssertionError: the curve answers #area: {"ok":true,"subpaths":[{"closed":false,"verbs":["M","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L"],"points":[[0,7],[0.0625,7.3125],[0.125,7.625],[0.1875,7.9375],[0.25,8.25],[0.3125,8.5625],[0.375,8.875],[0.4375,9.1875],[0.5,9.5],[0.5625,9.8125],[0.625,10.125],[0.6875,10.4375],[0.75,10.75],[0.8125,11.0625],[0.875,11.375],[0.9375,11.6875],[1 …
+ ❯ area-boost.test.ts:53:71
+     51|       passes(bin, doc, look(), c.y);
+     52|       const [g] = fnAt(bin, doc, 'area', [{}], c.y);
+     53|       expect(g!.area, `the curve answers #area: ${show(g!.raw)}`).not.…
+       |                                                                       ^
+     54|       const { value, lo, hi } = g!.area!;
+     55|       expect(Math.abs(value - c.exact) / Math.abs(c.exact), `#area.val…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  area-boost.test.ts > AC6 #505.80c4ff9d Boost.Math's Gauss-Kronrod integrals (f12be767c0) as the area under a path fn > AC6 #505.80c4ff9d test_quadratic: 5x² + 7x + 12 over [0, 1] (lines 289-292): #area.value within 2.22e-15 relative of 17.166666666666668, and its interval bound holds it
+AssertionError: the curve answers #area: {"ok":true,"subpaths":[{"closed":false,"verbs":["M","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L","L"],"points":[[0,12],[0.0625,12.45703125],[0.125,12.953125],[0.15625,13.2158203125],[0.1875,13.48828125],[0.21875,13.7705078125],[0.25,14.0625],[0.28125,14.3642578125],[0.3125,14 …
+ ❯ area-boost.test.ts:53:71
+     51|       passes(bin, doc, look(), c.y);
+     52|       const [g] = fnAt(bin, doc, 'area', [{}], c.y);
+     53|       expect(g!.area, `the curve answers #area: ${show(g!.raw)}`).not.…
+       |                                                                       ^
+     54|       const { value, lo, hi } = g!.area!;
+     55|       expect(Math.abs(value - c.exact) / Math.abs(c.exact), `#area.val…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  area-boost.test.ts > AC6 #505.80c4ff9d Boost.Math's Gauss-Kronrod integrals (f12be767c0) as the area under a path fn > AC6 #505.80c4ff9d test_ca f2: atan(√(x² + 1)) ÷ ((x² + 1)·√(x² + 1)) over [0, 1] (lines 312-315): #area.value within 1.00e-7 relative of 0.5904892708863851, and its interval bound holds it
+AssertionError: the curve answers #area: {"ok":true,"subpaths":[{"closed":false,"verbs":["M","L","L"],"points":[[0,0.7853981633974483],[0.5,0.601819750763286],[1,0.33775542942801995]]}]}: expected null not to be null
+ ❯ area-boost.test.ts:53:71
+     51|       passes(bin, doc, look(), c.y);
+     52|       const [g] = fnAt(bin, doc, 'area', [{}], c.y);
+     53|       expect(g!.area, `the curve answers #area: ${show(g!.raw)}`).not.…
+       |                                                                       ^
+     54|       const { value, lo, hi } = g!.area!;
+     55|       expect(Math.abs(value - c.exact) / Math.abs(c.exact), `#area.val…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  area-boost.test.ts > AC6 #505.80c4ff9d Boost.Math's Gauss-Kronrod integrals (f12be767c0) as the area under a path fn > AC6 #505.80c4ff9d test_three_quadrature_schemes_examples 1: t·log1p(t) over [0, 1] (lines 334-337): #area.value within 1.00e-8 relative of 0.25, and its interval bound holds it
+AssertionError: the curve answers #area: {"ok":true,"subpaths":[{"closed":false,"verbs":["M","L","L"],"points":[[0,0],[0.5,0.2027325540540822],[1,0.6931471805599453]]}]}: expected null not to be null
+ ❯ area-boost.test.ts:53:71
+     51|       passes(bin, doc, look(), c.y);
+     52|       const [g] = fnAt(bin, doc, 'area', [{}], c.y);
+     53|       expect(g!.area, `the curve answers #area: ${show(g!.raw)}`).not.…
+       |                                                                       ^
+     54|       const { value, lo, hi } = g!.area!;
+     55|       expect(Math.abs(value - c.exact) / Math.abs(c.exact), `#area.val…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  area-boost.test.ts > AC6 #505.80c4ff9d Boost.Math's Gauss-Kronrod integrals (f12be767c0) as the area under a path fn > AC6 #505.80c4ff9d test_three_quadrature_schemes_examples 2: t²·atan(t) over [0, 1] (lines 341-344): #area.value within 2.00e-8 relative of 0.210657251225807, and its interval bound holds it
+AssertionError: the curve answers #area: {"ok":true,"subpaths":[{"closed":false,"verbs":["M","L","L","L"],"points":[[0,0],[0.5,0.11591190225020152],[0.75,0.36196937369622245],[1,0.7853981633974483]]}]}: expected null not to be null
+ ❯ area-boost.test.ts:53:71
+     51|       passes(bin, doc, look(), c.y);
+     52|       const [g] = fnAt(bin, doc, 'area', [{}], c.y);
+     53|       expect(g!.area, `the curve answers #area: ${show(g!.raw)}`).not.…
+       |                                                                       ^
+     54|       const { value, lo, hi } = g!.area!;
+     55|       expect(Math.abs(value - c.exact) / Math.abs(c.exact), `#area.val…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  area-boost.test.ts > AC6 #505.80c4ff9d Boost.Math's Gauss-Kronrod integrals (f12be767c0) as the area under a path fn > AC6 #505.80c4ff9d test_three_quadrature_schemes_examples 3: eᵗ·cos(t) over [0, π/2] (lines 347-350): #area.value within 1.00e-8 relative of 1.9052386904826757, and its interval bound holds it
+AssertionError: the curve answers #area: {"ok":true,"subpaths":[{"closed":false,"verbs":["M","L","L","L","L","L","L","L","L","L","L","L","L","L"],"points":[[0,1],[0.19634954084936207,1.1935688101161406],[0.39269908169872414,1.36824033847421],[0.5890486225480862,1.4985351973599716],[0.6872233929727672,1.5368896796955362],[0.7853981633974483,1.5508831969180257],[0.8835729338221293,1.5349330109036075 …
+ ❯ area-boost.test.ts:53:71
+     51|       passes(bin, doc, look(), c.y);
+     52|       const [g] = fnAt(bin, doc, 'area', [{}], c.y);
+     53|       expect(g!.area, `the curve answers #area: ${show(g!.raw)}`).not.…
+       |                                                                       ^
+     54|       const { value, lo, hi } = g!.area!;
+     55|       expect(Math.abs(value - c.exact) / Math.abs(c.exact), `#area.val…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  area-boost.test.ts > AC6 #505.80c4ff9d Boost.Math's Gauss-Kronrod integrals (f12be767c0) as the area under a path fn > AC6 #505.80c4ff9d test_three_quadrature_schemes_examples 4: atan(√(x² + 2)) ÷ (√(x² + 2)·(x² + 1)) over [0, 1] (lines 353-356): #area.value within 1.00e-8 relative of 0.5140418958900707, and its interval bound holds it
+AssertionError: the curve answers #area: {"ok":true,"subpaths":[{"closed":false,"verbs":["M","L"],"points":[[0,0.6755108588560399],[1,0.3022998940390363]]}]}: expected null not to be null
+ ❯ area-boost.test.ts:53:71
+     51|       passes(bin, doc, look(), c.y);
+     52|       const [g] = fnAt(bin, doc, 'area', [{}], c.y);
+     53|       expect(g!.area, `the curve answers #area: ${show(g!.raw)}`).not.…
+       |                                                                       ^
+     54|       const { value, lo, hi } = g!.area!;
+     55|       expect(Math.abs(value - c.exact) / Math.abs(c.exact), `#area.val…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  area-boost.test.ts > AC6 #505.80c4ff9d Boost.Math's Gauss-Kronrod integrals (f12be767c0) as the area under a path fn > AC6 #505.80c4ff9d test_three_quadrature_schemes_examples 6: √(1 − t²) over [0, 1] (lines 366-369): #area.value within 3.50e-3 relative of 0.7853981633974483, and its interval bound holds it
+AssertionError: the curve answers #area: {"ok":true,"subpaths":[{"closed":false,"verbs":["M","L","L","L","L"],"points":[[0,1],[0.5,0.8660254037844386],[0.75,0.6614378277661477],[0.875,0.4841229182759271],[1,0]]}]}: expected null not to be null
+ ❯ area-boost.test.ts:53:71
+     51|       passes(bin, doc, look(), c.y);
+     52|       const [g] = fnAt(bin, doc, 'area', [{}], c.y);
+     53|       expect(g!.area, `the curve answers #area: ${show(g!.raw)}`).not.…
+       |                                                                       ^
+     54|       const { value, lo, hi } = g!.area!;
+     55|       expect(Math.abs(value - c.exact) / Math.abs(c.exact), `#area.val…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  color-wpt-palette.test.ts > AC7 #505.6af13a53 WPT's color-mix in oklab and palette's OKLab references, as a two-role ramp read by color_at > AC7 #505.6af13a53 for white→blue, red→green, green→blue, blue→red, red→white: the stroke at x = 0 and 1 is palette's a and b, and at x = 0.5 their OKLab mean, within 0.001 ΔEOK
+AssertionError: white→blue: 0 colors for 3 x values
+red→green: 0 colors for 3 x values
+green→blue: 0 colors for 3 x values
+blue→red: 0 colors for 3 x values
+red→white: 0 colors for 3 x values: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "white→blue: 0 colors for 3 x values",
++   "red→green: 0 colors for 3 x values",
++   "green→blue: 0 colors for 3 x values",
++   "blue→red: 0 colors for 3 x values",
++   "red→white: 0 colors for 3 x values",
++ ]
+
+ ❯ color-wpt-palette.test.ts:66:37
+     64|       });
+     65|     });
+     66|     expect(wrong, wrong.join('\n')).toEqual([]);
+       |                                     ^
+     67|   }, TIMEOUT);
+     68|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  color-wpt-palette.test.ts > AC7 #505.6af13a53 WPT's color-mix in oklab and palette's OKLab references, as a two-role ramp read by color_at > AC7 #505.6af13a53 white→blue: the stroke at x = 0.5 and 0.9 reads WPT's color-mix(in oklab, white, blue) and (white 10%, blue) within WPT's 0.01 a coordinate
+AssertionError: one color per x asked: expected +0 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 0
+
+ ❯ color-wpt-palette.test.ts:72:56
+     70|     const bin = render();
+     71|     const [g] = fnAt(bin, colorDoc(), 'line', [{ look: look({ a: PALET…
+     72|     expect(g!.colorAt.length, 'one color per x asked').toBe(WPT.length…
+       |                                                        ^
+     73|     WPT.forEach((w, i) => {
+     74|       const got = g!.colorAt[i]!;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  implicit-graphest.test.ts > AC4 #505.00692b98 graphest's reference plots of products of circles, run against our traced curve > AC4 #505.00692b98 twenty-five circles of radius √0.4 (graphest t_0b3b446edb104b2680bdb05fcdbef602): every drawn point within 0.5 px of a black reference pixel and every black pixel within 0.5 px of the line
+AssertionError: graphest-circles passes the check: {"ok":false,"issues":[{"check":"document.validate","code":"bad_doc","severity":"error","ids":["curve"],"path":"items/curve/params/fn/y","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"numbers":[],"notices":[{"code":"unknown_kind","severity":"notice","ids":["curve"],"path":"items/curve/kind", …
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "code": "bad_doc",
++     "ids": [
++       "curve",
++     ],
++     "severity": "error",
++   },
++ ]
+
+ ❯ passes helpers.ts:159:64
+    157| export function passes(bin: string, doc: JsonObject, theLook: JsonObje…
+    158|   const c = check(bin, doc, theLook, what);
+    159|   expect(c.errors, `${what} passes the check: ${show(c.raw)}`).toEqual…
+       |                                                                ^
+    160|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    161|   return c;
+ ❯ againstReference implicit-graphest.test.ts:44:3
+ ❯ implicit-graphest.test.ts:65:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  implicit-graphest.test.ts > AC4 #505.00692b98 graphest's reference plots of products of circles, run against our traced curve > AC4 #505.00692b98 four lines and three circles (graphest t_b8b04a37eaf64d0491cc2b1e6ee7bb1b): every drawn point within 0.5 px of a black reference pixel and every black pixel within 0.5 px of the line
+AssertionError: graphest-lines-and-circles passes the check: {"ok":false,"issues":[{"check":"document.validate","code":"bad_doc","severity":"error","ids":["curve"],"path":"items/curve/params/fn/y","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}],"numbers":[],"notices":[{"code":"unknown_kind","severity":"notice","ids":["curve"],"path":"items/cu …
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "code": "bad_doc",
++     "ids": [
++       "curve",
++     ],
++     "severity": "error",
++   },
++ ]
+
+ ❯ passes helpers.ts:159:64
+    157| export function passes(bin: string, doc: JsonObject, theLook: JsonObje…
+    158|   const c = check(bin, doc, theLook, what);
+    159|   expect(c.errors, `${what} passes the check: ${show(c.raw)}`).toEqual…
+       |                                                                ^
+    160|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    161|   return c;
+ ❯ againstReference implicit-graphest.test.ts:44:3
+ ❯ implicit-graphest.test.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  plots-graphest.test.ts > AC3 #505.5e6d3319 graphest's reference plots, run against our drawn line at the reference's pixel scale > AC3 #505.5e6d3319 y = sin(40 / x) (graphest "Infinite Frequency"): the stretch ours can't bound starts at 0.01 and lies inside the reference's unresolved stretch near 0, and the rest is bounded
+AssertionError: an estimate notice names a stretch from 0.01, where the reference is unresolved: []: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ plots-graphest.test.ts:82:191
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  plots-graphest.test.ts > AC3 #505.5e6d3319 graphest's reference plots, run against our drawn line at the reference's pixel scale > AC3 #505.5e6d3319 y = sin(40 / x): where ours is bounded, every drawn point is within 0.5 px of a pixel the reference leaves black, and every black pixel there within 0.5 px of the line
+AssertionError: sin(40 / x): the check's curves is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:51:71
+     49| export const show = (v: JsonValue | undefined): string => JSON.stringi…
+     50| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     51|   expect(isObject(value), `${what} is an object, got ${show(value)}`).…
+       |                                                                       ^
+     52|   return value as JsonObject;
+     53| }
+ ❯ curvesOf helpers.ts:165:21
+ ❯ plots-graphest.test.ts:93:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  plots-graphest.test.ts > AC3 #505.5e6d3319 graphest's reference plots, run against our drawn line at the reference's pixel scale > AC3 #505.5e6d3319 y = sin(x) / x (graphest "Wave") over [0.1, 10]: bounded throughout as the reference is resolved throughout, every drawn point within 0.5 px of a black pixel and every black pixel within 0.5 px of the line
+AssertionError: sin(x) / x: the check's curves is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:51:71
+     49| export const show = (v: JsonValue | undefined): string => JSON.stringi…
+     50| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     51|   expect(isObject(value), `${what} is an object, got ${show(value)}`).…
+       |                                                                       ^
+     52|   return value as JsonObject;
+     53| }
+ ❯ curvesOf helpers.ts:165:21
+ ❯ plots-graphest.test.ts:105:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  4 failed | 2 passed (6)
+      Tests  15 failed | 10 passed (25)
+   Start at  18:14:54
+   Duration  17.70s (tests 99%)
+
+vitest exit 1

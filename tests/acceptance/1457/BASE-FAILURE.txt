@@ -1,0 +1,13 @@
+#1457 at base 8620dccf. Not a full run: no release build, no window, no base binaries here (BASE_BIN_*, FS_CALLS_PER_FRAME unset).
+Run here with `npx vitest run --root tests/acceptance/1457 modes release frame -t "<non-build tests>"`, against a checkout that
+holds the implementation in progress (the working tree), so base-side facts below are from `git grep 8620dccf`:
+- AC1: at base `git grep` finds --cursor-demo, --probe-synthetic, --probe-held, --post-forged and `mod trusted` in crates/deep-app/src/main.rs
+  and crates/deep-app/README.md: the grep test fails at base for the expected reason.
+- AC2: base has no `--root` lint of the app's source that reads environment variables (scripts/render-lint.mjs matches
+  current_state/decorations only): the plant tests fail with "the lint lane has a --root lint ... that reads environment variables".
+  Base's release deep-app holds DEEP_HUB_PLANT? Not run (a release build was not made); base's panel_module.rs/plain.rs/states.rs read it
+  behind `env-plants`, and main.rs reads DEEP_APP_NOTIFICATION_SETTING ungated, so the byte search is expected to fail there.
+- AC3: render-lint.mjs doesn't flag exists()/fs reads: "a --root lint of the lint lane fails views.rs:574: expected false to be true".
+  Base's setup::count calls `.exists()`: the setup.rs test fails at base.
+- AC4/AC5 and FS_CALLS_PER_FRAME: INCONCLUSIVE until the preflight supplies BASE_BIN_DEBUG, BASE_BIN_RELEASE, FS_CALLS_PER_FRAME.
+Never run: the app-launching tests (budgets.test.ts AC4/AC5 real-app halves), the release build.
