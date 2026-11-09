@@ -3,6 +3,7 @@
 //! on image@1. Its kit is every part of the canvas kit on its fixtures, the carried-state part
 //! over a reverb's checkpointed tail among them, with no behavior part.
 
+use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{
     Dependency, Implementation, Manifest, Module, Range, Raised, Registrar, Semver, StepInput,
     Stepper,
@@ -80,7 +81,99 @@ fn register(r: &mut Registrar, restore: fn(&Value) -> Value) {
         rollback: |_, cp| cp.clone(),
         occurrences: |_| Vec::new(),
     });
-    r.rule("image@1", av_link);
+    // A strip as an item (Strip and track), for a document that keeps its strips beside its
+    // items; it draws nothing.
+    r.kind(strip_kind(), &[], "");
+    r.rule("image", av_link);
+    r.rule("media.strip", av_link_strip);
+}
+
+/// `media.strip@1`: Strip and track's fields as params.
+fn strip_kind() -> Entry {
+    let json = |name: &'static str| Param {
+        name,
+        ty: ParamType::Json,
+        unit: "",
+        default: Value::Null,
+        min: None,
+        max: None,
+        minor: 0,
+        module: "",
+        operator: "",
+    };
+    let fields = [
+        "track", "src", "start", "in", "out", "rate", "offset", "span", "loop", "gain", "pitch", "pan",
+        "bus", "enabled", "fade_in", "fade_out", "align", "at_stage", "tags",
+    ];
+    Entry {
+        family: "media",
+        name: "strip",
+        versions: vec![Version {
+            major: 1,
+            minor: 0,
+            params: fields.into_iter().map(json).collect(),
+        }],
+        migrations: vec![],
+    }
+}
+
+/// The sound strips of `doc` playing `asset`: the `strips` map's and `media.strip@1` items', each
+/// with the path its fields sit under.
+fn strips_of<'d>(doc: &'d Value, asset: &str) -> Vec<(String, &'d Value)> {
+    let mut out = Vec::new();
+    for (sid, strip) in doc["strips"].as_object().into_iter().flatten() {
+        if crate::doc::strip_asset(strip) == Some(asset) {
+            out.push((format!("strips/{sid}"), strip));
+        }
+    }
+    for (iid, item) in doc["items"].as_object().into_iter().flatten() {
+        if item["kind"] == "media.strip@1" && crate::doc::strip_asset(&item["params"]) == Some(asset) {
+            out.push((format!("items/{iid}/params"), &item["params"]));
+        }
+    }
+    out
+}
+
+/// The fields a picture and its sound must agree on, as the check compares them.
+fn linked_fields() -> &'static [&'static str] {
+    if crate::planted("av_link_compares_start_only") || crate::planted("av_link_start_only") {
+        &["start"]
+    } else {
+        &["start", "in", "rate"]
+    }
+}
+
+/// av_unlinked from a strip item's side: against each picture of its asset.
+fn av_link_strip(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    let Some(asset) = crate::doc::strip_asset(&item["params"]) else {
+        return Vec::new();
+    };
+    if item.pointer("/params/offset").is_some() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for (pid, pic) in doc["items"].as_object().into_iter().flatten() {
+        let (Some(frames), Some(a)) = (pic.pointer("/params/frames"), pic.pointer("/params/asset").and_then(Value::as_str)) else {
+            continue;
+        };
+        if a != asset {
+            continue;
+        }
+        for f in linked_fields() {
+            if crate::doc::link_value(doc, frames, f) != crate::doc::link_value(doc, &item["params"], f) {
+                out.push(Raised {
+                    code: "av_unlinked",
+                    severity: "error",
+                    path: format!("items/{pid}/params/frames/{f}"),
+                    what: format!(
+                        "the sound strip {id} and the picture {pid} of one video disagree on {f}; move both together, or give the strip an offset"
+                    ),
+                    fix_ops: None,
+                });
+            }
+        }
+    }
+    out
 }
 
 fn init() -> Value {
@@ -127,22 +220,19 @@ fn av_link(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     let Some(asset) = item.pointer("/params/asset").and_then(Value::as_str) else {
         return Vec::new();
     };
-    let start_only = crate::planted("av_link_compares_start_only");
     let mut out = Vec::new();
-    for (sid, strip) in doc["strips"].as_object().into_iter().flatten() {
-        if crate::doc::strip_asset(strip) != Some(asset) || strip.get("offset").is_some() {
+    for (at, strip) in strips_of(doc, asset) {
+        if strip.get("offset").is_some() {
             continue;
         }
-        let fields: &[&str] = if start_only { &["start"] } else { &["start", "in", "rate"] };
-        for f in fields {
-            let (a, b) = (crate::doc::link_value(doc, frames, f), crate::doc::link_value(doc, strip, f));
-            if a != b {
+        for f in linked_fields() {
+            if crate::doc::link_value(doc, frames, f) != crate::doc::link_value(doc, strip, f) {
                 out.push(Raised {
                     code: "av_unlinked",
                     severity: "error",
-                    path: format!("strips/{sid}/{f}"),
+                    path: format!("{at}/{f}"),
                     what: format!(
-                        "the picture {id} and the sound strip {sid} of one video disagree on {f}; move both together, or give the strip an offset"
+                        "the picture {id} and the sound strip at {at} of one video disagree on {f}; move both together, or give the strip an offset"
                     ),
                     fix_ops: None,
                 });
