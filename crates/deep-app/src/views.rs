@@ -10,7 +10,7 @@
 //! accessibility tree a screen reader sees and the observed elements a replica reads back are
 //! the same set of nodes.
 
-use std::{cell::Cell, cell::RefCell, rc::Rc, sync::mpsc::TryRecvError, sync::Arc, time::Duration};
+use std::{cell::Cell, cell::RefCell, sync::mpsc::TryRecvError, sync::Arc, time::Duration};
 
 use gpui_kit::base::dock::{
     register_panel, DockArea, DockAreaState, DockPlacement, DockState, Panel, PanelEvent,
@@ -23,8 +23,7 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 use serde_json::json;
 
 use crate::{
-    bound, brand, canvas, cells, chrome, events::Inbox, show::CanvasPanel, states,
-    states::READINGS, text,
+    bound, brand, canvas, cells, chrome, show::CanvasPanel, states, states::READINGS, text,
 };
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
@@ -69,32 +68,36 @@ const DIFF_WIDTH: f32 = 1060.;
 /// The most lines a sidebar row's problem draws under it (#1348): its one plain line, or a planted trace's.
 const PROBLEM_LINES: usize = 16;
 
-/// What a replica's fixture panels read through `deepbuild.needs_you`, and its virtual clock: the inbox projection at
+/// In no shipped build (#1457). What a replica's fixture panels read through `deepbuild.needs_you`, and its virtual clock: the inbox projection at
 /// a log position. The replica, the live capture and the registry checks set it before opening the shell. No view
 /// reads it: every view draws the record through the one reader, with the same tree in the app and in a replica
 /// (#1454). `held` stays here alone because the hub records no event for a hold yet.
 #[derive(Clone, Debug)]
+#[cfg(feature = "fixtures")]
 pub struct AppState {
-    pub inbox: Inbox,
+    pub inbox: crate::events::Inbox,
     pub now: u64,
     pub sessions: Vec<String>,
     pub held: Option<String>,
 }
 
+#[cfg(feature = "fixtures")]
 thread_local! {
-    static STATE: RefCell<Option<Rc<AppState>>> = const { RefCell::new(None) };
+    static STATE: RefCell<Option<std::rc::Rc<AppState>>> = const { RefCell::new(None) };
     /// The virtual clock, where one runs (a replica).
     static CLOCK: Cell<Option<u64>> = const { Cell::new(None) };
 }
 
 /// A replica's state and clock. Its record stands for a machine that's set up, whatever this HOME holds.
+#[cfg(feature = "fixtures")]
 pub fn set_state(state: AppState) {
     CLOCK.with(|clock| clock.set(Some(state.now)));
     crate::setup::assume_finished();
-    STATE.with(|cell| *cell.borrow_mut() = Some(Rc::new(state)));
+    STATE.with(|cell| *cell.borrow_mut() = Some(std::rc::Rc::new(state)));
 }
 
-pub fn current_state() -> Option<Rc<AppState>> {
+#[cfg(feature = "fixtures")]
+pub fn current_state() -> Option<std::rc::Rc<AppState>> {
     STATE.with(|cell| cell.borrow().clone())
 }
 
@@ -382,6 +385,7 @@ impl Shipped {
                 Err(TryRecvError::Disconnected) => "deep setup stopped without a word".to_owned(),
             };
             let _ = this.update(cx, |this, cx| {
+                crate::setup::refresh();
                 this.set_up = Some(said);
                 this.setting_up = None;
                 cx.notify();
@@ -798,18 +802,22 @@ fn first(record: &Record) -> (String, String, states::State) {
     record.sessions[0].clone()
 }
 
-/// Moves the virtual clock a replica's views draw by to `now`, ms since the epoch (#1546).
+/// Moves the virtual clock a replica's views draw by to `now`, ms since the epoch (#1546). A replica's door, in no
+/// shipped build (#1457).
+#[cfg(feature = "fixtures")]
 pub fn set_clock(now: u64) {
     CLOCK.with(|clock| clock.set(Some(now)));
 }
 
 /// The virtual clock's time where one runs (the replica), else the system's.
 pub fn now() -> u64 {
-    CLOCK.with(Cell::get).unwrap_or_else(|| {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |since| since.as_millis() as u64)
-    })
+    #[cfg(feature = "fixtures")]
+    if let Some(virtual_now) = CLOCK.with(Cell::get) {
+        return virtual_now;
+    }
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_millis() as u64)
 }
 
 /// A session's status mark and words, one accessibility node named by what it shows: the mark's core, a square of
