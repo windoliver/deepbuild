@@ -174,7 +174,7 @@ fn register(r: &mut Registrar) {
         .sidecar(json!({"codes": []}));
 }
 
-fn bell() -> Value {
+pub fn bell() -> Value {
     json!({
         "format": 1, "profile": "scene", "title": "A bell",
         "description": "A small box with a positional voice playing a sine chime.",
