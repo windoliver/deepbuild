@@ -9,7 +9,7 @@ The first-party resolver that ships on by default (#23): it answers an ask only 
 - `src/index.ts`: finding the covering decisions and budgets in the record.
 - `src/rules.ts`: standing rules judged by what later broke.
 - `fixtures/keys.json`: the design's key fixture file, pairs per kind that must share a key and near-misses that must not.
-- There is no `test/` folder: its tests are the acceptance suite in `tests/acceptance/23`, which is never edited.
+- Regression tests go in `test/resolver.test.ts`; the acceptance suite in `tests/acceptance/23` is never edited.
 
 ## What it may import
 
