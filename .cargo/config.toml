@@ -19,6 +19,10 @@ gpui-pre = { path = "vendor/gpui-pre" }
 # Issue #377 adds the GPU layer's handoff to it: BGRA surfaces composited premultiplied, and
 # `gpu_surfaces`, which reports the surfaces each frame command buffer samples and its completion.
 gpui-pre-apple = { path = "vendor/gpui-pre-apple" }
+# Issue #1477: AccessKit's macOS adapter gives a row its AXIndex from the row index, so VoiceOver reads a long
+# table's rows by number. vendor/accesskit_macos is accesskit_macos 0.26.3 with `accessibilityIndex` added, marked
+# "DeepBuild patch".
+accesskit_macos = { path = "vendor/accesskit_macos" }
 # Issue #1551: a still window stops its display link. vendor/gpui-pre-macos is gpui-pre-macos 0.3.9
 # from crates.io, whose shown window ran the request-frame callback every vsync; a tick that neither
 # drew nor was asked again stops the link, and `schedule_frame` and the frame waker start it.
