@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { parseClaimLine } from '@deepbuild/record';
 
 interface Hit { source: string; quote: string; outside?: boolean; known?: string; proof?: number; sources?: unknown[]; as_of?: number; reading?: unknown; status?: 'current' | 'STALE' }
-export interface Claim { id: string; page: string; source: string; text: string }
+interface Claim { id: string; page: string; source: string; text: string }
 interface IndexHit { claim: string; page: string; quote: string; source: string; [mark: string]: unknown }
 /** index@1's surface, as packages/conformance/src/slots/wiki-index.ts defines it; a fill that runs elsewhere answers later. */
 export interface IndexFill {

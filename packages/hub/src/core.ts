@@ -630,7 +630,7 @@ export class Core {
   /** When this core started: a deny from before it is read back from the record (#1033). */
   private readonly bootAt = Date.now();
   /** Each Claude Code home's mods as last read, by what they were read from (#1033). */
-  private readonly modsSeen = new Map<string, { at: number; read: HomeMods }>();
+  private readonly modsSeen = new Map<string, { at: number; read: Promise<HomeMods> }>();
   /** Each Claude Code home's login plan as `claude auth status` last read it, by the files a sign-in rewrites. */
   private readonly plansSeen = new Map<string, { key: string; at: number; plan: Promise<unknown> }>();
   /** The continues being read, one reading at a time, so the timer's and a prompt's never carry the same one twice. */
@@ -1872,12 +1872,15 @@ export class Core {
     if (meta.agent !== 'claude-code' && meta.agent !== 'claude') return { home: '', mods: [] };
     const dirs = pluginDirs(await argsOf(meta.ppid).catch(() => ''));
     const home = homeOfTranscript(meta.transcript) ?? claudeHomes(process.env)[0]!;
-    // Read again only when what Claude Code lists them from changes, or after MODS_MS: each read starts claude several times.
+    // Read again only when what Claude Code lists them from changes, or after MODS_MS: each read starts claude several
+    // times. A read in flight is shared, so starts that arrive together start claude once.
     const key = JSON.stringify([home, meta.cwd, dirs, ...[join(home, 'plugins', 'installed_plugins.json'), join(home, 'settings.json'), join(home, 'skills'), ...dirs].map(statKey)]);
     const seen = this.modsSeen.get(key);
     if (seen && this.now() - seen.at < MODS_MS) return seen.read;
-    const read = await homeMods(home, claudeOnPath(process.env), process.env, { cwd: meta.cwd, dirs });
+    const read = homeMods(home, claudeOnPath(process.env), process.env, { cwd: meta.cwd, dirs });
     this.modsSeen.set(key, { at: this.now(), read });
+    // A read that failed is not kept: the next start reads again.
+    read.catch(() => { if (this.modsSeen.get(key)?.read === read) this.modsSeen.delete(key); });
     return read;
   }
   /**
