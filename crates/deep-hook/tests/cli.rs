@@ -152,6 +152,109 @@ fn a_call_whose_guard_rules_stall_is_denied_within_the_deadline() {
 }
 
 #[test]
+fn a_hook_given_no_time_past_the_watchdog_with_its_call_sent_is_still_spooled() {
+    let home =
+        fresh_home(std::env::temp_dir().join(format!("dh17-starved-{}", std::process::id())));
+    let signal = |sig: &str, pid: u32| {
+        let sent = Command::new("kill")
+            .args([sig, &pid.to_string()])
+            .status()
+            .unwrap();
+        assert!(sent.success());
+    };
+    // Each hook starts and waits for its call; the machine then gives it no time (SIGSTOP stands in for a loaded
+    // CPU) while the agent sends the call, and gives it time again only past the watchdog's 48 ms. The call was
+    // there to read all along, so the hook was slow, not stuck: it is allowed and spooled, never dropped.
+    for round in 0..5 {
+        let start = std::time::Instant::now();
+        let mut child = hook(&home, "PreToolUse");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        signal("-STOP", child.id());
+        feed(
+            &mut child,
+            format!(r#"{{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"echo {round}"}}}}"#).as_bytes(),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        signal("-CONT", child.id());
+        let exited = exit_within(&mut child, start, SECOND);
+        assert_eq!(
+            exited.and_then(|s| s.code()),
+            Some(0),
+            "round {round}: the call is allowed: {}",
+            stderr_of(&mut child)
+        );
+    }
+    let spooled =
+        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
+    std::fs::remove_dir_all(&home).unwrap();
+    let lost: Vec<_> = (0..5)
+        .filter(|round| !spooled.contains(&format!("echo {round}")))
+        .collect();
+    assert!(
+        lost.is_empty(),
+        "rounds {lost:?} were let through and not spooled: {spooled:?}"
+    );
+}
+
+#[test]
+fn a_call_its_agent_sends_past_the_watchdog_is_still_spooled() {
+    let home =
+        fresh_home(std::env::temp_dir().join(format!("dh17-late-call-{}", std::process::id())));
+    // An agent the machine gives no time writes the call 150 ms after it started the hook, past the watchdog's 48 ms.
+    let start = std::time::Instant::now();
+    let mut child = hook(&home, "PreToolUse");
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    // A hook that already let the call through has closed its stdin: the write fails, and the spool says the rest.
+    let _ = std::io::Write::write_all(
+        &mut child.stdin.take().unwrap(),
+        br#"{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo sent late"}}"#,
+    );
+    let exited = exit_within(&mut child, start, SECOND);
+    let spooled =
+        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        exited.and_then(|s| s.code()),
+        Some(0),
+        "the call is allowed"
+    );
+    assert!(
+        spooled.contains("echo sent late"),
+        "the call is spooled: {spooled:?}"
+    );
+}
+
+#[test]
+fn a_call_whose_agent_closes_stdin_late_is_decided_and_spooled_without_waiting_for_it() {
+    let home =
+        fresh_home(std::env::temp_dir().join(format!("dh17-late-close-{}", std::process::id())));
+    // The agent writes the whole call at once and closes stdin only later, as one the machine gives no time may.
+    let start = std::time::Instant::now();
+    let mut child = hook(&home, "PreToolUse");
+    let mut stdin = child.stdin.take().unwrap();
+    std::io::Write::write_all(
+        &mut stdin,
+        br#"{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"echo closed late"}}"#,
+    )
+    .unwrap();
+    // stdin closes only after the hook has had its second: a hook that waits for the close is killed by then.
+    let exited = exit_within(&mut child, start, SECOND);
+    drop(stdin);
+    let spooled =
+        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        exited.and_then(|s| s.code()),
+        Some(0),
+        "the call is allowed before its agent closes stdin"
+    );
+    assert!(
+        spooled.contains("echo closed late"),
+        "the call is spooled: {spooled:?}"
+    );
+}
+
+#[test]
 fn a_hook_with_no_shell_call_is_spooled_whatever_rules_json_does() {
     let home = fresh_home(std::env::temp_dir().join(format!("dh315-start-{}", std::process::id())));
     // rules.json is a FIFO nobody writes, and no hub is there: guards can't touch a SessionStart, so it is spooled.
