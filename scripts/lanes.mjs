@@ -232,6 +232,8 @@ timed.push('tests/acceptance/1546/ac4-needs-you.live.test.ts');
 
 // #1348's suite runs the plain words lane, which builds and draws its fixture run in the replica: one file at a time.
 alone.push('tests/acceptance/1348/');
+// #1718's files build deep-show and deep-hook, start hubs and lay out an installed tree.
+alone.push('tests/acceptance/1718/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
