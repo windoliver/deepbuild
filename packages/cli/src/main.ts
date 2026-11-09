@@ -199,8 +199,9 @@ if (args.length === 0 || (args.length === 1 && ['--help', '-h', 'help'].includes
 } else if (args[0] === 'explain' && args[1] && args.slice(2).every((arg) => arg === '--json')) {
   process.exitCode = explain(args[1], args.includes('--json'));
 } else if (args[0] === 'hub') {
-  // Loaded only for hub commands, so every other command starts without the hub's modules.
-  const { hubCommand } = await import('@deepbuild/hub');
+  // Its own entry, loaded only for hub commands: every other command starts without the hub's modules, and the
+  // running hub without the other commands'.
+  const { hubCommand } = await import('@deepbuild/hub/hub');
   process.exitCode = await hubCommand(args.slice(1), fileURLToPath(import.meta.url));
 } else if (args[0] === 'lease') {
   // Its own entry, so a leased command starts without the hub's module graph.

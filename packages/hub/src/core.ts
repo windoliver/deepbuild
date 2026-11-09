@@ -92,7 +92,7 @@ import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
-import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
+import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { copySynced, disk, synced, testVfs, writeSynced, type Durable } from './vfs.js';
 import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
 
@@ -628,6 +628,8 @@ export class Core {
   private readonly bootAt = Date.now();
   /** Each Claude Code home's mods as last read, by what they were read from (#1033). */
   private readonly modsSeen = new Map<string, { at: number; read: HomeMods }>();
+  /** Each Claude Code home's login plan as `claude auth status` last read it, by the files a sign-in rewrites. */
+  private readonly plansSeen = new Map<string, { key: string; at: number; plan: Promise<unknown> }>();
   /** The continues being read, one reading at a time, so the timer's and a prompt's never carry the same one twice. */
   private continuing: Promise<void> = Promise.resolve();
   /** deep_wait and deep_run calls, by the ask or run they wait on, each woken by the event that settles it (#823). */
@@ -1871,6 +1873,21 @@ export class Core {
     return read;
   }
   /**
+   * The login plan of a Claude Code home (#1033), read again only after MODS_MS or once a file a sign-in rewrites
+   * changes: each read starts claude, about 175 ms of CPU, on every Claude Code session's start.
+   */
+  private planOf(home: string): Promise<unknown> {
+    const claude = claudeOnPath(process.env);
+    if (!claude) return Promise.resolve(undefined);
+    const files = [join(home, '.credentials.json'), join(home, '..', '.claude.json'), join(home, '.claude.json')];
+    const key = JSON.stringify([claude, ...files.map(statKey)]);
+    const seen = this.plansSeen.get(home);
+    if (seen && seen.key === key && this.now() - seen.at < MODS_MS) return seen.plan;
+    const plan = loginPlan(claude, { ...process.env, ...(home ? { CLAUDE_CONFIG_DIR: home } : {}) });
+    this.plansSeen.set(home, { key, at: this.now(), plan });
+    return plan;
+  }
+  /**
    * A denied call that ran anyway (#1033): guard.overridden with what denied it and the home's mods that could have
    * approved it, one line on the session's row, its claims judged again, and for a send, which may already have left,
    * one ask naming it.
@@ -1901,7 +1918,7 @@ export class Core {
    */
   private async modsReading(meta: HookMeta): Promise<void> {
     const read = await this.sessionMods(meta);
-    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env));
+    const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env), () => this.planOf(read.home));
     const risky = held || !('mods' in read) ? [] : read.mods.filter((m) => m.overrides);
     let reading: string | undefined;
     if ('unread' in read && !held) reading = `${MODS_WATCH} (${read.home}) loads mods DeepBuild couldn't read (${read.unread}), so whether one can approve a call past the guard is not checked: its holds and blocks may be watch-only.`;
@@ -5774,7 +5791,8 @@ export class Core {
    */
   private async page(after: number, limit: number, kinds?: string[], seen = ''): Promise<{ log_pos: number; json: string }[]> {
     const only = kinds ? ` AND kind IN (${kinds.map((k) => `'${k.replace(/'/g, "''")}'`).join(',')})` : '';
-    return (await this.record.raw(`SELECT log_pos, ${EVENT_TEXT} AS json FROM events WHERE log_pos > ${after}${only}${seen} ORDER BY log_pos LIMIT ${limit}`)) as { log_pos: number; json: string }[];
+    // The position and the page size bound, so every page is the one statement the record keeps compiled.
+    return (await this.record.raw(`SELECT log_pos, ${EVENT_TEXT} AS json FROM events WHERE log_pos > ?${only}${seen} ORDER BY log_pos LIMIT ?`, [after, limit])) as { log_pos: number; json: string }[];
   }
   /** deep status's rows, a person's only of the sessions they may see (#1338). */
   private async statusSeen(role: string): Promise<StatusRow[]> {
@@ -7697,6 +7715,9 @@ export class Core {
     this.channels?.stop();
     await this.extensions?.close();
     await this.supervisor.close();
+    // The product store's watch and the session starts' timers, set once the hub was ready, go with it.
+    this.products.close();
+    this.sessionStarts.close();
     await this.record.close();
     this.writeState('stopped');
   }
