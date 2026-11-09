@@ -82,15 +82,12 @@ it('a hub that slept with an ask waiting for its batch moves its deadline later 
   expect(moves[0]!.writer).toBe('core');
 }, 60_000);
 
-it('a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due', async () => {
+it('a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due, after you change the batches', async () => {
   dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-hub-batch-')));
   const [home, root] = ['home', 'root'].map((p) => join(dir, p)) as [string, string];
   for (const p of [home, root]) mkdirSync(p);
+  // Batches every 8 h, as setup drafts them: the ask, due in two days, waits for the next one.
   draftAskSettings(root);
-  // Batches every minute: the ask, due in two days, waits for the next one.
-  const config = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8'));
-  config.asks.batch = { every: '1m', cap: 20 };
-  writeFileSync(join(root, 'config.json'), `${JSON.stringify(config)}\n`);
   // Start at least 30 s before a batch time, so the ask is seen waiting first, even with a slow hub start.
   while (Date.now() % 60_000 > 30_000) await pause(250);
   const now = Date.now();
@@ -107,6 +104,10 @@ it('a hub that stays up shows an ask waiting for its batch at the batch time, wi
     .filter((e) => e.kind === 'ask.batched' && e.data.asks.some((a) => a.ask === `ask:${ask}`));
   await pause(2000);
   expect(await batched(), 'before the batch time the ask waits, unshown').toEqual([]);
+  // You change them to every minute while the hub runs: the next minute's batch shows it.
+  const config = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8'));
+  config.asks.batch = { every: '1m', cap: 20 };
+  writeFileSync(join(root, 'config.json'), `${JSON.stringify(config)}\n`);
   // The beat is 1 s; 5 s leaves room for a loaded machine, as the hub's start does in #319.
   while (Date.now() < batch + 5000) await pause(250);
   expect((await batched()).map((e) => e.data.batch), `the ${new Date(batch).toISOString()} batch shows it within 5 s of its time`).toEqual([`batch:${new Date(batch).toISOString()}`]);

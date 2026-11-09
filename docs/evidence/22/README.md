@@ -13,6 +13,9 @@ the macOS-only `cp -c`, the commit taken from `AT`):
 | main 6042ef5a | PASS | INCONCLUSIVE | PASS | PASS |
 | this change 12ea8c63 | PASS | INCONCLUSIVE | PASS | INCONCLUSIVE |
 
+The row for this change is its first fix; the correction after it (the batch time read every beat) changed only
+`nextBatch()` and the beat, and #319's suite but its budgets was rerun on it, 90 of 90.
+
 #319's only criterion that can't pass here is AC10 `#319.43d13eb3`, the budgets: `tests/acceptance/319/budgets.test.ts`
 counts a timing only on a reference Mac (Mac15,7 or Mac15,12) on mains power, and skips as INCONCLUSIVE anywhere else.
 Its proof is the Mac run below.
@@ -31,11 +34,16 @@ a deadline had passed or an unblock was open (#85's gate, which came after a23ee
 nothing: on a live hub every batched ask waited until its deadline, then showed at once. #319's suite drives the asks
 core on a virtual clock and calls `tick()` itself, so it never saw this.
 
-The fix: the asks core says when your next batch is (`nextBatch()`), and the hub's beat ticks at that time.
+The fix: the asks core says when your next batch is (`nextBatch()`, from your settings as they are now), and the hub's
+beat asks every second and ticks once that time passes, so a change to your batches counts from the next beat.
 
 - Failing first: `packages/hub/test/asleep.test.ts`, "a hub that stays up shows an ask waiting for its batch at the
-  batch time", on main's hub: `failing-first.txt` (`expected [] to deeply equal [ 'batch:…' ]`).
-- With the fix: `passing-after.txt` (both tests in the file pass, the #908 sleep test beside it unchanged).
+  batch time, … after you change the batches": the hub starts with setup's 8-hour batches, you change them to every
+  minute, and the next minute's batch must show the ask. On main's hub (`failing-first-main.txt`, the test's first
+  form, without the change of batches) and on this branch's first fix, which read the batch time once at start
+  (`failing-first.txt`): `expected [] to deeply equal [ 'batch:…' ]`.
+- With the fix: `passing-after.txt` (both tests in the file pass, the #908 sleep test beside it unchanged), and the
+  asks package with #319's suite but its budgets, 90 of 90.
 
 ## The runs by hand, after the fix
 

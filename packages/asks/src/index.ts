@@ -254,8 +254,8 @@ export interface Asks {
    * and the time before you saw it, or before they were back on, moves its deadline later as `away` does.
    */
   notifications(off: boolean): Promise<void>;
-  /** Your next batch time after now, or null with no batches declared: the hub's beat ticks then, with nothing else due. */
-  nextBatch(): number | null;
+  /** Your next batch time after now, or null with no batches declared, from your settings as they are now: the hub's beat ticks then, with nothing else due. */
+  nextBatch(): Promise<number | null>;
   card(ask: string): Promise<Card>;
   needsYou(): Promise<Card[]>;
   holds(session: string, step: Step): Promise<string[]>;
@@ -910,9 +910,11 @@ class AsksCore implements Asks {
     });
   }
 
-  nextBatch(): number | null {
-    const batches = this.batches();
-    return batches ? (Math.floor(this.options.now() / batches.every) + 1) * batches.every : null;
+  nextBatch(): Promise<number | null> {
+    return this.exclusive(async () => {
+      const batches = this.batches();
+      return batches ? (Math.floor(this.options.now() / batches.every) + 1) * batches.every : null;
+    });
   }
 
   card(handle: string): Promise<Card> {
