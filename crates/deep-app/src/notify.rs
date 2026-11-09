@@ -418,6 +418,12 @@ pub fn notification_text(table: &Table, session: &str, now: u64) -> String {
     }
 }
 
+/// Whether a notification Notification Center still holds carries this ask's question, as the notification shows it:
+/// marked (#1510).
+pub fn carries(text: &str, question: &str) -> bool {
+    !question.is_empty() && text.contains(&crate::question::visible(question))
+}
+
 /// The run's end notice (#1348), in plain words: its tasks have stopped, and how many each state holds, such as
 /// "DeepBuild\nAll 2 tasks have stopped: 1 PASS, 1 needs you."
 pub fn end_notice(table: &Table, sessions: &[String]) -> String {
@@ -454,6 +460,11 @@ fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
         .and_then(|options| options.iter().find(|option| option["id"] == default))
         .and_then(|option| option["label"].as_str())
         .unwrap_or(default);
+    // The ask's words as the card draws them, its controls and direction marks shown (#1510).
+    let (question, label) = (
+        crate::question::visible(data["question"].as_str().unwrap_or_default()),
+        crate::question::visible(label),
+    );
     // The undo of its default gives it a new deadline.
     let deadline = table.deadline(ask).unwrap_or(now);
     format!(
@@ -461,7 +472,7 @@ fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
         title(table, ask["session"].as_str().unwrap_or_default()),
         states::glyph(states::State::NeedsYou.entry()),
         states::State::NeedsYou.word(),
-        data["question"].as_str().unwrap_or_default(),
+        question,
         clock_time(deadline, now),
     )
 }
@@ -540,6 +551,30 @@ mod tests {
             text.ends_with(&format!("If you don't answer: No, at {want}.")),
             "{text}"
         );
+    }
+
+    #[test]
+    fn a_notification_shows_a_direction_mark_as_the_card_does() {
+        // #1510: an override in the question or the default's label would read the rest backwards.
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
+            "question": "Open invoice\u{202e}txt.exe?", "default": "no", "deadline": 1_000,
+            "options": [{"id": "no", "label": "No\u{202e}"}]}});
+        let text = notification_text(&view(&[ask]).table(), "s1", 1_000);
+        assert!(text.contains("Open invoice\\u{202e}txt.exe?"), "{text}");
+        assert!(text.contains("If you don't answer: No\\u{202e},"), "{text}");
+        assert!(!text.contains('\u{202e}'), "{text}");
+    }
+
+    #[test]
+    fn a_notification_the_app_finds_after_a_relaunch_still_carries_its_marked_question() {
+        // #1510: the posted text holds the marked question, so a relaunch that looks for the raw one withdraws it.
+        let question = "Deploy?\nThis restarts prod\u{202e}";
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
+            "question": question, "default": "no", "deadline": 1_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        let text = notification_text(&view(&[ask]).table(), "s1", 1_000);
+        assert!(carries(&text, question), "{text}");
+        assert!(!carries(&text, "Push?"), "{text}");
     }
 
     #[test]

@@ -1,0 +1,1 @@
+        let _text = std::fs::read_to_string("/tmp/shown");

@@ -14,7 +14,7 @@ import { call, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { dropEntries, writeRejected } from './guards.js';
 
-export type LessonKind = 'guard' | 'shared-rule' | 'removal';
+type LessonKind = 'guard' | 'shared-rule' | 'removal';
 export interface Lesson {
   id: string; kind: LessonKind; text: string; rank: number; claim: string; scope: string;
   sources: { at: string | null; path: string | null; quote: string }[];
