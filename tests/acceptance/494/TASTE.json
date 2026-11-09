@@ -1,0 +1,14 @@
+{
+  "issue": 494,
+  "criterion": "#494.862daf9a",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in the session (\"validate scresnhot for me\"); not the owner's own call",
+  "when": "2026-11-08T18:40:00Z",
+  "screenshots": {
+    "arc.png": "1bc5069c41318da417d1ba4435ba4461410028558bfdd69edceaa4f314fde543",
+    "circle-star.png": "039d1e4127a41fd692392f4b5612cf0442ac4e6ef6cf177659528c34c897da1f",
+    "formula-morph.png": "18fb583e660f26781d1ac597579b6bbdc1797801be04d7a37e07943f2746ef3e",
+    "arc-and-morphs.apng": "ac59a751ce9415d74a805ab69125496035b0bf5ea3e6d68b276ed1c35ae2f8ab"
+  },
+  "note": "Read the three stills at full size and frames 0, 12, 24, 49, 55, 61, 73, 74, 80, 86 and 98 of the 99-frame recording (49 arc, 25 circle to star, 25 formula). Arc: nine dots 0.1 s apart on one 180° arc from (160, 120) to (480, 120), bowing below the chord through about (320, 280), counterclockwise on screen; at frame 12 the lead dot is at the bottom of the arc. Circle to star: rounded halfway at 0.5 s, filled and closed with no twist, and a crisp five-point star at the last frame. Formula: A's three blocks are partway into B's shapes at 0.5 s, the bar and tall block overlapping as they pass, and the last frame is exactly B's triangle, pentagon and bar with nothing of A left. Before these were taken, the frames drew none of the motion: a vec3 channel on at/pos and a path channel never reached the frame's edits. Both were fixed and the pictures re-shot. Plain shapes in the clean look: this judges the motion, not finish."
+}

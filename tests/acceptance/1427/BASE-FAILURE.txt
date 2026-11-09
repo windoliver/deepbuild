@@ -1,0 +1,333 @@
+Base-commit failure output for tests/acceptance/1427 (issue #1427, the motion check)
+
+Base: 6aa228ce (origin/main, "Merge pull request #1671"), worktree clean; this folder only was added.
+Command: npx vitest run --root tests/acceptance/1427 --no-file-parallelism        (macOS, deep-drive built with --features env-plants)
+Second run, for the by-hand budget file and the one test whose first run hit vitest's default 5 s timeout while the binary built:
+         DEEP_MOTION_BUDGETS=1 npx vitest run --root tests/acceptance/1427 --no-file-parallelism ac5-repeat ac8-budget
+
+Result: every test that exercises the surface fails, and for the expected reason: the surface is missing at the base.
+  - `motion_check` is not a call of deep-drive at the base: with no replica launched, the base answers "no replica runs here: launch one first"
+    (its gate for every call it does not know); with one launched it would answer "is no call".
+  - `motion` is not a call: "\"motion\" is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, expect, close and ui_check".
+  - DEEP_DRIVE_PLANT=jumps-on-act is not a planted replica: {"ready":false,"error":"no planted replica jumps-on-act"}.
+  - scripts/lanes.mjs has no motion lane.
+  - the budget file (opted in) fails at the first motion_check, before it times anything; off the reference Mac it would read INCONCLUSIVE.
+Nothing passes at the base: 84 failed, 1 skipped (the budget file, skipped unless DEEP_MOTION_BUDGETS=1; it failed in the second run).
+
+The fixture the journeys use, tests/acceptance/1427/fixtures/panels/motion-lab, does load and move on the base replica, which was checked by
+hand with `see` over time (jumper 18 -> 378 px in one step; flyer 19 -> 379 px over 400 ms, in one step under reduced motion; springer
+20 -> 263 -> 200 px; drifter 1 px a 24 ms; Insert above moves Line B and Line C 40 px down in one step).
+The data fixtures were run through a reference reading of the README's rules (a temporary file, deleted): every planted fixture gives its
+one finding with the README's time and value, and every twin gives none.
+
+======================================================================================================
+Run 1: the whole suite
+======================================================================================================
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-1427-3bce88/agent-a2f11bf688600eff4/tests/acceptance/1427
+
+ ❯ scope-recording.test.ts (8 tests | 8 failed) 147462ms
+   ❯ #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity (8)
+     × the recording is 1/120 s apart, from the start of the recording to its stop, and lists each element in full 141976ms
+     × Jump: the jumper keeps one id throughout and its bounds change once, between two adjacent frames, by 180 pt (360 px) 510ms
+     × Pop in: pop-row is not in the frames before the press and is there, at opacity 1 and with its text, after 295ms
+     × Fade in: fade-row's opacity rises a tick at a time, never more than 10% between frames 350ms
+     × Insert above: line-b keeps its id and its text while its y moves 40 px down; the new line streams in under its own id 791ms
+     × the transitions and springs a panel declares are listed, by element and kind: flyer a flight, springer a spring, jumper nothing 721ms
+     × a replica launched with reduced_motion says so in the recording 636ms
+     × the same calls in two processes record the same bytes 551ms
+ ❯ ac4-allowances.test.ts (14 tests | 14 failed) 120237ms
+   ❯ #1427 AC4 an allowance names a finding, an element and a reason (14)
+     × a valid allowance suppresses its finding, and the claim no longer fails 9ms
+     × with no reason key it is INVALID, and the finding it names is not suppressed 7ms
+     × with an empty reason it is INVALID, and the finding stays 3ms
+     × with a reason of only spaces it is INVALID, and the finding stays 4ms
+     × with a null reason it is INVALID 4ms
+     × an INVALID allowance is INVALID even where it matches nothing: a missing reason is not first judged stale 4ms
+     × an allowance that matches no finding fails as stale, naming itself 3ms
+     × an allowance that matches a finding on another element is stale, and does not suppress the finding 3ms
+     × an allowance for another finding on the right element is stale, and does not suppress the finding 4ms
+     × an allowance for a finding that is not on the closed list is not accepted 3ms
+     × a valid allowance suppresses only the finding it names: the other finding in the recording stays 5ms
+     × two valid allowances suppress both findings, and the claim does not fail 3ms
+     × one valid and one stale allowance together: the claim fails as stale, the valid one still suppresses 4ms
+     × with no allowance at all, the claim and findings are the plain check's 3ms
+ ❯ ac7-shipped.test.ts (4 tests | 4 failed) 45066ms
+   ❯ #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each (3)
+     × a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows 44751ms
+     × the same shipped journeys in another process give the same recordings and findings, byte for byte 60ms
+     × a replica planted with a jump on every action fails all three, naming the jump, and the report says which journey 39ms
+   ❯ #1427 AC7 the lane (1)
+     × scripts/lanes.mjs has a motion lane, and running its commands reports each shipped journey with its recording's hash 145ms
+ ❯ ac1-planted.test.ts (25 tests | 25 failed) 31212ms
+   ❯ #1427 AC1 planted fixtures each give exactly one finding, naming the element, the time and the measured value (8)
+     × pop_in: a row that was not there appears at full opacity in one step 10ms
+     × pop_in: a row that appears at 55%, over the 50% line, in one step 4ms
+     × pop_in: a row that sat there invisible and is at 80% a step later 4ms
+     × jump: an element moves 26% of the window width in one 1/120 s step, with no flight declared 3ms
+     × jump: 26% of the window height in one step 5ms
+     × overshoot: an element goes more than 12% past its target, with no spring declared 4ms
+     × flicker: opacity reverses direction three times within 200 ms 4ms
+     × no_settle: an element is still moving 2 s after the journey's last input 3ms
+   ❯ #1427 AC1 near-miss twins give nothing (17)
+     × pop_in twin: a row appears at 49%, then rises a hundredth a step 5ms
+     × pop_in twin: a row appears at exactly 50%, which is not above it 3ms
+     × pop_in twin: a row sat invisible and is at 30% a step later 3ms
+     × jump twin: 24% of the window width in one step 3ms
+     × jump twin: exactly 25% of the width, which is not over it 2ms
+     × jump twin: 24% of the window height in one step 4ms
+     × jump twin: 26% in one step with a flight declared for the element 2ms
+     × jump twin: a slide of 50% of the window over 100 steps, half a percent a step 2ms
+     × jump twin: the same slide with a flight declared 4ms
+     × overshoot twin: 80 past a move of 720, 11.1% of it and 10% of the window 2ms
+     × overshoot twin: 110 past, but a spring is declared for the element 3ms
+     × overshoot twin: it arrives and stops 3ms
+     × flicker twin: two reversals in 25 ms 3ms
+     × flicker twin: four reversals, each 125 ms after the last, so never three in 200 ms 3ms
+     × no_settle twin: it stops 1.7 s after the input, before the 2 s mark 2ms
+     × no_settle twin: it is still moving 2.7 s after the first input, but 1.75 s after the last 3ms
+     × a planted recording fails its claim, and a twin of it does not 3ms
+ ❯ ac1-journeys.test.ts (10 tests | 10 failed) 101487ms
+   ❯ #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id (5)
+     × pop_in: "Pop in" shows pop-row at full opacity in one step 7ms
+     × jump: "Jump" moves jumper 180 pt of a 640 pt window, 28%, in one step, with no transition 1ms
+     × overshoot: "Overshoot" walks overshooter 10 to 100 pt, on to 190 and back, with no spring declared 2ms
+     × flicker: "Flicker 3" swings badge's opacity up, down, up, down, three reversals in about 100 ms 2ms
+     × no_settle: "Drift long" keeps drifter moving 3.6 s after the press, past the 2 s 3ms
+   ❯ #1427 AC1 on a real replica: the twins that move the same way but pass give nothing (5)
+     × Fade in: fade-row appears at 10% and gains 10% a tick: no pop_in 2ms
+     × Fly: flyer moves as far as jumper does, under a declared transition("left"): no jump 1ms
+     × Spring: springer goes past its target under a declared under-damped spring: no overshoot 1ms
+     × Flicker 2: badge swings up, down, up: two reversals, no flicker 2ms
+     × Drift short: drifter moves for 0.7 s, then settles: no no_settle 2ms
+ ❯ ac5-repeat.test.ts (3 tests | 3 failed) 131182ms
+   ❯ #1427 AC5 the same journey recorded twice gives byte-equal findings (3)
+     × data: one recording, twice, in two processes, once with the elements in another order 127182ms
+     × a real replica: the "Flicker 3" journey recorded twice, in two processes, gives the same recording and the same findings 3805ms
+     × a real replica: a different journey records differently, so the hash above is of the frames, not of a constant 66ms
+ ❯ ac3-reduced.test.ts (9 tests | 9 failed) 244380ms
+   ❯ #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion (9)
+     × data: a card moves 10 a step for 20 steps under reduced motion: one finding, 20 steps 13ms
+     × data: it moves over exactly two steps: more than one, so a finding, 2 steps 4ms
+     × data twin: it moves in one step, 10 at once: nothing 4ms
+     × data twin: it moves 20% of the window in one step: nothing, since reduced motion allows a move that takes one step 5ms
+     × data twin: the 20-step move with reduced motion off: nothing (it is motion, which is allowed) 6ms
+     × data: only a change of place counts: a card that fades over 20 steps under reduced motion gives nothing 5ms
+     × a real replica launched with reduced_motion: "Drift short" still moves drifter over 30 ticks: moved_under_reduced_motion 1ms
+     × a real replica launched with reduced_motion: "Fly" goes where it goes under the declared transition, which reduced motion makes one step: nothing 1ms
+     × the same "Drift short" with reduced motion off: nothing 1ms
+ ❯ ac2-reader.test.ts (5 tests | 5 failed) 437789ms
+   ❯ #1427 AC2 a streaming insert above the reader's line gives reader_moved; below it gives nothing (5)
+     × data: text streamed in above line-b moves line-b 40 down in one step: reader_moved 48ms
+     × data: the same text streamed in directly below line-b, which moves only line-c: nothing 23ms
+     × data: the same text streamed in at the end of the transcript, which moves nothing: nothing 4ms
+     × a real replica: "Insert above" streams a line in above Line B and moves it 2ms
+     × a real replica: "Insert below" streams a line in directly below Line B and moves only Line C: nothing 2ms
+ ❯ ac6-pacing.test.ts (6 tests | 6 failed) 179674ms
+   ❯ #1427 AC6 a result never reads PASS for pacing: it says "pacing not measured" (6)
+     × a recording with no finding says pacing not measured 12ms
+     × a recording with a finding says it too 4ms
+     × an INVALID result says it too 5ms
+     × a result whose finding a valid allowance cleared says it too 3ms
+     × a real replica's journey that passes says it too 1ms
+     × and a clean recording is not given a pacing verdict by a field the check made up: pacing is words, not a verdict 4ms
+
+
+Distinct failure messages, and how many tests gave each (run 1):
+   54 x AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+    8 x AssertionError: motion start: {"ok":false,"t":0,"error":{"code":"refused","message":"\"motion\" is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, expect, close and ui_check"}}: expected false to be true // Object.is equality
+    1 x Error: Test timed out in 5000ms.
+    1 x AssertionError: BLOCKED: deep-drive didn't say {"ready": true} with DEEP_DRIVE_PLANT=jumps-on-act: {"ready":false,"error":"no planted replica jumps-on-act"} 
+    1 x AssertionError: a lane named motion among typecheck, lint, unit, contracts, interfaces, noop, seams, relay, wasm32, catalogue drift, design links and names, public text, corpus, canvas kit, parity quick, proof, verdict proofs, config eval: expected undefined to be truthy
+
+(The one "Test timed out in 5000ms" is ac5-repeat's first test, which waited for cargo to rebuild the binary; it now has a 600 s timeout and fails as in run 2.)
+
+======================================================================================================
+Run 2: ac5-repeat and the budget file (opted in)
+======================================================================================================
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-1427-3bce88/agent-a2f11bf688600eff4/tests/acceptance/1427
+
+ ❯ ac5-repeat.test.ts (3 tests | 3 failed) 43230ms
+   ❯ #1427 AC5 the same journey recorded twice gives byte-equal findings (3)
+     × data: one recording, twice, in two processes, once with the elements in another order 43108ms
+     × a real replica: the "Flicker 3" journey recorded twice, in two processes, gives the same recording and the same findings 61ms
+     × a real replica: a different journey records differently, so the hash above is of the frames, not of a constant 58ms
+ ❯ ac8-budget.live.test.ts (1 test | 1 failed) 70546ms
+   ❯ #1427 AC8 the check adds under 2 s to a 30-second journey, on the reference Mac (1)
+     × five pairs after a warm-up pair: the checked run less the plain run, each under 2,000 ms 70545ms
+
+
+Distinct failure messages (run 2):
+    4 x AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+
+======================================================================================================
+One full failure block per file (run 1)
+======================================================================================================
+ FAIL  ac1-journeys.test.ts > #1427 AC1 on a real replica: each planted motion gives exactly one finding, named by its element's stable id > pop_in: "Pop in" shows pop-row at full opacity in one step
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ran ac1-journeys.test.ts:19:17
+ ❯ ac1-journeys.test.ts:30:30
+
+
+ FAIL  ac1-planted.test.ts > #1427 AC1 planted fixtures each give exactly one finding, naming the element, the time and the measured value > pop_in: a row that was not there appears at full opacity in one step
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ac1-planted.test.ts:22:20
+
+
+ FAIL  ac2-reader.test.ts > #1427 AC2 a streaming insert above the reader's line gives reader_moved; below it gives nothing > data: text streamed in above line-b moves line-b 40 down in one step: reader_moved
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ac2-reader.test.ts:28:19
+
+
+ FAIL  ac3-reduced.test.ts > #1427 AC3 an element that changes place over more than one step under reduced motion gives moved_under_reduced_motion > data: a card moves 10 a step for 20 steps under reduced motion: one finding, 20 steps
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ac3-reduced.test.ts:19:20
+
+
+ FAIL  ac4-allowances.test.ts > #1427 AC4 an allowance names a finding, an element and a reason > a valid allowance suppresses its finding, and the claim no longer fails
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ac4-allowances.test.ts:25:19
+
+
+ FAIL  ac5-repeat.test.ts > #1427 AC5 the same journey recorded twice gives byte-equal findings > data: one recording, twice, in two processes, once with the elements in another order
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ ac5-repeat.test.ts:43:3
+     41|
+     42| describe('#1427 AC5 the same journey recorded twice gives byte-equal f…
+     43|   it('data: one recording, twice, in two processes, once with the elem…
+       |   ^
+     44|     const first = await once({ recording: THREE() });
+     45|     const second = await once({ recording: reordered(THREE()) });
+
+
+ FAIL  ac6-pacing.test.ts > #1427 AC6 a result never reads PASS for pacing: it says "pacing not measured" > a recording with no finding says pacing not measured
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ ac6-pacing.test.ts:22:19
+
+
+ FAIL  ac7-shipped.test.ts > #1427 AC7 the check runs on the shipped journeys for Needs you, a session page and the project page, one report each > a report for each of the three, from a real recording of the journey: its steps, its inputs and the ids the record gave its rows
+AssertionError: motion_check answers: {"ok":false,"t":0,"error":{"code":"refused","message":"no replica runs here: launch one first"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ checked helpers.ts:179:84
+    177| export async function checked(drive: Drive, args: Obj): Promise<Obj> {
+    178|   const reply = await motionCheck(drive, args);
+    179|   expect(reply.ok, `motion_check answers: ${JSON.stringify(reply).slic…
+       |                                                                                    ^
+    180|   contract(reply);
+    181|   return reply;
+ ❯ shipped ac7-shipped.test.ts:32:12
+ ❯ ac7-shipped.test.ts:41:13
+
+
+ FAIL  scope-recording.test.ts > #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity > the recording is 1/120 s apart, from the start of the recording to its stop, and lists each element in full
+AssertionError: motion start: {"ok":false,"t":0,"error":{"code":"refused","message":"\"motion\" is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, expect, close and ui_check"}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ must ../124/helpers.ts:177:71
+    175| export async function must(drive: Drive, args: Obj, what = String(args…
+    176|   const { reply } = await drive.call(args);
+    177|   expect(reply.ok, `${what}: ${JSON.stringify(reply).slice(0, 800)}`).…
+       |                                                                       ^
+    178|   return reply;
+    179| }
+ ❯ recorded scope-recording.test.ts:21:19
+ ❯ scope-recording.test.ts:36:40
+
+

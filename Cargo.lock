@@ -2082,6 +2082,7 @@ name = "deep-canvas-motion"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-marks",
  "serde_json",
 ]
 
@@ -2242,6 +2243,8 @@ name = "deep-hook"
 version = "0.0.0"
 dependencies = [
  "deep-contracts",
+ "ring",
+ "rustls",
 ]
 
 [[package]]
