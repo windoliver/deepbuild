@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -86,6 +86,15 @@ export function repoOf(cwd: string): string | undefined {
 
 /** The installed hub's root: ~/.deepbuild. A dev hub's is the folder given to --root. */
 export const installedRoot = (): string => join(homedir(), '.deepbuild');
+/**
+ * Drops every test's setting on a process that acts on your own record at `root`, by your account's home, which a
+ * variable can't move: a service's environment is anyone's to set (`systemctl --user set-environment`), and a planted
+ * program or a stand-in for polkit there would count an answer you never gave (#70). A test's hub runs elsewhere.
+ */
+export function dropTestSettings(root: string): void {
+  if (resolve(root) !== join(userInfo().homedir, '.deepbuild')) return;
+  for (const name of Object.keys(process.env)) if (/^DEEP_HUB_(TEST_|PLANT$)/.test(name)) delete process.env[name];
+}
 /** The Node path to write into a file that outlives this run: a login service, an MCP server entry. Homebrew's
  * Cellar path names one version, which the next `brew upgrade` deletes, and every entry naming it then fails to
  * start; its `opt/<formula>` link names the version installed now, so it is written instead, when it runs this Node. */

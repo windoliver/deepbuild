@@ -8,11 +8,11 @@ import { ForgeRefused } from './pushes.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-export type Permissions = Record<string, 'read' | 'write'>;
+type Permissions = Record<string, 'read' | 'write'>;
 /** An app as your settings name it: its ID, and its private key (PEM) as the hub reads it, from the Keychain. */
 export interface AppKey { app_id: number; key(): Promise<string | undefined> }
 /** A token minted for one repo: what it may do, when GitHub stops taking it, and the login GitHub records its pushes as. */
-export interface AppToken { token: string; expires: number; permissions: Permissions; login: string | null }
+interface AppToken { token: string; expires: number; permissions: Permissions; login: string | null }
 
 /** What a session's credential may do, each at most at the level the agents' app was granted: push branches, open PRs and comment. Never statuses. */
 const SESSION: Permissions = { contents: 'write', pull_requests: 'write', issues: 'write', metadata: 'read' };
@@ -22,7 +22,7 @@ const GATE: Permissions = { statuses: 'write', metadata: 'read' };
 const SPARE_MS = 5 * 60_000;
 
 /** An app's JWT (RS256, issued by its ID, a minute back for clock skew, nine minutes on: GitHub takes ten at most). */
-export function jwtOf(appId: number, pem: string, now = Date.now()): string {
+function jwtOf(appId: number, pem: string, now = Date.now()): string {
   const at = Math.floor(now / 1000);
   const part = (o: Obj): string => Buffer.from(JSON.stringify(o)).toString('base64url');
   const body = `${part({ alg: 'RS256', typ: 'JWT' })}.${part({ iat: at - 60, exp: at + 540, iss: appId })}`;
@@ -40,7 +40,7 @@ async function call(api: string, method: string, path: string, auth: string, bod
 }
 
 /** A token of `app` for `repo` (owner/name), its permissions narrowed to `wanted`, each no higher than its installation holds. */
-export async function mint(api: string, app: AppKey, repo: string, wanted: Permissions): Promise<AppToken> {
+async function mint(api: string, app: AppKey, repo: string, wanted: Permissions): Promise<AppToken> {
   const kept = (await app.key())?.trim();
   if (!kept) throw Error(`app ${app.app_id}'s private key isn't in the Keychain`);
   // `security find-generic-password -w` prints a value with line breaks, as a PEM has, in hex.

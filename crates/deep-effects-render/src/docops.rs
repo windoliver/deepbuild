@@ -20,6 +20,7 @@ use serde_json::{json, Value};
 use wgpu::util::DeviceExt as _;
 
 use crate::compile::{compile_planted, compile_with, Compiled};
+use deep_scene3d_render::created::{key128, Created, Log};
 use crate::mips::{Chain, Fill, Fills, Mips};
 use crate::planted::Pre;
 use crate::runner::{texture_format, Frame, Runner, LINEAR};
@@ -73,9 +74,71 @@ struct IterRun {
     runner: Arc<Runner>,
 }
 
-/// One operator item of the document, compiled once.
+/// The operator pipelines a document session holds (canvas primitives: Compile, validate and
+/// cache: ≤ 32 per session), by key, kept across its revisions and variant switches so equal
+/// operators share one; and the log of each pipeline made, with the items it was made for.
+#[derive(Default)]
+pub struct Pool {
+    runners: BTreeMap<u128, Arc<Runner>>,
+    pub log: Log,
+}
+
+impl Pool {
+    /// The pipeline of `compiled` into `format`, made once per key; a new one is logged as made
+    /// for `items`.
+    pub fn runner(
+        &mut self,
+        device: &wgpu::Device,
+        compiled: Compiled,
+        format: wgpu::TextureFormat,
+        items: &[String],
+    ) -> (u128, Arc<Runner>) {
+        let key = key128(&[compiled.wgsl.as_bytes(), format!("{format:?}").as_bytes()]);
+        if let Some(r) = self.runners.get(&key) {
+            return (key, r.clone());
+        }
+        let kind = compiled.kind().name();
+        let runner = Arc::new(Runner::new(device, compiled, format));
+        self.runners.insert(key, runner.clone());
+        self.log.push(Created {
+            key,
+            items: items.to_vec(),
+            feature_set: if items.len() > 1 { format!("fused {kind}") } else { kind.to_string() },
+            target: "view".into(),
+        });
+        (key, runner)
+    }
+
+    /// How many operator pipelines it holds.
+    pub fn len(&self) -> usize {
+        self.runners.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.runners.is_empty()
+    }
+}
+
+/// How a document's chain fuses (Compile, validate and cache: pass fusion): `off` in a
+/// calibration run, which gives each operator its own pass; `apart` the operators that run alone
+/// because they differ between the states the warm-up reaches.
+#[derive(Clone, Debug, Default)]
+pub struct Fusing {
+    pub off: bool,
+    pub apart: BTreeSet<String>,
+}
+
+/// One operator item of the document, compiled once; or a run of pixel-wise passes fused into
+/// one, named by its first.
 pub struct Op {
     pub item: String,
+    /// The items it runs, in order, with each one's share of its cost: itself alone at 1, or a
+    /// fused pass's members by declared cost.
+    pub members: Vec<(String, f64)>,
+    /// Each member's declared ns per pixel.
+    pub member_ns: Vec<f64>,
+    /// Its pipeline's key.
+    pub key: u128,
     pub kind: Kind,
     pub class: Class,
     pub fallback: Fallback,
@@ -93,6 +156,16 @@ pub struct Op {
     structural: bool,
     /// Whether it runs once per fixed step rather than once a frame (#252).
     stepped: bool,
+    /// A fused pass's compiled graph (#432), in place of its first member's.
+    fused: Option<Compiled>,
+    /// The format of the target a pass writes: full precision when the next pass only loads it
+    /// at its texels, so an unfused chain rounds nothing a fused one doesn't (#432); else linear.
+    format: wgpu::TextureFormat,
+}
+
+/// What an operator's pipeline is built from: its fused graph, or its item's own.
+fn op_build(op: &Op, builds: &BTreeMap<String, (Value, Compiled)>) -> Option<Compiled> {
+    op.fused.clone().or_else(|| builds.get(&op.item).map(|b| b.1.clone()))
 }
 
 /// The frame's row for one operator: its resolution this frame and what it drew.
@@ -191,6 +264,46 @@ pub fn feeders(doc: &Value) -> BTreeSet<String> {
 }
 
 pub fn marks(doc: &Value) -> Vec<(String, f64)> {
+    let mut out = item_marks(doc);
+    out.extend(fused_marks(doc));
+    out
+}
+
+/// The marks the document's fused passes run under (#432: pass fusion), each with its members'
+/// summed cost: its pass items in chain order, fused as [`DocOps`] fuses them.
+fn fused_marks(doc: &Value) -> Vec<(String, f64)> {
+    let in_groups: BTreeSet<&str> = doc["items"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .flat_map(|(_, i)| i["params"]["passes"].as_array().into_iter().flatten())
+        .filter_map(|p| p["op"].as_str())
+        .collect();
+    let mut chain: Vec<(String, String, Value)> = doc["items"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(id, _)| !in_groups.contains(id.as_str()))
+        .filter_map(|(id, item)| {
+            let g = operator_of(id, item).filter(|g| g["kind"] == "pass")?;
+            Some((g["order"].as_str().unwrap_or("a0").to_string(), id.clone(), g))
+        })
+        .collect();
+    chain.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+    let chain: Vec<(String, Value)> = chain.into_iter().map(|(_, id, g)| (id, g)).collect();
+    deep_canvas_effects::fusion::runs(&chain, &BTreeSet::new())
+        .into_iter()
+        .filter(|run| run.len() > 1)
+        .map(|run| {
+            let names: Vec<&str> = run.iter().map(|&k| chain[k].0.as_str()).collect();
+            let ns = run.iter().map(|&k| chain[k].1["cost"]["ns_per_px"].as_f64().unwrap_or(0.0)).sum();
+            (mark_of(&names.join("+")).to_string(), ns)
+        })
+        .collect()
+}
+
+/// Each pass and compute operator item's own mark, with its declared cost.
+fn item_marks(doc: &Value) -> Vec<(String, f64)> {
     doc["items"]
         .as_object()
         .into_iter()
@@ -440,7 +553,27 @@ impl DocOps {
         hooks: Hooks,
         core: BTreeMap<String, wgpu::Buffer>,
     ) -> DocOps {
+        let mut pool = Pool::default();
+        Self::pooled(device, doc, options, planted, fail, hooks, core, &mut pool, &Fusing::default())
+    }
+
+    /// [`DocOps::with`], its pipelines from the session's `pool` and its chain fused as
+    /// `fusing` says (#432).
+    #[allow(clippy::too_many_arguments)]
+    pub fn pooled(
+        device: &Device,
+        doc: &Value,
+        options: Options,
+        planted: CheckOptions,
+        fail: &[String],
+        hooks: Hooks,
+        core: BTreeMap<String, wgpu::Buffer>,
+        pool: &mut Pool,
+        fusing: &Fusing,
+    ) -> DocOps {
         let mut out = DocOps::empty();
+        // Each item's graph and compiled form, until the chain is fused and its pipelines made.
+        let mut builds: BTreeMap<String, (Value, Compiled)> = BTreeMap::new();
         out.hooks = hooks;
         out.doc_seed = doc["seed"].as_u64().unwrap_or(0);
         for (name, b) in core {
@@ -481,12 +614,16 @@ impl DocOps {
                 .steps
                 .values()
                 .any(|s| deep_canvas_effects::table::multi_dispatch(&s.op));
+            let declared_ns = c.op.cost.unwrap_or(c.estimate);
             let mut op = Op {
                 item: id.clone(),
+                members: vec![(id.clone(), 1.0)],
+                member_ns: vec![declared_ns],
+                key: 0,
                 kind: c.op.kind,
                 class: c.class,
                 fallback: c.op.fallback,
-                declared_ns: c.op.cost.unwrap_or(c.estimate),
+                declared_ns,
                 order: c.op.order.clone(),
                 runner: None,
                 failed: None,
@@ -494,15 +631,10 @@ impl DocOps {
                 iterates: Vec::new(),
                 structural,
                 stepped: c.op.stepped.is_some(),
+                fused: None,
+                format: LINEAR,
             };
-            let mut built = compiled.clone();
-            if fail.contains(id) {
-                // The hook: the device gets a module it rejects, after the check passed.
-                built.wgsl.push_str("\nfn rejected_by_the_device( {\n");
-            }
             let d = &device.device;
-            let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
-            let runner = Runner::new(d, built, LINEAR);
             for it in &c.iterates {
                 let body = Compiled {
                     checked: (*it.body).clone(),
@@ -515,13 +647,10 @@ impl DocOps {
                     index: it.index.clone(),
                     scale: scale_of(&it.size),
                     format,
-                    runner: Arc::new(Runner::new(d, body, format)),
+                    runner: pool.runner(d, body, format, std::slice::from_ref(id)).1,
                 });
             }
-            match block(scope.pop()) {
-                Some(e) => op.failed = Some(e.to_string()),
-                None => op.runner = Some(Arc::new(runner)),
-            }
+            builds.insert(id.clone(), (json.clone(), compiled.clone()));
             // A stepped operator (#252) steps with the document's one fixed-step clock, and binds
             // storage only.
             if let Some(rate) = c.op.stepped {
@@ -625,7 +754,146 @@ impl DocOps {
                 &b.item,
             ))
         });
+        if !fusing.off {
+            out.fuse(&builds, fail, options, planted, fusing);
+        }
+        out.precise(&builds);
+        // Each operator's pipeline, from the pool; the device checks each one new to it.
+        for op in &mut out.ops {
+            let Some(built) = op_build(op, &builds) else { continue };
+            let mut built = built;
+            if fail.contains(&op.item) {
+                // The hook: the device gets a module it rejects, after the check passed.
+                built.wgsl.push_str("\nfn rejected_by_the_device( {\n");
+            }
+            let d = &device.device;
+            let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
+            let members: Vec<String> = op.members.iter().map(|m| m.0.clone()).collect();
+            let (key, runner) = pool.runner(d, built, op.format, &members);
+            match block(scope.pop()) {
+                Some(e) => op.failed = Some(e.to_string()),
+                None => {
+                    op.key = key;
+                    op.runner = Some(runner);
+                }
+            }
+        }
         out
+    }
+
+    /// Fuses each run of adjacent pixel-wise passes into one operator (pass fusion), its members
+    /// in order; a run whose fused graph the check refuses stays apart.
+    fn fuse(
+        &mut self,
+        builds: &BTreeMap<String, (Value, Compiled)>,
+        fail: &[String],
+        options: Options,
+        planted: CheckOptions,
+        fusing: &Fusing,
+    ) {
+        let eligible = |o: &Op| {
+            o.kind == Kind::Pass
+                && !o.structural
+                && !o.stepped
+                && o.iterates.is_empty()
+                && o.failed.is_none()
+                && !fail.contains(&o.item)
+                && builds.contains_key(&o.item)
+        };
+        let ops = std::mem::take(&mut self.ops);
+        let mut segment: Vec<Op> = Vec::new();
+        let flush = |segment: &mut Vec<Op>, out: &mut Vec<Op>| {
+            let chain: Vec<(String, Value)> = segment.iter().map(|o| (o.item.clone(), builds[&o.item].0.clone())).collect();
+            let runs = deep_canvas_effects::fusion::runs(&chain, &fusing.apart);
+            let mut taken: Vec<Option<Op>> = segment.drain(..).map(Some).collect();
+            for run in runs {
+                let fused = (run.len() > 1)
+                    .then(|| {
+                        let members: Vec<(String, Value)> = run.iter().map(|&k| chain[k].clone()).collect();
+                        let g = deep_canvas_effects::fusion::fuse(&members)?;
+                        compile_planted(&g, &BTreeMap::new(), options, planted).ok()
+                    })
+                    .flatten();
+                match fused {
+                    Some(c) => {
+                        let parts: Vec<Op> = run.iter().map(|&k| taken[k].take().expect("once")).collect();
+                        let total: f64 = parts.iter().map(|o| o.declared_ns).sum();
+                        let mut first = parts.into_iter();
+                        let mut op = first.next().expect("a run of two or more");
+                        let rest: Vec<Op> = first.collect();
+                        let mut members = vec![(op.item.clone(), op.declared_ns)];
+                        members.extend(rest.iter().map(|o| (o.item.clone(), o.declared_ns)));
+                        let names: Vec<&str> = members.iter().map(|m| m.0.as_str()).collect();
+                        op.mark = mark_of(&names.join("+"));
+                        op.member_ns = members.iter().map(|m| m.1).collect();
+                        op.members = members
+                            .iter()
+                            .map(|(i, ns)| (i.clone(), if total > 0.0 { ns / total } else { 1.0 / names.len() as f64 }))
+                            .collect();
+                        op.declared_ns = total;
+                        op.class = c.checked.class;
+                        op.fused = Some(c);
+                        out.push(op);
+                    }
+                    None => out.extend(run.iter().map(|&k| taken[k].take().expect("once"))),
+                }
+            }
+        };
+        let mut out = Vec::with_capacity(ops.len());
+        for op in ops {
+            let joins = eligible(&op)
+                && segment.last().is_none_or(|l: &Op| builds[&l.item].0["chain"] == builds[&op.item].0["chain"]);
+            if !joins {
+                flush(&mut segment, &mut out);
+            }
+            if eligible(&op) {
+                segment.push(op);
+            } else {
+                out.push(op);
+            }
+        }
+        flush(&mut segment, &mut out);
+        self.ops = out;
+    }
+
+    /// Which passes write a full-precision target: a pass at full resolution, drawn alone, whose
+    /// target no other operator reads by name and whose next pass only loads the frame's color.
+    fn precise(&mut self, builds: &BTreeMap<String, (Value, Compiled)>) {
+        let compiled = |o: &Op| op_build(o, builds);
+        let named: BTreeSet<String> = builds.values().flat_map(|(_, c)| reads_items(&c.checked)).collect();
+        let passes: Vec<usize> = (0..self.ops.len()).filter(|&k| self.ops[k].kind == Kind::Pass).collect();
+        for w in passes.windows(2) {
+            let (k, j) = (w[0], w[1]);
+            let (Some(a), Some(b)) = (compiled(&self.ops[k]), compiled(&self.ops[j])) else { continue };
+            let loads = b.checked.textures.iter().all(|n| {
+                let core_color = matches!(&b.checked.op.inputs[n].from, From::Target { op, output } if op == "core" && output == "color");
+                !core_color || crate::runner::only_loaded(&b.checked, n)
+            });
+            let o = &self.ops[k];
+            let alone = !o.structural && !o.stepped && o.iterates.is_empty();
+            let full = a.checked.op.size == Size::Full;
+            if loads && alone && full && !o.members.iter().any(|(m, _)| named.contains(m)) {
+                self.ops[k].format = wgpu::TextureFormat::Rgba32Float;
+            }
+        }
+    }
+
+    /// The pipeline key and members of the operator pass timed under `mark`, each member with its
+    /// share of the pass's cost (Operator cost and limits: a fused pass split by declared shares).
+    pub fn pass_of(&self, mark: &str) -> Option<(u128, &[(String, f64)])> {
+        self.ops
+            .iter()
+            .find(|o| o.mark == mark && o.kind != Kind::Compute && o.runner.is_some())
+            .map(|o| (o.key, o.members.as_slice()))
+    }
+
+    /// The operator that runs `item`, its declared ns per pixel and its share of that operator's
+    /// pass.
+    pub fn member(&self, item: &str) -> Option<(&Op, f64, f64)> {
+        self.ops.iter().find_map(|o| {
+            let k = o.members.iter().position(|m| m.0 == item)?;
+            Some((o, o.member_ns[k], o.members[k].1))
+        })
     }
 
     /// Each instances output with a count: the rows its compact step keeps and that count, which
@@ -1140,7 +1408,12 @@ impl DocOps {
         let mut steps = Some(self.steps(device, frame, &params, roles));
         for k in 0..self.ops.len() {
             let op = &self.ops[k];
-            let res = resolution(&op.item);
+            // A full-precision target is drawn at full size: its reader loads it texel for texel.
+            let res = match resolution(&op.item) {
+                r if op.format == LINEAR || r <= 0.0 => r,
+                _ => 1.0,
+            };
+            let format = op.format;
             let mut drew = if op.failed.is_some() || (canonical && op.class == Class::LiveOnly) {
                 Drew::Fallback
             } else if res <= 0.0 {
@@ -1149,6 +1422,7 @@ impl DocOps {
                 Drew::Operator
             };
             let item = op.item.clone();
+            let op_members = op.members.clone();
             let kind = op.kind;
             let mark = op.mark;
             let runner = op.runner.clone();
@@ -1166,7 +1440,15 @@ impl DocOps {
                 let mut f = *frame;
                 f.seed = item_seed(self.doc_seed, &item);
                 let mut own_params = params.clone();
-                own_params.extend(self.params.get(&item).into_iter().flatten().map(|(k, v)| (k.clone(), v.clone())));
+                if op_members.len() > 1 {
+                    // A fused pass reads each member's params under its member's prefix.
+                    for (j, (m, _)) in op_members.iter().enumerate() {
+                        let p = deep_canvas_effects::fusion::prefix(j);
+                        own_params.extend(self.params.get(m).into_iter().flatten().map(|(k, v)| (format!("{p}{k}"), v.clone())));
+                    }
+                } else {
+                    own_params.extend(self.params.get(&item).into_iter().flatten().map(|(k, v)| (k.clone(), v.clone())));
+                }
                 let values = interp::inputs(&c, &own_params, roles);
                 let storage: Option<Vec<wgpu::Buffer>> = c
                     .storage_inputs
@@ -1344,7 +1626,7 @@ impl DocOps {
                         let refs: Vec<&wgpu::TextureView> = views.iter().collect();
                         // Each pass writes a target of its own, never the one it reads.
                         let key = format!("{item}:{k}");
-                        let into = self.target(device, key.clone(), own);
+                        let into = self.target_of(device, key.clone(), own, format);
                         self.drawn.insert(item.clone(), key);
                         let (g0, g1, keep) =
                             runner.bind(&device.device, &f, own, &values, &refs, &srefs);
@@ -1373,11 +1655,13 @@ impl DocOps {
                     recs.push(Rec { mark, parts });
                 }
             }
-            rows.push(Row {
-                item,
-                resolution: if drew == Drew::Operator { res } else { 0.0 },
-                drew,
-            });
+            for (m, _) in &op_members {
+                rows.push(Row {
+                    item: m.clone(),
+                    resolution: if drew == Drew::Operator { res } else { 0.0 },
+                    drew,
+                });
+            }
         }
         (rows, recs, cur)
     }

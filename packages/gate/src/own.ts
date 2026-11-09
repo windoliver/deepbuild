@@ -12,7 +12,7 @@ export interface ApprovedCheck {
   reads: string[];
   declares: { tests?: string[]; fixtures?: string[]; expected?: string[]; runner_config?: string[]; script?: { file: string; target: string } };
 }
-export type SourcePlant = 'every-read-file-is-own' | 'declared-only' | 'ignores-script-target';
+type SourcePlant = 'every-read-file-is-own' | 'declared-only' | 'ignores-script-target';
 
 /** The folders a read file under is the check's own. */
 const OWN_FOLDERS = new Set(['test', 'tests', '__tests__', 'fixtures', '__fixtures__', '__snapshots__', 'scripts', 'spec']);

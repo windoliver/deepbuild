@@ -2542,6 +2542,7 @@ impl Interactivity {
                 }
 
                 window.with_element_opacity(style.opacity, |window| {
+                    window.note_painted(global_id, bounds); // DeepBuild patch (windoliver/deepbuild#1427)
                     style.paint(bounds, window, cx, |window: &mut Window, cx: &mut App| {
                         window.with_text_style(style.text_style().cloned(), |window| {
                             window.with_content_mask(

@@ -11,7 +11,7 @@ import { fail } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { list, object, word } from './shared.js';
 
-export const CHANNEL = 'channel@1';
+const CHANNEL = 'channel@1';
 
 export interface ChannelItem {
   thread_key: string; summary: string; link: string; answerable: 'answer' | 'view' | 'cancel' | 'closed';

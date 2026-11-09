@@ -13,8 +13,10 @@
 //! time, for the checks that must catch it.
 
 mod check;
+mod frames;
 pub mod glyphs;
 mod locate;
+mod motion;
 mod plant;
 
 use std::{
@@ -118,6 +120,7 @@ impl Drive {
                 })
             }
             ("ui_check", None) => check::run(self, &call["ui_check"]),
+            ("motion_check", None) => motion::run(self, &call["motion_check"]),
             (_, None) => Err(fail("refused", "no replica runs here: launch one first")),
             (_, Some(replica)) if call["replica"].as_str().is_some_and(|r| r != replica.id) => {
                 Err(fail(
@@ -195,6 +198,13 @@ struct Replica {
     evidence: Vec<Value>,
     trace: Vec<Value>,
     notified: Vec<Value>,
+    /// Issue #1427: the motion recording while one runs, the launch's reduced motion, and the panel's script view,
+    /// whose declared transitions and springs a recording lists.
+    motion: Option<motion::Recorder>,
+    reduced: bool,
+    script: Option<Entity<gpui_shell::ScriptView>>,
+    /// Issue #1546: in `launch.frames: "dirty"`, the frames GPUI drew on request and each step's comparison.
+    dirty: Option<frames::Dirty>,
 }
 
 impl Replica {
@@ -215,9 +225,16 @@ impl Replica {
             }
         };
         let from = word("from", &["fixture", "record_copy", "empty"], "fixture")?;
-        let center = word("center", &[NEEDS_YOU, HOME, SESSION, WELCOME, AGENTS], NEEDS_YOU)?;
+        let center = word(
+            "center",
+            &[NEEDS_YOU, HOME, SESSION, WELCOME, AGENTS],
+            NEEDS_YOU,
+        )?;
         let theme = word("theme", &["light", "dark"], "light")?;
         let clock = word("clock", &["virtual", "real"], "virtual")?;
+        // #1546: "every" draws every view each frame; "dirty" only the frames GPUI says the window needs.
+        let frames = word("frames", &["every", "dirty"], "every")?;
+        let dirty = frames == "dirty";
         let scale = match &args["scale"] {
             Value::Null => 2.,
             v if v == 2 => 2.,
@@ -411,8 +428,8 @@ impl Replica {
                     .map(|r| renderer_glyphs.renderer(r)))
             },
         );
-        let mounted: Rc<RefCell<Result<Option<Rc<gpui_shell::ShellRuntime>>, String>>> =
-            Rc::new(RefCell::new(Ok(None)));
+        type Mounted = Option<(Rc<gpui_shell::ShellRuntime>, Entity<gpui_shell::ScriptView>)>;
+        let mounted: Rc<RefCell<Result<Mounted, String>>> = Rc::new(RefCell::new(Ok(None)));
         let reduced = args["reduced_motion"].as_bool().unwrap_or(false);
         let window = cx.update(|cx| {
             gpui_kit::init(cx);
@@ -445,6 +462,12 @@ impl Replica {
                     origin: Point::default(),
                     size: gpui_kit::size(px(size.0), px(size.1)),
                 })),
+                // The dirty mode's frames are paced by the replica's clock alone, never by the wall clock's throttle.
+                inactive_frame_interval: if dirty {
+                    None
+                } else {
+                    crate::shell::window_options().inactive_frame_interval
+                },
                 ..crate::shell::window_options()
             };
             // A panel goes in the sidebar's slot, as an installed one would; with none, the shipped sidebar does.
@@ -473,8 +496,8 @@ impl Replica {
                             runtime.map_err(|e| e.to_string()).and_then(|runtime| {
                                 let view = deep_app::mount_panel(&runtime, &dir, window, cx)
                                     .map_err(|e| e.to_string())?;
-                                deep_app::views::place_extension(view.into());
-                                Ok(Some(runtime))
+                                deep_app::views::place_extension(view.clone().into());
+                                Ok(Some((runtime, view)))
                             });
                     }
                     None => deep_app::views::place_extension(deep_app::views::shipped(
@@ -498,10 +521,11 @@ impl Replica {
             }
             window
         });
-        let runtime = mounted
+        let (runtime, script) = mounted
             .borrow_mut()
             .clone()
-            .map_err(|e| fail("refused", format!("the panel didn't load: {e}")))?;
+            .map_err(|e| fail("refused", format!("the panel didn't load: {e}")))?
+            .unzip();
         // GPUI's test window reports 2x; the window itself lays out and paints at the scale it's set to, and the
         // renderer sizes its images to match.
         glyphs.draw_at(scale);
@@ -539,13 +563,22 @@ impl Replica {
             evidence: Vec::new(),
             trace: Vec::new(),
             notified: Vec::new(),
+            motion: None,
+            reduced,
+            script,
+            dirty: None,
         };
         replica.draw();
         replica.draw();
+        if dirty {
+            replica.cx.draw_on_request();
+            replica.dirty = Some(frames::Dirty::new(replica.live_tree()));
+        }
         let reply = json!({
             "replica": replica.id,
             "window": {"size": [size.0 as u32, size.1 as u32], "scale": scale as u32},
             "locale": locale,
+            "frames": frames,
         });
         replica
             .trace
@@ -558,24 +591,29 @@ impl Replica {
         let index = self.steps.len() + 1;
         let acts = name == "act";
         let before = acts.then(|| self.snapshot_file());
+        self.begin_step();
         let result = match name {
             "act" => self.act(call),
+            "feed" => self.feed(call),
+            "resize" => self.resize(call),
             "wait_for" => self.wait_for(call),
             "see" => self.see(call),
             "probe" => self.probe(call),
             "screenshot" => self.screenshot(&call["screenshot"]),
             "record" => self.record(&call["record"]),
+            "motion" => self.motion(&call["motion"]),
             "expect" => self.expect(call, index),
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, expect, close and ui_check"),
+                format!("{other:?} is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();
         if let Some(fields) = digested.as_object_mut() {
             fields.remove("replica");
         }
+        self.end_step(index, name);
         let id = format!("step {index}: {name}");
         self.steps
             .push(json!({"id": id, "digest": sha256(digested.to_string().as_bytes())}));
@@ -598,9 +636,14 @@ impl Replica {
 
     fn draw(&mut self) {
         let glyphs = self.glyphs.clone();
+        let recording = self.motion.is_some();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
             // A frame redraws every view, so the canvas items it lists are this frame's alone.
             deep_app::canvas::clear_items();
+            // While motion is recorded every view paints each step, cached or not, so each is sampled.
+            if recording {
+                window.refresh();
+            }
             window.render_frame(cx);
             glyphs.keep_scene(window);
         });
@@ -615,19 +658,32 @@ impl Replica {
                 *wall = Instant::now();
                 took
             }
+            None if self.motion.is_some() => motion::STEP,
             None => FRAME,
         };
         let before = nanos(self.clock.t);
         self.clock.t += step;
+        if self.dirty.is_some() {
+            self.move_views_clock();
+        }
         self.cx
             .advance_clock(Duration::from_nanos(nanos(self.clock.t) - before));
         self.cx.run_until_parked();
-        self.draw();
+        if self.motion.is_some() {
+            self.sample();
+        } else if self.dirty.is_some() {
+            self.request();
+        } else {
+            self.draw();
+        }
         self.notify();
         self.take_frames();
     }
 
     fn frame(&mut self) -> Frame {
+        if let Some(dirty) = &self.dirty {
+            return dirty.drawn().1;
+        }
         let glyphs = self.glyphs.clone();
         self.cx
             .update_window(self.window, |_, window, _| Frame::read(window, &glyphs))
@@ -703,9 +759,13 @@ impl Replica {
     }
 
     fn input(&mut self, event: PlatformInput) {
+        // In the dirty mode the window draws what the input changed at its next frame, as a real one does (#1546).
+        let forced = self.dirty.is_none();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
             window.dispatch_event(event, cx);
-            window.render_frame(cx);
+            if forced {
+                window.render_frame(cx);
+            }
         });
     }
 
@@ -756,6 +816,7 @@ impl Replica {
             }
         }
         let when = self.clock.t;
+        self.input_at(when);
         match kind.as_str() {
             "click" | "double_click" => {
                 let count = if kind == "click" { 1 } else { 2 };
@@ -830,6 +891,9 @@ impl Replica {
         }
         if !locator.is_null() {
             self.focus = Some(target.clone());
+        }
+        if matches!(kind.as_str(), "type" | "press" | "drag" | "set") {
+            self.input_drew();
         }
         self.tick();
         self.tick();
@@ -1118,7 +1182,19 @@ impl Replica {
     /// The text snapshot, as #338's: roles, names, values and bounds of every element with a role, the strings drawn
     /// that no element already names, and the canvas items with their values.
     fn tree(&mut self) -> (Value, Frame) {
-        let frame = self.frame();
+        match &self.dirty {
+            Some(dirty) => dirty.drawn(),
+            None => self.live_tree(),
+        }
+    }
+
+    /// The snapshot of what the window holds now.
+    fn live_tree(&mut self) -> (Value, Frame) {
+        let glyphs = self.glyphs.clone();
+        let frame = self
+            .cx
+            .update_window(self.window, |_, window, _| Frame::read(window, &glyphs))
+            .expect("the replica's window is open");
         let snapshot = self
             .cx
             .update_window(self.window, |_, window, _| from_observed(window))
@@ -1379,13 +1455,17 @@ impl Replica {
         let _ = std::fs::write(&path, bytes);
         let mut evidence = self.evidence.clone();
         evidence.push(json!({"slot": "trace", "state": "captured", "sha256": hash}));
-        json!({
+        let mut closed = json!({
             "journey": {
                 "outcome": outcome, "tests_run": self.assertions, "failures": self.failures, "steps": self.steps,
                 "evidence": evidence,
             },
             "trace": {"sha256": hash, "path": path},
-        })
+        });
+        if let Some(dirty) = &self.dirty {
+            closed["frames"] = dirty.report();
+        }
+        closed
     }
 }
 

@@ -12,7 +12,7 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** What the repo's spec says of delivery: its release checks, by name, and where its switches and their deployed values live. */
-export interface ReleaseSpec { checks: string[]; switches: { file: string; deployed: string } | null }
+interface ReleaseSpec { checks: string[]; switches: { file: string; deployed: string } | null }
 export function releaseSpec(cwd: string): ReleaseSpec {
   let spec: unknown;
   try { spec = parseYaml(readFileSync(join(cwd, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return { checks: [], switches: null }; }

@@ -17,10 +17,10 @@ const READ_MAX = 4 * 1024 * 1024;
 /** A duplicated block is at least this many lines, blank lines aside, that the change adds and that appear elsewhere in it or in a file it changes. */
 const BLOCK = 6;
 
-export interface ChangedFile { path: string; added: number; removed: number }
+interface ChangedFile { path: string; added: number; removed: number }
 /** Something a change brought in, and the file it came from. */
-export interface Brought { name: string; from: string }
-export interface Measured {
+interface Brought { name: string; from: string }
+interface Measured {
   files: ChangedFile[];
   added: number;
   removed: number;

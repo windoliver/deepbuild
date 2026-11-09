@@ -4,7 +4,7 @@ import { sha256Hex } from '@deepbuild/contracts';
 import type { EvidenceStore } from '@deepbuild/evidence';
 import type { Checkouts } from '@deepbuild/gate';
 
-export interface RetentionOptions {
+interface RetentionOptions {
   raw(query: string): Promise<unknown[]>;
   store: EvidenceStore;
   checkouts: Checkouts;

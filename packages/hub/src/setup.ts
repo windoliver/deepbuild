@@ -11,6 +11,7 @@ import { homedir, userInfo } from 'node:os';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFacts } from '@deepbuild/adapters';
 import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
 import { confirmed } from './authority.js';
@@ -50,7 +51,7 @@ export async function setupCommand(cli: string, args: readonly string[] = []): P
 }
 
 /** What the Set up click and the first `deep` command say they did (#326), in one line. */
-export const SET_UP_LINE = 'DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo\'s checks, and started the hub at login; deep setup --undo removes it all.';
+const SET_UP_LINE = 'DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo\'s checks, and started the hub at login; deep setup --undo removes it all.';
 
 /**
  * The first `deep` command (#326): in a home where setup hasn't finished (#1002), `deep setup`'s steps run without asking,
@@ -370,7 +371,7 @@ const paseoConfig = (): string => join(homedir(), '.paseo', 'config.json');
  * anything is written. paseo rewrites its config.json as it installs, so the bytes before are kept for undo.
  */
 function installPaseo(root: string, record: ReturnType<typeof setupRecord>, paseo: string, cli: string): void {
-  const facts = JSON.parse(readFileSync(join(REPO, 'adapters', 'paseo.facts.json'), 'utf8')) as { install: { source: string } };
+  const facts = readFacts<{ install: { source: string } }>('paseo.facts.json');
   const source = facts.install.source;
   const listed = execFileSync(paseo, ['plugin', 'ls', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
   if (listed.includes('"deepbuild"')) return;
