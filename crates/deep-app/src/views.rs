@@ -6,9 +6,9 @@
 //! `DockArea.register_panel` fills for scripts, so a layout can name a script panel in any slot
 //! and the same load path draws it there.
 //!
-//! Every element with an accessibility role also carries an id and `.test_support()`, so the
-//! accessibility tree a screen reader sees and the observed elements a replica reads back are
-//! the same set of nodes.
+//! Every element with an accessibility role is made by [`observed`]: it carries an id and `.test_support()`, so the
+//! accessibility tree a screen reader sees and the observed elements a replica reads back are the same set of nodes,
+//! and a named id is its author ID in both (#1459).
 
 use std::{cell::Cell, cell::RefCell, rc::Rc, sync::mpsc::TryRecvError, sync::Arc, time::Duration};
 
@@ -195,9 +195,18 @@ fn placed(area: &str) -> Vec<AnyView> {
     })
 }
 
-/// A box a placed view can't draw out of.
-fn placed_box(view: AnyView) -> Div {
-    div()
+/// What the tree names a view an agent wrote, so its words never pass as the app's (#1459): every node it draws sits
+/// under this one.
+pub const AGENT_WROTE: &str = "Written by an agent";
+
+/// The node an agent's view draws under: a group named [`AGENT_WROTE`].
+fn agents(id: impl Into<ElementId>) -> ObservedElement<Stateful<Div>> {
+    observed(id).role(Role::Group).aria_label(AGENT_WROTE)
+}
+
+/// A box a placed view can't draw out of, the `index`th in its area.
+fn placed_box((index, view): (usize, AnyView)) -> ObservedElement<Stateful<Div>> {
+    agents(("agent-placed", index))
         .relative()
         .overflow_hidden()
         .w_full()
@@ -566,7 +575,7 @@ impl Focusable for Slot {
 
 impl Render for Slot {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
+        agents("agent-slot")
             .size_full()
             .relative()
             .overflow_hidden()
@@ -591,15 +600,42 @@ impl Focusable for Shipped {
     }
 }
 
+/// An observed element keyed by `id`: its element ID, and when that is a name, the same name as its author ID in the
+/// accessibility tree, so the replica's snapshot and the live tree carry one `id` that is never drawn or spoken
+/// (#1459). A numbered ID is a place, so it gives the tree no `id`.
+pub(crate) fn observed(id: impl Into<ElementId>) -> ObservedElement<Stateful<Div>> {
+    let id = id.into();
+    let author = match &id {
+        ElementId::Name(name) => Some(name.clone()),
+        _ => None,
+    };
+    let element = div().id(id).test_support();
+    match author {
+        Some(author) => element.accessibility_id(author),
+        None => element,
+    }
+}
+
+thread_local! {
+    /// The sidebar row the keys reach, by its id, as the sidebar last drew it: none while keys go elsewhere.
+    static RING: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// The `id` of what holds the keyboard (#1459): the question card while it shows, else the sidebar's ringed row.
+pub fn focus_id(window: &Window) -> Option<String> {
+    if crate::card::focused(window) {
+        return Some(crate::card::CARD_ID.to_owned());
+    }
+    RING.with(|ring| ring.borrow().clone())
+}
+
 /// A line of text that is one accessibility node: a label named by its text.
 fn label(
     id: impl Into<ElementId>,
     text: impl Into<SharedString>,
 ) -> ObservedElement<Stateful<Div>> {
     let text = text.into();
-    div()
-        .id(id)
-        .test_support()
+    observed(id)
         .role(Role::Label)
         .aria_label(text.clone())
         .h(px(ROW_HEIGHT))
@@ -807,11 +843,11 @@ fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElemen
     } else {
         words
     };
-    div()
-        .id(id)
-        .test_support()
+    // Its value is the state's status-map entry, a closed word an agent reads where the eye reads the glyph (#1459).
+    observed(id)
         .role(Role::Label)
         .aria_label(name)
+        .aria_value(entry.to_owned())
         .h(px(ROW_HEIGHT))
         .flex()
         .items_center()
@@ -842,9 +878,7 @@ fn bound_values(
                 Some(_) => format!("{} · not reported", b.text),
                 None => b.text.clone(),
             };
-            div()
-                .id(id)
-                .test_support()
+            observed(id)
                 .role(Role::Label)
                 .aria_label(b.name())
                 .h(px(ROW_HEIGHT))
@@ -924,6 +958,7 @@ impl Render for Shipped {
                 let focused = (self.focus_handle.is_focused(window))
                     .then(|| self.rows.focused.clone())
                     .flatten();
+                RING.with(|ring| *ring.borrow_mut() = focused.as_ref().map(|s| format!("session:{s}")));
                 let selected = self.rows.selected.clone();
                 page.bg(chrome.raised)
                     .track_focus(&self.focus_handle)
@@ -964,7 +999,7 @@ impl Render for Shipped {
                             .hover(|style| style.bg(chrome.hover))
                             .on_click(|_, window, cx| show(AGENTS, window, cx)),
                     )
-                    .children(placed("sidebar").into_iter().map(placed_box))
+                    .children(placed("sidebar").into_iter().enumerate().map(placed_box))
                     .children(record.sessions.iter().zip(&record.rows).enumerate().map(
                         |(index, ((session, task, _), (words, entry)))| {
                             let text = format!("{task} · {words}");
@@ -995,6 +1030,14 @@ impl Render for Shipped {
                             let id = ElementId::Name(format!("session:{session}").into());
                             let row = marked(id, entry, text)
                                 .role(Role::Button)
+                                // The planted row is named by its task's title alone.
+                                .when(cfg!(feature = "plant-row-title-only"), |row| {
+                                    row.aria_label(task.clone())
+                                })
+                                // The ringed row is the one keys reach, so an assistive client reads it as focused.
+                                .when(focused.as_ref() == Some(session), |row| {
+                                    row.aria_active_descendant()
+                                })
                                 .h(px(24.))
                                 // Every row leaves room for the bar and a gap after it, so opening one moves no text.
                                 .pl(px(10.))
@@ -1091,7 +1134,7 @@ impl Render for Shipped {
                         "home-needs-you",
                         reach.count(format!("{open} asks need you")),
                     ))
-                    .children(placed("home").into_iter().map(placed_box)),
+                    .children(placed("home").into_iter().enumerate().map(placed_box)),
             },
             Kind::NeedsYou if unfinished.is_some() => page
                 .child(title("needs-you-title", "Needs you"))
@@ -1107,33 +1150,44 @@ impl Render for Shipped {
                             .gap_2()
                             .children(screen.lines().map(|line| div().child(line.to_owned())))
                     }))
-                    .children(record.open.iter().map(|(handle, _, question, status)| {
-                        let ask = handle.clone();
-                        // The planted row shows the handle.
-                        let text = if cfg!(feature = "plant-handle-rows") {
-                            handle
-                        } else {
-                            question
-                        };
-                        let shown = if reach.not_notified(handle) {
-                            format!("{text} · not notified")
-                        } else {
-                            text.clone()
-                        };
-                        // The row reads as its question, on the screen and to a screen reader; its handle is nowhere (#1172).
-                        label(ElementId::Name(handle.clone().into()), shown)
-                            .role(Role::Button)
-                            .rounded_sm()
-                            .hover(|style| style.bg(chrome.hover))
-                            .on_click(move |_, window, cx| {
-                                crate::card::present_ask(&ask, window, cx)
-                            })
-                            .when(status == "folded", |row| {
-                                row.pl_4().text_color(chrome.ink_secondary)
-                            })
-                            .when(status == "later", |row| row.text_color(chrome.ink_tertiary))
-                            .when(status == "held", |row| row.italic())
-                    }))
+                    .children(record.open.iter().enumerate().map(
+                        |(index, (handle, _, question, status))| {
+                            let ask = handle.clone();
+                            // The planted row shows the handle.
+                            let text = if cfg!(feature = "plant-handle-rows") {
+                                handle
+                            } else {
+                                question
+                            };
+                            let shown = if reach.not_notified(handle) {
+                                format!("{text} · not notified")
+                            } else {
+                                text.clone()
+                            };
+                            // The row reads as its question, on the screen and to a screen reader; its handle is nowhere
+                            // drawn (#1172) and is its id (#1459), so it holds when the words change or a row above closes.
+                            // The planted row is keyed by its place.
+                            let id = if cfg!(feature = "plant-row-index-ids") {
+                                format!("ask-{index}")
+                            } else {
+                                handle.clone()
+                            };
+                            // An open ask's state is needs you, so its value is that status-map entry.
+                            label(ElementId::Name(id.into()), shown)
+                                .role(Role::Button)
+                                .aria_value(states::State::NeedsYou.entry())
+                                .rounded_sm()
+                                .hover(|style| style.bg(chrome.hover))
+                                .on_click(move |_, window, cx| {
+                                    crate::card::present_ask(&ask, window, cx)
+                                })
+                                .when(status == "folded", |row| {
+                                    row.pl_4().text_color(chrome.ink_secondary)
+                                })
+                                .when(status == "later", |row| row.text_color(chrome.ink_tertiary))
+                                .when(status == "held", |row| row.italic())
+                        },
+                    ))
                     // Below the rows, so a screen reader and a keyboard reach the asks first.
                     .children((!self.popped).then(|| {
                         label("needs-you-pop-out", "Pop out")
@@ -1215,8 +1269,14 @@ impl Render for Shipped {
                     .children(grid)
                     .children(figure.map(|panel| div().flex_1().min_h_0().w_full().child(panel)))
                     .when(chart, |page| {
+                        // The chart is one node named from its own canvas text, its caption then its readout, so the
+                        // readout is in the tree where it's drawn and no line beside it repeats the caption (#1459). The
+                        // line's points end it, as the label that stood beside the chart named them.
+                        let name = format!("{} {}, {points} points", caption.text, readout.text);
                         page.child(
-                            div()
+                            observed("session-chart")
+                                .role(Role::Label)
+                                .aria_label(name)
                                 .w(px(600.))
                                 .h(px(200.))
                                 .border_1()
@@ -1248,10 +1308,16 @@ impl Render for Shipped {
                                         .w_full(),
                                 ),
                         )
-                        .child(label(
-                            "session-line-label",
-                            format!("Hours to each deadline: {points} points"),
-                        ))
+                        // The planted page keeps the base's hand-written label beside the chart.
+                        .when(
+                            cfg!(feature = "plant-chart-label-beside"),
+                            |page| {
+                                page.child(label(
+                                    "session-line-label",
+                                    format!("Hours to each deadline: {points} points"),
+                                ))
+                            },
+                        )
                     })
                     .children(bound_panel(chrome))
             }
@@ -1260,9 +1326,7 @@ impl Render for Shipped {
                 let working = said.is_none() && self.setting_up.is_some();
                 let (ground, ink) = (chrome.ground, chrome.ink_primary);
                 let button = (said.is_none() && !working && crate::setup::needed()).then(|| {
-                    div()
-                        .id("set-up")
-                        .test_support()
+                    observed("set-up")
                         .role(Role::Button)
                         .aria_label("Set up")
                         .px_4()
@@ -1274,9 +1338,7 @@ impl Render for Shipped {
                         .child("Set up")
                 });
                 page.child(
-                    div()
-                        .id("welcome")
-                        .test_support()
+                    observed("welcome")
                         .size_full()
                         .flex()
                         .flex_col()
@@ -1296,17 +1358,13 @@ impl Render for Shipped {
                         .child(div().child("Where your agents show, not tell."))
                         .children(button)
                         .children(working.then(|| {
-                            div()
-                                .id("set-up-working")
-                                .test_support()
+                            observed("set-up-working")
                                 .role(Role::Label)
                                 .aria_label(SETTING_UP)
                                 .child(SETTING_UP)
                         }))
                         .children(said.map(|line| {
-                            div()
-                                .id("set-up-said")
-                                .test_support()
+                            observed("set-up-said")
                                 .role(Role::Label)
                                 .aria_label(line.to_owned())
                                 .max_w(px(560.))
@@ -1318,9 +1376,7 @@ impl Render for Shipped {
                                 .then(crate::setup::reason)
                                 .flatten()
                                 .map(|line| {
-                                    div()
-                                        .id("set-up-reason")
-                                        .test_support()
+                                    observed("set-up-reason")
                                         .role(Role::Label)
                                         .aria_label(line.clone())
                                         // A long path in the reason wraps inside the window, so its fix stays in view.
@@ -1388,9 +1444,7 @@ impl Render for Shipped {
                                 if rule.held {
                                     said.push_str(" · held: an agent removed its line");
                                 }
-                                div()
-                                    .id(("rules-row", row))
-                                    .test_support()
+                                observed(("rules-row", row))
                                     .role(Role::Label)
                                     .aria_label(said)
                                     .h(px(ROW_HEIGHT))
@@ -1463,9 +1517,7 @@ fn agents_row(
 ) -> ObservedElement<Stateful<Div>> {
     let name = cells.join(" · ");
     let [what, how, wh] = cells;
-    div()
-        .id(id)
-        .test_support()
+    observed(id)
         .role(Role::Label)
         .aria_label(name)
         .flex()
@@ -1875,17 +1927,12 @@ pub fn title_bar(window: &Window) -> TitleBar {
         bar
     };
     bar.child(
-        div()
-            .id("title-bar-mark")
-            .test_support()
-            .flex()
-            .items_center()
-            .child(
-                svg()
-                    .data(brand::TITLE_BAR_MARK)
-                    .size(px(brand::TITLE_BAR_MARK_PX))
-                    .text_color(ink),
-            ),
+        observed("title-bar-mark").flex().items_center().child(
+            svg()
+                .data(brand::TITLE_BAR_MARK)
+                .size(px(brand::TITLE_BAR_MARK_PX))
+                .text_color(ink),
+        ),
     )
 }
 

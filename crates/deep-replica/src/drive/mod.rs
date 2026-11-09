@@ -222,7 +222,11 @@ impl Replica {
             }
         };
         let from = word("from", &["fixture", "record_copy", "empty"], "fixture")?;
-        let center = word("center", &[NEEDS_YOU, HOME, SESSION, WELCOME, AGENTS], NEEDS_YOU)?;
+        let center = word(
+            "center",
+            &[NEEDS_YOU, HOME, SESSION, WELCOME, AGENTS],
+            NEEDS_YOU,
+        )?;
         let theme = word("theme", &["light", "dark"], "light")?;
         let clock = word("clock", &["virtual", "real"], "virtual")?;
         let scale = match &args["scale"] {
@@ -636,6 +640,9 @@ impl Replica {
         self.cx
             .advance_clock(Duration::from_nanos(nanos(self.clock.t) - before));
         self.cx.run_until_parked();
+        // Time passes for the question card as the app's tick passes it, so it arms once its interval ran (#1459).
+        let now = self.now + self.clock.t * 1000 / FLICKS;
+        self.cx.update(|cx| deep_app::card::tick(now, cx));
         if self.motion.is_some() {
             self.sample();
         } else {
@@ -1134,24 +1141,18 @@ impl Replica {
         )
     }
 
-    /// The text snapshot, as #338's: roles, names, values and bounds of every element with a role, the strings drawn
-    /// that no element already names, and the canvas items with their values.
+    /// The text snapshot, in #338's one shape (#1459): roles, names, values, ids and bounds of every element with a
+    /// role, the strings drawn that no element already names, and the canvas items with their values.
     fn tree(&mut self) -> (Value, Frame) {
         let frame = self.frame();
-        let snapshot = self
+        let mut snapshot = self
             .cx
             .update_window(self.window, |_, window, _| from_observed(window))
             .expect("the replica's window is open");
-        let mut tree = snapshot.tree.clone();
         for run in frame.runs.iter().filter(|r| r.visible) {
-            add_text(&mut tree, run.text.clone(), run.bounds);
+            add_text(&mut snapshot.tree, run.text.clone(), run.bounds);
         }
-        let json = json!({
-            "window": {"size": snapshot.size, "scale": snapshot.scale},
-            "tree": tree.to_json(),
-            "items": snapshot.items.iter().map(|(id, value)| json!({"id": id, "value": value})).collect::<Vec<_>>(),
-        });
-        (json, frame)
+        (snapshot.to_json(), frame)
     }
 
     fn see(&mut self, call: &Value) -> Result<Value, Fail> {
@@ -1165,13 +1166,14 @@ impl Replica {
         let root = match scope {
             "window" => None,
             "panel" => Some(json!({
-                "role": "pane", "name": null, "value": null,
+                "role": "pane", "name": null, "value": null, "id": null,
                 "bounds": panel_bounds(frame.scale)?,
             })),
             "locator" => match frame.one(&call["locator"]) {
-                Ok(t) => Some(
-                    json!({"role": t.role, "name": t.name, "value": t.value, "bounds": t.bounds}),
-                ),
+                Ok(t) => Some(json!({
+                    "role": t.role, "name": t.name, "value": t.value,
+                    "id": crate::snapshot::author_id(&t.path), "bounds": t.bounds,
+                })),
                 Err(Miss::Bad(why)) => return Err(fail("refused", why)),
                 Err(Miss::None) => {
                     return Err(fail(
@@ -1543,6 +1545,7 @@ fn add_text(node: &mut Node, text: String, bounds: [i64; 4]) {
             role: "text_run".into(),
             name: Some(text),
             value: None,
+            id: None,
             bounds,
             children: Vec::new(),
         }),
@@ -1565,7 +1568,7 @@ fn collect_inside(node: &Value, bounds: [i64; 4], into: &mut Vec<Value>) {
     }
 }
 
-/// Leaves out the fields `include` doesn't name; the role always stays.
+/// Leaves out the fields `include` doesn't name; the role and the id always stay.
 fn keep(node: &mut Value, include: &[&str]) {
     let Some(fields) = node.as_object_mut() else {
         return;
