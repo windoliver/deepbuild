@@ -3,6 +3,11 @@
 //! accessibility the way an assistive client does, and writes the window's accessibility tree
 //! in the snapshot's shape: roles, names and values from GPUI's own AccessKit tree, and the
 //! identifier and bounds AppKit reports for each node, its bounds in whole device pixels.
+//!
+//! Issue #1546: `deep-live --view <id> --out <file> --watch` shows the real app window on your hub's record instead,
+//! read through the app's one record reader on its tick, sends it no input and forces no frame, and writes one JSON
+//! line per frame the window draws, `{"frame", "at", "log_pos", "names"}`, after `{"ready": true, "at"}` once the
+//! reader has reached the hub. It runs until stopped.
 
 fn main() {
     #[cfg(target_os = "macos")]
@@ -40,6 +45,9 @@ mod live {
         if view == deep_replica::FIRST_SCREEN {
             eprintln!("deep-live: --first-screen is the replica's; deep-live draws a shipped view");
             return 2;
+        }
+        if std::env::args().any(|arg| arg == "--watch") {
+            return watch::run(&view, out);
         }
         deep_app::views::set_state(deep_replica::load_state());
         let layout = Layout::shipped(&view);
@@ -103,6 +111,145 @@ mod live {
                 eprintln!("deep-live: {error}");
                 std::process::exit(1);
             }
+        }
+    }
+
+    /// Issue #1546: the real window on your hub, and each frame it draws by itself.
+    mod watch {
+        use std::{
+            cell::{Cell, RefCell},
+            fs::File,
+            io::Write as _,
+            path::PathBuf,
+            rc::Rc,
+            time::{Duration, SystemTime, UNIX_EPOCH},
+        };
+
+        use deep_app::{
+            hub,
+            record::{self, HubWatch, RecordReader},
+            views::{Layout, Shell},
+        };
+        use deep_replica::shell::window_options;
+        use gpui_kit::{base::test_support::snapshots, *};
+        use serde_json::json;
+
+        fn now() -> u64 {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |since| since.as_millis() as u64)
+        }
+
+        /// The shell, and a mark painted after it that writes the frame's line once the frame is drawn.
+        struct Watched {
+            shell: Entity<Shell>,
+            view: String,
+            out: Rc<RefCell<File>>,
+            frames: Rc<Cell<Option<u64>>>,
+        }
+
+        impl Render for Watched {
+            fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let (handle, view, out, frames) = (
+                    window.window_handle(),
+                    self.view.clone(),
+                    self.out.clone(),
+                    self.frames.clone(),
+                );
+                let written = move |_: Bounds<Pixels>, _: (), _: &mut Window, cx: &mut App| {
+                    let at = now();
+                    // Once the frame is drawn, its elements are what it painted.
+                    cx.defer(move |cx| {
+                        let names = handle
+                            .update(cx, |_, window, _| names_in(window, &view))
+                            .unwrap_or_default();
+                        let mut line = match frames.get() {
+                            None if !record::connected() => return,
+                            None => json!({"ready": true, "at": at}).to_string() + "\n",
+                            Some(_) => String::new(),
+                        };
+                        let frame = frames.get().map_or(0, |n| n + 1);
+                        frames.set(Some(frame));
+                        let log_pos = record::with_view(|v| v.log_pos).unwrap_or(0);
+                        line +=
+                            &json!({"frame": frame, "at": at, "log_pos": log_pos, "names": names})
+                                .to_string();
+                        let _ = writeln!(out.borrow_mut(), "{line}");
+                    });
+                };
+                div()
+                    .size_full()
+                    .child(self.shell.clone())
+                    .child(canvas(|_, _, _| (), written).absolute().size_0())
+            }
+        }
+
+        /// Every accessibility name the view `view` drew, top to bottom then left to right.
+        fn names_in(window: &Window, view: &str) -> Vec<String> {
+            let id = ElementId::Name(format!("view:deepbuild/{view}").into());
+            let mut named: Vec<_> = snapshots(window)
+                .into_iter()
+                .filter(|e| e.visible() && e.path().contains(&id))
+                .filter_map(|e| {
+                    Some((
+                        e.bounds().origin.y,
+                        e.bounds().origin.x,
+                        e.label()?.to_owned(),
+                    ))
+                })
+                .collect();
+            named.sort_by(|a, b| {
+                (a.0, a.1)
+                    .partial_cmp(&(b.0, b.1))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            named.into_iter().map(|(.., name)| name).collect()
+        }
+
+        pub fn run(view: &str, out: PathBuf) -> i32 {
+            let file = match File::create(&out) {
+                Ok(file) => Rc::new(RefCell::new(file)),
+                Err(error) => {
+                    eprintln!("deep-live: {}: {error}", out.display());
+                    return 1;
+                }
+            };
+            record::install(RecordReader::unopened_folded(
+                &hub::address(),
+                &hub::root().join("control.token"),
+            ));
+            let (layout, view) = (Layout::shipped(view), view.to_owned());
+            gpui_kit::application().run(move |cx| {
+                gpui_kit::init(cx);
+                deep_app::init(cx);
+                let options = WindowOptions {
+                    show: true,
+                    focus: true,
+                    ..window_options()
+                };
+                gpui_kit::open_window(options, cx, |window, cx| {
+                    let shell = cx.new(|cx| Shell::new(&layout, window, cx));
+                    cx.new(|_| Watched {
+                        shell,
+                        view,
+                        out: file,
+                        frames: Rc::new(Cell::new(None)),
+                    })
+                })
+                .expect("the window opens");
+                cx.activate(true);
+                // The reader's tick, as the app runs it: read the hub, then tell the views what moved.
+                cx.spawn(async move |cx| {
+                    let mut watch = HubWatch::default();
+                    loop {
+                        cx.background_executor().timer(record::TICK).await;
+                        watch.tick(now(), || record::read(Duration::from_millis(5)));
+                        cx.update(record::sync);
+                    }
+                })
+                .detach();
+            });
+            0
         }
     }
 

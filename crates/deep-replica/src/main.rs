@@ -56,6 +56,11 @@ mod replica {
     }
 
     pub fn run() -> i32 {
+        // Issue #1434: `--chrome <fixture>`, the chrome@1 fixture drawn headless, in a chrome-fixture build only.
+        #[cfg(feature = "chrome-fixture")]
+        if std::env::args().nth(1).as_deref() == Some("--chrome") {
+            return deep_replica::chrome::run();
+        }
         // Issue #1454: `--panel-kit <dir>`, panel@1 on one panel, for `deep install`: one JSON line, its verdict.
         let mut given = std::env::args().skip(1);
         if given.next().as_deref() == Some("--panel-kit") {

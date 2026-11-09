@@ -1,0 +1,192 @@
+Base commit: c88d9ae1ae09b7e5c6a5a35b912339fe86b986af
+Command: NO_COLOR=1 vitest run --root tests/acceptance/1480 --no-file-parallelism (with a scratch config; this worktree has no node_modules, so vitest came from the main checkout's install)
+Run in this worktree at the base commit holding only these test files (untracked). deep-text-render built from base.
+Date: 2026-11-08T22:42:39Z  Node v23.9.0  darwin-arm64
+Expected reason: the base render has no frames/windows/upload request surface (answers bad_input) and no upload byte, rect, page-alloc report fields.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1480
+
+ ❯ upload.test.ts (8 tests | 8 failed) 423506ms
+   ❯ AC1 one new 26 px glyph on a warm page uploads at most (w + 2) x (h + 2) bytes (2)
+     × AC1 the new glyph's own rectangle goes up in each of two windows, and nothing else 3056ms
+     × AC1 the planted whole-page upload fails the same check, naming 1,048,576 bytes 168ms
+   ❯ AC2 over 1,000 new glyphs on one page in a frame, total bytes never exceed one page (2)
+     × AC2 1,000+ new glyphs in one frame upload at most one page in each of two windows 154ms
+     × AC2 the ring holds 32 rects: 32 new glyphs upload rects only, 33 take one whole-page upload 160ms
+   ❯ AC3 a frame that adds a glyph clones no page, by the counting allocator (2)
+     × AC3 the counting allocator sees no page-sized allocation while a frame with a new glyph paints, in either window 206ms
+     × AC3 the allocator can see a clone: the planted whole-page twin allocates a page in each window 153ms
+   ❯ AC4 pixels are byte-equal to the whole-page path over a typing journey on two windows (2)
+     × AC4 every captured frame in both windows equals the whole-page path's, and each shows only its own text 134ms
+     × AC4 a frame after a glyph was updated shows the new glyph and none of the old: each equals a cold render of the same text 162ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  upload.test.ts > AC1 one new 26 px glyph on a warm page uploads at most (w + 2) x (h + 2) bytes > AC1 the new glyph's own rectangle goes up in each of two windows, and nothing else
+AssertionError: render refused the request (a missing `frames`/`windows`/`upload` surface answers bad_input): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run upload.test.ts:44:153
+     42|   const report = one(RENDER_BIN, ['render'], request);
+     43|   if (report['ok'] !== true && report['code'] === 'unsupported_platfor…
+     44|   expect(report['ok'], `render refused the request (a missing \`frames…
+       |                                                                                                                                                         ^
+     45|   const list = report['frames'];
+     46|   expect(Array.isArray(list) && list.length === frames.length, `SURFAC…
+ ❯ upload.test.ts:99:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  upload.test.ts > AC1 one new 26 px glyph on a warm page uploads at most (w + 2) x (h + 2) bytes > AC1 the planted whole-page upload fails the same check, naming 1,048,576 bytes
+AssertionError: render refused the request (a missing `frames`/`windows`/`upload` surface answers bad_input): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run upload.test.ts:44:153
+     42|   const report = one(RENDER_BIN, ['render'], request);
+     43|   if (report['ok'] !== true && report['code'] === 'unsupported_platfor…
+     44|   expect(report['ok'], `render refused the request (a missing \`frames…
+       |                                                                                                                                                         ^
+     45|   const list = report['frames'];
+     46|   expect(Array.isArray(list) && list.length === frames.length, `SURFAC…
+ ❯ upload.test.ts:115:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  upload.test.ts > AC2 over 1,000 new glyphs on one page in a frame, total bytes never exceed one page > AC2 1,000+ new glyphs in one frame upload at most one page in each of two windows
+AssertionError: render refused the request (a missing `frames`/`windows`/`upload` surface answers bad_input): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run upload.test.ts:44:153
+     42|   const report = one(RENDER_BIN, ['render'], request);
+     43|   if (report['ok'] !== true && report['code'] === 'unsupported_platfor…
+     44|   expect(report['ok'], `render refused the request (a missing \`frames…
+       |                                                                                                                                                         ^
+     45|   const list = report['frames'];
+     46|   expect(Array.isArray(list) && list.length === frames.length, `SURFAC…
+ ❯ upload.test.ts:129:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  upload.test.ts > AC2 over 1,000 new glyphs on one page in a frame, total bytes never exceed one page > AC2 the ring holds 32 rects: 32 new glyphs upload rects only, 33 take one whole-page upload
+AssertionError: render refused the request (a missing `frames`/`windows`/`upload` surface answers bad_input): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run upload.test.ts:44:153
+     42|   const report = one(RENDER_BIN, ['render'], request);
+     43|   if (report['ok'] !== true && report['code'] === 'unsupported_platfor…
+     44|   expect(report['ok'], `render refused the request (a missing \`frames…
+       |                                                                                                                                                         ^
+     45|   const list = report['frames'];
+     46|   expect(Array.isArray(list) && list.length === frames.length, `SURFAC…
+ ❯ upload.test.ts:142:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  upload.test.ts > AC3 a frame that adds a glyph clones no page, by the counting allocator > AC3 the counting allocator sees no page-sized allocation while a frame with a new glyph paints, in either window
+AssertionError: render refused the request (a missing `frames`/`windows`/`upload` surface answers bad_input): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run upload.test.ts:44:153
+     42|   const report = one(RENDER_BIN, ['render'], request);
+     43|   if (report['ok'] !== true && report['code'] === 'unsupported_platfor…
+     44|   expect(report['ok'], `render refused the request (a missing \`frames…
+       |                                                                                                                                                         ^
+     45|   const list = report['frames'];
+     46|   expect(Array.isArray(list) && list.length === frames.length, `SURFAC…
+ ❯ upload.test.ts:161:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  upload.test.ts > AC3 a frame that adds a glyph clones no page, by the counting allocator > AC3 the allocator can see a clone: the planted whole-page twin allocates a page in each window
+AssertionError: render refused the request (a missing `frames`/`windows`/`upload` surface answers bad_input): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run upload.test.ts:44:153
+     42|   const report = one(RENDER_BIN, ['render'], request);
+     43|   if (report['ok'] !== true && report['code'] === 'unsupported_platfor…
+     44|   expect(report['ok'], `render refused the request (a missing \`frames…
+       |                                                                                                                                                         ^
+     45|   const list = report['frames'];
+     46|   expect(Array.isArray(list) && list.length === frames.length, `SURFAC…
+ ❯ upload.test.ts:167:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  upload.test.ts > AC4 pixels are byte-equal to the whole-page path over a typing journey on two windows > AC4 every captured frame in both windows equals the whole-page path's, and each shows only its own text
+AssertionError: render refused the request (a missing `frames`/`windows`/`upload` surface answers bad_input): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run upload.test.ts:44:153
+     42|   const report = one(RENDER_BIN, ['render'], request);
+     43|   if (report['ok'] !== true && report['code'] === 'unsupported_platfor…
+     44|   expect(report['ok'], `render refused the request (a missing \`frames…
+       |                                                                                                                                                         ^
+     45|   const list = report['frames'];
+     46|   expect(Array.isArray(list) && list.length === frames.length, `SURFAC…
+ ❯ upload.test.ts:188:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  upload.test.ts > AC4 pixels are byte-equal to the whole-page path over a typing journey on two windows > AC4 a frame after a glyph was updated shows the new glyph and none of the old: each equals a cold render of the same text
+AssertionError: render refused the request (a missing `frames`/`windows`/`upload` surface answers bad_input): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run upload.test.ts:44:153
+     42|   const report = one(RENDER_BIN, ['render'], request);
+     43|   if (report['ok'] !== true && report['code'] === 'unsupported_platfor…
+     44|   expect(report['ok'], `render refused the request (a missing \`frames…
+       |                                                                                                                                                         ^
+     45|   const list = report['frames'];
+     46|   expect(Array.isArray(list) && list.length === frames.length, `SURFAC…
+ ❯ upload.test.ts:209:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  8 failed (8)
+   Start at  14:35:27
+   Duration  424.71s (tests 100%)
+
+exit 1

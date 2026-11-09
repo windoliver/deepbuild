@@ -136,7 +136,7 @@ export async function keysOf(folder: string): Promise<Keys> {
   return { services, install, migrate, seed };
 }
 
-export interface WarmOptions {
+interface WarmOptions {
   host: Host;
   /** The hub's folder for its stacks, and the Docker CLI it found. */
   compose: { dir: string; docker?: string | undefined };

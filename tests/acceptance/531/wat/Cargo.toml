@@ -1,0 +1,21 @@
+# The #531 acceptance suite's own fixture assembler (a copy of #238's, renamed): WebAssembly text to
+# bytes (the `wat` crate) and a listing of every function body's operators with their byte offsets in
+# the module (`wasmparser`), so a test knows the function index and the offset of the instruction a
+# trap fixture traps at. It is test tooling only, outside the workspace (the empty [workspace] table)
+# with its own lockfile, and it shares no code with the logic or sandbox module under test.
+[package]
+name = "acceptance-531-wat"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "acceptance-531-wat"
+path = "src/main.rs"
+
+[dependencies]
+wat = "=1.263.0"
+wasmparser = "=0.263.0"
+
+[workspace]

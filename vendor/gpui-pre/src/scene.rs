@@ -15,6 +15,9 @@ use std::{
     slice,
 };
 
+mod chrome; // DeepBuild patch (windoliver/deepbuild#1434)
+pub use chrome::*;
+
 #[allow(non_camel_case_types, unused)]
 #[expect(missing_docs)]
 pub type PathVertex_ScaledPixels = PathVertex<ScaledPixels>;
@@ -50,6 +53,8 @@ pub struct Scene {
     pub subpixel_sprites: Vec<SubpixelSprite>,
     pub polychrome_sprites: Vec<PolychromeSprite>,
     pub surfaces: Vec<PaintSurface>,
+    pub chrome: Vec<ChromePrimitive>, // DeepBuild patch (windoliver/deepbuild#1434)
+    chrome_state: ChromeState,
 }
 
 #[expect(missing_docs)]
@@ -66,6 +71,7 @@ impl Scene {
         self.subpixel_sprites.clear();
         self.polychrome_sprites.clear();
         self.surfaces.clear();
+        self.chrome.clear(); self.chrome_state = ChromeState::default(); // DeepBuild patch (windoliver/deepbuild#1434)
     }
 
     pub fn len(&self) -> usize {
@@ -73,6 +79,7 @@ impl Scene {
     }
 
     pub fn push_layer(&mut self, bounds: Bounds<ScaledPixels>) {
+        if self.chrome_paint_layer(Some(bounds)) { return; } // DeepBuild patch (windoliver/deepbuild#1434)
         let order = self.primitive_bounds.insert(bounds);
         self.layer_stack.push(order);
         self.paint_operations
@@ -80,12 +87,13 @@ impl Scene {
     }
 
     pub fn pop_layer(&mut self) {
+        if self.chrome_paint_layer(None) { return; } // DeepBuild patch (windoliver/deepbuild#1434)
         self.layer_stack.pop();
         self.paint_operations.push(PaintOperation::EndLayer);
     }
 
     pub fn insert_primitive(&mut self, primitive: impl Into<Primitive>) {
-        let mut primitive = primitive.into();
+        let Some(mut primitive) = self.chrome_redirect(primitive.into()) else { return }; // DeepBuild patch (windoliver/deepbuild#1434)
         let clipped_bounds = primitive
             .bounds()
             .intersect(&primitive.content_mask().bounds);
@@ -133,6 +141,10 @@ impl Scene {
                 surface.order = order;
                 self.surfaces.push(surface.clone());
             }
+            Primitive::Chrome(chrome) => { // DeepBuild patch (windoliver/deepbuild#1434)
+                chrome.order = order;
+                self.chrome.push(chrome.clone());
+            }
         }
         self.paint_operations
             .push(PaintOperation::Primitive(primitive));
@@ -144,6 +156,8 @@ impl Scene {
                 PaintOperation::Primitive(primitive) => self.insert_primitive(primitive.clone()),
                 PaintOperation::StartLayer(bounds) => self.push_layer(*bounds),
                 PaintOperation::EndLayer => self.pop_layer(),
+                PaintOperation::StartChrome(open) => self.push_chrome_layer(open.clone()), // DeepBuild patch (windoliver/deepbuild#1434)
+                PaintOperation::EndChrome => self.pop_chrome_layer(),
             }
         }
     }
@@ -160,6 +174,7 @@ impl Scene {
         self.polychrome_sprites
             .sort_by_key(|sprite| (sprite.order, sprite.tile.tile_id));
         self.surfaces.sort_by_key(|surface| surface.order);
+        self.chrome.sort_by_key(|chrome| chrome.order); // DeepBuild patch (windoliver/deepbuild#1434)
     }
 
     #[cfg_attr(
@@ -187,6 +202,8 @@ impl Scene {
             polychrome_sprites_iter: self.polychrome_sprites.iter().peekable(),
             surfaces_start: 0,
             surfaces_iter: self.surfaces.iter().peekable(),
+            chrome_start: 0, // DeepBuild patch (windoliver/deepbuild#1434)
+            chrome_iter: self.chrome.iter().peekable(),
         }
     }
 }
@@ -209,12 +226,15 @@ pub(crate) enum PrimitiveKind {
     SubpixelSprite,
     PolychromeSprite,
     Surface,
+    Chrome, // DeepBuild patch (windoliver/deepbuild#1434)
 }
 
 pub(crate) enum PaintOperation {
     Primitive(Primitive),
     StartLayer(Bounds<ScaledPixels>),
     EndLayer,
+    StartChrome(OpenChrome), // DeepBuild patch (windoliver/deepbuild#1434)
+    EndChrome,
 }
 
 #[derive(Clone)]
@@ -228,6 +248,7 @@ pub enum Primitive {
     SubpixelSprite(SubpixelSprite),
     PolychromeSprite(PolychromeSprite),
     Surface(PaintSurface),
+    Chrome(ChromePrimitive), // DeepBuild patch (windoliver/deepbuild#1434)
 }
 
 #[expect(missing_docs)]
@@ -242,6 +263,7 @@ impl Primitive {
             Primitive::SubpixelSprite(sprite) => &sprite.bounds,
             Primitive::PolychromeSprite(sprite) => &sprite.bounds,
             Primitive::Surface(surface) => &surface.bounds,
+            Primitive::Chrome(chrome) => &chrome.bounds, // DeepBuild patch (windoliver/deepbuild#1434)
         }
     }
 
@@ -255,6 +277,7 @@ impl Primitive {
             Primitive::SubpixelSprite(sprite) => &sprite.content_mask,
             Primitive::PolychromeSprite(sprite) => &sprite.content_mask,
             Primitive::Surface(surface) => &surface.content_mask,
+            Primitive::Chrome(chrome) => &chrome.content_mask, // DeepBuild patch (windoliver/deepbuild#1434)
         }
     }
 }
@@ -283,6 +306,8 @@ struct BatchIterator<'a> {
     polychrome_sprites_iter: Peekable<slice::Iter<'a, PolychromeSprite>>,
     surfaces_start: usize,
     surfaces_iter: Peekable<slice::Iter<'a, PaintSurface>>,
+    chrome_start: usize, // DeepBuild patch (windoliver/deepbuild#1434)
+    chrome_iter: Peekable<slice::Iter<'a, ChromePrimitive>>,
 }
 
 impl<'a> Iterator for BatchIterator<'a> {
@@ -316,6 +341,7 @@ impl<'a> Iterator for BatchIterator<'a> {
                 self.surfaces_iter.peek().map(|s| s.order),
                 PrimitiveKind::Surface,
             ),
+            (self.chrome_iter.peek().map(|c| c.order), PrimitiveKind::Chrome), // DeepBuild patch (windoliver/deepbuild#1434)
         ];
         orders_and_kinds.sort_by_key(|(order, kind)| (order.unwrap_or(u32::MAX), *kind));
 
@@ -461,6 +487,11 @@ impl<'a> Iterator for BatchIterator<'a> {
                 self.surfaces_start = surfaces_end;
                 Some(PrimitiveBatch::Surfaces(surfaces_start..surfaces_end))
             }
+            PrimitiveKind::Chrome => { // DeepBuild patch (windoliver/deepbuild#1434): one at a time
+                self.chrome_iter.next();
+                self.chrome_start += 1;
+                Some(PrimitiveBatch::Chrome(self.chrome_start - 1))
+            }
         }
     }
 }
@@ -493,6 +524,7 @@ pub enum PrimitiveBatch {
         range: Range<usize>,
     },
     Surfaces(Range<usize>),
+    Chrome(usize), // DeepBuild patch (windoliver/deepbuild#1434)
 }
 
 impl PrimitiveBatch {
@@ -525,6 +557,7 @@ impl PrimitiveBatch {
                 )
             }
             Self::Surfaces(range) => format!("surfaces ({})", range.len()),
+            Self::Chrome(index) => format!("chrome {index}"), // DeepBuild patch (windoliver/deepbuild#1434)
         }
     }
 }

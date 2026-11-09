@@ -1,0 +1,30 @@
+# Criterion 11's Rust logic program for the blind redraft of #531's budget criterion (README): a logic item's
+# program as an agent builds it, for wasm32-unknown-unknown with debug info. `src/rules.rs` holds `step`, the one
+# function the worst step runs, with its loops on rules.rs:10, 20 and 30. Test tooling only, outside the workspace
+# (the empty [workspace] table), no dependencies, sharing nothing with the code under test. Built by the test with
+#   cargo build --locked --release --target wasm32-unknown-unknown --manifest-path tests/acceptance/531-redraft-ac11/budget/Cargo.toml
+# into target/acceptance-531-redraft-ac11-budget/.
+[package]
+name = "acceptance-531-redraft-ac11-budget"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = "s"
+debug = 2
+debug-assertions = false
+overflow-checks = false
+panic = "abort"
+strip = false
+lto = false
+codegen-units = 1
+incremental = false
+
+[workspace]

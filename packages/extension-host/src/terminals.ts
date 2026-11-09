@@ -18,7 +18,7 @@ import { HELPER, type Supervisor } from '@deepbuild/supervisor';
 /** The terminal host protocol this build speaks, and its hosts state when the hub connects. */
 export const TERMINAL_PROTOCOL = 2;
 
-export interface Terminal {
+interface Terminal {
   terminal: string;
   /** The package that opened it. */
   id: string;

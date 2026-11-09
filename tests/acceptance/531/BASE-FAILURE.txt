@@ -1,0 +1,1383 @@
+# #531 acceptance suite at the base, dd83ac2fc7c6563b2d395d154bc877032ba16ec1 (this worktree, clean, with tests/acceptance/531 added)
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/531 --no-file-parallelism
+# Result: 27 of 27 tests fail (12 of 12 files), every one for the missing surface: cargo answers
+#   error: no bin target named `deep-logic` in default-run packages
+# so each test fails at its first deep-logic call (helpers.ts: "deep-logic builds on this host"). Nothing is BLOCKED:
+# the assembler, the Rust program (wasm32, debug info) and deep-sandbox built; the Linux test fails on the Mac build first.
+
+
+ RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/github-issue-531-dba4b3/agent-a4558ac5438b59e73/tests/acceptance/531
+
+ ❯ ac01-fuel-stack.test.ts (3 tests | 3 failed) 4765ms
+   ❯ #531.024523a2 a step that runs forever or recurses forever traps where the rewrite put it, the same on two machines (3)
+     × #531.024523a2 an endless loop traps with kind fuel at the same function and offset in two runs; its arrays keep step 9's values, the other item plays on, and logic.trap names the step, function, offset and the go entry 864ms
+     × #531.024523a2 an endless recursion traps with kind stack at a depth set by the logic module's stack cap (8 × 3 + 64 bytes a frame) at 64 KiB and 256 KiB, before wasmtime's own limit 24ms
+     × #531.024523a2 on Linux x86_64 the loop traps at the same step, function, offset and entries, and the recursion at the same place and depth, as on this Mac 0ms
+ ❯ ac02-seed.test.ts (2 tests | 2 failed) 7904ms
+   ❯ #531.7cbe85cc the quiz's order follows its step seed (2)
+     × #531.7cbe85cc played, seeked from three checkpoints and replayed by its tour, the quiz shows one order at every step; a document with another seed shows another 349ms
+     × #531.7cbe85cc the seed of step k is a function of the document seed, the logic ID and k alone: not of the step rate, the other items or the track 0ms
+ ❯ ac05-checkpoints.test.ts (2 tests | 2 failed) 4010ms
+   ❯ #531.50a7adee seeking equals playing for a table and memory.copy program, in the app and in headless Chrome (2)
+     × #531.50a7adee in the app, each checkpoint of the first 600 steps, restored and run on for 600 steps, gives the straight run's full-state hashes, step hashes and continuation probes 697ms
+     × #531.50a7adee in headless Chrome's own WebAssembly engine, the same bake gives the app's full-state hashes, step hashes, restores and probes 1ms
+ ❯ ac08-admission.test.ts (3 tests | 3 failed) 6178ms
+   ❯ #531.95fffd8f a logic item's program reaches its engine only as sandbox@1's rewritten bytes (3)
+     × #531.95fffd8f each of sandbox@1's refusal fixtures, named as a logic item's program, is refused at check with sandbox@1's report, naming the item 756ms
+     × #531.95fffd8f the import fixture as a logic program is refused, naming env.forbidden_fn and the item; an admitted program runs as sandbox@1's rewrite of it, never as built 93ms
+     × #531.95fffd8f a planted logic module that runs programs as built (runs_unchecked) runs the import fixture and fails, naming the item 0ms
+ ❯ ac07-pages.test.ts (3 tests | 3 failed) 3299ms
+   ❯ #531.8b2a1747 the rewrite's page bitmap marks the pages each step touches, and nothing hashes it (3)
+     × #531.8b2a1747 in wasmtime each step marks exactly the pages its store, memory.fill or memory.copy touched, and the bitmap is in no checkpoint or hash: the quiet twin hashes the same 435ms
+     × #531.8b2a1747 in headless Chrome's own WebAssembly engine each step marks the same pages as in wasmtime 1ms
+     × #531.8b2a1747 a planted tracker that skips memory.copy (tracker_skips_memory_copy) fails, naming the page 0ms
+ ❯ ac09-regions-digest.test.ts (3 tests | 3 failed) 3515ms
+   ❯ #531.9a08f4d0 check compares a program's regions_digest with its item's layout digest (3)
+     × #531.9a08f4d0 a program exporting its item's layout digest passes check, and one exporting none passes as before 652ms
+     × #531.9a08f4d0 a program built before c2 was added to the reads exports another digest and is refused, naming the first entry whose offset differs 1ms
+     × #531.9a08f4d0 a planted check that compares only the regions' total sizes (digest_compares_total_sizes) admits a program built for the same reads in another order and fails, naming the entry 5ms
+ ❯ ac06-start.test.ts (3 tests | 3 failed) 4464ms
+   ❯ #531.8f04cd7e the start function runs once, before step 0, and its state is the first checkpoint (3)
+     × #531.8f04cd7e from a seek to step 0 the lookup program gives the straight run's full-state hash at the first checkpoint and its step hashes, with the start function and init run once 1045ms
+     × #531.8f04cd7e a start function that loops forever traps with kind fuel before step 0, naming the start function 138ms
+     × #531.8f04cd7e a program whose write region would end past its memory is refused at check, naming the region 6ms
+ ❯ ac10-trap-source.test.ts (3 tests | 3 failed) 5596ms
+   ❯ #531.1b30f7a8 a trap names its source line through the program's debug sidecar (3)
+     × #531.1b30f7a8 the Rust program's division by zero traps with kind divide, and logic.trap names rules.rs:42 in two runs 533ms
+     × #531.1b30f7a8 with the sidecar and without it the program hash and step hashes are the same, and without it logic.trap names the function and offset with no line 1ms
+     × #531.1b30f7a8 a planted mapper that ignores the fuel rewrite's offset shift (mapper_ignores_fuel_shift) names another line and fails, naming the trap 0ms
+ ❯ ac11-budget-lines.test.ts (2 tests | 2 failed) 3692ms
+   ❯ #531.6b6fc913 logic.budget names the source lines that spent the most fuel in the worst step (2)
+     × #531.6b6fc913 the worst step's loops at rules.rs:10, 20 and 30 (3,000, 2,000 and 1,000 iterations) are named in that order, each with fuel in proportion to its iterations 976ms
+     × #531.6b6fc913 a planted report that charges each block to its function's first line (budget_charges_function_first_line) names one line and fails 1ms
+ ❯ ac12-threads.test.ts (1 test | 1 failed) 4677ms
+   ❯ #531.ff4975c5 a step at run time starts no thread (1)
+     × #531.ff4975c5 ten logic items at 60 Hz run 1,000 steps with the process's thread count unchanged from step 1 to step 1,000 12ms
+ ❯ ac03-writes.test.ts (1 test | 1 failed) 4315ms
+   ❯ #531.cbdb60cc a logic item writes only its own arrays (1)
+     × #531.cbdb60cc a write declared to a status binding's paint, another module's array, a check's expectation or a path under the record is refused at check, naming it; the item's own score is admitted 573ms
+ ❯ ac04-fill-fuel.test.ts (1 test | 1 failed) 4343ms
+   ❯ #531.f2a68f95 memory.fill is charged per byte (1)
+     × #531.f2a68f95 under a fuel budget of 10,000,000 a step of nine 1 MiB memory.fills records at least 9,437,184 fuel and doesn't trap 452ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 27 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac01-fuel-stack.test.ts > #531.024523a2 a step that runs forever or recurses forever traps where the rewrite put it, the same on two machines > #531.024523a2 an endless loop traps with kind fuel at the same function and offset in two runs; its arrays keep step 9's values, the other item plays on, and logic.trap names the step, function, offset and the go entry
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac01-fuel-stack.test.ts:70:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/27]⎯
+
+ FAIL  ac01-fuel-stack.test.ts > #531.024523a2 a step that runs forever or recurses forever traps where the rewrite put it, the same on two machines > #531.024523a2 an endless recursion traps with kind stack at a depth set by the logic module's stack cap (8 × 3 + 64 bytes a frame) at 64 KiB and 256 KiB, before wasmtime's own limit
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac01-fuel-stack.test.ts:78:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/27]⎯
+
+ FAIL  ac01-fuel-stack.test.ts > #531.024523a2 a step that runs forever or recurses forever traps where the rewrite put it, the same on two machines > #531.024523a2 on Linux x86_64 the loop traps at the same step, function, offset and entries, and the recursion at the same place and depth, as on this Mac
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac01-fuel-stack.test.ts:90:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/27]⎯
+
+ FAIL  ac02-seed.test.ts > #531.7cbe85cc the quiz's order follows its step seed > #531.7cbe85cc played, seeked from three checkpoints and replayed by its tour, the quiz shows one order at every step; a document with another seed shows another
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ quizLayout ac02-seed.test.ts:29:19
+ ❯ quizPiece ac02-seed.test.ts:36:46
+ ❯ ac02-seed.test.ts:50:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/27]⎯
+
+ FAIL  ac02-seed.test.ts > #531.7cbe85cc the quiz's order follows its step seed > #531.7cbe85cc the seed of step k is a function of the document seed, the logic ID and k alone: not of the step rate, the other items or the track
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ quizLayout ac02-seed.test.ts:29:19
+ ❯ quizPiece ac02-seed.test.ts:36:46
+ ❯ played ac02-seed.test.ts:39:70
+ ❯ ac02-seed.test.ts:92:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/27]⎯
+
+ FAIL  ac03-writes.test.ts > #531.cbdb60cc a logic item writes only its own arrays > #531.cbdb60cc a write declared to a status binding's paint, another module's array, a check's expectation or a path under the record is refused at check, naming it; the item's own score is admitted
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac03-writes.test.ts:26:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/27]⎯
+
+ FAIL  ac04-fill-fuel.test.ts > #531.f2a68f95 memory.fill is charged per byte > #531.f2a68f95 under a fuel budget of 10,000,000 a step of nine 1 MiB memory.fills records at least 9,437,184 fuel and doesn't trap
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac04-fill-fuel.test.ts:20:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/27]⎯
+
+ FAIL  ac05-checkpoints.test.ts > #531.50a7adee seeking equals playing for a table and memory.copy program, in the app and in headless Chrome > #531.50a7adee in the app, each checkpoint of the first 600 steps, restored and run on for 600 steps, gives the straight run's full-state hashes, step hashes and continuation probes
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ tableLayout ac05-checkpoints.test.ts:28:19
+ ❯ tablePiece ac05-checkpoints.test.ts:32:118
+ ❯ ac05-checkpoints.test.ts:81:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/27]⎯
+
+ FAIL  ac05-checkpoints.test.ts > #531.50a7adee seeking equals playing for a table and memory.copy program, in the app and in headless Chrome > #531.50a7adee in headless Chrome's own WebAssembly engine, the same bake gives the app's full-state hashes, step hashes, restores and probes
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ tableLayout ac05-checkpoints.test.ts:28:19
+ ❯ tablePiece ac05-checkpoints.test.ts:32:118
+ ❯ ac05-checkpoints.test.ts:88:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/27]⎯
+
+ FAIL  ac06-start.test.ts > #531.8f04cd7e the start function runs once, before step 0, and its state is the first checkpoint > #531.8f04cd7e from a seek to step 0 the lookup program gives the straight run's full-state hash at the first checkpoint and its step hashes, with the start function and init run once
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ lookupLayout ac06-start.test.ts:22:19
+ ❯ ac06-start.test.ts:29:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/27]⎯
+
+ FAIL  ac06-start.test.ts > #531.8f04cd7e the start function runs once, before step 0, and its state is the first checkpoint > #531.8f04cd7e a start function that loops forever traps with kind fuel before step 0, naming the start function
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac06-start.test.ts:56:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/27]⎯
+
+ FAIL  ac06-start.test.ts > #531.8f04cd7e the start function runs once, before step 0, and its state is the first checkpoint > #531.8f04cd7e a program whose write region would end past its memory is refused at check, naming the region
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac06-start.test.ts:67:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/27]⎯
+
+ FAIL  ac07-pages.test.ts > #531.8b2a1747 the rewrite's page bitmap marks the pages each step touches, and nothing hashes it > #531.8b2a1747 in wasmtime each step marks exactly the pages its store, memory.fill or memory.copy touched, and the bitmap is in no checkpoint or hash: the quiet twin hashes the same
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac07-pages.test.ts:40:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/27]⎯
+
+ FAIL  ac07-pages.test.ts > #531.8b2a1747 the rewrite's page bitmap marks the pages each step touches, and nothing hashes it > #531.8b2a1747 in headless Chrome's own WebAssembly engine each step marks the same pages as in wasmtime
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac07-pages.test.ts:55:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/27]⎯
+
+ FAIL  ac07-pages.test.ts > #531.8b2a1747 the rewrite's page bitmap marks the pages each step touches, and nothing hashes it > #531.8b2a1747 a planted tracker that skips memory.copy (tracker_skips_memory_copy) fails, naming the page
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac07-pages.test.ts:67:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/27]⎯
+
+ FAIL  ac08-admission.test.ts > #531.95fffd8f a logic item's program reaches its engine only as sandbox@1's rewritten bytes > #531.95fffd8f each of sandbox@1's refusal fixtures, named as a logic item's program, is refused at check with sandbox@1's report, naming the item
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac08-admission.test.ts:27:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/27]⎯
+
+ FAIL  ac08-admission.test.ts > #531.95fffd8f a logic item's program reaches its engine only as sandbox@1's rewritten bytes > #531.95fffd8f the import fixture as a logic program is refused, naming env.forbidden_fn and the item; an admitted program runs as sandbox@1's rewrite of it, never as built
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac08-admission.test.ts:46:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/27]⎯
+
+ FAIL  ac08-admission.test.ts > #531.95fffd8f a logic item's program reaches its engine only as sandbox@1's rewritten bytes > #531.95fffd8f a planted logic module that runs programs as built (runs_unchecked) runs the import fixture and fails, naming the item
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac08-admission.test.ts:63:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/27]⎯
+
+ FAIL  ac09-regions-digest.test.ts > #531.9a08f4d0 check compares a program's regions_digest with its item's layout digest > #531.9a08f4d0 a program exporting its item's layout digest passes check, and one exporting none passes as before
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ digests ac09-regions-digest.test.ts:29:15
+ ❯ ac09-regions-digest.test.ts:42:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/27]⎯
+
+ FAIL  ac09-regions-digest.test.ts > #531.9a08f4d0 check compares a program's regions_digest with its item's layout digest > #531.9a08f4d0 a program built before c2 was added to the reads exports another digest and is refused, naming the first entry whose offset differs
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ digests ac09-regions-digest.test.ts:29:15
+ ❯ ac09-regions-digest.test.ts:50:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/27]⎯
+
+ FAIL  ac09-regions-digest.test.ts > #531.9a08f4d0 check compares a program's regions_digest with its item's layout digest > #531.9a08f4d0 a planted check that compares only the regions' total sizes (digest_compares_total_sizes) admits a program built for the same reads in another order and fails, naming the entry
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ digests ac09-regions-digest.test.ts:29:15
+ ❯ ac09-regions-digest.test.ts:62:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/27]⎯
+
+ FAIL  ac10-trap-source.test.ts > #531.1b30f7a8 a trap names its source line through the program's debug sidecar > #531.1b30f7a8 the Rust program's division by zero traps with kind divide, and logic.trap names rules.rs:42 in two runs
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac10-trap-source.test.ts:40:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/27]⎯
+
+ FAIL  ac10-trap-source.test.ts > #531.1b30f7a8 a trap names its source line through the program's debug sidecar > #531.1b30f7a8 with the sidecar and without it the program hash and step hashes are the same, and without it logic.trap names the function and offset with no line
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac10-trap-source.test.ts:47:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/27]⎯
+
+ FAIL  ac10-trap-source.test.ts > #531.1b30f7a8 a trap names its source line through the program's debug sidecar > #531.1b30f7a8 a planted mapper that ignores the fuel rewrite's offset shift (mapper_ignores_fuel_shift) names another line and fails, naming the trap
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac10-trap-source.test.ts:61:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/27]⎯
+
+ FAIL  ac11-budget-lines.test.ts > #531.6b6fc913 logic.budget names the source lines that spent the most fuel in the worst step > #531.6b6fc913 the worst step's loops at rules.rs:10, 20 and 30 (3,000, 2,000 and 1,000 iterations) are named in that order, each with fuel in proportion to its iterations
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac11-budget-lines.test.ts:37:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/27]⎯
+
+ FAIL  ac11-budget-lines.test.ts > #531.6b6fc913 logic.budget names the source lines that spent the most fuel in the worst step > #531.6b6fc913 a planted report that charges each block to its function's first line (budget_charges_function_first_line) names one line and fails
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ onMac helpers.ts:304:24
+ ❯ ac11-budget-lines.test.ts:55:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/27]⎯
+
+ FAIL  ac12-threads.test.ts > #531.ff4975c5 a step at run time starts no thread > #531.ff4975c5 ten logic items at 60 Hz run 1,000 steps with the process's thread count unchanged from step 1 to step 1,000
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin helpers.ts:298:39
+ ❯ live helpers.ts:562:55
+ ❯ ac12-threads.test.ts:22:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/27]⎯
+
+
+ Test Files  12 failed (12)
+      Tests  27 failed (27)
+   Start at  16:45:53
+   Duration  69.62s (tests 92%, import 6%, transform 1%)
+
+    Isolate  12 workers spawned · ~536ms startup each (spawn + environment, per file)
+             at least ~5.90s faster with isolate: false — reuses workers across files instead of one per file
+
+exit 1

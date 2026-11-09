@@ -459,6 +459,83 @@ pub enum LocalHub {
     Refuses,
 }
 
+/// How often the app's one reader reads the hub: the reader's tick (#1546).
+pub const TICK: Duration = Duration::from_millis(250);
+
+/// Issue #1546: the record and the bound values as the views observe them. The reader and [`crate::bound`] hold what
+/// they draw; this entity holds where those stand, so a change the reader applied, or a bound value set, notifies
+/// every view that observes it, and marks its window dirty with no input.
+pub struct Shown {
+    at: (String, u64, u64),
+}
+
+struct Live(gpui_kit::Entity<Shown>);
+
+impl gpui_kit::Global for Live {}
+
+/// The app's start ID, `log_pos` and bound values' revision, as the reader holds them now.
+fn standing() -> (String, u64, u64) {
+    let (start, log_pos) = with_view(|view| (view.start.clone(), view.log_pos)).unwrap_or_default();
+    (start, log_pos, crate::bound::revision())
+}
+
+fn live(cx: &mut gpui_kit::App) -> gpui_kit::Entity<Shown> {
+    use gpui_kit::AppContext as _;
+    if let Some(live) = cx.try_global::<Live>() {
+        return live.0.clone();
+    }
+    let live = cx.new(|_| Shown { at: standing() });
+    cx.set_global(Live(live.clone()));
+    live
+}
+
+/// #1546's planted views read the record in render and observe nothing, as the merge base's did.
+fn unobserved() -> bool {
+    crate::plain::planted("record-in-thread-local")
+}
+
+/// A view observes the record: it draws again whenever [`sync`] finds the record or the bound values moved.
+pub fn observe<V: 'static>(cx: &mut gpui_kit::Context<V>) {
+    if unobserved() {
+        return;
+    }
+    let live = live(cx);
+    cx.observe(&live, |_, _, cx| cx.notify()).detach();
+}
+
+/// Tells the views where the record and the bound values stand: those that observe them draw again if either moved.
+pub fn sync(cx: &mut gpui_kit::App) {
+    if unobserved() {
+        return;
+    }
+    let at = standing();
+    let moved = live(cx).update(cx, |shown, cx| {
+        let moved = shown.at != at;
+        if moved {
+            shown.at = at;
+            cx.notify();
+        }
+        moved
+    });
+    // A panel's script reads the record through `deepbuild.needs_you`, so it renders again too (#1459).
+    if moved {
+        crate::refresh_panels(cx);
+    }
+}
+
+/// Tells the views something they draw beside the record moved, such as what the app can reach (#994).
+pub fn notify_views(cx: &mut gpui_kit::App) {
+    if !unobserved() {
+        live(cx).update(cx, |_, cx| cx.notify());
+    }
+}
+
+/// Delivers one event to a record held in memory, as the hub's stream would, and tells the views (a replica's feed).
+pub fn deliver(event: Value, cx: &mut gpui_kit::App) {
+    feed(event);
+    sync(cx);
+}
+
 /// The one screen the window shows while the hub it reached is older than the app (#41): which side is older, and
 /// the one step that fixes it. `None` once a hub covers the app, or before any hub answered.
 pub fn older() -> Option<String> {

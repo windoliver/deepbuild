@@ -269,6 +269,8 @@ pub struct Shipped {
     agents: Option<serde_json::Value>,
     reviewing: Option<String>,
     _agents_poll: Option<Task<()>>,
+    /// When the soonest age the view shows next reads differently, and the timer that draws it then (#1546).
+    age_tick: Option<(u64, Task<()>)>,
 }
 
 /// The sidebar's open session, drawn in the selected fill with a bar at its leading edge, and the one keyboard focus
@@ -326,6 +328,8 @@ impl Shipped {
                 cx.background_executor().timer(AGENTS_TICK).await;
             })
         });
+        // The record and the bound values reach the view through the entity it observes (#1546).
+        crate::record::observe(cx);
         Self {
             kind,
             focus_handle: cx.focus_handle(),
@@ -338,7 +342,32 @@ impl Shipped {
             agents: None,
             reviewing: None,
             _agents_poll: poll,
+            age_tick: None,
         }
+    }
+
+    /// Sets the view's next tick at the moment the soonest age it drew, as of `now`, reads differently; the view
+    /// draws again then with no input, as the frame clock arms a frame when an age it shows ticks (#1546).
+    fn tick_ages(&mut self, now: u64, cx: &mut Context<Self>) {
+        let Some(wait) = states::ages_written() else {
+            self.age_tick = None;
+            return;
+        };
+        // #1546's planted app sets no next tick.
+        if crate::plain::planted("no-age-timer") {
+            return;
+        }
+        let due = now + wait;
+        if self.age_tick.as_ref().is_some_and(|(at, _)| *at == due) {
+            return;
+        }
+        let timer = cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(wait))
+                .await;
+            let _ = this.update(cx, |_, cx| cx.notify());
+        });
+        self.age_tick = Some((due, timer));
     }
 
     /// Reads the Agents page's model; a changed one draws.
@@ -805,6 +834,11 @@ fn first(record: &Record) -> (String, String, states::State) {
     record.sessions[0].clone()
 }
 
+/// Moves the virtual clock a replica's views draw by to `now`, ms since the epoch (#1546).
+pub fn set_clock(now: u64) {
+    CLOCK.with(|clock| clock.set(Some(now)));
+}
+
 /// The virtual clock's time where one runs (the replica), else the system's.
 pub fn now() -> u64 {
     CLOCK.with(Cell::get).unwrap_or_else(|| {
@@ -926,6 +960,8 @@ fn bound_panel(chrome: &chrome::Chrome) -> Option<Stateful<Div>> {
 
 impl Render for Shipped {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The ages this frame writes, from here on, set the view's next tick (#1546).
+        states::ages_written();
         let chrome = chrome::of(window);
         // While setup hasn't finished, the count says so, never a number of asks (#1002).
         let unfinished = crate::setup::count();
@@ -941,7 +977,7 @@ impl Render for Shipped {
             .p_2()
             .text_xs()
             .text_color(chrome.ink_primary);
-        match self.kind {
+        let drawn = match self.kind {
             Kind::Sidebar => {
                 let ids: Vec<String> = record.sessions.iter().map(|(id, ..)| id.clone()).collect();
                 if let Some((selected, focused)) = self.start.take() {
@@ -1208,12 +1244,17 @@ impl Render for Shipped {
                     .iter()
                     .filter(|(_, of, ..)| *of == session)
                     .count();
+                // The hours to each deadline move with the clock a minute at a time, and the line ticks then (#1546).
+                let minute = now - now % 60_000;
                 let hours: Vec<f64> = record
                     .deadlines
                     .iter()
-                    .map(|deadline| (*deadline as f64 - now as f64) / 3_600_000.0)
+                    .map(|deadline| (*deadline as f64 - minute as f64) / 3_600_000.0)
                     .collect();
                 let points = hours.len();
+                if points > 0 {
+                    states::changes_after(minute + 60_000 - now);
+                }
                 // The line's caption and its readout are the canvas's text (#390): the readout
                 // is a bound number, tabular and never cut, holding its widest value's room.
                 let caption = text::Label::new("Hours to each deadline");
@@ -1495,7 +1536,9 @@ impl Render for Shipped {
                     ))
                     .children(placed("line"))
             }
-        }
+        };
+        self.tick_ages(now, cx);
+        drawn
     }
 }
 
@@ -2074,6 +2117,8 @@ impl Render for Shell {
             .bg(chrome.ground)
             .text_color(chrome.ink_primary)
             .text_sm()
+            // Issue #1434: the frame's guards go first, so every chrome effect after them is checked.
+            .child(crate::chrome_fx::guards())
             .children(self.title_bar.then(|| title_bar(window)))
             .child(div().flex_1().min_h_0().w_full().child(self.dock.clone()))
             .children(self.commands.clone())

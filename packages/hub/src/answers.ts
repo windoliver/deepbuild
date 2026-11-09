@@ -10,7 +10,7 @@ export interface Answer {
   /** The option a provisional ask went on with; null on any other ask. */
   undoes?: string | null;
 }
-export type DeliveryOutcome = 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting';
+type DeliveryOutcome = 'delivered' | 'stalled' | 'timed_out' | 'replaced' | 'waiting';
 interface AnswersOptions {
   raw: RecordStore['raw'];
   settled(): Promise<unknown>;

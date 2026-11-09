@@ -59,6 +59,7 @@ impl Target {
 }
 
 /// One frame, read for locating.
+#[derive(Clone)]
 pub struct Frame {
     pub elements: Vec<Target>,
     pub runs: Vec<Run>,
