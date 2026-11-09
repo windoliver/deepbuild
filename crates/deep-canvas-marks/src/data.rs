@@ -14,6 +14,7 @@
 
 use serde_json::{json, Map, Value};
 
+use deep_canvas::color::Oklab;
 use deep_canvas::ops;
 
 use crate::path;
@@ -21,6 +22,7 @@ use crate::scene::{
     object_or_empty, refuse, Align, Fill, Geometry, ImageFit, ImageSampling, Mark, Palette,
     Refused, TextSpec,
 };
+use crate::story::{self, Rows};
 
 /// The most rows a mark set holds (Mark set: "exceed 1M rows per set" it can never).
 const MAX_ROWS: u64 = 1_000_000;
@@ -40,7 +42,7 @@ pub enum Column {
 }
 
 impl Column {
-    fn number(&self, i: usize) -> Option<f64> {
+    pub(crate) fn number(&self, i: usize) -> Option<f64> {
         match self {
             Column::Numbers(v) => v.get(i).copied(),
             Column::Const(c) => c.as_f64(),
@@ -48,7 +50,7 @@ impl Column {
         }
     }
 
-    fn text(&self, i: usize) -> Option<String> {
+    pub(crate) fn text(&self, i: usize) -> Option<String> {
         match self {
             Column::Texts(v) => v.get(i).cloned(),
             Column::Numbers(v) => v.get(i).map(|n| format!("{n}")),
@@ -137,6 +139,10 @@ pub(crate) fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refus
 pub enum ScaleKind {
     Linear,
     Time,
+    /// Powers of ten; a value at or below 0 is refused, naming its row.
+    Log,
+    /// Logarithmic past ±1, linear through zero, as d3's `scaleSymlog` with constant 1.
+    Symlog,
     /// Categories to palette roles, one role each, in order.
     Ordinal,
     /// A numeric domain cut into equal bands, one palette role each.
@@ -153,10 +159,21 @@ pub struct Scale {
     pub step: f64,
     /// An ordinal scale's categories.
     pub categories: Vec<String>,
-    /// The palette roles of an ordinal or a quantize scale's range.
+    /// The palette roles of an ordinal or a quantize scale's range, or the stops of a continuous
+    /// one's, which it interpolates between in OKLab.
     pub roles: Vec<String>,
     /// The table column its domain was read from, when it came from one.
     pub from: Option<FromColumn>,
+    /// A domain that follows periods.
+    pub follows: Option<Follows>,
+}
+
+/// A domain that follows periods: each period's, in order, and where `at` falls among them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Follows {
+    pub domains: Vec<[f64; 2]>,
+    pub period: usize,
+    pub fraction: f64,
 }
 
 /// A mark set column a scale's domain was read from: its name and its table `trace`.
@@ -219,6 +236,105 @@ fn column_domain(
     (lo <= hi).then_some(([lo, hi], from, zero))
 }
 
+/// The first mark set that encodes a column through scale `id` and plays periods: its compiled
+/// periods, `at` and that column's name.
+fn periods_through(
+    id: &str,
+    items: &Map<String, Value>,
+) -> Result<Option<(std::rc::Rc<story::Compiled>, f64, String)>, Refused> {
+    for (set_id, item) in items {
+        if item.get("kind").and_then(Value::as_str) != Some("marks@1") {
+            continue;
+        }
+        let p = object_or_empty(item.get("params"));
+        let path = format!("items/{set_id}/params");
+        let Some(column) = object_or_empty(p.get("encode"))
+            .values()
+            .find(|e| e.get("scale").and_then(Value::as_str) == Some(id))
+            .and_then(|e| e.get("column")?.as_str())
+        else {
+            continue;
+        };
+        let base = || Ok(base_rows(set_id, item, &BoundRows::new())?.without_hidden());
+        if let Some(c) = story::compiled(set_id, p, &path, base)? {
+            let at = story::at_of(p, &c.periods, &path)?;
+            return Ok(Some((c, at, column.to_string())));
+        }
+    }
+    Ok(None)
+}
+
+/// The tick step of a domain.
+fn step_of(kind: ScaleKind, domain: [f64; 2]) -> f64 {
+    let span = domain[1] - domain[0];
+    match kind {
+        ScaleKind::Time => TIME_STEPS
+            .iter()
+            .copied()
+            .find(|s| span / s <= TICKS)
+            .unwrap_or(TIME_STEPS[TIME_STEPS.len() - 1]),
+        _ => linear_step(span),
+    }
+}
+
+/// `domain` rounded out to its step, or to decades on a log scale.
+fn nice_of(kind: ScaleKind, domain: [f64; 2], step: f64) -> [f64; 2] {
+    match kind {
+        ScaleKind::Log => [
+            ops::powi(10.0, ops::log10(domain[0]).floor() as i32),
+            ops::powi(10.0, ops::log10(domain[1]).ceil() as i32),
+        ],
+        ScaleKind::Symlog => {
+            let out = |v: f64, up: bool| {
+                let exp = ops::log10(v.abs().max(1.0));
+                let exp = if (v >= 0.0) == up {
+                    exp.ceil()
+                } else {
+                    exp.floor()
+                };
+                if v == 0.0 {
+                    0.0
+                } else {
+                    ops::powi(10.0, exp as i32).copysign(v)
+                }
+            };
+            [out(domain[0], false), out(domain[1], true)]
+        }
+        _ => [
+            (domain[0] / step).floor() * step,
+            (domain[1] / step).ceil() * step,
+        ],
+    }
+}
+
+/// Every row whose value at or below 0 reaches log scale `id`, as `<set>#<key>`.
+pub fn log_rows(id: &str, items: &Map<String, Value>) -> Result<Vec<String>, Refused> {
+    let mut out = Vec::new();
+    for (set_id, item) in items {
+        if item.get("kind").and_then(Value::as_str) != Some("marks@1")
+            || story::rows_of(item).is_some()
+        {
+            continue;
+        }
+        let p = object_or_empty(item.get("params"));
+        for e in object_or_empty(p.get("encode")).values() {
+            if e.get("scale").and_then(Value::as_str) != Some(id) {
+                continue;
+            }
+            let Some(name) = e.get("column").and_then(Value::as_str) else {
+                continue;
+            };
+            let rows = base_rows(set_id, item, &BoundRows::new())?;
+            if let Some(column) = rows.columns.get(name) {
+                let low = |i: &usize| column.number(*i).is_some_and(|v| v <= 0.0);
+                let rows_low = (0..rows.keys.len()).filter(low);
+                out.extend(rows_low.map(|i| format!("{set_id}#{}", rows.keys[i])));
+            }
+        }
+    }
+    Ok(out)
+}
+
 impl Scale {
     fn read(id: &str, item: &Value, items: &Map<String, Value>) -> Result<Scale, Refused> {
         let path = format!("items/{id}/params");
@@ -227,6 +343,8 @@ impl Scale {
         let kind = match get("type").and_then(Value::as_str) {
             None | Some("linear") => ScaleKind::Linear,
             Some("time") => ScaleKind::Time,
+            Some("log") => ScaleKind::Log,
+            Some("symlog") => ScaleKind::Symlog,
             Some("ordinal") => ScaleKind::Ordinal,
             Some("quantize") => ScaleKind::Quantize,
             Some(_) => return refuse("scale_type", format!("{path}/type")),
@@ -262,6 +380,71 @@ impl Scale {
                 categories: strings("domain")?,
                 roles: strings("range")?,
                 from: None,
+                follows: None,
+            });
+        }
+        if kind == ScaleKind::Log {
+            if let Some(row) = log_rows(id, items)?.first() {
+                return refuse("log_domain", format!("items/{row}"));
+            }
+        }
+        let nice = get("nice").and_then(Value::as_bool).unwrap_or(true);
+        // Palette roles as a continuous scale's range make it a colormap.
+        let ramp = kind != ScaleKind::Quantize
+            && get("range")
+                .and_then(Value::as_array)
+                .is_some_and(|r| r.first().is_some_and(Value::is_string));
+        let (range, roles) = if kind == ScaleKind::Quantize || ramp {
+            ([0.0, 0.0], strings("range")?)
+        } else {
+            (pair("range")?, Vec::new())
+        };
+        // A domain that follows the periods: each period's own, shaped as any scale's is.
+        if get("domain").and_then(Value::as_str) == Some("periods") {
+            let Some((compiled, at, column)) = periods_through(id, items)? else {
+                return refuse("bad_scale", format!("{path}/domain"));
+            };
+            let Some(Column::Numbers(values)) = compiled.rows.columns.get(&column) else {
+                return refuse("bad_scale", format!("{path}/domain"));
+            };
+            let zero = get("zero") == Some(&Value::Bool(true)) || bars_through(id, items);
+            let shape = |d: [f64; 2]| {
+                let d = if zero {
+                    [d[0].min(0.0), d[1].max(0.0)]
+                } else {
+                    d
+                };
+                let d = if d[1] <= d[0] { [d[0], d[0] + 1.0] } else { d };
+                if nice {
+                    nice_of(kind, d, step_of(kind, d))
+                } else {
+                    d
+                }
+            };
+            let periods = &compiled.periods;
+            let domains: Vec<[f64; 2]> = periods.domains(values).into_iter().map(shape).collect();
+            let (period, fraction) = periods.span_at(at);
+            let (a, b) = (
+                domains[period],
+                domains[(period + 1).min(domains.len() - 1)],
+            );
+            let domain = [
+                a[0] + (b[0] - a[0]) * fraction,
+                a[1] + (b[1] - a[1]) * fraction,
+            ];
+            return Ok(Scale {
+                kind,
+                domain,
+                range,
+                step: step_of(kind, domain),
+                categories: Vec::new(),
+                roles,
+                from: None,
+                follows: Some(Follows {
+                    domains,
+                    period,
+                    fraction,
+                }),
             });
         }
         // A domain read from the columns encoded through the scale, by default.
@@ -283,25 +466,9 @@ impl Scale {
         if domain[1] <= domain[0] {
             return refuse("out_of_range", format!("{path}/domain"));
         }
-        let (range, roles) = if kind == ScaleKind::Quantize {
-            ([0.0, 0.0], strings("range")?)
-        } else {
-            (pair("range")?, Vec::new())
-        };
-        let span = domain[1] - domain[0];
-        let step = match kind {
-            ScaleKind::Time => TIME_STEPS
-                .iter()
-                .copied()
-                .find(|s| span / s <= TICKS)
-                .unwrap_or(TIME_STEPS[TIME_STEPS.len() - 1]),
-            _ => linear_step(span),
-        };
-        if get("nice").and_then(Value::as_bool).unwrap_or(true) {
-            domain = [
-                (domain[0] / step).floor() * step,
-                (domain[1] / step).ceil() * step,
-            ];
+        let step = step_of(kind, domain);
+        if nice {
+            domain = nice_of(kind, domain, step);
         }
         Ok(Scale {
             kind,
@@ -311,7 +478,44 @@ impl Scale {
             categories: Vec::new(),
             roles,
             from,
+            follows: None,
         })
+    }
+
+    /// A scale whose domain is `domain`, as this one at a rest on its period.
+    fn resting(&self, domain: [f64; 2]) -> Scale {
+        Scale {
+            domain,
+            step: step_of(self.kind, domain),
+            follows: None,
+            ..self.clone()
+        }
+    }
+
+    /// The share of the way across the domain a value lies, in the scale's own warp.
+    fn unit(&self, v: f64) -> f64 {
+        let warp = |v: f64| match self.kind {
+            ScaleKind::Log => ops::log10(v),
+            ScaleKind::Symlog => ops::log1p(v.abs()).copysign(v),
+            _ => v,
+        };
+        let [d0, d1] = self.domain;
+        (warp(v) - warp(d0)) / (warp(d1) - warp(d0))
+    }
+
+    /// Whether the scale's range is palette roles it interpolates between.
+    pub fn ramp(&self) -> bool {
+        !self.roles.is_empty() && !matches!(self.kind, ScaleKind::Ordinal | ScaleKind::Quantize)
+    }
+
+    /// A value's color through a continuous scale, unrounded: its place across the stops, in
+    /// OKLab, held at the ends.
+    pub fn lab(&self, v: f64, palette: &Palette, path: &str) -> Result<Oklab, Refused> {
+        let last = self.roles.len() - 1;
+        let at = self.unit(v).clamp(0.0, 1.0) * last as f64;
+        let i = (at.floor() as usize).min(last.saturating_sub(1));
+        let [a, b] = [i, (i + 1).min(last)].map(|k| role(palette, &self.roles[k], path));
+        Ok(crate::paint::oklab_mix(a?, b?, at - i as f64))
     }
 
     /// The palette role a value takes through an ordinal or a quantize scale: an ordinal's
@@ -344,13 +548,15 @@ impl Scale {
 
     /// A value's place in u.
     pub fn map(&self, v: f64) -> f64 {
-        let [d0, d1] = self.domain;
         let [r0, r1] = self.range;
-        r0 + (v - d0) / (d1 - d0) * (r1 - r0)
+        r0 + self.unit(v) * (r1 - r0)
     }
 
     /// The ticks over the domain, each with its label.
     pub fn ticks(&self) -> Vec<(f64, String)> {
+        if matches!(self.kind, ScaleKind::Log | ScaleKind::Symlog) {
+            return self.decades();
+        }
         let first = (self.domain[0] / self.step).ceil() as i64;
         let last = (self.domain[1] / self.step).floor() as i64;
         let digits = match self.kind {
@@ -365,6 +571,53 @@ impl Scale {
                     _ => format!("{:.*}", digits, v),
                 };
                 (v, label)
+            })
+            .collect()
+    }
+
+    /// A log or symlog scale's ticks: each power of ten in its domain, and a symlog's zero.
+    fn decades(&self) -> Vec<(f64, String)> {
+        let mut out = Vec::new();
+        let [lo, hi] = self.domain;
+        if self.kind == ScaleKind::Symlog && lo <= 0.0 && hi >= 0.0 {
+            out.push(0.0);
+        }
+        let reach = ops::log10(lo.abs().max(hi.abs())).ceil() as i32;
+        // A symlog scale is linear within ±1, so its decades start at 1.
+        let first = match self.kind {
+            ScaleKind::Log => ops::log10(lo).floor() as i32,
+            _ => 0,
+        };
+        for e in first..=reach {
+            let v = ops::powi(10.0, e);
+            out.extend(
+                [v, -v].into_iter().filter(|v| {
+                    *v >= lo && *v <= hi && (self.kind == ScaleKind::Symlog || *v > 0.0)
+                }),
+            );
+        }
+        out.sort_by(f64::total_cmp);
+        out.into_iter().map(|v| (v, format!("{v}"))).collect()
+    }
+
+    /// Every tick the scale shows at any period, each with its opacity now: a tick only one of
+    /// the two periods around `at` holds enters or leaves by the fraction between them, and one
+    /// neither holds is listed at 0.
+    pub fn faded_ticks(&self) -> Vec<(f64, String, f64)> {
+        let Some(f) = &self.follows else {
+            return self.ticks().into_iter().map(|(v, l)| (v, l, 1.0)).collect();
+        };
+        let ticks: Vec<Vec<(f64, String)>> =
+            f.domains.iter().map(|d| self.resting(*d).ticks()).collect();
+        let next = (f.period + 1).min(ticks.len() - 1);
+        let holds = |p: usize, v: f64| f64::from(u8::from(ticks[p].iter().any(|t| t.0 == v)));
+        let mut all: Vec<(f64, String)> = ticks.iter().flatten().cloned().collect();
+        all.sort_by(|a, b| a.0.total_cmp(&b.0));
+        all.dedup_by(|a, b| a.0 == b.0);
+        all.into_iter()
+            .map(|(v, label)| {
+                let (from, to) = (holds(f.period, v), holds(next, v));
+                (v, label, from + (to - from) * f.fraction)
             })
             .collect()
     }
@@ -398,8 +651,26 @@ fn time_label(ms: i64, step: f64) -> String {
     }
 }
 
+/// Whether a bar or an area reads scale `id`.
+fn bars_through(id: &str, items: &Map<String, Value>) -> bool {
+    items.values().any(|item| {
+        let p = object_or_empty(item.get("params"));
+        matches!(p.get("mark").and_then(Value::as_str), Some("bar" | "area"))
+            && object_or_empty(p.get("encode"))
+                .values()
+                .any(|e| e.get("scale").and_then(Value::as_str) == Some(id))
+    })
+}
+
 /// A `scale@1` item's scale, its domain made nice, and its ticks.
 pub fn scale_of(id: &str, item: &Value) -> Result<Scale, Refused> {
+    // Alone, a scale has no rows to follow: it reads as the unit domain.
+    let follows = item.pointer("/params/domain").is_some_and(Value::is_string);
+    if follows {
+        let mut item = item.clone();
+        item["params"]["domain"] = json!([0, 1]);
+        return Scale::read(id, &item, &Map::new());
+    }
     Scale::read(id, item, &Map::new())
 }
 
@@ -464,23 +735,229 @@ enum Encoded {
     Const(Value),
 }
 
-/// A mark set's rows as marks, each named `<id>#<key>`.
-/// A mark set's rows as marks. `bound` holds the readings bound to its cells.
-pub fn mark_set(
+type Props = std::collections::BTreeMap<String, Encoded>;
+
+/// A set's `encode`, each column read against `rows`, each scale from `items`.
+fn encoded(
+    p: &Map<String, Value>,
+    rows: &Rows,
+    items: &Map<String, Value>,
+    path: &str,
+) -> Result<Props, Refused> {
+    let mut props = Props::new();
+    for (prop, e) in object_or_empty(p.get("encode")) {
+        let epath = format!("{path}/encode/{prop}");
+        let enc = match e {
+            Value::Object(o) if o.contains_key("column") => {
+                let Some(column) = o.get("column").and_then(Value::as_str) else {
+                    return refuse("bad_encode", epath);
+                };
+                // Rows from an occurrence list bring their columns at t.
+                if !rows.columns.contains_key(column) && !p.contains_key("rows") {
+                    return refuse("ref_unresolved", format!("{epath}/column"));
+                }
+                let scale = match o.get("scale").and_then(Value::as_str) {
+                    None => None,
+                    Some(s) => Some(scale_named(items, s, &format!("{epath}/scale"))?),
+                };
+                Encoded::Column {
+                    column: column.to_string(),
+                    scale,
+                }
+            }
+            v => Encoded::Const(v.clone()),
+        };
+        props.insert(prop.clone(), enc);
+    }
+    Ok(props)
+}
+
+/// Row `i`'s value of a property, through its scale.
+fn prop_number(props: &Props, rows: &Rows, prop: &str, i: usize) -> Option<f64> {
+    match props.get(prop)? {
+        Encoded::Column { column, scale } => {
+            let v = rows.columns.get(column)?.number(i)?;
+            Some(scale.as_ref().map_or(v, |s| s.map(v)))
+        }
+        Encoded::Const(v) => v.as_f64(),
+    }
+}
+
+/// A bar's or an area's base: its y scale's zero, else 0.
+/// #505: row `i`'s role where the set names its `roles` and has a `role` column: the column's
+/// value as an index into them (Mark set and columns: "a `role` column takes an index into the
+/// set's roles").
+fn set_role<'a>(p: &'a Map<String, Value>, rows: &Rows, i: usize) -> Option<&'a str> {
+    let roles = p.get("roles")?.as_array()?;
+    let k = rows.columns.get("role")?.number(i)?;
+    (k >= 0.0 && k.fract() == 0.0)
+        .then(|| roles.get(k as usize)?.as_str())
+        .flatten()
+}
+
+fn base_of(props: &Props) -> f64 {
+    match props.get("y") {
+        Some(Encoded::Column {
+            scale: Some(scale), ..
+        }) => scale.map(0.0),
+        _ => 0.0,
+    }
+}
+
+/// `#head`'s place in document u, `None` before the first row.
+pub fn head_place(
+    id: &str,
+    item: &Value,
+    items: &Map<String, Value>,
+) -> Result<Option<[f64; 2]>, Refused> {
+    let rows = rows(id, item, items, &BoundRows::new())?;
+    let path = format!("items/{id}/params");
+    let props = encoded(object_or_empty(item.get("params")), &rows, items, &path)?;
+    let at = |prop: &str, i: usize| prop_number(&props, &rows, prop, i);
+    Ok(rows
+        .head
+        .and_then(|i| Some([at("x", i)?, at("y", i)?]))
+        .map(|p| {
+            let pos = crate::scene::item_pos(item);
+            [p[0] + pos[0], p[1] + pos[1]]
+        }))
+}
+
+/// What `geometry` answers of a mark set at t: each row by key, after the transforms, with its
+/// columns, opacity, place in document u and, through a colormap, its color unrounded.
+pub fn rows_report(
     id: &str,
     item: &Value,
     items: &Map<String, Value>,
     palette: &Palette,
-    pos: [f64; 2],
-    bound: &BoundRows,
-) -> Result<Vec<Mark>, Refused> {
+) -> Result<Value, Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
+    let rows = rows(id, item, items, &BoundRows::new())?;
+    let props = encoded(p, &rows, items, &path)?;
+    let pos = crate::scene::item_pos(item);
+    let bar = p.get("mark").and_then(Value::as_str) == Some("bar");
+    let mut out = Map::new();
+    for (i, key) in rows.keys.iter().enumerate() {
+        let columns: Map<String, Value> = rows
+            .columns
+            .iter()
+            .map(|(name, c)| match c.number(i) {
+                Some(v) => (name.clone(), json!(v)),
+                None => (name.clone(), json!(c.text(i))),
+            })
+            .collect();
+        let at = |prop: &str| prop_number(&props, &rows, prop, i);
+        let mut place = Map::new();
+        for (k, axis) in [("x", 0), ("y", 1), ("x2", 0), ("y2", 1)] {
+            let base = (bar && k == "y2").then(|| base_of(&props));
+            if let Some(v) = at(k).or(base) {
+                place.insert(k.to_string(), json!(v + pos[axis]));
+            }
+        }
+        let mut row = json!({"columns": columns, "opacity": rows.opacity_of(i), "place": place});
+        // #505: a role column's index into the set's roles.
+        if let (None, Some(r)) = (props.get("role"), set_role(p, &rows, i)) {
+            let c = role(palette, r, &format!("{path}/roles"))?;
+            let lab = crate::paint::oklab_mix(c, c, 0.0);
+            row["oklab"] = json!([lab.l, lab.a, lab.b]);
+        }
+        if let Some(Encoded::Column {
+            column,
+            scale: Some(scale),
+        }) = props.get("role")
+        {
+            if let (true, Some(v)) = (
+                scale.ramp(),
+                rows.columns.get(column).and_then(|c| c.number(i)),
+            ) {
+                let lab = scale.lab(v, palette, &format!("{path}/encode/role"))?;
+                row["oklab"] = json!([lab.l, lab.a, lab.b]);
+            }
+        }
+        out.insert(key.clone(), row);
+    }
+    Ok(Value::Object(out))
+}
+
+/// What `geometry` answers of a scale at t: its domain.
+pub fn domain_report(id: &str, item: &Value, items: &Map<String, Value>) -> Result<Value, Refused> {
+    Ok(json!(Scale::read(id, item, items)?.domain))
+}
+
+/// What `geometry` answers of an axis at t: every tick its scale holds at any period, with its
+/// opacity.
+pub fn ticks_report(id: &str, item: &Value, items: &Map<String, Value>) -> Result<Value, Refused> {
+    let path = format!("items/{id}/params/scale");
+    let scale = item.pointer("/params/scale").and_then(Value::as_str);
+    let Some(scale) = scale else {
+        return refuse("bad_axis", path);
+    };
+    let ticks = scale_named(items, scale, &path)?.faded_ticks();
+    Ok(ticks
+        .into_iter()
+        .map(|(value, _, opacity)| json!({"value": value, "opacity": opacity}))
+        .collect())
+}
+
+/// What a mark set or an axis draws: its marks, and those a transform left below full opacity, by
+/// item name.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Drawing {
+    pub marks: Vec<Mark>,
+    pub fades: std::collections::BTreeMap<String, f64>,
+}
+
+/// The rows a mark set draws: its own columns after its transforms, or another set's rows
+/// (`rows_of`) after that set's. `bound` holds the readings bound to its cells.
+pub fn rows(
+    id: &str,
+    item: &Value,
+    items: &Map<String, Value>,
+    bound: &BoundRows,
+) -> Result<Rows, Refused> {
+    let path = format!("items/{id}/params");
+    let p = object_or_empty(item.get("params"));
+    let columns = object_or_empty(p.get("columns"));
+    if let Some(of) = p.get("rows_of") {
+        let of_path = format!("{path}/rows_of");
+        let source = match of.as_str().and_then(|s| Some((s, items.get(s)?))) {
+            Some((s, set))
+                if set.get("kind").and_then(Value::as_str) == Some("marks@1")
+                    && story::rows_of(set).is_none() =>
+            {
+                (s, set)
+            }
+            _ => return refuse("ref_unresolved", of_path),
+        };
+        let mut rows = rows(source.0, source.1, items, &BoundRows::new())?;
+        for (name, c) in columns {
+            let column = column_of(c, rows.keys.len(), &format!("{path}/columns/{name}"))?;
+            rows.columns.insert(name.clone(), column);
+        }
+        return Ok(rows);
+    }
+    if p.get("transforms").is_none() {
+        return base_rows(id, item, bound);
+    }
+    story::played(id, p, &path, !bound.is_empty(), || {
+        Ok(base_rows(id, item, bound)?.without_hidden())
+    })
+}
+
+/// A mark set's own rows, before its transforms. A set whose rows come from an occurrence list
+/// has them once its document is evaluated at a time.
+pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refused> {
+    let path = format!("items/{id}/params");
+    let p = object_or_empty(item.get("params"));
+    if p.contains_key("rows") && !p.contains_key("n") {
+        return Ok(Rows::default());
+    }
+    let columns = object_or_empty(p.get("columns"));
     let n = match p.get("n").and_then(Value::as_u64) {
         Some(n) if n <= MAX_ROWS => n as usize,
         _ => return refuse("out_of_range", format!("{path}/n")),
     };
-    let columns = object_or_empty(p.get("columns"));
     let mut decoded = std::collections::BTreeMap::new();
     for (name, c) in columns {
         decoded.insert(
@@ -516,46 +993,6 @@ pub fn mark_set(
             _ => return refuse("bad_column", format!("{path}/columns/{column}")),
         }
     }
-    let encode = object_or_empty(p.get("encode"));
-    let mut props = std::collections::BTreeMap::new();
-    for (prop, e) in encode {
-        let epath = format!("{path}/encode/{prop}");
-        let enc = match e {
-            Value::Object(o) if o.contains_key("column") => {
-                let Some(column) = o.get("column").and_then(Value::as_str) else {
-                    return refuse("bad_encode", epath);
-                };
-                if !decoded.contains_key(column) {
-                    return refuse("ref_unresolved", format!("{epath}/column"));
-                }
-                let scale = match o.get("scale").and_then(Value::as_str) {
-                    None => None,
-                    Some(s) => Some(scale_named(items, s, &format!("{epath}/scale"))?),
-                };
-                Encoded::Column {
-                    column: column.to_string(),
-                    scale,
-                }
-            }
-            v => Encoded::Const(v.clone()),
-        };
-        props.insert(prop.clone(), enc);
-    }
-    let number = |prop: &str, i: usize| -> Option<f64> {
-        match props.get(prop)? {
-            Encoded::Column { column, scale } => {
-                let v = decoded.get(column)?.number(i)?;
-                Some(scale.as_ref().map_or(v, |s| s.map(v)))
-            }
-            Encoded::Const(v) => v.as_f64(),
-        }
-    };
-    let text = |i: usize| -> Option<String> {
-        match props.get("text")? {
-            Encoded::Column { column, .. } => decoded.get(column)?.text(i),
-            Encoded::Const(v) => v.as_str().map(str::to_string),
-        }
-    };
     let key_column = match p.get("key").and_then(Value::as_str) {
         None => None,
         Some(k) => Some(
@@ -575,13 +1012,66 @@ pub fn mark_set(
                 .unwrap_or_else(|| i.to_string())
         })
         .collect();
-    // A key is unique and stable (Mark set: `key`), so a row can be picked and patched by it.
-    if let Some((k, _)) = key_column {
+    let transforms = story::listed(p, &path)?;
+    // A key is unique and stable (Mark set: `key`), so a row can be picked and patched by it;
+    // under periods, unique in its period, which the periods check.
+    if let (Some((k, _)), false) = (key_column, transforms.iter().any(|t| t.0 == "periods")) {
         let mut seen = std::collections::BTreeSet::new();
         if !keys.iter().all(|key| seen.insert(key)) {
             return refuse("key_not_unique", format!("{path}/columns/{k}"));
         }
     }
+    let precision = if transforms.is_empty() {
+        Default::default()
+    } else {
+        decoded
+            .iter()
+            .filter_map(|(name, c)| match c {
+                Column::Numbers(v) => Some((name.clone(), story::precision_of(&columns[name], v))),
+                _ => None,
+            })
+            .collect()
+    };
+    Ok(Rows {
+        keys,
+        columns: decoded,
+        precision,
+        hidden,
+        ..Rows::default()
+    })
+}
+
+/// A mark set's rows as marks, each named `<id>#<key>`. `bound` holds the readings bound to its
+/// cells.
+pub fn mark_set(
+    id: &str,
+    item: &Value,
+    items: &Map<String, Value>,
+    palette: &Palette,
+    pos: [f64; 2],
+    bound: &BoundRows,
+) -> Result<Drawing, Refused> {
+    let path = format!("items/{id}/params");
+    let p = object_or_empty(item.get("params"));
+    let rows = rows(id, item, items, bound)?;
+    let n = rows.keys.len();
+    let (decoded, keys, hidden) = (&rows.columns, &rows.keys, &rows.hidden);
+    let props = encoded(p, &rows, items, &path)?;
+    if let (Some("bar" | "area"), Some(Encoded::Column { scale: Some(s), .. })) =
+        (p.get("mark").and_then(Value::as_str), props.get("y"))
+    {
+        // A bar starts at zero, which a log scale doesn't hold.
+        if s.kind == ScaleKind::Log {
+            return refuse("bad_encode", format!("{path}/encode/y"));
+        }
+    }
+    let number = |prop: &str, i: usize| prop_number(&props, &rows, prop, i);
+    let text = |i: usize| -> Option<String> {
+        match props.get("text")? {
+            Encoded::Column { column, .. } => rows.shown(column, i),
+            Encoded::Const(v) => v.as_str().map(str::to_string),
+        }
+    };
     let paint = p.get("paint");
     let fill_role = paint
         .and_then(|pt| pt.get("fill").or(pt.get("stroke")))
@@ -623,6 +1113,9 @@ pub fn mark_set(
     // A row's color: its `role` through a scale whose range is palette roles, or the paint's.
     let color_of = |i: usize| -> Result<[u8; 3], Refused> {
         let rpath = format!("{path}/encode/role");
+        if let (None, Some(r)) = (props.get("role"), set_role(p, &rows, i)) {
+            return role(palette, r, &format!("{path}/roles"));
+        }
         match props.get("role") {
             None => Ok(match &row_steps {
                 Some((stops, at)) => crate::paint::sample_stops(stops, at[i]),
@@ -634,6 +1127,12 @@ pub fn mark_set(
                 scale: Some(scale),
             }) => {
                 let c = decoded.get(column);
+                if scale.ramp() {
+                    return match c.and_then(|c| c.number(i)) {
+                        Some(v) => Ok(crate::paint::rgb_of(scale.lab(v, palette, &rpath)?)),
+                        None => refuse("bad_encode", rpath),
+                    };
+                }
                 let text = c.and_then(|c| c.text(i));
                 match scale.role(c.and_then(|c| c.number(i)), text.as_deref()) {
                     Some(r) => role(palette, r, &rpath),
@@ -655,12 +1154,7 @@ pub fn mark_set(
         .and_then(Value::as_f64)
         .unwrap_or(1.0);
     // A bar's or an area's base: its `y2`, else its y scale's zero, else 0.
-    let zero = match props.get("y") {
-        Some(Encoded::Column {
-            scale: Some(scale), ..
-        }) => scale.map(0.0),
-        _ => 0.0,
-    };
+    let zero = base_of(&props);
     // A column the set reads by name, through `encode` or as itself (an image's asset and alt).
     let column_text = |name: &str, i: usize| -> Option<String> {
         match props.get(name) {
@@ -677,14 +1171,26 @@ pub fn mark_set(
         Some(_) => return refuse("bad_doc", format!("{path}/fit")),
     };
     let mut out = Vec::with_capacity(n);
+    let mut fades = std::collections::BTreeMap::new();
     // A path's and an area's rows are one line through the rows in order.
     let mut line: Vec<[f64; 2]> = Vec::new();
     let mut line_color = color;
+    // A line is one mark: it shows as its most opaque row does.
+    let mut line_alpha: f64 = 0.0;
     for (i, key) in keys.iter().enumerate() {
         if hidden.contains(&i) {
             continue;
         }
         let name = format!("{id}#{key}");
+        let alpha = rows.opacity_of(i);
+        if alpha <= 0.0 {
+            continue;
+        }
+        if mark == "path" || mark == "area" {
+            line_alpha = line_alpha.max(alpha);
+        } else if alpha < 1.0 {
+            fades.insert(name.clone(), alpha);
+        }
         let color = color_of(i)?;
         let (Some(x), Some(y)) = (number("x", i), number("y", i)) else {
             return refuse("bad_encode", format!("{path}/encode"));
@@ -814,8 +1320,11 @@ pub fn mark_set(
             offset: [0.0, 0.0],
             color: line_color,
         });
+        if line_alpha < 1.0 {
+            fades.insert(id.to_string(), line_alpha);
+        }
     }
-    Ok(out)
+    Ok(Drawing { marks: out, fades })
 }
 
 /// A polyline cut into dashes (Paint: `dash: [u]`, on and off lengths repeating from its start),
@@ -1205,6 +1714,24 @@ fn traced(trace: &Value, row: Option<usize>) -> Value {
     })
 }
 
+/// What a number on an anchor path traces to: the column it reads, and that column's table where
+/// it reads one (Honest numbers: a number a transform derives traces to its table).
+pub fn anchor_source(path: &str, items: &Map<String, Value>) -> Option<Value> {
+    let (set, rest) = path.strip_prefix("items/")?.split_once('#')?;
+    let (anchor, field) = rest.split_once('/')?;
+    let p = object_or_empty(items.get(set)?.get("params"));
+    let column = match anchor {
+        "head" => field,
+        _ => p
+            .get("transforms")?
+            .as_array()?
+            .iter()
+            .find_map(|t| t.get("periods")?.get("by")?.as_str())?,
+    };
+    let trace = p.get("columns")?.get(column)?.get("trace");
+    Some(trace.map_or_else(|| json!({"column": column}), |t| traced(t, None)))
+}
+
 /// Every number a mark set's text rows or an axis's tick labels show, each with what it traces
 /// to (Honest numbers, the check): `{item, row, text, source}`, `row` the mark set's row key.
 pub fn numbers(id: &str, item: &Value, items: &Map<String, Value>) -> Vec<Value> {
@@ -1212,8 +1739,11 @@ pub fn numbers(id: &str, item: &Value, items: &Map<String, Value>) -> Vec<Value>
     let mut out = Vec::new();
     match item.get("kind").and_then(Value::as_str) {
         Some("marks@1") if p.get("mark").and_then(Value::as_str) == Some("text") => {
-            let n = p.get("n").and_then(Value::as_u64).unwrap_or(0) as usize;
-            let columns = object_or_empty(p.get("columns"));
+            // A set that reads another's rows shows, and traces to, that set's cells.
+            let own = story::rows_of(item).and_then(|of| items.get(of));
+            let rows = own.map_or(p, |set| object_or_empty(set.get("params")));
+            let n = rows.get("n").and_then(Value::as_u64).unwrap_or(0) as usize;
+            let columns = object_or_empty(rows.get("columns"));
             let read = |name: &str| {
                 columns
                     .get(name)
@@ -1230,7 +1760,7 @@ pub fn numbers(id: &str, item: &Value, items: &Map<String, Value>) -> Vec<Value>
             let Some((text, trace)) = text else {
                 return out;
             };
-            let keys = p.get("key").and_then(Value::as_str).and_then(read);
+            let keys = rows.get("key").and_then(Value::as_str).and_then(read);
             let hidden: Vec<usize> = columns
                 .values()
                 .filter_map(|c| c.get("hide").and_then(Value::as_array))
@@ -1287,6 +1817,28 @@ const LABEL_BOX: f64 = 96.0;
 const LABEL_SIZE: f64 = 11.0;
 const TICK: f64 = 4.0;
 
+/// Which way an axis through the other scale's zero runs, and where that zero falls, clamped to
+/// the pane: the other scale is the one a mark set encodes across this one.
+fn cross_zero(id: &str, items: &Map<String, Value>, path: &str) -> Result<(bool, f64), Refused> {
+    for item in items.values() {
+        let encode = object_or_empty(item.get("params").and_then(|p| p.get("encode")));
+        let scale = |prop: &str| encode.get(prop)?.get("scale")?.as_str();
+        let (horizontal, other) = if scale("x") == Some(id) {
+            (true, scale("y"))
+        } else if scale("y") == Some(id) {
+            (false, scale("x"))
+        } else {
+            continue;
+        };
+        if let Some(other) = other {
+            let other = scale_named(items, other, path)?;
+            let [a, b] = other.range;
+            return Ok((horizontal, other.map(0.0).clamp(a.min(b), a.max(b))));
+        }
+    }
+    refuse("bad_axis", path)
+}
+
 /// One axis, generated from its scale: the line along the scale's range, a tick per step and its
 /// label; labels that would crowd thin by parity, keeping the first and the last.
 pub fn axis(
@@ -1295,7 +1847,7 @@ pub fn axis(
     items: &Map<String, Value>,
     palette: &Palette,
     pos: [f64; 2],
-) -> Result<Vec<Mark>, Refused> {
+) -> Result<Drawing, Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
     let Some(scale_id) = p.get("scale").and_then(Value::as_str) else {
@@ -1303,12 +1855,18 @@ pub fn axis(
     };
     let scale = scale_named(items, scale_id, &format!("{path}/scale"))?;
     let side = p.get("side").and_then(Value::as_str).unwrap_or("bottom");
-    let horizontal = match side {
-        "bottom" | "top" => true,
-        "left" | "right" => false,
+    let through_zero = match side {
+        "zero" => Some(cross_zero(scale_id, items, &format!("{path}/side"))?),
+        _ => None,
+    };
+    let horizontal = match (side, through_zero) {
+        (_, Some((horizontal, _))) => horizontal,
+        ("bottom" | "top", _) => true,
+        ("left" | "right", _) => false,
         _ => return refuse("bad_axis", format!("{path}/side")),
     };
-    let cross = p.get("at").and_then(Value::as_f64).unwrap_or(0.0);
+    let cross = p.get("at").and_then(Value::as_f64).unwrap_or(0.0)
+        + through_zero.map_or(0.0, |(_, cross)| cross);
     let color = role(
         palette,
         p.get("role").and_then(Value::as_str).unwrap_or("muted"),
@@ -1321,7 +1879,7 @@ pub fn axis(
             [cross + off + pos[0], along + pos[1]]
         }
     };
-    let out_dir = if side == "bottom" || side == "right" {
+    let out_dir = if matches!(side, "bottom" | "right" | "zero") {
         1.0
     } else {
         -1.0
@@ -1333,7 +1891,10 @@ pub fn axis(
         1.0,
         color,
     )];
-    let ticks = scale.ticks();
+    let mut faded = scale.faded_ticks();
+    faded.retain(|t| t.2 > 0.0);
+    let ticks: Vec<(f64, String)> = faded.iter().map(|(v, l, _)| (*v, l.clone())).collect();
+    let mut fades = std::collections::BTreeMap::new();
     // Thin by parity until labels clear each other: every 2nd, then every 4th, first and last kept.
     let est = |l: &str| 0.6 * LABEL_SIZE * l.chars().count() as f64 + 4.0;
     let spacing = |k: usize| -> f64 {
@@ -1362,6 +1923,12 @@ pub fn axis(
     }
     for (k, (v, label)) in ticks.iter().enumerate() {
         let along = scale.map(*v);
+        // A tick enters and leaves by opacity, under its value as it enters and leaves the domain.
+        let alpha = faded[k].2;
+        if alpha < 1.0 {
+            fades.insert(format!("{id}#tick{k}"), alpha);
+            fades.insert(format!("{id}#label{k}"), alpha);
+        }
         marks.push(rule(
             format!("{id}#tick{k}"),
             point(along, 0.0),
@@ -1450,7 +2017,7 @@ pub fn axis(
             runs: Vec::new(),
         });
     }
-    Ok(marks)
+    Ok(Drawing { marks, fades })
 }
 
 /// A legend row's swatch length, and the gaps after a swatch and after an entry, in u.
@@ -1608,6 +2175,43 @@ mod tests {
     }
 
     #[test]
+    fn a_symlog_scale_passes_through_zero_and_a_log_scale_ticks_on_decades() {
+        let scale = |p: Value| scale_of("s", &json!({"params": p})).unwrap();
+        let sym = scale(json!({"type": "symlog", "domain": [-100, 100], "range": [0, 100]}));
+        assert_eq!(sym.map(0.0), 50.0);
+        assert!(sym.map(1.0) > 50.0 && sym.map(10.0) - sym.map(1.0) < sym.map(1.0));
+        let ticks: Vec<f64> = sym.ticks().iter().map(|t| t.0).collect();
+        assert_eq!(ticks, [-100.0, -10.0, -1.0, 0.0, 1.0, 10.0, 100.0]);
+        let log = scale(json!({"type": "log", "domain": [2, 300], "range": [0, 300]}));
+        assert_eq!(log.domain, [1.0, 1000.0]);
+        assert!((log.map(10.0) - 100.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn an_axis_through_zero_crosses_at_the_other_scales_zero_clamped_to_the_pane() {
+        let items = |domain: Value| {
+            json!({
+                "xs": {"kind": "scale@1", "params": {"domain": [0, 10], "range": [0, 100], "nice": false}},
+                "ys": {"kind": "scale@1", "params": {"domain": domain, "range": [100, 0], "nice": false}},
+                "dots": {"kind": "marks@1", "params": {"encode": {
+                    "x": {"column": "x", "scale": "xs"}, "y": {"column": "y", "scale": "ys"}}}},
+            })
+        };
+        let line_y = |domain: Value| {
+            let all = items(domain);
+            let axis = json!({"params": {"scale": "xs", "side": "zero", "role": "ink"}});
+            let palette = Palette::from([("ink".to_string(), [0, 0, 0])]);
+            let drawn = super::axis("a", &axis, all.as_object().unwrap(), &palette, [0.0, 0.0]);
+            match drawn.unwrap().marks[0] {
+                Mark::Rect { bounds, .. } => bounds[1] + bounds[3] / 2.0,
+                _ => panic!("an axis line along x is a rect"),
+            }
+        };
+        assert_eq!(line_y(json!([-10, 10])), 50.0);
+        assert_eq!(line_y(json!([5, 10])), 100.0);
+    }
+
+    #[test]
     fn a_time_scale_ticks_on_calendar_units_in_utc() {
         // 2026-10-21 14:00 to 14:20 UTC.
         let start = 1_792_591_200_000.0;
@@ -1628,7 +2232,9 @@ mod tests {
                         "k": {"dtype": "str", "len": 2, "data": ["a", "b"]}},
             "encode": {"x": {"column": "v", "scale": "x"}, "y": 30, "size": 8}}});
         let palette: Palette = [("ink".to_string(), [0, 0, 0])].into();
-        let marks = mark_set("dots", &set, items, &palette, [0.0, 0.0], &BoundRows::new()).unwrap();
+        let marks = mark_set("dots", &set, items, &palette, [0.0, 0.0], &BoundRows::new())
+            .unwrap()
+            .marks;
         let centers: Vec<(String, [f64; 2])> = marks
             .iter()
             .map(|m| match m {
@@ -1658,6 +2264,7 @@ mod tests {
         let centers = |bound: &BoundRows| -> Vec<(String, f64)> {
             mark_set("dots", &set, items, &palette, [0.0, 0.0], bound)
                 .unwrap()
+                .marks
                 .iter()
                 .map(|m| match m {
                     Mark::Circle { item, center, .. } => (item.clone(), center[0]),
@@ -1687,7 +2294,8 @@ mod tests {
             &palette,
             [0.0, 0.0],
         )
-        .unwrap();
+        .unwrap()
+        .marks;
         let labels = marks
             .iter()
             .filter(|m| matches!(m, Mark::Text { .. }))
@@ -1704,7 +2312,8 @@ mod tests {
             &palette,
             [0.0, 0.0],
         )
-        .unwrap();
+        .unwrap()
+        .marks;
         let kept: Vec<&str> = marks
             .iter()
             .filter_map(|m| match m {
@@ -1730,7 +2339,8 @@ mod tests {
             &palette,
             [0.0, 0.0],
         )
-        .unwrap();
+        .unwrap()
+        .marks;
         let title = marks.iter().find_map(|m| match m {
             Mark::Text { spec, origin, .. } if spec.text == "Sales" => Some(*origin),
             _ => None,

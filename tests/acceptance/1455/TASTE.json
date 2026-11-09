@@ -1,0 +1,19 @@
+{
+  "issue": 1455,
+  "criterion": "AC7",
+  "verdict": "looks_right",
+  "who": "the owner, by delegation (\"check for me\"), on Claude's view-by-view check",
+  "when": "2026-11-09T10:02:11Z",
+  "files": {
+    "after-bound-panel.png": "4257c7fc949ba3437b375bc2ed612b2c2b0ba6eb23e0dc3ca0bbac5891e07e8b",
+    "after-first-screen.png": "0a2f216bd93447ade4182a97c2c735d44c3fb314edac0bf5662fd2e63b60f13c",
+    "after-question-card.png": "e257f01934a9ab7142deec125d09e46e03d9c82e4e528b0d0d5a4d8811c15263",
+    "after-session-page.png": "09b146ea449b480d1734a79ef7470ac9fe1ea2a3995db27cc3cdc7c71c4683d1",
+    "before-bound-panel.png": "6469610b7ea544661f307e51330c5dbce6de483ea63bdf85856063e47ee57094",
+    "before-first-screen.png": "0a2f216bd93447ade4182a97c2c735d44c3fb314edac0bf5662fd2e63b60f13c",
+    "before-question-card.png": "ffcf72d10aa43ca74ebf2f9a55cc6d27503d05380cee81198d670c0ccf7447b9",
+    "before-session-page.png": "50f9b53d8f52916d51a7b0ae6a7845f2f583b9c314fc974b6f8fcf91b97b77be",
+    "run.json": "35b19596749650041335e0c1c9dd80b1b011614f8009cb0521b416b3de253d78"
+  },
+  "note": "The owner asked Claude to check the eight pictures in their place. Session page: titled with its task, return line without \"returned\", one caption (\"Asks with a deadline\") whose readout agrees, a line for its one deadline, no second caption. Question card: first line \"Pick one\", not the kind name; the scope line says what answering will do. Bound panel: titled from what it binds instead of \"Cart total\", each row's source not repeated. First screen: unchanged on this fixture, \"1 ask needs you\". The card's options (SQLite, Plain files) under a logo question are the suite's fixture, not app text. Taken on the branch merged with main (297b439a); the after bound panel was taken with the window inactive (grey window buttons), its content as checked."
+}

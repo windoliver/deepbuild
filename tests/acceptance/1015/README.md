@@ -38,7 +38,7 @@ doesn't list.
 ```sh
 npm ci                            # once, if node_modules is missing
 npm run build --workspaces        # every file starts `deep hub run` and `deep lease` from packages/cli/dist
-cargo build --locked -p deep-hook # the sessions' hooks (the helper builds it if missing)
+cargo build --locked -p deep-hook --features env-plants # the sessions' hooks, with the plants (#1408); the helper builds it
 node node_modules/vitest/vitest.mjs run tests/acceptance/1015/<file>.test.ts   # one file at a time
 node node_modules/typescript/bin/tsc -p tests/acceptance/1015/tsconfig.json
 ```

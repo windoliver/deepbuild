@@ -1,0 +1,7 @@
+{
+  "id": "test/vault",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "secrets": [{ "name": "vault_key", "for": "the Secret Service round trip of #70's AC3" }],
+  "requires": { "preview": ["deep.secret"] }
+}

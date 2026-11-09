@@ -7,6 +7,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { billingMode } from '@deepbuild/readings';
 import { call } from './client.js';
+import { StaleHub } from './generations.js';
+import { joinedFor, remoteCall } from './remote.js';
 import { CAN_RUN, CANT_RUN } from './hook-programs.js';
 import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
@@ -14,11 +16,12 @@ import { numbersLines } from './numbers.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
+import { visible } from './visible.js';
 import { startOf } from './wire.js';
 import { claimState, newestClaim } from './verdict-chat.js';
 import { verdictLine } from '@deepbuild/verdicts';
 
-export type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
+type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
 export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; verdict?: string; calls?: string[]; commits?: string[]; readings?: string[] }
 const ORDER: readonly State[] = ['needs you', 'stuck', 'flagged', 'working', 'finished', 'quiet'];
@@ -30,6 +33,9 @@ const QUIET_MS = 24 * 3_600_000;
  * each 30 s while it watches the session. A hub started since reads the same from the record.
  */
 export const WAITING_QUIET_MS = 300_000;
+/** What a session's row says of the MCP servers and skills it loaded (#148): the older set after a sync, until its own evidence shows the current one. */
+export const OLDER_SET = 'Runs the older set:';
+export const NEWER_SET = 'Runs the current set:';
 /** The most tool calls a finished turn lists; the rest are counted on one line. */
 const CALLS_SHOWN = 20;
 
@@ -37,9 +43,9 @@ const CALLS_SHOWN = 20;
  * Why a session is in its state: one of a closed set, so a surface that draws the state from the record (the app's
  * sidebar, from `session.state`) says the same as this listing.
  */
-export type Cause = 'ask' | 'gone' | 'waiting' | 'stuck' | 'promised' | 'failed' | 'quiet' | 'interrupted' | 'finished' | 'working';
+type Cause = 'ask' | 'gone' | 'waiting' | 'stuck' | 'promised' | 'failed' | 'quiet' | 'interrupted' | 'finished' | 'working';
 /** A session's state as the record reads it, with why. */
-export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; note?: string }
+interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; note?: string }
 
 /**
  * Each session's state, from the record's tables through `query` (the hub's record, or its database read-only): the
@@ -133,6 +139,13 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   const codex = rows.filter((r) => r.agent === 'codex');
   const readings = await rowReadings(query, codex.map((r) => r.id), now, elapsed);
   for (const row of codex) if (readings.has(row.id)) row.readings = readings.get(row.id)!;
+  // The newest older-or-current set reading of each session: an older one stays on its row (#148).
+  const sets = (await query(`SELECT session_id, json_extract(data, '$.reading') AS text FROM events WHERE kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE '${OLDER_SET}%' OR json_extract(data, '$.reading') LIKE '${NEWER_SET}%') ORDER BY log_pos`)) as { session_id: string; text: string }[];
+  const newest = new Map(sets.map((r) => [r.session_id, r.text]));
+  for (const row of rows) {
+    const text = newest.get(row.id);
+    if (text?.startsWith(OLDER_SET)) row.readings = [...(row.readings ?? []), text];
+  }
   return rows;
 }
 
@@ -193,10 +206,13 @@ type Obj = Record<string, unknown>;
 /** One tool call: its kind, its command or the files it touched, and how it ended. */
 function callLine(call: Obj, after: Obj | undefined, worktree: string): string {
   const paths = Array.isArray(call.paths) ? call.paths.filter((p): p is string => typeof p === 'string') : [];
-  const what = typeof call.command === 'string' ? call.command.replace(/\s+/g, ' ').trim()
+  // Runs of spaces fold to one; any other white space is a character `render` marks (#1510), never a space.
+  const what = typeof call.command === 'string' ? call.command.replace(/ +/g, ' ').replace(/^ | $/g, '')
     : paths.length ? paths.map((p) => (worktree && isAbsolute(p) && p.startsWith(`${worktree}/`) ? relative(worktree, p) : p)).join(', ')
     : typeof call.tool === 'string' ? call.tool : '';
-  const shortened = what.length > 72 ? `${what.slice(0, 71)}…` : what;
+  // By code point, so an emoji or a tag character is never cut in half.
+  const points = [...what];
+  const shortened = points.length > 72 ? `${points.slice(0, 71).join('')}…` : what;
   const ended = !after ? 'no result' : after.outcome !== 'failed' ? 'ok'
     : ['failed', ...(typeof after.exit_code === 'number' ? [`exit ${after.exit_code}`] : []), ...(typeof after.signature === 'string' ? [after.signature] : [])].join(', ');
   return `${String(call.kind ?? 'call')} ${shortened}  ${ended}`;
@@ -256,7 +272,8 @@ export function render(rows: readonly StatusRow[], from: string): string {
   const quiet = rows.filter((r) => r.state === 'quiet');
   const byRepo = [...new Set(quiet.map((r) => r.repo))].sort().map((repo) => `${repo} ${quiet.filter((r) => r.repo === repo).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
-  return `${out.join('\n')}\n`;
+  // Each line names sessions, notes and calls from the record, so each prints through `visible` (#1510).
+  return `${out.map(visible).join('\n')}\n`;
 }
 
 /** `deep numbers`: your readings through the hub, or what changes them; a hub that can't be read shows no numbers at all. */
@@ -299,6 +316,21 @@ export async function statusCommand(args: readonly string[]): Promise<number> {
   }
   // The planted wrong program exits with a code the exit-code table doesn't list when it can't read a hub.
   const unread = activePlant() === 'status-exit-unmapped' ? 4 : 3;
+  // A clone of a project this machine joined reads that project's hub over the network (#1338), as its person.
+  const joined = joinedFor(process.cwd());
+  if (joined) {
+    try {
+      const reply = await remoteCall(joined, 'status.read', {});
+      if ('result' in reply) {
+        process.stdout.write(render(reply.result.rows as StatusRow[], `Reading ${joined.project}'s hub at ${joined.address} as ${joined.person}`));
+        return 0;
+      }
+      process.stderr.write(`deep status: the hub at ${joined.address} refused this read: ${reply.error.remediation}\n`);
+    } catch (error) {
+      process.stderr.write(`deep status: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+    return unread;
+  }
   let socket: string;
   try {
     socket = hubAddress().path;
@@ -318,6 +350,11 @@ export async function statusCommand(args: readonly string[]): Promise<number> {
     }
     why = reply.error.remediation;
   } catch (error) {
+    // A hub left behind isn't read in any way, its database included (#1338).
+    if (error instanceof StaleHub) {
+      process.stderr.write(`deep status: ${error.message}\n`);
+      return unread;
+    }
     why = error instanceof Error ? error.message : String(error);
   }
   // The hub's own folder holds its database: the socket's, or the installed root.

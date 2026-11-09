@@ -18,7 +18,7 @@ import { HELPER, type Supervisor } from '@deepbuild/supervisor';
 /** The terminal host protocol this build speaks, and its hosts state when the hub connects. */
 export const TERMINAL_PROTOCOL = 2;
 
-export interface Terminal {
+interface Terminal {
   terminal: string;
   /** The package that opened it. */
   id: string;
@@ -259,7 +259,7 @@ export class Terminals {
     const plants = this.options.plant && HOST_PLANTS.has(this.options.plant) ? this.options.plant : '-';
     const started = await this.supervisor.start({
       run, argv: [HELPER, 'pty', dir, String(cols), String(rows), String(this.options.protocol), this.lockPath(), plants, ...argv],
-      cwd, env: env ?? {}, grant: { run_as_you: true }, keep: kept, input: Buffer.from(`${key}\n`),
+      cwd, env: env ?? {}, grant: { run_as_you: true, own: [dir] }, keep: kept, input: Buffer.from(`${key}\n`),
     });
     if (started.status !== 'started') throw Error(`the sandbox held ${title}'s terminal: BLOCKED on ${started.kind}`);
     let ended = false;

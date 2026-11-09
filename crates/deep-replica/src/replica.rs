@@ -897,6 +897,7 @@ impl Replica {
     pub fn surfaces(&mut self) -> Vec<Seen> {
         let table = Replica::table();
         let session = table.sessions().first().cloned().unwrap_or_default();
+        let row = ElementId::Name(format!("session:{session}").into());
         let device = &mut self.devices[0];
         let drawn = device
             .cx
@@ -910,7 +911,7 @@ impl Replica {
                         .unwrap_or_default()
                 };
                 [
-                    ("sidebar-row", named(&("sidebar-session", 0usize).into())),
+                    ("sidebar-row", named(&row)),
                     ("line", named(&"line-status".into())),
                     ("return-card", named(&"return-card".into())),
                 ]

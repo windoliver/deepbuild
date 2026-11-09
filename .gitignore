@@ -17,5 +17,16 @@ crates/deep-app/panels/*/gpui-kit.d.ts
 crates/deep-app/panels/*/jsconfig.json
 tests/acceptance/124/fixtures/panels/*/gpui-kit.d.ts
 tests/acceptance/124/fixtures/panels/*/jsconfig.json
+tests/acceptance/1427/fixtures/panels/*/gpui-kit.d.ts
+tests/acceptance/1427/fixtures/panels/*/jsconfig.json
 crates/deep-replica/tests/fixtures/*/gpui-kit.d.ts
 crates/deep-replica/tests/fixtures/*/jsconfig.json
+docs/extension-guide/plugin/panel/gpui-kit.d.ts
+docs/extension-guide/plugin/panel/jsconfig.json
+# DeepBuild writes @deepbuild/panel, the one module a panel imports, under a panel's folder each time it loads one, and gpui-shell its typings beside it (#1425).
+**/@deepbuild/
+
+# #149's full-size frames: tests/acceptance/149/taste.test.ts writes them from the canvas's own
+# frames, and docs/evidence/149/preview/ holds what a reader sees.
+docs/evidence/149/*.png
+docs/evidence/149/*.apng

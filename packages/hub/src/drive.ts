@@ -87,7 +87,7 @@ export function driveCall(value: unknown): unknown {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => [k, driveCall(v)]));
 }
 
-export interface ReplicasOptions { folder: string; now: () => number; leases: () => LeaseTable; plant: Plant | undefined }
+interface ReplicasOptions { folder: string; now: () => number; leases: () => LeaseTable; plant: Plant | undefined }
 
 /** Each session's replicas (#124): each its own deep-drive process under the replica lease, released once it exits. */
 export class Replicas {

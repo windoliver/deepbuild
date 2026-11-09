@@ -9,7 +9,7 @@ import { run } from './children.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-export interface Load { kind: 'instructions' | 'skill' | 'hooks' | 'mcp'; name: string; source: string; digest: string }
+interface Load { kind: 'instructions' | 'skill' | 'hooks' | 'mcp'; name: string; source: string; digest: string }
 
 const sha = (parts: (string | Buffer)[]): string => {
   const hash = createHash('sha256');
@@ -100,18 +100,18 @@ export async function briefing(cwd: string): Promise<string> {
   return `DeepBuild is watching this session. ${active}${stack} When you finish a piece of work, declare it with the deep_claim tool (say what you claim is done); the checks' results decide its verdict, never your own words about it.`;
 }
 
-/** The git folder of the repo `cwd` is in, and the common folder its refs live in (a worktree's differs). */
-async function gitDirs(cwd: string): Promise<{ git: string; common: string } | undefined> {
+/** The git folder of the repo `cwd` is in, the common folder its refs live in (a worktree's differs), and its top folder. */
+export async function gitDirs(cwd: string): Promise<{ git: string; common: string; top: string } | undefined> {
   for (const dir of upFrom(cwd)) {
     const dotgit = join(dir, '.git');
     const info = await stat(dotgit).catch(() => undefined);
     if (!info) continue;
-    if (info.isDirectory()) return { git: dotgit, common: dotgit };
+    if (info.isDirectory()) return { git: dotgit, common: dotgit, top: dir };
     const pointer = /^gitdir: (.+)$/m.exec((await text(dotgit)) ?? '');
     if (!pointer) return undefined;
     const git = resolve(dir, pointer[1]!.trim());
     const common = await text(join(git, 'commondir'));
-    return { git, common: common ? resolve(git, common.trim()) : git };
+    return { git, common: common ? resolve(git, common.trim()) : git, top: dir };
   }
   return undefined;
 }

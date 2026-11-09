@@ -1,17 +1,23 @@
 // Rust source with every comment, string, byte string, raw string and char literal blanked to
 // spaces (newlines kept, so line and column numbers hold). A line-based strip would let a string
 // holding `//` hide the rest of its line, so this walks the tokens that can contain `//` or `"`.
-export function stripRust(source) {
+// With `keepComments`, the comments stay as written and only the literals are blanked.
+export function stripRust(source, { keepComments = false } = {}) {
   let out = '';
   let i = 0;
   const blank = (end) => {
     for (; i < end && i < source.length; i++) out += source[i] === '\n' ? '\n' : ' ';
   };
+  const comment = (end) => {
+    if (!keepComments) return blank(end);
+    out += source.slice(i, end);
+    i = end;
+  };
   while (i < source.length) {
     const rest = source.slice(i, i + 3);
     if (rest.startsWith('//')) {
       const end = source.indexOf('\n', i);
-      blank(end < 0 ? source.length : end);
+      comment(end < 0 ? source.length : end);
     } else if (rest.startsWith('/*')) {
       let depth = 0;
       let j = i;
@@ -20,7 +26,7 @@ export function stripRust(source) {
         else if (source.startsWith('*/', j)) { depth--; j += 2; }
         else j++;
       } while (depth > 0 && j < source.length);
-      blank(j);
+      comment(Math.min(j, source.length));
     } else if (/^b?r#*"/.test(source.slice(i, i + 8)) && (source[i] === 'r' || source[i] === 'b')) {
       const open = /^b?r(#*)"/.exec(source.slice(i, i + 8));
       const close = `"${open[1]}`;

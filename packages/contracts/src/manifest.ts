@@ -75,7 +75,9 @@ function checkEnvironments(environments: unknown, field = 'environments'): Contr
  * type each of its events is held to.
  */
 const SECRET_NAME = /^[a-z][a-z0-9_]*$/;
-const VARIANTS = ['stream', 'polled', 'mcp'];
+const VARIANTS = ['stream', 'polled', 'mcp', 'library'];
+/** A library source's host (#1731), which the install shows and grants: a name or address, and a port. */
+const LIBRARY_HOST = /^[a-z0-9.-]+(:\d{1,5})?$/;
 const READINGS = ['work.item@1', 'work.item@2', 'push.record@1'];
 function checkSecrets(secrets: unknown): ContractIssue[] {
   if (!Array.isArray(secrets)) return [issue('type', '/secrets', secrets)];
@@ -91,9 +93,11 @@ function checkSecrets(secrets: unknown): ContractIssue[] {
 function checkSources(sources: unknown, plugin: string): ContractIssue[] {
   if (!Array.isArray(sources)) return [issue('type', '/sources', sources)];
   return sources.flatMap((s, i): ContractIssue[] => {
-    const { name, variant, reading, ...rest } = (typeof s === 'object' && s !== null ? s : {}) as Record<string, unknown>;
+    const { name, variant, reading, host, ...rest } = (typeof s === 'object' && s !== null ? s : {}) as Record<string, unknown>;
     if (typeof s !== 'object' || s === null || Object.keys(rest).length) return [issue('type', `/sources/${i}`, s)];
     return [
+      // A library source (#1731) names its one host, and only a library source names one here.
+      ...(variant === 'library' ? (typeof host === 'string' && LIBRARY_HOST.test(host) ? [] : [issue('required', `/sources/${i}/host`, host)]) : host === undefined ? [] : [issue('type', `/sources/${i}/host`, host)]),
       ...(typeof name === 'string' && own(name, plugin, false) ? [] : [issue('pattern', `/sources/${i}/name`, name)]),
       ...(VARIANTS.includes(variant as string) ? [] : [issue('enum', `/sources/${i}/variant`, variant)]),
       ...(reading === undefined || (variant === 'stream' && READINGS.includes(reading as string)) ? [] : [issue('enum', `/sources/${i}/reading`, reading)]),

@@ -5,14 +5,14 @@
 // Each runs a real package through a real host and record; the provider is an HTTP client the test answers.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { openAsks } from '@deepbuild/asks';
 import { openRecord, type Event, type RecordStore } from '@deepbuild/record';
 import { openSupervisor } from '@deepbuild/supervisor';
-import { keychainStore, openExtensionHost, openTrust, packageDigest, type ExtensionHost, type HttpAnswer, type HttpClient, type HttpRequest, type SecretStore } from '../src/index.js';
+import { keychainStore, openExtensionHost, secretServiceStore, openTrust, packageDigest, type ExtensionHost, type HttpAnswer, type HttpClient, type HttpRequest, type SecretStore } from '../src/index.js';
 
 const dirs: string[] = [];
 const closing: { close(): Promise<void> }[] = [];
@@ -202,6 +202,25 @@ describe('#364 secrets on the trusted path', () => {
       expect(await store.get('deepbuild/deepbuild/market/market_key')).toBeUndefined();
     } finally {
       execFileSync('/usr/bin/security', ['delete-keychain', keychain]);
+    }
+  });
+
+  it.runIf(process.platform === 'linux')('the Secret Service store keeps, reads and deletes a value in the Secret Service', async () => {
+    // The session's own Secret Service, as the hub reaches it: nothing to stand in for it, so none here is BLOCKED.
+    if (!existsSync('/usr/bin/secret-tool') || !process.env.DBUS_SESSION_BUS_ADDRESS) throw Error('BLOCKED: no secret-tool or no session bus, so no Secret Service to keep a value in');
+    const store = secretServiceStore();
+    const key = `deepbuild/deepbuild/market/market_key_${process.pid}`;
+    try {
+      const value = `${KEY} "quoted" and \\ spaced`;
+      expect(await store.get(key)).toBeUndefined();
+      await store.set(key, value);
+      expect(await store.get(key)).toBe(value);
+      await store.set(key, KEY);
+      expect(await store.get(key), 'set again replaces it').toBe(KEY);
+      await store.delete(key);
+      expect(await store.get(key)).toBeUndefined();
+    } finally {
+      await store.delete(key);
     }
   });
 

@@ -1,7 +1,7 @@
 // A worktree's stack (#331, #332): `deep env up` and `down`, deep_env, and the stack a check run needs, through
 // env-local, every process through the host. The per-session keys a stack leases through the kernel's table stay
 // with the session that leased them and end once every process recorded for the run is gone; a stack goes down with
-// the session whose keys it holds, and with the hub.
+// the session that started it or whose keys it holds, once that session ends (#342), and with the hub.
 import { execFile } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
@@ -16,10 +16,10 @@ import { refusal, Refused, type Plant } from './wire.js';
 type Obj = Record<string, unknown>;
 type Rows = (query: string, params?: readonly (string | number | bigint | null)[]) => Promise<unknown[]>;
 /** Where a refusal points for the caller's surface, and what starts a stack there. */
-export interface At { path: string; remedy: string }
+interface At { path: string; remedy: string }
 
 /** The runtime stack lifecycle supplied by the composition root; stack policy never selects a concrete provider. */
-export interface StackEnvironment {
+interface StackEnvironment {
   newRun(at: number): string;
   up(options: Parameters<typeof upStack>[1]): Promise<Up>;
   down(run: string): Promise<void>;
@@ -31,7 +31,7 @@ export interface StackEnvironment {
   keys(folder: string): Promise<Keys>;
 }
 
-export interface StacksOptions {
+interface StacksOptions {
   raw: Rows;
   now: () => number;
   plant: Plant | undefined;
@@ -43,14 +43,14 @@ export interface StacksOptions {
   environment: StackEnvironment;
   leases: () => LeaseTable;
   stopping: () => boolean;
-  /** An agent session's process: whether it ended, its PID and the start time it had. */
-  session(id: string): { ended?: boolean; pid: number; start: string } | undefined;
-  /** A process's start time now, undefined when it can't be read. */
-  startOf(pid: number): Promise<string | undefined>;
+  /** An agent session: whether it ended, and whether a kill or a crash did that, which leaves it interrupted (#342). */
+  session(id: string): { ended?: boolean; interrupted?: boolean } | undefined;
   /** Whether a claim in the worktree still has a journey to run or running (#580). */
   pending(worktree: string): boolean;
   /** Whether the session is idle: no turn of it is running. */
   idle(session: string): boolean;
+  /** The planted pool's question: which stack to stop. */
+  plantedAsk(session: string, question: string): Promise<void>;
 }
 
 /** What a check needs of its stack (#580): whose worktree it is, and what the run is on. */
@@ -63,7 +63,8 @@ const median = (list: number[]): number => [...list].sort((a, b) => a - b)[Math.
 const owned = (holder: string): string => (holder === 'core' ? 'your own terminal\'s deep env up' : `session ${holder.slice('mcp:'.length)}`);
 /** The PIDs that listen on the TCP port, as lsof shows them; a failed lsof rejects, since it proves nothing. */
 const listening = (port: number): Promise<number[]> => new Promise((done, fail) => {
-  execFile('/usr/sbin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
+  // Where the system keeps it: Debian and Ubuntu have no /usr/sbin/lsof.
+  execFile(process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
     // lsof exits 1 with no output when nothing listens.
     if (error && !((error as { code?: unknown }).code === 1 && stdout.trim() === '' && stderr.trim() === '')) return fail(Error(`lsof can't list port ${port}'s listeners: ${stderr.trim() || error.message}`));
     done([...new Set(String(stdout ?? '').split('\n').filter((l) => l.startsWith('p')).map((l) => Number(l.slice(1))))]);
@@ -81,6 +82,8 @@ export class Stacks {
   private readonly taken = new Map<string, string[]>();
   /** Who leased each stack run's per-session keys: its session's deep mcp, or the core. */
   private readonly owners = new Map<string, string>();
+  /** The session each stack run was started for through `deep env up` or deep_env (#342): it reaps the stack at its end, whoever else uses it. */
+  private readonly starters = new Map<string, string>();
   /** Each worktree's stack run while it waits for its health route, so a down can end it rather than wait. */
   private readonly rising = new Map<string, string>();
 
@@ -137,7 +140,11 @@ export class Stacks {
       if (got.status === 'granted') return got.lease.id;
       if (got.status === 'BLOCKED') return { cause: got.message };
       const victim = this.reclaimable();
-      if (victim) { await this.tear(victim); continue; }
+      if (victim) {
+        if (this.o.plant === 'pool-asks-which-stack') await this.o.plantedAsk(victim.session, `The stack pool is full. Which stack should stop, ${victim.worktree}'s?`);
+        await this.tear(victim);
+        continue;
+      }
       if (!told) {
         told = true;
         const wait_ms = this.waitMs();
@@ -247,7 +254,7 @@ export class Stacks {
   }
 
   /** Sessions retained by the core until their stack's keys have been released. */
-  holders(): ReadonlySet<string> { return new Set(this.owners.values()); }
+  holders(): ReadonlySet<string> { return new Set([...this.owners.values(), ...this.starters.values()]); }
 
   /** A worktree named by its absolute path, as its real path. */
   worktreeOf(params: Obj): string {
@@ -271,22 +278,28 @@ export class Stacks {
   async down(worktree: string, at: At, caller?: string): Promise<Obj> {
     // A stack still coming up is signalled down now: its up ends BLOCKED, and this down's turn follows it.
     const rising = this.rising.get(worktree);
-    const owner = rising ? await this.ownerOf(rising) : undefined;
+    const owner = rising ? this.ownerOf(rising) : undefined;
     if (rising && caller && owner && owner !== caller) throw (new Refused(refusal('role', at.path, `The stack coming up in ${worktree} runs on keys ${owned(owner!)} leased, so only they, or you from your own terminal, take it down.`, worktree)));
     if (rising) void this.o.environment.down(rising);
     return this.inTurn(worktree, () => this.downIn(worktree, at, rising, caller));
   }
 
-  /** A session that ended takes the stacks its keys back down with it, so no key outlives its session (#332). */
+  /** A session that ended takes the stacks it started or its keys back down with it, volumes and all, so nothing outlives it (#332, #342). */
   endFor(session: string): void {
+    if (this.o.plant === 'reap-session-volumes') void this.reapCommands(session);
     for (const w of [...this.warm.values()]) {
       if (w.session !== session) continue;
       if (w.running) w.ending = true;
       else void this.tear(w);
     }
     for (const [worktree, stack] of this.stacks) {
-      if (this.owners.get(stack.run) === `mcp:${session}`) void this.down(worktree, { path: '/params/worktree', remedy: 'deep env up' }).catch(() => undefined);
+      if (this.owners.get(stack.run) === `mcp:${session}` || this.starters.get(stack.run) === `mcp:${session}`) void this.down(worktree, { path: '/params/worktree', remedy: 'deep env up' }).catch(() => undefined);
     }
+  }
+  /** The planted reaper: every volume the session's own commands made, which no record proves the supervisor started. */
+  private async reapCommands(session: string): Promise<void> {
+    const rows = await this.o.raw(`SELECT json_extract(data, '$.command') AS command FROM events WHERE kind = 'tool.before' AND session_id = ?`, [session]) as { command: string | null }[];
+    for (const { command } of rows) for (const [, volume] of (command ?? '').matchAll(/docker volume create (\S+)/g)) execFile('docker', ['volume', 'rm', '-f', volume!], () => undefined);
   }
 
   /**
@@ -311,6 +324,7 @@ export class Stacks {
       return await this.o.supervisor().cleanup(run);
     } finally {
       this.runs.delete(run);
+      this.starters.delete(run);
       await this.giveBack(run).catch(() => undefined);
     }
   }
@@ -363,8 +377,8 @@ export class Stacks {
       // A worktree's stack whose process ended on its own is cleaned up first, which records its ends and gives its keys back.
       for (const [worktree, stack] of [...this.stacks]) {
         if (!this.taken.has(stack.run)) continue;
-        // A stack whose session is gone without a SessionEnd goes down with it, so its keys don't outlive it.
-        if (this.owners.has(stack.run) && (await this.ownerOf(stack.run)) === undefined) {
+        // A stack whose session ended without taking it down goes now, so its keys don't outlive it.
+        if (this.owners.has(stack.run) && this.ownerOf(stack.run) === undefined) {
           if (this.stacks.get(worktree) === stack) this.stacks.delete(worktree);
           await this.takeDown(stack.run).catch(() => undefined);
           continue;
@@ -398,17 +412,17 @@ export class Stacks {
     return (await this.o.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = ?`, [run]) as { pid: number }[]).map((r) => r.pid);
   }
   /**
-   * Who a stack run's per-session keys stay with: its owner, unless that is a session that has ended, which owns
-   * nothing; one that ended without a SessionEnd (its agent killed) is ended once its agent's process is gone. A start
-   * that can't be read (ps failing under load) proves nothing, so the session keeps its stack while its process runs.
+   * Whether a holder is a session that has ended. A session ends by its SessionEnd, Archive or your Remove; one a signal,
+   * a crash or a shutdown ended is interrupted, can be resumed, and keeps what it holds until it ends (#342).
    */
-  private async ownerOf(run: string): Promise<string | undefined> {
+  private over(holder: string | undefined): boolean {
+    const session = holder?.startsWith('mcp:') ? this.o.session(holder.slice('mcp:'.length)) : undefined;
+    return session?.ended === true && !session.interrupted;
+  }
+  /** Who a stack run's per-session keys stay with: its owner, unless that is a session that has ended, which owns nothing. */
+  private ownerOf(run: string): string | undefined {
     const owner = this.owners.get(run);
-    const session = owner?.startsWith('mcp:') ? this.o.session(owner.slice('mcp:'.length)) : undefined;
-    if (!session) return owner;
-    if (session.ended) return undefined;
-    const start = await this.o.startOf(session.pid);
-    return (start === undefined ? alive(session.pid) : start === session.start) ? owner : undefined;
+    return this.over(owner) ? undefined : owner;
   }
   /** Values env-local loaded into a stack: scrubbed by value from hook text and evidence from now on (#332). */
   private scrubValues(values: string[]): void {
@@ -427,7 +441,7 @@ export class Stacks {
     }
     // A stack is reused only while its process runs and its health route still answers 200, and by an agent session
     // only when no other session leased its keys: they stay that session's (#332).
-    const owner = running ? await this.ownerOf(running.run) : undefined;
+    const owner = running ? this.ownerOf(running.run) : undefined;
     if (running && holder && owner && owner !== holder) return { status: 'BLOCKED', worktree, cause: `the stack in ${worktree} runs on leases ${(this.taken.get(running.run) ?? []).join(', ')} held by ${owned(owner)}, so it stays theirs; their deep env down, or yours from your own terminal, ends it` };
     // A stack whose keys an ended session leased starts again under its new holder, so no key outlives its session's use.
     const orphaned = running !== undefined && this.owners.has(running.run) && owner === undefined && this.owners.get(running.run) !== (holder ?? 'core');
@@ -442,6 +456,7 @@ export class Stacks {
     if (this.o.stopping()) return { status: 'BLOCKED', worktree, cause: 'the hub is stopping' };
     const run = this.o.environment.newRun(this.o.now());
     this.runs.add(run);
+    if (holder) this.starters.set(run, holder);
     this.rising.set(worktree, run);
     const up = await this.o.environment.up({ run, folder: worktree, sharedProject: this.o.plant === 'compose-default-project', byValue: this.o.plant === 'env-loads-by-value', take: this.take(holder ?? 'core', run), scrub: (v) => this.scrubValues(v), ...(holder ? { holder } : {}) })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
@@ -452,10 +467,9 @@ export class Stacks {
       return { status: 'BLOCKED', worktree, cause: up.cause };
     }
     // A session that ended while its stack came up leaves no key behind: the stack goes down with it.
-    const ended = this.owners.get(run);
-    if (ended && (await this.ownerOf(run)) === undefined) {
+    if (holder && this.over(holder)) {
       await this.takeDown(run).catch(() => undefined);
-      return { status: 'BLOCKED', worktree, cause: `${owned(ended)} ended while its stack came up` };
+      return { status: 'BLOCKED', worktree, cause: `${owned(holder)} ended while its stack came up` };
     }
     const unrecorded = await this.cloned(run, up.stack).then(() => undefined, (error: Error) => error.message);
     if (unrecorded) {
@@ -475,7 +489,7 @@ export class Stacks {
     // The up it interrupted took its own stack down and cleaned it up.
     if (!stack && interrupted) return { run: interrupted, stopped: [], left: [] };
     if (!stack) throw new Refused(refusal('not_found', at.path, `No stack runs for ${worktree}; start one with ${at.remedy}.`, worktree));
-    const owner = await this.ownerOf(stack.run);
+    const owner = this.ownerOf(stack.run);
     if (caller && owner && owner !== caller) throw new Refused(refusal('role', at.path, `The stack in ${worktree} runs on keys ${owned(owner)} leased, so only they, or you from your own terminal, take it down.`, worktree));
     const ports = Object.values(stack.ports);
     const before = (await this.recorded(stack.run)).filter(alive);

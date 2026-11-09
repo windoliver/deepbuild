@@ -39,8 +39,6 @@ dependencies = [
 [[package]]
 name = "accesskit_macos"
 version = "0.26.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce02dc63b43f0c9296af9ac946312a2dc8814427d7a64d2d600971dac55b6076"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -1977,13 +1975,16 @@ dependencies = [
  "deep-app",
  "deep-canvas-cells",
  "deep-canvas-marks",
+ "deep-effects-render",
  "deep-gpu",
  "deep-marks-gpui",
  "deep-text-gpui",
+ "ed25519-dalek",
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-shell",
  "image",
+ "libc",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
@@ -2022,6 +2023,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-drawn"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-canvas-effects"
 version = "0.0.0"
 dependencies = [
@@ -2034,6 +2043,15 @@ name = "deep-canvas-graph"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "serde_json",
+]
+
+[[package]]
+name = "deep-canvas-input"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-motion",
  "serde_json",
 ]
 
@@ -2051,6 +2069,7 @@ name = "deep-canvas-marks"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-drawn",
  "deep-text",
  "serde_json",
  "sha2 0.10.9",
@@ -2063,6 +2082,7 @@ name = "deep-canvas-motion"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-marks",
  "serde_json",
 ]
 
@@ -2090,6 +2110,7 @@ name = "deep-canvas-scene3d"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-drawn",
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-text",
@@ -2186,8 +2207,10 @@ dependencies = [
  "bytemuck",
  "deep-app",
  "deep-canvas",
+ "deep-canvas-drawn",
  "deep-canvas-effects",
  "deep-canvas-graph",
+ "deep-canvas-input",
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-canvas-record",
@@ -2209,6 +2232,7 @@ dependencies = [
  "image",
  "libc",
  "meshopt",
+ "naga 30.0.1",
  "serde_json",
  "sha2 0.11.1",
  "wgpu 30.0.1",
@@ -2220,6 +2244,34 @@ name = "deep-hook"
 version = "0.0.0"
 dependencies = [
  "deep-contracts",
+ "ring",
+ "rustls",
+]
+
+[[package]]
+name = "deep-input"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-input",
+ "serde_json",
+]
+
+[[package]]
+name = "deep-logic"
+version = "0.0.0"
+dependencies = [
+ "addr2line 0.26.1",
+ "base64 0.22.1",
+ "deep-canvas",
+ "deep-canvas-sandbox",
+ "deep-sandbox-wasmtime",
+ "gimli 0.33.0",
+ "libc",
+ "serde_json",
+ "sha2 0.10.9",
+ "wasmparser 0.258.3",
+ "wasmtime",
+ "wat",
 ]
 
 [[package]]
@@ -2333,8 +2385,10 @@ version = "0.0.0"
 dependencies = [
  "bytemuck",
  "deep-canvas-effects",
+ "deep-canvas-marks",
  "deep-canvas-scene3d",
  "deep-gpu",
+ "naga 30.0.1",
  "serde_json",
  "wgpu 30.0.1",
  "wgpu-profiler",
@@ -2348,6 +2402,7 @@ dependencies = [
  "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-graph",
+ "deep-canvas-input",
  "deep-canvas-loop",
  "deep-canvas-marks",
  "deep-canvas-motion",
@@ -2370,9 +2425,11 @@ dependencies = [
  "deep-text-gpui",
  "gpui-kit",
  "gpui-pre-apple",
+ "gpui-pre-macos",
  "image",
  "libc",
  "objc2 0.6.5",
+ "objc2-foundation 0.3.2",
  "raw-window-handle",
  "serde_json",
  "sha2 0.10.9",
@@ -2400,6 +2457,7 @@ dependencies = [
 name = "deep-text-gpui"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas-marks",
  "deep-text",
  "gpui-kit",
 ]
@@ -4028,6 +4086,7 @@ dependencies = [
  "gpui-pre-util",
  "hdrhistogram",
  "heapless",
+ "icu_segmenter",
  "image",
  "inventory",
  "itertools 0.14.0",
@@ -4220,8 +4279,6 @@ dependencies = [
 [[package]]
 name = "gpui-pre-macos"
 version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7c988b7e49775cc8542dbe48d5a10e073d8e898a023ef3ff3d24f33363e9863"
 dependencies = [
  "accesskit",
  "accesskit_macos",

@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
@@ -115,6 +115,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
     if (build) writeFileSync(counted, '');
     const argv = build ? [build.run, follow ? build.library : '-', ...command] : command;
     const env = build ? { ...process.env, DEEP_COUNT_LOG: counted } : process.env;
+    const loadStart = loadavg()[0];
     const started = performance.now();
     // A captured run leads its own process group: spawnSync stops only /usr/bin/time at the timeout or
     // maxBuffer, so the group is stopped with it, or the measured command and its children run on (#1322).
@@ -122,6 +123,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
       ? { cwd, env, stdio: ['ignore', 'inherit', 'inherit'] }
       : { cwd, env, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024, detached: true });
     const elapsedMs = performance.now() - started;
+    const loadEnd = loadavg()[0];
     if (result.error) {
       try {
         if (!stream && result.pid > 0) process.kill(-result.pid, 'SIGKILL');
@@ -134,7 +136,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
     const peakBytes = parsePeakRss(report, process.platform);
     const own = parseInstructions(report, process.platform);
     const { instructions, uncounted } = !follow ? { instructions: own, uncounted: [] } : build && own !== null ? countChildren(readFileSync(counted, 'utf8'), command) : { instructions: null, uncounted: [] };
-    return { elapsedMs, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, status: result.status, output: stream ? '' : result.stdout + result.stderr };
+    return { elapsedMs, loadStart, loadEnd, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, status: result.status, output: stream ? '' : result.stdout + result.stderr };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -186,12 +188,31 @@ export function warm(cwd) {
   for (const [command, ...args] of steps) spawnSync(command, args, { cwd, stdio: 'ignore' });
 }
 
+// A copy of a tree made ready to run in: the checks and benches read git, so it gets its own throwaway repository,
+// committed without the user's hooks or signing. Its origin/main is that commit, as on main itself, so checks that
+// compare with main (repo-rules' size) do the same work on both sides instead of skipping it in the copy. Then its
+// packages and warm builds, kept in CARGO_TARGET_DIR.
+export function prepareCopy(directory) {
+  const run = (command, args, options = {}) => execFileSync(command, args, { cwd: directory, encoding: 'utf8', timeout: 120_000, maxBuffer: 128 * 1024 * 1024, ...options });
+  const git = (...args) => run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=DeepBuild perf', '-c', 'user.email=perf@example.invalid', ...args], { stdio: 'pipe' });
+  git('init', '-q');
+  git('add', '-A');
+  git('commit', '-qm', 'perf copy');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  // target/ links to the kept builds, so ./target/debug binaries stay where the lanes and budgets run
+  // them. It is made after the commit: .gitignore's target/ matches a directory, not a link.
+  symlinkSync(process.env.CARGO_TARGET_DIR, join(directory, 'target'), 'dir');
+  run('npm', ['ci', '--no-audit', '--no-fund']);
+  warm(directory);
+}
+
 // A timing or memory budget counts only on a reference Mac, on mains power, with Low Power Mode
-// off and the thermal state nominal (design: The reference Mac). There are two, and a budget holds
+// off and the thermal state nominal (design: The reference Mac). There are three, and a budget holds
 // on each.
 const references = [
   { name: 'Mac15,7 (M3 Pro, 36 GB)', model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30 },
   { name: 'Mac15,12 (M3, 16 GB)', model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30 },
+  { name: 'Mac17,10 (M5 Max, 64 GB)', model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 64 * 2 ** 30 },
 ];
 const hardware = ['model', 'chip', 'memoryBytes'];
 const conditions = [
@@ -213,7 +234,10 @@ export function fingerprint() {
   };
   const memory = Number(read('sysctl', '-n', 'hw.memsize'));
   const source = read('pmset', '-g', 'ps');
-  const lowPower = read('pmset', '-g')?.match(/^\s*lowpowermode\s+([01])\s*$/m)?.[1];
+  // pmset's lowpowermode line; a Mac whose pmset prints none (a Mac17,10 on macOS 26 prints powermode instead) is
+  // asked through NSProcessInfo.
+  const lowPower = read('pmset', '-g')?.match(/^\s*lowpowermode\s+([01])\s*$/m)?.[1]
+    ?? { true: '1', false: '0' }[read('osascript', '-l', 'JavaScript', '-e', 'ObjC.import("Foundation"); $.NSProcessInfo.processInfo.isLowPowerModeEnabled')];
   // NSProcessInfo's thermalState: 0 nominal, 1 fair, 2 serious, 3 critical.
   const thermal = read('osascript', '-l', 'JavaScript', '-e', 'ObjC.import("Foundation"); $.NSProcessInfo.processInfo.thermalState');
   return {
@@ -230,15 +254,21 @@ export function fingerprint() {
 // Judges one limit on five runs taken after warm-up. On a reference Mac it passes when all five
 // are within the limit and fails when all five are over it by more than the margin, the larger of
 // 5% and the five runs' spread, both as fractions of the limit. Anything else, and every result off
-// the reference Macs, is INCONCLUSIVE with the five runs attached.
-export function judgeLimit({ limit, runs, fingerprint: machine }) {
+// the reference Macs, is INCONCLUSIVE with the five runs attached. So is any run whose one-minute load average, read
+// at its start or its end, is above the core count or can't be read: a loaded run counts neither way (design: How we
+// know version 0 works). loads is one { start, end } per run.
+export function judgeLimit({ limit, runs, fingerprint: machine, loads }) {
   if (!Array.isArray(runs) || runs.length !== 5 || runs.some((run) => !Number.isFinite(run) || run < 0))
     return { status: 'BLOCKED', limit, runs, reason: `a limit is judged on five readings taken after warm-up, got ${JSON.stringify(runs)}` };
   const margin = Math.max(0.05, (Math.max(...runs) - Math.min(...runs)) / limit);
   const off = references.some((reference) => hardware.every((key) => machine?.[key] === reference[key])) ? []
-    : [`${hardware.map((key) => `${key} is ${JSON.stringify(machine?.[key] ?? null)}`).join(', ')}: neither ${referenceNames}`];
+    : [`${hardware.map((key) => `${key} is ${JSON.stringify(machine?.[key] ?? null)}`).join(', ')}: none of ${referenceNames}`];
   off.push(...conditions.filter(([key, value]) => machine?.[key] !== value).map(([key, value, label]) => `${label} is ${JSON.stringify(machine?.[key] ?? null)}, not ${JSON.stringify(value)}`));
   if (!machine?.macosBuild) off.push('the macOS build is missing');
+  const cores = availableParallelism();
+  const readings = Array.isArray(loads) && loads.length === runs.length ? loads.flatMap((load) => [load?.start, load?.end]) : null;
+  if (!readings || readings.some((load) => !Number.isFinite(load) || load < 0)) off.push(`the load at each run's start and end can't be read: ${JSON.stringify(loads ?? null)}`);
+  else if (readings.some((load) => load > cores)) off.push(`load ${Math.max(...readings)} at a run's start or end is above the ${cores} cores`);
   if (off.length) return { status: 'INCONCLUSIVE', limit, runs, margin, reason: `a reading, not a budget result: off the reference Macs (${referenceNames}; mains power, Low Power Mode off, thermal state nominal): ${off.join('; ')}` };
   if (runs.every((run) => run <= limit)) return { status: 'PASS', limit, runs, margin };
   if (runs.every((run) => run > limit * (1 + margin))) return { status: 'FAIL', limit, runs, margin, reason: `all five runs are over ${limit} by more than the ${(margin * 100).toFixed(1)}% margin` };
@@ -268,12 +298,51 @@ export function validateBudgets(current, base) {
 
 // p95 has only absolute caps: between identical binaries on a shared machine, the tail of 20
 // interleaved samples still moves past a 50% margin in a few runs out of a hundred, and p50 does not.
+// time prints user and system CPU seconds each truncated to 10 ms, so a short run reads 0 CPU, and any
+// reading may be up to 20 ms short: the base's counts as up to that much more (#1421).
 export function compare(budget, current, base, keys = metrics) {
+  const missing = (reading, metric) => !Number.isFinite(reading) || reading < 0 || (reading === 0 && metric !== 'cpuMs');
   for (const metric of keys) {
-    if (!Number.isFinite(current[metric]) || current[metric] <= 0) throw Error(`${budget.id}: missing ${metric}`);
+    if (missing(current[metric], metric)) throw Error(`${budget.id}: missing ${metric}`);
     if (budget.limits[metric] !== undefined && current[metric] >= budget.limits[metric]) throw Error(`${budget.id}: ${metric} ${current[metric]} reached cap ${budget.limits[metric]}`);
-    if (base && (!Number.isFinite(base[metric]) || base[metric] <= 0)) throw Error(`${budget.id}: missing base ${metric}`);
-    if (base && metric !== 'p95Ms' && current[metric] > base[metric] * (1 + budget.margin)) throw Error(`${budget.id}: ${metric} ${current[metric]} regressed beyond base ${base[metric]} + ${budget.margin * 100}%`);
+    if (base && missing(base[metric], metric)) throw Error(`${budget.id}: missing base ${metric}`);
+    if (base && metric !== 'p95Ms' && current[metric] > (base[metric] + (metric === 'cpuMs' ? 20 : 0)) * (1 + budget.margin)) throw Error(`${budget.id}: ${metric} ${current[metric]} regressed beyond base ${base[metric]} + ${budget.margin * 100}%${metric === 'cpuMs' ? ", allowing 20 ms for time's truncation" : ''}`);
   }
   return base ? { status: 'PASS' } : { status: 'INITIAL', reason: budget.initialReason };
+}
+
+// One task judged against its merge base, as perf and the budget window judge it: 20 alternated rounds a side, its
+// limits on five runs after one untimed warm-up run, instructions retired where both sides ran, and the merge-base
+// regression, whose message is `regression`. A command that won't run throws.
+export function judgeTask(budget, established, cwd, baseCwd) {
+  const [now, then = null] = measure(budget.command, cwd, established && { command: established.command, cwd: baseCwd });
+  const once = () => {
+    const result = measureOnce(budget.command, cwd, false, undefined, false);
+    if (result.status !== 0) throw Error(`${budget.command[0]} exited ${result.status}: ${result.output}`);
+    return result;
+  };
+  const runs = Object.keys(budget.limits).length ? (once(), Array.from({ length: 5 }, once)) : [];
+  const machine = fingerprint();
+  const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine, loads: runs.map(({ loadStart, loadEnd }) => ({ start: loadStart, end: loadEnd })) })]));
+  // Instructions retired don't move with load, so this comparison holds on any machine; it never
+  // changes a limit's verdict.
+  const instructions = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })), [...new Set([...now.uncounted, ...then.uncounted])]);
+  let outcome, regression = null;
+  try {
+    // compare holds only the merge-base regression here; the limits are judged above.
+    outcome = compare({ ...budget, limits: {} }, now, then);
+  } catch (error) {
+    regression = error.message;
+  }
+  return { now, then, machine, limits, instructions, outcome, regression };
+}
+
+// A task's report is its command's last stdout line; `<bench> judge` reads it on stdin and prints its verdict.
+export function judgeTargets(budget, cwd) {
+  const last = (out) => JSON.parse(out.trim().split('\n').at(-1));
+  const ran = spawnSync(budget.command[0], budget.command.slice(1), { cwd, encoding: 'utf8', timeout: 3_600_000, maxBuffer: 512 * 1024 * 1024 });
+  if (ran.status !== 0) return { status: 'BLOCKED', reason: `${budget.command.join(' ')} exited ${ran.status}: ${ran.stderr.slice(-1000)}` };
+  const judged = spawnSync(budget.command[0], [budget.command[1], 'judge'], { cwd, encoding: 'utf8', input: JSON.stringify({ current: last(ran.stdout), base: null }) });
+  if (judged.status !== 0) return { status: 'BLOCKED', reason: `the judge exited ${judged.status}: ${judged.stderr.slice(-1000)}` };
+  return last(judged.stdout);
 }

@@ -84,7 +84,7 @@ x11 = ["scap?/x11"]
 name = "gpui"
 path = "src/gpui.rs"
 
-# DeepBuild patch: upstream's examples, docs and tests are not vendored; only the library is built.
+# DeepBuild patch (windoliver/deepbuild#390): upstream's examples, docs and tests are not vendored.
 
 [dependencies.accesskit]
 version = "0.24.0"
@@ -173,6 +173,12 @@ version = "0.9.2"
 [dependencies.http_client]
 version = "=0.3.9"
 package = "gpui-pre-http-client"
+
+# DeepBuild patch (windoliver/deepbuild#1550): chrome's wrapper breaks lines by UAX #14 at 17.0, as deep-text does.
+[dependencies.icu_segmenter]
+version = "2.3"
+features = ["compiled_data", "unstable"]
+default-features = false
 
 [dependencies.image]
 version = "0.25.1"
@@ -479,11 +485,9 @@ priority = -1
 level = "allow"
 priority = 0
 
-# DeepBuild patch (windoliver/deepbuild#390): a path dependency shows rustc's warnings, which the
-# registry build hid; the snapshot's one deprecation (profiler/journal.rs) is upstream's to fix.
+# DeepBuild patch (windoliver/deepbuild#390): the snapshot's one deprecation is upstream's to fix.
 [lints.rust]
 deprecated = "allow"
 
-# DeepBuild patch: its own workspace, as `cargo vendor` leaves a crate, so the repository's
-# workspace never takes it as a member.
+# DeepBuild patch (windoliver/deepbuild#390): its own workspace, so ours never takes it as a member.
 [workspace]

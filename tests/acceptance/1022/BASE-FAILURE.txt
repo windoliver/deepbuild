@@ -1,0 +1,34 @@
+Base commit: da22dbe4 (Merge pull request #1682 from windoliver/worktree-github-issue-308-81d00f)
+Command (Node v24.22.0 first on PATH; packages/cli/dist and target/debug/deep-hook built at the base):
+  NO_COLOR=1 npx vitest run tests/acceptance/1022 --no-file-parallelism --testTimeout=600000
+Date: 2026-11-08  vitest 5.0.5  darwin-arm64, 12 cores, load average 41-49 (the machine shared with other sessions)
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1022/tsconfig.json exits 0 at the base.
+
+Result: Test Files 3 failed (3), Tests 3 failed (3), 194 s. Each fails at its own assertion, for the reason its
+criterion names. Trimmed to the assertion lines.
+
+Earlier runs on this machine at load 75-125 (not kept as the base result): deep-hook dropped hooks it could neither hand
+to the hub in 20 ms nor spool in 50 ms, so records were missing hooks. The suite now delivers each hook until the record
+shows it (helpers.ts `deliver`), and a hook it can't get through in 5 tries fails the test as INCONCLUSIVE, never as a
+verdict (README: Load).
+
+== compact.test.ts (AC1): 1 failed, 64 s
+The /compact as recorded (PreCompact once) records one PreCompact and one PostCompact reading at the base; with its
+PreCompact hook reaching DeepBuild twice, as the 0.160.0 record's order shows, it records two:
+x AC1 #1022.616badd8 a /compact records exactly one PreCompact reading and one PostCompact reading, however often its PreCompact hook reaches DeepBuild
+  AssertionError: PreCompact fired twice: 2 PreCompact readings for one /compact (want exactly 1): log 13 session.reading {"reading":"PreCompact: the context compacts (manual)"} | log 15 session.reading {"reading":"PreCompact: the context compacts (manual)"}
+
+== slash.test.ts (AC2): 1 failed, 93 s
+x AC2 #1022.afb0a4f3 /compact records no user.ask; fired as UserPromptSubmit it is a reading naming /compact that opens no ask and bounds no turn
+  AssertionError: no UserPromptSubmit: a user.ask for the command, which is no prompt you typed: log 12 user.ask {"msg":1,"text":"","tasks":[],"from":"unknown"}
+  UserPromptSubmit "/compact": no reading naming /compact was recorded for it
+  UserPromptSubmit "/compact": a user.ask for the command, which is no prompt you typed: log 13 user.ask {"msg":1,"text":"/compact","tasks":["session:01a1bc87b5e17a72898f298164191be8#1"],"from":"person"}
+  UserPromptSubmit "/compact" opened an ask: log 12 task.created {"task_ref":"session:01a1bc87b5e17a72898f298164191be8#1","thread":"01a1bc87-b5e1-7a72-898f-298164191be8","owner":"you","title":"/compact"}
+  UserPromptSubmit "/compact" began a turn: log 14 session.state {"state":"working","cause":"working"}
+  UserPromptSubmit "/compact" bounded a turn: the session's row read "finished" after the typed prompt's stop and "working" after /compact
+
+== replay.test.ts (AC3): 1 failed, 28 s
+The recorded payloads, replayed as recorded, give the issue's empty user.ask from unknown; the judge names it by log
+position. (The judge's other branch, two PreCompact readings, is the one AC1's failure above shows, named the same way.)
+x AC3 #1022.77e6168c the recorded /compact run, replayed hook by hook, holds the compaction once: no second PreCompact reading and no user.ask for the command
+  AssertionError: a user.ask for the command, which is no prompt you typed: log 12 user.ask {"msg":1,"text":"","tasks":[],"from":"unknown"}

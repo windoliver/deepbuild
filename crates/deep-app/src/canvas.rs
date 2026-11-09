@@ -77,9 +77,16 @@ pub fn line(id: &str, values: Vec<f64>, color: Hsla) -> Canvas<()> {
 }
 
 fn paint_line(bounds: Bounds<Pixels>, values: &[f64], color: Hsla, window: &mut Window) {
-    if values.len() < 2 {
-        return;
-    }
+    // One value draws flat across the width, as two equal ones do, so a chart with one item isn't an empty box (#1455).
+    let one;
+    let values = match values {
+        [] => return,
+        [value] => {
+            one = [*value, *value];
+            &one[..]
+        }
+        values => values,
+    };
     let low = values.iter().cloned().fold(f64::INFINITY, f64::min);
     let high = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let spread = if high > low { high - low } else { 1.0 };

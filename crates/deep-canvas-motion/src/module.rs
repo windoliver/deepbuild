@@ -258,13 +258,16 @@ fn register_compiling(
     }));
 }
 
-const SECTIONS: [&str; 6] = [
+const SECTIONS: [&str; 8] = [
     "channels",
     "clips",
     "placements",
     "markers",
     "drivers",
     "constraints",
+    // #493: shots write their camera's pose, which a parallax group reads.
+    "shots",
+    "transitions",
 ];
 
 /// A document with any channel, clip, placement, marker, driver or constraint.
@@ -278,6 +281,13 @@ fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
 
 /// An item a document channel or driver targets, a limit constraint holds or a placement binds.
 fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
+    // #493: a parallax group moves with the camera's pose and its drift.
+    if item.get("kind").and_then(Value::as_str) == Some("group@1")
+        && item.pointer("/params/parallax").is_some_and(Value::is_object)
+        && doc.get("camera").is_some()
+    {
+        return true;
+    }
     let prefix = format!("items/{id}/");
     let targets = |section: &str| {
         doc.get(section)
@@ -290,7 +300,10 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
                     .is_some_and(|t| t.starts_with(&prefix))
             })
     };
-    let channel = targets("channels") || targets("drivers") || !keyed_data(doc, item).is_empty();
+    let channel = targets("channels")
+        || targets("drivers")
+        || !keyed_data(doc, item).is_empty()
+        || counter_data(doc, item).is_some();
     let held = doc
         .get("constraints")
         .and_then(Value::as_object)
@@ -317,6 +330,13 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
             _ => false,
         });
     channel || held || bound
+}
+
+/// The data value a counter's driver writes (`data/<name>`), which its text shows at t.
+fn counter_data<'a>(doc: &'a Value, item: &Value) -> Option<&'a str> {
+    let source = item.pointer("/params/text/counter/source")?.as_str()?;
+    let target = doc.get("drivers")?.get(source)?.get("target")?.as_str()?;
+    target.strip_prefix("data/")
 }
 
 /// The data names a text template's slots read (`{data/<name>}`), each once.
@@ -395,9 +415,16 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let mut state = program.state();
     program.evaluate_local(t, Validity::Full, &mut state);
-    let Some((transform, mut fields)) = program.item_values(&state, &id) else {
+    let Some((mut transform, mut fields)) = program.item_values(&state, &id) else {
         return Ok(());
     };
+    // #493: a parallax group's offset (Frame and group: parallax).
+    if let Some(plan) = program.shots.as_deref() {
+        if let Some(o) = plan.parallax(&program, &id, t, v.reduced_motion()?) {
+            transform[0] += o[0];
+            transform[1] += o[1];
+        }
+    }
     // A text whose template reads a keyed data value shows it at t: the value rides on the
     // evaluated item as `params/data/<name>`, which the template reads before the document's.
     let template = v
@@ -411,6 +438,14 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
         if let Some(x) = keyed.and_then(|c| program.channel_value(&state, &c.id)) {
             fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
         }
+    }
+    // A counter on a driver of a data value shows it at t the same way.
+    let source = v.item()?.pointer("/params/text/counter/source").and_then(Value::as_str);
+    let driver = source.and_then(|d| program.motion.drivers.iter().find(|x| x.id == d));
+    let name = driver.and_then(|d| d.target.owner.strip_prefix("data/"));
+    if let Some(field) = name.and_then(|n| program.fields.iter().find(|f| f.data.as_deref() == Some(n))) {
+        let name = field.data.clone().unwrap_or_default();
+        fields.push((vec!["params".into(), "data".into(), name], Datum::Num(state.slots[field.slot])));
     }
     let set = |name: &str, from: usize| Edit {
         add: false,

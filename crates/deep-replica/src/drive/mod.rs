@@ -1,17 +1,22 @@
 //! Issue #124: `deep_drive`, a replica an agent drives. One replica per process, on a fixture, a read-only and
 //! redacted copy of your record, or nothing, at a size, scale and theme, on a virtual clock. The agent locates by
 //! role and name, a canvas item, a handle, drawn text or a control's label, strictly; acts with waits until its
-//! target is visible, enabled and still for two frames; sees text snapshots and screenshots by hash; records frames
+//! target is visible, enabled and still for two frames, and refuses a pointer action that something in front of the
+//! target would get, as `probe` tells without acting; sees text snapshots and screenshots by hash; records frames
 //! at 30 fps with the locators it names masked in every frame and an actions list; and asserts. Only assertions
-//! make the run a journey check: `close` answers the journey a check's runner takes, and the trace.
+//! make the run a journey check: `close` answers the journey a check's runner takes, and the trace. `ui_check`
+//! (see `check`) renders the views a change touches and audits each.
 //!
 //! Nothing a replica does reaches your Mac or your record: it runs on GPUI's test platform, whose clipboard,
 //! windows, focus and activation are its own; its notifications are kept in its trace; and a copy of your record is
 //! read once, before any input, over a connection closed straight after. `DEEP_DRIVE_PLANT` lifts one guard at a
 //! time, for the checks that must catch it.
 
+mod check;
+mod frames;
 pub mod glyphs;
 mod locate;
+mod motion;
 mod plant;
 
 use std::{
@@ -25,7 +30,7 @@ use std::{
 use deep_app::{
     events::{inbox, Fixture, Row},
     notify::{Notifier, NOTIFY_AFTER},
-    views::{AppState, Kind, Layout},
+    views::{AppState, Kind, Layout, AGENTS, HOME, NEEDS_YOU, SESSION, WELCOME},
 };
 use gpui_kit::{test::TestWindowExt as _, *};
 use image::RgbaImage;
@@ -114,6 +119,8 @@ impl Drive {
                     reply
                 })
             }
+            ("ui_check", None) => check::run(self, &call["ui_check"]),
+            ("motion_check", None) => motion::run(self, &call["motion_check"]),
             (_, None) => Err(fail("refused", "no replica runs here: launch one first")),
             (_, Some(replica)) if call["replica"].as_str().is_some_and(|r| r != replica.id) => {
                 Err(fail(
@@ -157,6 +164,12 @@ struct Recording {
     actions: Vec<Value>,
 }
 
+/// What a device draws over the app, in device pixels; a height of 0 is none. Only the UI check reads them.
+struct Device {
+    bar: [i64; 4],
+    keyboard: [i64; 4],
+}
+
 struct Replica {
     id: String,
     cx: HeadlessAppContext,
@@ -174,6 +187,7 @@ struct Replica {
     hub: Option<(PathBuf, String)>,
     /// The last target acted on with a locator, which keys and words go to.
     focus: Option<Target>,
+    device: Option<Device>,
     pasted: Option<String>,
     shots: u64,
     recordings: u64,
@@ -184,6 +198,13 @@ struct Replica {
     evidence: Vec<Value>,
     trace: Vec<Value>,
     notified: Vec<Value>,
+    /// Issue #1427: the motion recording while one runs, the launch's reduced motion, and the panel's script view,
+    /// whose declared transitions and springs a recording lists.
+    motion: Option<motion::Recorder>,
+    reduced: bool,
+    script: Option<Entity<gpui_shell::ScriptView>>,
+    /// Issue #1546: in `launch.frames: "dirty"`, the frames GPUI drew on request and each step's comparison.
+    dirty: Option<frames::Dirty>,
 }
 
 impl Replica {
@@ -204,8 +225,16 @@ impl Replica {
             }
         };
         let from = word("from", &["fixture", "record_copy", "empty"], "fixture")?;
+        let center = word(
+            "center",
+            &[NEEDS_YOU, HOME, SESSION, WELCOME, AGENTS],
+            NEEDS_YOU,
+        )?;
         let theme = word("theme", &["light", "dark"], "light")?;
         let clock = word("clock", &["virtual", "real"], "virtual")?;
+        // #1546: "every" draws every view each frame; "dirty" only the frames GPUI says the window needs.
+        let frames = word("frames", &["every", "dirty"], "every")?;
+        let dirty = frames == "dirty";
         let scale = match &args["scale"] {
             Value::Null => 2.,
             v if v == 2 => 2.,
@@ -257,6 +286,40 @@ impl Replica {
                 ))
             }
         };
+        // A device's system bar over the window's top edge and on-screen keyboard over its bottom, in device pixels.
+        let device = match &args["device"] {
+            Value::Null => None,
+            Value::Object(fields)
+                if fields.keys().all(|k| k == "system_bar" || k == "keyboard") =>
+            {
+                let points = |key: &str| match &fields.get(key) {
+                    None | Some(Value::Null) => Ok(0),
+                    Some(v) => v.as_u64().filter(|&n| n as f32 <= size.1).ok_or_else(|| {
+                        fail(
+                            "refused",
+                            format!(
+                                "launch.device.{key} is points up to the window's height, not {v}"
+                            ),
+                        )
+                    }),
+                };
+                let (w, h, s) = (size.0 * scale, size.1 * scale, scale);
+                let (bar, keys) = (
+                    points("system_bar")? as f32 * s,
+                    points("keyboard")? as f32 * s,
+                );
+                Some(Device {
+                    bar: [0., 0., w, bar].map(|v| v.round() as i64),
+                    keyboard: [0., h - keys, w, keys].map(|v| v.round() as i64),
+                })
+            }
+            other => {
+                return Err(fail(
+                    "refused",
+                    format!("launch.device is {{system_bar, keyboard}} in points, not {other}"),
+                ))
+            }
+        };
         if let Some(packs) = args["packs"].as_array().filter(|p| !p.is_empty()) {
             return Err(fail(
                 "refused",
@@ -299,9 +362,20 @@ impl Replica {
         let mut hub = None;
         let (events, now, held) = match from.as_str() {
             "fixture" => {
-                let fixture =
-                    Fixture::load(&crate::fixture_path()).map_err(|e| fail("refused", e))?;
-                (fixture.events(), crate::NOW, Some(crate::HELD.to_owned()))
+                let (path, held) = match &args["fixture"] {
+                    Value::Null => (crate::fixture_path(), Some(crate::HELD.to_owned())),
+                    Value::String(path) if Path::new(path).is_absolute() => (path.into(), None),
+                    other => {
+                        return Err(fail(
+                            "refused",
+                            format!(
+                                "launch.fixture is an events file's absolute path, not {other}"
+                            ),
+                        ))
+                    }
+                };
+                let fixture = Fixture::load(&path).map_err(|e| fail("refused", e))?;
+                (fixture.events(), crate::NOW, held)
             }
             "empty" => (Vec::new(), crate::NOW, None),
             _ => {
@@ -354,8 +428,8 @@ impl Replica {
                     .map(|r| renderer_glyphs.renderer(r)))
             },
         );
-        let mounted: Rc<RefCell<Result<Option<Rc<gpui_shell::ShellRuntime>>, String>>> =
-            Rc::new(RefCell::new(Ok(None)));
+        type Mounted = Option<(Rc<gpui_shell::ShellRuntime>, Entity<gpui_shell::ScriptView>)>;
+        let mounted: Rc<RefCell<Result<Mounted, String>>> = Rc::new(RefCell::new(Ok(None)));
         let reduced = args["reduced_motion"].as_bool().unwrap_or(false);
         let window = cx.update(|cx| {
             gpui_kit::init(cx);
@@ -388,13 +462,31 @@ impl Replica {
                     origin: Point::default(),
                     size: gpui_kit::size(px(size.0), px(size.1)),
                 })),
+                // The dirty mode's frames are paced by the replica's clock alone, never by the wall clock's throttle.
+                inactive_frame_interval: if dirty {
+                    None
+                } else {
+                    crate::shell::window_options().inactive_frame_interval
+                },
                 ..crate::shell::window_options()
             };
             // A panel goes in the sidebar's slot, as an installed one would; with none, the shipped sidebar does.
             let layout = Layout {
                 sidebar: deep_app::views::EXTENSION.into(),
+                center: vec![center],
                 ..Layout::shipped("needs-you")
             };
+            // #124's wrong rows exist in an env-plants build only (#1662), as the plant that selects them does.
+            #[cfg(feature = "env-plants")]
+            deep_app::views::plant_row(match plant {
+                Some(Plant::RowLabelPastFrame) => Some(deep_app::views::RowPlant::PastFrame),
+                Some(Plant::RowBranchCutOff) => Some(deep_app::views::RowPlant::CutOff),
+                _ => None,
+            });
+            // #1470's planted menu is served by the panel module, which reads the plant from its environment.
+            if plant == Some(Plant::MenuReleaseAlways) {
+                std::env::set_var("DEEP_HUB_PLANT", "menu-release-always");
+            }
             let into = mounted.clone();
             let (window, shell) =
                 open_shell_with(options, &layout, cx, move |window, cx| match panel {
@@ -404,8 +496,8 @@ impl Replica {
                             runtime.map_err(|e| e.to_string()).and_then(|runtime| {
                                 let view = deep_app::mount_panel(&runtime, &dir, window, cx)
                                     .map_err(|e| e.to_string())?;
-                                deep_app::views::place_extension(view.into());
-                                Ok(Some(runtime))
+                                deep_app::views::place_extension(view.clone().into());
+                                Ok(Some((runtime, view)))
                             });
                     }
                     None => deep_app::views::place_extension(deep_app::views::shipped(
@@ -429,10 +521,11 @@ impl Replica {
             }
             window
         });
-        let runtime = mounted
+        let (runtime, script) = mounted
             .borrow_mut()
             .clone()
-            .map_err(|e| fail("refused", format!("the panel didn't load: {e}")))?;
+            .map_err(|e| fail("refused", format!("the panel didn't load: {e}")))?
+            .unzip();
         // GPUI's test window reports 2x; the window itself lays out and paints at the scale it's set to, and the
         // renderer sizes its images to match.
         glyphs.draw_at(scale);
@@ -459,6 +552,7 @@ impl Replica {
             notifier,
             hub,
             focus: None,
+            device,
             pasted: None,
             shots: 0,
             recordings: 0,
@@ -469,13 +563,22 @@ impl Replica {
             evidence: Vec::new(),
             trace: Vec::new(),
             notified: Vec::new(),
+            motion: None,
+            reduced,
+            script,
+            dirty: None,
         };
         replica.draw();
         replica.draw();
+        if dirty {
+            replica.cx.draw_on_request();
+            replica.dirty = Some(frames::Dirty::new(replica.live_tree()));
+        }
         let reply = json!({
             "replica": replica.id,
             "window": {"size": [size.0 as u32, size.1 as u32], "scale": scale as u32},
             "locale": locale,
+            "frames": frames,
         });
         replica
             .trace
@@ -488,23 +591,29 @@ impl Replica {
         let index = self.steps.len() + 1;
         let acts = name == "act";
         let before = acts.then(|| self.snapshot_file());
+        self.begin_step();
         let result = match name {
             "act" => self.act(call),
+            "feed" => self.feed(call),
+            "resize" => self.resize(call),
             "wait_for" => self.wait_for(call),
             "see" => self.see(call),
+            "probe" => self.probe(call),
             "screenshot" => self.screenshot(&call["screenshot"]),
             "record" => self.record(&call["record"]),
+            "motion" => self.motion(&call["motion"]),
             "expect" => self.expect(call, index),
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, wait_for, see, screenshot, record, expect and close"),
+                format!("{other:?} is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();
         if let Some(fields) = digested.as_object_mut() {
             fields.remove("replica");
         }
+        self.end_step(index, name);
         let id = format!("step {index}: {name}");
         self.steps
             .push(json!({"id": id, "digest": sha256(digested.to_string().as_bytes())}));
@@ -527,9 +636,14 @@ impl Replica {
 
     fn draw(&mut self) {
         let glyphs = self.glyphs.clone();
+        let recording = self.motion.is_some();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
             // A frame redraws every view, so the canvas items it lists are this frame's alone.
             deep_app::canvas::clear_items();
+            // While motion is recorded every view paints each step, cached or not, so each is sampled.
+            if recording {
+                window.refresh();
+            }
             window.render_frame(cx);
             glyphs.keep_scene(window);
         });
@@ -544,19 +658,32 @@ impl Replica {
                 *wall = Instant::now();
                 took
             }
+            None if self.motion.is_some() => motion::STEP,
             None => FRAME,
         };
         let before = nanos(self.clock.t);
         self.clock.t += step;
+        if self.dirty.is_some() {
+            self.move_views_clock();
+        }
         self.cx
             .advance_clock(Duration::from_nanos(nanos(self.clock.t) - before));
         self.cx.run_until_parked();
-        self.draw();
+        if self.motion.is_some() {
+            self.sample();
+        } else if self.dirty.is_some() {
+            self.request();
+        } else {
+            self.draw();
+        }
         self.notify();
         self.take_frames();
     }
 
     fn frame(&mut self) -> Frame {
+        if let Some(dirty) = &self.dirty {
+            return dirty.drawn().1;
+        }
         let glyphs = self.glyphs.clone();
         self.cx
             .update_window(self.window, |_, window, _| Frame::read(window, &glyphs))
@@ -632,9 +759,13 @@ impl Replica {
     }
 
     fn input(&mut self, event: PlatformInput) {
+        // In the dirty mode the window draws what the input changed at its next frame, as a real one does (#1546).
+        let forced = self.dirty.is_none();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
             window.dispatch_event(event, cx);
-            window.render_frame(cx);
+            if forced {
+                window.render_frame(cx);
+            }
         });
     }
 
@@ -666,7 +797,26 @@ impl Replica {
             _ => self.actionable(locator, timeout_ms)?,
         };
         let center = target.center();
+        // A pointer action asks the frame what the event would reach before anything is sent.
+        let pointer = kind != "press" && !locator.is_null();
+        if pointer && self.plant != Some(Plant::NoHitTest) {
+            let receiver = self.receiver(&target, center);
+            if receiver.path != target.path || receiver.text != target.text {
+                return Err(fail(
+                    "refused",
+                    format!(
+                        "{kind} on {locator} would reach {} {} in front of it; nothing was sent",
+                        receiver.role,
+                        receiver.name.as_deref().unwrap_or("with no name"),
+                    ),
+                )
+                .with("covered_by", receiver.summary())
+                .with("point", json!(center))
+                .with("box", json!(target.bounds)));
+            }
+        }
         let when = self.clock.t;
+        self.input_at(when);
         match kind.as_str() {
             "click" | "double_click" => {
                 let count = if kind == "click" { 1 } else { 2 };
@@ -742,6 +892,9 @@ impl Replica {
         if !locator.is_null() {
             self.focus = Some(target.clone());
         }
+        if matches!(kind.as_str(), "type" | "press" | "drag" | "set") {
+            self.input_drew();
+        }
         self.tick();
         self.tick();
         self.after_input(&kind, &target);
@@ -751,7 +904,57 @@ impl Replica {
                 "locator": if locator.is_null() { json!({"focused": target.summary()}) } else { locator.clone() },
             }));
         }
-        Ok(json!({"point": center, "box": target.bounds, "waited_ms": waited * 1000 / FLICKS}))
+        // Delivered is all an action can say: what the target did with it is for an assertion.
+        Ok(
+            json!({"point": center, "box": target.bounds, "waited_ms": waited * 1000 / FLICKS, "result": "delivered"}),
+        )
+    }
+
+    /// What a pointer event at `at` would reach: `target`, or what's in front of it.
+    fn receiver(&mut self, target: &Target, at: [i64; 2]) -> Target {
+        let frame = self.frame();
+        self.cx
+            .update_window(self.window, |_, window, _| {
+                frame.receiver(window, target, at)
+            })
+            .expect("the replica's window is open")
+    }
+
+    /// The system bar, and the keyboard while a text input has focus: each `(audit, role, box)` over the app now.
+    fn insets(&self) -> Vec<(&'static str, &'static str, [i64; 4])> {
+        let Some(device) = &self.device else {
+            return Vec::new();
+        };
+        let typing = self
+            .focus
+            .as_ref()
+            .is_some_and(|t| t.role.ends_with("input"));
+        let mut over = vec![("under_system_bar", "system_bar", device.bar)];
+        if typing {
+            over.push(("under_keyboard", "keyboard", device.keyboard));
+        }
+        over.retain(|(_, _, b)| b[3] > 0);
+        over
+    }
+
+    /// An action's hit test with no action: the point a click would use and what would get it. Nothing is sent and
+    /// no frame passes.
+    fn probe(&mut self, call: &Value) -> Result<Value, Fail> {
+        let locator = &call["locator"];
+        let target = match self.frame().one(locator) {
+            Ok(target) => target,
+            Err(Miss::Bad(why)) => return Err(fail("refused", why)),
+            Err(Miss::None) => {
+                return Err(fail("locate.none", format!("nothing matches {locator}")))
+            }
+            Err(Miss::Ambiguous(all)) => return Err(ambiguous(locator, all)),
+        };
+        let center = target.center();
+        let receiver = self.receiver(&target, center);
+        let clear = receiver.path == target.path && receiver.text == target.text;
+        Ok(
+            json!({"point": center, "box": target.bounds, "receiver": receiver.summary(), "clear": clear}),
+        )
     }
 
     fn click(&mut self, position: Point<Pixels>, count: usize) {
@@ -807,6 +1010,7 @@ impl Replica {
             enabled: true,
             checked: None,
             text: None,
+            path: Vec::new(),
         }
     }
 
@@ -823,8 +1027,8 @@ impl Replica {
                             .is_some_and(|question| name.starts_with(question))
                 });
                 let ask = asked.map(|e| format!("ask:{}", e["id"].as_str().unwrap_or_default()));
-                let option = asked
-                    .and_then(|e| e["data"]["options"][0]["id"].as_str().map(str::to_owned));
+                let option =
+                    asked.and_then(|e| e["data"]["options"][0]["id"].as_str().map(str::to_owned));
                 if let (Some((socket, token)), Some(ask), Some(option)) = (&self.hub, ask, option) {
                     let answered = plant::answer(socket, token, &ask, &option);
                     self.trace.push(json!({"planted": "answers-your-record", "ask": ask, "reply": answered.unwrap_or_else(|e| json!(e))}));
@@ -978,7 +1182,19 @@ impl Replica {
     /// The text snapshot, as #338's: roles, names, values and bounds of every element with a role, the strings drawn
     /// that no element already names, and the canvas items with their values.
     fn tree(&mut self) -> (Value, Frame) {
-        let frame = self.frame();
+        match &self.dirty {
+            Some(dirty) => dirty.drawn(),
+            None => self.live_tree(),
+        }
+    }
+
+    /// The snapshot of what the window holds now.
+    fn live_tree(&mut self) -> (Value, Frame) {
+        let glyphs = self.glyphs.clone();
+        let frame = self
+            .cx
+            .update_window(self.window, |_, window, _| Frame::read(window, &glyphs))
+            .expect("the replica's window is open");
         let snapshot = self
             .cx
             .update_window(self.window, |_, window, _| from_observed(window))
@@ -1239,13 +1455,17 @@ impl Replica {
         let _ = std::fs::write(&path, bytes);
         let mut evidence = self.evidence.clone();
         evidence.push(json!({"slot": "trace", "state": "captured", "sha256": hash}));
-        json!({
+        let mut closed = json!({
             "journey": {
                 "outcome": outcome, "tests_run": self.assertions, "failures": self.failures, "steps": self.steps,
                 "evidence": evidence,
             },
             "trace": {"sha256": hash, "path": path},
-        })
+        });
+        if let Some(dirty) = &self.dirty {
+            closed["frames"] = dirty.report();
+        }
+        closed
     }
 }
 

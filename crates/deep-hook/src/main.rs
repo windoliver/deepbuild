@@ -15,7 +15,7 @@ use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io};
@@ -26,6 +26,7 @@ use deep_hook::matcher;
 
 mod actions;
 mod heavy;
+mod remote;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -40,6 +41,19 @@ const BILLING_KEYS: &[&str] = &[
     "CLAUDE_CODE_USE_VERTEX",
     "OPENAI_API_KEY",
 ];
+
+// A release build refuses the planted programs' feature (#1408).
+#[cfg(all(feature = "env-plants", not(debug_assertions)))]
+compile_error!("the env-plants feature is for test builds only, never a release build");
+
+/// The planted wrong program a test selects with `DEEP_HUB_PLANT`: read only in a build with the `env-plants` feature,
+/// so a shipped hook never bends on it (#1408).
+fn hub_plant() -> Option<String> {
+    #[cfg(feature = "env-plants")]
+    return env::var("DEEP_HUB_PLANT").ok();
+    #[cfg(not(feature = "env-plants"))]
+    None
+}
 
 /// Who is calling: Cursor's CLI and Grok run the hooks in Claude Code's settings file, so a hook installed for Claude
 /// Code may come from either. Each sets variables of its own in its hooks' environment, and a hook that has another
@@ -67,6 +81,22 @@ const FEATURES: &[&str] = if cfg!(feature = "plant-f-test") {
 } else {
     &[]
 };
+
+/// The hub contract this deep-hook speaks, "major.minor": the hub's own is `CONTRACT` in packages/hub/src/wire.ts.
+const CONTRACT: &str = "1.0";
+
+/// Why a hub whose hello names a contract a major apart from this deep-hook's gets nothing (#1334); none when they agree.
+fn contract_mismatch(hub: Option<&Value>) -> Option<String> {
+    let Some(Value::String(theirs)) = hub else {
+        return None;
+    };
+    let major = |c: &str| c.split('.').next().unwrap_or_default().to_string();
+    (major(theirs) != major(CONTRACT)).then(|| {
+        format!(
+            "deep-hook: the hub speaks contract {theirs} and this deep-hook speaks contract {CONTRACT}, a major apart, so nothing was sent to it and its fail_closed guard entries apply. Promote a build whose deep-hook matches the hub's contract (deep hub promote), then start the session again."
+        )
+    })
+}
 
 fn home() -> PathBuf {
     PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".deepbuild")
@@ -559,7 +589,7 @@ fn denials(matched: &[(&Guard, matcher::Hit)], covered: bool) -> Vec<String> {
 
 /// The request's fields for what the matcher read of a call: `,"notes":{...}` for an entry's words, so the hub's
 /// denial says them too, and `,"stage":{...}` for what the hub stages before the call runs: the folders a delete whose
-/// reach can't be worked out names (#347), the paths a discard of tracked edits reaches and the stash a drop names (#1294).
+/// reach can't be worked out names (#347), the paths a delete past its worktree reaches (#1507), the paths a discard of tracked edits reaches and the stash a drop names (#1294).
 fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)]) -> String {
     let notes = matched
         .iter()
@@ -580,6 +610,7 @@ fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)
         let called = called?;
         let paths = match pattern {
             "effect:unknown-reach-delete" => called.stage(),
+            "effect:unrestorable-delete" => called.past(),
             "effect:discard-edits" => called.edits(),
             "effect:drop-stash" => called.stash(),
             _ => None,
@@ -670,6 +701,9 @@ enum Outcome {
     /// The hub isn't there, refused the request or sent what doesn't parse; `late` when it was there but
     /// didn't acknowledge in time or didn't reply by its hold.
     Down { late: bool },
+    /// A hub below the writer generation this machine has seen of it (#1338), or a contract major apart from this
+    /// deep-hook's (#1334): nothing was sent, and nothing spooled.
+    Stale(String),
 }
 
 enum Got {
@@ -679,7 +713,7 @@ enum Got {
 }
 
 /// Reads one line by `deadline`, or with no deadline at all.
-fn read_line(reader: &mut BufReader<UnixStream>, deadline: Option<Instant>) -> Got {
+fn read_line<S: remote::Timed>(reader: &mut BufReader<S>, deadline: Option<Instant>) -> Got {
     // A line already read off the socket is in time, whatever the clock says now.
     if reader.buffer().contains(&b'\n') {
         let mut text = String::new();
@@ -695,7 +729,7 @@ fn read_line(reader: &mut BufReader<UnixStream>, deadline: Option<Instant>) -> G
         },
         None => None,
     };
-    if reader.get_ref().set_read_timeout(left).is_err() {
+    if reader.get_ref().read_timeout(left).is_err() {
         return Got::Closed;
     }
     let mut line = String::new();
@@ -727,14 +761,25 @@ fn exchange(
     id: &str,
     line: impl Fn(&[&str]) -> String,
 ) -> (Option<String>, Outcome, String) {
-    let ack_due = start + ACK_BUDGET;
+    // A joined project's hub (#1338) has the network route's time to acknowledge, short of its fail-open time.
+    let joined = REMOTE.get().and_then(Option::as_ref);
+    let ack_due = start
+        + joined.map_or(ACK_BUDGET, |_| {
+            remote::FAIL_OPEN - Duration::from_millis(30)
+        });
     // Only the planted connect-timeout-only build reads with no deadline.
     let ack_deadline = (!cfg!(feature = "plant-connect-timeout-only")).then_some(ack_due);
     let late = Outcome::Down { late: true };
     let down = Outcome::Down { late: false };
-    let stream = match UnixStream::connect(address()) {
-        Ok(stream) => stream,
-        Err(_) => return (None, down, String::new()),
+    let stream = match joined {
+        Some(joined) => match remote::connect(&home(), joined, ack_due) {
+            Some(stream) => stream,
+            None => return (None, late, String::new()),
+        },
+        None => match UnixStream::connect(address()) {
+            Ok(stream) => remote::Stream::Unix(stream),
+            Err(_) => return (None, down, String::new()),
+        },
     };
     let mut reader = BufReader::new(stream);
     let hello = match read_line(&mut reader, ack_deadline) {
@@ -745,6 +790,21 @@ fn exchange(
     let Ok(hello_value) = parse(hello.trim_end()) else {
         return (None, down, hello);
     };
+    // A hub older than one this machine has seen of it is a copy left behind: nothing goes to it (#1338).
+    let hub = match member(&hello_value, "hub") {
+        Some(Value::String(id)) => id.clone(),
+        _ => format!("unix:{}", address().display()),
+    };
+    if let Some(why) =
+        remote::refused_generation(&home(), &hub, integer(member(&hello_value, "generation")))
+    {
+        return (None, Outcome::Stale(why), hello);
+    }
+    // A hub a contract major apart fails closed with its reason, as a stale one does: nothing is sent or spooled, so
+    // nothing of the session is judged by a hub whose contract it doesn't speak (#1334).
+    if let Some(why) = contract_mismatch(member(&hello_value, "contract")) {
+        return (None, Outcome::Stale(why), hello);
+    }
     let listed = match member(&hello_value, "features") {
         Some(Value::Array(items)) => items.as_slice(),
         _ => &[],
@@ -770,7 +830,11 @@ fn exchange(
     let _ = reader
         .get_ref()
         .set_write_timeout(ack_deadline.map(|_| left.max(Duration::from_millis(1))));
-    if let Err(error) = reader.get_mut().write_all(request.as_bytes()) {
+    let sent = match joined {
+        Some(joined) => remote::hello(joined) + &request,
+        None => request.clone(),
+    };
+    if let Err(error) = reader.get_mut().write_all(sent.as_bytes()) {
         let late = matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut);
         return (Some(request), Outcome::Down { late }, hello);
     }
@@ -853,7 +917,11 @@ fn exchange(
 /// exiting while one of its threads is in one, so a sync run here would hold the hook past its 50 ms even once
 /// spool_by stops waiting for it.
 fn spool(request: &str, written: &mut dyn FnMut()) -> io::Result<()> {
-    let folder = home().join("spool");
+    // A joined project's hub has a spool folder of its own (#1338), which this machine's own hub never replays.
+    let folder = match REMOTE.get().and_then(Option::as_ref) {
+        Some(joined) => remote::spool_folder(&home(), &joined.hub),
+        None => home().join("spool"),
+    };
     let upto = append(&folder, request, &mut || {})?;
     written();
     let synced = Command::new(env::current_exe()?)
@@ -1008,8 +1076,14 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
 /// O_NOFOLLOW, which std doesn't name: opening a symlink fails rather than following it.
 #[cfg(target_os = "macos")]
 const NOFOLLOW: i32 = 0x0100;
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    target_os = "linux",
+    not(any(target_arch = "aarch64", target_arch = "arm"))
+))]
 const NOFOLLOW: i32 = 0o400000;
+// arm64 and arm number it otherwise; 0o400000 there is O_LARGEFILE, which follows the link.
+#[cfg(all(target_os = "linux", any(target_arch = "aarch64", target_arch = "arm")))]
+const NOFOLLOW: i32 = 0o100000;
 
 /// DEEP_HOOK_TEST_SPOOL_STALL in a debug build: spool only this many bytes of the line, then wait to be killed.
 #[cfg(debug_assertions)]
@@ -1103,6 +1177,15 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     // and matched, the watchdog doesn't let it through while a fail_closed entry is installed.
     let ruling = event == "PreToolUse";
     RULING.store(ruling, Ordering::SeqCst);
+    // A panic before the hook decides is decided as the watchdog decides (#1407): Rust's exit 101 blocks nothing.
+    std::panic::set_hook(Box::new(|_| {
+        if !DECIDED.swap(true, Ordering::SeqCst) {
+            unanswered()
+        }
+        loop {
+            std::thread::park();
+        }
+    }));
     watchdog(start);
     let now = wall_clock_ns();
     let seq = now.min(i64::MAX as u128).to_string();
@@ -1133,6 +1216,14 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let parsed = parse(&input).ok();
     if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
         let _ = CWD.set(PathBuf::from(cwd));
+    }
+    // A clone of a project this machine joined reaches that project's hub, and the watchdog waits the route's time.
+    let joined = REMOTE.get_or_init(|| CWD.get().and_then(|cwd| remote::joined(&home(), cwd)));
+    if joined.is_some() {
+        WATCH_MS.store(
+            (remote::FAIL_OPEN - Duration::from_millis(2)).as_millis() as u64,
+            Ordering::SeqCst,
+        );
     }
     // The agent's hook JSON goes as it came: a raw newline in valid JSON is only whitespace, so it becomes a space.
     let payload = if parsed.is_some() {
@@ -1179,7 +1270,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let read = read_fields(called.as_ref(), &matched);
     // A shell call that runs a heavy command (#1015), for the hub to run under `deep lease`; spooled with it, so a
     // hub that was away reads that it ran unleased.
-    let plant = env::var("DEEP_HUB_PLANT").ok();
+    let plant = hub_plant();
     let heavy = parsed
         .as_ref()
         .filter(|_| event == "PreToolUse")
@@ -1243,12 +1334,27 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             stdout,
             stderr,
         } => {
+            // The link answers again: what was spooled for a joined project's hub goes to it now, apart from this hook.
+            if let Some(joined) = REMOTE.get().and_then(Option::as_ref) {
+                remote::send_later(&home(), &joined.hub);
+            }
             decide();
             print!("{stdout}");
             eprint!("{stderr}");
             return ExitCode::from(exit);
         }
         Outcome::Down { late } => late,
+        Outcome::Stale(why) => {
+            decide();
+            eprintln!("{why}");
+            return match DENIAL.get() {
+                Some(denial) => {
+                    eprintln!("{denial}");
+                    ExitCode::from(2)
+                }
+                None => ExitCode::SUCCESS,
+            };
+        }
     };
     if cfg!(feature = "plant-print-reply") {
         print!("{last}");
@@ -1263,7 +1369,9 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     // Before an acknowledgement the 50 ms run from the hook's start; after a hold the hub acknowledged ran out or
     // broke, or past the watchdog's 50 ms while it waited for a fail_closed match, the spool's time runs from now,
     // since the hook was already allowed to wait.
-    let from = if ACKED.load(Ordering::SeqCst) || start.elapsed() >= WATCHDOG {
+    let from = if ACKED.load(Ordering::SeqCst)
+        || start.elapsed() >= Duration::from_millis(WATCH_MS.load(Ordering::SeqCst))
+    {
         Instant::now()
     } else {
         start
@@ -1353,6 +1461,10 @@ static RULED: AtomicBool = AtomicBool::new(false);
 static READ_RULES: AtomicBool = AtomicBool::new(false);
 /// When, after the hook's start, the watchdog decides for a hook the hub hasn't acknowledged.
 const WATCHDOG: Duration = Duration::from_millis(48);
+/// The watchdog's time on this hook's route, in ms: WATCHDOG, or the network route's (#1338).
+static WATCH_MS: AtomicU64 = AtomicU64::new(48);
+/// The joined project's hub this hook's folder reaches, once its payload is read (#1338).
+static REMOTE: OnceLock<Option<remote::Remote>> = OnceLock::new();
 /// How long, after the hook's start, the watchdog waits for a call a fail_closed entry may hold to be matched.
 const RULING_LIMIT: Duration = Duration::from_millis(500);
 
@@ -1363,6 +1475,8 @@ fn decide() {
             std::thread::park();
         }
     }
+    // Once decided, a panic is Rust's again: the decision is printing, and parking would hang the hook.
+    let _ = std::panic::take_hook();
 }
 
 /// Keeps the 50 ms whatever holds the hook up before the hub acknowledges it (a stdin that never ends, a slow
@@ -1379,6 +1493,14 @@ fn watchdog(start: Instant) {
     }
     std::thread::spawn(move || {
         sleep_until(start, WATCHDOG);
+        // The route may lengthen the watchdog's time once the payload is read: it waits whatever the route says by then.
+        loop {
+            let due = Duration::from_millis(WATCH_MS.load(Ordering::SeqCst));
+            if start.elapsed() >= due {
+                break;
+            }
+            std::thread::sleep((due - start.elapsed()).min(Duration::from_millis(5)));
+        }
         // A call a fail_closed entry may hold is decided by its match, not the clock: the watchdog gives the hook
         // until RULING_LIMIT to read the call and match it, and only past that denies it unchecked.
         while RULING.load(Ordering::SeqCst)
@@ -1391,24 +1513,30 @@ fn watchdog(start: Instant) {
         if ACKED.load(Ordering::SeqCst) || DECIDED.swap(true, Ordering::SeqCst) {
             return;
         }
-        // RULED first: the hook sets a denial before it sets RULED, so once RULED is read as set, DENIAL is final.
-        let ruled = RULED.load(Ordering::SeqCst);
-        match DENIAL.get() {
-            Some(denial) => {
-                eprintln!("{denial}");
-                std::process::exit(2)
-            }
-            None if RULING.load(Ordering::SeqCst) && !ruled => {
-                if READ_RULES.load(Ordering::SeqCst) {
-                    eprintln!("DeepBuild blocked this: deep-hook couldn't read this call and check it against the guards that hold while the hub doesn't answer within 500 ms. Retry it.");
-                } else {
-                    eprintln!("DeepBuild blocked this: deep-hook couldn't read its guards in ~/.deepbuild/rules.json within 500 ms, with the hub not answering. Check that file, then retry.");
-                }
-                std::process::exit(2)
-            }
-            None => std::process::exit(0),
-        }
+        unanswered()
     });
+}
+
+/// Ends the process with the decision for a hook the hub hasn't answered, once it holds DECIDED: the watchdog's, and
+/// a panic's.
+fn unanswered() -> ! {
+    // RULED first: the hook sets a denial before it sets RULED, so once RULED is read as set, DENIAL is final.
+    let ruled = RULED.load(Ordering::SeqCst);
+    match DENIAL.get() {
+        Some(denial) => {
+            eprintln!("{denial}");
+            std::process::exit(2)
+        }
+        None if RULING.load(Ordering::SeqCst) && !ruled => {
+            if READ_RULES.load(Ordering::SeqCst) {
+                eprintln!("DeepBuild blocked this: deep-hook couldn't read this call and check it against the guards that hold while the hub doesn't answer within 500 ms. Retry it.");
+            } else {
+                eprintln!("DeepBuild blocked this: deep-hook couldn't read its guards in ~/.deepbuild/rules.json within 500 ms, with the hub not answering. Check that file, then retry.");
+            }
+            std::process::exit(2)
+        }
+        None => std::process::exit(0),
+    }
 }
 
 /// The account Claude Code records beside your sign-in: `oauthAccount.accountUuid` in ~/.claude.json.
@@ -1688,7 +1816,7 @@ fn waiter() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     // #824's planted wrong program: a copy of the session's transcript in the waiter's own memory while it waits.
-    let kept = if env::var("DEEP_HUB_PLANT").as_deref() == Ok("waiter-keeps-transcript") {
+    let kept = if hub_plant().as_deref() == Some("waiter-keeps-transcript") {
         fs::read(field("transcript_path")).unwrap_or_default()
     } else {
         Vec::new()
@@ -1709,7 +1837,7 @@ fn waiter() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
-    let watched = env::var("DEEP_HUB_PLANT").as_deref() != Ok("waiter-outlives-session");
+    let watched = hub_plant().as_deref() != Some("waiter-outlives-session");
     let gone = || watched && (agent_pid() != agent || !alive(agent));
     loop {
         std::hint::black_box(&kept);
@@ -1732,9 +1860,63 @@ extern "C" {
     fn clonefile(src: *const std::ffi::c_char, dst: *const std::ffi::c_char, flags: u32) -> i32;
 }
 
+#[cfg(target_os = "linux")]
+extern "C" {
+    fn ioctl(fd: std::ffi::c_int, request: std::ffi::c_ulong, ...) -> std::ffi::c_int;
+}
+
 /// One copy-on-write clone of `from` at `to`, which must not exist: a folder whole, a link as a link (APFS's
-/// clonefile(2); the other platforms' staging isn't built yet, so they can't stage).
+/// clonefile(2); on Linux each file a reflink, FICLONE, as btrfs and XFS make; elsewhere staging isn't built yet).
+/// Unsupported, leaving nothing at `to`, where the file system can't make one.
 fn clone_one(from: &Path, to: &Path) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::io::AsRawFd;
+        const FICLONE: std::ffi::c_ulong = 0x4004_9409;
+        let meta = fs::symlink_metadata(from)?;
+        let kind = meta.file_type();
+        if kind.is_symlink() {
+            return std::os::unix::fs::symlink(fs::read_link(from)?, to);
+        }
+        if kind.is_dir() {
+            fs::create_dir(to)?;
+            let made = (|| {
+                for entry in fs::read_dir(from)? {
+                    let entry = entry?;
+                    clone_one(&entry.path(), &to.join(entry.file_name()))?;
+                }
+                fs::set_permissions(to, meta.permissions())
+            })();
+            if made.is_err() {
+                let _ = fs::remove_dir_all(to);
+            }
+            return made;
+        }
+        if !kind.is_file() {
+            // A FIFO, socket or device has no copy-on-write copy.
+            return Err(io::Error::from(ErrorKind::Unsupported));
+        }
+        let source = fs::File::open(from)?;
+        let copy = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(to)?;
+        // SAFETY: two open descriptors that live through the call.
+        if unsafe { ioctl(copy.as_raw_fd(), FICLONE, source.as_raw_fd()) } != 0 {
+            let e = io::Error::last_os_error();
+            drop(copy);
+            let _ = fs::remove_file(to);
+            // EOPNOTSUPP, EINVAL or EXDEV: no reflink on this file system, or not between these two.
+            return Err(if matches!(e.raw_os_error(), Some(95 | 22 | 18)) {
+                io::Error::from(ErrorKind::Unsupported)
+            } else {
+                e
+            });
+        }
+        copy.set_permissions(meta.permissions())?;
+        copy.set_modified(meta.modified()?)?;
+        Ok(())
+    }
     #[cfg(target_os = "macos")]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -1749,7 +1931,7 @@ fn clone_one(from: &Path, to: &Path) -> io::Result<()> {
         }
         Err(io::Error::last_os_error())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = (from, to);
         Err(io::Error::from(ErrorKind::Unsupported))
@@ -1821,6 +2003,7 @@ fn main() -> ExitCode {
                 Err(_) => ExitCode::from(1),
             };
         }
+        [arg, hub] if arg == "spool-send" => return remote::send_spool(&home(), hub),
         [arg, server] if arg == "mcp" && server == "actions" => return actions::serve(),
         [agent, event] if !agent.starts_with('-') && event == "waiter" => return waiter(),
         [agent, event] if !agent.starts_with('-') => return forward(agent, event),
@@ -1837,7 +2020,8 @@ mod tests {
     use super::append;
     use super::pi_path;
     use deep_hook::shell::glob;
-    use std::fs;
+    use std::fs::{self, DirBuilder};
+    use std::os::unix::fs::DirBuilderExt;
 
     #[test]
     fn a_pi_path_is_the_file_pi_opens() {
@@ -1870,7 +2054,8 @@ mod tests {
     fn a_line_written_to_a_spool_moved_aside_is_written_again_to_the_new_one() {
         let folder = std::env::temp_dir().join(format!("dh315-append-{}", std::process::id()));
         let _ = fs::remove_dir_all(&folder);
-        fs::create_dir_all(&folder).unwrap();
+        // Yours alone, as deep-hook makes it: a umask of 002, Ubuntu's, would leave it group-writable, which it refuses.
+        DirBuilder::new().mode(0o700).create(&folder).unwrap();
         let live = folder.join("spool.jsonl");
         let moved = folder.join("replay-1.jsonl");
         // The hub moves the file aside, reads it and removes it while this write holds it open.

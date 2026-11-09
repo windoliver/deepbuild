@@ -66,6 +66,10 @@ pub const INTERFACE_PARTS: [&str; 2] = ["bit", "behavior"];
 /// sandbox@1's own part (#238): its fixtures on this host's engine, against the reference's results.
 pub const SANDBOX_PART: &str = "sandbox";
 
+/// The parts a module that fills `control@1` adds (#308): each of that registry's kit rules run
+/// on every control kind the module fills.
+pub const CONTROL_PARTS: [&str; 4] = ["replay", "read_region", "keyboard", "input"];
+
 /// The part a module that declares registries adds (#200): each kit rule isolated by a planted
 /// wrong entry that breaks it alone.
 pub const REGISTRY_PART: &str = "registries";
@@ -143,6 +147,7 @@ impl KitCall {
                     && !INTERFACE_PARTS.contains(&x.as_str())
                     && x != REGISTRY_PART
                     && x != SANDBOX_PART
+                    && !CONTROL_PARTS.contains(&x.as_str())
             })
         }) {
             return None;
@@ -172,7 +177,8 @@ impl KitCall {
             param_sets: u32::try_from(n("param_sets", u64::from(PARAM_SETS))?).ok()?,
             patch_seed: optional(c.get("patch_seed"), Value::as_u64)?,
             replay: path("replay")?,
-            corpus: path("corpus")?,
+            // The committed migration corpus, unless the call names another folder.
+            corpus: path("corpus")?.or_else(|| Some(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/kit-corpus")))),
             ledger: path("ledger")?,
         })
     }
@@ -399,6 +405,7 @@ impl<'a> Hub<'a> {
                 .into_iter()
                 .chain(INTERFACE_PARTS)
                 .chain([REGISTRY_PART, SANDBOX_PART])
+                .chain(CONTROL_PARTS)
             {
                 if !call.runs(part) {
                     continue;
@@ -484,8 +491,32 @@ impl<'a> Hub<'a> {
             "behavior" => interface::behavior(self, ctx),
             REGISTRY_PART => self.registries_part(ctx.module),
             SANDBOX_PART => sandbox_part(ctx.module),
+            _ if CONTROL_PARTS.contains(&part) => self.control_part(part, ctx.module),
             _ => None,
         }
+    }
+
+    /// A `control@1` part (#308): the registry's kit rule named `part` on each control kind
+    /// `module` fills, a case per kind, failing with the kind's name and why.
+    fn control_part(&self, part: &str, module: &str) -> Option<PartRun> {
+        let reg = self.startup.sealed.registry("control@1")?;
+        let rule = reg.def.kit.iter().find(|k| k.rule == part)?;
+        let mine: Vec<_> = reg.entries.iter().filter(|e| e.module == module).collect();
+        if mine.is_empty() {
+            return None;
+        }
+        let mut run = PartRun::new(mine.len() as u64);
+        for e in mine {
+            let mut case = Case::new(format!("{part}:{}", e.name), Verdict::Pass);
+            if let Err(why) = (rule.test)(&e.value) {
+                case.fail(
+                    Verdict::Fail,
+                    failure("kit_rule", module, part, json!({"registry": reg.def.name, "entry": e.name, "rule": part, "what": why})),
+                );
+            }
+            run.cases.push(case);
+        }
+        Some(run)
     }
 
     /// The registries part (#200): for each registry the module declares, each kit rule must

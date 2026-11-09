@@ -2,22 +2,29 @@
 // the token alone. The hub asks, not the client, since a confirmation a client reports is a claim the hub can't
 // check. On macOS it is deep-confirm, which signs a challenge the hub picked with a Secure Enclave key that signs only
 // after Touch ID or your password; the hub counts that signature, verified by the key setup recorded, never the
-// helper's exit code, and runs no helper whose code signature isn't the one recorded with the key. Elsewhere the hub
-// can't ask yet (polkit lands with the Linux hub), so nothing it would confirm counts.
+// helper's exit code, and runs no helper whose code signature isn't the one recorded with the key. On Linux (#70) it
+// is polkit: pkcheck, on the action this package ships, for the process the peer check proved, with your password at
+// that process's own agent (client.ts). The hub counts pkcheck's exit 0 alone. Elsewhere nothing it would confirm counts.
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, stat } from 'node:fs/promises';
 import { createPublicKey, randomBytes, verify } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
 import type { Devices } from './trusted.js';
-import { ulid } from './wire.js';
+import { startOf, ulid } from './wire.js';
 
 const HELPER = fileURLToPath(new URL('./deep-confirm', import.meta.url));
 const CODESIGN = '/usr/bin/codesign';
+const PKCHECK = '/usr/bin/pkcheck';
+/** The action native/dev.deepbuild.confirm.policy declares: your own password each time, never kept. */
+const ACTION = 'dev.deepbuild.confirm';
 
-/** What a confirmation is for: the handle the prompt answers, and its revision, which the signature covers with the words. */
-export interface Subject { handle: string; revision: string }
+/**
+ * What a confirmation is for: the handle the prompt answers, and its revision, which the signature covers with the
+ * words; and the process asking, by ID and start time, which is who polkit prompts.
+ */
+interface Subject { handle: string; revision: string; process?: { pid: number; start: string } | undefined }
 
 /** A program's output, whatever its exit code: that counts for nothing here. */
 function ran(file: string, args: string[], o: { env?: NodeJS.ProcessEnv; input?: Uint8Array } = {}): Promise<{ stdout: string; stderr: string; failed?: Error }> {
@@ -39,6 +46,16 @@ async function signedAs(file: string, requirement: string): Promise<boolean> {
   return !(await ran(CODESIGN, ['--verify', '--strict', '-R', `=${requirement}`, file])).failed;
 }
 
+/** A process of yours as pkcheck names one, `pid,start,uid`, once it is still the one the peer check proved; else undefined. */
+async function polkitSubject(peer: Subject['process']): Promise<string | undefined> {
+  if (!peer || (await startOf(peer.pid)) !== peer.start) return undefined;
+  const uid = process.getuid!();
+  const [owner, line] = await Promise.all([stat(`/proc/${peer.pid}`).catch(() => undefined), readFile(`/proc/${peer.pid}/stat`, 'utf8').catch(() => '')]);
+  // The start time in clock ticks, field 22; fields count from the end of the program's name, which may hold anything.
+  const ticks = line.slice(line.lastIndexOf(')') + 2).split(' ')[19];
+  return owner?.uid === uid && ticks ? `${peer.pid},${ticks},${uid}` : undefined;
+}
+
 /** One JSON object from the helper's first line of output, or undefined. */
 function replyOf(stdout: string): Record<string, unknown> | undefined {
   try {
@@ -50,8 +67,11 @@ function replyOf(stdout: string): Record<string, unknown> | undefined {
 }
 
 export class Confirmer {
-  /** `stub` is DEEP_HUB_TEST_CONFIRM, which only tests set; `key` where deep-confirm keeps its enclave-wrapped key. */
-  constructor(private readonly o: { devices: Devices; key: string; stub?: string; plant?: string }) {}
+  /**
+   * `stub` is DEEP_HUB_TEST_CONFIRM and `polkit` DEEP_HUB_TEST_POLKIT, the program run in pkcheck's place, which only
+   * tests set; `key` where deep-confirm keeps its enclave-wrapped key.
+   */
+  constructor(private readonly o: { devices: Devices; key: string; stub?: string; polkit?: string; plant?: string }) {}
 
   private helperEnv(): NodeJS.ProcessEnv {
     return { ...process.env, DEEP_CONFIRM_KEY: this.o.key };
@@ -72,6 +92,7 @@ export class Confirmer {
       const said = await readFile(stub, 'utf8').catch(() => '');
       return said.trim() === 'confirmed' ? undefined : 'the prompt was cancelled';
     }
+    if (process.platform === 'linux') return this.polkit(subject);
     if (process.platform !== 'darwin') return `the hub can't ask ${process.platform} to confirm you yet`;
     const device = this.o.devices.enclave();
     if (!device?.requirement) return 'deep-confirm has no key set up; deep setup sets one up';
@@ -79,6 +100,16 @@ export class Confirmer {
       return `${HELPER} isn't the deep-confirm recorded at setup (its code signature doesn't match), so it wasn't run; a rebuilt helper is set up again from the app`;
     }
     return this.signed(device.public_key, words, subject);
+  }
+
+  /** polkit's answer for the process asking: pkcheck's exit 0 is you confirming, and anything else isn't. */
+  private async polkit(subject: Subject): Promise<string | undefined> {
+    const who = await polkitSubject(subject.process);
+    if (!who) return `polkit has no process of yours to prompt for ${subject.handle}`;
+    const { failed, stderr } = await ran(this.o.polkit ?? PKCHECK, ['--action-id', ACTION, '--process', who, '--allow-user-interaction']);
+    if (!failed) return undefined;
+    if ((failed as { code?: unknown }).code === 3) return 'the prompt was cancelled';
+    return `polkit didn't confirm you${stderr.trim() ? `: ${stderr.trim().slice(0, 200)}` : ''}`;
   }
 
   /** deep-confirm's signature, made once you confirm, over a challenge for this confirmation alone, by the key `point`. */

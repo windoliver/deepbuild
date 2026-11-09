@@ -14,12 +14,15 @@ const WEEKLY_MINUTES = 10_080;
 
 /** What isn't data in an agent's facts: the flags that confine its job, and where it records its account. */
 export interface AgentParts {
-  facts: URL;
+  /** Its facts file's name in the repo's adapters/ folder, read through @deepbuild/adapters. */
+  facts: string;
   /**
    * Added to the facts' read-only launch: the job's own MCP servers and nothing else, their tools allowed, read tools
    * only, and the sub-agents it may hand work to.
    */
-  confine(mcp: Record<string, McpServer>, subagents: Record<string, Subagent>): string[];
+  confine(mcp: Record<string, McpServer>, subagents: Record<string, Subagent>, writes?: string): string[];
+  /** Its job can write one folder. */
+  writing?: true;
   /** The account the agent records beside your sign-in, or null. */
   account(home: string, env: Record<string, string | undefined>): string | null;
   /** Your sign-in files the agent reads in place, never copied into a job's folder. */
@@ -71,11 +74,12 @@ export function codexWindows(limits: unknown): Map<string, { used: number; reset
 
 export const AGENTS: Partial<Record<Agent, AgentParts>> = {
   'claude-code': {
-    facts: new URL('../../../adapters/claude-code.facts.json', import.meta.url),
-    confine: (mcp, subagents) => [
+    facts: 'claude-code.facts.json',
+    writing: true,
+    confine: (mcp, subagents, writes) => [
       '--mcp-config', JSON.stringify({ mcpServers: mcp }),
-      ...(Object.keys(mcp).length ? ['--allowedTools', Object.keys(mcp).map((name) => `mcp__${name}`).join(',')] : []),
-      '--tools', Object.keys(subagents).length ? 'Read,Grep,Glob,Task' : 'Read,Grep,Glob',
+      ...(Object.keys(mcp).length || writes ? ['--allowedTools', [...Object.keys(mcp).map((name) => `mcp__${name}`), ...(writes ? [`Edit(${writes}/**)`, `Write(${writes}/**)`] : [])].join(',')] : []),
+      '--tools', `Read,Grep,Glob${writes ? ',Write,Edit' : ''}${Object.keys(subagents).length ? ',Task' : ''}`,
       ...(Object.keys(subagents).length ? ['--agents', JSON.stringify(subagents)] : []),
     ],
     account: (home) => {
@@ -115,7 +119,7 @@ export const AGENTS: Partial<Record<Agent, AgentParts>> = {
     },
   },
   codex: {
-    facts: new URL('../../../adapters/codex.facts.json', import.meta.url),
+    facts: 'codex.facts.json',
     // The MCP servers go on the command line, since the facts' launch ignores your config. Codex has no sub-agents to name.
     confine: (mcp, subagents) => {
       if (Object.keys(subagents).length) throw Error('a Codex job takes no sub-agents');
@@ -198,7 +202,7 @@ export function codexLogRefused(log: string): boolean {
 }
 
 AGENTS.pi = {
-  facts: new URL('../../../adapters/pi.facts.json', import.meta.url),
+  facts: 'pi.facts.json',
   // pi has no MCP and no sub-agents: a job that names them is refused, never run without them.
   confine: (mcp, subagents) => {
     if (Object.keys(mcp).length || Object.keys(subagents).length) throw Error('a pi job takes no MCP server and no sub-agent');

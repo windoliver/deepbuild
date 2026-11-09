@@ -21,6 +21,10 @@ path = "src/main.rs"
 [features]
 test-pool = ["deep-gpu/test-pool"]
 test-meter = ["dep:deep-canvas-test-modules"]
+# `test-faults` (#1413) adds `--fail-reopen`, `raise_errors`, the live call's `lose_device` and
+# `gpu_change`, the frames call's `fail_resize` and the test kinds `test.alloc@1` and
+# `test.pipeline@1`; no shipped build has them.
+test-faults = ["test-meter"]
 # `test-seam` (#140) adds `--adapters`, `--quirks` and the validation lane's and error channel's
 # test fixtures; no shipped build has them.
 test-seam = []
@@ -31,6 +35,7 @@ test-spike = []
 [dependencies]
 deep-gpu = { path = "../deep-gpu" }
 deep-canvas = { path = "../deep-canvas" }
+deep-canvas-drawn = { path = "../deep-canvas-drawn" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-text = { path = "../deep-text" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
@@ -46,6 +51,8 @@ deep-canvas-graph = { path = "../deep-canvas-graph" }
 deep-canvas-record = { path = "../deep-canvas-record" }
 deep-canvas-sheet = { path = "../deep-canvas-sheet" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+# The controls a live document plays through (#432): the input module's control@1 kinds.
+deep-canvas-input = { path = "../deep-canvas-input" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 # Issue #423: the run's decode worker, which makes a material's maps ready for the GPU.
@@ -53,6 +60,8 @@ deep-codecs = { path = "../deep-codecs" }
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-effects-render = { path = "../deep-effects-render" }
 wgpu-profiler = "0.28"
+# Issue #464: the indexed operator's class, computed from its module.
+naga = { version = "30", default-features = false, features = ["wgsl-in"] }
 deep-app = { path = "../deep-app" }
 deep-replica = { path = "../deep-replica" }
 bytemuck = { version = "1", features = ["derive"] }

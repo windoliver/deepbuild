@@ -7,8 +7,12 @@ The hub daemon on its socket (#16), the one writer to the record and evidence st
 ## Where new code goes
 
 - `src/server.ts`: the socket and event loop; `src/core.ts`: the core, run in a worker (`src/core-worker.ts`); `src/wire.ts`: what crosses the socket and threads.
+- `src/hub-command.ts`: `deep hub run | start | status | stop | use`, the package's `./hub` entry, so the running hub loads the server's modules and none of the other commands'.
 - `src/stacks.ts`: worktree and check-run stack policy (`deep env`, `deep_env`, #331, #332), through a supplied lifecycle provider. The composition root currently supplies env-local. Runtime selection of an installed `environment@1` remains unimplemented; the empty release list is a separate limitation, not proof that replacement works.
+- `src/teardowns.ts`: the teardown task each outside resource gets, from the `resources` of a repo's done.yaml and its sessions' own calls (#342); only its check closes it.
+- `src/agents.ts`: the Agents page's syncs (#148): an MCP server or a skill written into each chosen agent's own file at user level, planned in memory, journaled, replaced and flushed, recovered at start, undone by `deep undo sync:<id>`; each agent's rules come from its facts' `entries`. `src/mcp-exec.ts` is `deep mcp-exec <name>`, a synced server's command with its secrets by handle.
 - `src/runs.ts`: the supervisor's runs (`run.start`, deep_run, a claim's checks) and their journal; a claim's check goes through the command check kind, or the kind a loaded package installed with `replaces`.
+- `src/acceptance.ts`: the blind acceptance job (#1328): its start on the runner, the base rule, the attempt's first commit, disputes and their slots.
 - `src/drive.ts`: deep_drive's replicas, each under the replica lease; `src/retention.ts`: the evidence retention pass and snapshot pruning.
 - `src/answers.ts`: eligible answers from the record, answer text and delivery outcomes. The core retains hook scheduling, permission ownership and transcript acknowledgement.
 - A new command gets its own `src/<command>.ts`, exported from `src/index.ts`; MCP tool schemas go in `src/tools.ts`.
@@ -22,6 +26,7 @@ The top of the TypeScript stack under the CLI: the core packages and the first-p
 
 ## Deviations
 
+- `native/dev.deepbuild.confirm.policy`: the polkit action the hub asks on Linux (#70): your own password each time, never kept. Root installs it; `deep doctor` says so while it's missing.
 - `native/deep-confirm.swift`: a Swift helper, built into `dist/` on macOS only by `native/build.mjs`, through which the hub asks the OS to confirm you (#24).
 - `src/plant.ts`: every planted wrong program the tests select with `DEEP_HUB_PLANT`, in one module so a proof lane's twin can lay a wrong program over this file alone.
 - `src/vfs.ts`: the design's test VFS (`DEEP_HUB_TEST_VFS`), which numbers durable writes so a test can cut the process after any one, as a power cut would.

@@ -414,6 +414,10 @@
           "spec": "0.0.0",
           "why": "Issue #20: the hub runs the transcript archive, a first-party extension on by default, once an hour on its record, evidence store and asks core."
         },
+        "@deepbuild/github": {
+          "spec": "0.0.0",
+          "why": "Issue #46: the hub runs the github extension, first-party and on by default, which posts each verdict as a commit status and reads each push."
+        },
         "@deepbuild/asks": {
           "spec": "0.0.0",
           "why": "Issue #236: the asks core the supervisor raises its unblock asks through, opened on the hub's record."
@@ -425,6 +429,22 @@
         "@deepbuild/checks-command": {
           "spec": "0.0.0",
           "why": "Issue #30: a claim's checks run through the command check kind, hermetically through host@1, and its closed run records are what the claim's verdict is made from."
+        },
+        "@deepbuild/checks-numbers": {
+          "spec": "0.0.0",
+          "why": "Issue #1537: the numbers check kind (#87), held in the hub's kind table and run on every claim that states a number with the query behind it."
+        },
+        "@deepbuild/checks-review": {
+          "spec": "0.0.0",
+          "why": "Issue #1537: the review check kind (#87), held in the hub's kind table and run on every claim that opens or updates a pull request; its independence rule decides whether a review counts."
+        },
+        "@deepbuild/checks-work": {
+          "spec": "0.0.0",
+          "why": "Issue #1537: the service, data, document and message check kinds (#68), held in the hub's kind table where a definition's drafted check names one."
+        },
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #1537: the check.kind@1 spec, context and result types the hub's kind table holds, and #67's state-source@1 item and source types its workspaces pin; type imports only."
         },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
@@ -482,6 +502,10 @@
           "spec": "0.0.0",
           "why": "Issue #356: setup writes what it learned as the wiki's claims and pages, and keeps your edits to them through the wiki's own entry."
         },
+        "@deepbuild/workspaces": {
+          "spec": "0.0.0",
+          "why": "Issue #67: the state sources a workspace's touches read, a reading's digest and diff, and a workspace's own git work, which the hub pins in the record and re-runs on drift."
+        },
         "better-sqlite3": {
           "spec": "13.0.3",
           "why": "Issue #16: the lock the OS holds and drops with the process, never a PID file, and the test VFS's in-memory ledger."
@@ -494,6 +518,10 @@
     },
     "packages/otlp/package.json": {
       "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Refactor of the facts path: readFacts, the one entry the receiver reads Claude Code's tool kinds and model families through, never a path into the repo's adapters/ folder."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #42: the record the receiver appends tool.span and request.cost events to, and reads a session's and a task's cost from."
@@ -545,6 +573,14 @@
         "@deepbuild/verdicts": {
           "spec": "0.0.0",
           "why": "Issue #87: the run record and claim check a review job's run is written as."
+        }
+      }
+    },
+    "packages/checks-work/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #68: the check.kind@1 slot's fill, context and result types, and the kit types and Finding each work kind's own kit is judged with by the one kit runner."
         }
       }
     },
@@ -697,6 +733,14 @@
         "deep-contracts": {
           "spec": "* path=../deep-contracts",
           "why": "Issue #16: the hook's JSON read and written by the contracts' own parser and RFC 8785 printer, the Rust side of the wire it shares with the hub."
+        },
+        "ring": {
+          "spec": "^0.17",
+          "why": "Issue #1338: SHA-256 of a joined hub's certificate, the ID deep-hook pins it by; rustls's one provider, already in the lockfile."
+        },
+        "rustls": {
+          "spec": "^0.23",
+          "why": "Issue #1338: a joined project's hub over TLS 1.3, its certificate pinned and this machine's key proved; already in the lockfile for deep-relay."
         }
       }
     },
@@ -1118,6 +1162,10 @@
     },
     "packages/runner/package.json": {
       "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Refactor of the facts path: readFacts, the one entry the runner reads each agent's facts through (its launch, billing and stop causes), never a path into the repo's adapters/ folder."
+        },
         "@deepbuild/asks": {
           "spec": "0.0.0",
           "why": "Issue #159: the window, first-reading and smoke-test asks a job raises while it waits, through the asks core."
@@ -1480,6 +1528,18 @@
         }
       }
     },
+    "packages/workspaces/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #67: the state-source@1 fill and its item, diff, change, plan and undo types each shipped source is held to by its kit; type imports only."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #67: canonical JSON and SHA-256, so a reading's digest is the same bytes whoever takes it."
+        }
+      }
+    },
     "packages/reading/package.json": {
       "dependencies": {
         "@deepbuild/contracts": {
@@ -1501,6 +1561,14 @@
         "@deepbuild/wiki": {
           "spec": "0.0.0",
           "why": "Issue #63: an install writes its findings as wiki claims, and a cite's known-from is the wiki's knownOf."
+        }
+      }
+    },
+    "packages/github/package.json": {
+      "dependencies": {
+        "@deepbuild/gate": {
+          "spec": "0.0.0",
+          "why": "Issue #46: head trust is the gate's rule, and the reading's types are the gate's, so a head's status follows the rule the core applies."
         }
       }
     },
@@ -1715,6 +1783,46 @@
         "wasmparser": {
           "spec": "=0.263.0",
           "why": "Issue #238's blind suite: lists each fixture's operators with their offsets, so a test knows where each trap's instruction is."
+        }
+      }
+    },
+    "packages/checks-journey/package.json": {
+      "dependencies": {
+        "@deepbuild/checks-command": {
+          "spec": "0.0.0",
+          "why": "Issue #37: check.kind@1's kit cases are command suites, so the journey fill answers a command spec as the command kind does, through its public entry."
+        },
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #37: the check.kind@1 result shape the journey kind returns, and its kit at install."
+        },
+        "@deepbuild/env-local": {
+          "spec": "0.0.0",
+          "why": "Issue #37: the stack a journey runs against is started from the run's checkout by env-local, through the host."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #37: a saved script's typed and observed values are scrubbed as evidence is, by value."
+        },
+        "@deepbuild/gate": {
+          "spec": "0.0.0",
+          "why": "Issue #37: the tree a stack served, worked out by the core from the supervisor's records, which an uncounted run names."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #37: host@1's types; the driver and every stack process start, are signalled and waited for through the host."
+        },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #37: the Depth type a run and a requirement carry (journey or live), types only."
+        },
+        "playwright": {
+          "spec": "1.64.1",
+          "why": "Issue #37: the browser driver journeys run on; the design names Playwright, and its Chromium is the fixed browser build of the environment profile."
+        },
+        "yaml": {
+          "spec": "2.9.1",
+          "why": "Issue #37: journey files and feature entries under .deepbuild/ are YAML; env-local's pinned parser."
         }
       }
     }
