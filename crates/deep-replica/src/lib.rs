@@ -55,6 +55,8 @@ pub fn headless_context() -> HeadlessAppContext {
     cx.update(|cx| {
         gpui_kit::init(cx);
         deep_app::init(cx);
+        // The replica draws as a Mac with Reduce Motion off, whatever this Mac's setting, unless asked (#1436).
+        cx.set_reduce_motion(false);
     });
     cx
 }
