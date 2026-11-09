@@ -56,6 +56,20 @@ pub fn input_bytes(c: &Compiled, values: &BTreeMap<String, Val>) -> Vec<u8> {
     deep_canvas_effects::emit::input_bytes(&c.checked, values)
 }
 
+/// Whether every step that reads the texture input `name`, in any body, loads it at a texel and
+/// none samples it (#432).
+pub fn only_loaded(c: &deep_canvas_effects::check::Checked, name: &str) -> bool {
+    use deep_canvas_effects::graph::{Arg, Step};
+    fn reads(steps: &BTreeMap<String, Step>, name: &str) -> bool {
+        steps.values().all(|s| {
+            let names = s.args.values().any(|a| matches!(a, Arg::Ref(r, _) if r == name))
+                || s.fields.get("tex").and_then(|v| v.as_str()) == Some(name);
+            (!names || s.op == "load@1") && s.body.as_ref().is_none_or(|b| reads(&b.steps, name))
+        })
+    }
+    reads(&c.op.steps, name)
+}
+
 enum Pipeline {
     Render(wgpu::RenderPipeline),
     Compute(wgpu::ComputePipeline),
@@ -122,7 +136,9 @@ impl Runner {
                 Ty::Tex(Tex::Depth) => wgpu::TextureSampleType::Depth,
                 // A 3D texture is read by its texels' loads (sample3d), so r32float binds too.
                 Ty::Tex3(_) => wgpu::TextureSampleType::Float { filterable: false },
-                _ => wgpu::TextureSampleType::Float { filterable: true },
+                // An input the operator only loads, never samples, binds unfiltered, so a
+                // full-precision intermediate can feed it (#432).
+                _ => wgpu::TextureSampleType::Float { filterable: !only_loaded(c, name) },
             };
             wgpu::BindingType::Texture {
                 sample_type,
