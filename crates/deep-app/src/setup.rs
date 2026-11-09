@@ -17,9 +17,6 @@ use std::{
 /// How long the login shell has to print its PATH, as packages/hub/src/setup.ts gives it.
 const LOGIN_SHELL_WAIT: Duration = Duration::from_secs(5);
 
-/// What the click says once it's done; the first `deep` command says the same (packages/hub/src/setup.ts).
-pub const SET_UP_LINE: &str = "DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo's checks, and started the hub at login; deep setup --undo removes it all.";
-
 thread_local! {
     /// A replica has no machine to set up: its record stands for one that finished.
     static ASSUMED: Cell<bool> = const { Cell::new(false) };
@@ -161,7 +158,7 @@ pub fn deep(path: &str) -> Command {
 
 /// Runs [`set_up`] on a thread of its own and returns where it says the one line, or what went wrong, so the click
 /// never waits on `deep setup` (#1556). It says it once; a thread that couldn't start says that.
-pub fn start() -> Receiver<Result<&'static str, String>> {
+pub fn start() -> Receiver<Result<String, String>> {
     let (said, heard) = mpsc::channel();
     let thread = std::thread::Builder::new().name("deep setup".into());
     let running = said.clone();
@@ -171,16 +168,21 @@ pub fn start() -> Receiver<Result<&'static str, String>> {
     heard
 }
 
-/// Runs `deep setup` and returns the one line, or what went wrong. It waits for setup to end, so the window calls it
-/// only through [`start`].
-pub fn set_up() -> Result<&'static str, String> {
+/// Runs `deep setup` and returns the one line it ends with, `SET_UP_LINE` in packages/hub/src/setup.ts, or what went
+/// wrong. It waits for setup to end, so the window calls it only through [`start`].
+pub fn set_up() -> Result<String, String> {
     let path = login_path().map_err(|error| format!("Set up {error}"))?;
     let mut setup = deep(&path);
     // blocking call: off the UI thread, on start's thread or in the headless `deep-app --set-up`.
     let output = setup.arg("setup").output();
     let output = output.map_err(|error| format!("deep setup didn't start: {error}"))?;
     match output {
-        Output { status, .. } if status.success() => Ok(SET_UP_LINE),
+        Output { status, stdout, .. } if status.success() => String::from_utf8_lossy(&stdout)
+            .lines()
+            .map(str::trim)
+            .rfind(|line| !line.is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| "deep setup finished without a word".to_owned()),
         Output { status, stderr, .. } => Err(format!(
             "deep setup failed ({status}): {}",
             String::from_utf8_lossy(&stderr).trim()

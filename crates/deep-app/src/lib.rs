@@ -112,13 +112,14 @@ pub fn stocks() -> Vec<Stock> {
 }
 
 /// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); then what the app
-/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count.
+/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count
+/// sentence (#1455).
 pub fn menu_bar_line() -> String {
     match setup::count().or_else(|| notify::reach().short()) {
         Some(line) => line.to_owned(),
         None if record::older().is_some() => "Hub is older".to_owned(),
         None if !record::connected() => "No hub".to_owned(),
-        None => views::count().to_string(),
+        None => views::asks_need_you(views::count()),
     }
 }
 

@@ -163,57 +163,6 @@ pub type ViewArgs = (
     Option<(f32, f32)>,
 );
 
-/// Issue #629: `--bound <file>`, `{"runs": [{run, check, tool, report}], "card": [{id, bind}], "panel": [{id,
-/// bind}]}`: each run recorded from its tool's report, as the hub records it, and each bound value resolved by the
-/// app from those runs, on the session's return card or in a panel.
-pub fn load_bound(path: &Path) -> Result<(), String> {
-    use deep_app::bound::{self, Run, Surface};
-    use serde_json::Value;
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let input: Value =
-        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-    let field = |v: &Value, k: &str| {
-        v.get(k)
-            .and_then(Value::as_str)
-            .map(str::to_owned)
-            .ok_or(format!("--bound: no {k}"))
-    };
-    let mut runs = Vec::new();
-    for r in input
-        .get("runs")
-        .and_then(Value::as_array)
-        .ok_or("--bound: no runs")?
-    {
-        let report =
-            std::fs::read(field(r, "report")?).map_err(|e| format!("--bound: report: {e}"))?;
-        let run = Run::from_report(
-            field(r, "run")?,
-            field(r, "check")?,
-            &field(r, "tool")?,
-            &report,
-        )
-        .ok_or("--bound: the report isn't its tool's JSON report")?;
-        runs.push(run);
-    }
-    let mut binds = Vec::new();
-    for (surface, key) in [(Surface::Card, "card"), (Surface::Panel, "panel")] {
-        for b in input
-            .get(key)
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            binds.push((
-                surface,
-                field(b, "id")?,
-                b.get("bind").cloned().ok_or("--bound: no bind")?,
-            ));
-        }
-    }
-    bound::set(&runs, &binds)
-        .ok_or_else(|| "--bound: a bind isn't a run's expected or received value".to_owned())
-}
-
 /// Issue #629: every bound value drawn, `{"bound": [{surface, id, text, missing, bounds}]}`, its bounds its node's in
 /// the screenshot's device pixels.
 pub fn bound_listing(snapshot: &snapshot::Snapshot) -> serde_json::Value {
