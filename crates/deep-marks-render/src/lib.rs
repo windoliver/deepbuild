@@ -7,8 +7,7 @@
 //! frame captures, and #882's: `look` answers each theme's roles; and #373's: `raster` and `geometry` (on every platform), R2's 2D marks drawn by
 //! Vello CPU, and `check` with a look adding the marks2d module's own check; and #381's: `raster`
 //! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`;
-//! and #854's: `idle`, a document held on screen on the real clock for `seconds`, its frames,
-//! wakeups and CPU read from this process; and #398's: `check`, `raster` and `geometry` import
+//! and #398's: `check`, `raster` and `geometry` import
 //! each `vector@1` item's SVG from the line's `store` and draw it as marks2d's items, `geometry`
 //! answers a vector's `parts`, and the planted `write_fades_fills_from_start` and
 //! `import_skips_clip_path`; and #1175's: `check` answers a `verdict` that stays INCONCLUSIVE
@@ -125,16 +124,6 @@ enum Request {
         store: Option<PathBuf>,
         /// #417 AC2's wrong program: a look switch that empties every node cache.
         switch_rebuilds: bool,
-    },
-    /// #854: the document held on screen on the real clock.
-    Idle {
-        doc: Map<String, Value>,
-        look: Look,
-        view: View,
-        record: Record,
-        seconds: u64,
-        /// The wrong program: a frame clock that arms a frame each vsync.
-        arms_each_vsync: bool,
     },
     Render {
         out: String,
@@ -892,21 +881,6 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 arms_only_on_readings,
             }
         }
-        "idle" => Request::Idle {
-            doc: doc(input.get("doc"))?,
-            look,
-            view: view(input.get("view"))?,
-            record: record(input)?,
-            seconds: input
-                .get("seconds")?
-                .as_u64()
-                .filter(|s| (1..=600).contains(s))?,
-            arms_each_vsync: match input.get("planted") {
-                None => false,
-                Some(Value::String(p)) if p == "arms_each_vsync" => true,
-                Some(_) => return None,
-            },
-        },
         "session" => {
             let steps = input
                 .get("steps")?
@@ -992,7 +966,6 @@ pub fn main() {
         "look",
         "raster",
         "geometry",
-        "idle",
         "labels",
         "crosshair",
         "path",
