@@ -1,0 +1,111 @@
+Acceptance tests for #1510 on the base c12a65bb (origin/main: `deep inbox` of #24, plans of #69, `deep status`'s
+last-turn calls of #668, the question card of #327; no #1510), run on 2026-11-06 on the Linux arm64 dev machine
+(load average about 25-90 from other sessions), Node 24.22.0, after `npm ci`, `npm run build --workspaces` and
+`cargo build --locked -p deep-hook`:
+
+  npx vitest run tests/acceptance/1510/
+  npx tsc -p tests/acceptance/1510
+  cargo test --locked -p deep-app --test acceptance_1510
+
+Raw control bytes vitest echoed in its "Received" lines are written <raw ESC> and <raw CR> here. Trimmed to each failure's reason; code frames dropped. <repo> is the checkout, ~ the home folder.
+
+Summary
+  criterion 1 #1510.54eb0445  FAIL (5 of 5): raw 0x1b and 0x0d reach deep inbox's stdout on the ask's row and its
+                              plan step's line, named by ask handle; a newline splits the row; deep status passes 0x1b raw
+  criterion 2 #1510.6263c922  FAIL (3 of 3): U+202E, and each of the 14 others, reach the card's text raw
+  criterion 3 #1510.f4b3f47a  PASS (1 of 1): the base keeps the bytes (regression protection)
+  criterion 4 #1510.5fbd0a55  PASS (3 of 3 in deep inbox, 1 of 1 in the card): the base changes nothing (regression protection)
+  npx tsc -p tests/acceptance/1510: exit 0, no errors.
+
+
+== npx vitest run tests/acceptance/1510/
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1510/inbox.test.ts > #1510.54eb0445 an ask whose call holds an escape prints both commands with the escape as visible text, and deep inbox prints no control byte but its line ends > #1510.54eb0445 deep inbox exits 0 and its stdout, read byte by byte, holds no control byte but its line ends
+AssertionError: deep inbox's stdout holds no control byte but its line ends; 2 line(s) do:
+the row of ask:01M6SKG47QJS4NBXESFGZACTGZ (stdout line 1) holds raw 0x1b, 0x0d: "ask:01M6SKG47QJS4NBXESFGZACTGZ  authority  S1510-esc  1m  shown  Run `git push --force\u001b[2K\rgit status` in shop?  [approve | decline]"
+a line under the row of ask:01M6SKG47QJS4NBXESFGZACTGZ (stdout line 3) holds raw 0x1b, 0x0d: "    1. git push --force\u001b[2K\rgit status  changes origin/main  undo: Revert it  cost $0.00": expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/1510/inbox.test.ts > #1510.54eb0445 an ask whose call holds an escape prints both commands with the escape as visible text, and deep inbox prints no control byte but its line ends > #1510.54eb0445 the ask's row shows both commands, in order, with the escape as visible text
+AssertionError: the row of ask:01M6SKG47QJS4NBXESFGZACTGZ shows the escape between the two commands as visible text (such as \x1b): "ask:01M6SKG47QJS4NBXESFGZACTGZ  authority  S1510-esc  1m  shown  Run `git push --force\u001b[2K\rgit status` in shop?  [approve | decline]": expected 'git push --force\u001b[2K\rgit status…' to match /\\x1b|\\u001b|\\u\{1b\}|\\e|\\033|\^…/i
+
+- Expected:
+/\\x1b|\\u001b|\\u\{1b\}|\\e|\\033|\^\[|␛|<esc>/i
+
++ Received:
+"git push --force<raw ESC>[2K<raw CR>git status` in shop?  [approve | decline]"
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/1510/inbox.test.ts > #1510.54eb0445 an ask whose call holds an escape prints both commands with the escape as visible text, and deep inbox prints no control byte but its line ends > #1510.54eb0445 the ask's plan step shows the same call on one line, both commands and the escape visible
+AssertionError: the plan step under ask:01M6SKG47QJS4NBXESFGZACTGZ shows the escape as visible text: "    1. git push --force\u001b[2K\rgit status  changes origin/main  undo: Revert it  cost $0.00": expected '    1. git push --force\u001b[2K\rgit…' to match /\\x1b|\\u001b|\\u\{1b\}|\\e|\\033|\^…/i
+
+- Expected:
+/\\x1b|\\u001b|\\u\{1b\}|\\e|\\033|\^\[|␛|<esc>/i
+
++ Received:
+"    1. git push --force<raw ESC>[2K<raw CR>git status  changes origin/main  undo: Revert it  cost $0.00"
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/1510/inbox.test.ts > #1510.54eb0445 an ask whose call holds an escape prints both commands with the escape as visible text, and deep inbox prints no control byte but its line ends > #1510.54eb0445 a call holding a newline stays on the ask's row, and on its plan step's line
+AssertionError: the row of ask:01M6SKG481KFPNHZQFGSAE7XS2 holds "git status" on the same line as "git push --force": "ask:01M6SKG481KFPNHZQFGSAE7XS2  authority  S1510-newline  1m  shown  Run `git push --force": expected 'git push --force' to contain 'git status'
+
+Expected: "git status"
+Received: "git push --force"
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/1510/status.test.ts > #1510.54eb0445 deep status prints a finished turn's call with both commands on one line, the escape visible, and no control byte but its line ends
+AssertionError: deep status's stdout holds no control byte but its line ends; 1 line(s) do:
+a line under the row of S1510sta (stdout line 6) holds raw 0x1b: "      shell git push --force\u001b[2K git status  ok": expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+ Test Files  2 failed (2)
+      Tests  5 failed | 4 passed (9)
+   Start at  15:36:58
+   Duration  1.06s (tests 90%, import 5%, transform 4%)
+
+
+
+== npx tsc -p tests/acceptance/1510
+
+(no output, exit 0)
+
+
+== cargo test --locked -p deep-app --test acceptance_1510
+
+deep-app builds and this test runs on Linux arm64 too (it touches no window), so it is not INCONCLUSIVE here.
+
+running 4 tests
+test ac2_6263c922_a_call_with_u202e_in_an_authority_card_shows_a_visible_mark_at_that_place ... FAILED
+test ac2_6263c922_a_question_with_u202e_shows_a_visible_mark_at_that_place_in_the_card ... FAILED
+test ac4_5fbd0a55_plain_chinese_and_emoji_questions_show_unchanged_in_the_card ... ok
+test ac2_6263c922_each_invisible_or_direction_changing_character_shows_a_visible_mark_at_its_place ... FAILED
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+thread 'ac2_6263c922_a_call_with_u202e_in_an_authority_card_shows_a_visible_mark_at_that_place' (1493316) panicked at crates/deep-app/../../tests/acceptance/1510/app/card.rs:82:5:
+the card's text holds U+202E RIGHT-TO-LEFT OVERRIDE raw, unmarked: ["Run `git push origin \u{202e}niam` in shop?"]
+thread 'ac2_6263c922_a_question_with_u202e_shows_a_visible_mark_at_that_place_in_the_card' (1493317) panicked at crates/deep-app/../../tests/acceptance/1510/app/card.rs:82:5:
+the card's text holds U+202E RIGHT-TO-LEFT OVERRIDE raw, unmarked: ["Open the attachment invoice\u{202e}txt.exe for the review?"]
+the card's text holds U+202E RIGHT-TO-LEFT OVERRIDE raw, unmarked: ["Run `rm -rf build\u{202e}/cache` in shop?"]
+the card's text holds U+202D LEFT-TO-RIGHT OVERRIDE raw, unmarked: ["Run `rm -rf build\u{202d}/cache` in shop?"]
+  ... (the third test then names each of the 15 characters, ending:)
+15 of 15 characters reach the card's text unmarked:
+the card's text holds U+202E RIGHT-TO-LEFT OVERRIDE raw, unmarked: ["Run `rm -rf build\u{202e}/cache` in shop?"]

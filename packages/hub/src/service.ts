@@ -21,7 +21,7 @@ function connect(path: string, timeoutMs = 2000): Promise<{ hello: Obj; next(): 
   return new Promise((resolve, reject) => {
     const sock = net.connect(path);
     const lines: Obj[] = [];
-    const waiting: ((o: Obj) => void)[] = [];
+    const waiting: { wake(o: Obj): void; stop(e: Error): void }[] = [];
     let buffer = '';
     let failed: Error | undefined;
     const timer = setTimeout(() => fail(Error(`no answer within ${timeoutMs} ms`)), timeoutMs);
@@ -29,6 +29,8 @@ function connect(path: string, timeoutMs = 2000): Promise<{ hello: Obj; next(): 
       failed = error;
       clearTimeout(timer);
       sock.destroy();
+      // What waits on a line gets the failure now: its own timer would keep a refused command alive for `timeoutMs`.
+      for (const w of waiting.splice(0)) w.stop(error);
       reject(error);
     };
     sock.setEncoding('utf8');
@@ -39,8 +41,8 @@ function connect(path: string, timeoutMs = 2000): Promise<{ hello: Obj; next(): 
       for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
         const o = JSON.parse(buffer.slice(0, i)) as Obj;
         buffer = buffer.slice(i + 1);
-        const wake = waiting.shift();
-        if (wake) wake(o);
+        const w = waiting.shift();
+        if (w) w.wake(o);
         else lines.push(o);
       }
     });
@@ -49,7 +51,7 @@ function connect(path: string, timeoutMs = 2000): Promise<{ hello: Obj; next(): 
       if (ready) return done(ready);
       if (failed) return stop(failed);
       const t = setTimeout(() => stop(Error(`no answer within ${timeoutMs} ms`)), timeoutMs);
-      waiting.push((o) => { clearTimeout(t); done(o); });
+      waiting.push({ wake: (o) => { clearTimeout(t); done(o); }, stop: (e) => { clearTimeout(t); stop(e); } });
     });
     // Connected once the hub's hello arrives.
     next().then((hello) => { clearTimeout(timer); resolve({ hello, next, send: (o) => sock.write(line(o)), close: () => sock.destroy() }); }, () => undefined);

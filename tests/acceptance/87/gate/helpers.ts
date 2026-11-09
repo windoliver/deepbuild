@@ -1,13 +1,14 @@
 // Shared by the #87 gate-slice acceptance tests (README): the criteria's IDs, the review check package imported
 // lazily (so each test fails on its own at the base), real git repositories in temporary folders, and the scratch
-// repositories the preflight's replay lane runs in, with the maintainer's SSH-signed approvals. Nothing here stands
+// repositories the preflight's replay lane runs in, with the maintainer's security-key approvals. Nothing here stands
 // in for the code under test; the stand-in review check of the replay test lives in that test's scratch repository.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll } from 'vitest';
+import { APPROVERS, people, tag } from '../../../fixtures/approver.mjs';
 
 export const REPO = realpathSync(fileURLToPath(new URL('../../../../', import.meta.url)));
 export const PROOF = join(REPO, 'scripts/proof.mjs');
@@ -75,35 +76,26 @@ export function gitRepo(files: Record<string, string>): { cwd: string; first: st
 }
 
 // ---- The scratch repositories of the replay lane (README, AC21), as #569's suite builds them.
-export interface Scene { cwd: string; head: string; env: Record<string, string>; key(name: 'maintainer' | 'stranger'): string; approvals: number }
-/** The maintainer's SSH key, listed in the approvers file DEEP_APPROVERS names, and a stranger's that isn't. */
-function keys(): { approvers: string; key(name: string): string } {
-  const dir = tempDir('deep-87-gate-keys-');
-  for (const name of ['maintainer', 'stranger'])
-    execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', `${name}@example.invalid`, '-f', join(dir, name)], { stdio: ['ignore', 'pipe', 'pipe'] });
-  const approvers = join(dir, 'approvers');
-  writeFileSync(approvers, `maintainer@example.invalid namespaces="git" ${readFileSync(join(dir, 'maintainer.pub'), 'utf8').trim()}\n`);
-  return { approvers, key: (name) => join(dir, name) };
-}
+export interface Scene { cwd: string; head: string; env: Record<string, string>; keys: ReturnType<typeof people>; approvals: number }
 /**
  * `base` committed on main as the merge base, with origin/main pointing at it; then each change commit on branch
- * `change`. DEEP_PROOF_ISSUES names an empty folder (the change names no issue), DEEP_APPROVERS the approvers file.
+ * `change`. DEEP_PROOF_ISSUES names an empty folder (the change names no issue); the maintainer's security key is on
+ * the merge base's .deepbuild/approvers (#1326).
  */
 export function scene(base: Record<string, string>, commits: { files: Record<string, string | null>; message: string }[]): Scene {
   const cwd = tempDir();
+  const keys = people();
   git(cwd, 'init', '-q', '-b', 'main');
-  commit(cwd, base, 'base');
+  commit(cwd, { [APPROVERS]: keys.list, ...base }, 'base');
   git(cwd, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
   git(cwd, 'checkout', '-q', '-b', 'change');
   let head = git(cwd, 'rev-parse', 'HEAD');
   for (const c of commits) head = commit(cwd, c.files, c.message);
-  const k = keys();
-  return { cwd, head, env: { DEEP_PROOF_ISSUES: tempDir('deep-87-gate-issues-'), DEEP_APPROVERS: k.approvers }, key: k.key, approvals: 0 };
+  return { cwd, head, env: { DEEP_PROOF_ISSUES: tempDir('deep-87-gate-issues-') }, keys, approvals: 0 };
 }
-/** The maintainer's yes (or `signer`'s): an SSH-signed annotated tag under deep/approved/ on `at`, one `Approves:` line per item. */
+/** The maintainer's yes (or `signer`'s): a security key's signed annotated tag under deep/approved/ on `at`, one `Approves:` line per item. */
 export function approve(s: Scene, at: string, items: string[], signer: 'maintainer' | 'stranger' = 'maintainer'): void {
-  const message = items.map((item) => `Approves: ${item}`).join('\n');
-  git(s.cwd, '-c', 'gpg.format=ssh', '-c', `user.signingkey=${s.key(signer)}`, 'tag', '-s', '-m', message, `deep/approved/${++s.approvals}`, at);
+  tag(s.cwd, `deep/approved/${++s.approvals}`, at, items, s.keys[signer]);
 }
 export interface Proof { status: number | null; stdout: string; stderr: string; lines: string[] }
 /** `node scripts/proof.mjs ...args` from this checkout, its cwd the scene's repository. */

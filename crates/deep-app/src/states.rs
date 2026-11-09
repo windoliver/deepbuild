@@ -451,13 +451,16 @@ impl Table {
         &self.order
     }
 
-    /// The title of the session's task.
+    /// The title of the session's task, as every surface draws it. The agent chooses it, so its controls and
+    /// direction marks show as the question card shows them (#1738); the record keeps the bytes.
     pub fn title(&self, session: &str) -> String {
-        self.titles
+        let title = self
+            .titles
             .get(session)
             .cloned()
             .flatten()
-            .unwrap_or_else(|| untitled(session))
+            .unwrap_or_else(|| untitled(session));
+        crate::question::visible(&title)
     }
 
     /// A session's state.
@@ -486,10 +489,7 @@ impl Table {
             return (shown.text(now), shown.entry());
         };
         // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
-        #[cfg(feature = "env-plants")]
-        let planted = std::env::var("DEEP_HUB_PLANT").as_deref() == Ok("waiting-as-working");
-        #[cfg(not(feature = "env-plants"))]
-        let planted = false;
+        let planted = crate::plain::planted("waiting-as-working");
         let (word, entry) = match listed.as_str() {
             _ if planted && cause == "waiting" => ("working".to_owned(), "running"),
             "needs you" => ("needs you".to_owned(), "needs_you"),
@@ -845,6 +845,21 @@ mod tests {
 
     fn ask(id: &str) -> Value {
         json!({"v": 4, "id": id, "kind": "ask.created", "session": "s1", "data": {"question": "Push?"}})
+    }
+
+    #[test]
+    fn the_menu_bar_shows_a_titles_controls_and_direction_marks() {
+        // #1738: the menu bar lists every session by its task's title, which the agent chose.
+        let events = vec![
+            json!({"kind": "task.created", "writer": "core", "log_pos": 1, "ts": 1,
+                   "data": {"thread": "s1", "title": "Fix\u{202e}txt\x1b[2K\rok\nship"}}),
+            json!({"kind": "session.start", "writer": "hook", "session": "s1", "log_pos": 2, "ts": 1, "data": {}}),
+        ];
+        let menu = menu(&table(&events), 1);
+        assert!(
+            menu[0].starts_with("Fix\\u{202e}txt\\x1b[2K\\rok\\nship · "),
+            "{menu:?}"
+        );
     }
 
     #[test]

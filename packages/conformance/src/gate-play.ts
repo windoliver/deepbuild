@@ -31,7 +31,7 @@ const ASKS = {
 const ACCOUNT = 'acct-gate-kit-0001';
 const BILLING = /^(ANTHROPIC_|CLAUDE|CODEX|OPENAI_API_KEY|AWS_BEARER|GH_TOKEN|GITHUB_TOKEN|DEEP_|XDG_|GIT_|OTEL_|npm_)/;
 
-export type Obj = { [key: string]: any };
+type Obj = { [key: string]: any };
 export interface Ran { code: number | null; stdout: string; stderr: string }
 export interface Ev { id: string; kind: string; log_pos: number; session?: string; subject?: string; data: Obj }
 

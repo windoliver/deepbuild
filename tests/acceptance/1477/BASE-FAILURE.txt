@@ -1,0 +1,41 @@
+#1477 acceptance tests at the base, dd83ac2f ("Merge pull request #1692 …"; origin/main when written).
+
+Run on a `git archive dd83ac2f` export with this folder copied in (this worktree held another session's uncommitted
+edits under crates/deep-app, so it wasn't the base), on macOS:
+
+$ npx vitest run --root tests/acceptance/1477 --no-file-parallelism --testTimeout=600000
+ Test Files  2 failed (2)
+      Tests  13 failed (13)
+   Duration  65.84s
+
+record.test.ts, all 5 tests, fail first on the bench's build, which the base doesn't have:
+
+$ cargo test --release --locked -p deep-app --test lists_1477 --no-run
+error: no test target named `lists_1477` in `deep-app` package
+help: available test targets:
+    acceptance_1141
+    acceptance_1141_memory
+    acceptance_34
+    acceptance_995
+    chrome
+    headless
+    hub_client
+    screens
+    spike_402
+
+  AssertionError: the bench builds: cargo test --release --locked -p deep-app --test lists_1477 --no-run: expected
+  'cargo test --release --locked -p deep…' to be ''   (#1477.e66d9bdb, #1477.46aa3ab4, #1477.466ab542, #1477.af9cb943)
+  AssertionError: the measurement record is committed at docs/spikes/1477/record.json: expected false to be true
+                                                        (#1477.55753e50, which reads the committed record first)
+
+built.test.ts, all 8 tests (5 criteria and 3 planted twins), fail first on the decision they read, since there is no
+record:
+
+  AssertionError: the measurement record is committed at docs/spikes/1477/record.json: expected false to be true
+
+Past those, the base has none of the surface (README, The surface under test): no `arm`, `measure`, `remeasure`,
+`offsets`, `sort`, `access`, `soak` or `back` call, no `plant-element-per-cell`, `plant-f32-offset` or
+`plant-unstable-text-sort` feature, and no docs/spikes/1477/record.json. Off macOS every test fails first with a
+message starting `INCONCLUSIVE:`, never a pass.
+
+Type-check: `node node_modules/typescript/bin/tsc -p tests/acceptance/1477/tsconfig.json` prints nothing (clean).

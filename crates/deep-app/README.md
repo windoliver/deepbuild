@@ -6,7 +6,7 @@ The macOS app shell on gpui-kit (issues #337, #338, #326, #327, #339, #105, #117
 
 ## Where new code goes
 
-- One module per surface in `src/` (`card.rs`, `question.rs`, `views.rs`, `commands.rs` for ⌘K, `capture.rs` and so on), declared in `src/lib.rs`; new command-line modes go in `src/main.rs`.
+- One module per surface in `src/` (`card.rs`, `question.rs`, `views.rs`, `commands.rs` for ⌘K, `capture.rs` and so on), declared in `src/lib.rs`. `src/main.rs` holds only the app's start, its menu bar and its notifications; the probes the suites run as `deep-app --flag` are each a file in `src/probes/` (#1457).
 - Hub calls go through `src/hub.rs`, and the record is read only through `src/record.rs`. A view that draws the record or bound values observes them with `record::observe`, and an age it shows sets its next tick from `states::ages_written` (#1546), so a change marks the window dirty with no input.
 - Canvas text goes through deep-text-gpui (`src/text.rs`), never GPUI's text system, which stays for the chrome.
 - Unit tests sit in a `#[cfg(test)]` module in the file; integration tests in `tests/`; pixel tests rendered offscreen in `screens.rs`.
@@ -23,9 +23,8 @@ The app: the top of the stack. It may use the canvas crates (deep-canvas-marks, 
 - `screens.rs`: a `harness = false` test target outside `tests/`, since AppKit needs the main thread and preflight's perf run drops a change's own `tests/` files, so this suite counts in its measured workload.
 - `Cargo.toml`: the `acceptance_34` test target points at `tests/acceptance/34`, outside the crate; those tests are written blind and never edited here.
 - `src/answer.rs`: under the `test-confirm` feature, in no shipped build, a file stands in for the OS's prompt, since an environment variable in the shipped app would let an agent answer for you (#1454).
-- `src/states.rs`: the planted app #992 names reads `DEEP_HUB_PLANT` only in a build with the `env-plants` feature, which a release build refuses (#1408).
+- `src/plain.rs`: the planted programs (#992's in `states.rs` among them) read `DEEP_HUB_PLANT` once, through `plain::planted`, and only in a build with the `env-plants` feature, which a release build refuses (#1408, #1457). The `fixtures` feature holds the replica's doors (`AppState`, `events.rs`, `bound::set`); no shipped build has it (#1457).
 - `src/chrome_fixture.rs`: #1434's `chrome@1` fixture and the wrong programs `DEEP_CHROME_PLANT` selects, in no shipped build. It builds under the `chrome-fixture` feature, which unlike `env-plants` builds in release, since the budget run times a release build.
 - `src/spike.rs`: #337's spike window, in no shipped build. It builds under the `spike` feature, through the crate's dev-dependency on itself, for the suites that keep #337's and #79's proof, and for the planted build #1172's suite opens.
 - `panels/`: JavaScript panels that are test fixtures, not app code to tidy. `claude-code/` and `codex/` were written by each agent from `docs/spikes/337/panel-brief.md` and gpui-shell's docs alone; the `338-*` ones fill #338's slots, and `338-cap20`, `338-drop-folded`, `338-hide-newest` and `338-list-superseded` are planted faults the kit must name.
 - `fixtures/quotes.json`: a synthetic seeded random walk recorded once, not market data; #337's panels read it, under the `spike` feature only, and the tests compute their expected values from the same recording.
-- `src/trusted_input.rs`: `allow(deprecated)` on `CGDisplayCreateImageForRect`, since one frame of one rect is what the gate needs and ScreenCaptureKit and gpui's capture both stream.

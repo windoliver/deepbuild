@@ -35,6 +35,8 @@ pub enum Plant {
     /// Before every frame it asks GPUI for, the replica notifies the window's root, so every frame draws (#1546
     /// criterion 3).
     NotifiesEveryStep,
+    /// A menu takes every release as a pick or a close, drag or not (#1470 criterion 2).
+    MenuReleaseAlways,
 }
 
 impl Plant {
@@ -51,6 +53,7 @@ impl Plant {
             "row-branch-cut-off" => Some(Plant::RowBranchCutOff),
             "jumps-on-act" => Some(Plant::JumpsOnAct),
             "notifies-every-step" => Some(Plant::NotifiesEveryStep),
+            "menu-release-always" => Some(Plant::MenuReleaseAlways),
             _ => None,
         }
     }
