@@ -1,0 +1,69 @@
+Base: dd83ac2f ("Merge pull request #1692 …"), checked out as 86245f1f (dd83ac2f plus main's merge of #1727 for #1492,
+which touches no logic module), with tests/acceptance/531/{README.md,helpers.ts,tsconfig.json,wat} restored from
+9e44bd99 and nothing else of it. Run 2026-11-08 on this Mac (darwin/arm64), Node 24.22.2, vitest 5.0.5:
+
+  NO_COLOR=1 npx vitest run --root tests/acceptance/531-redraft-ac12 --no-file-parallelism
+
+It fails, as expected, for the missing deep-logic surface: the base has no `deep-logic` binary, so `live()` cannot
+build the runner and the test fails before any session opens. No thread reading was taken.
+
+ RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/github-issue-531-dba4b3/agent-ac4fd7287131cd51e/tests/acceptance/531-redraft-ac12
+
+ ❯ ac12-threads.test.ts (1 test | 1 failed) 3647ms
+   × #531.ff4975c5 ten logic items at 60 Hz run 1,000 steps with deep-logic's thread count unchanged from step 1 to step 1,000 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac12-threads.test.ts > #531.ff4975c5 ten logic items at 60 Hz run 1,000 steps with deep-logic's thread count unchanged from step 1 to step 1,000
+AssertionError: deep-logic builds on this host (cargo build --locked --bin deep-logic): expected 'cargo build --locked --bin deep-logic…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-logic failed:
++ error: no bin target named `deep-logic` in default-run packages
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-drive
++     deep-gpu
++     deep-graph
++     deep-hook
++     deep-input
++     deep-layout
++     deep-live
++     deep-motion
++     deep-panel-host
++     deep-panel-host-jit-control
++     deep-plain-words
++     deep-relay
++     deep-relay-suite
++     deep-replica
++     deep-replica-canvas
++     deep-salience
++     deep-sandbox
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ native ../531/helpers.ts:294:90
+    292|     built.set(name, made);
+    293|   }
+    294|   expect(made.error, `${name} builds on this host (cargo build --locke…
+       |                                                                                          ^
+    295|   return made.bin;
+    296| }
+ ❯ logicBin ../531/helpers.ts:298:39
+ ❯ live ../531/helpers.ts:562:55
+ ❯ ac12-threads.test.ts:45:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:27:58
+   Duration  4.69s (tests 93%, transform 7%, import 1%)

@@ -1,0 +1,264 @@
+#1550's acceptance tests on the base, dd83ac2f (origin/main), November 8, 2026, macOS 26.7.1 on arm64 (Apple silicon),
+under load (load average 34 to 46 on the machine's cores).
+
+The surface the tests read exists at the base: GPUI's TextSystem::line_wrapper / LineWrapper::wrap_line and
+WindowTextSystem::shape_text, through probe.rs. Only its wiring doesn't: for these runs the [[example]] block in README.md
+("What the implementer adds") was added to crates/deep-replica/Cargo.toml and taken out again afterwards; nothing else
+outside this folder was changed, and Cargo.lock didn't change. Both builds ran with CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0: `cargo build --locked -p deep-replica --bin deep-drive --features env-plants` (5 min 16 s) and
+`cargo build --locked -p deep-replica --features env-plants --example acceptance_1550_probe` (3 min 1 s), from an empty target.
+
+Commands:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1550 wrap.test.ts --testTimeout=600000 --no-file-parallelism
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1550 wrap.test.ts -t "wrong program" --reporter=verbose --testTimeout=600000
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1550 shown.test.ts --testTimeout=600000
+
+Per test, at the base:
+
+  C1 #1550.1699487d  FAIL for the issue's reason: 672 breaks inside a word, in all four scripts on both routes,
+                     e.g. greek "κόσμ|ε," at 91 px (the issue's "κόσ|με" was at fixed 10 px advances; these are the card
+                     font's real advances), arabic "بال|عالم،", hebrew "עו|לם,", devanagari "द|ुनिया,".
+  C2 #1550.575d9695  FAIL for the issue's reason: 42 problems, first "今天的天气非常好|，我们一起去公园…" (a line
+                     starting with "，", CL) on both routes, and lines starting with 。？！」）・々 or ending with 「（.
+  C3 #1550.8fc59257  FAIL: 8,466 line starts the file forbids over 895 of its lines, on both routes (wrap_line 2,372,
+                     shape_text 6,094), each naming its LineBreakTest.txt line.
+  C3 plant           PASS (the planted allow-list path fails, naming LineBreakTest.txt:15209 first; 2,276 problems).
+  C4 #1550.996d9be7  PASS: at the base a line may start at "/", so the path wraps inside 300 px on both routes. This
+                     criterion guards the fix; the base isn't a wrong program for it.
+  C4 plant           PASS (the planted spaces-only wrap fails: "line 1 of 1 is 1187.1 px wide, 887.1 px past the 300 px box").
+  C5 #1550.54f5f264  FAIL, INCONCLUSIVE: no TASTE.json. The two pictures were taken (written to target/acceptance/1550/).
+                     What they show at the base: the card's question doesn't wrap at all; it runs on one line past the
+                     card's right edge, in Arabic and in Chinese (README: What the base shows).
+
+======================================================================== wrap.test.ts, the whole file
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1550
+
+ ❯ wrap.test.ts (6 tests | 3 failed) 15839ms
+   × #1550.1699487d (C1) Greek, Arabic, Hebrew and Devanagari sentences wrapped at every width from the longest word up never break inside a word 1204ms
+   × #1550.575d9695 (C2) over a Chinese and a Japanese fixture at every width no line starts with CL, CP, EX, IS or NS and none ends with OP, unless one unbreakable cluster passes the width 442ms
+   × #1550.8fc59257 (C3) every boundary chrome picks over LineBreakTest.txt at narrow widths is a break the file allows 5415ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  wrap.test.ts > #1550.1699487d (C1) Greek, Arabic, Hebrew and Devanagari sentences wrapped at every width from the longest word up never break inside a word
+AssertionError: 672 problem(s), the first 30:
+greek, wrap_line: breaks inside "κόσμ|ε," (first at 91 px)
+greek, shape_text: breaks inside "κόσμ|ε," (first at 91 px)
+arabic, wrap_line: breaks inside "بال|عالم،" (first at 57 px)
+arabic, shape_text: breaks inside "قب|ل" (first at 57 px)
+hebrew, wrap_line: breaks inside "עו|לם," (first at 41 px)
+hebrew, shape_text: breaks inside "ס|וף" (first at 41 px)
+devanagari, wrap_line: breaks inside "द|ुनिया," (first at 61 px)
+devanagari, shape_text: breaks inside "दुनिय|ा," (first at 61 px)
+greek, wrap_line: breaks inside "και|ρός" (first at 91 px)
+greek, shape_text: breaks inside "και|ρός" (first at 91 px)
+arabic, wrap_line: breaks inside "الط|قس" (first at 57 px)
+arabic, shape_text: breaks inside "التغي|ير" (first at 57 px)
+hebrew, wrap_line: breaks inside "מז|ג" (first at 41 px)
+hebrew, shape_text: breaks inside "הראש|י" (first at 41 px)
+devanagari, wrap_line: breaks inside "मौस|म" (first at 61 px)
+devanagari, shape_text: breaks inside "मौस|म" (first at 61 px)
+greek, wrap_line: breaks inside "υπέρο|χος" (first at 91 px)
+greek, shape_text: breaks inside "υπέρο|χος" (first at 91 px)
+arabic, wrap_line: breaks inside "جمي|ل" (first at 57 px)
+arabic, shape_text: breaks inside "د|مج" (first at 57 px)
+hebrew, wrap_line: breaks inside "האווי|ר" (first at 41 px)
+hebrew, shape_text: breaks inside "לענ|ף" (first at 41 px)
+devanagari, wrap_line: breaks inside "सु|हावना" (first at 61 px)
+devanagari, shape_text: breaks inside "सुहाव|ना" (first at 61 px)
+greek, wrap_line: breaks inside "πάμ|ε" (first at 91 px)
+greek, shape_text: breaks inside "πάμ|ε" (first at 91 px)
+arabic, wrap_line: breaks inside "اليو|م" (first at 57 px)
+arabic, shape_text: breaks inside "ت|وافق" (first at 57 px)
+hebrew, wrap_line: breaks inside "מ|אוד" (first at 41 px)
+hebrew, shape_text: breaks inside "ה|זה" (first at 41 px): expected 672 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 672
+
+ ❯ wrap.test.ts:48:45
+     46|   }
+     47|   const problems = interleave(groups);
+     48|   expect(problems.length, listed(problems)).toBe(0);
+       |                                             ^
+     49| }, 30 * MINUTES);
+     50|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  wrap.test.ts > #1550.575d9695 (C2) over a Chinese and a Japanese fixture at every width no line starts with CL, CP, EX, IS or NS and none ends with OP, unless one unbreakable cluster passes the width
+AssertionError: 42 problem(s), the first 30:
+chinese, wrap_line: starts a line with "，" (CL): "今天的天气非常好|，我们一起去公园…" (first at 24 px)
+chinese, shape_text: starts a line with "，" (CL): "今天的天气非常好|，我们一起去公园…" (first at 24 px)
+japanese, wrap_line: starts a line with "！" (EX): "…歩に行きましょう|！「この変更」を…" (first at 24 px)
+japanese, shape_text: starts a line with "！" (EX): "…歩に行きましょう|！「この変更」を…" (first at 24 px)
+chinese, wrap_line: starts a line with "？" (EX): "…吧。你觉得怎么样|？「这个改动」可…" (first at 24 px)
+chinese, shape_text: starts a line with "？" (EX): "…吧。你觉得怎么样|？「这个改动」可…" (first at 24 px)
+japanese, wrap_line: ends a line with "「" (OP): "…行きましょう！「|この変更」をメイ…" (first at 24 px)
+japanese, shape_text: ends a line with "「" (OP): "…行きましょう！「|この変更」をメイ…" (first at 24 px)
+chinese, wrap_line: ends a line with "「" (OP): "…你觉得怎么样？「|这个改动」可以合…" (first at 24 px)
+chinese, shape_text: ends a line with "「" (OP): "…你觉得怎么样？「|这个改动」可以合…" (first at 24 px)
+japanese, wrap_line: starts a line with "」" (CL): "…ょう！「この変更|」をメインのブラ…" (first at 24 px)
+japanese, shape_text: starts a line with "」" (CL): "…ょう！「この変更|」をメインのブラ…" (first at 24 px)
+chinese, wrap_line: starts a line with "」" (CL): "…么样？「这个改动|」可以合并到主分…" (first at 24 px)
+chinese, shape_text: starts a line with "」" (CL): "…么样？「这个改动|」可以合并到主分…" (first at 24 px)
+japanese, wrap_line: starts a line with "。" (CL): "…も良い天気ですね|。人々と一緒に公…" (first at 35 px)
+japanese, shape_text: starts a line with "。" (CL): "…も良い天気ですね|。人々と一緒に公…" (first at 35 px)
+chinese, wrap_line: starts a line with "？" (EX): "…以合并到主分支吗|？如果可以，请在…" (first at 24 px)
+chinese, shape_text: starts a line with "？" (EX): "…以合并到主分支吗|？如果可以，请在…" (first at 24 px)
+japanese, wrap_line: starts a line with "々" (NS): "…い天気ですね。人|々と一緒に公園へ…" (first at 35 px)
+japanese, shape_text: starts a line with "々" (NS): "…い天気ですね。人|々と一緒に公園へ…" (first at 35 px)
+chinese, wrap_line: ends a line with "（" (OP): "…在今天之内回复（|越快越好）！谢谢…" (first at 36 px)
+chinese, shape_text: ends a line with "（" (OP): "…在今天之内回复（|越快越好）！谢谢…" (first at 36 px)
+japanese, wrap_line: starts a line with "・" (NS): "…いですか？コード|・レビューはちょ…" (first at 35 px)
+japanese, shape_text: starts a line with "・" (NS): "…いですか？コード|・レビューはちょ…" (first at 35 px)
+chinese, wrap_line: starts a line with "。" (CL): "…越快越好）！谢谢|。" (first at 60 px)
+chinese, shape_text: starts a line with "。" (CL): "…越快越好）！谢谢|。" (first at 60 px)
+japanese, wrap_line: ends a line with "（" (OP): "…待ってください（|今日中に返事しま…" (first at 35 px)
+japanese, shape_text: ends a line with "（" (OP): "…待ってください（|今日中に返事しま…" (first at 35 px)
+chinese, wrap_line: starts a line with "。" (CL): "…一起去公园散步吧|。你觉得怎么样？…" (first at 227 px)
+chinese, shape_text: starts a line with "。" (CL): "…一起去公园散步吧|。你觉得怎么样？…" (first at 227 px): expected 42 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 42
+
+ ❯ wrap.test.ts:96:45
+     94|   }
+     95|   const problems = interleave(groups);
+     96|   expect(problems.length, listed(problems)).toBe(0);
+       |                                             ^
+     97| }, 30 * MINUTES);
+     98|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  wrap.test.ts > #1550.8fc59257 (C3) every boundary chrome picks over LineBreakTest.txt at narrow widths is a break the file allows
+AssertionError: 8466 problem(s), the first 30:
+LineBreakTest.txt:15209: wrap_line at 20 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:132: shape_text at 22 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15209: wrap_line at 21 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:132: shape_text at 23 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15209: wrap_line at 22 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:132: shape_text at 24 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15213: wrap_line at 11 px starts a line between U+0308 and U+00A7, where the file has ×: × 0020 ÷ 0308 × 00A7 ÷
+LineBreakTest.txt:132: shape_text at 25 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15213: wrap_line at 12 px starts a line between U+0308 and U+00A7, where the file has ×: × 0020 ÷ 0308 × 00A7 ÷
+LineBreakTest.txt:134: shape_text at 24 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0308 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15221: wrap_line at 14 px starts a line between U+0308 and U+2630, where the file has ×: × 0020 ÷ 0308 × 2630 ÷
+LineBreakTest.txt:134: shape_text at 25 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0308 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15221: wrap_line at 15 px starts a line between U+0308 and U+2630, where the file has ×: × 0020 ÷ 0308 × 2630 ÷
+LineBreakTest.txt:136: shape_text at 22 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05D0 ÷
+LineBreakTest.txt:15225: wrap_line at 10 px starts a line between U+0308 and U+25CC, where the file has ×: × 0020 ÷ 0308 × 25CC ÷
+LineBreakTest.txt:136: shape_text at 23 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05D0 ÷
+LineBreakTest.txt:15225: wrap_line at 11 px starts a line between U+0308 and U+25CC, where the file has ×: × 0020 ÷ 0308 × 25CC ÷
+LineBreakTest.txt:136: shape_text at 24 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05D0 ÷
+LineBreakTest.txt:15226: wrap_line at 8 px starts a line between U+0308 and U+0020, where the file has ×: × 0020 ÷ 0308 × 0020 ÷ 25CC ÷
+LineBreakTest.txt:136: shape_text at 25 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05D0 ÷
+LineBreakTest.txt:15229: wrap_line at 11 px starts a line between U+0308 and U+0023, where the file has ×: × 0020 ÷ 0308 × 0023 ÷
+LineBreakTest.txt:136: shape_text at 26 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05D0 ÷
+LineBreakTest.txt:15229: wrap_line at 12 px starts a line between U+0308 and U+0023, where the file has ×: × 0020 ÷ 0308 × 0023 ÷
+LineBreakTest.txt:136: shape_text at 27 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05D0 ÷
+LineBreakTest.txt:15234: wrap_line at 8 px starts a line between U+0308 and U+0020, where the file has ×: × 0020 ÷ 0308 × 0020 ÷ 11003 ÷
+LineBreakTest.txt:136: shape_text at 28 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05D0 ÷
+LineBreakTest.txt:15238: wrap_line at 7 px starts a line between U+0308 and U+0020, where the file has ×: × 0020 ÷ 0308 × 0020 ÷ 1B50 ÷
+LineBreakTest.txt:138: shape_text at 24 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0308 × 0020 ÷ 05D0 ÷
+LineBreakTest.txt:15238: wrap_line at 8 px starts a line between U+0308 and U+0020, where the file has ×: × 0020 ÷ 0308 × 0020 ÷ 1B50 ÷
+LineBreakTest.txt:138: shape_text at 25 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0308 × 0020 ÷ 05D0 ÷: expected 8466 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 8466
+
+ ❯ wrap.test.ts:129:45
+    127|     wrap: (cs, ws) => wrapAll(route, cs.map((c, i) => ({ text: c.text,…
+    128|   })));
+    129|   expect(problems.length, listed(problems)).toBe(0);
+       |                                             ^
+    130| }, 60 * MINUTES);
+    131|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 3 passed (6)
+   Start at  17:18:34
+   Duration  15.97s (tests 100%)
+
+
+======================================================================== wrap.test.ts, the two planted programs, verbose (to show their messages)
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1550
+
+stdout | wrap.test.ts > #1550.8fc59257 (C3) wrong program: a planted allow-list path fails, naming the line
+#1550.8fc59257: the planted allow-list path fails:
+2276 problem(s), the first 5:
+LineBreakTest.txt:15209: the planted allow-list path at 20 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:15209: the planted allow-list path at 21 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:15209: the planted allow-list path at 22 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:15213: the planted allow-list path at 11 px starts a line between U+0308 and U+00A7, where the file has ×: × 0020 ÷ 0308 × 00A7 ÷
+LineBreakTest.txt:15213: the planted allow-list path at 12 px starts a line between U+0308 and U+00A7, where the file has ×: × 0020 ÷ 0308 × 00A7 ÷
+
+ ↓ wrap.test.ts > #1550.1699487d (C1) Greek, Arabic, Hebrew and Devanagari sentences wrapped at every width from the longest word up never break inside a word
+ ↓ wrap.test.ts > #1550.575d9695 (C2) over a Chinese and a Japanese fixture at every width no line starts with CL, CP, EX, IS or NS and none ends with OP, unless one unbreakable cluster passes the width
+ ↓ wrap.test.ts > #1550.8fc59257 (C3) every boundary chrome picks over LineBreakTest.txt at narrow widths is a break the file allows
+ ✓ wrap.test.ts > #1550.8fc59257 (C3) wrong program: a planted allow-list path fails, naming the line 9919ms
+stdout | wrap.test.ts > #1550.996d9be7 (C4) wrong program: a planted wrap that breaks only at spaces fails, naming the overflow
+#1550.996d9be7: the planted spaces-only wrap fails:
+1 problem(s):
+the planted spaces-only wrap: line 1 of 1 is 1187.1 px wide, 887.1 px past the 300 px box: "/srv/deepbuild/worktrees/review-chrome-wrap-1550/vendor/gpui-pre/src/text_system/line_wrapper/fixtures/unicode-17.0.0/line_break/east_asian_closing_punctuation/zh/full_width_comma_after_ideograph.json"
+
+ ↓ wrap.test.ts > #1550.996d9be7 (C4) a 200-character path wraps inside a 300 px box
+ ✓ wrap.test.ts > #1550.996d9be7 (C4) wrong program: a planted wrap that breaks only at spaces fails, naming the overflow 438ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 4 skipped (6)
+   Start at  17:29:37
+   Duration  15.76s (tests 100%)
+
+
+======================================================================== shown.test.ts
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1550
+
+stdout | shown.test.ts > #1550.54f5f264 (C5) the check run takes a question card in Arabic and one in Chinese at a narrow width, and reads INCONCLUSIVE unless a recorded taste call on exactly these pictures says they look right
+#1550.54f5f264: pictures from this run in <checkout>/target/acceptance/1550:
+  card-arabic.png  3a24b365c2f99310de6b58437edc82d241cfeacfae49c6510a4010a2ff0a5d67
+  card-chinese.png  da7dd1435dac94c76ef4d2f4617387f93a79c137f1d5fccc5ff37bdd3b8e075d
+
+ ❯ shown.test.ts (1 test | 1 failed) 11716ms
+   × #1550.54f5f264 (C5) the check run takes a question card in Arabic and one in Chinese at a narrow width, and reads INCONCLUSIVE unless a recorded taste call on exactly these pictures says they look right 11716ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  shown.test.ts > #1550.54f5f264 (C5) the check run takes a question card in Arabic and one in Chinese at a narrow width, and reads INCONCLUSIVE unless a recorded taste call on exactly these pictures says they look right
+AssertionError: INCONCLUSIVE: #1550.54f5f264: no taste call is recorded for these pictures (no TASTE.json, or one with no verdict); this is not a pass
+ ❯ shown.test.ts:80:42
+     78|   const call = existsSync(TASTE) ? JSON.parse(readFileSync(TASTE, 'utf…
+     79|   const { outcome, why } = tasteOutcome(call, hashes);
+     80|   if (outcome === 'INCONCLUSIVE') expect.fail(`INCONCLUSIVE: ${AC.show…
+       |                                          ^
+     81|   expect(outcome, why).toBe('PASS');
+     82| }, 30 * 60_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:18:34
+   Duration  11.95s (tests 99%, transform 1%, import 1%)
+

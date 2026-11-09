@@ -24,7 +24,7 @@ const ACTION = 'dev.deepbuild.confirm';
  * What a confirmation is for: the handle the prompt answers, and its revision, which the signature covers with the
  * words; and the process asking, by ID and start time, which is who polkit prompts.
  */
-export interface Subject { handle: string; revision: string; process?: { pid: number; start: string } | undefined }
+interface Subject { handle: string; revision: string; process?: { pid: number; start: string } | undefined }
 
 /** A program's output, whatever its exit code: that counts for nothing here. */
 function ran(file: string, args: string[], o: { env?: NodeJS.ProcessEnv; input?: Uint8Array } = {}): Promise<{ stdout: string; stderr: string; failed?: Error }> {

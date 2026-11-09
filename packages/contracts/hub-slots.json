@@ -66,6 +66,16 @@
     "since": "R2"
   },
   {
+    "method": "deep.registerSource",
+    "variant": "library",
+    "interface": "asset.library@1",
+    "digest": "d1:889afc00dc974a58c31dbb9ac6c3f33bab43813a4c8285c78973b82fa5c70cc0",
+    "fills": "many",
+    "kit": null,
+    "planted": [],
+    "since": "R6"
+  },
+  {
     "method": "deep.registerEnvironment",
     "variant": null,
     "interface": "environment@1",
