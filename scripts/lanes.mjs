@@ -222,6 +222,8 @@ timed.push('tests/acceptance/33/budget.test.ts');
 
 // #1348's suite runs the plain words lane, which builds and draws its fixture run in the replica: one file at a time.
 alone.push('tests/acceptance/1348/');
+// #505's files each build deep-canvas-render (and its formula file deep-show): one file at a time.
+alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
