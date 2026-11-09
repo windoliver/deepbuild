@@ -234,6 +234,8 @@ timed.push('tests/acceptance/1546/ac4-needs-you.live.test.ts');
 
 // #1348's suite runs the plain words lane, which builds and draws its fixture run in the replica: one file at a time.
 alone.push('tests/acceptance/1348/');
+// #1455's suite builds deep-drive, the replica and the app, and draws the fixture run in them: one file at a time.
+alone.push('tests/acceptance/1455/');
 // #505's files each build deep-canvas-render (and its formula file deep-show): one file at a time.
 alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
 // #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.

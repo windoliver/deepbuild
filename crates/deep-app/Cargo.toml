@@ -40,6 +40,9 @@ plant-panel-skips-kit = []
 # Issue #1454: a file stands in for the OS's prompt, in no shipped build: a test can't be you, and an environment variable
 # in the shipped app would let an agent answer for you.
 test-confirm = []
+# Issue #1455: the app draws the bound values of the file DEEP_APP_TEST_BOUND names, as `deep-replica --bound` does, in no
+# shipped build: its pictures need a bound panel from the real app.
+test-bound = ["fixtures"]
 # Issue #1477's wrong programs, in no shipped build (tests/acceptance/1477): a table that builds an element per cell,
 # one that places rows by f32 offsets, and a text sort that isn't stable.
 plant-element-per-cell = []

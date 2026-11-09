@@ -93,18 +93,23 @@ pub struct Reach {
 const HUB_DOWN: &str = "The hub isn't answering";
 
 impl Reach {
-    /// The count: `count` with what you should know beside it. With the hub down a number may be old, so it reads none.
+    /// The count: `count`, or with the hub down that it isn't answering, since a number may be old.
     pub fn count(&self, count: String) -> String {
         if self.hub_down {
             return HUB_DOWN.to_owned();
         }
+        count
+    }
+
+    /// What you should know beside the count, a row of its own (#1455): notifications are off, and the fix.
+    pub fn notice(&self) -> Option<&'static str> {
         match self.setting {
-            NotificationSetting::Allowed => count,
-            NotificationSetting::Denied => format!(
-                "{count} · Notifications are off: turn on Allow notifications for DeepBuild in System Settings"
+            NotificationSetting::Allowed => None,
+            NotificationSetting::Denied => Some(
+                "Notifications are off: turn on Allow notifications for DeepBuild in System Settings",
             ),
-            NotificationSetting::AlertsNone => format!(
-                "{count} · Alerts are set to None: pick an Alert style for DeepBuild in System Settings"
+            NotificationSetting::AlertsNone => Some(
+                "Alerts are set to None: pick an Alert style for DeepBuild in System Settings",
             ),
         }
     }
