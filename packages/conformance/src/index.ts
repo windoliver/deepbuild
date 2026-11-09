@@ -9,6 +9,7 @@ export type {
 } from './slot-types.js';
 // A check kind's own kit (#685's proof kind) is judged by the same runner, so its judge ends a case with the same finding.
 export { fail, Finding } from './slot-types.js';
+export { isCheckResult } from './result.js';
 export type { Random } from './generator.js';
 export { cleanFill, kits } from './kit.js';
 export { shippedFill } from './shipped.js';
