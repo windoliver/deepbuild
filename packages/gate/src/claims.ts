@@ -14,7 +14,7 @@ export interface ClaimIntake {
   named?: string[];
 }
 export interface MadeClaim { claim: string; task_ref: string; source: ClaimSource; session: string; commit: string }
-export type ClaimPlant = 'claims-every-open-ask' | 'claims-on-words' | 'claims-on-answers' | 'two-per-ask';
+type ClaimPlant = 'claims-every-open-ask' | 'claims-on-words' | 'claims-on-answers' | 'two-per-ask';
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const id = (): string => {

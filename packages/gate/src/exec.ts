@@ -36,7 +36,7 @@ async function storeEnv(repo: string, store: string): Promise<NodeJS.ProcessEnv>
  * same HEAD is the same commit. Its objects go to `store`, never the repo's: the worktree, its index, its refs and
  * its objects stay as they were.
  */
-export async function snapshotOf(repo: string, store = DEFAULT_STORE): Promise<string> {
+async function snapshotOf(repo: string, store = DEFAULT_STORE): Promise<string> {
   const head = await git(repo, ['rev-parse', 'HEAD']);
   if (!(await git(repo, ['status', '--porcelain', '--untracked-files=all']))) return head;
   const dir = mkdtempSync(join(tmpdir(), 'deep-index-'));
@@ -58,7 +58,7 @@ export async function snapshotOf(repo: string, store = DEFAULT_STORE): Promise<s
   }
 }
 /** A temporary checkout of `commit`, outside every worktree: git's own worktree list, refs and stash stay as they were. */
-export async function checkoutOf(repo: string, commit: string, store = DEFAULT_STORE): Promise<string> {
+async function checkoutOf(repo: string, commit: string, store = DEFAULT_STORE): Promise<string> {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-checkout-')));
   const gitDir = await git(repo, ['rev-parse', '--absolute-git-dir']);
   const env = await storeEnv(repo, store);

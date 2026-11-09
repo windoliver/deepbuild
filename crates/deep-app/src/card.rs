@@ -174,6 +174,8 @@ impl Card {
         controller: Option<Controller>,
         cx: &mut Context<Self>,
     ) -> Self {
+        // Issue #1434: while the card shows, no chrome effect may draw over its slot.
+        crate::chrome_fx::guard(crate::chrome_fx::CARD, bounds);
         Card {
             question,
             options,
@@ -333,6 +335,12 @@ impl Card {
                 .into_any_element(),
             None => element.into_any_element(),
         }
+    }
+}
+
+impl Drop for Card {
+    fn drop(&mut self) {
+        crate::chrome_fx::unguard(crate::chrome_fx::CARD);
     }
 }
 

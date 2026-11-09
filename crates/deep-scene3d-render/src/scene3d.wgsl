@@ -291,9 +291,14 @@ struct LobeEntry {
 // The opaque scene's copy with mips, which transmission samples (#428).
 @group(1) @binding(13) var opaque: texture_2d<f32>;
 
+// Whether this pipeline shades extra lobes (#432: one pipeline per feature set): the opaque
+// solids' plain pipelines are made with it off, so their lobe code folds away, and a part with
+// lobes draws through the pipeline made with it on.
+override LOBES: bool = true;
+
 // The part's lobes' entry, 0 for none.
 fn lobe_index(in: MeshOut) -> u32 {
-    return in.op.w >> 16u;
+    return select(0u, in.op.w >> 16u, LOBES);
 }
 
 fn oklab(c: vec3<f32>) -> vec3<f32> {
@@ -2243,6 +2248,17 @@ fn mesh_cut_fs(in: MeshOut, @builtin(front_facing) front: bool) -> CutTargets {
 fn shadow_fs(in: MeshOut) {
     if ((in.flags & CUT) != 0u && cut_hides(in.world))
         || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x) {
+        discard;
+    }
+}
+
+// A mask-alpha caster's fragment stage (#432: a caster kind of its own): what its alpha test
+// removes in the view casts nothing either.
+@fragment
+fn shadow_mask_fs(in: MeshOut) {
+    if ((in.flags & CUT) != 0u && cut_hides(in.world))
+        || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x)
+        || (((in.flags >> 7u) & 3u) == MASK && in.emission.w < ALPHA_CUTOFF) {
         discard;
     }
 }

@@ -24,7 +24,7 @@ import { refusal, Refused, ulid, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
-export interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; /** A claim's check that needs the app: it runs on the worktree's warm stack (#580). */ stack?: StackWant; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
+interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; /** A claim's check that needs the app: it runs on the worktree's warm stack (#580). */ stack?: StackWant; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
   /** A claim's check (#30): the command line the command check kind runs in `cwd`, hermetically through host@1; `argv` is what it would be as a shell line. */
   command?: string;
   /** A check your repo's spec runs outside the sandbox (#33). */
@@ -57,7 +57,7 @@ const isUnder = (path: string, dir: string) => {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 };
 
-export interface RunsOptions {
+interface RunsOptions {
   /** The journal file: each run started and not yet durably finished. */
   journalFile: string;
   point(): void;

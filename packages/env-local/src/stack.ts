@@ -342,7 +342,7 @@ async function seedClone(host: Host, seed: NonNullable<Environment['seed']>, fol
   writeFileSync(join(dir, 'clone', 'seed-record.json'), JSON.stringify(carried));
   return { database: clone, record: carried };
 }
-export interface UpOptions {
+interface UpOptions {
   run: string;
   /** The folder the stack starts from and reads its environment block in: a worktree, or a check's checkout. */
   folder: string;
@@ -401,7 +401,7 @@ const dockerTools = () => {
   const guarded = [join(config, 'config.json'), ...cli.searched, ...plugins, dirname(cli.found), dirname(plugin.found)];
   return { docker: cli.found, plugin: plugin.found, guarded: [...new Set(guarded.map((p) => (existsSync(p) ? realpathSync(p) : p)))] };
 };
-export const SYSTEM_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
+const SYSTEM_PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
 type Daemon = { socket: string[]; env: Record<string, string> } | { why: string };
 const daemons = new Map<string, Daemon>();
 /**
