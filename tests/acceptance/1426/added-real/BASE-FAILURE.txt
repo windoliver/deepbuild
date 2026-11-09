@@ -1,0 +1,42 @@
+#1426 a17e5e56, the real-tree half: the run at the base commit db917989 (main of November 7, 2026), on macOS (Darwin
+27.2.0), Node 24.22.2, cargo 1.99.1, after `npm ci`. The tagged test fails for a missing surface: the README has no
+carried-patch table. The self-tests pass, since they test the test.
+
+== node --test tests/acceptance/1426/added-real/real.test.mjs  (exit 1; 1 test, 0 pass, 1 fail)
+
+✖ #1426.a17e5e56 (scope, the real tree) every row of the carried-patch table gives a removal condition and names its test by full repo path, and that test is in its suite's own list (0.981875ms)
+  AssertionError [ERR_ASSERTION]: FAIL table: vendor/gpui-pre-apple/upstream/README.md has no "## Carried patches" table with the columns Behavior | Issue | Files | Test | Budget | Removal
+
+  'FAIL' !== 'PASS'
+
+== node --test tests/acceptance/1426/added-real/wrong.test.mjs  (exit 0; 36 tests, 36 pass, 0 fail, about 5 s)
+
+ℹ tests 36
+ℹ pass 36
+ℹ fail 0
+
+== Mutation check of the self-tests (scratch copies of real-judge.mjs, one fault each; not part of the suite)
+
+node-text (a node test found by the file's text)          8 self-tests fail
+vitest-text (a vitest test found by the file's text)      4 fail
+cargo-text (any Rust name with a fn passes)               3 fail
+no-removal (Removal never checked)                        7 fail
+none-ok ("none" with no reason passes)                    3 fail
+builds-gpui (no gpui check, so cargo builds the stub)     2 fail
+inconclusive-passes (an unread list reads PASS)           6 fail
+no-shim (node tests run with a working cargo)             1 fail
+basename-ok (no existence check)                          0 fail: a path that isn't there still fails, in its runner
+
+== Probes of the listers on the real tree at the base (scratch, not part of the suite)
+
+crates/deep-app/src/lib.rs › tests::stocks                       INCONCLUSIVE: needs a gpui build (through gpui-kit)
+vendor/gpui-pre-apple/src/metal_renderer.rs › metal_renderer::tests::render_bgra_surface_premultiplied
+                                                                 FAIL: the file defines no such fn (the test is only in
+                                                                 upstream/0001-...patch at the base)
+crates/deep-contracts/tests/jcs.rs › a_unicode_escape_takes_four_hex_digits_and_nothing_else
+                                                                 listed (cold cargo build in a temp target, about 10 s)
+crates/deep-contracts/tests/jcs.rs › canonical                   FAIL: a plain fn, not in cargo's list
+tests/acceptance/377/deps.test.ts › x                            INCONCLUSIVE: vitest failed to load vitest.config.ts,
+                                                                 since the workspace packages weren't built
+tests/acceptance/882/wrong.test.mjs › AC1: the control guard passes the look judges
+                                                                 listed

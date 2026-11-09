@@ -876,3 +876,58 @@ fn runners_fetched_and_written_programs_meet_the_floor_with_the_hub_away() {
     let _ = std::fs::remove_dir_all(&home);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+/// `deep-hook clone <from> <to>`, its exit code and stderr.
+#[cfg(target_os = "linux")]
+fn clone_tree(from: &std::path::Path, to: &std::path::Path) -> (Option<i32>, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_deep-hook")).arg("clone").arg(from).arg(to).output().unwrap();
+    (out.status.code(), String::from_utf8_lossy(&out.stderr).into_owned())
+}
+
+/// A folder of what staging meets: a file, an executable, a subfolder and a link.
+#[cfg(target_os = "linux")]
+fn tree(at: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::create_dir_all(at.join("sub")).unwrap();
+    std::fs::write(at.join("a.txt"), "a\n").unwrap();
+    std::fs::write(at.join("run.sh"), "#!/bin/sh\n").unwrap();
+    std::fs::set_permissions(at.join("run.sh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(at.join("sub/b.bin"), vec![7u8; 1 << 16]).unwrap();
+    std::os::unix::fs::symlink("a.txt", at.join("link")).unwrap();
+}
+
+/// Staging on Linux (#70): a reflink clone where the file system can make one, and exit 3 where it can't, so the
+/// command becomes an ask there and is never run against a plain copy.
+#[test]
+#[cfg(target_os = "linux")]
+fn a_folder_is_cloned_copy_on_write_where_the_file_system_can_and_exits_3_where_it_cannot() {
+    use std::os::unix::fs::PermissionsExt;
+    let cow = std::path::PathBuf::from(std::env::var("DEEP_TEST_COW_DIR").unwrap_or_else(|_| "/var/tmp".into()));
+    let dir = cow.join(format!("deep-hook-clone-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("probe"), "p").unwrap();
+    let reflinks = Command::new("cp").arg("--reflink=always").arg(dir.join("probe")).arg(dir.join("probe.copy")).status().unwrap().success();
+    if !reflinks {
+        let _ = std::fs::remove_dir_all(&dir);
+        panic!("BLOCKED: {} can't make a reflink copy; set DEEP_TEST_COW_DIR to a folder on btrfs or XFS with reflink", cow.display());
+    }
+    tree(&dir.join("from"));
+    let (code, err) = clone_tree(&dir.join("from"), &dir.join("to"));
+    assert_eq!(code, Some(0), "clone on {}: {err}", cow.display());
+    let to = dir.join("to");
+    assert_eq!(std::fs::read(to.join("a.txt")).unwrap(), b"a\n");
+    assert_eq!(std::fs::read(to.join("sub/b.bin")).unwrap(), vec![7u8; 1 << 16]);
+    assert_eq!(std::fs::read_link(to.join("link")).unwrap(), std::path::PathBuf::from("a.txt"), "a link stays a link");
+    assert_eq!(std::fs::metadata(to.join("run.sh")).unwrap().permissions().mode() & 0o777, 0o755);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let shm = std::path::PathBuf::from(format!("/dev/shm/deep-hook-clone-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&shm);
+    tree(&shm.join("from"));
+    let (code, err) = clone_tree(&shm.join("from"), &shm.join("to"));
+    let left = shm.join("to").exists();
+    let _ = std::fs::remove_dir_all(&shm);
+    assert_eq!(code, Some(3), "tmpfs makes no copy-on-write copy, so clone must exit 3: {err}");
+    assert!(!left, "a clone that can't be copy-on-write leaves nothing at the target");
+}

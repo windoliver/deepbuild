@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { writeJson } from './claude-settings.js';
-import { call, type Reply } from './client.js';
+import { call, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
@@ -15,7 +15,8 @@ type Obj = Record<string, unknown>;
 /** One call as this process, so the hub's peer check can tell whether an agent's process tree runs it. */
 async function asYou(method: string, params: Obj): Promise<Reply> {
   const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-  return call(hubAddress(null).path, token, method, params, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+  const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
+  return withPrompt(() => call(hubAddress(null).path, token, method, params, peer));
 }
 /** Why `command` doesn't count, or undefined once the OS confirmed you through the hub. */
 export async function confirmed(command: string, detail?: string): Promise<string | undefined> {

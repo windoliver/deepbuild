@@ -7,6 +7,8 @@ pub mod building;
 pub mod clusters;
 pub mod curve;
 pub mod cut;
+pub mod deviation;
+pub mod emitters;
 pub mod fixtures;
 pub mod flare;
 pub mod frames;
@@ -25,6 +27,7 @@ pub mod modifiers;
 pub mod module;
 pub mod overlay;
 pub mod poly;
+pub mod probe;
 pub mod samples;
 pub mod scene;
 pub mod sets;
@@ -34,6 +37,7 @@ pub mod spec;
 pub mod stack;
 pub mod sweep;
 pub mod uv;
+pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.

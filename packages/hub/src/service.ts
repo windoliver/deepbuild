@@ -6,7 +6,7 @@ import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync 
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { hubAddress, installedRoot, lastingNode, rootOf } from './paths.js';
+import { hubAddress, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
@@ -150,6 +150,7 @@ WantedBy=default.target
 /** Hands the definition to the service manager, or to $DEEP_HUB_LAUNCHER where a test stands in for it. */
 function launch(file: string): string | undefined {
   const run = (command: string, args: string[]) => spawnSync(command, args, { encoding: 'utf8' });
+  const same = (a: string, b: string) => { try { return realpathSync(a) === realpathSync(b); } catch { return a === b; } };
   const launcher = process.env.DEEP_HUB_LAUNCHER;
   if (launcher) {
     const r = run(launcher, [file]);
@@ -162,17 +163,23 @@ function launch(file: string): string | undefined {
     // Already loaded: start it again, but only the job this home's plist loaded. One label serves every home, so a
     // job loaded from another home's plist (a test's, a second checkout's) is that home's hub, never this one's.
     const path = /^\s*path = (.+)$/m.exec(run('launchctl', ['print', `${domain}/${LABEL}`]).stdout ?? '')?.[1]?.trim();
-    const same = (a: string, b: string) => { try { return realpathSync(a) === realpathSync(b); } catch { return a === b; } };
     if (path && !same(path, file)) return `${LABEL} is already loaded from ${path}, another home's hub; unload it with launchctl bootout ${domain}/${LABEL} if it is yours to stop, then start this one again`;
     const kicked = run('launchctl', ['kickstart', `${domain}/${LABEL}`]);
     return kicked.status === 0 ? undefined : `launchctl: ${loaded.stderr.trim()} ${kicked.stderr.trim()}`;
   }
   if (process.platform === 'linux') {
-    for (const args of [['--user', 'daemon-reload'], ['--user', 'enable', '--now', UNIT]]) {
-      const r = run('systemctl', args);
-      if (r.status !== 0) return `systemctl ${args.join(' ')}: ${r.stderr.trim()}`;
+    const reloaded = run('systemctl', ['--user', 'daemon-reload']);
+    if (reloaded.status !== 0) return `systemctl --user daemon-reload: ${reloaded.stderr.trim()}`;
+    // The same for systemd: one unit name serves every home, and a unit loaded from another home's file is that hub.
+    const path = run('systemctl', ['--user', 'show', '--property=FragmentPath', '--value', UNIT]).stdout?.trim();
+    if (path && !same(path, file)) return `${UNIT} is loaded from ${path}, another home's hub; stop it with systemctl --user disable --now ${UNIT} if it is yours to stop, then start this one again`;
+    // The user manager reads units from its own home; a unit written under another one, as a test's home is, is linked in.
+    if (!path) {
+      const linked = run('systemctl', ['--user', 'link', file]);
+      if (linked.status !== 0) return `systemctl --user link ${file}: ${linked.stderr.trim()}`;
     }
-    return undefined;
+    const started = run('systemctl', ['--user', 'enable', '--now', UNIT]);
+    return started.status === 0 ? undefined : `systemctl --user enable --now ${UNIT}: ${started.stderr.trim()}`;
   }
   return `a login service on ${process.platform} isn't supported yet`;
 }
@@ -182,7 +189,10 @@ export async function startHub(options: { root?: string; cli: string }): Promise
   const root = rootOf(options.root ?? installedRoot());
   if (await answers(root.socket)) return 0;
   mkdirSync(root.logs, { recursive: true, mode: 0o700 });
-  const program = [options.root ? process.execPath : lastingNode(), realpathSync(options.cli), 'hub', 'run', ...(options.root ? ['--root', root.dir] : [])];
+  // An installed version's login service runs the versions folder's current link, which every update keeps, never a
+  // version's own folder (#41); a checkout's runs its own CLI through Node.
+  const installed = options.root ? undefined : installedPrograms(root.dir);
+  const program = installed ? [installed.deep, 'hub', 'run'] : [options.root ? process.execPath : lastingNode(), realpathSync(options.cli), 'hub', 'run', ...(options.root ? ['--root', root.dir] : [])];
   if (options.root) {
     // A dev hub: in a session of its own, so its terminal's hangup never reaches it.
     const log = openSync(join(root.logs, 'hub.log'), 'a', 0o600);

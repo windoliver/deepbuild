@@ -501,7 +501,7 @@ impl DocOps {
                 built.wgsl.push_str("\nfn rejected_by_the_device( {\n");
             }
             let d = &device.device;
-            let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+            let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
             let runner = Runner::new(d, built, LINEAR);
             for it in &c.iterates {
                 let body = Compiled {

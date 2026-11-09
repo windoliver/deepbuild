@@ -2,6 +2,7 @@
 // appended events back for subscribers.
 import { parentPort, workerData } from 'node:worker_threads';
 import { Core, type CallContext } from './core.js';
+import { ReadOnlyCore, unreadable } from './readonly-core.js';
 import { shedStartup } from './settle.js';
 import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMeta } from './wire.js';
 
@@ -36,7 +37,7 @@ export type CoreMessage =
   | (CoreRequest & { n: number });
 
 /** Runs one request against the core: the core's answer, or the refusal to write back. */
-export async function answer(core: Core, request: CoreRequest): Promise<unknown> {
+export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): Promise<unknown> {
   switch (request.op) {
     case 'call': return core.call(request.method, request.params, request.context);
     case 'mcp-hello': return core.mcpHello(request.parent, request.paseo);
@@ -57,7 +58,10 @@ export const asRefusal = (error: unknown) => (error instanceof Refused ? error.r
 
 if (parentPort && workerData?.core) {
   const port = parentPort;
-  const core = new Core(workerData.core as CoreOptions, (sub, event) => port.postMessage({ op: 'frame', sub, event }), (sessions, judged, resend, cantRun) => port.postMessage({ op: 'asking', sessions, judged, resend, cantRun }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }));
+  // A record a newer version wrote is opened read-only, by a stand-in that appends nothing (#41).
+  const options = workerData.core as CoreOptions;
+  const why = unreadable(options);
+  const core = why ? new ReadOnlyCore(why) : new Core(options, (sub, event) => port.postMessage({ op: 'frame', sub, event }), (sessions, judged, resend, cantRun) => port.postMessage({ op: 'asking', sessions, judged, resend, cantRun }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }));
   core.started().then(
     () => { shedStartup(); port.postMessage({ op: 'started', hooks: core.hooks() }); },
     (error: unknown) => port.postMessage({ op: 'fatal', message: error instanceof Error ? error.stack ?? error.message : String(error) }),

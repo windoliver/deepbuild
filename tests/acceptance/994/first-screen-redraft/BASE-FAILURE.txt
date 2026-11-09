@@ -1,0 +1,40 @@
+#994's first-screen redraft at the base: commit c12a65bb, this folder added, nothing else. November 6, 2026, a Mac at load
+118 to 136, Node 24.22.2, cargo 1.99.1, outside the Bash tool's sandbox.
+
+NOT THE RUN THE JOB ASKED FOR. No test here failed for its expected reason, and none has read a real window. Every window
+test stopped BLOCKED at its first launch, before any window opened:
+
+  $ probe access
+  {"ax":false,"screen":false,"screens":[[1736,1133,2]],"locked":false}
+
+The screen was not locked. See ../../1002/first-screen-redraft/BASE-FAILURE.txt for how that was checked.
+
+  $ NO_COLOR=1 caffeinate -di npx vitest run --root tests/acceptance/994/first-screen-redraft --no-file-parallelism --reporter=verbose
+  Test Files  2 failed | 1 passed (3)
+       Tests  8 failed | 14 passed (22)
+
+The 8 that failed, each with this one reason:
+  BLOCKED: this process has no Accessibility permission, so nothing can read the real window's nodes or the menu bar
+
+  first-screen.test.ts  #994 scope: started with no hub answering, the count says so, with no number
+  first-screen.test.ts  #994 scope: the count follows the hub: ...
+  first-screen.test.ts  #994 scope: a refused read is shown the same way: ...
+  first-screen.test.ts  #994 (wrong program) a planted spike window ...
+  first-screen.test.ts  AC3 #994.649376f0 with notifications denied, an open ask's row ...
+  first-screen.test.ts  AC3 #994.649376f0 (control) with notifications allowed ...
+  first-screen.test.ts  AC3 #994.649376f0 planted: an app that posts without checking ...
+  shown.test.ts         AC5 #994.f8ef6a91 screenshots of the real window ...
+
+The 14 that passed: judges.test.ts, written readings, no app and no criterion. They say nothing about the real window.
+
+WHAT THE BASE SHOULD DO, FROM READING ITS CODE ONLY, UNRUN:
+
+- Every tagged test here should pass at the base, or reach INCONCLUSIVE for AC5. The sidebar's count reads `count_line`,
+  which gives "The hub isn't answering" while the watch is down, and a Needs you row adds "· not notified". So none of these
+  criteria is expected to fail on the merge base.
+- That still proves something: #994's criteria name no merge-base failure for the count or the row, and #1454 asks that they
+  hold on the real window while it changes that window. Their wrong programs are `plant-spike-window` and
+  `plant-posts-unchecked`, both real builds, which should fail through the same judges, the second naming the ask.
+- Not knowable from the code: whether the words fit at 960 × 640, and whether Vision reads them.
+
+A later run with both permissions must replace this file.

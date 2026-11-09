@@ -126,6 +126,14 @@ impl Ring {
         self.slots.is_empty()
     }
 
+    /// The frame the slot on screen holds, if one is shown.
+    pub fn on_screen(&self) -> Option<u64> {
+        self.slots
+            .iter()
+            .find(|s| s.state == SlotState::OnScreen)
+            .and_then(|s| s.frame)
+    }
+
     pub fn state(&self, slot: usize) -> SlotState {
         self.slots[slot].state
     }
