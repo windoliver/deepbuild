@@ -65,19 +65,16 @@ impl OutlinePen for Pen {
 }
 
 /// #496: one glyph's outline in its own frame (pen origin on the baseline, y down), in logical
-/// pixels, at the variation coordinates it was shaped at; empty for a glyph with none.
-pub fn outline_of(g: &Glyph) -> Vec<Cmd> {
-    let Ok(face) = skrifa::FontRef::from_index(g.font.data.data(), g.font.index) else {
-        return Vec::new();
-    };
+/// pixels, at the variation coordinates it was shaped at; empty for a blank glyph (a space), and
+/// `None` (#1479) for one its face holds no outline for, which only the atlas can draw.
+pub fn outline_of(g: &Glyph) -> Option<Vec<Cmd>> {
+    let face = skrifa::FontRef::from_index(g.font.data.data(), g.font.index).ok()?;
     let upm = f64::from(
         face.metrics(Size::unscaled(), LocationRef::default())
             .units_per_em
             .max(1),
     );
-    let Some(glyph) = face.outline_glyphs().get(skrifa::GlyphId::new(g.id)) else {
-        return Vec::new();
-    };
+    let glyph = face.outline_glyphs().get(skrifa::GlyphId::new(g.id))?;
     let mut pen = Pen {
         at: [0.0, 0.0],
         k: f64::from(g.size) / upm,
@@ -89,10 +86,8 @@ pub fn outline_of(g: &Glyph) -> Vec<Cmd> {
         .map(|&c| skrifa::instance::NormalizedCoord::from_bits(c))
         .collect();
     let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::new(&coords));
-    if glyph.draw(settings, &mut pen).is_err() {
-        return Vec::new();
-    }
-    pen.cmds
+    glyph.draw(settings, &mut pen).ok()?;
+    Some(pen.cmds)
 }
 
 /// Every glyph of `run` with its outline, in logical pixels with y down from the first baseline;
@@ -108,6 +103,7 @@ pub fn glyph_outlines(run: &Shaped) -> Vec<GlyphOutline> {
     for g in &run.glyphs {
         let origin = [f64::from(g.x), f64::from(g.y)];
         let cmds: Vec<Cmd> = outline_of(g)
+            .unwrap_or_default()
             .into_iter()
             .map(|c| {
                 let m = |p: [f64; 2]| [p[0] + origin[0], p[1] + origin[1]];
