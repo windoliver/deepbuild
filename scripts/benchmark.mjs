@@ -298,12 +298,15 @@ export function validateBudgets(current, base) {
 
 // p95 has only absolute caps: between identical binaries on a shared machine, the tail of 20
 // interleaved samples still moves past a 50% margin in a few runs out of a hundred, and p50 does not.
+// time prints user and system CPU seconds each truncated to 10 ms, so a short run reads 0 CPU, and any
+// reading may be up to 20 ms short: the base's counts as up to that much more (#1421).
 export function compare(budget, current, base, keys = metrics) {
+  const missing = (reading, metric) => !Number.isFinite(reading) || reading < 0 || (reading === 0 && metric !== 'cpuMs');
   for (const metric of keys) {
-    if (!Number.isFinite(current[metric]) || current[metric] <= 0) throw Error(`${budget.id}: missing ${metric}`);
+    if (missing(current[metric], metric)) throw Error(`${budget.id}: missing ${metric}`);
     if (budget.limits[metric] !== undefined && current[metric] >= budget.limits[metric]) throw Error(`${budget.id}: ${metric} ${current[metric]} reached cap ${budget.limits[metric]}`);
-    if (base && (!Number.isFinite(base[metric]) || base[metric] <= 0)) throw Error(`${budget.id}: missing base ${metric}`);
-    if (base && metric !== 'p95Ms' && current[metric] > base[metric] * (1 + budget.margin)) throw Error(`${budget.id}: ${metric} ${current[metric]} regressed beyond base ${base[metric]} + ${budget.margin * 100}%`);
+    if (base && missing(base[metric], metric)) throw Error(`${budget.id}: missing base ${metric}`);
+    if (base && metric !== 'p95Ms' && current[metric] > (base[metric] + (metric === 'cpuMs' ? 20 : 0)) * (1 + budget.margin)) throw Error(`${budget.id}: ${metric} ${current[metric]} regressed beyond base ${base[metric]} + ${budget.margin * 100}%${metric === 'cpuMs' ? ", allowing 20 ms for time's truncation" : ''}`);
   }
   return base ? { status: 'PASS' } : { status: 'INITIAL', reason: budget.initialReason };
 }

@@ -316,6 +316,14 @@ pub enum Planted {
     DeviationOneWay,
     /// #427: normals draws each vertex's line along a face normal of a face using it.
     NormalsFromFaces,
+    /// #854, on #1551's shown window: the frame clock arms a frame each vsync once settled.
+    ArmsEachVsync,
+    /// #1551: the window's display link keeps running while it is still.
+    LinkNeverStops,
+    /// #1551: the link stops when idle, but `schedule_frame` doesn't start it again.
+    WakerIgnoresScheduleFrame,
+    /// #1551: a restarted link sits out a full refresh before its first callback.
+    LinkRestartsARefreshLate,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry

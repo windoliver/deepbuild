@@ -1,0 +1,65 @@
+{
+  "failures": [],
+  "requests": [
+    {
+      "at": 1794216783765,
+      "method": "GET",
+      "path": "/api/search?q=chair"
+    },
+    {
+      "at": 1794216783775,
+      "method": "GET",
+      "path": "/thumbs/oak-chair.png"
+    },
+    {
+      "at": 1794216783779,
+      "method": "GET",
+      "path": "/thumbs/pine-chair.png"
+    },
+    {
+      "at": 1794216783783,
+      "method": "GET",
+      "path": "/thumbs/office-chair.png"
+    },
+    {
+      "at": 1794216783786,
+      "method": "GET",
+      "path": "/thumbs/bar-chair.png"
+    },
+    {
+      "at": 1794216783788,
+      "method": "GET",
+      "path": "/thumbs/kids-chair.png"
+    },
+    {
+      "at": 1794216783792,
+      "method": "GET",
+      "path": "/thumbs/wing-chair.png"
+    },
+    {
+      "at": 1794216783794,
+      "method": "GET",
+      "path": "/thumbs/shelf-armchair.png"
+    },
+    {
+      "at": 1794216783797,
+      "method": "GET",
+      "path": "/thumbs/lawn-chair.png"
+    },
+    {
+      "at": 1794216783800,
+      "method": "GET",
+      "path": "/thumbs/rocking-chair.png"
+    },
+    {
+      "at": 1794216783858,
+      "method": "GET",
+      "path": "/api/assets/shelf-armchair"
+    },
+    {
+      "at": 1794216783867,
+      "method": "GET",
+      "path": "/api/assets/shelf-armchair"
+    }
+  ]
+}
