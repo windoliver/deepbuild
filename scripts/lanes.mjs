@@ -225,7 +225,7 @@ alone.push('tests/acceptance/1348/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
-timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts');
+timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts', 'tests/acceptance/1477/redraft/record.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

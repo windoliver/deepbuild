@@ -296,6 +296,8 @@ struct Run {
     shaped_down: u64,
     shaped_back: u64,
     seen_problem: Option<String>,
+    /// A table arm that can't show its rows misses (#1477, amended): why.
+    missed: Option<String>,
 }
 
 /// What an arm does once its frames are counted.
@@ -331,7 +333,7 @@ impl Render for Bench {
                         .iter()
                         .any(|hit| format!("{:?}", hit.element).contains("\"row\""));
                     if !row {
-                        r.seen_problem = Some(match self.body {
+                        r.missed = Some(match self.body {
                             Body::Panel(_) => "the panel's table drew no rows: gpui-shell refuses its 100,000 rows of 8 columns (it caps a component's data at 10,000 array items, 4,096 nodes and 1,024 object keys, so a panel's DataTable holds at most 127 such rows) and shows the error instead".into(),
                             _ => "the kit's table drew no row under the pointer".into(),
                         });
@@ -352,7 +354,10 @@ impl Render for Bench {
         }
         let (ended, problem) = {
             let r = run.borrow();
-            (r.ended.is_some(), r.seen_problem.is_some())
+            (
+                r.ended.is_some(),
+                r.seen_problem.is_some() || r.missed.is_some(),
+            )
         };
         // After the counted seconds, a list arm goes 120 frames down and 120 back, counting strings shaped.
         let mut dy = STEP;
@@ -521,6 +526,8 @@ fn arm(name: &str) -> Json {
                 let r = run4.borrow();
                 let json = if let Some(problem) = &r.seen_problem {
                     json!({ "arm": name2, "status": "INCONCLUSIVE", "reason": problem })
+                } else if let Some(why) = &r.missed {
+                    json!({ "arm": name2, "status": "missed", "reason": why, "rows": rows, "columns": COLUMNS })
                 } else {
                     let (elapsed, allocs, cpu, working_set) = r.ended.expect("counted");
                     let frames = r.times.len();
@@ -604,7 +611,7 @@ fn print_and_exit(out: &Rc<RefCell<Option<Json>>>, load_start: f64) {
     let mut json = out.borrow().clone().unwrap_or(
         json!({ "status": "INCONCLUSIVE", "reason": "the arm ended without a reading" }),
     );
-    if json["status"] == "measured" {
+    if json["status"] == "measured" || json["status"] == "missed" {
         json["fingerprint"] = fingerprint();
     }
     json["load"] = json!({ "start": load_start, "end": load() });
@@ -654,31 +661,41 @@ fn measure(out: &str, only: Option<Vec<String>>) -> i32 {
             "working_set_above_data_bytes": r["working_set_bytes"].as_f64().unwrap_or(f64::NAN) - r["data_bytes"].as_f64().unwrap_or(f64::NAN) - b["working_set_bytes"].as_f64().unwrap_or(f64::NAN),
         })
     };
+    let missed = |a: &Json| a["status"] == "missed";
     let tables_ran = ["blank", "kit", "panel"]
         .iter()
-        .all(|a| measured(&arms[*a]));
+        .all(|a| measured(&arms[*a]) || missed(&arms[*a]));
     let mut word = "INCONCLUSIVE";
     let why;
     if tables_ran {
         let blank = arms["blank"].clone();
-        let kit = net_of(&arms["kit"], &blank)["p99_ms"]
-            .as_f64()
-            .unwrap_or(f64::NAN);
-        let panel = net_of(&arms["panel"], &blank)["p99_ms"]
-            .as_f64()
-            .unwrap_or(f64::NAN);
-        word = if kit > 4. || panel > 4. {
+        // A table arm that can't show its rows misses 4 ms; one that ran is judged on its p99 net of the blank arm.
+        let read = |name: &str| -> (bool, String) {
+            let a = &arms[name];
+            if missed(a) {
+                return (
+                    true,
+                    format!("{name} missed ({})", a["reason"].as_str().unwrap_or("")),
+                );
+            }
+            let p99 = net_of(a, &blank)["p99_ms"].as_f64().unwrap_or(f64::NAN);
+            (
+                p99 > 4.,
+                format!("{name} p99 {p99:.3} ms net of the blank arm"),
+            )
+        };
+        let (kit_miss, kit) = read("kit");
+        let (panel_miss, panel) = read("panel");
+        word = if kit_miss || panel_miss {
             "build"
         } else {
             "stop"
         };
-        why = format!(
-            "kit p99 {kit:.3} ms, panel p99 {panel:.3} ms net of the blank arm, against 4 ms"
-        );
+        why = format!("{kit}; {panel}; against 4 ms");
     } else {
         let unrun: Vec<&str> = ["blank", "kit", "panel"]
             .into_iter()
-            .filter(|a| !measured(&arms[*a]))
+            .filter(|a| !measured(&arms[*a]) && !missed(&arms[*a]))
             .collect();
         why = format!("{} unrun, so the table arms can't decide", unrun.join(", "));
     }
