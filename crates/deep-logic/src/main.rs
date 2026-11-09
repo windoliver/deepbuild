@@ -1,6 +1,6 @@
 //! `deep-logic` (#531): the logic module's check, steps, checkpoints, restores and reports as JSON
 //! lines, one reply per line, on this host's wasmtime. `--planted <name>` runs one planted twin
-//! (the #531 acceptance README: Planted twins of deep-logic).
+//! (the #531 and #532 acceptance READMEs: Planted twins), and several names apply together.
 
 use std::io::{BufRead, Write};
 
@@ -9,11 +9,13 @@ use serde_json::{json, Value};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let planted = match args.as_slice() {
-        [] => Planted::default(),
-        [flag, name] if flag == "--planted" => Planted::named(name).unwrap_or_else(|| refuse()),
-        _ => refuse(),
-    };
+    let mut planted = Planted::default();
+    for pair in args.chunks(2) {
+        planted = match pair {
+            [flag, name] if flag == "--planted" => planted.and(name).unwrap_or_else(|| refuse()),
+            _ => refuse(),
+        };
+    }
     let mut logic = Logic::new(planted);
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout().lock();

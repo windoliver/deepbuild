@@ -182,7 +182,7 @@ function runCase(c: Case, fill: Fill, headless: boolean): Ran {
   return { outcome: 'PASS', message: '', codes: [], reached, probes, unsupported };
 }
 
-const PRECEDENCE: Verdict[] = ['FAIL', 'BLOCKED', 'INVALID', 'INCONCLUSIVE', 'PASS'];
+const PRECEDENCE: Verdict[] = ['FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE', 'PASS'];
 /** The verdict that decides a run: the first of PRECEDENCE among its verdicts; none is INCONCLUSIVE. */
 export const worst = (verdicts: Verdict[]): Verdict => (verdicts.length ? PRECEDENCE.find((v) => verdicts.includes(v))! : 'INCONCLUSIVE');
 

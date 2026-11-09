@@ -13,8 +13,8 @@ import { ulid, type Connection, type RecordStore } from '@deepbuild/record';
 import type { Ended } from './schedules.js';
 import type { WorkDecl } from './sources.js';
 
-export type Role = 'owner' | 'collaborator' | 'outside';
-export type WorkVerdict = 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'INVALID';
+type Role = 'owner' | 'collaborator' | 'outside';
+type WorkVerdict = 'PASS' | 'FAIL' | 'BLOCKED' | 'INCONCLUSIVE' | 'INVALID';
 /** A work.item@1 reading. */
 export interface WorkItem { source_id: string; link: string; title: string; body: string; criteria: string[]; authors: { handle: string; role: Role }[]; updated: string }
 export interface WorkEvent { id: string; kind: 'item' | 'comment' | 'edit' | 'status'; at: string; reading: WorkItem }
@@ -36,7 +36,7 @@ export interface WorkKitFixture { scope: string; items: string[]; roles: Record<
 export interface Added { source: string; scope: string; every: number; on: boolean; added: number; rule: { handle: string; sentence: string } | null }
 
 /** What the work sources need of the extension host. */
-export interface WorkHost {
+interface WorkHost {
   record: RecordStore; now(): number; asks: Asks | undefined;
   added(): Record<string, Added>; saveAdded(all: Record<string, Added>): void;
   /** A loaded work source's declaration and the package holding it, or undefined. */
@@ -90,7 +90,7 @@ const changed = (d: Delta): boolean => Object.values(d).some((v) => (v as unknow
 const words = (text: string): string[] => text.split(/\s+/).filter(Boolean);
 
 /** A result as its channel takes it: a chat reply is the verdict line and at most 100 words with the receipt's link; elsewhere the structured receipt. */
-export function render(delivers: WorkDecl['delivers'], title: string, r: WorkResult): string {
+function render(delivers: WorkDecl['delivers'], title: string, r: WorkResult): string {
   const passed = r.requirements.filter((q) => q.verdict === 'PASS').length;
   const head = `${r.verdict}: ${title} (${passed} of ${r.requirements.length} requirements pass)`;
   if (delivers === 'chat') {

@@ -556,6 +556,8 @@ export function representatives(w: World): Record<string, Call> {
     'no-unknown-reach-delete': bash('rm -rf "$X"/*'),
     'no-discarding-edits': bash('git reset --hard'),
     'no-dropping-stash': bash('git stash drop'),
+    'no-approval-tag-sign': bash('git tag -s deep/approved/fix-1 -m "Approves: tests/a.test.ts"'),
+    'no-approval-tag-push': bash('git push origin refs/tags/deep/approved/fix-1'),
     'no-unreadable-push': bash('"$(printf git)" push origin main'),
   };
 }

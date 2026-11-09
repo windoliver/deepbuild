@@ -17,11 +17,11 @@ const FILES = 8192;
 type Obj = Record<string, unknown>;
 
 /** A connection's lines, read one at a time. */
-function connect(path: string, timeoutMs = 2000): Promise<{ next(): Promise<Obj>; send(o: object): void; close(): void }> {
+function connect(path: string, timeoutMs = 2000): Promise<{ hello: Obj; next(): Promise<Obj>; send(o: object): void; close(): void }> {
   return new Promise((resolve, reject) => {
     const sock = net.connect(path);
     const lines: Obj[] = [];
-    const waiting: ((o: Obj) => void)[] = [];
+    const waiting: { wake(o: Obj): void; stop(e: Error): void }[] = [];
     let buffer = '';
     let failed: Error | undefined;
     const timer = setTimeout(() => fail(Error(`no answer within ${timeoutMs} ms`)), timeoutMs);
@@ -29,6 +29,8 @@ function connect(path: string, timeoutMs = 2000): Promise<{ next(): Promise<Obj>
       failed = error;
       clearTimeout(timer);
       sock.destroy();
+      // What waits on a line gets the failure now: its own timer would keep a refused command alive for `timeoutMs`.
+      for (const w of waiting.splice(0)) w.stop(error);
       reject(error);
     };
     sock.setEncoding('utf8');
@@ -39,8 +41,8 @@ function connect(path: string, timeoutMs = 2000): Promise<{ next(): Promise<Obj>
       for (let i = buffer.indexOf('\n'); i >= 0; i = buffer.indexOf('\n')) {
         const o = JSON.parse(buffer.slice(0, i)) as Obj;
         buffer = buffer.slice(i + 1);
-        const wake = waiting.shift();
-        if (wake) wake(o);
+        const w = waiting.shift();
+        if (w) w.wake(o);
         else lines.push(o);
       }
     });
@@ -49,14 +51,16 @@ function connect(path: string, timeoutMs = 2000): Promise<{ next(): Promise<Obj>
       if (ready) return done(ready);
       if (failed) return stop(failed);
       const t = setTimeout(() => stop(Error(`no answer within ${timeoutMs} ms`)), timeoutMs);
-      waiting.push((o) => { clearTimeout(t); done(o); });
+      waiting.push({ wake: (o) => { clearTimeout(t); done(o); }, stop: (e) => { clearTimeout(t); stop(e); } });
     });
     // Connected once the hub's hello arrives.
-    next().then(() => { clearTimeout(timer); resolve({ next, send: (o) => sock.write(line(o)), close: () => sock.destroy() }); }, () => undefined);
+    next().then((hello) => { clearTimeout(timer); resolve({ hello, next, send: (o) => sock.write(line(o)), close: () => sock.destroy() }); }, () => undefined);
   });
 }
 /** Whether a hub answers at `path` with its hello. */
 const answers = (path: string) => connect(path).then((c) => { c.close(); return true; }, () => false);
+/** The hub's hello at `path`, which names its start ID and contract; undefined when no hub answers. */
+export const helloAt = (path: string): Promise<Obj | undefined> => connect(path).then((c) => { c.close(); return c.hello; }, () => undefined);
 async function waitForHub(path: string): Promise<boolean> {
   const deadline = Date.now() + WAIT_MS;
   while (Date.now() < deadline) {
@@ -67,13 +71,13 @@ async function waitForHub(path: string): Promise<boolean> {
 }
 
 /** One control call on the hub at `path`, as the CLI, with the token `tokenFile` holds. */
-async function control(path: string, tokenFile: string, method: string): Promise<Obj> {
-  const c = await connect(path);
+export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000): Promise<Obj> {
+  const c = await connect(path, timeoutMs);
   try {
     c.send({ hello: 'cli', token: readFileSync(tokenFile, 'utf8').trim() });
     const hello = await c.next();
     if (hello.error) throw Error(`the hub refused the CLI's credential: ${JSON.stringify(hello.error)}`);
-    c.send({ id: method, method, params: {} });
+    c.send({ id: method, method, params });
     const reply = await c.next();
     if (reply.error) throw Error(`${method} was refused: ${JSON.stringify(reply.error)}`);
     return reply.result as Obj;
@@ -184,6 +188,17 @@ function launch(file: string): string | undefined {
   return `a login service on ${process.platform} isn't supported yet`;
 }
 
+/** Writes the login service's definition for `program` and hands it to the service manager; why it couldn't, or undefined. */
+export function startService(program: string[], logs: string): string | undefined {
+  mkdirSync(logs, { recursive: true, mode: 0o700 });
+  const { file, text } = definition(program, logs);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, text);
+  return launch(file);
+}
+/** Where the login service's definition is: the launchd plist on macOS, the systemd user unit elsewhere. */
+export const serviceFile = (): string => definition([], '').file;
+
 /** `deep hub start [--root <folder>]`: exits 0 once a hub answers on the root's socket, started now or already running. */
 export async function startHub(options: { root?: string; cli: string }): Promise<number> {
   const root = rootOf(options.root ?? installedRoot());
@@ -198,10 +213,7 @@ export async function startHub(options: { root?: string; cli: string }): Promise
     const log = openSync(join(root.logs, 'hub.log'), 'a', 0o600);
     spawn(program[0]!, program.slice(1), { detached: true, stdio: ['ignore', log, log] }).unref();
   } else {
-    const { file, text } = definition(program, root.logs);
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, text);
-    const failed = launch(file);
+    const failed = startService(program, root.logs);
     if (failed) {
       process.stderr.write(`deep hub start: ${failed}\n`);
       return 3;

@@ -23,6 +23,7 @@ mod oit;
 mod op;
 pub mod print;
 pub mod shadow;
+pub mod sss;
 pub mod status;
 pub mod surface;
 pub mod targets;
@@ -186,7 +187,7 @@ pub struct Planted {
     pub single_sample: bool,
     /// #1173: each frame's resolve blends in half of the previous frame's.
     pub resolve_accumulates: bool,
-    /// #428's shading plants as the shader's bits (scene3d.wgsl: `P_*`), 0 for none.
+    /// #428's and #481's shading plants as the shader's bits (scene3d.wgsl: `P_*`), 0 for none.
     pub lobes: u32,
     /// #446: the local maps' wrong programs.
     pub local: local::Planted,
@@ -464,6 +465,9 @@ impl AdjustEntry {
     }
 }
 
+/// scene3d.wgsl's `P_SSS_ACROSS` (#481): the planted spread that takes every tap.
+const PLANT_SSS_ACROSS: u32 = 8192;
+
 /// The most distinct lobe sets a frame shades with (#428): its lobe table's entries.
 const LOBE_ENTRIES: usize = 512;
 
@@ -501,9 +505,38 @@ fn lobe_entry(l: &light::Lobes, seed: u32, scale: f64) -> LobeEntry {
                 l.flake_size as f32,
             ],
             c(l.flakes, l.flake_cos_tilt),
-            [f32::from_bits(seed), l.amount as f32, 0.0, 0.0],
+            [
+                f32::from_bits(seed),
+                l.amount as f32,
+                l.subsurface as f32,
+                0.0,
+            ],
         ],
     }
+}
+
+/// A subsurface part's second entry (#481), right after its [`lobe_entry`]: the lobe's color
+/// (w 1 when set, 0 for the base color), its mean free paths in m and whether it's thin.
+fn subsurface_entry(l: &light::Lobes) -> Option<LobeEntry> {
+    let c = |v: [f64; 3], w: f32| [v[0] as f32, v[1] as f32, v[2] as f32, w];
+    (l.subsurface > 0.0).then(|| {
+        let mut v = [[0.0; 4]; 8];
+        v[0] = c(
+            l.subsurface_color.unwrap_or([0.0; 3]),
+            f32::from(u8::from(l.subsurface_color.is_some())),
+        );
+        v[1] = c(l.subsurface_radius, f32::from(u8::from(l.subsurface_thin)));
+        LobeEntry { v }
+    })
+}
+
+/// Where a material's entries sit in the lobe table: its [`lobe_entry`], with its
+/// [`subsurface_entry`] right after it when it has one.
+fn lobes_at(table: &[LobeEntry], e: &LobeEntry, sub: Option<&LobeEntry>) -> Option<usize> {
+    let same = |a: &LobeEntry, b: &LobeEntry| bytemuck::bytes_of(a) == bytemuck::bytes_of(b);
+    (0..table.len()).find(|&k| {
+        same(&table[k], e) && sub.is_none_or(|s| table.get(k + 1).is_some_and(|t| same(t, s)))
+    })
 }
 
 /// scene3d.wgsl's `Lights`: the view, the light count and the lights the policy shades (#421).
@@ -735,7 +768,19 @@ struct SegmentRecord {
     color: u32,
     pick: u32,
     flags: u32,
-    pad: u32,
+    /// A mesh-edge line's dash and gap in its size space, as two f16 (#1640), or 0.
+    dash: u32,
+}
+
+/// `x` ≥ 0 as an IEEE half's bits, its mantissa cut toward zero and capped at the largest half;
+/// 0 below the smallest normal half, which `unpack2x16float` reads back.
+fn half_bits(x: f64) -> u32 {
+    let x = x as f32;
+    if !(x >= 6.103_515_6e-5) {
+        return 0;
+    }
+    let b = x.min(65504.0).to_bits();
+    (((b >> 23) - 112) << 10) | ((b >> 13) & 0x3ff)
 }
 
 #[repr(C)]
@@ -1012,6 +1057,28 @@ fn transmits(s: &Solid) -> bool {
     s.material.is_some_and(|m| {
         m.lobes.transmission > 0.0 && !m.alpha_mode.see_through() && m.catch.is_none()
     })
+}
+
+/// Whether a solid's subsurface lobe spreads (#481): an opaque or masked lit part drawn in the
+/// geometry pass by the scene shader, which the share pass draws again. Any other keeps its
+/// diffuse whole.
+fn spreads(s: &Solid) -> bool {
+    s.material.is_some_and(|m| {
+        m.lobes.subsurface > 0.0 && !m.unlit && m.catch.is_none() && !m.alpha_mode.see_through()
+    }) && !s.per_pixel
+        && !faded(s)
+        && !transmits(s)
+        && s.op.is_none()
+        && s.batch == 0
+}
+
+/// A solid's lobes as its draw shades them: its subsurface off where it doesn't spread.
+fn drawn_lobes(s: &Solid, l: &light::Lobes) -> light::Lobes {
+    let mut l = *l;
+    if !spreads(s) {
+        l.subsurface = 0.0;
+    }
+    l
 }
 
 fn pack(c: [u8; 3]) -> u32 {
@@ -1367,6 +1434,8 @@ struct Set {
     new_owners: Option<Vec<String>>,
     /// It holds a less detailed band's draw inside a margin (#425), which draws last.
     lower: bool,
+    /// It holds a part whose subsurface spreads (#481), which the share pass draws again.
+    subsurface: bool,
     /// Bumped whenever a record changes, which culls every view again (#484).
     revision: u64,
     /// An instancer's batch: its prototype's bounds, each record's row in the instancer, its
@@ -1383,6 +1452,7 @@ impl Set {
         self.count = 0;
         self.new_owners = None;
         self.lower = false;
+        self.subsurface = false;
         self.elements.clear();
         self.models.clear();
     }
@@ -1715,6 +1785,9 @@ pub struct Renderer {
     /// texel that stands in for it.
     glass: Option<glass::Glass>,
     glass_stub: wgpu::TextureView,
+    /// The subsurface share and spread while a scene holds a part whose subsurface spreads
+    /// (#481).
+    subsurface: Option<sss::Subsurface>,
     /// Whether the DFG buffer holds the sheen table yet (#428).
     sheen_written: bool,
     /// The per-pixel resolve's lists (#424), and its resolve and sorted-fallback pipelines once
@@ -2048,6 +2121,10 @@ const SOLID: [wgpu::VertexAttribute; 12] = wgpu::vertex_attr_array![
 const ROW: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![2 => Uint32];
 const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
     0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
+];
+/// A line's segment records, with its dash (#1640).
+const LINE: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
+    0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32, 5 => Uint32
 ];
 const POINT: [wgpu::VertexAttribute; 4] =
     wgpu::vertex_attr_array![0 => Float32x4, 1 => Uint32, 2 => Uint32, 3 => Uint32];
@@ -2557,7 +2634,7 @@ impl Families {
                 draw,
                 "line_vs",
                 "line_fs",
-                instance(std::mem::size_of::<SegmentRecord>() as u64, &SEGMENT),
+                instance(std::mem::size_of::<SegmentRecord>() as u64, &LINE),
             ),
             (
                 "scene3d.point",
@@ -3173,6 +3250,7 @@ impl Renderer {
             lobe_table: Vec::new(),
             glass: None,
             glass_stub,
+            subsurface: None,
             sheen_written: false,
             oit,
             oit_pipelines: None,
@@ -4152,7 +4230,7 @@ impl Renderer {
                     color: pack(stroke.color),
                     pick: 0,
                     flags,
-                    pad: 0,
+                    dash: 0,
                 };
                 set.push(&s.id, bytemuck::bytes_of(&record));
             }
@@ -4731,7 +4809,8 @@ impl Renderer {
     /// A solid's lobe table index above the adjust's, 0 without lobes, or `None` when its lobes
     /// aren't in this frame's table (#428).
     fn lobe_slot(&self, s: &Solid) -> Option<u32> {
-        let Some(m) = s.material.as_ref().filter(|m| m.lobes.on()) else {
+        let lobes = s.material.as_ref().map(|m| drawn_lobes(s, &m.lobes));
+        let (Some(m), Some(lobes)) = (s.material.as_ref(), lobes.filter(|l| l.on())) else {
             return Some(0);
         };
         let scale = if s.mesh.is_some() {
@@ -4739,12 +4818,8 @@ impl Renderer {
         } else {
             1.0
         };
-        let e = lobe_entry(&m.lobes, m.pattern_seed, scale);
-        let bytes = bytemuck::bytes_of(&e);
-        let k = self
-            .lobe_table
-            .iter()
-            .position(|x| bytemuck::bytes_of(x) == bytes)?;
+        let e = lobe_entry(&lobes, m.pattern_seed, scale);
+        let k = lobes_at(&self.lobe_table, &e, subsurface_entry(&lobes).as_ref())?;
         Some((k as u32 + 1) << 16)
     }
 
@@ -5082,6 +5157,7 @@ impl Renderer {
             self.op_binds.clear();
         }
         let k = f64::from(internal[0]) / f64::from(scene.size[0].max(1));
+        self.prepare_subsurface(device, scene, internal, k);
         self.upload_pages(device, &scene.pages);
         let cam = &scene.camera;
         let depth = if self.planted.forward_z {
@@ -5306,6 +5382,64 @@ impl Renderer {
             decode(scene.ground[2]),
             1.0,
         ];
+    }
+
+    /// The subsurface share and spread while a part's subsurface spreads (#481), made at the
+    /// internal size from the geometry's targets.
+    fn prepare_subsurface(&mut self, device: &Device, scene: &Scene, internal: [u32; 2], k: f64) {
+        let spreading: Vec<&Solid> = scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.solids)
+            .filter(|s| spreads(s))
+            .collect();
+        let made = self.subsurface.as_ref().is_some_and(|s| s.size == internal);
+        if made == spreading.is_empty() {
+            self.subsurface = match (spreading.is_empty(), &self.targets) {
+                (false, Some(t)) => Some(sss::Subsurface::new(
+                    &device.device,
+                    internal,
+                    sss::Inputs {
+                        ids: &t.ids_view,
+                        samples: self.families.samples,
+                        ids_ms: &t.drawn.ids_ms,
+                        depth_ms: &t.drawn.depth_ms,
+                        module: &self.scene_module,
+                        layout: &self.solid_layout,
+                    },
+                )),
+                _ => None,
+            };
+        }
+        let Some(sub) = &self.subsurface else {
+            return;
+        };
+        // The planted pass that takes every tap spreads at the widest mean free path of the
+        // scene's parts, at the pixel size of the nearest one's centre.
+        let across = (self.planted.lobes & PLANT_SSS_ACROSS != 0).then(|| {
+            let cam = &scene.camera;
+            let widest = spreading
+                .iter()
+                .filter_map(|s| s.material)
+                .flat_map(|m| m.lobes.subsurface_radius)
+                .fold(0.0, f64::max);
+            let near = spreading
+                .iter()
+                .map(|s| {
+                    let c = [s.model[0][3], s.model[1][3], s.model[2][3]];
+                    (0..3)
+                        .map(|i| (c[i] - cam.eye[i]) * cam.forward[i])
+                        .sum::<f64>()
+                })
+                .fold(f64::INFINITY, f64::min);
+            let px = if cam.perspective {
+                near / (cam.scale * k)
+            } else {
+                1.0 / (cam.scale * k)
+            };
+            (widest * 1000.0, px * 1000.0)
+        });
+        sub.write(&device.queue, across);
     }
 
     fn prepare_batch(
@@ -5533,7 +5667,8 @@ impl Renderer {
         // Its lobes' entry in the frame's lobe table, 0 for none (#428), above the adjust's.
         let lobe_table = &mut self.lobe_table;
         let mut lobes_of = |s: &Solid| -> u32 {
-            let Some(m) = s.material.as_ref().filter(|m| m.lobes.on()) else {
+            let lobes = s.material.as_ref().map(|m| drawn_lobes(s, &m.lobes));
+            let (Some(m), Some(lobes)) = (s.material.as_ref(), lobes.filter(|l| l.on())) else {
                 return 0;
             };
             // The flakes hash the material's pattern seed with the cell.
@@ -5544,16 +5679,14 @@ impl Renderer {
             } else {
                 1.0
             };
-            let e = lobe_entry(&m.lobes, m.pattern_seed, scale);
-            let bytes = bytemuck::bytes_of(&e);
-            let k = match lobe_table
-                .iter()
-                .position(|x| bytemuck::bytes_of(x) == bytes)
-            {
+            let e = lobe_entry(&lobes, m.pattern_seed, scale);
+            let sub = subsurface_entry(&lobes);
+            let k = match lobes_at(lobe_table, &e, sub.as_ref()) {
                 Some(k) => k,
-                None if lobe_table.len() < LOBE_ENTRIES => {
+                None if lobe_table.len() + usize::from(sub.is_some()) < LOBE_ENTRIES => {
                     lobe_table.push(e);
-                    lobe_table.len() - 1
+                    lobe_table.extend(sub);
+                    lobe_table.len() - 1 - usize::from(sub.is_some())
                 }
                 None => return 0,
             };
@@ -5599,6 +5732,7 @@ impl Renderer {
             };
             let set = sets.entry(slot.0).or_default();
             set.lower |= s.mask.is_some_and(|m| m.lower);
+            set.subsurface |= spreads(s);
             slot.1 = set.count as u32;
             if slot.0 .3 != 0 {
                 set.bounds = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
@@ -5676,8 +5810,9 @@ impl Renderer {
                     flags: u32::from(l.world)
                         | (u32::from(l.edges.is_some()) << 1)
                         | (u32::from(l.over) << 2)
-                        | (u32::from(l.joined) << 3),
-                    pad: 0,
+                        | (u32::from(l.joined) << 3)
+                        | (u32::from(l.dash_world) << 4),
+                    dash: half_bits(l.dash[0]) | (half_bits(l.dash[1]) << 16),
                 };
                 batch.lines.push(&l.id, bytemuck::bytes_of(&record));
             }
@@ -5798,6 +5933,32 @@ impl Renderer {
             self.rebind_lights(device);
         }
         remade
+    }
+
+    /// The opaque sets holding a part whose subsurface spreads, for the share pass (#481).
+    fn share_draws(&self) -> Vec<sss::ShareDraw> {
+        let mut draws = Vec::new();
+        for id in &self.order {
+            for ((shape, maps, _, _), set) in &self.batches[id].solids {
+                let (true, None, Some(buffer), Some(mesh)) = (
+                    set.subsurface,
+                    &set.cull,
+                    &set.buffer,
+                    self.meshes.get(shape),
+                ) else {
+                    continue;
+                };
+                draws.push((
+                    mesh.vertices.clone(),
+                    mesh.indices.clone(),
+                    mesh.count,
+                    buffer.clone(),
+                    set.len(),
+                    self.maps.by_index(*maps & MAPS_INDEX).clone(),
+                ));
+            }
+        }
+        draws
     }
 
     /// The per-pixel items' draws in see-through order, for the sorted fallback (#424).
@@ -6449,6 +6610,15 @@ impl Renderer {
         };
         let copy_late = self.planted.backdrop_after_see_through;
         let glass_copy = glass.as_ref().and(self.glass.clone());
+        // The subsurface share and spread after the resolve (#481).
+        let subsurface = self.subsurface.clone().map(|sub| {
+            let binds = [
+                self.frame_bind.clone(),
+                self.lights_bind.clone(),
+                self.ao.shade().clone(),
+            ];
+            (sub, binds, self.share_draws())
+        });
         let core = self.core_draws();
         let linear_texture = t.linear.clone();
         let motion = self.motion_frame.take().map(|m| (m, t.linear.clone()));
@@ -6545,6 +6715,9 @@ impl Renderer {
                 if let Some(staging) = &staging {
                     encoder.copy_buffer_to_buffer(info, 0, staging, 0, 16);
                 }
+            }
+            if let Some((sub, binds, draws)) = &subsurface {
+                sub.record(encoder, &linear, binds, draws, &profiler);
             }
             // The core's targets an effect or operator reads, from what the geometry left (#431).
             if let Some(core) = &core {
