@@ -1592,6 +1592,8 @@ impl Hub<'_> {
     /// their `at`; each writer's patches wait in its own queue, and one checker takes them in
     /// turn across writers, one at a time, so one writer's flood never delays another's patch.
     pub fn run_calls(&mut self) -> Vec<Value> {
+        // #499: the media module's own check reads its planted wrong program from here.
+        deep_canvas_media::plant(self.scenario.module_planted.as_deref());
         self.open_shared();
         let calls = &self.scenario.calls;
         let Some(clock) = self.scenario.clock else {

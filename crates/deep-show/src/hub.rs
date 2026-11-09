@@ -278,6 +278,22 @@ pub enum Planted {
     KeepsVoicesOnSwitch,
     /// #498: closing a panel fades its voices over 5 ms, longer than a block.
     FadesOnClose,
+    /// #499: a reverb restores its checkpoint without its tail.
+    ReverbRestoresWithoutTail,
+    /// #499: a checkpoint ring past its budget drops its oldest checkpoint.
+    RingDropsOldest,
+    /// #499: the live transport's mixer holds each strip's gain for a block.
+    MixerHoldsGainPerBlock,
+    /// #499: every emitter uses the inverse distance model.
+    EmitterAlwaysInverse,
+    /// #499: the cone's angle is taken against source minus listener.
+    ConeSignReversed,
+    /// #499: while audio plays, the transport keeps the display clock.
+    ClockFollowsDisplay,
+    /// #499: the audio output stays bound to a device after it is removed.
+    BackendKeepsRemovedDevice,
+    /// #499: after a device change the clock counts t from the new stream's sample 0.
+    ClockRestartsFromSample0,
     /// #421: a view keeps an item only when its bounds' centre is inside.
     CullByCenter,
     /// #421: a node's hierarchy bounds union only its direct children's own bounds.
@@ -750,6 +766,10 @@ pub enum Call {
     Media(Box<crate::media::MediaCall>),
     /// The device gate: documents of strips, Play, the gate's fields, the device's output (#498).
     Gate(Box<crate::gate::GateCall>),
+    /// #499: the media module's mix.
+    Mix(Box<crate::mixdown::MixCall>),
+    /// #499: the test audio backend's devices, the transport log and a logic item's state.
+    Audio(Box<crate::audio::AudioCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -840,6 +860,8 @@ pub struct Scenario {
     pub devices: crate::capture::Devices,
     /// The decode worker's caps for this run (#498).
     pub decode_caps: deep_codecs::Caps,
+    /// #499: the test audio backend, which replaces the platform's output at its boundary.
+    pub audio: Option<crate::audio::Backend>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
@@ -1704,6 +1726,8 @@ impl<'a> Hub<'a> {
             Call::Capture(c) => self.capture_call(c),
             Call::Media(m) => self.media_call(m),
             Call::Gate(g) => self.gate_call(g),
+            Call::Mix(m) => self.mix_call(m),
+            Call::Audio(a) => self.audio_call(a),
             Call::Term(t) => self.term_call(t),
         };
         for shaping in deep_text::cache::take_log() {
@@ -1893,6 +1917,13 @@ impl<'a> Hub<'a> {
             &writer,
             &title,
         );
+        // #499: each asset a probing kind names is probed in the decode worker, its probe kept
+        // on the document's asset, as the check and the frame read it.
+        let mut probe_issues = Vec::new();
+        let stamped = stamped.map(|mut doc| {
+            probe_issues = self.probe_assets(&mut doc);
+            doc
+        });
         // The document's look (Document envelope: `look: {asset: look@major}`), read from the
         // evidence store by its asset's hash; one the store doesn't hold leaves the shipped look.
         if let Ok(doc) = &stamped {
@@ -1932,6 +1963,7 @@ impl<'a> Hub<'a> {
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = result.issues;
+                issues.append(&mut probe_issues);
                 blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.

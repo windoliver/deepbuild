@@ -2,6 +2,7 @@
 //! picture's clock). Audio runs through our own code with pinned math, so output is identical for
 //! the same build and CPU architecture.
 
+pub mod clock;
 pub mod doc;
 pub mod emitter;
 pub mod fixtures;
