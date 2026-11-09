@@ -1003,7 +1003,9 @@ impl Render for Shipped {
                 let focused = (self.focus_handle.is_focused(window))
                     .then(|| self.rows.focused.clone())
                     .flatten();
-                RING.with(|ring| *ring.borrow_mut() = focused.as_ref().map(|s| format!("session:{s}")));
+                RING.with(|ring| {
+                    *ring.borrow_mut() = focused.as_ref().map(|s| format!("session:{s}"))
+                });
                 let selected = self.rows.selected.clone();
                 page.bg(chrome.raised)
                     .track_focus(&self.focus_handle)

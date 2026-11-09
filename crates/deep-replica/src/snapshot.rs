@@ -182,7 +182,10 @@ pub fn first_difference(a: &Snapshot, b: &Snapshot) -> Option<(usize, String)> {
     if a.menu_bar != b.menu_bar {
         return Some((
             0,
-            format!("the menu bar's title differs: {:?} vs {:?}", a.menu_bar, b.menu_bar),
+            format!(
+                "the menu bar's title differs: {:?} vs {:?}",
+                a.menu_bar, b.menu_bar
+            ),
         ));
     }
     if a.focus != b.focus {
@@ -492,12 +495,15 @@ mod tests {
             ("the window differs", |s| s.size[0] = 1511),
             ("the window differs", |s| s.scale = 1),
             ("the menu bar's title differs", |s| s.menu_bar = "2".into()),
-            ("the focus differs", |s| s.focus = Some("session:01A".into())),
+            ("the focus differs", |s| {
+                s.focus = Some("session:01A".into())
+            }),
         ];
         for (why, change) in wholes {
             let mut b = a.clone();
             change(&mut b);
-            let (index, said) = first_difference(&a, &b).unwrap_or_else(|| panic!("{why} went unseen"));
+            let (index, said) =
+                first_difference(&a, &b).unwrap_or_else(|| panic!("{why} went unseen"));
             assert_eq!(index, 0);
             assert!(said.contains(why), "{said}");
         }

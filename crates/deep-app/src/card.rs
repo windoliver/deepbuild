@@ -13,8 +13,8 @@
 
 use std::cell::RefCell;
 
-use gpui_kit::*;
 use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::*;
 
 use crate::arming::{Client, Source};
 use crate::chrome::Chrome;
@@ -117,7 +117,12 @@ pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
 
 /// Whether the shown card holds the keyboard in `window`.
 pub fn focused(window: &Window) -> bool {
-    FOCUS.with(|focus| focus.borrow().as_ref().is_some_and(|focus| focus.is_focused(window)))
+    FOCUS.with(|focus| {
+        focus
+            .borrow()
+            .as_ref()
+            .is_some_and(|focus| focus.is_focused(window))
+    })
 }
 
 fn leave(cx: &mut App) {

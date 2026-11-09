@@ -25,7 +25,11 @@ const FIRST: &str = "session:01MCBH57D812FQ88XJ33AV9KCE";
 #[test]
 fn a_view_keyed_by_session_ids_that_draws_no_id_passes() {
     let (code, verdict) = kit("1459-session-rows");
-    assert_eq!((code, &verdict["result"]), (0, &Value::from("pass")), "{verdict}");
+    assert_eq!(
+        (code, &verdict["result"]),
+        (0, &Value::from("pass")),
+        "{verdict}"
+    );
 }
 
 #[test]

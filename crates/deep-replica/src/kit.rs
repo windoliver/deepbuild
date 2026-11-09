@@ -95,7 +95,10 @@ pub fn session_rows(rows: &[(String, String)], expected: &[(String, String, Stri
     for index in 0..rows.len().max(expected.len()) {
         match (rows.get(index), expected.get(index)) {
             (Some((id, drawn)), Some((session, title, words))) if id == session => {
-                if let Some(missing) = [title, words].into_iter().find(|word| !drawn.contains(word.as_str())) {
+                if let Some(missing) = [title, words]
+                    .into_iter()
+                    .find(|word| !drawn.contains(word.as_str()))
+                {
                     return fail(format!("{session}: its row draws no {missing:?}"));
                 }
             }
