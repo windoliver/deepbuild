@@ -1,0 +1,29 @@
+{
+  "scene": "crease-edges",
+  "format": 1,
+  "about": "Parity fixture for #1640 AC1 and AC2 (Marks in 3D: mesh edges, kind crease and border). Four builder items, each read by mark.line@1 items with `edges`. Expected values are the issue's: with crease {angle: 30}, the 1 m cube (slab@1, 12 triangles) draws exactly its 12 edges; the 32-segment cylinder with flat caps (lathe@1, radius 0.5 m, from y = 0 to 1 m) draws 64 segments, its two rims of 32 each, and none on its side (neighbouring side facets meet at 360/32 = 11.25 degrees); the 32 x 16 UV ball draws 0 (every neighbouring pair of its faces meets at under 30 degrees); the 2-triangle plane (plate@1, 1 x 1 m, in y = 0) draws its 4 border edges with border: true, 0 with border: false, and never its diagonal. The `all` lines are fixture guards from #420's rule: the closed 12-triangle cube has 18 triangle edges, and the 2-triangle plane 5 (4 border edges and its diagonal). Segments are counted on welded positions, each once. The twin is a planted program, reachable only through deep-gpu's --planted, that must fail, the failure naming each text in `names`.",
+  "items": {
+    "cam": { "kind": "camera@1", "params": { "projection": "perspective", "position": [6, 6, 9], "target": [0, 0.5, 1], "fov": 45, "near": 0.1 } },
+    "cube": { "kind": "slab@1", "params": { "size": [1, 1, 1] }, "at": { "pos": [-3, 0, 0] } },
+    "cylinder": { "kind": "lathe@1", "params": { "outline": [[0.5, 0, false], [0.5, 1, false]], "segments": 32, "caps": "flat" }, "at": { "pos": [0, 0, 0] } },
+    "ball": { "kind": "ball@1", "params": { "radius": 0.5, "segments": 32 }, "at": { "pos": [3, 0.5, 0] } },
+    "plane": { "kind": "plate@1", "params": { "grid": [1, 1], "size": [1, 1] }, "at": { "pos": [0, 0, 3] } },
+    "cube_crease": { "kind": "mark.line@1", "params": { "edges": { "of": "cube", "kind": { "crease": { "angle": 30 } } }, "width": 2, "size_space": "screen", "paint": { "fill": { "role": "accent" } } } },
+    "cube_all": { "kind": "mark.line@1", "params": { "edges": { "of": "cube", "kind": "all" }, "width": 2, "size_space": "screen", "paint": { "fill": { "role": "accent" } } } },
+    "cylinder_crease": { "kind": "mark.line@1", "params": { "edges": { "of": "cylinder", "kind": { "crease": { "angle": 30 } } }, "width": 2, "size_space": "screen", "paint": { "fill": { "role": "accent" } } } },
+    "ball_crease": { "kind": "mark.line@1", "params": { "edges": { "of": "ball", "kind": { "crease": { "angle": 30 } } }, "width": 2, "size_space": "screen", "paint": { "fill": { "role": "accent" } } } },
+    "plane_border": { "kind": "mark.line@1", "params": { "edges": { "of": "plane", "kind": { "crease": { "angle": 30 } }, "border": true }, "width": 2, "size_space": "screen", "paint": { "fill": { "role": "accent" } } } },
+    "plane_no_border": { "kind": "mark.line@1", "params": { "edges": { "of": "plane", "kind": { "crease": { "angle": 30 } }, "border": false }, "width": 2, "size_space": "screen", "paint": { "fill": { "role": "accent" } } } },
+    "plane_all": { "kind": "mark.line@1", "params": { "edges": { "of": "plane", "kind": "all" }, "width": 2, "size_space": "screen", "paint": { "fill": { "role": "accent" } } } }
+  },
+  "cases": {
+    "cube": { "line": "cube_crease", "of": "cube", "at": [-3, 0, 0], "segments": 12, "source": "AC1: a 1 m cube (12 triangles) draws exactly 12 segments", "guard": { "line": "cube_all", "segments": 18 } },
+    "cylinder": { "line": "cylinder_crease", "of": "cylinder", "at": [0, 0, 0], "segments": 64, "radius": 0.5, "rims": [0, 1], "per_rim": 32, "source": "AC1: a 32-segment cylinder with flat caps draws 64 (its two rims) and none on its side" },
+    "ball": { "line": "ball_crease", "of": "ball", "at": [3, 0.5, 0], "segments": 0, "source": "AC1: a 32 x 16 UV ball draws 0" },
+    "plane_border": { "line": "plane_border", "of": "plane", "at": [0, 0, 3], "segments": 4, "source": "AC2: a 2-triangle plane draws 4 border segments with border: true, never its diagonal", "guard": { "line": "plane_all", "segments": 5 } },
+    "plane_no_border": { "line": "plane_no_border", "of": "plane", "at": [0, 0, 3], "segments": 0, "source": "AC2: 0 with border: false" }
+  },
+  "twins": [
+    { "planted": "crease_below_angle", "wrong": "a crease line keeps the edges whose faces meet below the angle instead of above it", "names": ["crease edges of cube draw 6 segments, not 12", "crease edges of cylinder draw", "crease edges of ball draw"] }
+  ]
+}

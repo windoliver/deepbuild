@@ -4219,6 +4219,20 @@ fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Va
     let mut moves = Vec::new();
     for (id, item) in items.iter() {
         let anchor = item.pointer("/at/anchor").and_then(Value::as_str);
+        // #499: an image's own anchor, `ID#name`: a point given as fractions of the image,
+        // where its box draws it.
+        if let Some((source, name)) = anchor.and_then(|a| a.split_once('#')) {
+            let image = items.get(source).filter(|s| s["kind"] == "image@1");
+            if let Some(f) = image.and_then(|s| pair(s.pointer(&format!("/params/anchors/{name}"))))
+            {
+                let s = image.expect("an image");
+                if let Some([x, y, w, h]) = four(s.pointer("/params/box")) {
+                    let p = item_pos(s);
+                    moves.push((id.clone(), [p[0] + x + f[0] * w, p[1] + y + f[1] * h]));
+                }
+                continue;
+            }
+        }
         let Some(set) = anchor.and_then(|a| a.strip_suffix("#head")) else {
             continue;
         };

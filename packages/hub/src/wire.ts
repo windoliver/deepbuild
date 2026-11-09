@@ -163,6 +163,8 @@ export const SCREEN_TOOLS = ['mcp__computer-use__', 'mcp__remote-devices__comput
 export interface StageReach {
   /** The folders a delete whose reach can't be worked out names (#347). */
   folders?: string[] | null;
+  /** What a delete whose reach is known reaches past its worktree, or the folder a `git clean` that deletes works in (#1507). */
+  past?: string[] | null;
   /** The paths under which a command discards tracked edits (#1294). */
   edits?: string[] | null;
   /** The stash a drop names: the folder it works in, then the entry, or no entry for all of them (#1294). */

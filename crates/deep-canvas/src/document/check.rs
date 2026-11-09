@@ -435,7 +435,15 @@ fn module_checks(
                     .iter()
                     .find(|c| c.code == r.code)
                     .map(|c| c.fix.clone());
+                // An issue at another item's or a strip's field names it too (#499's av_unlinked).
+                let other = ["strips/", "items/"]
+                    .iter()
+                    .find_map(|p| r.path.strip_prefix(p))
+                    .and_then(|p| p.split('/').next())
+                    .filter(|o| *o != id)
+                    .map(str::to_string);
                 let mut issue = Issue::error(r.code, id, r.path, actual, &r.what);
+                issue.ids.extend(other);
                 issue.severity = if r.severity == "warning" {
                     "warning"
                 } else {
@@ -740,6 +748,25 @@ fn recheck_by(
                 .get(p)
                 .and_then(|i| member(i, "parent"))
                 .and_then(Value::as_str);
+        }
+    }
+    // #499: the items that play an asset an affected item plays (a video's picture and its
+    // sound strip, by the asset's hash), which a check links them by.
+    let mut assets: BTreeSet<String> = BTreeSet::new();
+    for id in &affected {
+        if let Some(params) = items.get(id).and_then(|i| member(i, "params")) {
+            strings_in(params, &mut |s| {
+                if s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    assets.insert(s.to_string());
+                }
+            });
+        }
+    }
+    if !assets.is_empty() {
+        for (id, item) in items {
+            if member(item, "params").is_some_and(|p| names_any(p, &assets)) {
+                context.insert(id.clone());
+            }
         }
     }
     let mut reduced = Map::new();

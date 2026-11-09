@@ -1,0 +1,53 @@
+#1551 acceptance tests at the base dd83ac2f (November 8, 2026), on a Mac (darwin, Node 23.9.0, `npm ci` done).
+Local paths redacted to <checkout>.
+
+## Run
+
+  npx vitest run --root tests/acceptance/1551 --testTimeout=600000 --no-file-parallelism lane vendored --reporter=verbose
+  npx tsc -p tests/acceptance/1551/tsconfig.json        # exit 0
+
+## Result: 4 of 4 failed, each at its assertion
+
+ × lane.test.ts > #1551.5ed5fd2b ... > the lane's judge takes a reading whose every run was shown as a shown window,
+   and reads INCONCLUSIVE when run 3 was hidden, covered or on a sleeping display, naming the run and its state  41ms
+   AssertionError: the verdict's window entry: {"task":"canvas-idle","status":"INCONCLUSIVE","profile":"release",
+   "targets":{"frames":{"status":"PASS",...},"wakeups":{"status":"INCONCLUSIVE",...,"reason":"a reading, not a budget
+   result: off the reference Macs (...): the load at each run's start and end can't be read: null"},...}}
+   is an object: the base's judge has no `window` entry.
+
+ × lane.test.ts > #1551.5ed5fd2b ... > a headless reading, the merge base's shape with no window reading, can't PASS
+   the lane  36ms
+   AssertionError: the verdict's window entry: {...same verdict, no "window"...}
+   (The base's verdict is INCONCLUSIVE here only because `judge` passes `judgeLimit` no load readings, so the
+   timing targets never PASS on any machine; the frames count PASSes. That is why the test asks for the window
+   entry reading `headless`, not only for a status other than PASS.)
+
+ × lane.test.ts > #1551.5ed5fd2b ... > on this Mac the lane holds the still board in a shown window: every run says
+   the window was shown for its whole run, and the judge takes it as shown  319623ms
+   AssertionError: run 1: window is an object, got undefined
+   (The real lane ran: a release deep-canvas-render, a 5 s warm-up and five 60 s runs in its headless window on
+   `thread::sleep`; its report has no window reading.)
+
+ × vendored.test.ts > #1551.529faaf6 #1551.d7b41417 scope: ... > the build takes gpui-pre-macos from
+   vendor/gpui-pre-macos, the table has a #1551 row naming its files, and vendor-rebase check passes  5ms
+   AssertionError: Cargo.lock resolves gpui-pre-macos from a path, not a registry: expected
+   '\nname = "gpui-pre-macos"\nversion = "0.3.9"\nsource = "registry+https://github.com/rust-lang/crates.io-index"...'
+   not to match /^\s*source = /m
+
+ Test Files  2 failed (2)
+      Tests  4 failed (4)
+
+## Not run at the base: window.test.ts (C1, C2, C4 and their plants)
+
+Its surfaces plainly don't exist at dd83ac2f, read from crates/deep-show/src/watch.rs and main.rs:
+- `watch::parse` accepts only `pace_hz`, `watch_from`, `watch_ms`, `tree`, `after` and `hold_ms` and returns None for
+  any other key, which `deep-show live` answers with bad input: the shipped scenario's `wake` is refused, so the
+  C1, C2 and C4 shipped tests fail at "deep-show live answered ok".
+- The answer's `live` has no `request_frames`, `window` or `wakes`; its `wakeups` counts only the frame clock's own
+  `on_next_frame` requests, so a still window reads 0 there however often the display link runs `step`.
+- deep-show's scenario `planted` knows none of `link_never_stops`, `waker_ignores_schedule_frame` or
+  `link_restarts_a_refresh_late`.
+- The merge-base test reads INCONCLUSIVE without `DEEP_1551_BASE_BIN`, and no base build with the measuring surfaces
+  exists yet (README: The merge base), so the merge base's callback count, which the issue says reads at least
+  3,000 at 60 Hz (read from code: gpui-pre-macos 0.3.9 stops the link only on occlusion, and `step` runs the
+  request-frame closure each tick), was not measured here. It is for the implementer to record with the change.

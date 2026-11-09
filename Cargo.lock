@@ -39,8 +39,6 @@ dependencies = [
 [[package]]
 name = "accesskit_macos"
 version = "0.26.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce02dc63b43f0c9296af9ac946312a2dc8814427d7a64d2d600971dac55b6076"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -2080,6 +2078,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-media"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-scene3d",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "deep-canvas-motion"
 version = "0.0.0"
 dependencies = [
@@ -2268,10 +2276,12 @@ dependencies = [
  "deep-canvas-sandbox",
  "deep-sandbox-wasmtime",
  "gimli 0.33.0",
+ "libc",
  "serde_json",
  "sha2 0.10.9",
  "wasmparser 0.258.3",
  "wasmtime",
+ "wat",
 ]
 
 [[package]]
@@ -2289,9 +2299,11 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-graph",
  "deep-canvas-marks",
+ "deep-canvas-media",
  "deep-canvas-motion",
  "deep-canvas-seams",
  "deep-canvas-vector",
+ "deep-codecs",
  "deep-gpu",
  "deep-marks-gpui",
  "deep-marks-vello",
@@ -2302,6 +2314,8 @@ dependencies = [
  "gpui-pre-apple",
  "image",
  "libc",
+ "objc2-core-foundation",
+ "objc2-core-video",
  "serde_json",
  "skrifa 0.44.0",
  "vello_cpu",
@@ -2405,6 +2419,7 @@ dependencies = [
  "deep-canvas-input",
  "deep-canvas-loop",
  "deep-canvas-marks",
+ "deep-canvas-media",
  "deep-canvas-motion",
  "deep-canvas-record",
  "deep-canvas-sandbox",
@@ -2416,6 +2431,7 @@ dependencies = [
  "deep-codecs",
  "deep-effects-render",
  "deep-gpu",
+ "deep-logic",
  "deep-marks-vello",
  "deep-relay",
  "deep-replica",
@@ -2425,9 +2441,11 @@ dependencies = [
  "deep-text-gpui",
  "gpui-kit",
  "gpui-pre-apple",
+ "gpui-pre-macos",
  "image",
  "libc",
  "objc2 0.6.5",
+ "objc2-foundation 0.3.2",
  "raw-window-handle",
  "serde_json",
  "sha2 0.10.9",
@@ -4084,6 +4102,7 @@ dependencies = [
  "gpui-pre-util",
  "hdrhistogram",
  "heapless",
+ "icu_segmenter",
  "image",
  "inventory",
  "itertools 0.14.0",
@@ -4276,8 +4295,6 @@ dependencies = [
 [[package]]
 name = "gpui-pre-macos"
 version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7c988b7e49775cc8542dbe48d5a10e073d8e898a023ef3ff3d24f33363e9863"
 dependencies = [
  "accesskit",
  "accesskit_macos",
