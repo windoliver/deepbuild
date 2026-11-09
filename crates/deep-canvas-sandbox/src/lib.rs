@@ -11,6 +11,7 @@ pub mod trap;
 pub mod kit;
 pub mod layouts;
 pub mod module;
+pub mod link;
 
 use serde_json::Value;
 
