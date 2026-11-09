@@ -27,7 +27,7 @@ import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { alive as running, openSupervisor, openUnder, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
-import { predictionContradictions, recordVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
+import { predictionContradictions, recordVerdict, verdict as claimVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, HOLD_MARGIN_MS, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { Confirmer } from './confirm.js';
@@ -88,7 +88,7 @@ import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
-import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
+import { plantedReload, plantedSessionEnd, plantedStop, type Plant } from './plant.js';
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts, type AssetKind } from './libraries.js';
@@ -181,6 +181,8 @@ const reusedPids = (): number[] => {
   try { const list = JSON.parse(readFileSync(file, 'utf8')) as unknown; return Array.isArray(list) ? list.filter((n): n is number => Number.isSafeInteger(n)) : []; } catch { return []; }
 };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** A verdict as the hub records and returns it: the gate's, or its opposite in #1334's planted misjudging build. */
+const misjudged = <V extends { outcome: string }>(v: V, plant: Plant | undefined): V => (plant === 'judges-claims-wrongly' ? { ...v, outcome: v.outcome === 'PASS' ? 'FAIL' : 'PASS' } : v);
 const isUnder = (path: string, dir: string) => {
   const rel = relative(dir, path);
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
@@ -590,6 +592,8 @@ export class Core {
    */
   private readonly jobs = new Map<string, { failures: number; since: number; at: number; error: string } | null>();
   private stopping = false;
+  /** A promotion's drain (#1334): no session starts until the hub restarts on the new build. */
+  private draining = false;
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
   private dropped = false;
@@ -5665,7 +5669,18 @@ export class Core {
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);
       case 'start.approve': return this.sessionStarts.approve(params, context);
-      case 'start.session': return this.sessionStarts.startSession(params, context);
+      case 'start.session':
+        if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
+        return this.sessionStarts.startSession(params, context);
+      // A promotion (#1334): the run pauses and its running turns are counted until none is left; the fixture claim
+      // judged by this build's own verdict engine; and, on the build that came back, the rollback's one notice.
+      case 'hub.drain':
+        this.draining = params.on !== false;
+        // A turn runs while its session reads working, or waits on a permission prompt, as session.state records it.
+        await this.statesSettled();
+        return { turns: [...this.states.values()].filter((s) => s.startsWith('working/') || s === 'needs you/waiting').length };
+      case 'hub.check': return this.healthClaim();
+      case 'build.rolled_back': return this.rolledBack(params);
       case 'test.load': return this.testLoad(params);
       case 'record.backup': return this.backup(params);
       case 'lease.wait': return this.heavy.wait(params, context.peer, () => this.agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
@@ -7427,6 +7442,27 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT outcome FROM runs WHERE id = ?`, [run.slice(4)])) as { outcome: string | null }[];
     return row?.outcome ?? 'stopped';
   }
+  /**
+   * A promotion's health check (#1334): one fixture claim, a requirement its one check covers and a passing run of
+   * it, judged by this build's verdict engine and returned as judged() records a claim's. A good build reads it PASS.
+   */
+  private healthClaim(): Obj {
+    const commit = '0'.repeat(40), req = 'req:HEALTH#R1', check = 'health', digest = `d1:${'0'.repeat(64)}`, claim = 'claim:HEALTH';
+    const v = misjudged(claimVerdict({
+      claim, agent: 'session:HEALTH', repo: 'health', task: 'task:HEALTH', commit, now: this.now(), changes: [], waivers: [],
+      requirements: [{ req, depth: 'unit', oracle: 'code', on_base: 'passes' }],
+      checks: [{ check, digest, source: 'definition', depth: 'unit', proof: 'test_run', covers: [req], environment: {}, tools: {} }],
+      runs: [{ run: 'run:HEALTH', check, claim, commit, digest, environment: {}, tools: {}, outcome: 'passed', ended: 1, tests_run: 1, reads: [], failures: [], evidence: [], kept: true }],
+    }), this.options.plant);
+    return { claim, outcome: v.outcome, reasons: v.reasons };
+  }
+  /** The rollback's one notice (#1334), recorded by the build that came back: the promoted commit, the restored one and why. */
+  private async rolledBack(p: Obj): Promise<Obj> {
+    const hex = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{40}$/.test(v);
+    if (!hex(p.commit) || typeof p.restored !== 'string' || !p.restored) throw refuse('pattern', '/params/commit', 'Name the promoted commit as 40 hex digits, and the build that came back.', p.commit);
+    await this.appendCore('build.rolled_back', { commit: p.commit, restored: p.restored, why: String(p.why ?? '').slice(0, 8192) });
+    return { recorded: true };
+  }
   /** Each claim's verdict on its way to the record after its lane (#82): what reads the record waits for it. */
   private readonly verdictWrites = new Map<string, Promise<void>>();
   /** Each claim's last recorded verdict, by its hash: a verdict that didn't change isn't recorded again. */
@@ -7476,6 +7512,7 @@ export class Core {
       const ran = await this.overridesFor(claim);
       if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000)] };
     }
+    v = misjudged(v, this.options.plant);
     const hash = verdictHash(v);
     if (this.verdictsMade.get(claim) === hash) return;
     try {
