@@ -6,8 +6,8 @@ import { execFile } from 'node:child_process';
 import { constants, existsSync, readFileSync, realpathSync, statfsSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import net from 'node:net';
-import { homedir } from 'node:os';
-import { delimiter, dirname, join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { delimiter, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
 import { canvasItems } from './canvas-doctor.js';
@@ -17,6 +17,7 @@ import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
+import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
 import { claudeHomes, denyHolds, homeMods, managedSettings, overrideWords } from './mods.js';
@@ -144,6 +145,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
     add('hub.disk', 'deepbuild', 'not_checked', 'skip', `the free space at ${root} couldn't be read: ${error instanceof Error ? error.message : String(error)}`, 'Check the disk by hand.');
   }
 
+  items.push(serviceItem(root));
   // The ports a worktree's stack leases (env-local, from 3000 up): one must be free for the next stack.
   const free = await firstFree(3000, 3100);
   if (free !== undefined) add('hub.ports', 'deepbuild', 'healthy', 'ok', `port ${free} is free on 127.0.0.1 for the next worktree's stack, leased from 3000 up`, 'Nothing to do.');
@@ -185,6 +187,40 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   // The canvas: its GPU adapter and tier, a fixture rendered headless against its golden, and its verdict (#140).
   items.push(...(await canvasItems(env)));
   return items;
+}
+
+/**
+ * The hub's login service (#1334): it runs a promoted build, ~/.deepbuild/versions/current, never a program in a git
+ * worktree, a checkout or a temporary folder, which a merge, a prune or a reboot moves or deletes under the run.
+ */
+function serviceItem(root: string): Item {
+  const file = serviceFile();
+  const item = (code: string, level: Item['level'], evidence: string, fix: string): Item => ({ item: 'hub.service', agent: 'deepbuild', code, level, evidence, fix });
+  let text: string;
+  try { text = readFileSync(file, 'utf8'); } catch { return item('not_checked', 'skip', `no login service for the hub at ${file}`, 'Run `deep setup`, which installs it.'); }
+  const unxml = (v: string) => v.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const args = file.endsWith('.plist')
+    ? [...(/<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(text)?.[1] ?? '').matchAll(/<string>([\s\S]*?)<\/string>/g)].map((m) => unxml(m[1]!))
+    : [...(/^ExecStart=(.*)$/m.exec(text)?.[1] ?? '').matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!.replace(/\\(.)/g, '$1'));
+  const programs = args.filter((a) => a.startsWith('/'));
+  const versions = join(root, 'versions') + sep;
+  const real = (p: string) => { try { return realpathSync(p); } catch { return p; } };
+  const temps = [tmpdir(), process.env.TMPDIR ?? '', '/tmp', '/private/tmp', '/var/folders', '/private/var/folders'].filter(Boolean).flatMap((t) => [t, real(t)]).map((t) => (t.endsWith(sep) ? t : t + sep));
+  const where = (program: string): string | undefined => {
+    if (program.startsWith(versions)) return undefined;
+    // A worktree's .git is a file naming its folder under the main checkout's; a checkout's is a folder.
+    for (let dir = dirname(program); dirname(dir) !== dir; dir = dirname(dir)) {
+      const git = join(dir, '.git');
+      if (existsSync(git)) return /^gitdir:.*[\\/]worktrees[\\/]/m.test((() => { try { return readFileSync(git, 'utf8'); } catch { return ''; } })()) ? `a git worktree, ${dir}` : `a checkout, ${dir}`;
+    }
+    return temps.some((t) => program.startsWith(t) || real(program).startsWith(t)) ? 'a temp folder' : undefined;
+  };
+  for (const program of programs) {
+    const found = where(program);
+    if (found) return item('service_unpromoted', 'fail', `the hub's login service (${file}) runs ${program}, in ${found}, which can move or vanish under the run`, 'Promote a build main watch passed with `deep hub promote <build folder>`, so the service runs ~/.deepbuild/versions/current.');
+  }
+  if (programs.some((p) => p.startsWith(versions))) return item('healthy', 'ok', `the hub's login service runs a promoted build: ${programs.join(' ')}`, 'Nothing to do.');
+  return item('service_unpromoted', 'warn', `the hub's login service runs ${programs.join(' ') || 'no program'}, not a promoted build under ${versions}`, 'Promote a build main watch passed with `deep hub promote <build folder>`.');
 }
 
 async function claudeItems(claude: string | undefined, loginPath: string | undefined, env: NodeJS.ProcessEnv, prompt: boolean, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
@@ -373,6 +409,14 @@ function deprecatedItems(root: string): Item[] {
   return items;
 }
 
+/** The one line `deep doctor` ends with: how many items, and how many of them need you. */
+function summary(items: readonly Item[]): string {
+  const count = (level: Item['level']) => items.filter((i) => i.level === level && i.code !== 'not_checked').length;
+  const parts = [[count('fail'), 'failed'], [count('warn'), 'to look at'], [items.filter((i) => i.code === 'not_checked').length, 'not checked']] as const;
+  const needs = parts.filter(([n]) => n > 0).map(([n, what]) => `${n} ${what}`);
+  return `${items.length} ${items.length === 1 ? 'item' : 'items'}: ${needs.length ? needs.join(', ') : 'all healthy'}.`;
+}
+
 /**
  * `deep doctor [--json] [--prompt]`: the items, one per line, for a person (an item not checked reading "not checked")
  * or as doctor.item@1 objects with their item and agent; `also` adds the extensions' items. The exit is the one table's:
@@ -387,12 +431,16 @@ export async function doctorCommand(args: readonly string[], also: () => Promise
   const json = args.includes('--json');
   const agents: Record<string, string> = { 'claude-code': 'Claude Code', codex: 'Codex', deepbuild: 'DeepBuild' };
   const items = [...(await doctorItems(process.env, { prompt: args.includes('--prompt'), cwd: process.cwd() })), ...(await also())];
+  // A person reads `Fix:` only where something needs fixing, and how to check an item that wasn't (#1455).
+  const fixes = (i: Item) => i.level === 'warn' || i.level === 'fail' || (plant() === 'doctor-healthy-fix' && i.item === 'hub.socket');
+  const next = (i: Item) => (fixes(i) ? `\n  Fix: ${i.fix}` : i.code === 'not_checked' ? `\n  To check: ${i.fix}` : '');
   for (const i of items) {
     const state = i.code === 'not_checked' ? 'not checked' : i.level.toUpperCase();
-    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state} (${i.code})\n  ${i.evidence}\n  Fix: ${i.fix}`);
+    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state} (${i.code})\n  ${i.evidence}${next(i)}`);
   }
   const failed = items.some((i) => i.level === 'fail');
   const unchecked = items.some((i) => i.code === 'not_checked');
+  if (!json) console.log(summary(items));
   // The planted wrong programs: one exits 0 with an item not checked, one puts not checked before a failure.
   if (plant() === 'not-checked-exits-0') return failed ? 1 : 0;
   if (plant() === 'doctor-not-checked-first' && unchecked) return 3;

@@ -1672,14 +1672,14 @@ class AsksCore implements Asks {
     };
   }
 
-  /** What an answer to the ask would be saved as, said in words, and how many other open asks that decision would then answer. */
+  /** What an answer to the ask would be saved as, said as what answering will do (nothing is saved yet, #1455), and how many other open asks that decision would then answer. */
   private savesOf(ask: Ask): Card['saves'] {
     if (ask.fold || ask.theirs || !ask.options.length) return null;
-    if (this.unplaced(ask).length) return { scope: 'Saved for this ask only', also: 0 };
+    if (this.unplaced(ask).length) return { scope: 'Answering saves it for this ask only', also: 0 };
     const scope = this.scopeOf(ask);
     if (scope === null) return null;
     const project = this.sessions.get(ask.session)?.project;
-    const words = scope.startsWith('repo:') && project ? `Saved for this repo (${project})` : 'Saved for this session';
+    const words = scope.startsWith('repo:') && project ? `Answering saves it for this repo (${project})` : 'Answering saves it for this session';
     const also = this.open().filter((a) => a !== ask && !a.theirs && !a.fold && a.data.key === ask.data.key && this.scopeCovers(scope, a)).length;
     return { scope: words, also };
   }

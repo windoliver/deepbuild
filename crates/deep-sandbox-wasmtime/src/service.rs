@@ -64,14 +64,20 @@ const PAGE: u64 = 65_536;
 impl Budget {
     /// The role's budget (Provider `gen@1`; Logic: data layouts), with what `v` sets.
     pub fn of(role: &str, v: Option<&Value>, input: usize) -> Budget {
-        let (fuel, memory) = match role {
-            "validator" => ((8 * input as i64).max(10_000_000), input as u64 + 4 * MIB),
-            _ => (1_000_000_000, 64 * MIB),
+        let (fuel, memory, stack) = match role {
+            "validator" => (
+                (8 * input as i64).max(10_000_000),
+                input as u64 + 4 * MIB,
+                262_144,
+            ),
+            // logic@1's defaults: 1,000,000 fuel a step, 4 MiB and 64 KiB (#531).
+            "logic" => (1_000_000, 4 * MIB, 65_536),
+            _ => (1_000_000_000, 64 * MIB, 262_144),
         };
         let get = |k: &str| v.and_then(|b| b.get(k)).and_then(Value::as_i64);
         Budget {
             fuel: get("fuel").unwrap_or(fuel),
-            stack: get("stack").unwrap_or(262_144) as i32,
+            stack: get("stack").unwrap_or(stack) as i32,
             memory: get("memory_mib").map_or(memory, |m| m as u64 * MIB),
         }
     }
@@ -150,7 +156,12 @@ impl Sandbox {
     ) -> Result<(Rewritten, f64), Result<Vec<Refusal>, String>> {
         self.check(bytes, role, budget).map_err(Ok)?;
         let t = Instant::now();
-        let out = rewrite::rewrite(bytes, self.planted.rewrite).map_err(Err)?;
+        let mode = if role == "logic" {
+            rewrite::Mode::Logic
+        } else {
+            rewrite::Mode::Plain
+        };
+        let out = rewrite::rewrite_as(bytes, self.planted.rewrite, mode).map_err(Err)?;
         Ok((out, t.elapsed().as_secs_f64() * 1000.0))
     }
 

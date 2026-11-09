@@ -1,0 +1,9 @@
+{
+  "rows": [],
+  "fetch": {
+    "status": "refused",
+    "reason": "ext.shelf.library is off, so nothing is fetched from it; turn it on to fetch oak-chair"
+  },
+  "text": "{\"status\":\"refused\",\"reason\":\"ext.shelf.library is off, so nothing is fetched from it; turn it on to fetch oak-chair\"}",
+  "requests": []
+}

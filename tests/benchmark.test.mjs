@@ -149,6 +149,34 @@ test('the measured preflight workload has its own frozen time and peak-memory bu
   assert.throws(() => compare(workload, { elapsedMs: 300_000, peakBytes: 1000 }, null, ['elapsedMs', 'peakBytes']), /elapsedMs/);
 });
 
+test('a CPU reading of 0 is a run shorter than time\'s 10 ms resolution, not a missing one (#1421)', () => {
+  const workload = { id: 'preflight', margin: 0.5, limits: {} };
+  const keys = ['cpuMs', 'peakBytes'];
+  // A bare node start reads cpu_s=0.00 0.00 now and then, on either side.
+  for (const [current, base] of [[0, 0], [10, 0], [0, 10], [20, 10]]) {
+    assert.equal(compare(workload, { cpuMs: current, peakBytes: 1 }, { cpuMs: base, peakBytes: 1 }, keys).status, 'PASS', `${current} against ${base}`);
+  }
+  assert.equal(compare(workload, { cpuMs: 0, peakBytes: 1 }, null, keys).status, 'INITIAL');
+  // Past the 20 ms the base's reading can hide, plus the margin, a regression still fails.
+  assert.equal(compare(workload, { cpuMs: 30, peakBytes: 1 }, { cpuMs: 0, peakBytes: 1 }, keys).status, 'PASS');
+  assert.throws(() => compare(workload, { cpuMs: 31, peakBytes: 1 }, { cpuMs: 0, peakBytes: 1 }, keys), /cpuMs 31 regressed beyond base 0 \+ 50%, allowing 20 ms for time's truncation/);
+  // The 20 ms counts toward the base, so the margin scales it.
+  assert.equal(compare({ ...workload, margin: 0 }, { cpuMs: 20, peakBytes: 1 }, { cpuMs: 0, peakBytes: 1 }, keys).status, 'PASS');
+  assert.throws(() => compare({ ...workload, margin: 0 }, { cpuMs: 21, peakBytes: 1 }, { cpuMs: 0, peakBytes: 1 }, keys), /cpuMs 21 regressed/);
+  assert.throws(() => compare(workload, { cpuMs: 1600, peakBytes: 1 }, { cpuMs: 980, peakBytes: 1 }, keys), /cpuMs 1600 regressed/);
+  // No reading is still missing, on either side; 0 is a reading only for CPU time.
+  for (const absent of [undefined, NaN, -10]) {
+    assert.throws(() => compare(workload, { cpuMs: absent, peakBytes: 1 }, { cpuMs: 0, peakBytes: 1 }, keys), /missing cpuMs/);
+    assert.throws(() => compare(workload, { cpuMs: 0, peakBytes: 1 }, { cpuMs: absent, peakBytes: 1 }, keys), /missing base cpuMs/);
+  }
+  assert.throws(() => compare(workload, { cpuMs: 0, peakBytes: 0 }, { cpuMs: 0, peakBytes: 1 }, keys), /missing peakBytes/);
+  assert.throws(() => compare(workload, { cpuMs: 0, peakBytes: 1 }, { cpuMs: 0, peakBytes: 0 }, keys), /missing base peakBytes/);
+  assert.throws(() => compare(workload, { elapsedMs: 0, peakBytes: 1 }, { elapsedMs: 1, peakBytes: 1 }, ['elapsedMs', 'peakBytes']), /missing elapsedMs/);
+  // The 20 ms is CPU time's alone.
+  assert.throws(() => compare({ ...workload, margin: 0 }, { elapsedMs: 21, peakBytes: 21 }, { elapsedMs: 20, peakBytes: 20 }, ['elapsedMs']), /elapsedMs 21 regressed beyond base 20 \+ 0%$/);
+  assert.throws(() => compare({ ...workload, margin: 0 }, { elapsedMs: 1, peakBytes: 21 }, { elapsedMs: 1, peakBytes: 20 }, ['peakBytes']), /peakBytes 21 regressed beyond base 20 \+ 0%$/);
+});
+
 test('an established harness budget cannot disappear or change, so it can never switch its lane off', () => {
   const harness = { limits: { sessionMs: 60_000, wholeMs: 600_000 }, margin: 1, initialReason: 'First harness measurement in issue #48.' };
   const withHarness = { ...config, harness };

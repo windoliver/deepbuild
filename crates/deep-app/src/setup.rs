@@ -17,26 +17,75 @@ use std::{
 /// How long the login shell has to print its PATH, as packages/hub/src/setup.ts gives it.
 const LOGIN_SHELL_WAIT: Duration = Duration::from_secs(5);
 
-/// What the click says once it's done; the first `deep` command says the same (packages/hub/src/setup.ts).
-pub const SET_UP_LINE: &str = "DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo's checks, and started the hub at login; deep setup --undo removes it all.";
-
+#[cfg(feature = "fixtures")]
 thread_local! {
     /// A replica has no machine to set up: its record stands for one that finished.
     static ASSUMED: Cell<bool> = const { Cell::new(false) };
 }
 
+/// A replica's door, in no shipped build (#1457).
+#[cfg(feature = "fixtures")]
 pub fn assume_finished() {
     ASSUMED.with(|assumed| assumed.set(true));
 }
 
+/// What the disk says about setup in this home (#1457): read by [`refresh`], never by a frame.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Disk {
+    Finished,
+    Stopped,
+    NotStarted,
+}
+
+thread_local! {
+    static DISK: Cell<Option<Disk>> = const { Cell::new(None) };
+    /// The line under Set up, read with the disk, since a frame draws it.
+    static REASON: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+fn read_disk() -> Disk {
+    let root = crate::hub::root();
+    if root.join("setup-finished.json").exists() {
+        Disk::Finished
+    } else if root.join("setup-stopped.json").exists() {
+        Disk::Stopped
+    } else if nothing_here(&root) {
+        Disk::NotStarted
+    } else {
+        // Something of DeepBuild's is here and no setup stopped: nothing asks for setup.
+        Disk::Finished
+    }
+}
+
+/// Reads the setup files once more. The app's tick calls it, and so does a finished Set up; a frame only reads what it
+/// kept. It reports whether the answer changed, so a caller can draw again.
+pub fn refresh() -> bool {
+    let read = read_disk();
+    let line = (read == Disk::Stopped).then(read_reason).flatten();
+    let reason_changed = REASON.with(|kept| kept.replace(line.clone()) != line);
+    DISK.with(|disk| disk.replace(Some(read)) != Some(read)) || reason_changed
+}
+
+fn disk() -> Disk {
+    DISK.with(|disk| match disk.get() {
+        Some(read) => read,
+        None => {
+            refresh();
+            disk.get().unwrap_or(Disk::Finished)
+        }
+    })
+}
+
 /// Whether setup hasn't finished in this home, so the window shows the Set up button (#1002): nothing of DeepBuild
 /// is here yet, or a setup started and didn't finish. Setup's first step writes `~/.deepbuild/setup-stopped.json` and
-/// its last writes `setup-finished.json` and takes the first away (packages/hub/src/setup.ts).
+/// its last writes `setup-finished.json` and takes the first away (packages/hub/src/setup.ts). It reads what
+/// [`refresh`] kept, and does no file-system call of its own after the first.
 pub fn needed() -> bool {
-    let root = crate::hub::root();
-    !ASSUMED.with(Cell::get)
-        && !root.join("setup-finished.json").exists()
-        && (nothing_here(&root) || root.join("setup-stopped.json").exists())
+    #[cfg(feature = "fixtures")]
+    if ASSUMED.with(Cell::get) {
+        return false;
+    }
+    disk() != Disk::Finished
 }
 
 /// Whether `root` holds nothing of DeepBuild's: the running app's claim on it (#994) isn't setup.
@@ -65,7 +114,7 @@ pub fn stopped() -> Option<(String, String)> {
 pub fn count() -> Option<&'static str> {
     if !needed() {
         None
-    } else if crate::hub::root().join("setup-stopped.json").exists() {
+    } else if disk() == Disk::Stopped {
         Some("Setup didn't finish")
     } else {
         Some("Not set up yet")
@@ -73,7 +122,13 @@ pub fn count() -> Option<&'static str> {
 }
 
 /// The line under Set up: why the last setup stopped and its fix, when it kept them, with your home written `~`.
+/// It reads what [`refresh`] kept.
 pub fn reason() -> Option<String> {
+    disk();
+    REASON.with(|kept| kept.borrow().clone())
+}
+
+fn read_reason() -> Option<String> {
     let (reason, fix) = stopped()?;
     let line = format!("Setup stopped: {}. {fix}", reason.trim_end_matches('.'));
     let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
@@ -161,7 +216,7 @@ pub fn deep(path: &str) -> Command {
 
 /// Runs [`set_up`] on a thread of its own and returns where it says the one line, or what went wrong, so the click
 /// never waits on `deep setup` (#1556). It says it once; a thread that couldn't start says that.
-pub fn start() -> Receiver<Result<&'static str, String>> {
+pub fn start() -> Receiver<Result<String, String>> {
     let (said, heard) = mpsc::channel();
     let thread = std::thread::Builder::new().name("deep setup".into());
     let running = said.clone();
@@ -171,16 +226,21 @@ pub fn start() -> Receiver<Result<&'static str, String>> {
     heard
 }
 
-/// Runs `deep setup` and returns the one line, or what went wrong. It waits for setup to end, so the window calls it
-/// only through [`start`].
-pub fn set_up() -> Result<&'static str, String> {
+/// Runs `deep setup` and returns the one line it ends with, `SET_UP_LINE` in packages/hub/src/setup.ts, or what went
+/// wrong. It waits for setup to end, so the window calls it only through [`start`].
+pub fn set_up() -> Result<String, String> {
     let path = login_path().map_err(|error| format!("Set up {error}"))?;
     let mut setup = deep(&path);
     // blocking call: off the UI thread, on start's thread or in the headless `deep-app --set-up`.
     let output = setup.arg("setup").output();
     let output = output.map_err(|error| format!("deep setup didn't start: {error}"))?;
     match output {
-        Output { status, .. } if status.success() => Ok(SET_UP_LINE),
+        Output { status, stdout, .. } if status.success() => String::from_utf8_lossy(&stdout)
+            .lines()
+            .map(str::trim)
+            .rfind(|line| !line.is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| "deep setup finished without a word".to_owned()),
         Output { status, stderr, .. } => Err(format!(
             "deep setup failed ({status}): {}",
             String::from_utf8_lossy(&stderr).trim()
