@@ -177,6 +177,22 @@
       "next_step": "Retry once the hub is up, or ask the person to run it.",
       "fail_closed": true
     },
+    "no-approval-tag-sign": {
+      "match": "shell:*git* tag *deep/approved/*",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "A tag under deep/approved/ is a person's approval of an edit that could weaken a check, so only a person signs or pushes one, never an agent's call (#1326).",
+      "next_step": "Ask a person on .deepbuild/approvers to approve the commit; a signed commit on your own branch goes through. To list or check approvals, read them with git for-each-ref refs/tags/deep/approved/.",
+      "fail_closed": true
+    },
+    "no-approval-tag-push": {
+      "match": "shell:*git* push *deep/approved/*",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "A tag under deep/approved/ is a person's approval of an edit that could weaken a check, so only a person signs or pushes one, never an agent's call (#1326).",
+      "next_step": "Ask a person on .deepbuild/approvers to approve the commit; a signed commit on your own branch goes through.",
+      "fail_closed": true
+    },
     "record-new-dependency": {
       "match": "effect:dependency",
       "scope": "all_repos",
@@ -614,6 +630,34 @@
         "tool_name": "Bash",
         "tool_input": {
           "command": "cd \"$REPO\" && git stash list"
+        }
+      }
+    },
+    "no-approval-tag-sign": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git tag -s deep/approved/fix-1 -m \"Approves: tests/receipt.test.mjs\""
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git commit -S -m \"work on my branch\""
+        }
+      }
+    },
+    "no-approval-tag-push": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git push origin refs/tags/deep/approved/fix-1"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git fetch origin refs/tags/deep/approved/fix-1"
         }
       }
     },
