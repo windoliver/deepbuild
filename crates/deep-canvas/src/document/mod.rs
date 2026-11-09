@@ -99,6 +99,9 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     // track, Emitter), read by the media module.
     "strips",
     "emitters",
+    // #499: the media module's buses and processors (Bus, Processor).
+    "buses",
+    "processors",
 ];
 
 /// An item's keys (Item and kind), in this slice.

@@ -286,10 +286,23 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
   async function forgeRuns(forge: NonNullable<ArchiveOptions['forge']>): Promise<void> {
     const token = options.env.GH_TOKEN ?? options.env.GITHUB_TOKEN;
     const headers = { accept: 'application/vnd.github+json', ...(token && { authorization: `Bearer ${token}` }) };
-    const get = async (path: string) => {
-      const res = await fetch(`${forge.api}${path}`, { headers });
-      if (!res.ok) throw Error(`the forge answered ${res.status} for ${path}`);
-      return res;
+    const origin = new URL(forge.api).origin;
+    const get = async (path: string): Promise<Response> => {
+      // One deadline covers redirects and the final body's consumption. Never carry credentials to another origin.
+      const signal = AbortSignal.timeout(10_000);
+      let url = new URL(`${forge.api}${path}`);
+      for (let hop = 0; ; hop++) {
+        if (url.origin !== origin || url.username || url.password) throw Error('the forge redirected outside its declared origin');
+        const res = await fetch(url, { headers, redirect: 'manual', signal });
+        if (res.status >= 300 && res.status < 400 && res.headers.has('location')) {
+          await res.body?.cancel();
+          if (hop >= 5) throw Error('the forge exceeded five redirects');
+          url = new URL(res.headers.get('location')!, url);
+          continue;
+        }
+        if (!res.ok) { await res.body?.cancel(); throw Error(`the forge answered ${res.status} for ${path}`); }
+        return res;
+      }
     };
     for (const repo of forge.repos) {
       // Newest first: a page whose runs were all copied already ends the walk.
@@ -302,7 +315,7 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
           const logs: { job: string; evidence: string }[] = [];
           for (const job of jobs) {
             const text = await (await get(`/repos/${repo}/actions/jobs/${String(job.id)}/logs`)).text();
-            const redacted = Buffer.from(scrubText(text, { held: [...(options.held?.() ?? [])] }), 'utf8');
+            const redacted = Buffer.from(scrubText(text, { held: [...(options.held?.() ?? []), ...(token ? [token] : [])] }), 'utf8');
             logs.push({ job: String(job.id), evidence: await keep('ci.log', `forge:${repo}#${String(run.id)}`, redacted, true) });
           }
           await append(undefined, 'ci.archived', 1, { repo, run: String(run.id), result: String(run.conclusion ?? 'unknown'), logs }, logs.map((l) => l.evidence));

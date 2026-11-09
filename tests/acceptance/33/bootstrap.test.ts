@@ -7,7 +7,7 @@
 //    typecheck commands (the typecheck lane's `tsc --noEmit`, and a test runner the unit lane runs), and the commit
 //    that last changed it carries the maintainer's approval as this repo records one (scripts/proof-change.mjs
 //    `readApprovals`: an SSH-signed tag under refs/tags/deep/approved/ with `Approves: .deepbuild/done.yaml`). Where
-//    this machine has no approvers file, the approval can't be read: that part is INCONCLUSIVE and the test skips.
+//    the repo has no .deepbuild/approvers yet, the approval can't be read: that part is INCONCLUSIVE and the test skips.
 // 2. A repo gated the same way (helpers.ts, bootstrapWorld): a hand-written bootstrap with `test` and `typecheck`, no
 //    drafted spec and no handed definition, trusted in Claude Code. The session starts from a work item; the agent's
 //    change makes the test pass and adds a type error; its stop is sent back, the verdict is FAIL, and both name the
@@ -15,7 +15,6 @@
 // 3. The wrong program `drafted-spec-only` (DEEP_HUB_PLANT): a gate that counts only a drafted spec as approved. The
 //    same scenario must fail on it.
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { afterEach, describe, it } from 'vitest';
@@ -68,10 +67,10 @@ describe(`${AC4} with only the maintainer's bootstrap done.yaml, the repo is gat
     const { git } = (await import(join(REPO, 'scripts/proof-change.mjs'))) as { git: (root: string, args: string[]) => string };
     const sha = git(REPO, ['log', '-1', '--format=%H', '--', '.deepbuild/done.yaml']).trim();
     must(/^[0-9a-f]{40}$/.test(sha), `${AC4} the bootstrap is committed: ${sha}`);
-    const approvers = process.env.DEEP_APPROVERS || join(homedir(), '.deepbuild', 'approvers');
-    if (!isFile(approvers)) return ctx.skip(`INCONCLUSIVE: no approvers file at ${approvers}, so the maintainer's approval of ${sha.slice(0, 12)} can't be read here`);
-    const { readApprovals } = (await import(join(REPO, 'scripts/proof-change.mjs'))) as { readApprovals: (root: string, change: { commits: { sha: string }[] }) => Map<string, string[]> };
-    const items = readApprovals(REPO, { commits: [{ sha }] }).get(sha) ?? [];
+    // The signers are the repo's own list at HEAD (#1326); until a person lands one, the approval can't be read.
+    if (!git(REPO, ['ls-tree', '--name-only', 'HEAD', '.deepbuild/approvers']).trim()) return ctx.skip(`INCONCLUSIVE: this repo has no .deepbuild/approvers yet, so the maintainer's approval of ${sha.slice(0, 12)} can't be read here`);
+    const { readApprovals } = (await import(join(REPO, 'scripts/proof-change.mjs'))) as { readApprovals: (root: string, change: { base: string; commits: { sha: string }[] }) => Map<string, string[]> };
+    const items = readApprovals(REPO, { base: 'HEAD', commits: [{ sha }] }).get(sha) ?? [];
     must(items.includes('.deepbuild/done.yaml'), `${AC4} the commit ${sha.slice(0, 12)} that last changed the bootstrap carries the maintainer's SSH-signed tag under refs/tags/deep/approved/ with "Approves: .deepbuild/done.yaml" (fetch the tags first): it approves ${JSON.stringify(items)}`);
   }, 120_000);
 

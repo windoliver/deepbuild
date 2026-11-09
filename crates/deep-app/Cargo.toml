@@ -40,9 +40,20 @@ plant-panel-skips-kit = []
 # Issue #1454: a file stands in for the OS's prompt, in no shipped build: a test can't be you, and an environment variable
 # in the shipped app would let an agent answer for you.
 test-confirm = []
+# Issue #1455: the app draws the bound values of the file DEEP_APP_TEST_BOUND names, as `deep-replica --bound` does, in no
+# shipped build: its pictures need a bound panel from the real app.
+test-bound = ["fixtures"]
+# Issue #1477's wrong programs, in no shipped build (tests/acceptance/1477): a table that builds an element per cell,
+# one that places rows by f32 offsets, and a text sort that isn't stable.
+plant-element-per-cell = []
+plant-f32-offset = []
+plant-unstable-text-sort = []
 # Issue #1172: #337's spike window, in no shipped build: the suites that keep its proof build it, through the dev
 # dependency on this crate below.
 spike = []
+# Issue #1457: the replica's fixture door, in no shipped build: AppState and its clock, the fixture record's inbox
+# (`events`), and the bound values a replica sets. deep-replica and this crate's own tests turn it on.
+fixtures = []
 # Issue #1434: the `chrome@1` fixture its acceptance tests draw (`deep-app --chrome`, `deep-replica --chrome`) and the
 # wrong programs DEEP_CHROME_PLANT selects, in no shipped build. Unlike env-plants it builds in release, which the
 # budget run needs.
@@ -80,9 +91,8 @@ ed25519-dalek = "3"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # The menu-bar count: gpui-kit has no status item. Versions already in gpui's tree.
-# Issue #339 adds the event monitor (NSEvent, block2), the screen-capture access calls and the
-# one-frame capture (objc2-core-graphics), the cursor window's native move (raw-window-handle,
-# NSWindow) and the frame's pixels as a gpui image (image).
+# Issue #339 adds the screen-capture access calls and the HID table reads (objc2-core-graphics); its cursor window
+# left with #1457. block2, raw-window-handle and image serve the capture, the shown views and the color check.
 # Issue #262 adds NSScreen, NSGraphics, CGDisplayConfiguration, CGSession, NSDictionary and NSValue: whether a
 # window's display sleeps and whether the session is locked, for the views it reports shown.
 # The frame's pixels as a gpui image (`show.rs`), on every platform the app builds on.
@@ -117,7 +127,7 @@ wgpu = { version = "30", default-features = false, features = ["std", "metal"] }
 pollster = "0.4"
 
 [dev-dependencies]
-deep-app = { path = ".", features = ["spike"] }
+deep-app = { path = ".", features = ["spike", "fixtures"] }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
 
 # Real pixels from GPUI's offscreen Metal renderer; AppKit needs the main thread, so no libtest
@@ -149,10 +159,29 @@ path = "../../tests/acceptance/1141/app/folded.rs"
 name = "acceptance_1141_memory"
 path = "../../tests/acceptance/1141/app/memory.rs"
 
+# Issue #1510: the question card's text, its invisible and direction-changing characters marked, written blind in
+# tests/acceptance/1510.
+[[test]]
+name = "acceptance_1510"
+path = "../../tests/acceptance/1510/app/card.rs"
+
+# Issue #1738: a session's task title shown as data on every surface that draws it, written blind in
+# tests/acceptance/1738.
+[[test]]
+name = "acceptance_1738"
+path = "../../tests/acceptance/1738/app/titles.rs"
+
 # Issue #995: the canvas panel's acceptance test, written blind in tests/acceptance/995. A binary of its own, so its
 # process holds the one panel and nothing another test allocated; it draws the panel in a headless window, and AppKit
 # needs the main thread, so no libtest harness.
 [[test]]
 name = "acceptance_995"
 path = "../../tests/acceptance/995/app/panel.rs"
+harness = false
+
+# Issue #1477: the long lists and tables bench, and the calls its acceptance tests make of our table (README in
+# tests/acceptance/1477). A real window and the headless one both need the main thread, so no libtest harness.
+[[test]]
+name = "lists_1477"
+path = "lists_1477.rs"
 harness = false

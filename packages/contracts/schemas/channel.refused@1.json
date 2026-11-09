@@ -86,7 +86,10 @@
             "at",
             "signature",
             "answer",
-            "account_link_id"
+            "account_link_id",
+            "method",
+            "once",
+            "params"
           ],
           "description": "The field of the proof that failed; left out when the answer carried no proof, or needs the trusted path.",
           "x-closure": {

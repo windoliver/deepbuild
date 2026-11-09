@@ -1,0 +1,96 @@
+# #1334 acceptance tests: the run on the base, the throwaway implementation, and the planted wrong programs
+
+## The base (f1e8736e: no `deep hub promote`, no `hub.service` doctor item, no contract check, no plants)
+
+$ node --test --test-concurrency=2 'tests/acceptance/1334/*.test.mjs'
+(run in this worktree, HEAD 42319109 = f1e8736e plus #531's logic crates only, on the official Node 24.22 build, at
+1-minute loads of 220 to 320 on 18 cores; 503 s. Every failure is an AssertionError at its test's own first check.
+The first line of each message follows its test's name. AC5's file ran again after its control was reworked; that
+run is the one shown, below the others.)
+
+✖ #1334.775c65d4 a planted build that crashes at start is rolled back within 60 s, with no attempt lost and one notice naming the commit
+    #1334.775c65d4 the first promotion, of a build of 2f87bcf that main watch passed, must leave ~/.deepbuild/versions/current on its folder under versions/ and the hub answering: current undefined, the hub does not answer
+    exit 2 … Usage: deep hub run [--root <folder>] [--safe]
+✖ the hub runs from a promoted build in a versioned folder: its login service names ~/.deepbuild/versions/current, never a checkout or a temporary path
+    the first promotion, of a build of 2f87bcf that main watch passed, failed: exit 2 … Usage: deep hub run [--root <folder>] [--safe]
+✖ #1334.14e4b3e9 a planted build that starts but judges the fixture claim wrongly is rolled back the same way; a health check that only pings the hub passes this plant and fails, naming the claim
+    #1334.14e4b3e9 the first promotion, of a build of 6b77128 that main watch passed, must leave ~/.deepbuild/versions/current on its folder under versions/ and the hub answering: current undefined, the hub does not answer
+✖ #1334.a6dc45e5 no promotion happens while main is red
+    deep hub promote of a build of 66abd19, main watch's last clean commit, must be refused while main is red (exit 1 or 3): exit 2 … Usage: deep hub run …
+✖ a build is promoted only from a commit main watch passed: one of a landing it hasn't run on is refused, naming the commit
+    deep hub promote of a build of 0cde9ce, a landing main watch hasn't run on, must be refused (exit 1 or 3): exit 2 … Usage: deep hub run …
+✖ #1334.a6dc45e5 no promotion happens while a turn is running: it waits for the drain, the hub serving the turn, then promotes and the run resumes
+    the first promotion, of a build of 0c13477 that main watch passed, must leave versions/current on it and the hub answering: exit 2 … Usage: deep hub run …
+✖ #1334.32b63e42 deep doctor fails on a service whose program sits in a temp folder or a worktree, naming the path
+    deep doctor must read the hub's login service as one hub.service item; its hub.service items: []
+✖ deep doctor fails a service whose program sits in a checkout, naming the path
+    a service running a promoted build must pass hub.service; its hub.service items: []
+
+$ node --test tests/acceptance/1334/contract.test.mjs
+(the AC5 file again, after its control was given the transcript entries and the handed definition a claim needs to be
+judged; 187 s at a load of 130 to 165. The control's claim read PASS on the base's own hub, past its assertion, so
+each test fails at the planted hub.)
+
+✖ #1334.33ca60cb a session whose deep-hook is older than the hub's contract gets a clear refusal, and nothing is recorded as a PASS
+    the hub planted one contract major ahead must run (DEEP_HUB_PLANT=contract-major-ahead, which the implementer adds to packages/hub/src/plant.ts): the hub with DEEP_HUB_PLANT=contract-major-ahead didn't start: … Error: DEEP_HUB_PLANT=contract-major-ahead names no planted program
+✖ a contract mismatch fails closed with its reason: a call a fail_closed guard entry matches is denied, as with the hub away
+    the hub planted one contract major ahead must run (DEEP_HUB_PLANT=contract-major-ahead): … names no planted program
+
+ℹ tests 10
+ℹ pass 0
+ℹ fail 10
+
+In the first base run, before that rework, the AC5 test stopped earlier, at its control: the session's claim was made
+but never judged ("the session's claim never read PASS … [["claim.made",null]]"), since a prompt with no transcript
+entry opens no task and a task with no definition handed waits. That was the suite's fault, now fixed.
+
+## The throwaway implementation
+
+In a scratch tree (an APFS clone of this worktree with the blind job's throwaway implementation, twins/README.md), on
+the official Node 24.22 build, each file on its own, at loads of 130 to 290: 10 of 10 pass.
+
+| File | Result | Time | What it showed |
+|---|---|---|---|
+| `hold.test.mjs` | 3 of 3 | 119 s | |
+| `crash.test.mjs` | 2 of 2 | 63 s | the last good build answered 30.3 s after the planted build first ran, at a load of 155; 10 turns worked meanwhile |
+| `misjudge.test.mjs` | 1 of 1 | 40 s | the last good build answered 6.0 s after the planted build first ran, at a load of 164; 2 turns worked meanwhile |
+| `doctor.test.mjs` | 2 of 2 | 28 s | |
+| `contract.test.mjs` | 2 of 2 | 205 s | the control's claim read PASS; the planted hub's record holds none |
+
+Before it passed, the throwaway failed these tests for its own faults, each caught where it should be: a 2 s control
+timeout under load (the first promotion's health check, "the fixture claim couldn't be judged: no answer within
+2000 ms"); a drain read from the session's live state, which a prompt with no transcript entry never sets ("the
+build … started as the installed hub 1.4 s after the promotion was asked for, while the session's turn ran"); one
+start of the service while the old hub's process was still ending, a no-op for launchd ("the planted crash build …
+never ran"); and a drain that waited on a Stop the hub only took late, from the spool, so it never ended.
+
+## The planted wrong programs
+
+Each run the same way: the twin's file over the throwaway, `packages/hub` built again, its one test file, one at a
+time, at loads of 100 to 240. Every twin fails the test of its criterion, at the assertion its fault breaks. The first
+line of that failure, and any other test of the same file it fails, follow.
+
+| Twin | Caught by | Its message | Also fails |
+|---|---|---|---|
+| slow-rollback | #1334.775c65d4 | the last good build answered again 76.4 s after the planted build first ran; the bound is 60 s | |
+| two-notices | #1334.775c65d4 | one notice of the rollback, a build.rolled_back event in the record naming the promoted commit d821def; there are 2 | |
+| notice-names-restored | #1334.775c65d4 | the rollback's notice must name the promoted commit 7a7233a… in data.commit, not {"commit":"9cf128f…","restored":"7a7233a…",…} | |
+| fresh-root-on-rollback | #1334.775c65d4 | an attempt lost: 10 of the session's 11 calls aren't in the record after the rollback (by tool_use_id) | |
+| pings-only | #1334.14e4b3e9 | the last good build (9689bc7) never came back: the planted build (DEEP_HUB_PLANT=judges-claims-wrongly) starts and answers, so a health check that only pings the hub passes it. The fixture claim, judged by this build's gate, reads the opposite of what it should, and the health check must judge it | |
+| judges-in-promote | #1334.14e4b3e9 | the same message: judged with promote's own code, the fixture reads right and the planted build stays | |
+| promotes-while-red | #1334.a6dc45e5 (red) | deep hub promote of a build of 643b185, main watch's last clean commit, must be refused while main is red (exit 1 or 3): exit 0 | |
+| no-drain | #1334.a6dc45e5 (turn) | the build of f7783f3 started as the installed hub 3.7 s after the promotion was asked for, while the session's turn ran (its Stop came at 20.2 s) | |
+| refuses-while-turn | #1334.a6dc45e5 (turn) | deep hub promote ended 0.9 s in, while the turn ran: a promotion waits for the drain | |
+| promotes-any-commit | the passed-commit Scope test | deep hub promote of a build of cee29fb, a landing main watch hasn't run on, must be refused (exit 1 or 3): exit 0 | #1334.a6dc45e5 (red): nothing is promoted: ~/.deepbuild/versions/current must not appear |
+| temp-only | #1334.32b63e42 | the hub.service failure must say the program sits in a worktree: it says "… runs …/side/feature-a/bin/deep, in a temporary folder, not a promoted build" | the checkout Scope test |
+| flags-every-service | #1334.32b63e42 | a service running ~/.deepbuild/versions/current/bin/deep, a promoted build, must pass hub.service | the checkout Scope test |
+| names-no-path | #1334.32b63e42 | the hub.service failure must name the path, …/t/node-v24.22.0-darwin-arm64/bin/node | the checkout Scope test |
+| silent-refusal | #1334.33ca60cb | deep-hook's SessionStart run must tell the session it is older than the hub's contract 2.0, naming it | the fails-closed Scope test: the denial must also say the hub refused this deep-hook's older contract (2.0) |
+| replays-as-normal | #1334.33ca60cb | nothing from a session whose deep-hook is older than the hub's contract may be recorded as a PASS, its spooled requests replayed included | |
+| fails-open | the fails-closed Scope test | deep-hook must deny the kill by name, which the shipped kill:by-name entry holds fail_closed, when the hub refuses its contract: exit 0 | |
+
+Four twin runs were thrown away and run again, each for a fault of the throwaway, not of the twin or the test: the
+throwaway once started the service while the old hub was still ending, and once drained on a Stop it had only taken
+late (so the twins ran on a throwaway that couldn't pass). The table holds the reruns on the final throwaway, except
+pings-only, judges-in-promote, slow-rollback and two-notices, which ran on the throwaway one fix earlier (its drain
+read open turns from the hub's live hooks); their faults sit in promote.ts, apart from that fix.

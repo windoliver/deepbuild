@@ -1,0 +1,31 @@
+{
+ "runs": 1000,
+ "cpuMsHistogram": {
+  "0": 106,
+  "10": 615,
+  "20": 253,
+  "30": 12,
+  "40": 8,
+  "50": 3,
+  "60": 1,
+  "70": 1,
+  "100": 1
+ },
+ "verdicts": {
+  "fix": {
+   "PASS": 498,
+   "preflight: cpuMs N regressed beyond base N + N%": 2
+  },
+  "main": {
+   "preflight: missing cpuMs": 56,
+   "PASS": 337,
+   "preflight: cpuMs N regressed beyond base N + N%": 64,
+   "preflight: missing base cpuMs": 43
+  }
+ },
+ "load1m": [
+  20.84,
+  50.09
+ ],
+ "node": "v24.22.0"
+}

@@ -1,0 +1,176 @@
+# Base run of tests/acceptance/65/redraft-1579 at f1e8736e (the built base export), 2026-11-09T08:45Z
+# cd <export> && NO_COLOR=1 scripts/lease node node_modules/vitest/vitest.mjs run tests/acceptance/65/redraft-1579 --no-file-parallelism --testTimeout=600000
+# Every case fails: the base checks the old signature format and refuses the new one (field 'ask', 'leaves out ask'); its app path refuses the new app signature (credential, /params/signature).
+
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run tests/acceptance/65/redraft-1579 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 <export>
+
+stderr | tests/acceptance/65/redraft-1579/proofs.test.ts
+vitest-setup: stopping 4 process(es) this file left running:
+  10326 (node)
+  10732 (node)
+  10733 (node)
+  10907 (node)
+
+ ❯ tests/acceptance/65/redraft-1579/proofs.test.ts (5 tests | 5 failed) 77641ms
+   ❯ AC5 #65.bd21c26c A planted channel that returns an answer marked as signed by the paired device but carrying no valid signature, or naming an account link the hub doesn't hold, is refused, naming the device key or the link, and the answer counts as nothing; a hub that takes the channel's word for its proof accepts it and fails this test (1)
+     × AC5 #65.bd21c26c an answer marked as signed by the paired phone with another key's signature is refused naming the phone's device, and counts as nothing 10545ms
+   ❯ AC15 #65.fdfea15b After the test phone is unpaired, an answer signed by its key is refused naming the key and counts as nothing, and its next connection is told it was unpaired; a hub that still accepts the key fails this test (1)
+     × AC15 #65.fdfea15b unpaired on the trusted path, the phone is told so, and its signed answer is refused naming its device 9561ms
+   ❯ AC16 #65.84e09e8f A signed answer replayed to a second hub, one signed more than 10 minutes ago, and one whose card text was changed on the way are each refused, naming the field (3)
+     × AC16 #65.84e09e8f the phone's signed answer, counted by its own hub, replayed to a second hub is refused there naming hub 53061ms
+     × AC16 #65.84e09e8f an answer signed 11 minutes ago is refused naming at 846ms
+     × AC16 #65.84e09e8f an answer signed over a card changed on the way is refused naming card_hash 1054ms
+ ❯ tests/acceptance/65/redraft-1579/answers.test.ts (3 tests | 3 failed) 193579ms
+   ❯ AC1 #65.82812f3b An ask answered on one channel is gone from every other channel and from Needs you within 10 seconds (1)
+     × AC1 #65.82812f3b a choice answered on the paired phone is closed on chat, email and text, and in Needs you, within 10 s 101890ms
+   ❯ AC3 #65.19700b29 An answer given in paseo's phone app, signed with the phone's paired device key, reaches the waiting session and is saved as a decision; the same answer with no valid signature counts as nothing for an authority ask and points to the trusted path (1)
+     × AC3 #65.19700b29 the phone's signed approve of a held permission request reaches the session as allow and is saved as a decision 73841ms
+   ❯ AC10 #65.05709fd8 One choice ask answered B on the paired phone and C in the app 2 s later records B, the first appended, refuses C naming B and its channel, and delivers one answer; a last-writer-wins hub delivers C after B and fails this test, naming both channels (1)
+     × AC10 #65.05709fd8 B on the phone, then C in the app 2 s later: B is the one answer, and C is refused naming B and the paseo channel 17218ms
+ ❯ tests/acceptance/65/redraft-1579/proof.test.ts (1 test | 1 failed) 103529ms
+   ❯ Proof of #65: AC1 #65.82812f3b AC2 #65.c0406413 AC3 #65.19700b29 (1)
+     × AC1 #65.82812f3b AC2 #65.c0406413 AC3 #65.19700b29 a task finished on the phone has its check re-run and closes on chat and email; chat's approve of the push is refused 100913ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/65/redraft-1579/answers.test.ts > AC1 #65.82812f3b An ask answered on one channel is gone from every other channel and from Needs you within 10 seconds > AC1 #65.82812f3b a choice answered on the paired phone is closed on chat, email and text, and in Needs you, within 10 s
+Error: timed out after 60000 ms waiting for ask:01M6ZQEKHQ137TZKWSBG7FJEKJ, answered on the phone, gone from chat, email, text and Needs you: chat still shows answer, 2 buttons, "Keep the cache in SQLite or in plain files?"; email still shows view, 0 buttons, "Keep the cache in SQLite or in plain files? (answer in the app or on your paired phone)"; text still shows view, 0 buttons, ""; Needs you still holds it: {"ask":"ask:01M6ZQEKHQ137TZKWSBG7FJEKJ","kind":"choice","session":"","status":"shown","outcome":"unanswered","owner":"you","age":97978,"request":null,"decision":null,"missing":null,"words":[],"question":"Keep the cache in SQLite or in plain files?","options":["sqlite","files"],"plan":null}; the hub refused the phone's answer: channel.refused@38 {"channel":"paseo","thread_key":"ask:01M6ZQEKHQ137TZKWSBG7FJEKJ","answer":"sqlite","field":"ask","reason":"the signature leaves out ask, so it covers too little to count"}
+ ❯ tests/acceptance/65/helpers.ts:59:107
+
+ ❯ inTime tests/acceptance/65/helpers.ts:59:15
+ ❯ tests/acceptance/65/redraft-1579/answers.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  tests/acceptance/65/redraft-1579/answers.test.ts > AC3 #65.19700b29 An answer given in paseo's phone app, signed with the phone's paired device key, reaches the waiting session and is saved as a decision; the same answer with no valid signature counts as nothing for an authority ask and points to the trusted path > AC3 #65.19700b29 the phone's signed approve of a held permission request reaches the session as allow and is saved as a decision
+AssertionError: the waiting session got an answer; the hub's refusals: channel.refused@17 {"channel":"paseo","thread_key":"ask:01M6ZQJ2HS873Z02ZJWR3QK0KH","answer":"approve","field":"ask","reason":"the signature leaves out ask, so it covers too little to count"}: expected undefined to be defined
+ ❯ tests/acceptance/65/redraft-1579/answers.test.ts:46:126
+     44|     phone.answer(relay, ask, 'approve');
+     45|     const reply = await Promise.race([held.reply, sleep(MINUTE).then((…
+     46|     expect(reply, `the waiting session got an answer; the hub's refusa…
+       |                                                                                                                              ^
+     47|     expect((JSON.parse(String(reply!.stdout)) as Line).decision, `the …
+     48|     const decisions = (await ofKind(w, 'decision.created')).filter((e)…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  tests/acceptance/65/redraft-1579/answers.test.ts > AC10 #65.05709fd8 One choice ask answered B on the paired phone and C in the app 2 s later records B, the first appended, refuses C naming B and its channel, and delivers one answer; a last-writer-wins hub delivers C after B and fails this test, naming both channels > AC10 #65.05709fd8 B on the phone, then C in the app 2 s later: B is the one answer, and C is refused naming B and the paseo channel
+AssertionError: the app's signed answer counts on an open ask: {"v":1,"id":1,"error":{"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}}: expected { code: 'credential', …(5) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "actual": "",
+  "code": "credential",
+  "evidence": [],
+  "path": "/params/signature",
+  "remediation": "Sign the answer with a device you paired, over exactly the params it sends.",
+  "retryable": false,
+}
+
+ ❯ tests/acceptance/65/redraft-1579/answers.test.ts:63:100
+     61|     // last-writer-wins hub would take it.
+     62|     const first = await appAnswer(w, other, 'A');
+     63|     expect(first.error, `the app's signed answer counts on an open ask…
+       |                                                                                                    ^
+     64|     const relay = w.providers.paseo!;
+     65|     await waitFor(() => relay.latest(ask), MINUTE, `${ask} on the phon…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  tests/acceptance/65/redraft-1579/proof.test.ts > Proof of #65: AC1 #65.82812f3b AC2 #65.c0406413 AC3 #65.19700b29 > AC1 #65.82812f3b AC2 #65.c0406413 AC3 #65.19700b29 a task finished on the phone has its check re-run and closes on chat and email; chat's approve of the push is refused
+Error: timed out after 60000 ms waiting for task-done run again after the phone's "I did it"; the hub's refusals: channel.refused@34 {"channel":"paseo","thread_key":"ask:01M6ZQNP3YPQRWEDEN31XV2EFW","answer":"done","field":"ask","reason":"the signature leaves out ask, so it covers too little to count"}
+ ❯ tests/acceptance/65/redraft-1579/proof.test.ts:43:42
+
+ ❯ tests/acceptance/65/redraft-1579/proof.test.ts:42:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  tests/acceptance/65/redraft-1579/proofs.test.ts > AC5 #65.bd21c26c A planted channel that returns an answer marked as signed by the paired device but carrying no valid signature, or naming an account link the hub doesn't hold, is refused, naming the device key or the link, and the answer counts as nothing; a hub that takes the channel's word for its proof accepts it and fails this test > AC5 #65.bd21c26c an answer marked as signed by the paired phone with another key's signature is refused naming the phone's device, and counts as nothing
+AssertionError: the refusal names the signature: channel.refused@12 {"channel":"paseo","thread_key":"ask:01M6ZQC52BRWCT6RVR79KAENH2","answer":"sqlite","field":"ask","reason":"the signature leaves out ask, so it covers too little to count"}: expected 'ask' to be 'signature' // Object.is equality
+
+Expected: "signature"
+Received: "ask"
+
+ ❯ tests/acceptance/65/redraft-1579/proofs.test.ts:34:75
+     32|     phone.answer(relay, ask, 'sqlite', { forged: true });
+     33|     const r = await firstRefusal(w, ask, 'the forged signature');
+     34|     expect(r.data.field, `the refusal names the signature: ${said([r])…
+       |                                                                           ^
+     35|     expect(String(r.data.reason), 'the refusal names the paired device…
+     36|     await sleep(3000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  tests/acceptance/65/redraft-1579/proofs.test.ts > AC15 #65.fdfea15b After the test phone is unpaired, an answer signed by its key is refused naming the key and counts as nothing, and its next connection is told it was unpaired; a hub that still accepts the key fails this test > AC15 #65.fdfea15b unpaired on the trusted path, the phone is told so, and its signed answer is refused naming its device
+AssertionError: the refusal names the device: channel.refused@13 {"channel":"paseo","thread_key":"ask:01M6ZQCEY98VK44320BCG79DF2","answer":"sqlite","field":"ask","reason":"the signature leaves out ask, so it covers too little to count"}: expected 'ask' to be 'device' // Object.is equality
+
+Expected: "device"
+Received: "ask"
+
+ ❯ tests/acceptance/65/redraft-1579/proofs.test.ts:55:72
+     53|     phone.answer(relay, ask, 'sqlite');
+     54|     const r = await firstRefusal(w, ask, 'the unpaired key\'s answer');
+     55|     expect(r.data.field, `the refusal names the device: ${said([r])}`)…
+       |                                                                        ^
+     56|     expect(String(r.data.reason), 'the refusal names the unpaired devi…
+     57|     await sleep(3000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  tests/acceptance/65/redraft-1579/proofs.test.ts > AC16 #65.84e09e8f A signed answer replayed to a second hub, one signed more than 10 minutes ago, and one whose card text was changed on the way are each refused, naming the field > AC16 #65.84e09e8f the phone's signed answer, counted by its own hub, replayed to a second hub is refused there naming hub
+Error: timed out after 30000 ms waiting for the first hub counting the phone's signed answer; its refusals: channel.refused@17 {"channel":"paseo","thread_key":"ask:01M6ZQCRD3DN1W2H17W66QPDYM","answer":"sqlite","field":"ask","reason":"the signature leaves out ask, so it covers too little to count"}
+ ❯ tests/acceptance/65/redraft-1579/proofs.test.ts:82:42
+     80|     const { answer } = phone.answer(relay, asks[0]!, 'sqlite');
+     81|     await waitFor(async () => (await ofKind(a, 'ask.answered', asks[0]…
+     82|       .catch(async (e: Error) => { throw Error(`${e.message}; its refu…
+       |                                          ^
+     83|     b.providers.paseo!.give(answer);
+     84|     const r = await firstRefusal(b, asks[0]!, 'the replayed answer on …
+ ❯ tests/acceptance/65/redraft-1579/proofs.test.ts:81:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  tests/acceptance/65/redraft-1579/proofs.test.ts > AC16 #65.84e09e8f A signed answer replayed to a second hub, one signed more than 10 minutes ago, and one whose card text was changed on the way are each refused, naming the field > AC16 #65.84e09e8f an answer signed 11 minutes ago is refused naming at
+AssertionError: the refusal names the field: channel.refused@19 {"channel":"paseo","thread_key":"ask:01M6ZQCRDKM66MFBYN31RGR212","answer":"sqlite","field":"ask","reason":"the signature leaves out ask, so it covers too little to count"}: expected 'ask' to be 'at' // Object.is equality
+
+Expected: "at"
+Received: "ask"
+
+ ❯ tests/acceptance/65/redraft-1579/proofs.test.ts:93:71
+     91|     phone.answer(relay, asks[1]!, 'sqlite', { at: Date.now() - 11 * MI…
+     92|     const r = await firstRefusal(a, asks[1]!, 'the stale answer');
+     93|     expect(r.data.field, `the refusal names the field: ${said([r])}`).…
+       |                                                                       ^
+     94|     await countedNothing(a, asks[1]!);
+     95|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  tests/acceptance/65/redraft-1579/proofs.test.ts > AC16 #65.84e09e8f A signed answer replayed to a second hub, one signed more than 10 minutes ago, and one whose card text was changed on the way are each refused, naming the field > AC16 #65.84e09e8f an answer signed over a card changed on the way is refused naming card_hash
+AssertionError: the refusal names the field: channel.refused@21 {"channel":"paseo","thread_key":"ask:01M6ZQCRF26HBNJ7G01N67FBYQ","answer":"sqlite","field":"ask","reason":"the signature leaves out ask, so it covers too little to count"}: expected 'ask' to be 'card_hash' // Object.is equality
+
+Expected: "card_hash"
+Received: "ask"
+
+ ❯ tests/acceptance/65/redraft-1579/proofs.test.ts:102:71
+    100|     phone.answer(relay, asks[2]!, 'sqlite');
+    101|     const r = await firstRefusal(a, asks[2]!, 'the changed card\'s ans…
+    102|     expect(r.data.field, `the refusal names the field: ${said([r])}`).…
+       |                                                                       ^
+    103|     await countedNothing(a, asks[2]!);
+    104|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  9 failed (9)
+   Start at  00:39:03
+   Duration  385.74s (tests 98%, transform 1%, import 1%)
+
+exit=1

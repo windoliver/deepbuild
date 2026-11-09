@@ -108,7 +108,8 @@ impl Runner {
         })
     }
 
-    fn set(&mut self, name: &str, v: Val) -> Result<(), String> {
+    /// Sets an exported mutable global.
+    pub fn set(&mut self, name: &str, v: Val) -> Result<(), String> {
         let g = self
             .instance
             .get_global(&mut self.store, name)
@@ -131,6 +132,12 @@ impl Runner {
     pub fn memory(&mut self, name: &str) -> Option<&[u8]> {
         let m = self.instance.get_memory(&mut self.store, name)?;
         Some(m.data(&self.store))
+    }
+
+    /// The exported memory's bytes, to write in place.
+    pub fn memory_mut(&mut self, name: &str) -> Option<&mut [u8]> {
+        let m = self.instance.get_memory(&mut self.store, name)?;
+        Some(m.data_mut(&mut self.store))
     }
 
     /// Writes bytes into the exported memory at `at`.

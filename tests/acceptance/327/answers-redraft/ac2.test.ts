@@ -36,7 +36,6 @@ const RECORD: Option[] = [A, C, B];
 const drawn = (record: Option[], recommended: string): Option[] => [record.find((o) => o.id === recommended)!, ...record.filter((o) => o.id !== recommended)];
 /** What a card sends for a click on the option drawn at `clicked`. */
 type Card = (record: Option[], recommended: string, clicked: number) => string;
-const rightCard: Card = (record, recommended, clicked) => drawn(record, recommended)[clicked]!.id;
 /** The wrong program the criterion names: the click's drawn position read as the record's index. */
 const byRecordIndex: Card = (record, _recommended, clicked) => record[clicked]!.id;
 
@@ -148,10 +147,9 @@ async function answeredByClickOnC(card: Card): Promise<{ handle: string; failure
 }
 
 describe(`AC2 ${AC2} a click on C records C, the agent's next input holds C's ID and label, and delivery.outcome is delivered once the turn shows it`, () => {
-  it(`${AC2} a taste call (A, C, B in the record; B recommended, drawn first) answered by a click on C: ask.answered records C, the session's transcript shows C's ID and label as its next input, and delivered is recorded only once it does`, async () => {
-    const { failures } = await answeredByClickOnC(rightCard);
-    expect(failures, 'the answer C reaches the agent, delivered and acknowledged').toEqual([]);
-  }, 240_000);
+  // The case itself, a click on C delivered as C, is proven by the blind redraft ../answers-redraft-1579/ac2.test.ts,
+  // swapped in with the owner's approval: #1579 changed what a paired device signs, so this draft's signer fails
+  // it on the format at the click on C.
 
   it(`${AC2} wrong program: a card that maps the click to the record's index delivers B and fails, naming the option`, async () => {
     const { failures } = await answeredByClickOnC(byRecordIndex);
