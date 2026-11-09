@@ -217,6 +217,8 @@ alone.push('tests/acceptance/33/');
 alone.push('tests/acceptance/1427/');
 byHand.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
+// #1550's files build a GPUI text probe and deep-drive, and start replicas.
+alone.push('tests/acceptance/1550/');
 // #1434's files build deep-replica and start a replica each, and ac5 runs #377's handoff suite; its live window files
 // run by hand on the reference Mac, the budgets as a timed file.
 alone.push('tests/acceptance/1434/');
@@ -232,10 +234,16 @@ timed.push('tests/acceptance/1546/ac4-needs-you.live.test.ts');
 
 // #1348's suite runs the plain words lane, which builds and draws its fixture run in the replica: one file at a time.
 alone.push('tests/acceptance/1348/');
+// #505's files each build deep-canvas-render (and its formula file deep-show): one file at a time.
+alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
 // #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.
 alone.push('tests/acceptance/1479/');
 // #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
 alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests/acceptance/531-redraft-ac12/');
+
+// #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
+alone.push('tests/acceptance/1477/');
+timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts', 'tests/acceptance/1477/redraft/record.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

@@ -51,6 +51,7 @@ pub mod single;
 #[cfg(feature = "spike")]
 pub mod spike;
 pub mod states;
+pub mod table;
 pub mod text;
 pub mod views;
 
