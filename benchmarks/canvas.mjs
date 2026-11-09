@@ -694,15 +694,19 @@ workloads.idle = () => {
         clock: { refresh_hz: 60, lead: 0, check: 0 }, calls: [{ call: 'deep_show', session: 's1', doc: 'still', document, at: 0 }],
         live: { watch_from: 'settled', watch_ms: (warm ? 5 : 60) * 1000 }, ...(planted() ? { planted: planted() } : {}),
       });
-      // A window AppKit never showed (covered, hidden, a sleeping display or a locked screen) is read as that, unread.
-      if (answer.code === 'no_display' && answer.window) return { opened_frames: 0, window: answer.window, unread: 'no_display' };
+      const spent = (p) => ({ seconds: p.seconds, wakeups: p.wakeups, interrupt_wakeups: p.interrupt_wakeups, cpu_ms: p.cpu_ms,
+        cpu_fraction: p.cpu_ms / (p.seconds * 1000), energy: p.energy });
+      // A window AppKit never showed (covered, hidden, a sleeping display or a locked screen) is read as that: what it
+      // and the process did while deep-show waited for a first frame, with no frame drawn.
+      if (answer.code === 'no_display' && answer.window && answer.process) {
+        return { opened_frames: 0, frames: 0, drawn: [], ...spent(answer.process), request_frames: answer.request_frames, window: answer.window };
+      }
       if (answer.ok !== true || !answer.live?.process) throw Error(`deep-show live answered ${JSON.stringify(answer).slice(0, 1500)}`);
       const { frames, process: p, request_frames, window } = answer.live;
       return {
-        opened_frames: 1, seconds: p.seconds, frames: frames.length,
+        opened_frames: 1, frames: frames.length,
         drawn: frames.map((f) => ({ frame: f.frame_seq, at_ms: Math.max(0, (f.presented_ns - p.from_ns) / 1e6) })),
-        wakeups: p.wakeups, interrupt_wakeups: p.interrupt_wakeups, cpu_ms: p.cpu_ms, cpu_fraction: p.cpu_ms / (p.seconds * 1000),
-        energy: p.energy, request_frames, window,
+        ...spent(p), request_frames, window,
       };
     } finally {
       rmSync(evidence, { recursive: true, force: true });

@@ -192,6 +192,17 @@ pub unsafe fn post_pointer_move(ns_window: *mut AnyObject, point: NSPoint, uptim
     let _: () = msg_send![&*app, postEvent: event, atStart: false];
 }
 
+/// Has the window take pointer moves queued for it. GPUI's normal window hears the real cursor
+/// through a tracking area and turns this off, so AppKit would drop a queued move; on, the window
+/// hands it to GPUI's view as it does real input.
+///
+/// SAFETY: `ns_window` is null or a live NSWindow; this runs on the main thread.
+pub unsafe fn accept_posted_moves(ns_window: *mut AnyObject) {
+    if !ns_window.is_null() {
+        let _: () = msg_send![&*ns_window, setAcceptsMouseMovedEvents: true];
+    }
+}
+
 /// The process's package-idle and interrupt wakeups, its CPU, every thread's, in ns, and its
 /// energy in nJ (#1492: a reading only).
 #[derive(Clone, Copy)]
@@ -217,6 +228,16 @@ struct RusageV6 {
     ri_energy_nj: u64,
     ri_penergy_nj: u64,
     reserved: [u64; 14],
+}
+
+/// What the process spent from `t0` to `t1` (host ns), as `live.process` reports it.
+pub fn spent(t0: i64, u0: Usage, t1: i64, u1: Usage) -> Value {
+    json!({
+        "from_ns": t0, "seconds": (t1 - t0) as f64 / 1e9, "wakeups": u1.wakeups - u0.wakeups,
+        "interrupt_wakeups": u1.interrupts - u0.interrupts,
+        "cpu_ms": (u1.cpu_ns - u0.cpu_ns) as f64 / 1e6,
+        "energy": { "counter": ENERGY_COUNTER, "nj": u1.energy_nj.saturating_sub(u0.energy_nj) },
+    })
 }
 
 pub fn usage() -> Usage {

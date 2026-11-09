@@ -65,19 +65,27 @@ pub(super) fn note_callback() {
 }
 
 /// A window's link between ticks: whether the tick running drew or was asked for another frame,
-/// whether the link is stopped for being still, and ticks a planted restart sits out.
+/// whether the link is stopped for being still, whether the last start went ahead, and ticks a
+/// planted restart sits out.
 #[derive(Default)]
 pub(super) struct Link {
     asked: bool,
     drew: bool,
     stopped: bool,
+    started: bool,
     skip: u32,
 }
 
 impl Link {
-    /// The link started: it isn't stopped for being still any more.
+    /// Whether a start is refused: a link stopped for being still starts only when woken, not
+    /// when AppKit reports the window shown, moved, made key or its layer to display again (the
+    /// layer keeps its last frame meanwhile).
+    pub(super) fn holds(&self) -> bool {
+        self.stopped
+    }
+
     pub(super) fn started(&mut self) {
-        self.stopped = false;
+        self.started = true;
     }
 }
 
@@ -90,7 +98,6 @@ impl MacWindowState {
         }
         self.frame_link.asked = false;
         self.frame_link.drew = false;
-        note_callback();
         true
     }
 
@@ -108,16 +115,26 @@ impl MacWindowState {
         self.frame_link.drew = true;
     }
 
+    /// Starts a stopped link and runs its first callback now rather than at the next vsync, so
+    /// waking costs no refresh. Upstream's rules may still keep it off (an occluded window or no
+    /// screen); AppKit's own start then brings it back when the window shows again.
     fn wake(&mut self) {
         self.frame_link.asked = true;
         if !self.frame_link.stopped {
             return;
         }
-        self.frame_link.stopped = false;
-        if planted() == Planted::RestartsAfterRefresh {
+        let late = planted() == Planted::RestartsAfterRefresh;
+        if late {
             self.frame_link.skip = 1;
         }
+        self.frame_link.stopped = false;
+        self.frame_link.started = false;
         self.start_display_link();
+        if !late && self.frame_link.started {
+            if let Some(source) = self.frame_source.as_ref() {
+                source.request_frame();
+            }
+        }
     }
 }
 
