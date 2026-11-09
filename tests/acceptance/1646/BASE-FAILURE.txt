@@ -1,0 +1,40 @@
+#1646 acceptance suite at the base, a3efe5c8 (Merge pull request #1746), before any implementation.
+
+Run once with
+`npx vitest run --root tests/acceptance/1646 --no-file-parallelism --testTimeout=600000`
+(binaries built by each file, debug, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, on a Mac shared with other
+sessions' builds). In that run dither.test.ts's beforeAll hit its 1 h hook timeout while cargo built deep-gpu and
+deep-canvas-render cold, so its three tests were skipped; once both binaries were built, dither.test.ts was run once
+more on its own (the same command with `dither.test.ts`). Trimmed to the failures:
+
+ x #1646.23206300 between two roles over a gradient, each 4 × 4 block covers exactly the pixels whose matrix entry is
+   below the gradient's step, at every t
+   AssertionError: played, frame 0 was answered, not refused: {"code":"bad_paint","reason":"items/plate/params/paint/fill/role"}
+ x #1646.23206300 a dither fill naming a status role is refused at check, naming the item; the same fill between two
+   data roles checks
+   AssertionError: the status-color rule refuses the fill: {"ok":false,"issues":[{"check":"document.validate",
+   "code":"bad_paint","severity":"error","ids":["plate"],"path":"items/plate/params/paint/fill/role", …}]}
+ x #1646.23206300 the dither fill covers the same pixels on two GPUs
+   AssertionError: played, frame 0 was answered, not refused: {"code":"bad_paint", …}   (fails before the record, not BLOCKED)
+ Test Files 1 failed (1); Tests 3 failed (3)
+
+ x #1646.7fba4dd6 cells(p, seed) returns f1 ≤ f2, a u32 id and the nearest center at every frame played, and the same
+   outputs seeked
+   AssertionError: deep-motion eval accepts the cells drivers: {"ok":false,"code":"bad_doc","path":"drivers/m_cx/expr",
+   "call":"center","why":"is no swizzle of x, y, z, w (or r, g, b, a)"}
+ x #1646.7fba4dd6 a planted cells seeded from t (planted cells_seeded_from_t) fails, naming the frame
+   AssertionError: deep-motion eval accepts the cells drivers (planted cells_seeded_from_t): {"ok":false,"code":"bad_input"}
+
+ x #1646.5b6cd97b each unit's afterglow equals e^(−(t − r) ÷ τ) from its own reveal time r at every frame played and
+   each frame seeked
+   AssertionError: raster at frame 0: texts.type.reveal is an array, got undefined
+
+ Test Files 3 failed (3); Tests 3 failed | 3 skipped (6)   (the full run; the dither file's 3 are the rerun above)
+
+So at the base: a fill `{dither: …}` is no fill kind (`fill_of` reads a role and finds none, `bad_paint`), for
+`film2d` and the document check alike, so the check refuses the status-role stop for the wrong reason, and the
+data-role twin too; `cells(p, seed)` answers one number and its outputs can't be read by name (`.center` is taken for a
+swizzle), and `deep-motion eval` knows no `cells_seeded_from_t`; `raster` answers no per-unit reveal times or afterglow.
+
+`npx tsc -p tests/acceptance/1646/tsconfig.json` exits 0. The two-GPU test stays BLOCKED on a one-GPU machine once the
+fill draws.
