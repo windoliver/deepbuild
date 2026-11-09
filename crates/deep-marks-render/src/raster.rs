@@ -130,6 +130,7 @@ impl deep_canvas_marks::animator::Host for Host<'_> {
 fn outline_row(g: &deep_text::Glyph) -> Value {
     use deep_text::outlines::Cmd;
     let cmds: Vec<Value> = deep_text::outlines::outline_of(g)
+        .unwrap_or_default()
         .into_iter()
         .map(|c| match c {
             Cmd::Move(p) => json!(["M", p[0], p[1]]),

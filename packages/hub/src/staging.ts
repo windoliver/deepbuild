@@ -33,9 +33,9 @@ const COPIES = 8;
 /** What git is given to read a tree or a stash, inside the hold. */
 const GIT_MS = 8_000;
 
-export interface Settings { files: number; seconds: number; keepMs: number }
+interface Settings { files: number; seconds: number; keepMs: number }
 /** `staging` in <root>/config.json, each value held to what the hold allows. */
-export function settings(root: string): Settings {
+function settings(root: string): Settings {
   let given: { files?: unknown; seconds?: unknown; keep?: unknown } = {};
   try {
     const config = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as { staging?: typeof given };
@@ -50,7 +50,7 @@ export function settings(root: string): Settings {
   };
 }
 
-export interface StagingOptions {
+interface StagingOptions {
   root: string;
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   now(): number;

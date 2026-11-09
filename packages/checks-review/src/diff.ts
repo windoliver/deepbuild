@@ -10,9 +10,9 @@ export const git = (cwd: string, args: string[]): string =>
 export const diffOf = (checkout: string, from: string, to: string, context = 3): string =>
   git(checkout, ['diff', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/', `-U${context}`, from, to]);
 
-export interface DiffLine { file: string; line: number; text: string; added: boolean }
+interface DiffLine { file: string; line: number; text: string; added: boolean }
 /** A hunk's old side, as -U0 prints it: the lines it removes or alters (from, count) and how many lines it adds. */
-export interface Hunk { file: string; from: number; count: number; added: number }
+interface Hunk { file: string; from: number; count: number; added: number }
 
 /** Every line of a unified diff on the new side, added or context, with its file and new line number. */
 export function newSide(diff: string): DiffLine[] {

@@ -5,8 +5,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 
-export interface Feature { id: string; name: string; files: string[]; journeys: string[]; depth: 'journey' | 'live'; file: string }
-export interface Selection {
+interface Feature { id: string; name: string; files: string[]; journeys: string[]; depth: 'journey' | 'live'; file: string }
+interface Selection {
   /** Features a changed path lives in. */
   changed: string[];
   /** The changed features that share a changed file with another changed feature. */

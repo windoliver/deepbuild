@@ -12,7 +12,7 @@ import type { Cause, Checked, ProofResult, ProofSpec, Proposal } from './types.j
 export class Overran extends Error {}
 /** The machine can't run the check: its toolchain is missing, or the checker couldn't start. */
 export class Missing extends Error {}
-export interface Clock { end: number; now(): number }
+interface Clock { end: number; now(): number }
 export const clock = (ctx: CheckContext): Clock => ({ end: ctx.now() + ctx.deadline, now: ctx.now });
 
 export interface Exec { status: number | null; stdout: string; out: string }
@@ -111,7 +111,7 @@ export const overranRun = (spec: ProofSpec, deadline: number): Checked => {
   return { result: { outcome: 'overran', ...empty(spec), reasons: [why], receipt: `stopped: ${why}` }, causes: [] };
 };
 
-export interface Parts {
+interface Parts {
   testsRun: number;
   failures: Failure[];
   causes: Cause[];

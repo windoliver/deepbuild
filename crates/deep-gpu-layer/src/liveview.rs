@@ -16,7 +16,8 @@ use deep_canvas_scene3d::frames::Frames;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Depth, Labels, Refused};
-use deep_effects_render::docops::{item_of_mark, DocOps, Rec, Row, Times};
+use deep_effects_render::docops::{item_of_mark, DocOps, Fusing, Pool, Rec, Row, Times};
+use deep_scene3d_render::created::Created;
 use deep_effects_render::runner::Frame;
 use deep_gpu::alloc::outside;
 use deep_gpu::device::Device;
@@ -548,6 +549,10 @@ pub struct View {
     /// The document's composed pass and compute operators (#429), each at the resolution its
     /// writer's meter gives it, and what each drew last frame.
     pub ops: DocOps,
+    /// The session's operator pipelines, kept across its revisions and variant switches, and how
+    /// its chain fuses (#432).
+    pub pool: Pool,
+    pub fusing: Fusing,
     pub op_resolution: BTreeMap<String, f64>,
     pub op_rows: Vec<Row>,
     /// #429's planted render-back, which draws live-only operators as the live view does.
@@ -597,11 +602,15 @@ impl View {
         look: &Look3,
         labels: &mut Labels,
         planted: Planted3,
+        warm_shadows: bool,
     ) -> Result<View, String> {
         let ((slots, renderer, frames, prepared), base_bytes) = memory::across(device, || {
             let slots: Result<Vec<_>, String> =
                 (0..slots).map(|_| allocate(device, path, size)).collect();
             let mut renderer = Renderer::new(device, planted);
+            renderer.warm_shadows = warm_shadows;
+            // The view opens at check: what its first scene compiles is the warm-up's (#432).
+            renderer.log.warming = true;
             let mut frames = frames;
             let prepared = match &mut frames {
                 Content::Scene(frames) => match frames.at(0, size, &Offsets::default(), labels) {
@@ -613,6 +622,7 @@ impl View {
                 },
                 Content::Flat(_) => false,
             };
+            renderer.log.warming = false;
             (slots, renderer, frames, prepared)
         });
         Ok(View {
@@ -631,12 +641,47 @@ impl View {
             base_bytes,
             still: None,
             ops: DocOps::empty(),
+            pool: Pool::default(),
+            fusing: Fusing::default(),
             op_resolution: BTreeMap::new(),
             op_rows: Vec::new(),
             canonical_draws_live_only: false,
             #[cfg(feature = "test-meter")]
             test: crate::testgpu::Items::default(),
         })
+    }
+
+    /// The warm-up at check (#432): prepares each scene a revision can reach, so every pipeline
+    /// they draw with is compiled before its first frame; none of them is a frame's.
+    pub fn warm(&mut self, device: &Device, look: &Look3, scenes: &[deep_canvas_scene3d::scene::Scene]) {
+        self.renderer.log.warming = true;
+        for scene in scenes {
+            self.renderer.prepare(device, scene, look);
+        }
+        self.renderer.log.warming = false;
+        self.prepared = false;
+    }
+
+    /// Starts a frame's list of pipelines made.
+    pub fn begin_frame(&mut self) {
+        self.renderer.log.begin_frame();
+        self.pool.log.begin_frame();
+    }
+
+    /// Every pipeline made since the frame began that the warm-up didn't make (#432).
+    pub fn created(&self) -> Vec<Created> {
+        self.renderer
+            .log
+            .this_frame()
+            .chain(self.pool.log.this_frame())
+            .cloned()
+            .collect()
+    }
+
+    /// The operator pipelines the session holds: its pass and compute operators' and its
+    /// material operators'.
+    pub fn operator_pipelines(&self) -> usize {
+        self.pool.len() + self.renderer.material_ops()
     }
 
     /// Draws `frames` from the next frame on: a revision's document.

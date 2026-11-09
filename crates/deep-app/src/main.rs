@@ -107,6 +107,12 @@ enum Mode {
 fn main() {
     // The signed app has no allow-jit entitlement (#358), so no panel in it may ask for native code.
     rquickjs_jit::deny_native_code();
+    // Issue #1434: `--chrome <fixture> (--snapshot <png> | --idle <s> | --frames <n>)`, in a chrome-fixture build.
+    #[cfg(all(feature = "chrome-fixture", target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--chrome") {
+        chrome_fixture(std::env::args().skip(2).collect());
+        return;
+    }
     #[cfg(feature = "panel-check")]
     {
         let all: Vec<String> = std::env::args().skip(1).collect();
@@ -411,6 +417,29 @@ fn args() -> (Option<PathBuf>, Option<String>, Mode) {
         "--view names the view a --panel draws"
     );
     (panel, view, mode)
+}
+
+/// `--chrome <fixture> (--snapshot <png> | --idle <seconds> | --frames <n>)` (#1434): the chrome@1 fixture as the app's
+/// real window's content, one report line, then quit.
+#[cfg(all(feature = "chrome-fixture", target_os = "macos"))]
+fn chrome_fixture(args: Vec<String>) {
+    use deep_app::chrome_fixture::{Fixture, Live};
+    let usage = "usage: deep-app --chrome <fixture> (--snapshot <png> | --idle <seconds> | --frames <n>)";
+    let (Some(path), Some(mode), Some(value)) = (args.first(), args.get(1), args.get(2)) else {
+        panic!("{usage}");
+    };
+    let fixture = Fixture::read(std::path::Path::new(path)).unwrap_or_else(|why| panic!("deep-app --chrome: {why}"));
+    let live = match mode.as_str() {
+        "--snapshot" => Live::Snapshot(PathBuf::from(value)),
+        "--idle" => Live::Idle(number(Some(value.clone()), "--idle takes seconds")),
+        "--frames" => Live::Frames(number(Some(value.clone()), "--frames takes a count")),
+        _ => panic!("{usage}"),
+    };
+    application().run(move |cx| {
+        gpui_kit::init(cx);
+        init(cx);
+        deep_app::chrome_fixture::run(fixture, live, cx);
+    });
 }
 
 fn number(arg: Option<String>, what: &str) -> u64 {
@@ -1149,7 +1178,7 @@ mod notifications {
     };
     use gpui_kit::{App, AsyncApp, SystemNotification};
 
-    const TICK: Duration = Duration::from_millis(250);
+    const TICK: Duration = record::TICK;
 
     fn now() -> u64 {
         SystemTime::now()
@@ -1221,7 +1250,7 @@ mod notifications {
             let mut watch = HubWatch::default();
             let (mut begun, mut active) = (false, false);
             let notifies = held.is_some();
-            let mut shown = (deep_app::menu_bar_line(), 0);
+            let mut shown = deep_app::menu_bar_line();
             if notifies {
                 read_setting(&mut notifier);
             }
@@ -1258,12 +1287,14 @@ mod notifications {
                     notify::publish(reach);
                 }
                 cx.update(|cx| {
+                    // What the reader applied reaches the views that observe it, and marks their windows dirty (#1546).
+                    record::sync(cx);
+                    // What the app can reach, the hub's age and setup draw beside the record, and move the count's line.
                     let line = deep_app::menu_bar_line();
-                    let at = record::with_view(|view| view.log_pos).unwrap_or(0);
-                    if reached || (&line, at) != (&shown.0, shown.1) {
+                    if reached || line != shown {
+                        record::notify_views(cx);
                         super::menu_bar::show_title(&line);
-                        shown = (line, at);
-                        cx.refresh_windows();
+                        shown = line;
                     }
                     deep_app::card::tick(now, cx);
                 });
