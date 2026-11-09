@@ -330,7 +330,7 @@ fn ready(
     textures: &BTreeMap<u8, wgpu::Texture>,
 ) -> Result<Ready, String> {
     let d = &device.device;
-    let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
     let runner = Runner::new(d, c.clone(), LINEAR);
     let views: Vec<wgpu::TextureView> = c
         .checked

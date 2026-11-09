@@ -26,6 +26,7 @@ pub mod shadow;
 pub mod status;
 pub mod surface;
 pub mod targets;
+pub mod water;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -101,7 +102,9 @@ pub const SKY_PASS: &str = "scene3d.sky";
 pub const PUFF_PASS: &str = "scene3d.puff";
 /// The pass resolving the geometry pass's object IDs and depth (#1173).
 pub const RESOLVE_PASS: &str = "scene3d.sample_resolve";
-pub use deep_canvas_scene3d::module::{CASCADE_PASS, CULL_PASS, FLARE_PASS, MIRROR_PASS};
+pub use deep_canvas_scene3d::module::{
+    CASCADE_PASS, CULL_PASS, FLARE_PASS, MIRROR_PASS, WATER_PASS,
+};
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -139,6 +142,8 @@ pub struct Planted {
     pub winding_ignores_determinant: bool,
     /// #465: the flare's wrong programs.
     pub flare: flare::Planted,
+    /// #166: the water's wrong program.
+    pub water: water::Planted,
     /// #421: opaque solids submitted in an order that turns over each frame, ties left to the
     /// depth test.
     pub ties_by_submission: bool,
@@ -1766,6 +1771,11 @@ pub struct Renderer {
     /// #465: the flare's passes, made when a frame first has a flare, and whether this frame has.
     flarer: Option<Box<flare::Flarer>>,
     flaring: bool,
+    /// #166: the water's pass, made when a frame first has water, and whether this frame has.
+    waterer: Option<Box<water::Waterer>>,
+    watering: bool,
+    /// #166: view3d's `reflection` target while a frame asks for it: each mirror part's lookup.
+    reflection: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
     /// The pass resolving the geometry pass's object IDs and depth (#1173), and the planted
     /// resolve_accumulates_frames' blend of the previous frame.
     resolve: wgpu::RenderPipeline,
@@ -1803,6 +1813,8 @@ pub struct Renderer {
     shadow: Shadow,
     /// This frame's camera: world to clip (column-major), the eye and the near plane.
     camera: Camera,
+    /// The camera's view axis this frame (#166's `depth` target reads along it).
+    forward: [f64; 3],
     pub profiler: Option<Profiler>,
     /// The GPU surface it draws through, and the upscale's pipelines once compiled (#386).
     pub surface: Surface,
@@ -3199,6 +3211,9 @@ impl Renderer {
             mirroring: false,
             flarer: None,
             flaring: false,
+            waterer: None,
+            watering: false,
+            reflection: None,
             resolve,
             accumulate,
             compiled: 2,
@@ -3241,6 +3256,7 @@ impl Renderer {
                 clip: None,
             },
             camera: ([0.0; 16], [0.0; 3], 0.1),
+            forward: [0.0, 0.0, -1.0],
             profiler: None,
             surface: Surface::default(),
             upscale: None,
@@ -4244,7 +4260,38 @@ impl Renderer {
             deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
             return self.prepare(device, &chosen, look);
         }
+        // #166: the water's parts draw in a pass of their own, after the mirror's view.
+        if let Some(w) = scene.water.clone() {
+            let wet = |s: &Solid| w.parts.contains(&s.id);
+            if scene.layers.iter().flat_map(|l| &l.solids).any(wet) {
+                let mut dry = scene.clone();
+                for layer in &mut dry.layers {
+                    layer.solids.retain(|s| !wet(s));
+                }
+                self.prepare(device, &dry, look);
+                self.prepare_water(device, scene, &w);
+                return;
+            }
+        }
+        self.watering = false;
         self.prepare_frame(device, scene, look);
+        // #166: view3d's `reflection` target, made while a frame asks for it.
+        let internal = self.internal();
+        self.reflection = match self.reflection.take() {
+            Some(r) if scene.read_reflection && r.2 == internal => Some(r),
+            _ if scene.read_reflection => {
+                let texture = texture2d(
+                    &device.device,
+                    "scene3d reflection",
+                    internal,
+                    water::REFLECTION,
+                    wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                );
+                let view = texture.create_view(&Default::default());
+                Some((texture, view, internal))
+            }
+            _ => None,
+        };
         // The per-pixel lists' room for this frame (#424).
         let per_pixel = scene
             .layers
@@ -4357,7 +4404,12 @@ impl Renderer {
                 let mirrorer = self
                     .mirrorer
                     .get_or_insert_with(|| Box::new(mirror::Mirrorer::new(device, planted)));
-                mirrorer.prepare(device, scene, m, look, &self.picks);
+                // A water's own mirror lays its picture in the water's pass, not over its parts.
+                let overlay = scene
+                    .water
+                    .as_ref()
+                    .is_none_or(|w| w.material != m.material);
+                mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
                 true
             }
             None => false,
@@ -4567,6 +4619,52 @@ impl Renderer {
         })
     }
 
+    /// #166: the water's parts at t, with their pick IDs, the mirror's picture and the light.
+    fn prepare_water(
+        &mut self,
+        device: &Device,
+        scene: &Scene,
+        w: &deep_canvas_scene3d::water::Water,
+    ) {
+        for id in &w.parts {
+            self.pick(id);
+        }
+        let mirror = match (&scene.mirror, &self.mirrorer) {
+            (Some(m), Some(r)) if self.mirroring && m.material == w.material => {
+                r.picture().map(|p| (p, m.strength))
+            }
+            _ => None,
+        };
+        let lighting = water::Lighting {
+            toward: scene.sun.as_ref().map_or([0.0, 1.0, 0.0], |s| s.toward),
+            sun: scene
+                .sun
+                .as_ref()
+                .map_or(0.0, |s| s.illuminance / std::f64::consts::PI),
+            ambient: scene.sky.as_ref().map_or([0.3; 3], |s| s.ambient[0]),
+        };
+        let reversed = self.depth_grows_nearer();
+        let samples = self.families.samples;
+        let Some(t) = self.targets.as_ref() else {
+            return;
+        };
+        let (ids, depth) = (t.ids_view.clone(), t.depth_view.clone());
+        let (ids_ms, depth_ms) = (t.drawn.ids_ms.clone(), t.drawn.depth_ms.clone());
+        let frame = water::Frame {
+            camera: &self.camera.0,
+            reversed,
+            size: self.internal(),
+            mirror: mirror.as_ref().map(|(p, s)| (p, *s)),
+            picks: &self.picks,
+            lighting,
+            planted: self.planted.water,
+        };
+        self.waterer
+            .get_or_insert_with(|| Box::new(water::Waterer::new(device, reversed, samples)))
+            .prepare(device, scene, w, &frame, &ids, &depth, [&ids_ms, &depth_ms]);
+        self.watering = true;
+    }
+
     /// The copy of the opaque scene that transmission and `backdrop` read (#431), as the last
     /// frame took it: each mip's size and its texels as f32 RGBA, level 0 first; `None` while the
     /// frame holds no copy.
@@ -4651,6 +4749,7 @@ impl Renderer {
             || self.batches.values().any(|b| !b.clear_draws.is_empty())
             || !self.adjusts.is_empty()
             || scene.mirror.is_some()
+            || scene.water.is_some()
         {
             return self.prepare(device, scene, look);
         }
@@ -4994,6 +5093,7 @@ impl Renderer {
             }
         }
         self.camera = (camera, cam.eye, cam.near);
+        self.forward = cam.forward;
         self.compiled += self.ao.prepare(
             device,
             &self.scene_module,
@@ -6333,7 +6433,24 @@ impl Renderer {
         let core = self.core_draws();
         let linear_texture = t.linear.clone();
         let motion = self.motion_frame.take().map(|m| (m, t.linear.clone()));
+        let reflection = self.reflection.as_ref().map(|r| r.1.clone());
         let geometry: Job = Box::new(move |encoder| {
+            // #166: the `reflection` target starts each frame at 0.
+            if let Some(view) = &reflection {
+                drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(GEOMETRY_PASS),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    ..Default::default()
+                }));
+            }
             if let Some((_, heads, ..)) = &resolve {
                 encoder.clear_buffer(heads, 0, None);
             }
@@ -6496,7 +6613,26 @@ impl Renderer {
             self.targets.as_ref(),
         ) {
             let (linear, ids) = (t.linear_view.clone(), t.ids_view.clone());
-            jobs.extend(m.jobs(device, slot, &linear, &ids, &self.profiler));
+            let reflection = self.reflection.as_ref().map(|r| r.1.clone());
+            jobs.extend(m.jobs(device, slot, &linear, &ids, reflection, &self.profiler));
+        }
+        // #166: the water over the bed the geometry left, under the mirror's picture.
+        if let (true, Some(w), Some(t)) =
+            (self.watering, self.waterer.as_ref(), self.targets.as_ref())
+        {
+            let (drawn, clear, rect) = (t.drawn.clone(), self.clear_depth(), w.rect());
+            let targets = water::Targets {
+                linear: (t.linear.clone(), t.linear_view.clone()),
+                ids_ms: t.drawn.ids_ms.clone(),
+                depth_ms: t.drawn.depth_ms.clone(),
+                reflection: self.reflection.as_ref().map(|r| r.1.clone()),
+                resolve: Box::new(move |encoder, timestamps| {
+                    resolve_ids(encoder, &drawn, clear, Some(rect), timestamps)
+                }),
+            };
+            if let Some(job) = w.job(targets, &self.profiler) {
+                jobs.push((WATER_PASS.into(), job));
+            }
         }
         let covers = after.as_deref().and_then(|a| a.covers());
         deep_gpu::alloc::outside(|| self.cover(device, covers));
@@ -7230,6 +7366,49 @@ impl Renderer {
         read_texture(device, t.depth_view.texture(), t.size, 4)
     }
 
+    /// #166: view3d's `reflection` target, f32 RGBA, rows top-down: each mirror part's lookup.
+    pub fn read_reflection(&self, device: &Device) -> Option<Vec<u8>> {
+        let r = self.reflection.as_ref()?;
+        read_texture(device, &r.0, r.2, 16)
+    }
+
+    /// #166: view3d's `depth` target, f32 a pixel, rows top-down: at each pixel's centre, the
+    /// distance in m along the view axis from the eye to what the depth target holds there;
+    /// infinite where nothing is drawn.
+    pub fn read_view_depth(&self, device: &Device) -> Option<Vec<u8>> {
+        let t = self.targets.as_ref()?;
+        let raw = read_texture(device, t.depth_view.texture(), t.size, 4)?;
+        let unclip = water::inverse(&self.camera.0);
+        let (eye, forward) = (self.camera.1, self.forward);
+        let empty = self.clear_depth() as f32;
+        let [w, h] = t.size.map(f64::from);
+        let mut out = Vec::with_capacity(raw.len());
+        for (k, z) in raw.chunks_exact(4).enumerate() {
+            let z = f32::from_le_bytes([z[0], z[1], z[2], z[3]]);
+            let d = if z == empty {
+                f32::INFINITY
+            } else {
+                let (i, j) = (
+                    (k % t.size[0] as usize) as f64,
+                    (k / t.size[0] as usize) as f64,
+                );
+                let ndc = [
+                    (i + 0.5) / w * 2.0 - 1.0,
+                    1.0 - (j + 0.5) / h * 2.0,
+                    f64::from(z),
+                    1.0,
+                ];
+                let p: [f64; 4] =
+                    std::array::from_fn(|r| (0..4).map(|c| unclip[c * 4 + r] * ndc[c]).sum());
+                (0..3)
+                    .map(|a| (p[a] / p[3] - eye[a]) * forward[a])
+                    .sum::<f64>() as f32
+            };
+            out.extend(d.to_le_bytes());
+        }
+        Some(out)
+    }
+
     /// Whether depth reads nearer as it grows: reversed Z, unless the planted forward Z.
     pub fn depth_grows_nearer(&self) -> bool {
         !self.planted.forward_z
@@ -7446,6 +7625,53 @@ const PUFF: [wgpu::VertexAttribute; 3] =
 /// The geometry pass into `drawn`'s multisampled targets, then the pass resolving their object
 /// IDs and depth (#1173); `timestamps` time the first, since Metal fails a pass's timestamps split
 /// over two passes.
+/// The geometry pass's object IDs and depth resolved into the targets everything after it reads
+/// (#1173); #166's water runs it again once its parts are in.
+fn resolve_ids(
+    encoder: &mut wgpu::CommandEncoder,
+    drawn: &Drawn,
+    clear_depth: f64,
+    rect: Option<[u32; 4]>,
+    timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+) {
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some(RESOLVE_PASS),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &drawn.ids,
+            resolve_target: None,
+            depth_slice: None,
+            ops: wgpu::Operations {
+                load: match rect {
+                    Some(_) => wgpu::LoadOp::Load,
+                    None => wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                },
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &drawn.depth,
+            depth_ops: Some(wgpu::Operations {
+                load: match rect {
+                    Some(_) => wgpu::LoadOp::Load,
+                    None => wgpu::LoadOp::Clear(clear_depth as f32),
+                },
+                store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+        }),
+        timestamp_writes: timestamps,
+        ..Default::default()
+    });
+    // Again inside a rectangle (#166's water): what lies outside it is as the first resolve left
+    // it.
+    if let Some([x, y, w, h]) = rect {
+        pass.set_scissor_rect(x, y, w, h);
+    }
+    pass.set_pipeline(&drawn.resolve.0);
+    pass.set_bind_group(0, &drawn.resolve.1, &[]);
+    pass.draw(0..3, 0..1);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn geometry_pass<'a>(
     encoder: &mut wgpu::CommandEncoder,
@@ -7516,31 +7742,7 @@ fn geometry_pass<'a>(
             pass.draw(0..6, 0..*count);
         }
         drop(pass);
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some(RESOLVE_PASS),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &drawn.ids,
-                resolve_target: None,
-                depth_slice: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &drawn.depth,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(clear_depth as f32),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            ..Default::default()
-        });
-        pass.set_pipeline(&drawn.resolve.0);
-        pass.set_bind_group(0, &drawn.resolve.1, &[]);
-        pass.draw(0..3, 0..1);
-        drop(pass);
+        resolve_ids(encoder, drawn, clear_depth, None, None);
         if let Some((pipeline, bind, previous, drew)) = &drawn.accumulates {
             let linear = drawn.color.1.as_ref().unwrap_or(&drawn.color.0);
             if drew.swap(true, Ordering::SeqCst) {
@@ -8017,6 +8219,17 @@ impl Module3 {
                 writes: vec!["linear"],
                 resolution: Resolution::Half,
                 ns_per_px: 0.5,
+                determinism: Determinism::SameMachine,
+            },
+            // #166: the water's parts, after the mirror's view, drawn only while a frame has water.
+            Pass {
+                name: WATER_PASS.into(),
+                place: "geometry",
+                order: 2,
+                reads: vec!["linear", "depth"],
+                writes: vec!["linear", "ids", "depth"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.3,
                 determinism: Determinism::SameMachine,
             },
             // #465: the flare, after the effects' bloom, drawn only while a frame has one.

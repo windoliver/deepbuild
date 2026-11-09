@@ -264,6 +264,17 @@ pub fn sequence(
 pub struct Body {
     pub id: String,
     pub radius: f64,
+    /// kg/m³, which buoyancy reads (#166).
+    pub density: f64,
+}
+
+/// #166: an input track entry `{step, kind: "poke", target, data: {push}}`: at the start of step
+/// `step` the push adds to the target body's velocity, before that step's forces.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Poke {
+    pub step: usize,
+    pub body: usize,
+    pub push: V3,
 }
 
 /// `fixture.world@1`'s bake: every body's position and velocity after each step, step 0 the
@@ -276,16 +287,25 @@ pub struct World {
     pub restitution: f64,
     pub bodies: Vec<Body>,
     pub states: Vec<Vec<(V3, V3)>>,
+    /// #166: the fluid's plane and density, when the world has buoyancy.
+    pub buoyancy: Option<(f64, f64)>,
 }
 
 impl World {
-    /// One step of `dt` from `s`: for each body in ID order, v.y += g·dt, p += v·dt, and a bounce
-    /// off the floor.
+    /// One step of `dt` from `s`: for each body in ID order, its buoyancy, v.y += g·dt, p += v·dt,
+    /// and a bounce off the floor. Buoyancy (#166) lifts a sphere by its submerged share
+    /// φ = h² (3r − h) ÷ (4r³), h = clamp(level − (p.y − r), 0, 2r): v.y −= g (ρ_fluid ÷ ρ_body) φ dt.
     pub fn step(&self, s: &[(V3, V3)], dt: f64) -> Vec<(V3, V3)> {
         s.iter()
             .zip(&self.bodies)
             .map(|((p, v), b)| {
                 let mut v = *v;
+                if let Some((level, fluid)) = self.buoyancy {
+                    let r = b.radius;
+                    let h = (level - (p[1] - r)).clamp(0.0, 2.0 * r);
+                    let share = h * h * (3.0 * r - h) / (4.0 * r * r * r);
+                    v[1] -= self.gravity * (fluid / b.density) * share * dt;
+                }
                 v[1] += self.gravity * dt;
                 let mut p = [0, 1, 2].map(|k| p[k] + v[k] * dt);
                 if p[1] - b.radius < self.floor {
@@ -369,9 +389,14 @@ pub fn bake(params: &Value, path: &str) -> Result<World, Refused> {
             .or_else(bad)?;
         let p = v3(b.get("pos")).ok_or(format!("{at}/pos")).or_else(bad)?;
         let v = v3(b.get("vel")).unwrap_or([0.0; 3]);
+        let density = b.get("density").and_then(Value::as_f64).unwrap_or(1000.0);
+        if !(density > 0.0 && density.is_finite()) {
+            return bad(format!("{at}/density"));
+        }
         bodies.push(Body {
             id: id.clone(),
             radius,
+            density,
         });
         initial.push((p, v));
     }
@@ -382,10 +407,52 @@ pub fn bake(params: &Value, path: &str) -> Result<World, Refused> {
         restitution: num("restitution", 0.5),
         bodies,
         states: vec![initial],
+        buoyancy: None,
     };
+    if let Some(b) = params.get("buoyancy") {
+        let level = b.get("level").and_then(Value::as_f64);
+        let density = b.get("density").and_then(Value::as_f64).unwrap_or(1000.0);
+        match level {
+            Some(l) if l.is_finite() && density > 0.0 && density.is_finite() => {
+                w.buoyancy = Some((l, density));
+            }
+            _ => return bad(format!("{path}/buoyancy")),
+        }
+    }
+    let mut pokes = Vec::new();
+    for (k, e) in params
+        .get("inputs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        let at = format!("{path}/inputs/{k}");
+        let step = e.get("step").and_then(Value::as_u64);
+        let body = e
+            .get("target")
+            .and_then(Value::as_str)
+            .and_then(|t| w.bodies.iter().position(|b| b.id == t));
+        let push = v3(e.pointer("/data/push"));
+        match (e.get("kind").and_then(Value::as_str), step, body, push) {
+            (Some("poke"), Some(step), Some(body), Some(push)) => pokes.push(Poke {
+                step: step as usize,
+                body,
+                push,
+            }),
+            _ => return bad(at),
+        }
+    }
+    // Entries apply in (kind, target) order: one kind, so by target.
+    pokes.sort_by_key(|p| (p.step, p.body));
     let dt = 1.0 / step_hz;
-    for _ in 0..steps {
-        let next = w.step(w.states.last().expect("step 0"), dt);
+    for k in 0..steps {
+        let mut now = w.states.last().expect("step 0").clone();
+        for p in pokes.iter().filter(|p| p.step == k) {
+            let v = &mut now[p.body].1;
+            *v = [0, 1, 2].map(|i| v[i] + p.push[i]);
+        }
+        let next = w.step(&now, dt);
         w.states.push(next);
     }
     Ok(w)

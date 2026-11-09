@@ -70,6 +70,8 @@ mod mask_sprite; // DeepBuild patch (windoliver/deepbuild#390)
 mod prompts;
 
 mod hits; // DeepBuild patch (windoliver/deepbuild#124)
+mod painted; // DeepBuild patch (windoliver/deepbuild#1427)
+pub use painted::{Painted, note_paints, take_painted};
 
 pub use a11y::A11ySubtreeBuilder;
 

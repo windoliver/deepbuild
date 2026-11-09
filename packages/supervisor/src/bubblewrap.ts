@@ -74,7 +74,7 @@ function bwrapArgs(run: string, cwd: string, grant: Grant, guards: readonly Guar
     if (!existsSync(g.path)) continue;
     mounts.push('--ro-bind', real(g.path), real(g.path));
     flags.push('--guard', real(g.path));
-    for (const e of g.except) {
+    for (const e of [...g.except, ...(grant.own ?? []).filter((o) => real(o).startsWith(`${real(g.path)}/`))]) {
       if (!existsSync(e)) continue;
       mounts.push('--bind', real(e), real(e));
       flags.push('--except', real(e));

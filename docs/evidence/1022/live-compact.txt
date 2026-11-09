@@ -1,0 +1,33 @@
+#1022: one live /compact in the Codex CLI (Codex 0.144.0, the version installed on this Mac; 0.160.0 is not installed here).
+
+How: live-compact.py drives the real Codex TUI in a pty against spikes/1330/fake-openai.mjs (a local stand-in model, no spend),
+with DeepBuild's own hooks written by `deep setup` and a real `deep hub run`, all in a scratch HOME under /tmp. It types
+"say hi", waits for the turn, types /compact, waits for the compaction, quits, lets the hub drain, and prints the session's record.
+
+Codex's own hooks for that run (logged raw, no DeepBuild): SessionStart, UserPromptSubmit "say hi", Stop, then PreCompact
+(trigger manual) and PostCompact under a new turn_id. Codex fired no UserPromptSubmit for /compact.
+
+## Base (da22dbe4), 2026-11-08 11:16
+
+    (4, 'user.ask', None, 'say hi', 'person')
+    (8, 'session.reading', "Codex billing: no plan in the session's logs, so an API account", None, None)
+    (9, 'agent.stop', None, None, None)
+    (11, 'user.ask', None, '', 'unknown')          <- the /compact recorded as an empty prompt from unknown
+    (12, 'session.reading', 'PreCompact: the context compacts (manual)', None, None)
+    user.asks: [('say hi', 'person'), ('', 'unknown')]
+
+That run's hub was stopped 4 s after Codex quit, before its PostCompact reading was appended; the fixed run below waits 45 s.
+The doubled PreCompact did not reproduce live at this load: it needs deep-hook to give up on the hub's 20 ms acknowledgement
+and spool a copy, or Codex to fire the hook twice. The blind suite's AC1 covers the second hook arriving.
+
+## With the fix, 2026-11-08 12:09
+
+    (3, 'user.ask', 'say hi', 'person')
+    (9, 'agent.stop')
+    (10, 'session.state', {"state":"finished"})
+    (11, 'session.reading', 'PreCompact: the context compacts (manual)')
+    (12, 'session.reading', 'PostCompact: the context compacts (manual)')
+    (13, 'session.gone')
+    PreCompact readings: 1
+    PostCompact readings: 1
+    user.asks: [('say hi', 'person')]
