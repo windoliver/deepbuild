@@ -1,0 +1,44 @@
+Base commit: dd83ac2f (Merge pull request #1692 from windoliver/worktree-github-issue-70-9b235c), main
+Built first: npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-hook
+Command: NO_COLOR=1 npx vitest run tests/acceptance/1338 --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-08  Machine: Mac17,10 (Apple M5 Max), 1-minute load about 40 to 100 (other worktrees' runs)
+Node: ~/.local/share/fnm/node-versions/v24.22.0 (v24.22.0)  vitest 5.0.5
+Exit code: 1
+Result: Test Files 5 failed (5); Tests 6 failed (6). Duration 15 s.
+
+No test passed at the base. Why each fails:
+
+Failing at a named judgement:
+  AC3 generation.test.ts, after the hub reported generation 3 (record raised by prepareRestore) and both clients read it,
+  then the hub restarted on the generation-2 copy (its hello said 2):
+    "the CLI, having seen generation 3, must refuse the hub at generation 2 (a nonzero exit): exit 0; stdout: Reading the
+     hub at unix:/private/tmp/dh1338-VgZIL5/m/.deepbuild/hub.sock ..."   (deep status reads the stale hub)
+    "the CLI's refusal must name generation 3 and 2 on one line: exit 0 ..."
+    "deep-hook, having seen generation 3, wrote session d1a00bd1-79ba-4b63-b60b-89692f775278's hook to the hub at
+     generation 2: expected [ …(3) ] to deeply equal []"   (deep-hook delivers to the stale hub; it reads no generation)
+
+BLOCKED, no network surface at the base:
+  AC1 revoke.test.ts, AC2 hook.test.ts, AC5 proof.test.ts, at the first step (inviting bob):
+    "BLOCKED: the hub issues no invite (person.invite {person: "bob", repo: <maya's clone of acme/shop>, address:
+     "127.0.0.1:<port>"} on the owner's control connection, answered {invite}): it answered {"code":"unknown_method", ...
+     "remediation":"The hub serves no method person.invite." ...}"
+  AC4 port.test.ts (main test): the base hub, with hub.listen set and no members, listened on no TCP port (lsof found
+    none: as the criterion wants, but the base never listens), then invite failed as above, so it reads BLOCKED: a hub
+    that can't have a member proves nothing about listening only with members.
+  AC4 port.test.ts (wrong program): "BLOCKED: the hub didn't start (deep hub run): exit {"code":1,"signal":null}; ...
+    DEEP_HUB_PLANT=listen-without-members names no planted program"
+
+What was checked of the harness at the base, in throwaway runs not kept in the suite:
+  - world(): the hub started with hub.listen in its config and lsof listed no port for it; maya's session through the
+    real deep-hook reached the record (events' `session` = the payload's session_id; a PreToolUse read as tool.before);
+    `deep status` on her machine listed the session's 8-character prefix, exit 0.
+  - deep-hook against the local hub: `ls` allowed (6 ms), no-kill-by-name's planted `pkill -f node` denied, its twin
+    `echo 'pkill -f node'` allowed, as decision() reads them.
+  - generations(): the hub's hello said 3 on the raised record and 2 on the kept copy; `deep status` exited 0 at 2.
+  - the link: to an echo server with 100 ms each way, one round trip took 204 ms; cut, a new connection got nothing
+    for 1.5 s (no data, no close); restored, it carried again.
+  - listening(): on the test process itself it listed both servers it had open (the link and another), so a hub that
+    listens is seen. noCredential(): against a stand-in that answers any line with an event, the plain-TCP client
+    received the event's ID, so a hub that serves data to no credential is seen.
+  - SURFACE.generationLine: true for "refused: this client has seen generation 3; the hub is at 2", false for
+    "generation 13 vs 22".

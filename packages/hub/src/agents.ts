@@ -36,7 +36,7 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const sha = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex');
 const canonical = (v: unknown): string => JSON.stringify(v, (_, x: unknown) => (isObj(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x));
 /** The agents a sync knows, by their facts files' names. */
-export const AGENT_IDS = ['claude-code', 'codex', 'pi', 'opencode', 'cursor'] as const;
+const AGENT_IDS = ['claude-code', 'codex', 'pi', 'opencode', 'cursor'] as const;
 const NAME = /^[A-Za-z0-9_-]{1,64}$/;
 /** The deep command's script beside this package, whatever thread the core runs in. */
 const DEEP_CLI = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
@@ -53,7 +53,7 @@ interface AgentFacts {
   daemon?: { restart?: string[]; picksUp?: Record<string, Obj> };
 }
 let factsCache: AgentFacts[] | undefined;
-export function agentFacts(): AgentFacts[] {
+function agentFacts(): AgentFacts[] {
   return (factsCache ??= AGENT_IDS.flatMap((id) => {
     let f: Obj;
     try { f = readFacts<Obj>(`${id}.facts.json`); } catch { return []; }
@@ -69,11 +69,11 @@ export function agentFacts(): AgentFacts[] {
 const factsOf = (id: string): AgentFacts | undefined => agentFacts().find((a) => a.id === id);
 const expand = (p: string): string => (p.startsWith('~/') ? join(homedir(), p.slice(2)) : p);
 /** A path as you'd read it: under your home as ~/... */
-export const shownPath = (p: string): string => (p.startsWith(`${homedir()}/`) ? `~/${relative(homedir(), p)}` : p);
+const shownPath = (p: string): string => (p.startsWith(`${homedir()}/`) ? `~/${relative(homedir(), p)}` : p);
 
 // ---- What a sync adds.
 
-export interface ServerSpec { name: string; transport: 'stdio' | 'http'; command?: string; args?: string[]; env?: Record<string, string>; url?: string; headers?: Record<string, string>; secrets?: string[]; scope?: { repos: string[] } }
+interface ServerSpec { name: string; transport: 'stdio' | 'http'; command?: string; args?: string[]; env?: Record<string, string>; url?: string; headers?: Record<string, string>; secrets?: string[]; scope?: { repos: string[] } }
 interface SkillFile { rel: string; mode: number; sha: string }
 interface SkillItem { name: string; repo: string; commit: string; path: string; digest: string; files: SkillFile[]; license: string; scripts: string[]; findings: string[] }
 type Item = { kind: 'server'; server: ServerSpec } | { kind: 'skill'; skill: SkillItem };
@@ -96,7 +96,7 @@ export interface Sync {
   reason?: string; completed?: number; created_dirs?: string[];
 }
 
-export interface AgentsOptions {
+interface AgentsOptions {
   root: string;
   plant: Plant | undefined;
   durable: Durable;

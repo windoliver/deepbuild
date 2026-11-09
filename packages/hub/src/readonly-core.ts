@@ -78,6 +78,7 @@ export class ReadOnlyCore {
   lockLost(): void {}
   stop(): Promise<void> { return Promise.resolve(); }
   hook(): Promise<void> { return Promise.resolve(); }
+  replayed(): Promise<void> { return Promise.resolve(); }
   waiterGone(): void {}
   notifierGone(): void {}
   hookGone(): void {}
