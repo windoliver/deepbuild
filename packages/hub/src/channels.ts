@@ -5,13 +5,12 @@
 // Each answer a channel returns is checked here, never taken on the channel's word: a paired device's signature over
 // the card it showed, which is the trusted path, or an account link you made, which counts for "I did it", a taste
 // call or a choice, answering that ask alone. Every channel runs its own passes, so one that stalls holds up no other.
-import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
-import { ulid } from '@deepbuild/record';
 import type { Devices } from './trusted.js';
 
 type Obj = Record<string, unknown>;
@@ -31,8 +30,10 @@ interface Settings { channels: Record<string, Obj>; routes: Route[]; quiet: { fr
 /** An ask as the channels render it: its kind, words and options, and where it is in its life. */
 export interface ChannelAsk { handle: string; kind: string; question: string; options: { id: string; label: string }[]; status: string; outcome: string; answer: string | null }
 /** What the hub gives the channels: its clock and root, the loaded channels, the asks, the record and the answer path. */
-export interface ChannelDeps {
+interface ChannelDeps {
   root: string;
+  /** The hub's ID, as its hello names it: what a signature must be for (#1579). */
+  hub: string;
   now(): number;
   plant?: string | undefined;
   devices: Devices;
@@ -47,14 +48,12 @@ export interface ChannelDeps {
 }
 
 /** The words a card that can't be answered here carries. */
-export const WHERE = 'answer in the app or on your paired phone';
+const WHERE = 'answer in the app or on your paired phone';
 const TRUSTED = 'an answer with authority, or one saved as a decision, counts only on the trusted path: the DeepBuild app, deep inbox answer once the OS confirms you, or your paired phone, which signs it';
 const TICK_MS = 250;
 const RECEIVE_MS = 1000;
 const FETCH_MS = 5000;
-const SIGNED_WITHIN_MS = 10 * 60_000;
 const NEEDS_TRUSTED = new Set(['authority', 'exception', 'definition']);
-const SIGNED_FIELDS = ['device', 'ask', 'revision', 'card_hash', 'hub', 'at'] as const;
 const LIVE = new Set(['shown', 'held']);
 
 /**
@@ -98,7 +97,7 @@ export class Channels {
 
   constructor(private readonly deps: ChannelDeps) {
     this.settings = readSettings(join(deps.root, 'channels.json'));
-    this.hub = hubId(join(deps.root, 'hub.id'));
+    this.hub = deps.hub;
     this.linked = this.links();
   }
 
@@ -319,24 +318,23 @@ export class Channels {
     await this.deps.append('channel.answered', { channel: c.name, thread_key: thread, answer, proof }, thread);
     this.asks = await this.deps.asks().catch(() => this.asks);
   }
-  /** Why a signed answer doesn't count, naming the field, or undefined once every part of it holds. */
+  /**
+   * Why a signed answer doesn't count, naming the field, or undefined once every part of it holds: the one verifier's
+   * check for `channel.answer` (#1579), over the params the signature carries, then each of them against the card
+   * this hub sent on the thread.
+   */
   private signedWrong(c: Channel, thread: string, answer: string, signature: unknown): { field: string; reason: string } | undefined {
-    const s = (typeof signature === 'object' && signature !== null ? signature : {}) as { signed?: Obj; sig?: unknown };
-    const signed = (typeof s.signed === 'object' && s.signed !== null ? s.signed : {}) as Obj;
-    for (const field of SIGNED_FIELDS) if (signed[field] === undefined) return { field, reason: `the signature leaves out ${field}, so it covers too little to count` };
-    const device = String(signed.device);
-    if (signed.hub !== this.hub) return { field: 'hub', reason: `the answer was signed for the hub ${String(signed.hub)}, not this one (${this.hub})` };
-    const trust = this.deps.plant === 'trusts-channel-proof';
-    const key = this.deps.devices.keyOf(device, this.deps.plant === 'keeps-unpaired-key');
-    if (!key && !trust) return { field: 'device', reason: `${device} is no device you paired, or you unpaired it, so what it signs counts for nothing` };
-    if (!trust && !verifies(key!, canonicalize(signed as JsonValue), s.sig)) return { field: 'signature', reason: `the signature doesn't verify against ${device}'s paired key` };
-    if (typeof signed.at !== 'number' || Math.abs(this.deps.now() - signed.at) > SIGNED_WITHIN_MS) return { field: 'at', reason: `it was signed at ${String(signed.at)}, more than 10 minutes from now` };
-    if (signed.ask !== thread) return { field: 'ask', reason: `it signs ${String(signed.ask)}, not ${thread}` };
+    if (this.deps.plant === 'trusts-channel-proof') return undefined;
+    const carried = (typeof signature === 'object' && signature !== null ? (signature as { params?: unknown }).params : undefined);
+    const params = (typeof carried === 'object' && carried !== null ? carried : {}) as Obj;
     const sent = c.threads.get(thread)?.sent;
-    if (signed.revision !== (sent?.revision ?? 1)) return { field: 'revision', reason: `it signs revision ${String(signed.revision)} of ${thread}'s card, not ${sent?.revision ?? 1}` };
-    if (!sent || signed.card_hash !== cardHash(sent)) return { field: 'card_hash', reason: `it signs a card that isn't the one this hub sent ${c.name} on ${thread}` };
-    if (signed.answer !== answer) return { field: 'answer', reason: `it signs the answer ${String(signed.answer)}, not ${answer}` };
-    return undefined;
+    return this.deps.devices.verify(signature, { method: 'channel.answer', hub: this.hub, params, now: this.deps.now() }, { unpairedToo: this.deps.plant === 'keeps-unpaired-key', skipsTime: this.deps.plant === 'signature-skips-time' }, () => {
+      if (params.ask !== thread) return { field: 'ask', reason: `it signs ${String(params.ask)}, not ${thread}` };
+      if (params.revision !== (sent?.revision ?? 1)) return { field: 'revision', reason: `it signs revision ${String(params.revision)} of ${thread}'s card, not ${sent?.revision ?? 1}` };
+      if (!sent || params.card_hash !== cardHash(sent)) return { field: 'card_hash', reason: `it signs a card that isn't the one this hub sent ${c.name} on ${thread}` };
+      if (params.answer !== answer) return { field: 'answer', reason: `it signs the answer ${String(params.answer)}, not ${answer}` };
+      return undefined;
+    });
   }
   private async refuse(c: Channel, thread: string, answer: string, reason: string, field?: string): Promise<void> {
     await this.deps.append('channel.refused', { channel: c.name, thread_key: thread.slice(0, 200), answer: answer.slice(0, 2000), ...(field ? { field } : {}), reason: reason.slice(0, 8192) }, /^ask:[0-9A-Za-z]+$/.test(thread) ? thread : undefined);
@@ -346,22 +344,6 @@ export class Channels {
   }
 }
 
-/** Ed25519 over `bytes` by the raw key `key` (base64url), the signature base64url. */
-function verifies(key: string, bytes: Uint8Array, sig: unknown): boolean {
-  if (typeof sig !== 'string') return false;
-  try {
-    return verify(null, bytes, createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: key }, format: 'jwk' }), Buffer.from(sig, 'base64url'));
-  } catch {
-    return false;
-  }
-}
-/** The hub's ID, the same across its restarts: made once, kept beside the record. */
-function hubId(file: string): string {
-  if (existsSync(file)) return readFileSync(file, 'utf8').trim();
-  const id = `hub:${ulid(Date.now())}${randomBytes(4).toString('hex').toUpperCase()}`;
-  writeFileSync(file, id, { mode: 0o600 });
-  return id;
-}
 function readSettings(file: string): Settings {
   try {
     const s = JSON.parse(readFileSync(file, 'utf8')) as Partial<Settings>;

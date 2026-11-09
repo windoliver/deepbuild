@@ -109,12 +109,12 @@
       "match": "hub:service",
       "scope": "all_repos",
       "mode": "block",
-      "reason": "Stopping or unloading the hub's login service switches DeepBuild off, so only you do it, never an agent's call.",
+      "reason": "Stopping, unloading or changing the environment of the hub's login service can switch DeepBuild off, so only you do it, never an agent's call.",
       "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you.",
       "fail_closed": true
     },
     "no-hub-service-write": {
-      "match": "write:~/Library/LaunchAgents/com.deepbuild.hub.plist ~/.config/systemd/user/deepbuild-hub.service",
+      "match": "write:~/Library/LaunchAgents/com.deepbuild.hub.plist ~/.config/systemd/user/deepbuild-hub.service ~/.config/systemd/user/deepbuild-hub.service.d/* ~/.config/environment.d/*",
       "scope": "all_repos",
       "mode": "block",
       "reason": "The hub's login service file decides whether the hub runs, so only DeepBuild's setup or you change it, never an agent's write.",
@@ -161,6 +161,14 @@
       "next_step": "Delete the paths by name, or ask the person to run it, or retry once the hub is up.",
       "fail_closed": true
     },
+    "no-delete-past-worktree": {
+      "match": "effect:unrestorable-delete",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "This delete reaches past the session's worktree, or is a git clean, so it removes files git can't restore, and with the hub down nothing can stage them first or ask you.",
+      "next_step": "Delete only paths inside the worktree, or ask the person to run it, or retry once the hub is up.",
+      "fail_closed": true
+    },
     "no-discarding-edits": {
       "match": "effect:discard-edits",
       "scope": "all_repos",
@@ -175,6 +183,22 @@
       "mode": "block",
       "reason": "This drops a stash entry's uncommitted edits, which git can't restore, and with the hub down nothing can stage them first or ask you.",
       "next_step": "Retry once the hub is up, or ask the person to run it.",
+      "fail_closed": true
+    },
+    "no-approval-tag-sign": {
+      "match": "shell:*git* tag *deep/approved/*",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "A tag under deep/approved/ is a person's approval of an edit that could weaken a check, so only a person signs or pushes one, never an agent's call (#1326).",
+      "next_step": "Ask a person on .deepbuild/approvers to approve the commit; a signed commit on your own branch goes through. To list or check approvals, read them with git for-each-ref refs/tags/deep/approved/.",
+      "fail_closed": true
+    },
+    "no-approval-tag-push": {
+      "match": "shell:*git* push *deep/approved/*",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "A tag under deep/approved/ is a person's approval of an edit that could weaken a check, so only a person signs or pushes one, never an agent's call (#1326).",
+      "next_step": "Ask a person on .deepbuild/approvers to approve the commit; a signed commit on your own branch goes through.",
       "fail_closed": true
     },
     "record-new-dependency": {
@@ -278,7 +302,7 @@
       "scope": "all_repos",
       "mode": "block",
       "reason": "Merge authority covers one head commit: a merge goes through only naming the commit the claim's PASS is pinned to, and while a merge armed with --auto is pending, a push to its branch waits.",
-      "next_step": "Name the PASS's commit, --match-head-commit <sha> for gh pr merge, sha for the API and the MCP tool; for a pending merge run gh pr merge --disable-auto first.",
+      "next_step": "Name the PASS's commit, --match-head-commit <sha> for gh pr merge, --sha for glab mr merge, expectedHeadOid for GraphQL, sha for the API and the MCP tool; gt merge and git town ship can't name one, so merge with gh pr merge --match-head-commit; for a pending merge run gh pr merge --disable-auto first.",
       "fail_closed": false
     }
   },
@@ -575,6 +599,22 @@
         }
       }
     },
+    "no-delete-past-worktree": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "rm -rf ~/"
+        },
+        "cwd": "{repo}"
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "rm -rf build"
+        },
+        "cwd": "{repo}"
+      }
+    },
     "no-discarding-edits": {
       "planted": {
         "tool_name": "Bash",
@@ -593,13 +633,13 @@
       "planted": {
         "tool_name": "Bash",
         "tool_input": {
-          "command": "\"$(printf git)\" push origin main"
+          "command": "\"$(printf jj)\" git push"
         }
       },
       "twin": {
         "tool_name": "Bash",
         "tool_input": {
-          "command": "git push origin main"
+          "command": "jj git push"
         }
       }
     },
@@ -617,61 +657,391 @@
         }
       }
     },
-    "push-needs-ask": {
+    "no-approval-tag-sign": {
       "planted": {
         "tool_name": "Bash",
         "tool_input": {
-          "command": "git push origin HEAD"
+          "command": "git tag -s deep/approved/fix-1 -m \"Approves: tests/receipt.test.mjs\""
         }
       },
       "twin": {
         "tool_name": "Bash",
         "tool_input": {
-          "command": "echo 'git push origin HEAD'"
+          "command": "git commit -S -m \"work on my branch\""
         }
       }
     },
-    "pr-needs-ask": {
+    "no-approval-tag-push": {
       "planted": {
         "tool_name": "Bash",
         "tool_input": {
-          "command": "gh pr create --fill"
+          "command": "git push origin refs/tags/deep/approved/fix-1"
         }
       },
       "twin": {
         "tool_name": "Bash",
         "tool_input": {
-          "command": "echo 'gh pr create --fill'"
+          "command": "git fetch origin refs/tags/deep/approved/fix-1"
         }
       }
     },
-    "merge-needs-ask": {
+    "authority-send": {
       "planted": {
         "tool_name": "Bash",
         "tool_input": {
-          "command": "gh pr merge 12"
+          "command": "gh issue create -t x"
         }
       },
       "twin": {
         "tool_name": "Bash",
         "tool_input": {
-          "command": "echo 'gh pr merge 12'"
+          "command": "gh issue list"
         }
       }
     },
-    "merge-names-head": {
-      "planted": {
-        "tool_name": "Bash",
-        "tool_input": {
-          "command": "gh pr merge 12 --auto"
+    "push-needs-ask": [
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "git push origin HEAD"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "echo 'git push origin HEAD'"
+          }
         }
       },
-      "twin": {
-        "tool_name": "Bash",
-        "tool_input": {
-          "command": "gh pr view 12"
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "jj git push --bookmark main"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "jj git fetch"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "sl push --to main"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "sl log"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gt submit --stack"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gt log"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "git town sync"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "git town status"
+          }
         }
       }
-    }
+    ],
+    "pr-needs-ask": [
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh pr create --fill"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "echo 'gh pr create --fill'"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gt submit --stack"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gt log"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "git town propose"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "git town status"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "sl pr submit"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "sl pr list"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "glab mr create --fill"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "glab mr list"
+          }
+        }
+      }
+    ],
+    "merge-needs-ask": [
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh pr merge 12"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "echo 'gh pr merge 12'"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "glab mr merge 3"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "glab mr view 3"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gt merge"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gt log"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "git town ship"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "git town status"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"PR_kwDOA\", expectedHeadOid: \"0123abc\"}) { clientMutationId } }'"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api graphql -f query='query { repository(owner: \"acme\", name: \"shop\") { pullRequest(number: 3) { merged } } }'"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_kwDOA\"}) { clientMutationId } }'"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api graphql -f query='query { repository(owner: \"acme\", name: \"shop\") { pullRequest(number: 3) { merged } } }'"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api -X PUT repos/acme/shop/pulls/3/merge"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api repos/acme/shop/pulls/3/merge"
+          }
+        }
+      }
+    ],
+    "merge-names-head": [
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh pr merge 12 --auto"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh pr view 12"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "glab mr merge 3"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "glab mr view 3"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gt merge"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gt log"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "git town ship"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "git town status"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"PR_kwDOA\", expectedHeadOid: \"0123abc\"}) { clientMutationId } }'"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api graphql -f query='query { repository(owner: \"acme\", name: \"shop\") { pullRequest(number: 3) { merged } } }'"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_kwDOA\"}) { clientMutationId } }'"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api graphql -f query='query { repository(owner: \"acme\", name: \"shop\") { pullRequest(number: 3) { merged } } }'"
+          }
+        }
+      },
+      {
+        "planted": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api -X PUT repos/acme/shop/pulls/3/merge"
+          }
+        },
+        "twin": {
+          "tool_name": "Bash",
+          "tool_input": {
+            "command": "gh api repos/acme/shop/pulls/3/merge"
+          }
+        }
+      }
+    ]
   }
 }

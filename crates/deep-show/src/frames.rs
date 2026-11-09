@@ -24,9 +24,10 @@ use crate::snapshot::{self, Drawn, Unfit};
 /// An operator's error as a revision's issue.
 pub fn op_issue(i: &OpIssue) -> Issue {
     let what = format!("{} can't evaluate this", i.operator);
+    let actual = i.actual.clone().unwrap_or(Value::Null);
     match &i.item {
-        Some(id) => Issue::error(i.code, id, i.path.clone(), Value::Null, &what),
-        None => Issue::envelope(i.code, i.path.clone(), Value::Null, &what),
+        Some(id) => Issue::error(i.code, id, i.path.clone(), actual, &what),
+        None => Issue::envelope(i.code, i.path.clone(), actual, &what),
     }
 }
 
@@ -281,6 +282,20 @@ impl<'a> Hub<'a> {
             "steps": report.steps.iter().map(|s| json!({"module": s.module, "t": s.t, "count": s.count, "read": s.read})).collect::<Vec<_>>(),
             "issues": report.issues.iter().map(issue_json).collect::<Vec<_>>(),
         });
+        if !e.arrays.is_empty() {
+            // #497: each named array as this frame read it.
+            let read: Map<String, Value> = e
+                .arrays
+                .iter()
+                .map(|name| {
+                    let v = evaluated.array(&self.sched, name);
+                    let n = v.as_ref().and_then(|v| v.as_typed::<i64>()).map(|n| json!(*n));
+                    let x = v.as_ref().and_then(|v| v.as_typed::<f64>()).map(|x| json!(*x));
+                    (name.clone(), n.or(x).unwrap_or(Value::Null))
+                })
+                .collect();
+            reply["arrays"] = Value::Object(read);
+        }
         if self.startup.test_build {
             reply["access"] = json!(report
                 .access
@@ -288,11 +303,39 @@ impl<'a> Hub<'a> {
                 .map(|a| json!({"operator": a.operator, "item": a.item, "read": a.read}))
                 .collect::<Vec<_>>());
         }
-        let drawing = if e.pixels {
+        // #493: a 2D film's shots: the sides its frame draws, and the film block.
+        let reduced = e.view.get("reduced_motion").and_then(Value::as_bool).unwrap_or(false);
+        let program = crate::film::program_of(&self.sched, evaluated);
+        let document = evaluated.document().cloned();
+        let sides = match (&program, &document) {
+            (Some(p), Some(d)) => crate::film::sides(p, d, t, reduced),
+            _ => None,
+        };
+        let drawing = if e.pixels || e.film {
             drawing_of(&self.sched, evaluated)
         } else {
             None
         };
+        // #499: each video image item's frame at t, and its picture for the snapshot.
+        if let Some(d) = &document {
+            let (video, pictures) = self.videos_at(d, t, false);
+            if !video.is_empty() {
+                reply["video"] = Value::Object(video);
+            }
+            self.renderer.videos = pictures;
+        }
+        if e.film {
+            let glyphs = drawing
+                .as_ref()
+                .and_then(|d| self.renderer.prepare_drawing(d, &self.scenario.evidence).ok())
+                .map(|d| d.glyphs())
+                .unwrap_or_default();
+            reply["film"] = match (&program, &document) {
+                (Some(p), Some(d)) => crate::film::block(p, d, t, reduced, glyphs),
+                _ => json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs}),
+            };
+        }
+        let drawing = drawing.filter(|_| e.pixels);
         reply["hashes"] = json!(self
             .sched
             .take_hashes()
@@ -300,7 +343,11 @@ impl<'a> Hub<'a> {
             .map(|h| json!({"of": h.of, "bytes": h.bytes}))
             .collect::<Vec<_>>());
         if let Some(drawing) = drawing {
-            match self.canonical_png(&drawing, e.size) {
+            let drawn = match (&sides, &document) {
+                (Some(sides), Some(doc)) => self.film_png(&drawing, e.size, sides, doc),
+                _ => self.canonical_png(&drawing, e.size),
+            };
+            match drawn {
                 Ok((sha, drawn, size)) => {
                     reply["snapshots"] = json!([snapshot::entry(&sha, &drawn, size)]);
                 }
@@ -336,6 +383,59 @@ impl<'a> Hub<'a> {
             path: "snapshots".into(),
         })?;
         Ok((sha, drawn, size))
+    }
+
+    /// #493: [`Hub::canonical_png`] of a 2D film whose shots write its camera: each side the
+    /// frame draws through its own camera, finished in its own look, the sides blended as
+    /// finished pixels, and the status marks drawn once on top from the side that holds the
+    /// reveal, never blended (Transition).
+    pub(crate) fn film_png(
+        &mut self,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+        sides: &crate::film::Sides,
+        doc: &Value,
+    ) -> Result<(String, Drawn, [u16; 2]), Unfit> {
+        let drawn = self
+            .renderer
+            .prepare_drawing(drawing, &self.scenario.evidence)?;
+        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
+        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
+        let ink = self.look.light.get("ink").copied().unwrap_or([0; 3]);
+        let frame = drawn.frame.size;
+        let mut pictures = Vec::with_capacity(sides.sides.len());
+        for side in &sides.sides {
+            let part = drawn.part(Some(crate::film::view(&side.pose, frame)), true, false);
+            let mut rgba = self.renderer.raster(&part, size, Some(ground));
+            if let Some(map) = side.look.as_deref().and_then(|l| self.tone_of(doc, l)) {
+                crate::film::finish(&mut rgba, map);
+            }
+            pictures.push(rgba);
+        }
+        let mut rgba = match (&sides.mix, pictures.len()) {
+            (Some(mix), 2) => crate::film::blend(&pictures[0], &pictures[1], mix, size, ink),
+            _ => pictures.swap_remove(0),
+        };
+        let top = &sides.sides[sides.status.min(sides.sides.len() - 1)];
+        let status = drawn.part(Some(crate::film::view(&top.pose, frame)), false, true);
+        let over = self.renderer.raster(&status, size, None);
+        crate::film::over(&mut rgba, &over);
+        let sha = evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
+            code: "evidence_unwritable",
+            path: "snapshots".into(),
+        })?;
+        Ok((sha, status, size))
+    }
+
+    /// A shot's look's tone map: the look@1 the document names by asset, read from the evidence
+    /// store (#1162's way).
+    fn tone_of(&self, doc: &Value, name: &str) -> Option<deep_canvas_marks::finish::ToneMap> {
+        let sha = doc.pointer(&format!("/assets/{name}/sha256"))?.as_str()?;
+        let bytes = (sha.len() == 64)
+            .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
+            .flatten()?;
+        let def: Value = serde_json::from_slice(&bytes).ok()?;
+        deep_canvas_marks::finish::read_tone_map(def.get("tone_map")).ok()
     }
 
     /// [`Hub::canonical_png`] of a document with 3D writer layers: its 3D frame at `t` on the GPU,
@@ -382,6 +482,7 @@ impl<'a> Hub<'a> {
         // The last frame's drawing and its hash: an unchanged drawing isn't drawn again.
         let mut last: Option<(Option<*const Drawing>, Option<*const StatusDrawing>, String)> = None;
         let mut out = Vec::with_capacity(f.count);
+        let mut revised_now = false;
         for k in 0..f.count {
             if f.paced {
                 let due = started + period * k as u32;
@@ -404,6 +505,7 @@ impl<'a> Hub<'a> {
             {
                 let (document, _) = pending.take().expect("checked above");
                 revised = self.revise(&f.doc, document);
+                revised_now = true;
             }
             let Some(session) = self.sessions.get_mut(&f.doc) else {
                 break;
@@ -426,6 +528,9 @@ impl<'a> Hub<'a> {
             let mut frame = json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms,
                                    "frame_ms": ms, "settling": pending.is_some(),
                                    "json_values": json_values});
+            // #1732: the solves of each arrangement this frame ran, from the scheduler's nodes.
+            frame["solves"] = solves(&self.sched, &self.sessions[&f.doc], revised_now);
+            revised_now = false;
             let mut capture = 0;
             if f.pixels {
                 let before = thread_cpu_ns();
@@ -1168,4 +1273,49 @@ mod story_tests {
             assert_eq!(at_dot, Some(dot), "an item on #head at {t}");
         }
     }
+}
+
+/// How many solves of each arrangement the session's last frame ran (#1732): the document's
+/// check-phase solve when the frame took a new revision, and a frame-phase solve that wrote a
+/// result.
+fn solves(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &deep_canvas::schedule::Session,
+    revised: bool,
+) -> Value {
+    let mut out = Map::new();
+    let items = session
+        .document()
+        .and_then(|d| d.get("items"))
+        .and_then(Value::as_object);
+    for (id, _) in items
+        .into_iter()
+        .flatten()
+        .filter(|(_, i)| deep_canvas_motion::arrange::is_arrangement(i))
+    {
+        out.insert(id.clone(), json!(0));
+    }
+    for n in session.nodes(sched) {
+        if n.run != deep_canvas::schedule::Run::Ran {
+            continue;
+        }
+        // The check-phase solve covers every arrangement of the document at once.
+        let ids: Vec<String> = match (n.operator.as_str(), &n.item) {
+            ("motion.arrange", None) if revised => out.keys().cloned().collect(),
+            ("motion.arrangelive", Some(id))
+                if n.values
+                    .iter()
+                    .any(|v| !matches!(v, deep_canvas::schedule::Val::None)) =>
+            {
+                vec![id.clone()]
+            }
+            _ => Vec::new(),
+        };
+        for id in ids {
+            if let Some(c) = out.get_mut(&id) {
+                *c = json!(c.as_u64().unwrap_or(0) + 1);
+            }
+        }
+    }
+    Value::Object(out)
 }

@@ -4,17 +4,22 @@
 //! away from it comes straight back, so no panel moves focus without your gesture.
 //!
 //! Issue #327: a card presented for an ask draws from its [`Controller`](question::Controller), every row an
-//! accessibility node an assistive client reads, and hands each press on a row to it. The view can't name a
-//! press's platform timestamp or source, so a press from it counts as not hardware: it answers only after the OS
-//! confirms you, and until the shell raises that prompt it is a cancelled one, so the card stays armed.
+//! accessibility node an assistive client reads, and hands each press on a row to it.
+//!
+//! Issue #1454: a press carries its own timestamp and source. It is hardware only when its down and its up each come
+//! with their own HID event; anything else, a press a screen reader sends among them, answers only after the OS
+//! confirms you, and the hub raises that prompt. Each answer goes to the hub, signed as the device you paired, off the
+//! main thread; one that doesn't get there stays on the card, saying why.
 
 use std::cell::RefCell;
 
 use gpui_kit::*;
 
-use crate::arming::Source;
+use crate::arming::{Client, Source};
 use crate::chrome::Chrome;
+use crate::hub::HubError;
 use crate::question::{self, Controller, Did, Input, Phase, Row, Target};
+use crate::trusted_input::{delivered, PressEdge};
 
 thread_local! {
     /// Where the next card is presented, in window points.
@@ -137,6 +142,28 @@ pub struct Card {
     bounds: Bounds<Pixels>,
     focus: FocusHandle,
     controller: Option<Controller>,
+    /// The press down on a row, until its up: its target, time and whether it was hardware.
+    down: Option<(Target, u64, bool)>,
+    /// Why your answer didn't reach the hub.
+    failed: Option<SharedString>,
+}
+
+/// What a press edge says: its own time and whether the HID system made it.
+fn edge(kind: PressEdge) -> (u64, bool) {
+    let now = crate::views::now();
+    delivered(kind).map_or((now, false), |(age, hardware)| {
+        (now.saturating_sub(age as u64), hardware)
+    })
+}
+
+/// What the hub's refusal says, for the card's line.
+fn why(error: &HubError) -> String {
+    match error {
+        HubError::Refused(refusal) => refusal["message"]
+            .as_str()
+            .map_or_else(|| refusal.to_string(), str::to_owned),
+        other => format!("{other:?}"),
+    }
 }
 
 impl Card {
@@ -147,12 +174,16 @@ impl Card {
         controller: Option<Controller>,
         cx: &mut Context<Self>,
     ) -> Self {
+        // Issue #1434: while the card shows, no chrome effect may draw over its slot.
+        crate::chrome_fx::guard(crate::chrome_fx::CARD, bounds);
         Card {
             question,
             options,
             bounds,
             focus: cx.focus_handle(),
             controller,
+            down: None,
+            failed: None,
         }
     }
 
@@ -165,41 +196,99 @@ impl Card {
         cx.emit(PromptResponse(0));
     }
 
-    /// A press from the view on `target`, down and up: not hardware, since the view can't say, so one the OS
-    /// must confirm; with no prompt to raise, a cancelled one.
+    /// The down of a press on `target`.
+    fn pressing(&mut self, target: Target) {
+        let (t, hardware) = edge(PressEdge::Down);
+        self.down = Some((target, t, hardware));
+    }
+
+    /// The up of a press on `target`, with its down: the controller decides what the whole press does.
     fn pressed(&mut self, target: Target, cx: &mut Context<Self>) {
+        let (up, hardware) = edge(PressEdge::Up);
+        let (down, hardware) = match self.down.take() {
+            Some((on, t, was)) if on == target => (t, was && hardware),
+            _ => (up, false),
+        };
+        let hardware = hardware || cfg!(feature = "plant-card-skips-confirm");
+        let source = if hardware {
+            Source::Hardware
+        } else {
+            Source::Accessibility {
+                client: Client::Unknown,
+            }
+        };
         let Some(controller) = self.controller.as_mut() else {
             return;
         };
-        let (t, source) = (crate::views::now(), Source::Synthetic { pid: None });
         // The card reads the record's history from the hub, as it stands at the press.
         let events = crate::record::history();
-        let did = match controller.press(
-            Input {
-                t,
-                source,
-                target,
-                phase: Phase::Down,
-            },
-            &events,
+        let now = crate::views::now();
+        let press = |phase, t| Input {
             t,
-        ) {
-            Did::Nothing => controller.press(
-                Input {
-                    t,
-                    source,
-                    target,
-                    phase: Phase::Up,
-                },
-                &events,
-                t,
-            ),
+            source,
+            target,
+            phase,
+        };
+        let did = match controller.press(press(Phase::Down, down), &events, now) {
+            Did::Nothing => controller.press(press(Phase::Up, up), &events, now),
             other => other,
         };
-        if let Did::NeedsConfirmation(_) = did {
-            controller.confirmed(false, &events, t);
+        if let Did::NeedsConfirmation(reason) = did {
+            self.confirm(reason, cx);
         }
+        self.send(cx);
         cx.notify();
+    }
+
+    /// Has the OS confirm you off the main thread, then tells the controller what it said.
+    fn confirm(&mut self, reason: String, cx: &mut Context<Self>) {
+        let Some(controller) = self.controller.as_ref() else {
+            return;
+        };
+        let ask = controller.model().ask.clone();
+        cx.spawn(async move |card, cx| {
+            let said = cx
+                .background_spawn(async move { crate::answer::confirm(&ask, &reason) })
+                .await;
+            let _ = card.update(cx, |card, cx| {
+                if let Some(controller) = card.controller.as_mut() {
+                    let (events, now) = (crate::record::history(), crate::views::now());
+                    controller.confirmed(said.is_ok(), &events, now);
+                }
+                card.failed = said.err().map(|error| why(&error).into());
+                card.send(cx);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Sends what the controller answered, in order.
+    fn send(&mut self, cx: &mut Context<Self>) {
+        let Some(controller) = self.controller.as_mut() else {
+            return;
+        };
+        let answers = controller.take_answers();
+        if answers.is_empty() {
+            return;
+        }
+        self.failed = None;
+        cx.spawn(async move |card, cx| {
+            let sent = cx
+                .background_spawn(async move {
+                    answers
+                        .iter()
+                        .try_for_each(|params| crate::answer::send(params).map(|_| ()))
+                })
+                .await;
+            if let Err(error) = sent {
+                let _ = card.update(cx, |card, cx| {
+                    card.failed = Some(why(&error).into());
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
     }
 
     fn row(&self, index: usize, row: &Row, chrome: &Chrome, cx: &mut Context<Self>) -> AnyElement {
@@ -225,8 +314,7 @@ impl Card {
             .test_support()
             .role(role)
             .aria_label(label.clone())
-            .flex()
-            .items_center()
+            // A block, not a flex row, so the text takes the card's width and a long question wraps (#1550).
             .text_xs()
             .child(label);
         match target {
@@ -235,14 +323,24 @@ impl Card {
                 .py_1()
                 .border_1()
                 .border_color(if focused {
-                    chrome.accent
+                    chrome.focus
                 } else {
                     chrome.ink_primary
                 })
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |card, _, _, _| card.pressing(target)),
+                )
                 .on_click(cx.listener(move |card, _, _, cx| card.pressed(target, cx)))
                 .into_any_element(),
             None => element.into_any_element(),
         }
+    }
+}
+
+impl Drop for Card {
+    fn drop(&mut self) {
+        crate::chrome_fx::unguard(crate::chrome_fx::CARD);
     }
 }
 
@@ -264,10 +362,22 @@ impl Render for Card {
         let rows: Vec<AnyElement> = match &self.controller {
             Some(controller) => {
                 let rows = controller.rows();
-                rows.iter()
+                let mut drawn: Vec<AnyElement> = rows
+                    .iter()
                     .enumerate()
                     .map(|(index, row)| self.row(index, row, chrome, cx))
-                    .collect()
+                    .collect();
+                drawn.extend(self.failed.clone().map(|line| {
+                    div()
+                        .id("card-failed")
+                        .test_support()
+                        .role(Role::Label)
+                        .aria_label(line.clone())
+                        .text_xs()
+                        .child(line)
+                        .into_any_element()
+                }));
+                drawn
             }
             None => vec![
                 div()

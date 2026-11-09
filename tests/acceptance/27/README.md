@@ -28,7 +28,7 @@ With Node 24.22 first on `PATH`, on macOS, with the Rust toolchain:
 
 ```sh
 npm ci && npm run build --workspaces          # the tests run the built CLI, packages/cli/dist/main.js
-cargo build --locked -q -p deep-hook          # setup's entries run it; a test builds it if it's missing
+cargo build --locked -q -p deep-hook --features env-plants   # setup's entries run it, with the plants (#1408); a test builds it
 npx vitest run --root tests/acceptance/27 --no-file-parallelism wake.test.ts repeat.test.ts desktop.test.ts waits.test.ts outcomes.test.ts
 npx vitest run --root tests/acceptance/27 --no-file-parallelism --silent=false budgets.test.ts   # about 10-15 minutes, nothing beside it; --silent=false prints the readings
 node node_modules/typescript/bin/tsc -p tests/acceptance/27/tsconfig.json

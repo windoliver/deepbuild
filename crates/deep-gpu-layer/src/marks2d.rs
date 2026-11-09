@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use deep_canvas_effects::fx::{self, Named};
 use deep_canvas_effects::module::depth_child;
-use deep_canvas_marks::scene::{self, Blend, Drawn, Frame, Record, Scope};
+use deep_canvas_marks::scene::{self, Blend, Drawn, Frame, Record, Scope, Type};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
 use deep_canvas_scene3d::look::Look3;
@@ -37,6 +37,7 @@ use serde_json::{json, Map, Value};
 use crate::groups::{self, Clock, Groups, Picture};
 use crate::session3::On;
 use crate::view3d::{pair, png, write_named};
+use crate::drawn::Page;
 use crate::{effects, frames, parity, refused, status, App, Planted};
 
 /// One writer layer as the live view sees it.
@@ -62,6 +63,8 @@ struct Evaluated {
     roles: Arc<BTreeMap<String, [f64; 3]>>,
     guard: Option<Guard>,
     packs: Arc<Vec<Named>>,
+    /// #149: where the frame's pixels land on its look's paper.
+    page: Option<Arc<Page>>,
 }
 
 /// The named operators of the packs a call installs, a folder or `{id, dir}` each.
@@ -103,7 +106,18 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     let program = Program::compile(&doc).map_err(|r| refused(r.code, r.path))?;
     let mut state = program.state();
     program.evaluate(t, eval::Validity::Full, &mut state);
-    let items = eval::items(&doc, &program, &state);
+    let mut items = eval::items(&doc, &program, &state);
+    // #149: a 2D film's camera places its items, and no 3D layer comes of it.
+    let view = deep_canvas_marks::drawn::view_of(&doc, &mut items);
+    if let Some(v) = &view {
+        deep_canvas_marks::drawn::through(v, &mut items);
+    }
+    if let Some((pass, collection)) = deep_canvas_effects::module::foreign_read(&doc) {
+        return Err(refused(
+            "collection_other_writer",
+            format!("items/{pass}: reads another writer's collection {collection}"),
+        ));
+    }
     let flat: Map<String, Value> = items
         .iter()
         .filter(|(_, v)| !parity::three_d(v))
@@ -113,6 +127,7 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     if let Some(Value::Object(listed)) = flat_doc.get_mut("items") {
         listed.retain(|_, v| !parity::three_d(v));
     }
+    let ty = drawn_type(app, &call["look"], &doc)?;
     let three: Vec<&str> = items
         .values()
         .filter(|v| parity::three_d(v))
@@ -121,8 +136,15 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     // A role map (`{light, dark}`) gives a 3D layer its roles with no tone map and unit exposure;
     // a look@1 is read as scene3d reads it.
     let role_map = call["look"].get("light").is_some() && call["look"].get("roles").is_none();
+    // A drawn look holds the status distance only where the document shows status (#149).
+    let distance = match doc.contains_key("status_bindings") {
+        true => deep_canvas_marks::look::Distance::Everywhere,
+        false => deep_canvas_marks::look::Distance::WhereStatusShows,
+    };
+    let drawing = call["look"]["basis"] == "drawing" && call["look"].get("id").is_some();
     let (palette, look3) = if three.is_empty() {
-        (layer::palette(&call["look"], "light")?, None)
+        let at = if drawing { distance } else { deep_canvas_marks::look::Distance::Everywhere };
+        (layer::palette_where(&call["look"], "light", at)?, None)
     } else if role_map {
         let palette = layer::palette(&call["look"], "light")?;
         let look = Look3::from_roles(palette.clone());
@@ -139,7 +161,7 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     let frame = scene::frame_planted(
         &flat_doc,
         &flat,
-        (&palette, &scene::Type::default()),
+        (&palette, &ty),
         &record,
         1.0,
         planted,
@@ -153,7 +175,8 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
             three: three.contains(&l.id.as_str()),
             marks: l.marks.iter().cloned().collect(),
         })
-        .filter(|l| l.three || !l.marks.is_empty())
+        // A layer whose items are all hidden (a flip showing none) is still the film's layer.
+        .filter(|l| l.three || !l.marks.is_empty() || flat.values().any(|v| v["layer"] == l.id.as_str()))
         .collect();
     let gpu = match look3 {
         Some((look, themed)) => {
@@ -174,10 +197,11 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
         }
         None => None,
     };
-    let roles = palette
+    let roles: BTreeMap<String, [f64; 3]> = palette
         .iter()
         .map(|(k, c)| (k.clone(), c.map(|v| f64::from(v) / 255.0)))
         .collect();
+    let page = page_of(&ty, view.as_ref(), &doc, &roles, call)?;
     let guard = match doc.contains_key("status_bindings") {
         true => layer::status_map(&call["look"])?,
         false => None,
@@ -194,7 +218,52 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
         layers,
         gpu,
         roles: Arc::new(roles),
+        page,
     })
+}
+
+/// The bare `Type` of a call's look with its drawn fields, for a document of its size (#149).
+pub(crate) fn drawn_type(app: &App, look: &Value, doc: &Map<String, Value>) -> Result<Type, Value> {
+    let size = pair(&doc["size"]).unwrap_or([0, 0]).map(f64::from);
+    let shipped;
+    let def = match look {
+        Value::String(id) => match deep_canvas_marks::look::shipped(id) {
+            Some(d) => {
+                shipped = d;
+                &shipped
+            }
+            None => return Ok(Type::default()),
+        },
+        other => other,
+    };
+    // A role map isn't a look@1: it has no drawn fields.
+    if def.get("roles").is_none() {
+        return Ok(Type::default());
+    }
+    let drawn = deep_canvas_marks::drawn::read_look(def, size).map_err(|r| refused(r.code, r.path))?;
+    Ok(Type {
+        drawn,
+        first_rim: app.planted == Some(Planted::RimKeepsFirst),
+        flat_ink: app.planted == Some(Planted::InkFillFlat),
+        ..Type::default()
+    })
+}
+
+/// The frame's page under `ty`'s drawn look, when it has one.
+pub(crate) fn page_of(
+    ty: &Type,
+    view: Option<&deep_canvas_marks::drawn::View>,
+    doc: &Map<String, Value>,
+    roles: &BTreeMap<String, [f64; 3]>,
+    call: &Value,
+) -> Result<Option<Arc<Page>>, Value> {
+    let Some(look) = &ty.drawn else {
+        return Ok(None);
+    };
+    let view = view.copied().unwrap_or(deep_canvas_marks::drawn::View::NONE);
+    let empty = Map::new();
+    let assets = call["assets"].as_object().unwrap_or(&empty);
+    Ok(Some(Arc::new(Page::of(look, &view, doc, roles, assets)?)))
 }
 
 /// The live view's refusal naming `item`.
@@ -241,6 +310,7 @@ fn vello_picture(
 ) -> Result<Picture, Value> {
     let (size, clock, roles, planted) = (ev.size, ev.clock, ev.roles.clone(), app.planted);
     let (guard, packs) = (ev.guard.clone(), ev.packs.clone());
+    let page = ev.page.clone();
     app.worker.call(move |state| {
         let device = state.gpu.recover().map_err(|e| refused("no_device", e))?;
         let vello = state
@@ -250,7 +320,7 @@ fn vello_picture(
         if base.is_none() && !keep && !groups::composited(marks.iter().map(|m| &**m)) {
             let marks: Vec<&Drawn> = marks.iter().map(|m| &**m).collect();
             let image = vello.picture(&device.device, &device.queue, &marks, size, options)?;
-            return Ok(Picture { image, floats: None, inputs: Vec::new() });
+            return Ok(Picture { image, floats: None, inputs: Vec::new(), costs: Vec::new() });
         }
         let layer = groups::Layer {
             layers: &[&marks],
@@ -265,12 +335,35 @@ fn vello_picture(
             planted,
             guard: guard.as_ref(),
             other: other.as_ref(),
+            page: page.as_deref(),
+            ground: false,
         };
         state
             .groups
             .get_or_insert_with(|| Groups::new(&device.device))
             .picture(&device, vello, &layer)
     })
+}
+
+/// The look's ground alone, as `layers`' `ground` row (#149).
+fn ground_row(app: &App, out: &str, ev: &Evaluated) -> Result<Option<Value>, Value> {
+    let Some(page) = ev.page.clone() else {
+        return Ok(None);
+    };
+    let size = ev.size;
+    let picture = app.worker.call(move |state| {
+        let device = state.gpu.recover().map_err(|e| refused("no_device", e))?;
+        state
+            .groups
+            .get_or_insert_with(|| Groups::new(&device.device))
+            .ground(&device, &page, size)
+    })?;
+    let Some(p) = picture else {
+        return Ok(None);
+    };
+    let mut side = json!({"png": write_png(out, &p.image)?});
+    kept(out, &mut side, &p)?;
+    Ok(Some(json!({"layer": "ground", "dim": "2d", "drawn": {"gpu_layer": side}})))
 }
 
 /// Why Vello GPU doesn't draw `marks`, if it doesn't.
@@ -402,6 +495,7 @@ fn side(app: &mut App, out: &str, renderer: &str, l: &Layer2, ev: &Evaluated, fl
         let mut side = json!({"png": write_png(out, &picture)?, "runs": runs});
         if let Some(p) = &whole {
             kept(out, &mut side, p)?;
+            side["target_costs"] = json!(p.costs);
         }
         Ok(side)
     };
@@ -440,11 +534,26 @@ pub fn layers(app: &mut App, out: &str, call: &Value) -> Value {
                 "edges": write_named(out, &edges, "json")?, "drawn": drawn,
             }));
         }
-        Ok(json!({"layers": listed, "backends": backends()}))
+        if call["ground"] == true {
+            listed.extend(ground_row(app, out, &ev)?);
+        }
+        let mut reply = json!({"layers": listed, "backends": backends()});
+        if call["target_costs"] == true {
+            let rows = listed_costs(&reply);
+            reply["target_costs"] = json!(rows);
+        }
+        Ok(reply)
     };
     match run() {
         Ok(v) | Err(v) => v,
     }
+}
+
+/// Every collection target the reply's sides drew.
+fn listed_costs(reply: &Value) -> Vec<Value> {
+    let rows = reply["layers"].as_array().into_iter().flatten();
+    rows.flat_map(|l| l["drawn"]["gpu_layer"]["target_costs"].as_array().cloned().unwrap_or_default())
+        .collect()
 }
 
 fn backends() -> Value {
@@ -490,7 +599,7 @@ fn draw3(app: &App, ev: &Evaluated, l: &Layer2, keep: bool) -> Result<Picture, V
     }
     let marks: Vec<&Drawn> = l.marks.iter().map(|m| &**m).collect();
     let image = linear::over(&base, &marks, ev.size)?;
-    Ok(Picture { image, floats: None, inputs: Vec::new() })
+    Ok(Picture { image, floats: None, inputs: Vec::new(), costs: Vec::new() })
 }
 
 /// Compositing in linear light, inside a 3D writer layer (Frame and group: blend modes).
@@ -615,6 +724,12 @@ pub(crate) struct Frame2 {
     pub roles: Arc<BTreeMap<String, [f64; 3]>>,
     pub guard: Option<Guard>,
     pub packs: Arc<Vec<Named>>,
+    /// #149: where the frame's pixels land on its look's paper.
+    pub page: Option<Arc<Page>>,
+    /// #464: the look's print finish for this frame, when it prints anything.
+    pub print: Option<Arc<crate::print2d::Printing>>,
+    /// #464: an indexed look's frame, which the index operator draws in place of Vello GPU.
+    pub indexed: Option<Arc<crate::indexed::IndexFrame>>,
 }
 
 impl Frame2 {
@@ -637,6 +752,10 @@ struct Module2 {
     error: Arc<Mutex<Option<Value>>>,
     /// When the film's frame finished encoding Vello GPU's passes (#417).
     encoded: Option<crate::film::Encoded>,
+    /// #464: the textures a printed frame draws through, and what the call reads back.
+    stage: Option<Arc<crate::print2d::Stage>>,
+    taps: crate::print2d::Taps,
+    indexer: Option<Arc<Mutex<crate::indexed::Indexer>>>,
 }
 
 impl RenderModule for Module2 {
@@ -680,7 +799,8 @@ impl RenderModule for Module2 {
         let (options, error, encoded) = (self.options, self.error.clone(), self.encoded.clone());
         let target = target.clone();
         // A composited group's passes record ahead of the frame, on their own command buffers.
-        let groups = groups::composited(frame.marks()).then(|| {
+        let on_paper = frame.page.as_ref().is_some_and(|p| p.sheet.is_some() || p.relief.is_some());
+        let groups = (on_paper || groups::composited(frame.marks())).then(|| {
             let mut clock = frame.clock;
             if self.planted == Some(Planted::DissolveReadsPlayback) {
                 clock.t = (self.played * groups::FLICKS as u64 / 60) as i64;
@@ -700,6 +820,8 @@ impl RenderModule for Module2 {
                 planted: self.planted,
                 guard: frame.guard.as_ref(),
                 other: None,
+                page: frame.page.as_deref(),
+                ground: true,
             };
             let mut v = vello.lock().unwrap_or_else(|e| e.into_inner());
             let g = self
@@ -709,25 +831,81 @@ impl RenderModule for Module2 {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .compose(device, &mut v, &layer)
-                .map(|(done, _)| done);
+                .map(|(done, ..)| done);
             (g.clone(), done)
         });
+        // #464: a printed frame draws its base and each ink's coverage into the stage, and the
+        // finish prints them into the slot.
+        let printing = frame.print.clone();
+        let wants_linear = self.taps.wants_linear();
+        let stage = printing.as_ref().map(|p| {
+            let kept = self.stage.take().and_then(|s| Arc::try_unwrap(s).ok());
+            let s = Arc::new(crate::print2d::Stage::ensure(
+                kept,
+                &device.device,
+                FORMAT,
+                target.size,
+                p.print.separations.len(),
+                wants_linear,
+            ));
+            self.stage = Some(s.clone());
+            s
+        });
+        let taps = self.taps.clone();
+        let indexer = self
+            .indexer
+            .get_or_insert_with(|| Arc::new(Mutex::new(crate::indexed::Indexer::new(&device.device))))
+            .clone();
         let job: Job = Box::new(move |encoder| {
-            let drawn = match groups {
-                Some((g, done)) => done.map(|done| {
+            let base = stage.as_ref().map_or(&target.view, |s| &s.source.1);
+            let inked = printing.as_ref().map(|p| p.inked()).unwrap_or_default();
+            // Each ink's coverage first, each Vello GPU draw on its own encoder and submit, since
+            // its uploads land before any encoder that shares its buffers runs (#430).
+            let mut inks = Ok(());
+            if let (Some(p), Some(s)) = (&printing, &stage) {
+                for (k, items) in p.inks.iter().enumerate() {
+                    let mut own = dev.create_command_encoder(&Default::default());
+                    inks = inks.and(vello.lock().unwrap_or_else(|e| e.into_inner()).draw(
+                        &dev,
+                        &queue,
+                        &mut own,
+                        frame.marks().filter(|d| items.contains(d.mark.item())),
+                        target.size,
+                        &s.covs[k].1,
+                        options,
+                    ));
+                    queue.submit([own.finish()]);
+                }
+            }
+            let drawn = match (groups, &frame.indexed) {
+                // #464: an indexed look draws its marks through the index operator.
+                (_, Some(f)) => {
+                    let mut ix = indexer.lock().unwrap_or_else(|e| e.into_inner());
+                    ix.record(&dev, encoder, f, base, FORMAT, &taps.indices);
+                    Ok(())
+                }
+                (Some((g, done)), None) => done.map(|done| {
                     let mut g = g.lock().unwrap_or_else(|e| e.into_inner());
-                    g.finish(&dev, encoder, &done, &target.view, FORMAT, false);
+                    g.finish(&dev, encoder, &done, base, FORMAT, false);
                 }),
-                None => vello.lock().unwrap_or_else(|e| e.into_inner()).draw(
+                (None, None) => vello.lock().unwrap_or_else(|e| e.into_inner()).draw(
                     &dev,
                     &queue,
                     encoder,
-                    frame.marks(),
+                    frame.marks().filter(|d| !inked.contains(d.mark.item())),
                     target.size,
-                    &target.view,
+                    base,
                     options,
                 ),
             };
+            let drawn = drawn.and(inks);
+            if let (Ok(()), Some(p), Some(s)) = (&drawn, &printing, &stage) {
+                s.record(&dev, encoder, p, &target.view, FORMAT, wants_linear);
+                if let Some((t, _)) = s.linear.as_ref().filter(|_| wants_linear) {
+                    *taps.linear.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some((t.clone(), target.size));
+                }
+            }
             if let Some(at) = &encoded {
                 *at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
             }
@@ -747,6 +925,7 @@ pub(crate) fn open2(
     marks: Marks2,
     size: [u32; 2],
     encoded: Option<crate::film::Encoded>,
+    taps: crate::print2d::Taps,
 ) -> Result<(deep_gpu::view::Ui, Refusal), Value> {
     let error = Arc::new(Mutex::new(None));
     let module = Module2 {
@@ -762,6 +941,9 @@ pub(crate) fn open2(
         },
         error: error.clone(),
         encoded,
+        stage: None,
+        taps,
+        indexer: None,
     };
     let path = app.decision.path;
     let ui = app
@@ -856,6 +1038,9 @@ pub fn window2d(app: &mut App, out: &str, call: &Value) -> Value {
             roles: ev.roles.clone(),
             guard: ev.guard.clone(),
             packs: ev.packs.clone(),
+            page: ev.page.clone(),
+            print: None,
+            indexed: None,
         };
         for l in &ev.layers {
             let path = path_of(app, l);
@@ -893,6 +1078,7 @@ pub fn window2d(app: &mut App, out: &str, call: &Value) -> Value {
                 Arc::new(Mutex::new(Arc::new(frame2(marks)))),
                 ev.size,
                 None,
+                Default::default(),
             )?),
             None => None,
         };
@@ -1030,8 +1216,17 @@ pub fn spike2d(app: &mut App, out: &str, call: &Value) -> Value {
             roles: ev.roles.clone(),
             guard: ev.guard.clone(),
             packs: ev.packs.clone(),
+            page: ev.page.clone(),
+            print: None,
+            indexed: None,
         };
-        let (ui, error) = open2(app, Arc::new(Mutex::new(Arc::new(frame))), ev.size, None)?;
+        let (ui, error) = open2(
+            app,
+            Arc::new(Mutex::new(Arc::new(frame))),
+            ev.size,
+            None,
+            Default::default(),
+        )?;
         app.window.as_ref().expect("opened").paint.borrow_mut().ui = Some(ui.clone());
         ui.record(false);
         ui.take_record();

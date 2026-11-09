@@ -1,0 +1,28 @@
+{
+  "title": "asset.library@1",
+  "description": "A library source: search {words, kind, size_m, license, limit} gives rows of an online library's catalog (id, name, kind, license {id, terms, shareable, credit}, size in m where the library states one, triangles, a thumbnail path and the library's own URL), and fetch {id} names an asset's file, its sidecars, its license and its upstream, read from the library's own record. The hub makes every call and downloads every byte.",
+  "x-since": "R6",
+  "x-stability": "preview",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "asset.library@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "variant": {
+      "const": "library"
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "variant"
+  ],
+  "additionalProperties": false
+}

@@ -11,6 +11,7 @@ import { homedir, userInfo } from 'node:os';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFacts } from '@deepbuild/adapters';
 import { draftAskSettings } from '@deepbuild/asks';
 import { keepOriginal, noteWritten, putBack, saveRecord, setupRecord, strictObject, target, writeThrough } from './agent-files.js';
 import { confirmed } from './authority.js';
@@ -18,7 +19,7 @@ import { Confirmer } from './confirm.js';
 import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, hasCodex, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
-import { deepHook, hubAddress, installedRoot, lastingNode, rootOf } from './paths.js';
+import { deepHook, hubAddress, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { removeService, startHub, stopIfRunning } from './service.js';
 import { Devices } from './trusted.js';
@@ -49,7 +50,7 @@ export async function setupCommand(cli: string, args: readonly string[] = []): P
   return install(cli);
 }
 
-/** What the Set up click and the first `deep` command say they did (#326), in one line. */
+/** What `deep setup`, the first `deep` command and the app's Set up click say they did (#326), in one line: its one definition (#1455). */
 export const SET_UP_LINE = 'DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo\'s checks, and started the hub at login; deep setup --undo removes it all.';
 
 /**
@@ -102,7 +103,8 @@ async function install(cli: string, quiet = false): Promise<number> {
     recordLoginPath(root);
     installRules(root);
     await enrollConfirm(root);
-    const hook = builtHook();
+    // An installed version's fixed programs, which every update keeps (#41); a checkout's own build otherwise.
+    const hook = installedPrograms(root)?.hook ?? builtHook();
     // For an agent whose hooks run in its own process, which no settings entry names deep-hook to: the pi package.
     editConfig(root, (c) => { c.hook = { binary: hook }; });
     // The waiter waits as long as your longest ask deadline, so an answer in time can still wake the session.
@@ -128,7 +130,7 @@ async function install(cli: string, quiet = false): Promise<number> {
     const servers = isObj(user.mcpServers) ? user.mcpServers : {};
     // deep-actions is the second server entry (#363): the plug-ins' actions, apart from the deep_* tools. deep-hook
     // serves it, so a session runs one Node server, not two (#824's memory per session).
-    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', command: lastingNode(), args: [cli, 'mcp'] }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
+    writeJson(userFile, { ...user, mcpServers: { ...servers, deepbuild: { type: 'stdio', ...mcpServer(root, cli) }, 'deep-actions': { type: 'stdio', command: hook, args: ['mcp', 'actions'] } } });
     noteWritten(record, userFile);
     const skill = skillDir();
     if (!existsSync(skill) || record.created.includes(skill)) {
@@ -142,7 +144,7 @@ async function install(cli: string, quiet = false): Promise<number> {
     process.stderr.write(`deep setup: ${why}\n`);
     return stopped(root, 1, why, 'Set up again once that is fixed.');
   }
-  if (!quiet) console.log(`DeepBuild added its hooks and status line forwarder to ${settingsFile}, beside yours; its MCP server to ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}. Its gates are watch-only until you approve a repo's checks. deep setup --undo removes it all.`);
+  if (!quiet) console.log(`Its hooks and status line forwarder are in ${settingsFile}, beside yours; its MCP server in ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}.`);
   // Only a relation that doesn't hold needs you; deep doctor lists them all.
   if (!quiet) for (const r of relations(root)) if (!r.holds) console.log(`BROKEN ${r.text}`);
   const started = await startHub({ cli });
@@ -153,6 +155,8 @@ async function install(cli: string, quiet = false): Promise<number> {
   const code = await readHistory(quiet);
   writeFileSync(finishedFile(root), `${JSON.stringify({ version: deepbuild, at: new Date().toISOString() })}\n`, { mode: 0o600 });
   rmSync(stoppedFile(root), { force: true });
+  // Its last line, which the app's Set up shows as it is (#1455).
+  if (!quiet) console.log(SET_UP_LINE);
   return code;
 }
 /** What setup says when building deep-hook failed: with no cargo at all, how to get one. */
@@ -192,6 +196,11 @@ async function readHistory(quiet: boolean): Promise<number> {
  * deep-hook as this checkout built it; from a checkout with none, or one built before it served deep-actions (#824),
  * setup builds it once (a release ships it built, #41).
  */
+/** DeepBuild's MCP server's program: the installed version's fixed deep, or Node with this checkout's CLI. */
+function mcpServer(root: string, cli: string): { command: string; args: string[] } {
+  const installed = installedPrograms(root);
+  return installed ? { command: installed.deep, args: ['mcp'] } : { command: lastingNode(), args: [cli, 'mcp'] };
+}
 function builtHook(): string {
   // Whether a build lists deep-actions; undefined when its --help can't be read, which is no reason to rebuild.
   const serves = (hook: string) => { try { return execFileSync(hook, ['--help'], { encoding: 'utf8', timeout: 10_000 }).includes('mcp actions'); } catch { return undefined; } };
@@ -226,8 +235,9 @@ function installCodex(root: string, record: ReturnType<typeof setupRecord>, cli:
   // Both are read before either is written: one that won't parse refuses the pair.
   const [hooksFile, configFile] = [codexHooks(), codexConfig()];
   const [hooksText, configText] = [read(hooksFile), read(configFile)];
-  const [hooks, config] = [withEntries(hooksText, hook), withServer(configText, lastingNode(), cli)];
-  recordEntries(root, hook, { node: lastingNode(), cli });
+  const server = mcpServer(root, cli);
+  const [hooks, config] = [withEntries(hooksText, hook), withServer(configText, server)];
+  recordEntries(root, hook, server);
   for (const [file, before, after] of [[hooksFile, hooksText, hooks], [configFile, configText, config]] as const) {
     if (after === before) continue;
     keepOriginal(root, record, file);
@@ -332,9 +342,15 @@ async function undo(): Promise<number> {
     plant() === 'undo-reserializes' ? hooksOut() : putBack(root, record, settingsFile, hooksOut),
     putBack(root, record, userFile, mcpOut),
     putBack(root, record, recordedHooks, () => editedCodex(recordedHooks, (text) => withoutEntries(root, text), "only DeepBuild's entries")),
-    putBack(root, record, recordedConfig, () => editedCodex(recordedConfig, (text) => (server ? withoutServer(text, server.node, server.cli) : text), "DeepBuild's MCP server if it was as setup wrote it")),
+    putBack(root, record, recordedConfig, () => editedCodex(recordedConfig, (text) => (server ? withoutServer(text, server) : text), "DeepBuild's MCP server if it was as setup wrote it")),
     undoPaseo(root, record),
   ].filter((n): n is string => n !== undefined);
+  // Every other agent file an Agents page sync wrote (#148): its original bytes back where you haven't edited it since.
+  const handled = new Set([settingsFile, userFile, recordedHooks, recordedConfig, join(homedir(), '.paseo', 'config.json')]);
+  for (const file of Object.keys(record.files).filter((f) => !handled.has(f))) {
+    const note = putBack(root, record, file, () => `you edited ${file} since DeepBuild wrote it, so undo left it as it is; take DeepBuild's entries out by hand`);
+    if (note) notes.push(note);
+  }
   forgetEntries(root);
   for (const dir of record.created) rmSync(dir, { recursive: true, force: true });
   rmSync(installedRecord(root), { force: true });
@@ -357,7 +373,7 @@ const paseoConfig = (): string => join(homedir(), '.paseo', 'config.json');
  * anything is written. paseo rewrites its config.json as it installs, so the bytes before are kept for undo.
  */
 function installPaseo(root: string, record: ReturnType<typeof setupRecord>, paseo: string, cli: string): void {
-  const facts = JSON.parse(readFileSync(join(REPO, 'adapters', 'paseo.facts.json'), 'utf8')) as { install: { source: string } };
+  const facts = readFacts<{ install: { source: string } }>('paseo.facts.json');
   const source = facts.install.source;
   const listed = execFileSync(paseo, ['plugin', 'ls', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 });
   if (listed.includes('"deepbuild"')) return;

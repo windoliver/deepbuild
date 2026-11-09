@@ -204,15 +204,26 @@ pub struct Line {
     pub edges: Option<Arc<EdgesOf>>,
     /// Drawn over whatever is in front of it: the planted `edges_skip_depth`'s line.
     pub over: bool,
+    /// Its segments are one drawn line's pieces (#149), so their caps draw no soft edge.
+    pub joined: bool,
+    /// A mesh-edge line's dash and gap in its size space, each segment dashed from its start
+    /// (#1640); zeros for none.
+    pub dash: [f64; 2],
+    /// The dash is in m: as `world`, but for #1640's planted `edges_dash_other_space`.
+    pub dash_world: bool,
 }
 
-/// A mesh-edge line's mesh, its kind and the matrix that places the mesh.
+/// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EdgesOf {
     pub mesh: Arc<crate::geom::Mesh>,
     pub kind: crate::geom::EdgeKind,
     pub model: Affine3,
     pub width: f64,
+    /// The edges, on welded positions, in the mesh's space.
+    pub list: Arc<Vec<[crate::geom::V3; 2]>>,
+    /// Whether this evaluation derived `list` rather than reusing a crease set (#1640).
+    pub derived: bool,
 }
 
 impl EdgesOf {
@@ -220,7 +231,7 @@ impl EdgesOf {
     /// `edges_unwelded` reader).
     pub fn segments(&self, welded: bool) -> Vec<Segment> {
         let edges = if welded {
-            self.mesh.edge_list(self.kind, None)
+            self.list.as_ref().clone()
         } else {
             self.mesh
                 .edges(self.kind == crate::geom::EdgeKind::All, false)
@@ -654,6 +665,9 @@ pub struct Scene {
     /// Motion blur by velocity this frame (#419): the evaluations at t ± half the shutter that the
     /// renderer's velocity target reads, or `None`.
     pub motion: Option<Arc<Motion>>,
+    /// The core's velocity target this frame (#431): the evaluations at t ± half the shutter an
+    /// effect or operator reading it is drawn from, or `None` where nothing reads it.
+    pub velocity: Option<Arc<Motion>>,
     /// Each `overlay.text@1` readout (#419): drawn by the view after the frame's samples and
     /// motion blur resolve, over the frame, never into the frame itself.
     pub readouts: Vec<Label>,
@@ -670,12 +684,27 @@ pub struct Scene {
     /// The per-pixel resolve's room (#424): the view's `max_fragments`, and the most fragments
     /// the class's GPU memory holds at 16 B each.
     pub fragments: [u64; 2],
+    /// #149: each item's paint at t, under a drawing look: what its drawn fills and lines read.
+    pub painted: BTreeMap<String, Value>,
     /// The IES tables its lights read, each an atlas layer (#446).
     pub distributions: Vec<Arc<crate::ies::Distribution>>,
     /// The light policy's shadow fields (#446).
     pub shadowing: crate::light::Shadowing,
     /// Under samples per frame, the angle this sample turns a soft shadow's disk by (#446).
     pub sample_turn: Option<f64>,
+    /// #464: what the look's print finish draws from at this frame's t and the document's seed.
+    pub print: deep_canvas_marks::print::Frame,
+    /// The view's mirror (#465; Material: mirror), which one extra pass draws.
+    pub mirror: Option<crate::mirror::Mirror>,
+    /// The view's flare (#465; Effect: flare): the first `effect@1` of kind flare.
+    pub flare: Option<Arc<crate::flare::Flare>>,
+    /// The view's water (#166; Material: water), which its own pass draws after the mirror's.
+    pub water: Option<Arc<crate::water::Water>>,
+    /// #166: whether the view reads back each mirror part's lookup (view3d's `reflection`).
+    pub read_reflection: bool,
+    /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
+    /// in item order. They draw nothing in the look.
+    pub probes: Vec<crate::probe::Probe>,
 }
 
 impl Scene {
@@ -703,12 +732,30 @@ impl Scene {
     }
 
     /// #420 AC6's wrong programs, reachable only through `deep-gpu --planted`: mesh-edge lines
-    /// read from the unwelded mesh, or drawn over what is in front of them.
-    pub fn plant_edges(&mut self, unwelded: bool, over: bool) {
+    /// read from the unwelded mesh, or drawn over what is in front of them; and #1640's
+    /// (`crease_below_angle`, `edges_derive_every_frame`, `edges_dash_other_space`).
+    pub fn plant_edges(&mut self, unwelded: bool, over: bool, planted: Option<&str>) {
         for line in self.layers.iter_mut().flat_map(|l| &mut l.lines) {
             let Some(edges) = line.edges.clone() else {
                 continue;
             };
+            if let (crate::geom::EdgeKind::Crease { angle, border }, Some(name)) =
+                (edges.kind, planted)
+            {
+                if matches!(name, "crease_below_angle" | "edges_derive_every_frame") {
+                    let (list, derived) = edges.mesh.crease_set(angle, border, planted);
+                    let source = EdgesOf {
+                        list,
+                        derived,
+                        ..(*edges).clone()
+                    };
+                    line.segments = source.segments(true);
+                    line.edges = Some(Arc::new(source));
+                }
+            }
+            if planted == Some("edges_dash_other_space") {
+                line.dash_world = !line.world;
+            }
             if unwelded {
                 line.segments = edges.segments(false);
             }
@@ -951,6 +998,17 @@ fn origin(m: &Affine3) -> Vec3 {
 }
 
 fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3], Refused> {
+    // #149: a noise fill's first stop, or a line's own role, or the ink a named fill leaves out.
+    let drawn = params.pointer("/paint/fill/noise/stops/0/role").or_else(|| {
+        params
+            .pointer("/paint/fill/role")
+            .is_none()
+            .then(|| params.pointer("/paint/stroke/role"))
+            .flatten()
+    });
+    if let Some(c) = drawn.and_then(Value::as_str).and_then(|r| look.role(r)) {
+        return Ok(c);
+    }
     let role = params
         .get("paint")
         .and_then(|p| p.get("fill"))
@@ -1040,16 +1098,39 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
                 .map(|(i, v)| point_of(items, v, &format!("{path}/points/{i}")))
                 .collect::<Result<Vec<_>, _>>()
         })?;
+    // #149: a named line's width and its profile along the line.
+    let named = params.pointer("/paint/stroke/line").and_then(Value::as_str);
+    let drawn_line = match (named, look.drawn.as_ref()) {
+        (Some(name), Some(d)) => d.line(name).map_err(|r| Refused {
+            code: r.code,
+            path: r.path,
+        })?,
+        _ => None,
+    };
+    let written = points.len();
+    let (points, along) = match drawn_line.as_ref().and_then(|l| l.profile.as_ref()) {
+        Some(p) => profiled_points(&points, p),
+        None => {
+            let flat = vec![1.0; points.len()];
+            (points, flat)
+        }
+    };
     let n = points.len();
+    let base = drawn_line.as_ref().and_then(|l| l.width);
     let widths: Vec<f64> = match params.get("width") {
-        None | Some(Value::Null) => vec![1.5; n],
-        Some(Value::Array(w)) if w.len() == n => w
-            .iter()
-            .map(|x| num(Some(x)).filter(|&x| x >= 0.0))
-            .collect::<Option<Vec<_>>>()
-            .map_or_else(|| refused("out_of_range", format!("{path}/width")), Ok)?,
+        None | Some(Value::Null) => along.iter().map(|k| base.unwrap_or(1.5) * k).collect(),
+        Some(Value::Array(w)) if w.len() == written => {
+            let w = w
+                .iter()
+                .map(|x| num(Some(x)).filter(|&x| x >= 0.0))
+                .collect::<Option<Vec<_>>>()
+                .map_or_else(|| refused("out_of_range", format!("{path}/width")), Ok)?;
+            // A profile multiplies each point's own width, at the written point it grew from.
+            let at = |i: usize| i * written.saturating_sub(1) / n.saturating_sub(1).max(1);
+            (0..n).map(|i| w[at(i)] * along[i]).collect()
+        }
         Some(v) => match num(Some(v)).filter(|&x| x >= 0.0) {
-            Some(w) => vec![w; n],
+            Some(w) => along.iter().map(|k| w * k).collect(),
             None => return refused("out_of_range", format!("{path}/width")),
         },
     };
@@ -1077,6 +1158,9 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         color: paint(look, params, &path)?,
         edges: None,
         over: false,
+        joined: drawn_line.is_some(),
+        dash: [0.0; 2],
+        dash_world: false,
     })
 }
 
@@ -1298,6 +1382,7 @@ fn edge_line(
     look: &Look3,
     seconds: f64,
     outlines: Outlines<'_>,
+    assets: Option<Assets<'_>>,
 ) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
     let edges = &params["edges"];
@@ -1306,10 +1391,9 @@ fn edge_line(
     let Some(item) = items.get(target) else {
         return refused("ref_unresolved", format!("{path}/edges/of"));
     };
-    let Some(kind) =
-        crate::geom::EdgeKind::named(edges.get("kind").and_then(Value::as_str).unwrap_or("quads"))
-    else {
-        return refused("out_of_range", format!("{path}/edges/kind"));
+    let kind = match crate::geom::EdgeKind::read(edges) {
+        Ok(kind) => kind,
+        Err(field) => return refused("out_of_range", format!("{path}/edges/{field}")),
     };
     let width = match params.get("width") {
         None | Some(Value::Null) => 1.5,
@@ -1318,7 +1402,23 @@ fn edge_line(
             None => return refused("out_of_range", format!("{path}/width")),
         },
     };
-    let mut mesh = mesh_of(doc, target, item, seconds, outlines)?;
+    // Its dash and gap in its size space; one length dashes as long as it gaps.
+    let dash = match params.get("dash") {
+        None | Some(Value::Null) => [0.0; 2],
+        Some(v) => match v.as_array().map(|a| a.iter().map(|x| num(Some(x))).collect()) {
+            Some(Some::<Vec<f64>>(d)) if d.iter().all(|x| *x >= 0.0) && matches!(d.len(), 1 | 2) => {
+                [d[0], d[d.len() - 1]]
+            }
+            _ => return refused("out_of_range", format!("{path}/dash")),
+        },
+    };
+    let mut mesh = match (item.get("kind").and_then(Value::as_str), assets) {
+        // A glTF asset's mesh, read as its solid is (#1640).
+        (Some("mesh.asset@1"), Some(read)) => {
+            asset_mesh(read, target, item.get("params").unwrap_or(&Value::Null))?.0
+        }
+        _ => mesh_of(doc, target, item, seconds, outlines)?,
+    };
     if let Some((_, part)) = of.split_once('#') {
         let Some(tris) = mesh
             .parts
@@ -1340,20 +1440,76 @@ fn edge_line(
         }
         mesh = only;
     }
+    let (list, derived) = match kind {
+        crate::geom::EdgeKind::Crease { angle, border } => mesh.crease_set(angle, border, None),
+        _ => (Arc::new(mesh.edge_list(kind, None)), true),
+    };
     let source = EdgesOf {
         mesh: Arc::new(mesh),
         kind,
         model: world(items, target),
         width,
+        list,
+        derived,
     };
+    let world = params.get("size_space").and_then(Value::as_str) == Some("world");
     Ok(Line {
         id: id.to_string(),
         segments: source.segments(true),
-        world: params.get("size_space").and_then(Value::as_str) == Some("world"),
+        world,
         color: paint(look, params, &path)?,
         edges: Some(Arc::new(source)),
         over: false,
+        joined: false,
+        dash,
+        dash_world: world,
     })
+}
+
+/// A drawing look's key: its `dir` around the page, and its `elevation` toward the viewer.
+fn drawn_light(look: &Look3) -> Option<Sun> {
+    let l = look.drawn.as_ref()?.light.as_ref()?;
+    let (dir, up) = (deep_canvas::ops::rad(l.dir), deep_canvas::ops::rad(l.elevation));
+    let (c, s) = (deep_canvas::ops::cos(up), deep_canvas::ops::sin(up));
+    Some(Sun {
+        id: "look.light".into(),
+        toward: [c * deep_canvas::ops::cos(dir), c * deep_canvas::ops::sin(dir), s],
+        illuminance: std::f64::consts::PI,
+        shadow: l.cast.is_some(),
+        cascades: Cascades::default(),
+    })
+}
+
+/// The u a drawn look's sizes span on a surface, a metre.
+const U_PER_METER: f64 = 300.0;
+
+/// `points` split finely enough to carry a line profile, with its width multiplier at each.
+fn profiled_points(points: &[Vec3], p: &deep_canvas_drawn::spec::Profile) -> (Vec<Vec3>, Vec<f64>) {
+    const PIECES: usize = 16;
+    let mut fine = Vec::new();
+    for pair in points.windows(2) {
+        for k in 0..PIECES {
+            let t = k as f64 / PIECES as f64;
+            fine.push([0, 1, 2].map(|i| pair[0][i] + (pair[1][i] - pair[0][i]) * t));
+        }
+    }
+    fine.extend(points.last());
+    let mut s = vec![0.0];
+    for pair in fine.windows(2) {
+        let d = [0, 1, 2].map(|i| pair[1][i] - pair[0][i]);
+        s.push(s[s.len() - 1] + deep_canvas::ops::hypot(deep_canvas::ops::hypot(d[0], d[1]), d[2]));
+    }
+    let total = s.last().copied().unwrap_or(0.0).max(1e-9);
+    // A profile's flick is in u, and this line's arc length in metres.
+    let metres = deep_canvas_drawn::spec::Profile {
+        flick: p.flick / U_PER_METER,
+        ..p.clone()
+    };
+    let widths = s
+        .iter()
+        .map(|at| deep_canvas_drawn::geometry::width_along(&metres, *at, total))
+        .collect();
+    (fine, widths)
 }
 
 /// A solid's color: its paint's role, or the look's `muted` when it names none.
@@ -1635,6 +1791,8 @@ fn evaluate_any(
     let Some(map) = doc.as_object() else {
         return refused("out_of_range", "");
     };
+    // #166: a wake behind an item a logic array moves, refused at check before anything else.
+    crate::water::logic_moved(map)?;
     let program = Program::compile(map).map_err(|r| Refused {
         code: r.code,
         path: r.path,
@@ -1795,7 +1953,7 @@ fn lod_of(
 }
 
 /// A built solid's world bounds' corners.
-fn corners_of(s: &Solid) -> Vec<Vec3> {
+pub(crate) fn corners_of(s: &Solid) -> Vec<Vec3> {
     let Some(mesh) = &s.mesh else {
         return Vec::new();
     };
@@ -2052,6 +2210,7 @@ pub(crate) fn evaluate_compiled(
     let mut doc_value: Option<Value> = None;
     let mut bounds: Vec<Vec3> = Vec::new();
     let mut sun = None;
+    let mut painted = BTreeMap::new();
     let mut lights = Vec::new();
     let mut sky = None;
     let mut puffs = 0u64;
@@ -2077,6 +2236,8 @@ pub(crate) fn evaluate_compiled(
     let mut protos: HashMap<String, Vec<Solid>> = HashMap::new();
     let mut instancers: Vec<(usize, String)> = Vec::new();
     let mut cutaway = None;
+    let mut flare: Option<Arc<crate::flare::Flare>> = None;
+    let mut probe_items: Vec<crate::probe::Wanted> = Vec::new();
     // The IES tables the lights name (#446).
     let mut tables: Vec<Arc<crate::ies::Distribution>> = Vec::new();
     for layer_id in &order {
@@ -2102,6 +2263,9 @@ pub(crate) fn evaluate_compiled(
             let path = format!("items/{id}/params");
             let empty = Value::Object(Map::new());
             let params = item.get("params").unwrap_or(&empty);
+            if let (true, Some(p)) = (look.drawn.is_some(), params.get("paint")) {
+                painted.insert(id.clone(), p.clone());
+            }
             match kind {
                 "mark.box@1" | "mark.cylinder@1" | "mark.sphere@1" => {
                     let shape = match kind {
@@ -2170,7 +2334,7 @@ pub(crate) fn evaluate_compiled(
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
-                    let l = edge_line(doc, &items, id, params, look, seconds, outlines)?;
+                    let l = edge_line(doc, &items, id, params, look, seconds, outlines, assets)?;
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
                     layer.lines.push(l);
                 }
@@ -2503,6 +2667,11 @@ pub(crate) fn evaluate_compiled(
                 "camera@1" | "sky@1" | "material@1" | "group@1" => {}
                 // #424: an instancer's elements, placed once its prototypes are read.
                 "instance@1" => instancers.push((layers.len(), id.clone())),
+                // #465: the first flare is the view's; scene3d draws no other effect kind.
+                "effect@1" => {
+                    let f = crate::flare::parse(id, params, look)?;
+                    flare.get_or_insert_with(|| Arc::new(f));
+                }
                 "cutaway@1" if cutaway.is_none() => {
                     cutaway = Some(crate::cut::cutaway(
                         id,
@@ -2517,6 +2686,11 @@ pub(crate) fn evaluate_compiled(
                     )?);
                 }
                 "cutaway@1" => {}
+                // #427: a probe draws nothing; its capture is made once the lights are read.
+                "light.probe@1" => {
+                    let pos = origin(&world(&items, id));
+                    probe_items.push(crate::probe::read(id, params, pos, &path)?);
+                }
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -2717,6 +2891,11 @@ pub(crate) fn evaluate_compiled(
         return refused("out_of_range", "budget/puffs");
     }
     crate::sets::compile(map, &mut lights, &mut layers)?;
+    let probes = probes(map, probe_items, &lights, &layers, sky.as_ref())?;
+    // #149: a drawing look lights its marks from its own light, with no Light item.
+    if let (None, true, Some(l)) = (&sun, lights.is_empty(), drawn_light(look)) {
+        sun = Some(l);
+    }
     let mut scene = Scene {
         size,
         camera,
@@ -2724,6 +2903,7 @@ pub(crate) fn evaluate_compiled(
         layers,
         overlays,
         sun,
+        painted,
         lights,
         sky,
         others,
@@ -2731,6 +2911,7 @@ pub(crate) fn evaluate_compiled(
         curves,
         pages: labels.pages(),
         motion: None,
+        velocity: None,
         readouts,
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
@@ -2739,9 +2920,150 @@ pub(crate) fn evaluate_compiled(
         distributions: tables,
         shadowing: crate::sets::policy(map)?,
         sample_turn: None,
+        print: deep_canvas_marks::print::frame(
+            &look.print,
+            map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32,
+            t,
+            false,
+        ),
+        mirror: None,
+        flare,
+        water: None,
+        read_reflection: false,
+        probes,
     };
     scene.set_cutaway(cutaway);
+    scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
+    // #166: the water, its wake's path, and its own mirror unless a material names one.
+    let seed = map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
+    if let Some(mut w) = crate::water::find(&scene.layers, |id| items.get(id), seed, seconds)? {
+        if let Some(wake) = &mut w.wake {
+            let step = frame_interval(map);
+            wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+            let times = crate::water::wake_times(t, step, wake.span);
+            wake.path = wake_path(map, program, &items, &w.material, &wake.item, &times)?;
+        }
+        if scene.mirror.is_none() {
+            scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &w);
+        }
+        scene.water = Some(Arc::new(w));
+    }
     Ok(scene)
+}
+
+/// #166: where a wake's item stood in the water's plane (x, z) at each of `times`, read through
+/// the chain a trail reads: its channels and parents, or a physics bake's output kept through the
+/// world's span, never an earlier frame ([`crate::water::logic_moved`] refuses an item a logic
+/// array moves before this).
+fn wake_path(
+    map: &Map<String, Value>,
+    program: &Program,
+    items: &Items<'_>,
+    material: &str,
+    item: &str,
+    times: &[i64],
+) -> Result<Vec<[f64; 2]>, Refused> {
+    let unresolved = || {
+        refused(
+            "ref_unresolved",
+            format!("items/{material}/params/water/wake/item"),
+        )
+    };
+    // A body of a baked world: `<world>#<body>`.
+    if let Some((owner, body)) = item.split_once('#') {
+        let Some(world) = items
+            .get(owner)
+            .filter(|w| w.get("kind").and_then(Value::as_str) == Some("fixture.world@1"))
+        else {
+            return unresolved();
+        };
+        let params = world.get("params").cloned().unwrap_or(Value::Null);
+        let bake = crate::fixtures::bake(&params, &format!("items/{owner}/params"))?;
+        let Some(k) = bake.bodies.iter().position(|b| b.id == body) else {
+            return unresolved();
+        };
+        return Ok(times
+            .iter()
+            .map(|&at| {
+                let p = bake.at(at)[k];
+                [p[0], p[2]]
+            })
+            .collect());
+    }
+    if items.get(item).is_none() {
+        return unresolved();
+    }
+    Ok(times
+        .iter()
+        .map(|&at| {
+            let o = origin_at(map, program, item, at);
+            [o[0], o[2]]
+        })
+        .collect())
+}
+
+/// The document's frame interval in flicks: its transport's `frame_rate`, 60/1 by default.
+fn frame_interval(map: &Map<String, Value>) -> i64 {
+    let (p, q) = map
+        .get("transport")
+        .and_then(deep_canvas::document::frame_rate_of)
+        .filter(|(p, q)| *p > 0 && *q > 0)
+        .unwrap_or((60, 1));
+    deep_canvas::camera::FLICKS_PER_SECOND as i64 * i64::from(q) / i64::from(p)
+}
+
+/// Item `id`'s world origin at `t`, through the chain its channels and parents give: what a
+/// wake reads at an earlier time, never an earlier frame.
+fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> Vec3 {
+    let mut state = program.state();
+    program.evaluate_local(t, eval::Validity::Full, &mut state);
+    let empty = Map::new();
+    let doc_items = map
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let written = eval::written(map, program, &state);
+    let items = Items::new(doc_items, &written, &state);
+    origin(&world(&items, id))
+}
+
+/// The document's light probes, each captured or baked from what it sees (#427). Figures and
+/// data views refuse probes, and `budget.probes` caps each type (reflection 8, irradiance 4).
+fn probes(
+    map: &Map<String, Value>,
+    wanted: Vec<crate::probe::Wanted>,
+    lights: &[crate::light::Light],
+    layers: &[Layer3],
+    sky: Option<&crate::sky::Sky>,
+) -> Result<Vec<crate::probe::Probe>, Refused> {
+    use crate::probe::{ProbeKind, MAX_IRRADIANCE, MAX_REFLECTION};
+    let Some(first) = wanted.first() else {
+        return Ok(Vec::new());
+    };
+    if matches!(
+        map.get("profile").and_then(Value::as_str),
+        Some("figure" | "view" | "chart" | "sheet" | "cells")
+    ) {
+        return refused("out_of_range", format!("items/{}/kind", first.id));
+    }
+    for (kind, name, most) in [
+        (ProbeKind::Reflection, "reflection", MAX_REFLECTION),
+        (ProbeKind::Irradiance, "irradiance", MAX_IRRADIANCE),
+    ] {
+        let cap = map
+            .get("budget")
+            .and_then(|b| b.pointer(&format!("/probes/{name}")))
+            .and_then(Value::as_u64)
+            .map_or(most, |c| (c as usize).min(most));
+        if wanted.iter().filter(|w| w.kind == kind).count() > cap {
+            return refused("out_of_range", format!("budget/probes/{name}"));
+        }
+    }
+    let around = crate::probe::Surroundings::of(layers, sky.map(|s| s.ambient));
+    Ok(wanted
+        .into_iter()
+        .map(|w| crate::probe::capture(w, lights, &around))
+        .collect())
 }
 
 /// Whether `id` and each of its parents are visible (Item: `visible`, inherited).

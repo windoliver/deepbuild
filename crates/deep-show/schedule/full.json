@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "ffcd648c9522bd4b512b2c1a6fd62cd07a3a67473f9ec8f8ad927c1ec44368ac",
+  "set_digest": "c405df073407624fc4f6dfb8e2aa1351022769ae419d8c01fa760b0038e905ea",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -92,7 +92,7 @@
       }
     },
     "effects@1": {
-      "digest": "a5c48d2d39ec542b3e471645b597ed286640f2114a2e8ccd3b7d82c360e22324",
+      "digest": "d45a9a5ad3664b3c5a5849ae6bf54992cadea2d518fac39a4a5cc16c936dce78",
       "reference": "effects",
       "kit": [
         "fixtures",
@@ -121,7 +121,7 @@
       }
     },
     "graph@1": {
-      "digest": "840570cf1f3a314adfeb0cb2d42b736e0590426d107bf6e231ab3c0535256415",
+      "digest": "42cebb9cb1568a4ae30c1e1163bb021d0efd2393630840e50167520dc92c646c",
       "reference": "graph",
       "kit": [
         "fixtures",
@@ -143,6 +143,35 @@
       "module": "graph",
       "implementation": {
         "name": "graph",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "input@1": {
+      "digest": "e65249671ed96cf758617d3f9e202cfd7401bf7c1ed804b4d410c90df61e325e",
+      "reference": "input",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "input",
+      "implementation": {
+        "name": "input",
         "version": "1.0.0",
         "pins": {},
         "equivalence": "bit",
@@ -236,8 +265,37 @@
         "state": "canonical"
       }
     },
+    "media@1": {
+      "digest": "3248cd86932ae98bf199c04e9a4f48fff1784e69696b9f95934b1079dfdbed98",
+      "reference": "media",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "media",
+      "implementation": {
+        "name": "media",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
     "motion@1": {
-      "digest": "def0784a75255943cbe31d9b104fc00297447171a92b0b229cb139b5949d3663",
+      "digest": "b345fa202abce017f322143ebab888c21c57e764cbe7eb61752f944e60f603cb",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -335,7 +393,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "06336effe820630c6b21b7c10341baaacb5ab1c23bf396f4c2dccceeb7e5d937",
+      "digest": "1235792443270721f90858c1162ff00a38d4f9238363f0d227ec44796376365d",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -468,6 +526,18 @@
     ],
     "plan": [
       {
+        "operator": "motion.arrange",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "motion.arranged"
+        ],
+        "per": "document"
+      },
+      {
         "operator": "motion.compile",
         "module": "motion",
         "version": "1.0.0",
@@ -557,6 +627,20 @@
         "per": "item"
       },
       {
+        "operator": "motion.arrangelive",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.arrangelive"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.channels",
         "module": "motion",
         "version": "1.0.0",
@@ -596,19 +680,6 @@
         ],
         "writes": [
           "building.shaded"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "core.world",
-        "module": "core",
-        "version": "0.0.0",
-        "reads": [
-          "core.transform",
-          "parent"
-        ],
-        "writes": [
-          "core.world"
         ],
         "per": "item"
       },
@@ -660,6 +731,31 @@
           "motion.next"
         ],
         "per": "document"
+      },
+      {
+        "operator": "motion.placed",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.arranged"
+        ],
+        "writes": [
+          "motion.placed"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
+        ],
+        "per": "item"
       },
       {
         "operator": "record.salience",
@@ -920,7 +1016,8 @@
       "look.status"
     ],
     "core.transform": [
-      "motion.at"
+      "motion.at",
+      "motion.placed"
     ]
   }
 }

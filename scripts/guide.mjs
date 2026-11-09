@@ -4,7 +4,8 @@
 // tier first (#351), and stamps the envelope digest of its two worked examples. `--check` is the guide's drift test, as
 // skill.mjs's is the skill's: one entry per published method and per slot, none for anything the contract doesn't
 // publish, each as the contract has it now. One `PASS guide` line, or one `FAIL guide: <name>: <reason>` line per
-// finding; exit 1 on a finding. `--api <file>` and `--table <file>` point it at other copies of the contract.
+// finding; exit 1 on a finding. `--api <file>` and `--table <file>` point it at other copies of the contract. A panel's
+// module, `@deepbuild/panel`, is written from crates/deep-app/panel-catalog.json, its names and props (#1425).
 //   node scripts/guide.mjs [--check [--api <extension-api.json>] [--table <hub-slots.json>]]
 import { readFileSync, writeFileSync } from 'node:fs';
 
@@ -20,6 +21,27 @@ const arg = (flag) => {
   return value;
 };
 const read = (file) => JSON.parse(readFileSync(file, 'utf8'));
+const CATALOG = new URL('crates/deep-app/panel-catalog.json', ROOT);
+
+/** The guide's section on a panel's one module, from the panel catalog (#1425). */
+function panelModule() {
+  const catalog = read(CATALOG);
+  const props = (c) => Object.entries(c.props).map(([name, what]) => `\`${name}\`: ${what}`).join('; ');
+  return [
+    '## A panel\'s module',
+    '',
+    `A panel imports only \`${catalog.module}\`, DeepBuild's own module, by name: \`import { View, div, v_flex } from "${catalog.module}"\`, as \`panel/main.js\` does. It never names the toolkit under it, so a change of toolkit breaks no plug-in. A panel that imports the toolkit, or a name off the list below, is refused at install and again at load, naming the file and line, and for a name off the list the closest name on it. The list is checked in at \`crates/deep-app/panel-catalog.json\`, with every component the toolkit has that isn't offered and why.`,
+    '',
+    ...catalog.core.map((c) => `- \`${c.name}\`: ${c.what}`),
+    '- `needs_you`, `quotes`: the data the app serves a panel, as plain values.',
+    '',
+    'Its components, each with its props:',
+    '',
+    ...catalog.components.map((c) => `- \`${c.name}\`: ${props(c)}. For example \`${c.example}\`.`),
+    '',
+    'A component whose script runs per frame, such as a table drawing each cell or a list drawing each row through a callback, is never offered: a panel\'s rows are data.',
+  ].join('\n');
+}
 
 /** The first-plug-in tier, in the order a plug-in reaches for them (design: A first plug-in). */
 const TIER = ['deep.on', 'deep.registerView', 'deep.registerSource', 'deep.store', 'deep.schedule', 'deep.registerAction', 'deep.secret',
@@ -30,7 +52,11 @@ const DOCS = {
   'deep.on': 'Handles an event: session.start, tool.before, tool.after, prompt.submit, agent.stop, pr.opened, merged, released or schedule. A handler adds context for the agent or denies with a reason; outside DeepBuild\'s signed release, both only fill templates the manifest declares, with typed values.',
   'deep.registerCheck': 'A check kind: its runner gets a spec and the checkout and returns the run\'s outcome, the tests it ran, each failure from the tool\'s own report and the evidence. The verdict is the core\'s, never the runner\'s.',
   'deep.registerResolver': 'Answers an ask with an option and the decision that covers it. The core applies the answer only when that decision is active and of the ask\'s kind and scope; otherwise the ask reaches you.',
-  'deep.registerSource': 'A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: \'USD\' }`. A list or a record is no reading, unless the source declares `shape: \'series\'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can\'t serve is refused at install. A source\'s readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point.',
+  'deep.registerSource': 'A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: \'USD\' }`. A list or a record is no reading, unless the source declares `shape: \'series\'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can\'t serve is refused at install. A source\'s readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point. A library source (`variant: \'library\'`, asset.library@1, #1731) names its one host in the manifest, which the install grants, and gives `search(ctx, {words, kind, size_m, license, limit})` and `fetch(ctx, {id})`: they read the library\'s API through `ctx.fetch`, the hub\'s call to that host, and the hub downloads every file a fetch names, so a library\'s rows and licenses reach `deep_kinds` and the evidence store with no byte through the plug-in.',
+  'deep.registerStateSource': 'State outside a repo that a workspace keeps: read() returns its items, compare(item, expected) the difference from what was expected, and undo(change) a plan to undo a change, or that it cannot.',
+  'deep.registerChannel': 'A way to reach you, such as your phone, a chat app or email: deliver({ summary, link, thread_key }) says delivered, stalled or timed out, and receive() gives an answer with its proof, which the hub checks and decides what it counts as.',
+  'deep.channel.fetch': 'A channel\'s one call to its own service: a GET or POST to a path on the host the channel was granted, answered through the hub.',
+  'deep.work.fetch': 'A work or library source\'s one call to its provider, as its context\'s `fetch`: a GET or POST to a path on the source\'s host, with its secret and under its quota, answered through the hub.',
   'deep.registerEnvironment': 'An environment a check runs against: up(spec, lease, checkout) starts it and returns a handle, down(handle) stops it.',
   'deep.lease': 'Leases a resource of a declared lease.kind@1 kind, the core\'s or one a manifest declares, exclusive or shared, held by the package itself: the grant, or the refusal naming the holder.',
   'deep.registerView': 'A JavaScript panel in the app, in the sidebar, the home screen, a tab or the line, under an empty policy plus DeepBuild\'s modules. `view` adds its pages, each opened from ⌘K with one parameter (a page per stock: `{ name: "Stock", param: "symbol", values }`, given to the panel\'s `init` as `props.page`), its ⌘K commands, each running one of its actions, and `binds`, the readings it shows (`reading:<source>` or `reading:<source>#<series>`), which Read now and while-shown cadences go by. A panel never calls the network itself: it reads what its sources read, and a panel that fetches is refused at install.',
@@ -119,6 +145,8 @@ function render(api, table) {
     '## A package\'s own tests',
     '',
     'Put them in `tests/`, each file named `*.test.ts` or `*.test.mjs`. A file\'s default export is an object of named tests, each an async function given `t`: `t.call(action, input)` calls one of the package\'s actions as the app would and returns its output, `t.read(source)` reads one of its polled sources through the hub, and `t.now()` is the hub\'s clock. A test fails by throwing; `node:assert` works. DeepBuild runs them in the package\'s sandbox on recorded source calls and a clock it controls, never live.',
+    '',
+    panelModule(),
     '',
     '## A first plug-in',
     '',

@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7B",
+  "kind": "work.delivery",
+  "data": {
+    "key": "d01k74fkzvk8q",
+    "task_ref": "task:01K74FKZVK8Q2X5R7M3N9P4T6Z",
+    "source": "work:01K74FKZVK8Q2X5R7M3N9P4T6Y",
+    "thread": "acme/web#42",
+    "phase": "gone",
+    "detail": {
+      "cause": "the tracker answered 410: the issue was deleted"
+    }
+  }
+}

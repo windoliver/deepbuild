@@ -24,6 +24,9 @@ pub use deep_scene3d_render::status::lock;
 pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
     Planted3 {
         forward_z: p == Some(Planted::ForwardZ),
+        emission_thresholds_color: p == Some(Planted::EmissionThresholdsColor),
+        sample_grad_implicit: p == Some(Planted::SampleGradImplicit),
+        backdrop_after_see_through: p == Some(Planted::BackdropAfterSeeThrough),
         encodes_twice: p == Some(Planted::EncodesTwice),
         skips_encode: p == Some(Planted::SkipsEncode),
         encodes_every_frame: p == Some(Planted::EncodesEveryFrame),
@@ -35,6 +38,13 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         status_before_upscale: p == Some(Planted::StatusBeforeUpscale),
         status_without_depth: p == Some(Planted::StatusWithoutDepth),
         winding_ignores_determinant: p == Some(Planted::WindingIgnoresDeterminant),
+        water: deep_scene3d_render::water::Planted {
+            foam_keeps_state: p == Some(Planted::WaterFoamKeepsState),
+        },
+        flare: deep_scene3d_render::flare::Planted {
+            fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
+            ignores_occlusion: p == Some(Planted::FlareIgnoresOcclusion),
+        },
         ties_by_submission: p == Some(Planted::TiesBySubmission),
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
         status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
@@ -71,7 +81,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         },
         ids_by_compacted_place: p == Some(Planted::IdsByCompactedRow),
         count_read_back: p == Some(Planted::CountReadBack),
-        // #428's shading plants, a bit each in scene3d.wgsl's order.
+        // #428's and #481's shading plants, a bit each in scene3d.wgsl's order.
         lobes: [
             Planted::AbsorptionIgnoresThickness,
             Planted::TransmissionIgnoresRoughness,
@@ -82,6 +92,9 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             Planted::OrenNayarUncompensated,
             Planted::RetroreflectionIgnored,
             Planted::FlakesByPixel,
+            // #481's.
+            Planted::SubsurfaceAcrossParts,
+            Planted::SubsurfaceAddsToDiffuse,
         ]
         .iter()
         .position(|q| p == Some(*q))
@@ -119,6 +132,8 @@ pub struct Opened {
     pub profiler: Option<Profiler>,
     /// The status stage, attached only where status can show.
     pub stage: Option<SharedStage>,
+    /// #149: what a drawing look lays over this frame's surfaces.
+    pub drawn: Arc<Mutex<crate::drawn::Frame3>>,
 }
 
 /// Opens the session: a view at `size` whose render module is scene3d with the effects between
@@ -187,6 +202,8 @@ fn open_with(
     let path = on.path;
     let fx_planted = effects::planted_fx(on.planted);
     let timings = timings && on.backend != Backend::Noop;
+    let drawn3 = Arc::new(Mutex::new(crate::drawn::Frame3::default()));
+    let opened3 = drawn3.clone();
     on.worker
         .call(move |state| -> Result<Opened, String> {
             let (module, shared) = Module3::new(planted);
@@ -194,7 +211,12 @@ fn open_with(
             let mut effects = Effects::new(Default::default(), fx_planted);
             setup(&mut effects);
             let fx = Arc::new(Mutex::new(effects));
-            lock(&shared).post = Some(Box::new(fx::Shared(fx.clone())));
+            let drawn = crate::drawn::Post3::new(
+                Box::new(fx::Shared(fx.clone())),
+                drawn3.clone(),
+                fx.clone(),
+            );
+            lock(&shared).post = Some(Box::new(drawn));
             let stage = if with_stage {
                 let device = state.gpu.recover()?;
                 let stage = Arc::new(Mutex::new(Stage::new(&device)));
@@ -230,6 +252,7 @@ fn open_with(
                 fx,
                 profiler,
                 stage,
+                drawn: opened3,
             })
         })
         .map_err(|e| refused("no_session", e))
@@ -251,6 +274,23 @@ pub fn surface(app: &mut App, surface: Surface) -> Result<(), Value> {
             if surface.scale < 1.0 && renderer.upscale.is_none() {
                 renderer.upscale = Some(Arc::new(Upscale::new(&device)));
             }
+            Ok(())
+        })
+        .map_err(|e| refused("no_session", e))
+}
+
+/// The core targets the session's frames build (#431): only those its operators read.
+pub fn core_targets(app: &mut App, want: deep_scene3d_render::targets::Want) -> Result<(), Value> {
+    app.worker
+        .call(move |state| -> Result<(), String> {
+            let s = state.scene3d.as_mut().ok_or("no session")?;
+            let device = s.view.device().clone();
+            let mut shared = lock(&s.shared);
+            let planted = shared.planted;
+            let renderer = shared
+                .renderer
+                .get_or_insert_with(|| deep_scene3d_render::Renderer::new(&device, planted));
+            renderer.core.want = want;
             Ok(())
         })
         .map_err(|e| refused("no_session", e))
@@ -380,6 +420,12 @@ pub struct Drawn {
     /// The depth target, f32 per pixel, read with the targets, and whether it grows nearer: what
     /// a 3D pick's ties read (#424).
     pub depth: Option<(Vec<u8>, bool)>,
+    /// The opaque scene's copy with its mips, read with the targets while the frame holds one
+    /// (#431): each level's size and f32 RGBA texels.
+    pub backdrop: Option<Vec<([u32; 2], Vec<u8>)>>,
+    /// #166: the view-axis depth, f32 a pixel, and each mirror part's lookup, f32 RGBA.
+    pub view_depth: Option<Vec<u8>>,
+    pub reflection: Option<Vec<u8>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -501,6 +547,21 @@ pub fn draw_on(
                 },
                 pre_tone: if read_targets && !noop {
                     r.read_pre_tone(&device)
+                } else {
+                    None
+                },
+                view_depth: if read_targets && !noop {
+                    r.read_view_depth(&device)
+                } else {
+                    None
+                },
+                reflection: if read_targets && !noop {
+                    r.read_reflection(&device)
+                } else {
+                    None
+                },
+                backdrop: if read_targets && !noop {
+                    r.read_backdrop(&device)
                 } else {
                     None
                 },

@@ -111,6 +111,11 @@ impl Ui {
         lock(&self.ring).take_record()
     }
 
+    /// The frame the view shows now, if any.
+    pub fn shown_frame(&self) -> Option<u64> {
+        lock(&self.ring).on_screen()
+    }
+
     pub fn states(&self) -> Vec<SlotState> {
         let ring = lock(&self.ring);
         (0..ring.len()).map(|s| ring.state(s)).collect()
@@ -176,6 +181,10 @@ pub struct View {
     hold_next: bool,
     held: Vec<bool>,
     done_while_held: Vec<bool>,
+    /// The planted allocator (#1413): resizes still to fail; and the merge base's render, which
+    /// leaves a slot whose resize failed rendering.
+    failing_resizes: u32,
+    resize_leaves_rendering: bool,
 }
 
 impl View {
@@ -216,6 +225,8 @@ impl View {
             hold_next: false,
             held: vec![false; n],
             done_while_held: vec![false; n],
+            failing_resizes: 0,
+            resize_leaves_rendering: false,
             config,
         })
     }
@@ -301,8 +312,28 @@ impl View {
         Ok(())
     }
 
+    /// The planted allocator fails the next `n` allocations of a slot's storage at a new size.
+    pub fn fail_resizes(&mut self, n: u32) {
+        self.failing_resizes = n;
+    }
+
+    /// The merge base's resize: a failed allocation leaves its slot rendering.
+    pub fn plant_resize_leaves_rendering(&mut self) {
+        self.resize_leaves_rendering = true;
+    }
+
     /// Makes a free slot's storage at the current size, outside every lock the UI thread takes.
     fn reallocate(&mut self, slot: usize) -> Result<(), String> {
+        let resize = self.storage[slot]
+            .as_ref()
+            .is_some_and(|s| s.size() != self.config.size);
+        if resize && self.failing_resizes > 0 {
+            self.failing_resizes -= 1;
+            return Err(format!(
+                "the planted allocator failed slot {slot}'s storage at {:?}",
+                self.config.size
+            ));
+        }
         let storage = allocate(&self.device, self.config.path, self.config.size)?;
         let shown = storage.shown();
         let entry = (identity(&shown), shown);
@@ -323,7 +354,14 @@ impl View {
         self.done_while_held[slot] = false;
         let size = self.config.size;
         if stale || self.storage[slot].as_ref().is_none_or(|s| s.size() != size) {
-            self.reallocate(slot)?;
+            // A failed allocation gives its slot back (#1413): on a healthy device the next
+            // frame tries again, and a lost device takes the reopen path at the next `recover`.
+            if let Err(e) = self.reallocate(slot) {
+                if !self.resize_leaves_rendering {
+                    lock(&self.ui.ring).abandon(slot);
+                }
+                return Err(e);
+            }
         }
         let storage = self.storage[slot].as_ref().expect("allocated above");
         let target = Target {

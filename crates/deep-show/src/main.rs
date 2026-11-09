@@ -8,12 +8,14 @@
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
 mod access;
+mod audio;
 mod ask;
 mod capture;
 mod costs;
 mod efficiency;
 mod familiar;
 mod evidence;
+mod film;
 mod frames;
 mod function;
 mod gate;
@@ -25,6 +27,7 @@ mod jobs;
 mod kinds;
 mod kit;
 mod media;
+mod mixdown;
 mod modes;
 mod packs;
 mod placement;
@@ -59,6 +62,7 @@ mod time;
 ))]
 mod twins;
 mod verdict;
+mod video;
 mod workers;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
@@ -546,8 +550,13 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 item: c.get("item")?.as_str()?.to_string(),
             })
         }
-        // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path.
-        "deep_kinds" => return Some(Call::Kinds(Value::Object(c.clone()))),
+        // #412: deep_kinds checks its own fields, so each refusal is error@2 at its path. It arrives on
+        // the clock at `arrives`, never one of its fields (#1718), so the check never sees it.
+        "deep_kinds" => {
+            let mut args = c.clone();
+            args.remove("arrives");
+            return Some(Call::Kinds(Value::Object(args)));
+        }
         "sandbox" => return Some(Call::Sandbox),
         "provided" => return Some(Call::Provided(c.get("doc")?.as_str()?.to_string())),
         "validate" => {
@@ -598,7 +607,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 clean: flag("clean")?,
                 perturb: optional(c.get("perturb"), |p| Some(p.as_str()?.to_string()))?,
                 pixels: flag("pixels")?,
+                film: flag("film")?,
                 size: px_size(c.get("size"), |_| true)?,
+                arrays: optional(c.get("arrays"), |a| {
+                    a.as_array()?.iter().map(|n| Some(n.as_str()?.to_string())).collect()
+                })?
+                .unwrap_or_default(),
             })));
         }
         "frames" => {
@@ -772,9 +786,17 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(m) = media::parse_call(name, c) {
         return Some(Call::Media(Box::new(m)));
     }
+    if let Some(m) = mixdown::parse_call(name, c) {
+        return Some(Call::Mix(Box::new(m)));
+    }
+    if let Some(a) = audio::parse_call(name, c) {
+        return Some(Call::Audio(Box::new(a)));
+    }
     let via = via(name, c)?;
     let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
         (Some(_), None, None) => None,
+        // #427: a diagnostic mode of the current revision carries no document.
+        (None, None, None) if c.contains_key("mode") => None,
         (None, Some(p), None) => Some(Body::Patch(p.clone())),
         (None, None, Some(u)) => Some(Body::Undo {
             patch: u.get("patch")?.as_str()?.to_string(),
@@ -807,7 +829,12 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     let show = Box::new(Show {
         via,
         doc: c.get("doc")?.as_str()?.to_string(),
-        document: c.get("document")?.clone(),
+        // #427: a mode call without a document draws the current revision and mints none.
+        document: match (c.get("document"), c.get("mode")) {
+            (Some(d), _) => d.clone(),
+            (None, Some(_)) => Value::Null,
+            (None, None) => return None,
+        },
         removes: strings(c.get("removes"))?,
         t: optional(c.get("t"), |t| flicks(t.as_str()?))?.unwrap_or(0),
         size,
@@ -822,7 +849,26 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             let mode = m.as_str().filter(|m| modes::owner(m).is_some())?;
             // #412: where the readings an earlier answer cut at 64 KB left off.
             let cursor = optional(c.get("cursor"), |n| n.as_str()?.parse().ok())?.unwrap_or(0);
-            Some(Call::Mode(show, mode.to_string(), cursor))
+            // #427: what the deviation, motion paths and pick hierarchy modes read.
+            let span = match c.get("span") {
+                None => None,
+                Some(s) => {
+                    let s = s.as_array().filter(|s| s.len() == 2)?;
+                    Some([flicks(s[0].as_str()?)?, flicks(s[1].as_str()?)?])
+                }
+            };
+            Some(Call::Mode(
+                show,
+                Box::new(modes::ModeArgs {
+                    mode: mode.to_string(),
+                    cursor,
+                    item: optional(c.get("item"), |s| Some(s.as_str()?.to_string()))?,
+                    reference: optional(c.get("reference"), |s| Some(s.as_str()?.to_string()))?,
+                    select: strings(c.get("select"))?,
+                    span,
+                    depth: optional(c.get("depth"), Value::as_u64)?.map(|d| d as usize),
+                }),
+            ))
         }
     }
 }
@@ -1068,7 +1114,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .get("planted")
         .and_then(Value::as_str)
         .filter(|p| {
-            deep_canvas_scene3d::PLANTED.contains(p) || deep_canvas_loop::PLANTED.contains(p)
+            deep_canvas_scene3d::PLANTED.contains(p)
+                || deep_canvas_loop::PLANTED.contains(p)
+                || deep_canvas_media::PLANTED.contains(p)
+                // #1732's wrong programs live in the motion module's arrangement solve.
+                || deep_canvas_motion::arrange::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1201,12 +1251,35 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "probe_rounds_to_flicks" => Planted::ProbeRoundsToFlicks,
                 "probe_stores_normalized" => Planted::ProbeStoresNormalized,
                 "assumes_bt601" => Planted::AssumesBt601,
+                "lookup_floors_frame_rate" => Planted::LookupFloorsFrameRate,
+                "seek_reads_proxy" => Planted::SeekReadsProxy,
                 "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,
                 "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,
                 "fades_on_close" => Planted::FadesOnClose,
                 "cull_by_center" => Planted::CullByCenter,
                 "bounds_children_only" => Planted::BoundsChildrenOnly,
+                "mode_draws_live_surface" => Planted::ModeDrawsLiveSurface,
+                "mode_ids_by_count" => Planted::ModeIdsByCount,
+                "bounds_authored_position" => Planted::BoundsAuthoredPosition,
+                "lights_local_position" => Planted::LightsLocalPosition,
+                "checker_fits_surface" => Planted::CheckerFitsSurface,
+                "deviation_one_way" => Planted::DeviationOneWay,
+                "normals_from_faces" => Planted::NormalsFromFaces,
+                // #499: the mix's wrong programs.
+                "reverb_restores_without_tail" => Planted::ReverbRestoresWithoutTail,
+                "ring_drops_oldest" => Planted::RingDropsOldest,
+                "mixer_holds_gain_per_block" => Planted::MixerHoldsGainPerBlock,
+                "emitter_always_inverse" => Planted::EmitterAlwaysInverse,
+                "cone_sign_reversed" => Planted::ConeSignReversed,
+                // #499: the clock's and the audio backend's.
+                "clock_follows_display" => Planted::ClockFollowsDisplay,
+                "backend_keeps_removed_device" => Planted::BackendKeepsRemovedDevice,
+                "clock_restarts_from_sample_0" => Planted::ClockRestartsFromSample0,
+                "arms_each_vsync" => Planted::ArmsEachVsync,
+                "link_never_stops" => Planted::LinkNeverStops,
+                "waker_ignores_schedule_frame" => Planted::WakerIgnoresScheduleFrame,
+                "link_restarts_a_refresh_late" => Planted::LinkRestartsARefreshLate,
                 _ => return None,
             }),
         },
@@ -1271,10 +1344,12 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         .iter()
         .map(|c| {
             // deep_query's `at` is the times it reads (#411), geometry's the curve fractions it
-            // reads (#441) and fn's the points (#490): on the clock each arrives at `arrives`.
+            // reads (#441) and fn's the points (#490): on the clock each arrives at `arrives`, as
+            // deep_kinds does, which takes no `at` (#1718).
             let arrives = if c.get("call") == Some(&json!("deep_query"))
                 || c.get("call") == Some(&json!("geometry"))
                 || c.get("call") == Some(&json!("fn"))
+                || c.get("call") == Some(&json!("deep_kinds"))
             {
                 "arrives"
             } else {
@@ -1392,6 +1467,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         machine: optional(input.get("machine"), |m| Some(m.as_object()?.clone()))?,
         devices: capture::Devices::parse(input)?,
         decode_caps: media::caps(input)?,
+        audio: audio::parse(input.get("audio"))?,
     })
 }
 
@@ -1484,7 +1560,7 @@ impl CanvasSide {
             .enumerate()
             .map(|(i, c)| {
                 let mut c = c.clone();
-                let arrives = if c["call"] == "deep_query" || c["call"] == "geometry" || c["call"] == "fn" {
+                let arrives = if ["deep_query", "geometry", "fn", "deep_kinds"].iter().any(|k| c["call"] == *k) {
                     "arrives"
                 } else {
                     "at"
@@ -1660,6 +1736,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-step-cycle",
     feature = "test-scatter",
     feature = "test-tick",
+    feature = "test-held",
     feature = "test-frame-cache",
     feature = "test-kit",
     feature = "test-leave-out-look",
@@ -1747,6 +1824,15 @@ fn modules(set: BuildSet) -> Vec<Module> {
         out.push(deep_canvas_scene3d::building::module());
         // Issue #453: the loop's check kinds, geometry.shading first.
         out.push(deep_canvas_loop::module());
+        // Issue #499: the media module, media@1; `test-media-checkpoint-without-tail` seals the
+        // planted implementation whose reverb checkpoint leaves out its tail.
+        out.push(if cfg!(feature = "test-media-checkpoint-without-tail") {
+            deep_canvas_media::module::checkpoint_without_tail()
+        } else {
+            deep_canvas_media::module::module()
+        });
+        // Issue #308: controls and the input track's handling, with control@1.
+        out.push(deep_canvas_input::module::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
@@ -1768,6 +1854,24 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::sandbox::prog());
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");
+    // #499: a build without the media module, and the test module that probes an asset through
+    // the decode worker (or, planted, through media).
+    #[cfg(feature = "test-leave-out-media")]
+    out.retain(|m| m.manifest.name != "media");
+    #[cfg(feature = "test-probe")]
+    out.push(deep_canvas_test_modules::probe::module(false));
+    #[cfg(feature = "test-probe-via-media")]
+    out.push(deep_canvas_test_modules::probe::module(true));
+    // #308: a build without the input module, which refuses a document with a control kind.
+    #[cfg(feature = "test-leave-out-input")]
+    out.retain(|m| m.manifest.name != "input");
+    // #308: the input module with the test control kind test.dial among its kinds.
+    #[cfg(feature = "test-control-kind")]
+    for m in &mut out {
+        if m.manifest.name == "input" {
+            *m = deep_canvas_input::module::with_test_kind("");
+        }
+    }
     out.extend(test_registries::modules());
     #[cfg(feature = "test-leave-out-look")]
     out.retain(|m| m.manifest.name != "look");
@@ -1801,6 +1905,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::scatter());
     #[cfg(feature = "test-tick")]
     out.push(deep_canvas_test_modules::tick());
+    #[cfg(feature = "test-held")]
+    out.push(deep_canvas_test_modules::held());
     #[cfg(feature = "test-frame-cache")]
     out.push(deep_canvas_test_modules::cache());
     #[cfg(feature = "test-a")]
@@ -1950,6 +2056,7 @@ fn interfaces() -> Vec<deep_canvas::registry::Interface> {
                 "data@1" => deep_canvas_marks::modules::data(),
                 "graph@1" => deep_canvas_graph::module::module(),
                 "vector@1" => deep_canvas_vector::module::module(),
+                "media@1" => deep_canvas_media::module::module(),
                 _ if m.manifest.name == "scene3d" => deep_canvas_scene3d::module::module(),
                 _ => m,
             };
@@ -2056,6 +2163,19 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             *m = deep_canvas_motion::module::planted(p);
         }
     }
+    // #308: the input module, or the test control kind, with a planted program.
+    if let Some(StartPlanted::Input(p)) = planted {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "input") {
+            if let Some(planted) = deep_canvas_input::module::planted(p) {
+                *m = planted;
+            }
+        }
+    }
+    if let Some(StartPlanted::ControlKind(p)) = planted {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "input") {
+            *m = deep_canvas_input::module::with_test_kind(p);
+        }
+    }
     // Every build set holds text and look, since a status mark needs text's shaper and look's
     // status map; the planted seal lets a build without look start (#388).
     for name in deep_canvas::registry::CORE_MODULES {
@@ -2089,6 +2209,9 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     }
     if cfg!(feature = "test-ease-in-motion") {
         registry = registry.plant(Fault::EaseInMotion);
+    }
+    if cfg!(feature = "test-camera-in-scene3d") {
+        registry = registry.plant(Fault::CameraInScene3d);
     }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {
@@ -2177,6 +2300,11 @@ enum StartPlanted {
     Kinds(kinds::Planted),
     /// #415: a wrong first-party layout's cap or validator.
     Layouts(deep_canvas_sandbox::layouts::Planted),
+    /// #308: the input module with a planted program, whose control@1 entry the kit refuses.
+    Input(&'static str),
+    /// #308: the test control kind test.dial, which the input module fills under
+    /// `test-control-kind`, with a planted program.
+    ControlKind(&'static str),
 }
 
 #[cfg(test)]
@@ -2544,6 +2672,14 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "constraint_reads_previous_output" => Ok(StartPlanted::Constraints(
             deep_canvas_motion::kit::Planted::PreviousFrame,
         )),
+        "input_drag_along_recompute" => Ok(StartPlanted::Input("drag_along_recompute")),
+        "input_tool_stamps_you" => Ok(StartPlanted::Input("tool_stamps_you")),
+        "control_kind_recompute"
+        | "control_kind_reads_modifiers"
+        | "control_kind_no_keyboard"
+        | "control_kind_agent_input" => Ok(StartPlanted::ControlKind(
+            Box::leak(twin.trim_start_matches("control_kind_").to_string().into_boxed_str()),
+        )),
         "registries_without_slots" => Ok(StartPlanted::Listing(registries::Listing::WithoutSlots)),
         "slot_fill_as_entry" => Ok(StartPlanted::Listing(registries::Listing::FillAsEntry)),
         "validator_without_close" => Ok(StartPlanted::Seal(Fault::NoCloseNames)),
@@ -2707,6 +2843,8 @@ fn main() {
 
 #[cfg(target_os = "macos")]
 mod live;
+#[cfg(target_os = "macos")]
+mod idle;
 #[cfg(target_os = "macos")]
 mod watch;
 #[cfg(target_os = "macos")]

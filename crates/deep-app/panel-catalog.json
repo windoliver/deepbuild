@@ -1,0 +1,715 @@
+{
+  "module": "@deepbuild/panel",
+  "about": "The names a panel imports from @deepbuild/panel, DeepBuild's own module (#1425). `core` is the module itself: a view, an element, the layout helpers, the dock and DeepBuild's canvas. `components` is the catalog of toolkit components a panel may use, with their props and an example that renders. `not_offered` lists every other component the toolkit exports, with the reason it is not offered; `per_frame` marks one whose script runs per frame, refused at pack check and load. `from` says which toolkit module serves a name; only the app's loader reads it. The data a panel reads (needs_you, quotes) is the module's too, served by the app.",
+  "core": [
+    {
+      "name": "View",
+      "from": "gpui-kit",
+      "what": "The class a panel's views extend: init(props, cx), render(cx)."
+    },
+    {
+      "name": "div",
+      "from": "gpui-kit",
+      "what": "A box element, styled by chained calls such as .p(8), .bg(color) and .child(x)."
+    },
+    {
+      "name": "svg",
+      "from": "gpui-kit",
+      "what": "An element drawing an SVG path or file, sized and colored like a div."
+    },
+    {
+      "name": "PathBuilder",
+      "from": "gpui-kit",
+      "what": "Builds a vector path: move_to, line_to, curve_to, then fill or stroke it."
+    },
+    {
+      "name": "Background",
+      "from": "gpui-kit",
+      "what": "A background beyond a plain color, such as a gradient, for .bg(…)."
+    },
+    {
+      "name": "h_flex",
+      "from": "gpui-base",
+      "what": "A box laying its children out in a row."
+    },
+    {
+      "name": "v_flex",
+      "from": "gpui-base",
+      "what": "A box laying its children out in a column."
+    },
+    {
+      "name": "DockArea",
+      "from": "gpui-base",
+      "what": "The app's dock: DockArea.register_panel(slot, View) puts a view in a slot."
+    },
+    {
+      "name": "Canvas",
+      "from": "gpui-component",
+      "what": "DeepBuild's canvas: new Canvas(scene, color?) draws a CanvasScene's items."
+    },
+    {
+      "name": "CanvasScene",
+      "from": "gpui-component",
+      "what": "The items a Canvas draws, by ID, kept across renders: scene.set(id, values)."
+    },
+    {
+      "name": "Menu",
+      "from": "deepbuild-menu",
+      "what": "DeepBuild's menu, drawn inside the panel: new Menu(id, { label, rows: [{ id, label, disabled?, on_pick: (cx) => ... }] }). Press the trigger, slide to a row and let go, or click a row."
+    },
+    {
+      "name": "Button",
+      "from": "gpui-base",
+      "what": "A button: Button.new(id) with its label as a child and .on_click(handler), styled like a div."
+    },
+    {
+      "name": "Input",
+      "from": "gpui-base",
+      "what": "A text field: Input.new(state) over an InputState."
+    },
+    {
+      "name": "InputState",
+      "from": "gpui-base",
+      "what": "The text an Input holds, kept across renders: InputState.new({ placeholder })."
+    }
+  ],
+  "components": [
+    {
+      "name": "Badge",
+      "from": "gpui-component",
+      "props": {
+        "count": "number, from .count(n)",
+        "max": "number, from .max(n), past which it shows n+",
+        "dot": "from .dot(), a dot instead of a count",
+        "color": "string, from .color(\"#rrggbb\")"
+      },
+      "example": "Badge.new().count(3)"
+    },
+    {
+      "name": "Label",
+      "from": "gpui-component",
+      "props": {
+        "text": "string, given to Label.new(text)",
+        "secondary": "string, from .secondary(text), muted text after it",
+        "masked": "boolean, from .masked(on)",
+        "on_click": "(event, window, cx) => void, called on your click",
+        "disabled": "boolean, from .disabled(on)"
+      },
+      "example": "Label.new(\"Name\")"
+    }
+  ],
+  "not_offered": [
+    {
+      "name": "Accordion",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "AccordionItem",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Alert",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "AlertDialog",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "AreaChart",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Attachment",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Avatar",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "BarChart",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Breadcrumb",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Bubble",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Button",
+      "reason": "The module's core serves its own Button, the one panels use, which keeps its id in the panel's tree; this second Button the toolkit registers is not offered, so a panel never has two."
+    },
+    {
+      "name": "Calendar",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Carousel",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "CarouselContent",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "CarouselItem",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "CarouselNext",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "CarouselPagination",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "CarouselPaginationItem",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "CarouselPrevious",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Checkbox",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Clipboard",
+      "reason": "It writes the clipboard on a click without the gesture serial a panel's clipboard write needs."
+    },
+    {
+      "name": "Collapsible",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "ColorPicker",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "Combobox",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "Command",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "CommandGroup",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "CommandItem",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "CommandSeparator",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "DashedSeparator",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "DataTable",
+      "reason": "Its render_cell callback runs script for every visible cell on every frame; a panel's rows are data.",
+      "from": "gpui-component",
+      "per_frame": true
+    },
+    {
+      "name": "DataTableState",
+      "reason": "The state of DataTable, whose render_cell callback runs script for every visible cell on every frame.",
+      "from": "gpui-component",
+      "per_frame": true
+    },
+    {
+      "name": "DatePicker",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "DescriptionItem",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "DescriptionList",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Dialog",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "Diff",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "DropdownButton",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "DropdownMenu",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "Editor",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "Empty",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "EmptyContent",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "EmptyDescription",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "EmptyHeader",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "EmptyMedia",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "EmptyTitle",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "ErrorAlert",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Field",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Form",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "GroupBox",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "HForm",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "HorizontalRadioGroup",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "HoverCard",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "Icon",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Image",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "InfoAlert",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Input",
+      "reason": "The module's core serves its own Input, the one panels use, which keeps its id in the panel's tree; this second Input the toolkit registers is not offered, so a panel never has two."
+    },
+    {
+      "name": "InputGroup",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "InputGroupAddon",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "InputGroupButton",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "InputGroupInput",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "InputGroupText",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "InputGroupTextarea",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "Kbd",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "LineChart",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Link",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "List",
+      "reason": "Its render_row callback runs script for every visible row on every frame; a panel's rows are data.",
+      "from": "gpui-component",
+      "per_frame": true
+    },
+    {
+      "name": "Marker",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Menu",
+      "reason": "The toolkit's menu draws outside its parent, where it could cover the question card; the name serves DeepBuild's own Menu, drawn inside the panel."
+    },
+    {
+      "name": "MenuBar",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "MenuItem",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "MenuSeparator",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "Message",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "MessageScroller",
+      "reason": "Its render_item callback runs script for every visible item on every frame; a panel's rows are data.",
+      "from": "gpui-component",
+      "per_frame": true
+    },
+    {
+      "name": "MessageScrollerState",
+      "reason": "The state of MessageScroller, whose render_item callback runs script for every visible item on every frame.",
+      "from": "gpui-component",
+      "per_frame": true
+    },
+    {
+      "name": "NativeMenuItem",
+      "reason": "A native menu is the app's menu bar, never a panel's."
+    },
+    {
+      "name": "NativeMenuSeparator",
+      "reason": "A native menu is the app's menu bar, never a panel's."
+    },
+    {
+      "name": "NativeMenuTrigger",
+      "reason": "A native menu is the app's menu bar, never a panel's."
+    },
+    {
+      "name": "Notification",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "NumberInput",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "OtpInput",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "Pagination",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "PieChart",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Popover",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "Progress",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Questionnaire",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "QuestionnaireChoice",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "QuestionnaireInput",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "QuestionnaireItem",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "RadarChart",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Radio",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "RadioGroup",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Rating",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Resizable",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "ResizablePanel",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Scroll",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Scrollbar",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Select",
+      "reason": "Its render_row callback runs script for every visible row on every frame, and its menu draws outside its parent, where it could cover the question card.",
+      "from": "gpui-component",
+      "per_frame": true
+    },
+    {
+      "name": "Separator",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "SettingGroup",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "SettingItem",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "SettingPage",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Settings",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Sheet",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "ShimmerText",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Sidebar",
+      "reason": "The sidebar is the app's own view, never a panel's."
+    },
+    {
+      "name": "SidebarFooter",
+      "reason": "The sidebar is the app's own view, never a panel's."
+    },
+    {
+      "name": "SidebarHeader",
+      "reason": "The sidebar is the app's own view, never a panel's."
+    },
+    {
+      "name": "SidebarMenu",
+      "reason": "The sidebar is the app's own view, never a panel's."
+    },
+    {
+      "name": "SidebarMenuItem",
+      "reason": "The sidebar is the app's own view, never a panel's."
+    },
+    {
+      "name": "SidebarToggleButton",
+      "reason": "The sidebar is the app's own view, never a panel's."
+    },
+    {
+      "name": "Skeleton",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Slider",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Spinner",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "StatusBar",
+      "reason": "The status bar is the app's, never a panel's."
+    },
+    {
+      "name": "Stepper",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "StepperItem",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "SuccessAlert",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Switch",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Tab",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "TabBar",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Table",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "TableBody",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "TableCaption",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "TableCell",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "TableFooter",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "TableHead",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "TableHeader",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "TableRow",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Tabs",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Tag",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Text",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Textarea",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "TimeField",
+      "reason": "Text entry takes keyboard focus, and a panel moves focus only after your gesture; no panel takes typed text yet."
+    },
+    {
+      "name": "TitleBar",
+      "reason": "The window's title bar is the app's, never a panel's."
+    },
+    {
+      "name": "Toggle",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Toolbar",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "Tooltip",
+      "reason": "It draws outside its parent, where it could cover the question card."
+    },
+    {
+      "name": "Tree",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "TreeItem",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "VForm",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "VerticalDashedSeparator",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "VerticalSeparator",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "WarningAlert",
+      "reason": "No panel uses it yet. A component joins the catalog, with its props and an example that renders in light and dark, when a panel needs it."
+    },
+    {
+      "name": "WebView",
+      "reason": "A web view loads pages from the network, and a panel reaches no network."
+    },
+    {
+      "name": "h_virtual_list",
+      "reason": "Its render callback runs script for every visible column on every frame; a panel's rows are data.",
+      "from": "gpui-base",
+      "per_frame": true
+    },
+    {
+      "name": "list",
+      "reason": "Its render callback runs script for every visible row on every frame; a panel's rows are data.",
+      "from": "gpui-kit",
+      "per_frame": true
+    },
+    {
+      "name": "uniform_list",
+      "reason": "Its render callback runs script for every visible row on every frame; a panel's rows are data.",
+      "from": "gpui-kit",
+      "per_frame": true
+    },
+    {
+      "name": "v_virtual_list",
+      "reason": "Its render callback runs script for every visible row on every frame; a panel's rows are data.",
+      "from": "gpui-base",
+      "per_frame": true
+    }
+  ]
+}

@@ -106,7 +106,7 @@ export async function scan(markers: readonly string[]): Promise<Map<string, numb
  */
 export function openUnder(dir: string): Promise<{ pid: number; command: string }[]> {
   return new Promise((resolve, reject) => {
-    execFile('/usr/sbin/lsof', ['-n', '-P', '-w', '-F', 'pcn'], { env: { ...process.env, LC_ALL: 'C' }, maxBuffer: 256 * 1024 * 1024, timeout: 30_000 }, (error, stdout) => {
+    execFile(process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof', ['-n', '-P', '-w', '-F', 'pcn'], { env: { ...process.env, LC_ALL: 'C' }, maxBuffer: 256 * 1024 * 1024, timeout: 30_000 }, (error, stdout) => {
       // lsof exits 1 when a process it could not read went by; what it read is still the answer, unless it read nothing.
       if (error && !stdout) return reject(error);
       const found = new Map<number, string>();

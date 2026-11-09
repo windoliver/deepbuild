@@ -10,7 +10,7 @@
 //! Documents several writers share (issue #96) are in [`crate::shared`]: patches, undo, reads,
 //! history, the by-writer lens, the record and the clock's latch.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
@@ -270,6 +270,10 @@ pub enum Planted {
     ProbeStoresNormalized,
     /// #498: untagged streams are assumed BT.601 at every height.
     AssumesBt601,
+    /// #499: a video frame looked up by ⌊source time × the nominal frame rate⌋.
+    LookupFloorsFrameRate,
+    /// #499: a canonical seek decodes its frame from the asset's short-GOP proxy.
+    SeekReadsProxy,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
     ShippedPanelsUngated,
     /// #498: the reserved-sound comparer refuses only an asset whose hash is a reserved sound's.
@@ -278,10 +282,48 @@ pub enum Planted {
     KeepsVoicesOnSwitch,
     /// #498: closing a panel fades its voices over 5 ms, longer than a block.
     FadesOnClose,
+    /// #499: a reverb restores its checkpoint without its tail.
+    ReverbRestoresWithoutTail,
+    /// #499: a checkpoint ring past its budget drops its oldest checkpoint.
+    RingDropsOldest,
+    /// #499: the live transport's mixer holds each strip's gain for a block.
+    MixerHoldsGainPerBlock,
+    /// #499: every emitter uses the inverse distance model.
+    EmitterAlwaysInverse,
+    /// #499: the cone's angle is taken against source minus listener.
+    ConeSignReversed,
+    /// #499: while audio plays, the transport keeps the display clock.
+    ClockFollowsDisplay,
+    /// #499: the audio output stays bound to a device after it is removed.
+    BackendKeepsRemovedDevice,
+    /// #499: after a device change the clock counts t from the new stream's sample 0.
+    ClockRestartsFromSample0,
     /// #421: a view keeps an item only when its bounds' centre is inside.
     CullByCenter,
     /// #421: a node's hierarchy bounds union only its direct children's own bounds.
     BoundsChildrenOnly,
+    /// #427: a mode's render-back draws on the live view's surface, asking its clock for a frame.
+    ModeDrawsLiveSurface,
+    /// #427: a mode's visible table is kept per document until its item count changes.
+    ModeIdsByCount,
+    /// #427: bounds reads each item's authored position, not its evaluated one at t.
+    BoundsAuthoredPosition,
+    /// #427: lights and cameras reads a light's local position, ignoring its parent.
+    LightsLocalPosition,
+    /// #427: the UV checker fits 8 × 8 cells to each surface's uv0 extent.
+    CheckerFitsSurface,
+    /// #427: deviation measures only from the reference to the item's surface.
+    DeviationOneWay,
+    /// #427: normals draws each vertex's line along a face normal of a face using it.
+    NormalsFromFaces,
+    /// #854, on #1551's shown window: the frame clock arms a frame each vsync once settled.
+    ArmsEachVsync,
+    /// #1551: the window's display link keeps running while it is still.
+    LinkNeverStops,
+    /// #1551: the link stops when idle, but `schedule_frame` doesn't start it again.
+    WakerIgnoresScheduleFrame,
+    /// #1551: a restarted link sits out a full refresh before its first callback.
+    LinkRestartsARefreshLate,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -477,7 +519,7 @@ pub enum Call {
     /// #411: deep_query, and deep.canvas.read for a check plug-in.
     SceneQuery(Box<crate::query::Query>),
     /// #411: a deep_show or deep show call in a diagnostic mode; #412: from its readings' cursor.
-    Mode(Box<Show>, String, usize),
+    Mode(Box<Show>, Box<crate::modes::ModeArgs>),
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #140: the network seam's conformance suite.
@@ -736,6 +778,10 @@ pub enum Call {
     Media(Box<crate::media::MediaCall>),
     /// The device gate: documents of strips, Play, the gate's fields, the device's output (#498).
     Gate(Box<crate::gate::GateCall>),
+    /// #499: the media module's mix.
+    Mix(Box<crate::mixdown::MixCall>),
+    /// #499: the test audio backend's devices, the transport log and a logic item's state.
+    Audio(Box<crate::audio::AudioCall>),
 }
 
 /// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
@@ -755,9 +801,14 @@ pub struct Eval {
     pub clean: bool,
     pub perturb: Option<String>,
     pub pixels: bool,
+    /// #493: the film block, each camera's pose, a reduced-motion cut's dissolve, each parallax
+    /// group's offset and each text's glyphs.
+    pub film: bool,
     pub size: Option<[u16; 2]>,
     /// #855: each node's Debug text digest beside its result, a diagnostic only.
     pub debug_text: bool,
+    /// #497: document arrays to answer as the frame read them.
+    pub arrays: Vec<String>,
 }
 
 pub struct Scenario {
@@ -821,6 +872,8 @@ pub struct Scenario {
     pub devices: crate::capture::Devices,
     /// The decode worker's caps for this run (#498).
     pub decode_caps: deep_codecs::Caps,
+    /// #499: the test audio backend, which replaces the platform's output at its boundary.
+    pub audio: Option<crate::audio::Backend>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
@@ -872,6 +925,12 @@ pub struct Hub<'a> {
     /// The shared documents each writer has written, for its quota.
     pub written: BTreeMap<String, std::collections::BTreeSet<String>>,
     pub look: Look,
+    /// #464: the document's look as defined, for its print fields; and the GPU snapshots this
+    /// run took, each display only, which no check reads.
+    pub look_def: Option<Value>,
+    pub display_only: BTreeSet<String>,
+    /// #427's planted `mode_ids_by_count`: each document's mode visible table, by item count.
+    pub mode_ids: BTreeMap<String, (usize, Vec<(String, [f64; 4])>)>,
     pub renderer: Renderer,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
@@ -1025,6 +1084,9 @@ impl<'a> Hub<'a> {
             applied_at: BTreeMap::new(),
             written: BTreeMap::new(),
             look: shipped_look(),
+            look_def: None,
+            display_only: BTreeSet::new(),
+            mode_ids: BTreeMap::new(),
             renderer: Renderer::new(),
             sched,
             sessions: BTreeMap::new(),
@@ -1223,6 +1285,9 @@ impl<'a> Hub<'a> {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
         let palette = self.look.light.clone();
+        // #493: a shot writes the camera's pose the 3D frame is drawn through.
+        let posed = crate::film::posed(doc, t);
+        let doc = posed.as_ref().unwrap_or(doc);
         let gpu = self.gpu3().ok_or(())?;
         gpu.draw(doc, t, &palette, size)
             .map(|(rgba, scene)| (rgba, size, scene.boxes()))
@@ -1270,15 +1335,31 @@ impl<'a> Hub<'a> {
     /// and the record's readings.
     /// The look a document names by asset, resolved over the bundled faces (#1162).
     fn look_of(&self, doc: &Value) -> Option<Look> {
+        let def = self.look_def_of(doc)?;
+        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
+        // The status distance holds wherever status can show: a document with a status binding
+        // (the status-color rule's first case); any other may use any palette (#464).
+        let binds = doc
+            .get("status_bindings")
+            .and_then(Value::as_object)
+            .is_some_and(|b| !b.is_empty());
+        let at = if binds {
+            look::Distance::Everywhere
+        } else {
+            look::Distance::WhereStatusShows
+        };
+        look::resolve_in(&def, &bundled, at).ok()
+    }
+
+    /// The look@1 a document names by asset, as the evidence store holds it.
+    fn look_def_of(&self, doc: &Value) -> Option<Value> {
         let name = doc.pointer("/look/asset")?.as_str()?;
         let id = name.split('@').next()?;
         let sha = doc.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;
         let bytes = (sha.len() == 64)
             .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
             .flatten()?;
-        let def: Value = serde_json::from_slice(&bytes).ok()?;
-        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
-        look::resolve(&def, &bundled).ok()
+        serde_json::from_slice(&bytes).ok()
     }
 
     /// Mark set columns that read the agent's table, inlined from the evidence store as
@@ -1471,9 +1552,9 @@ impl<'a> Hub<'a> {
         }
         let mut reply = match call {
             Call::Show(show) => self.show_call(show),
-            Call::Mode(show, mode, cursor) => {
+            Call::Mode(show, args) => {
                 self.vias.insert(show.doc.clone(), show.via.clone());
-                self.mode_show(show, mode, *cursor)
+                self.mode_show(show, args)
             }
             Call::Patch(p) => self.patch(p, None, self.now),
             Call::Read { doc, via } => self.read(doc, via.as_ref()),
@@ -1657,6 +1738,8 @@ impl<'a> Hub<'a> {
             Call::Capture(c) => self.capture_call(c),
             Call::Media(m) => self.media_call(m),
             Call::Gate(g) => self.gate_call(g),
+            Call::Mix(m) => self.mix_call(m),
+            Call::Audio(a) => self.audio_call(a),
             Call::Term(t) => self.term_call(t),
         };
         for shaping in deep_text::cache::take_log() {
@@ -1846,11 +1929,19 @@ impl<'a> Hub<'a> {
             &writer,
             &title,
         );
+        // #499: each asset a probing kind names is probed in the decode worker, its probe kept
+        // on the document's asset, as the check and the frame read it.
+        let mut probe_issues = Vec::new();
+        let stamped = stamped.map(|mut doc| {
+            probe_issues = self.probe_assets(&mut doc);
+            doc
+        });
         // The document's look (Document envelope: `look: {asset: look@major}`), read from the
         // evidence store by its asset's hash; one the store doesn't hold leaves the shipped look.
         if let Ok(doc) = &stamped {
             if let Some(look) = self.look_of(doc) {
                 self.look = look;
+                self.look_def = self.look_def_of(doc);
             }
         }
         let mut notices = Vec::new();
@@ -1863,7 +1954,9 @@ impl<'a> Hub<'a> {
         let mut fresh: Option<(Vec<Expansion>, f64)> = None;
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
-            Ok(doc) => {
+            Ok(mut doc) => {
+                // #1732: a revision that moves an arranged item breaks it out of its arrangement.
+                deep_canvas_motion::arrange::carry_break_outs(current_doc.as_ref(), &mut doc);
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
@@ -1884,6 +1977,7 @@ impl<'a> Hub<'a> {
                 skipped = crate::verdict::unknown_items(&result.notices);
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = result.issues;
+                issues.append(&mut probe_issues);
                 blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.
@@ -1983,6 +2077,9 @@ impl<'a> Hub<'a> {
                 issues.push(op_issue(i));
             }
             if let Some(drawing) = drawing.filter(|_| op_issues.is_empty()) {
+                // #499: a video image item draws its frame at the revision's time.
+                let (_, pictures) = self.videos_at(doc, show.t, false);
+                self.renderer.videos = pictures;
                 if let Err(Unfit { code, path }) = self
                     .renderer
                     .prepare_drawing(&drawing, &self.scenario.evidence)
@@ -2054,6 +2151,11 @@ impl<'a> Hub<'a> {
         if let Some(session) = self.sessions.get_mut(&show.doc) {
             session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
         }
+        // #1732: render-back's geometry audit of the revision, on its frame at `t`.
+        if show.include.iter().any(|i| matches!(i, Include::Audit)) {
+            let audit = self.audit_of(&show.doc, show.t);
+            reply.insert("audit".into(), audit);
+        }
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         // A revision with 3D writer layers renders back on the GPU (#378).
         let three = visible && wants_pixels && deep_canvas_scene3d::scene::has_3d(&doc);
@@ -2065,9 +2167,51 @@ impl<'a> Hub<'a> {
             None
         };
         if three {
-            self.pending3d = Some(self.draw3d(&doc, show.t, show.size));
+            let placed = self.arranged(&show.doc, &doc);
+            self.pending3d = Some(self.draw3d(&placed, show.t, show.size));
         }
         self.present(show, visible, drawn.as_ref(), reply)
+    }
+
+    /// #1732: `document` as a 3D frame draws it, each arranged item at the place its session's
+    /// check solved (the derived value), never solved again here.
+    pub(crate) fn arranged(&self, doc: &str, document: &Value) -> Value {
+        let mut out = document.clone();
+        if let Some((v, _)) = self
+            .sessions
+            .get(doc)
+            .and_then(|s| s.read(&self.sched, "motion.arranged", None))
+        {
+            if let Some(a) = v.as_typed::<deep_canvas_motion::arrange::Arranged>() {
+                a.apply(&mut out);
+            }
+        }
+        out
+    }
+
+    /// The geometry audit of a document's current revision on its session's frame at `t`
+    /// (Geometry audit: scenes): `{failures}`.
+    fn audit_of(&mut self, doc: &str, t: i64) -> Value {
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"failures": []});
+        };
+        let view = crate::frames::session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let session = &self.sessions[doc];
+        let Some(document) = session.document() else {
+            return json!({"failures": []});
+        };
+        let sched = &self.sched;
+        let at_of = |id: &str, item: &Value| {
+            session
+                .read(sched, "core.transform", Some(id))
+                .and_then(|(v, _)| {
+                    v.as_typed::<deep_canvas::schedule::core_ops::Transform>()
+                        .map(|t| deep_canvas_motion::arrange::At { pos: t.pos, rot: t.rot, scale: t.scale })
+                })
+                .unwrap_or_else(|| deep_canvas_motion::arrange::At::of(item.get("at")))
+        };
+        json!({"failures": deep_canvas_motion::arrange::audit(document, &at_of)})
     }
 
     /// The check's notices as a reply carries them. The planted check that loads a deprecated
@@ -2090,6 +2234,19 @@ impl<'a> Hub<'a> {
     /// cap, with an empty list of snapshots. True when one is an error not carried.
     pub fn issue_reply(&self, issues: &[Issue], reply: &mut Map<String, Value>) -> bool {
         let mut list: Vec<Value> = issues.iter().map(Issue::to_json).collect();
+        // #1732: an unsatisfied arrangement names the relations it misses and the pairs that
+        // overlap on the issue itself.
+        for (i, issue) in issues.iter().enumerate() {
+            if let (deep_canvas_motion::arrange::UNSATISFIED, Value::Object(found)) =
+                (issue.code, &issue.actual)
+            {
+                if let Some(out) = list[i].as_object_mut() {
+                    for (k, v) in found {
+                        out.entry(k.clone()).or_insert_with(|| v.clone());
+                    }
+                }
+            }
+        }
         if self.scenario.planted == Some(Planted::IssuesWithoutActual) {
             for i in list.iter_mut().filter_map(Value::as_object_mut) {
                 i.remove("actual");
@@ -2196,7 +2353,13 @@ impl<'a> Hub<'a> {
                                 Some(d) => snapshot::visible(d.boxes(), d.scale(size), size),
                                 None => snapshot::visible(boxes3d, 1.0, size),
                             };
-                            reply.insert("snapshots".into(), json!([entry]));
+                            // #464: a 2D print look adds this machine's GPU snapshot, display
+                            // only, beside the Vello CPU one.
+                            let gpu = match drawn.filter(|_| !three) {
+                                Some(d) => self.print_snapshot(show, d, size, &instanced),
+                                None => None,
+                            };
+                            reply.insert("snapshots".into(), json!([entry].into_iter().chain(gpu).collect::<Vec<_>>()));
                             reply.insert("visible".into(), rows);
                             // The instanced batches the 2D draw made: none for a 3D frame, which
                             // scene3d draws and reports on its own (#378).
@@ -2275,6 +2438,71 @@ impl<'a> Hub<'a> {
     /// passes a claim only when the claim's definition names the document among its deliverables,
     /// since a picture explains and never proves; a snapshot it asked for and couldn't take is
     /// BLOCKED.
+    /// #464: a 2D frame under a print look through the look's finish on this machine's GPU (the
+    /// print pass, as the canvas's live frame runs it), kept as evidence and labelled
+    /// `display_only`: an agent sees the grain and the halftone, and no check reads it.
+    fn print_snapshot(
+        &mut self,
+        show: &Show,
+        drawn: &Drawn,
+        size: [u16; 2],
+        instanced: &BTreeMap<String, (String, String)>,
+    ) -> Option<Value> {
+        let def = self.look_def.clone()?;
+        let print = deep_canvas_marks::print::read(&def, &self.look.light, f64::from(size[0])).ok()?;
+        if print.is_identity() {
+            return None;
+        }
+        let items = show.document.get("items").and_then(Value::as_object)?;
+        let role = |i: &Value| {
+            i.pointer("/params/paint/fill/role")
+                .or_else(|| i.pointer("/params/paint/stroke/role"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        };
+        let inks: Vec<BTreeSet<String>> = print
+            .separations
+            .iter()
+            .map(|s| {
+                items
+                    .iter()
+                    .filter(|(_, i)| role(i).as_deref() == Some(s.role.as_str()))
+                    .map(|(id, _)| id.clone())
+                    .collect()
+            })
+            .collect();
+        let inked: BTreeSet<&String> = inks.iter().flatten().collect();
+        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
+        let base = drawn.only(|i| !inked.iter().any(|k| k.as_str() == i));
+        let (base, _) = self.renderer.raster_batched(&base, size, Some(ground), instanced);
+        let covs: Vec<Vec<u8>> = inks
+            .iter()
+            .map(|set| {
+                let only = drawn.only(|i| set.contains(i));
+                self.renderer.raster_batched(&only, size, None, instanced).0
+            })
+            .collect();
+        let seed = show.document.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
+        let frame = deep_canvas_marks::print::frame(&print, seed, show.t, false);
+        let px = [u32::from(size[0]), u32::from(size[1])];
+        let params = deep_scene3d_render::print::params(
+            &print,
+            &frame,
+            px,
+            deep_scene3d_render::print::Placed {
+                scale: 1.0 / drawn.scale(size),
+                offset: [0.0, 0.0],
+            },
+            ground,
+            false,
+            Default::default(),
+        );
+        let rgba = self.gpu3()?.print(&params, &base, &covs, px)?;
+        let sha = evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).ok()?;
+        self.display_only.insert(sha.clone());
+        Some(json!({"sha256": sha, "w": size[0], "h": size[1], "display_only": true}))
+    }
+
     fn verdict(&self, show: &Show, snapshot_taken: bool) -> &'static str {
         if !snapshot_taken {
             return "BLOCKED";

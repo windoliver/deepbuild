@@ -6,11 +6,12 @@ import { execFile } from 'node:child_process';
 import { accessSync, constants, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, delimiter, join } from 'node:path';
+import { readFacts } from '@deepbuild/adapters';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-export interface ModsFacts {
+interface ModsFacts {
   since: { terminal: string; desktop: string };
   validate: { args: string[]; hooks: string; calls: string };
   overrides: { event: string; past: string };
@@ -18,9 +19,9 @@ export interface ModsFacts {
   holdsWhen: { case: 'managed' | 'login' | 'plan' | 'interactive'; text: string; subscriptionTypes?: string[]; mode?: string; since?: string; tools?: string[] }[];
 }
 /** The Claude Code facts' mods entry. */
-export const modsFacts = (): ModsFacts => (JSON.parse(readFileSync(new URL('../../../adapters/claude-code.facts.json', import.meta.url), 'utf8')) as { mods: ModsFacts }).mods;
+const modsFacts = (): ModsFacts => readFacts<{ mods: ModsFacts }>('claude-code.facts.json').mods;
 
-export interface Mod {
+interface Mod {
   /** The plugin as Claude Code names it, `name@marketplace`. */
   plugin: string;
   name: string;
@@ -51,19 +52,20 @@ export function claudeOnPath(env: NodeJS.ProcessEnv): string | undefined {
 /**
  * Why the setup holds a PreToolUse deny whatever a mod answers, by the facts' cases: managed settings on the machine,
  * or a Team or Enterprise login (`claude auth status` in `env`'s home, or the plan already read from it); undefined
- * when nothing does.
+ * when nothing does. `known` is the plan already read, or how to read it.
  */
-export async function denyHolds(env: NodeJS.ProcessEnv, claude: string | undefined, known?: { plan: unknown }, facts: ModsFacts = modsFacts()): Promise<string | undefined> {
+export async function denyHolds(env: NodeJS.ProcessEnv, claude: string | undefined, known?: { plan: unknown } | (() => Promise<unknown>), facts: ModsFacts = modsFacts()): Promise<string | undefined> {
   const managed = managedSettings(env);
   if (existsSync(managed)) return `Claude Code's managed settings (${managed}) are present`;
   const login = facts.holdsWhen.find((c) => c.case === 'login')?.subscriptionTypes ?? [];
   if (!claude || !login.length) return undefined;
-  let plan = known?.plan;
-  if (!known) {
-    const ran = await run(claude, ['auth', 'status'], env);
-    try { plan = (JSON.parse(ran?.out ?? '') as Obj).subscriptionType; } catch { return undefined; }
-  }
+  const plan = typeof known === 'function' ? await known() : known ? known.plan : await loginPlan(claude, env);
   return typeof plan === 'string' && login.includes(plan) ? `the session signs in with a ${plan} login` : undefined;
+}
+/** The plan `claude auth status` reports for `env`'s home, or undefined when it can't be read. */
+export async function loginPlan(claude: string, env: NodeJS.ProcessEnv): Promise<unknown> {
+  const ran = await run(claude, ['auth', 'status'], env);
+  try { return (JSON.parse(ran?.out ?? '') as Obj).subscriptionType; } catch { return undefined; }
 }
 /** Each Claude Code home: CLAUDE_CONFIG_DIR where it is set, and ~/.claude. */
 export function claudeHomes(env: NodeJS.ProcessEnv): string[] {

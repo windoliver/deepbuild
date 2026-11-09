@@ -7,7 +7,8 @@
 // revision it makes as doc.patched@2 with the canonical document in evidence, and hands each presented revision to
 // the app over its socket. With no app connected, the reply is the headless worker's all the same.
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -19,8 +20,14 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 /** deep_show answers within 2 s (Admission and latch): a presentation that waits for an app gives up then. */
 const PRESENT_MS = 2000;
 
-/** The canvas core's binary: the checkout's build of `deep-show`, the newer of release and debug. */
+/**
+ * The canvas core's binary: the `deep-show` an installed copy ships beside this module (#41), else the checkout's
+ * build, the newer of release and debug. Both are found from this module's own folder, so an installed copy never
+ * reaches a checkout.
+ */
 function canvasCore(): string {
+  const shipped = fileURLToPath(new URL('./deep-show', import.meta.url));
+  if (existsSync(shipped)) return shipped;
   const repo = fileURLToPath(new URL('../../../', import.meta.url));
   const built = ['release', 'debug'].map((p) => join(repo, 'target', p, 'deep-show')).filter((p) => existsSync(p));
   if (!built.length) throw refuse('unavailable', '', `No canvas core is built under ${join(repo, 'target')}; run cargo build --bin deep-show first.`, 'deep-show', true);
@@ -39,8 +46,71 @@ export function kindsCommand(args: readonly string[]): Promise<number> {
   });
 }
 
+const EXPORT_USAGE = 'Usage: deep export --document <file> --still <frame | marker> --out <file.png>';
+/** The session and document ID `deep export` opens its document under: the canvas core's world holds nothing else. */
+const EXPORTER = 'deep-export';
+const STILL_DOC = '01JB4100000000000000000000';
+
+/**
+ * `deep export --document <file> --still <frame | marker> --out <file.png>` (#41; design, Export: a single still at a
+ * frame or a marker): the canvas core opens the stored document as revision 0 and renders the still headless, in a
+ * process of this command's own with an evidence store of its own, so it needs neither setup nor a running hub; the
+ * still's PNG is then copied to --out. A whole number is a frame at the document's rate, anything else a marker's
+ * name. Exit 0 with the PNG written, 1 when the still can't be drawn, 2 for a usage error.
+ */
+export async function exportCommand(args: readonly string[]): Promise<number> {
+  const opts = new Map<string, string>();
+  for (let i = 0; i < args.length; i += 2) {
+    const [flag, value] = [args[i]!, args[i + 1]];
+    if (!['--document', '--still', '--out'].includes(flag) || value === undefined || opts.has(flag)) return exportUsage();
+    opts.set(flag, value);
+  }
+  const [file, still, out] = ['--document', '--still', '--out'].map((flag) => opts.get(flag));
+  if (!file || !still || !out) return exportUsage();
+  let document: unknown;
+  try {
+    document = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    process.stderr.write(`deep export: can't read ${file} as JSON: ${(error as Error).message}\n`);
+    return 2;
+  }
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-export-'));
+  const canvas = new Canvas(evidence);
+  try {
+    const world: CanvasWorld = {
+      sessions: [{ id: EXPORTER, thread: EXPORTER, name: 'deep export' }],
+      record: {},
+      file: { panels: { still: { rect: [0, 0, 1, 1] } }, docs: { [STILL_DOC]: { panel: 'still', document } } },
+      docs: [STILL_DOC],
+    };
+    const { reply: at } = await canvas.call(world, { call: 'time', doc: STILL_DOC, text: /^\d+$/.test(still) ? `${still}f` : `@${still}` });
+    if (typeof at.t !== 'number') {
+      process.stderr.write(`deep export: ${still} is neither a frame nor a marker of ${file} (${String(at.code)})\n`);
+      return 1;
+    }
+    const { reply } = await canvas.call(world, { call: 'render_back', session: EXPORTER, doc: STILL_DOC, t: at.t, rev: 0 });
+    const shot = Array.isArray(reply.snapshots) && isObj(reply.snapshots[0]) ? reply.snapshots[0].sha256 : undefined;
+    if (reply.outcome !== 'presented' || typeof shot !== 'string') {
+      process.stderr.write(`deep export: the canvas core drew no still: ${JSON.stringify(reply).slice(0, 600)}\n`);
+      return 1;
+    }
+    copyFileSync(join(evidence, shot.slice(0, 2), shot.slice(2)), out);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`deep export: ${(error as Error).message}\n`);
+    return 1;
+  } finally {
+    canvas.close();
+    rmSync(evidence, { recursive: true, force: true });
+  }
+}
+function exportUsage(): number {
+  process.stderr.write(`${EXPORT_USAGE}\n`);
+  return 2;
+}
+
 /** One session as the canvas core takes it: its thread, the name its outline shows. */
-export interface CanvasSession { id: string; thread: string; name: string }
+interface CanvasSession { id: string; thread: string; name: string }
 /** What the hub knows that the canvas core reads: the world file a test gives (DEEP_HUB_TEST_SHOW) and the record. */
 export interface CanvasWorld {
   sessions: CanvasSession[];
@@ -48,10 +118,12 @@ export interface CanvasWorld {
   record: Obj;
   /** The panels, documents, claims, window, card and fault of the world file; empty without one. */
   file: Obj;
+  /** The documents shown so far, each on the app's one canvas panel unless the world file places it. */
+  docs: string[];
 }
 
 /** One call to the canvas core: who it writes as, and #393's call fields. */
-export type CanvasCall = Obj;
+type CanvasCall = Obj;
 
 /** The long-lived canvas core: one call at a time, in order. */
 export class Canvas {
@@ -110,11 +182,15 @@ export class Canvas {
   }
 }
 
+/** The panel a document draws on with no world file: the app's canvas panel, the app laying its rect out in a session's page (#1454). */
+const PANEL = 'main';
+const PANELS = { [PANEL]: { rect: [0, 0, 800, 600] } };
+
 /** The world as `deep-show canvas` reads it: #393's scenario fields, sessions keyed by session ID. */
 function shape(world: CanvasWorld, evidence: string): Obj {
   const sessions: Obj = {};
   for (const s of world.sessions) sessions[s.id] = { thread: s.thread, name: s.name, process: { pid: 0, start: 0 } };
-  const out: Obj = { evidence, sessions, record: world.record };
+  const out: Obj = { evidence, sessions, record: world.record, panels: PANELS, docs: Object.fromEntries(world.docs.map((doc) => [doc, { panel: PANEL }])) };
   for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault']) if (world.file[key] !== undefined) out[key] = world.file[key];
   return out;
 }

@@ -330,12 +330,16 @@ impl Hub<'_> {
     }
 
     /// `eval`'s and `time`'s `t`: a flick count as it is, or a literal resolved against the
-    /// document's current revision, its frame rate and its markers.
+    /// document's current revision, its frame rate and its markers; a shared document's current
+    /// document too, as `deep export` opens a stored one (#41).
     pub(crate) fn resolve_time(&self, doc: &str, t: &EvalTime) -> Result<i64, &'static str> {
         match t {
             EvalTime::Flicks(t) => Ok(*t),
             EvalTime::Literal(text) => {
-                let doc = self.current(doc).map(|r| &r.doc).ok_or("no_revision")?;
+                let doc = match self.current(doc) {
+                    Some(row) => &row.doc,
+                    None => &self.shared.get(doc).ok_or("no_revision")?.doc,
+                };
                 let time = Time::parse(text).map_err(|r| r.code)?;
                 time.resolve(&context_of(doc)).map_err(|r| r.code)
             }
@@ -475,11 +479,11 @@ impl Hub<'_> {
                 PlayPath::Cold => vec![t],
             };
             let seek_times = [t.saturating_add(FLICKS_PER_SECOND), t];
-            let play = match self.side(&document, &view, &play_times) {
+            let play = match self.side(&document, &view, &play_times, false) {
                 Ok(side) => side,
                 Err(code) => return refused(&code),
             };
-            let seek = match self.side(&document, &view, &seek_times) {
+            let seek = match self.side(&document, &view, &seek_times, true) {
                 Ok(side) => side,
                 Err(code) => return refused(&code),
             };
@@ -491,12 +495,23 @@ impl Hub<'_> {
     /// One side of a comparison: a fresh scheduler and session framed at `times` in order, its
     /// last frame's canonical render (the SHA-256 of its PNG, in the evidence store) and its
     /// nodes' results.
-    fn side(&mut self, doc: &Value, view: &[Value; 6], times: &[i64]) -> Result<Value, String> {
+    fn side(
+        &mut self,
+        doc: &Value,
+        view: &[Value; 6],
+        times: &[i64],
+        seek: bool,
+    ) -> Result<Value, String> {
         let mut sched = Scheduler::new(&self.startup.sealed, self.options());
         let mut session: DocSession = self.new_session();
         session.load(&mut sched, doc);
+        // #499: each video image item's frame, at every time the side frames, the last drawn.
+        let mut video = Map::new();
         for &t in times {
             session.frame(&mut sched, t, view);
+            let (block, pictures) = self.videos_at(doc, t, seek);
+            video = block;
+            self.renderer.videos = pictures;
         }
         let drawing =
             crate::frames::drawing_of(&sched, &session).ok_or_else(|| "no_drawing".to_string())?;
@@ -516,6 +531,10 @@ impl Hub<'_> {
                 json!({"operator": n.operator, "module": n.module, "item": n.item, "result": n.result})
             })
             .collect();
-        Ok(json!({"pixels": sha, "nodes": nodes}))
+        let mut side = json!({"pixels": sha, "nodes": nodes});
+        if !video.is_empty() {
+            side["video"] = Value::Object(video);
+        }
+        Ok(side)
     }
 }

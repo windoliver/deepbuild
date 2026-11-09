@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@1",
+  "schema": "adapter.facts@5",
   "versions": ["2.1.299", "2.1.304", "2.1.308"],
   "agent": "claude",
   "hookTimeouts": {
@@ -7,6 +7,14 @@
     "conformance": "claude/hookTimeouts/hold-within-timeout",
     "defaultMs": 60000,
     "perHook": { "Stop": 600000, "UserPromptSubmit": 30000 }
+  },
+  "routes": {
+    "network": {
+      "readBy": "deep-hook waits failOpenMs from the hook's start for a joined project's hub to acknowledge over its TLS connection, then decides as with the hub away; its fast rules stay local",
+      "measured": "PreToolUse p95 647, 748 and 661 ms in three runs of ten (#1338 AC2), on a link holding every chunk 100 ms each way, three round trips: the TLS handshake, the hub's hello, the hook; this Mac at load 120 to 156, Nov 8 2026",
+      "hookOverheadMs": 900,
+      "failOpenMs": 1500
+    }
   },
   "continuation": {
     "readBy": "a stop hold continues a turn at most cap times in a row, counted per turn and from its last tool call; past it, what would continue the turn goes by the next prompt",
@@ -43,6 +51,32 @@
         "dontAsk"
       ],
       "prompt": "stdin"
+    },
+    "started": {
+      "readBy": "a session DeepBuild starts under your approval (#1330): the unmodified CLI in a terminal the hub hosts, your words the prompt's argument and never typed in, its permission mode set at launch (the one that asks before acting unless the approval names another) and its sandbox's settings beside it; the environment drops the variables that mark a nested session, and names the account's home only when it isn't the default",
+      "args": ["--permission-mode", "{mode}", "--settings", "{settings}", "{prompt}"],
+      "asks": "default",
+      "modes": { "default": "default", "acceptEdits": "acceptEdits", "plan": "plan", "dontAsk": "dontAsk", "bypassPermissions": "bypassPermissions" },
+      "skipping": ["bypassPermissions"],
+      "nested": ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT", "CLAUDE_PROJECT_DIR"],
+      "home": "CLAUDE_CONFIG_DIR",
+      "defaultHome": "~/.claude",
+      "trust": { "readBy": "the worktree a start made is one you approved, so it starts trusted: nothing types into the folder-trust dialog", "file": "~/.claude.json", "homeFile": ".claude.json", "set": "projects.{worktree}.hasTrustDialogAccepted" }
+    }
+  },
+  "sandbox": {
+    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the settings that turn it on, the walls they hold, and how the agent's way out is turned off. {credentials} is the folders no command may read, {hosts} the hosts the approval names, {sockets} the hub's socket. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 2.1.308 (spikes/1330): its hooks run outside the sandbox and reach the hub",
+    "conformance": "claude/sandbox/walls",
+    "versions": {
+      "2.1.308": {
+        "settings": "{\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":true,\"allowUnsandboxedCommands\":false,\"filesystem\":{\"denyRead\":\"{credentials}\"},\"network\":{\"allowedDomains\":\"{hosts}\",\"allowUnixSockets\":\"{sockets}\"}}}",
+        "walls": {
+          "writes": "a command writes only its worktree and the temp folders",
+          "credentials": "a command can't read the credential folders: sandbox.filesystem.denyRead",
+          "network": "a command reaches only the hosts the approval names: sandbox.network.allowedDomains; the agent's own API calls run outside its sandbox"
+        },
+        "wayOut": { "call": "dangerouslyDisableSandbox", "setting": "sandbox.allowUnsandboxedCommands", "off": false }
+      }
     }
   },
   "modelFamily": {
@@ -1005,5 +1039,52 @@
   "readUsage": {
     "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",
     "conformance": "claude/readUsage/model-switch"
+  },
+  "entries": {
+    "readBy": "where the hub's sync (#148) writes and reads this agent's MCP servers and skills, at user level only, and the fields it refuses; checked against each entry before a plan shows",
+    "name": "Claude Code",
+    "mcp": {
+      "file": "~/.claude.json",
+      "format": "json",
+      "key": "mcpServers",
+      "perProject": "projects",
+      "transports": {
+        "stdio": {
+          "type": "stdio",
+          "fields": ["command", "args", "env"]
+        },
+        "http": {
+          "type": "http",
+          "fields": ["url", "headers", "env"]
+        }
+      },
+      "refused": [
+        {
+          "transport": "stdio",
+          "field": "url",
+          "reason": "a stdio entry runs a command"
+        },
+        {
+          "transport": "stdio",
+          "field": "headers",
+          "reason": "a stdio entry runs a command"
+        },
+        {
+          "transport": "http",
+          "field": "command",
+          "reason": "an http entry names a URL"
+        },
+        {
+          "transport": "http",
+          "field": "args",
+          "reason": "an http entry names a URL"
+        }
+      ],
+      "list": ["mcp", "list"]
+    },
+    "skills": {
+      "write": "~/.claude/skills",
+      "readFrom": ["~/.claude/skills"]
+    }
   }
 }

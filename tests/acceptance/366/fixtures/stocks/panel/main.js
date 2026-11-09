@@ -1,8 +1,7 @@
 // The test stocks view's panel (#366, README: Fixtures). Mounted as the view, it reads "Watchlist"; mounted as one of
 // the view's pages, it is given that page as `props.page` ({ name, params }) and reads "Stock page: <symbol>", or
 // "Stock page: (none)" when the page came with no symbol. It reaches nothing outside the app.
-import { View, div } from "gpui-kit";
-import { v_flex } from "gpui-base";
+import { View, div, v_flex } from "@deepbuild/panel";
 
 export default class Stocks extends View {
   init(props) {

@@ -1,0 +1,85 @@
+{
+  "status": {
+    "state": "done",
+    "result": "INVALID",
+    "why": "#86.fb5b8d9b \"Three paid runs started at once against a budget with room for two: two start, the third is BLOCKED with the cause budget, and the cap is never passed\" has no test that ran on the base: tests/acceptance/86/batch.test.ts ran no test on the base: failed; tests/acceptance/86/concurrent.test.ts ran no test on the base: failed; tests/acceptance/86/planted-charge.test.ts ran no test on the base: failed; tests/acceptance/86/release-orders.test.ts ran no test on the base: failed; tests/acceptance/86/rerun.test.ts ran no test on the base: failed; tests/acceptance/86/resolver.test.ts ran no test on the base: failed; tests/acceptance/86/two-budgets.test.ts ran no test on the base: failed; tests/acceptance/86/unpriced.test.ts ran no test on the base: failed",
+    "jobs": [
+      "run:01M6TPV67B9VNRR0FXKN8TZ4BE"
+    ],
+    "branch": null,
+    "commit": null,
+    "base": [],
+    "disputes": []
+  },
+  "recorded": {
+    "job": "run:01M6TPV67B9VNRR0FXKN8TZ4BE",
+    "kind": "acceptance",
+    "agent": "claude-code",
+    "account": "<redacted>",
+    "folder": "/private/tmp/dh1328p/root/jobs/01M6TPV67B9VNRR0FXKN8TZ4BE",
+    "prompt": "45f8c89ee6c0c6ca11c785aab82ff4f396d9162e62801b73f06a074557fb214e",
+    "waiting": [],
+    "inputs": [
+      {
+        "kind": "issue",
+        "ref": "https://github.com/windoliver/deepbuild/issues/86",
+        "sha256": "925de3e8b01e4d40c42cb24b2cf322462d2db0466530f76f39986ebba448d89e"
+      },
+      {
+        "kind": "design",
+        "ref": "AGENTS.md",
+        "sha256": "868cffeee4f67d4196f945488c7ea5ed4a68cd2b309f12d6751d04996fa4257f"
+      },
+      {
+        "kind": "design",
+        "ref": "docs/technical-design.md",
+        "sha256": "95aff4e8bc2a4e1dda8fca55f988e904bc1d8d7aaff59ceffcaee58cdcabf75e"
+      },
+      {
+        "kind": "base",
+        "ref": "c9891b33397da56566a73c86f4541e651f092f9f"
+      }
+    ]
+  },
+  "job": {
+    "job": "run:01M6TPV67B9VNRR0FXKN8TZ4BE",
+    "kind": "acceptance",
+    "agent": "claude-code",
+    "account": "<redacted>",
+    "state": "finished",
+    "binary": {
+      "path": "<scratch>/claude308/node_modules/.bin/claude",
+      "version": "2.1.308"
+    },
+    "model": "claude-opus-5-5",
+    "stop": null,
+    "usage": {
+      "input": 140771,
+      "cached": 2770310,
+      "output": 257
+    },
+    "cost_usd": 2.869382999999999,
+    "inputs": [
+      {
+        "kind": "issue",
+        "ref": "https://github.com/windoliver/deepbuild/issues/86",
+        "sha256": "925de3e8b01e4d40c42cb24b2cf322462d2db0466530f76f39986ebba448d89e"
+      },
+      {
+        "kind": "design",
+        "ref": "AGENTS.md",
+        "sha256": "868cffeee4f67d4196f945488c7ea5ed4a68cd2b309f12d6751d04996fa4257f"
+      },
+      {
+        "kind": "design",
+        "ref": "docs/technical-design.md",
+        "sha256": "95aff4e8bc2a4e1dda8fca55f988e904bc1d8d7aaff59ceffcaee58cdcabf75e"
+      },
+      {
+        "kind": "base",
+        "ref": "c9891b33397da56566a73c86f4541e651f092f9f"
+      }
+    ]
+  },
+  "attempt": []
+}

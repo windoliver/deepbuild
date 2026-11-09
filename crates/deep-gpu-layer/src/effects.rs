@@ -757,7 +757,7 @@ struct Reached {
 /// dispatched once over its elements.
 fn run_once(device: &Device, c: &Compiled, reached: &mut Reached) -> Result<(), String> {
     let d = &device.device;
-    let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
     let runner = Runner::new(d, c.clone(), LINEAR);
     if let Some(e) = pollster_block(scope.pop()) {
         return Err(e.to_string());
@@ -915,8 +915,8 @@ fn unchecked(device: &Device, op: &Value, reached: &mut Reached) -> Option<Strin
 
 /// `check_operator`: the core's check, and only if it passes, the core's WGSL through naga, a
 /// pipeline and one run on the GPU.
-pub fn check_operator(app: &mut App, call: &Value) -> Value {
-    let op = call["operator"].clone();
+pub fn check_operator(app: &mut App, out: &str, call: &Value) -> Value {
+    let out = out.to_string();
     let assets: BTreeMap<String, PathBuf> = call["assets"]
         .as_object()
         .map(|a| {
@@ -926,7 +926,32 @@ pub fn check_operator(app: &mut App, call: &Value) -> Value {
         })
         .unwrap_or_default();
     let skips = app.planted == Some(Planted::SkipsOperatorCheck);
-    let (emit_options, check_options) = operator_plants(app.planted);
+    let (emit_options, mut check_options) = operator_plants(app.planted);
+    // The class the check's limits apply under, as a document's budget class (#431).
+    check_options.wide_fetches = matches!(call["class"].as_str(), Some("showpiece" | "export"));
+    // A composed pass that calls the shipped blur compiles into its parts (#432).
+    if let Some(parts) = deep_canvas_effects::fusion::split_blur(&call["operator"]) {
+        return check_parts(app, parts, assets, emit_options, check_options);
+    }
+    // The packs' step functions `use@1` calls, inlined before the check (#431).
+    let functions = match pack_functions(&call["packs"]) {
+        Ok(f) => f,
+        Err(e) => return e,
+    };
+    let op = match graph::inline_functions(
+        &call["operator"],
+        &functions,
+        !check_options.no_divergence_rule,
+    ) {
+        Ok(op) => op,
+        Err(issues) => {
+            return json!({"outcome": "refused", "issues": issues.iter().map(graph::Issue::to_json).collect::<Vec<_>>(), "reached": {"naga": false, "pipeline": false, "gpu": false}})
+        }
+    };
+    let reference_size = call["reference"]["size"]
+        .as_array()
+        .filter(|s| s.len() == 2)
+        .and_then(|s| Some([s[0].as_u64()? as u32, s[1].as_u64()? as u32]));
     let ui_thread = std::thread::current().name().unwrap_or("main").to_string();
     app.worker.call(move |state| {
         let device = state.gpu.device();
@@ -963,7 +988,19 @@ pub fn check_operator(app: &mut App, call: &Value) -> Value {
             Ok(c) => {
                 reached.naga = true;
                 match run_once(&device, &c, &mut reached) {
-                    Ok(()) => ("accepted", Vec::new()),
+                    Ok(()) => {
+                        // Drawn once by the step harness at `size`, on this GPU and through the
+                        // f64 interpreter (#431).
+                        if let Some(size) = reference_size {
+                            match reference_of(&device, &c, &assets, size, &out) {
+                                Ok(r) => {
+                                    extra.insert("reference".into(), r);
+                                }
+                                Err(e) => return e,
+                            }
+                        }
+                        ("accepted", Vec::new())
+                    }
                     Err(e) => ("refused", vec![graph::Issue::at_path("operator_compile", "", e).to_json()]),
                 }
             }
@@ -976,6 +1013,123 @@ pub fn check_operator(app: &mut App, call: &Value) -> Value {
     })
 }
 
+/// A composed pass split around the shipped blur (#432), each part checked, written, validated
+/// and run once as a pass of its own: its steps' parts costed by their estimate, the blur's at
+/// what the calibration run measured; the operator's estimate is the parts' sum.
+fn check_parts(
+    app: &mut App,
+    parts: Vec<deep_canvas_effects::fusion::Part>,
+    assets: BTreeMap<String, PathBuf>,
+    emit_options: deep_canvas_effects::emit::Options,
+    check_options: check::CheckOptions,
+) -> Value {
+    app.worker.call(move |state| {
+        let device = state.gpu.device();
+        let mut reached = Reached::default();
+        let mut rows = Vec::new();
+        let mut total = 0.0;
+        for p in &parts {
+            let c = match compile_planted(&p.graph, &assets, emit_options, check_options) {
+                Ok(c) => c,
+                Err(issues) => {
+                    let issues: Vec<Value> = issues
+                        .iter()
+                        .map(|i| {
+                            let mut j = i.to_json();
+                            j["part"] = json!(p.of);
+                            j
+                        })
+                        .collect();
+                    return json!({"outcome": "refused", "issues": issues, "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}});
+                }
+            };
+            reached.naga = true;
+            if let Err(e) = run_once(&device, &c, &mut reached) {
+                let issue = graph::Issue::at_path("operator_compile", "", e).to_json();
+                return json!({"outcome": "refused", "issues": [issue], "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}});
+            }
+            let measured = deep_canvas_effects::shipped::BLUR_MEASURED_NS_PER_PX
+                .iter()
+                .find(|(name, _)| *name == p.of)
+                .map(|(_, ns)| *ns);
+            let estimate = measured.unwrap_or(c.checked.estimate);
+            total += estimate;
+            rows.push(json!({
+                "of": p.of, "steps": p.steps, "fetches": c.checked.fetches, "estimate_ns": estimate,
+                "cost": if measured.is_some() { "measured" } else { "estimated" },
+            }));
+        }
+        json!({
+            "outcome": "accepted", "issues": [], "parts": rows, "estimate_ns": total,
+            "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu},
+        })
+    })
+}
+
+/// Every step function the call's packs bring (`[{id, dir}]`, each dir holding a `pack.json` with
+/// `functions: {name@major → step function}`), by name.
+fn pack_functions(packs: &Value) -> Result<graph::Functions, Value> {
+    let mut out = graph::Functions::new();
+    for p in packs.as_array().into_iter().flatten() {
+        let Some(dir) = p["dir"].as_str().or_else(|| p.as_str()) else {
+            return Err(refused("bad_input", "a pack is {id, dir}"));
+        };
+        let path = PathBuf::from(dir).join("pack.json");
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| refused("bad_input", format!("{}: {e}", path.display())))?;
+        let manifest: Value = serde_json::from_str(&text)
+            .map_err(|e| refused("bad_input", format!("{}: {e}", path.display())))?;
+        for (name, f) in manifest["functions"].as_object().into_iter().flatten() {
+            out.insert(name.clone(), f.clone());
+        }
+    }
+    Ok(out)
+}
+
+/// An operator's step-harness drawing at `size` on this GPU and through the f64 interpreter, its
+/// texture inputs by hash read from `assets` (each channel ÷ 255, as linear data), written under
+/// `out` as two f32 RGBA files.
+fn reference_of(
+    device: &Device,
+    c: &Compiled,
+    assets: &BTreeMap<String, PathBuf>,
+    size: [u32; 2],
+    out: &str,
+) -> Result<Value, Value> {
+    let mut data = crate::steps_ref::Data::default();
+    for name in &c.checked.textures {
+        let input = &c.checked.op.inputs[name];
+        let Ty::Tex(kind) = input.ty else { continue };
+        let img = match &input.from {
+            graph::From::Asset(sha) => {
+                let path = assets
+                    .get(sha)
+                    .ok_or_else(|| refused("asset_missing", format!("inputs/{name}")))?;
+                let bytes = std::fs::read(path)
+                    .map_err(|_| refused("asset_missing", format!("inputs/{name}")))?;
+                let decoded = image::load_from_memory(&bytes)
+                    .map_err(|_| refused("out_of_range", format!("inputs/{name}")))?
+                    .to_rgba8();
+                let mut img = Image::new(decoded.width(), decoded.height());
+                for (p, px) in img.px.iter_mut().zip(decoded.pixels()) {
+                    *p = px.0.map(|v| f64::from(v) / 255.0);
+                }
+                img
+            }
+            _ => Image::new(size[0], size[1]),
+        };
+        let (_, held) = deep_effects_render::reference::upload(device, kind, &img);
+        data.textures.insert(name.clone(), (kind, held));
+    }
+    let (gpu, cpu) = crate::steps_ref::drawn_both(device, c, &data, size)
+        .map_err(|e| refused("bad_input", format!("reference: {e}")))?;
+    Ok(json!({
+        "size": size,
+        "gpu": crate::view3d::write_named(out, &gpu, "f32")?,
+        "cpu": crate::view3d::write_named(out, &cpu, "f32")?,
+    }))
+}
+
 /// The emitter's and the check's planted wrong programs (#429), from the binary's `--planted`.
 pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
     (
@@ -983,6 +1137,7 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
             drops_swizzle_last: p == Some(Planted::DropsSwizzleLast),
             index_wraps: p == Some(Planted::IndexWraps),
             no_count_guard: p == Some(Planted::DispatchWithoutGuard),
+            period_first_octave: p == Some(Planted::PeriodFirstOctave),
             ..Options::default()
         },
         check::CheckOptions {
@@ -991,6 +1146,9 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
             exact_f32_floor: p == Some(Planted::F32CompareFloorExact),
             trusts_index: p == Some(Planted::TrustsWriteIndex),
             noise_weight_halved: p == Some(Planted::NoiseWeightHalved),
+            no_divergence_rule: p == Some(Planted::NoDivergenceRule),
+            wide_fetches: false,
+            carried_exact: p == Some(Planted::CarriedClassExact),
         },
     )
 }
@@ -1007,6 +1165,8 @@ pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks 
         ties_decreasing: p == Some(Planted::SortTiesDecreasing),
         compact_by_atomic: p == Some(Planted::CompactByAtomic),
         dispatch_without_guard: p == Some(Planted::DispatchWithoutGuard),
+        steps_per_frame: p == Some(Planted::StepsPerFrame),
+        keeps_every_checkpoint: p == Some(Planted::RingKeepsEveryCheckpoint),
     }
 }
 

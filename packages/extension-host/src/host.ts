@@ -53,7 +53,8 @@ import { checkReply, join as joinReplies, type JoinPlant, type Template } from '
 import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings, type Verdict } from './schedules.js';
 import { missing, SeriesStore, shownValue, type BoundValue, type Rollup, type Span } from './series.js';
 import { Sends, type SendRow, type SendRule } from './sends.js';
-import { declareSource, handleOf, nodeHttp, openBrowser, osSecrets, Sources, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
+import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
+import { declareSource, handleOf, NoAnswer, nodeHttp, openBrowser, osSecrets, Sources, type LibraryDecl, type WorkDecl, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
@@ -195,6 +196,8 @@ export interface InstallFrom {
 export interface KitRun { slot: string; fill: string; verdict: 'PASS' | 'FAIL' | 'BLOCKED' | 'INVALID' | 'INCONCLUSIVE' }
 /** A view of a project's pack, as the app shows it while you're in the project (#67). */
 export interface ProjectView { name: string; extension: string; commands: { name: string; action: string }[] }
+/** A view of a package you installed, as the app mounts it (#1454): its panel's folder, its pages, and what panel@1 said of these bytes, if it ran. */
+export interface InstalledView extends ProjectView { version: string; folder: string; area: string; pages: { name: string; param: string; values?: string[] }[]; kit: KitRun['verdict'] | null }
 export interface Installed { id: string; version: string; folder: string; digest: string; builtBy: string | null; project: string | null; kits: KitRun[] }
 export interface PackageTests { passed: boolean; testsRun: number; failures: { test: string; message: string }[] }
 /** How an answer reaches a session: into the running turn, in the stop hold, waking an idle session, or at its next prompt. */
@@ -234,6 +237,10 @@ export interface ExtensionHost {
   leaveProject(folder: string): Promise<void>;
   /** What the app shows now: the views and commands of the projects you're in. */
   projectViews(): ProjectView[];
+  /** The views of the packages you installed that are loaded, as the app mounts them (#1454). */
+  installedViews(): InstalledView[];
+  /** What a view's panel kit said of the installed bytes, kept across a restart, as the kits at install are. */
+  keepKit(id: string, run: KitRun): void;
   /** One send or read of a loaded channel (#65), its provider calls made by `ctx.fetch`, the caller's. */
   channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
   channel(name: string, op: 'receive', item: null, ctx: ChannelCtx): Promise<ChannelReceived>;
@@ -255,6 +262,8 @@ export interface ExtensionHost {
    */
   revoke(connection: Connection, id: string, word: 'run_as_you'): Promise<void>;
   /** Raw input for a hosted terminal, written to its program: only from the app, which sends the panel you focused. */
+  /** A hosted terminal of the hub's own, kept past a restart (#70). */
+  openTerminal(connection: Connection, spec: OpenSpec): Promise<{ terminal: string; run: string; pid: number }>;
   rawInput(connection: Connection, terminal: string, text: string): Promise<void>;
   /** What the app's tab for a hosted terminal shows now (#989), for every terminal the hub knows, loaded or not: only for the app. */
   tab(connection: Connection, terminal: string): Promise<TerminalTab>;
@@ -322,6 +331,12 @@ export interface ExtensionHost {
   heldSecrets(): Promise<{ secret: string; provider: string }[]>;
   /** A reading of a loaded polled source, as what needs it would read it: from the cache while fresh, else one call. */
   readSource(name: string): Promise<SourceRead>;
+  /** The library sources loaded packages registered (#1731): each one's name and package. */
+  libraries(): { name: string; extension: string }[];
+  /** One search or fetch of a loaded library source (#1731), its calls the hub's; `noAnswer` when one got none. */
+  libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }>;
+  /** A file a library's fetch named, downloaded through its source by the hub (#1731); `status` null when its host gave no answer. */
+  libraryFile(name: string, path: string): Promise<{ status: number; bytes: Uint8Array } | { status: null; why: string }>;
   /** Every source call this host made, with its secrets stripped. */
   recording(): Recording;
   /** The readings the record holds of a source with an as-of time in the window, both ends in, in as-of order. */
@@ -338,6 +353,24 @@ export interface ExtensionHost {
    * the reading type its manifest names, and a page with one that isn't refused with the cursor where it was.
    */
   readStream(name: string, limit: number): Promise<StreamRead>;
+  /** On the trusted path (#66): switches a loaded work source on over a scope; its handle, which is also its schedule's name. */
+  addWorkSource(connection: Connection, spec: { source: string; scope: string; every: number }): Promise<string>;
+  removeWorkSource(connection: Connection, handle: string): Promise<void>;
+  /** On the trusted path: your standing rule for a work source's deliveries; its handle. */
+  setWorkRule(connection: Connection, handle: string, rule: { sentence: string }): Promise<string>;
+  /** "Fix <id>": the item read now by its ID through the sources you switched on, whenever it was made; its task. */
+  fix(connection: Connection, id: string): Promise<WorkTask>;
+  workTasks(): Promise<WorkTask[]>;
+  /** The events taken in on a task's item, each once. */
+  workEvents(task_ref: string): Promise<WorkEvent[]>;
+  endTask(connection: Connection, task_ref: string): Promise<void>;
+  /** A work source's page: its read position, and the items it skipped, dropped, keeps failing or refused. */
+  workPage(handle: string): Promise<WorkPage>;
+  /** Records a result for delivery into its task's thread; its send key. The hub's timer sends it. */
+  deliverResult(task_ref: string, result: WorkResult): Promise<string>;
+  deliveries(): Promise<DeliveryRow[]>;
+  /** The work.item@1 kit on a loaded work source, against its provider. */
+  workKit(source: string, fixture: WorkKitFixture): Promise<{ verdict: 'PASS' | 'FAIL'; failures: string[] }>;
   /** The hub's timer at now() (#365): every run due starts, or queues behind its schedule's running run; resolves once each is dispatched. */
   tick(): Promise<void>;
   /** Resolves once nothing the schedules started is still going and nothing due can start. */
@@ -385,12 +418,19 @@ export interface ExtensionHost {
 const RUNTIME = fileURLToPath(new URL('../runtime/', import.meta.url));
 const RUNNER = join(RUNTIME, 'runner.mjs');
 const NODE_HOME = dirname(dirname(realpathSync(process.execPath)));
+/** What Node links, where it isn't in its own folder: Homebrew's build loads its libraries from the other formulas. It reads OpenSSL's config from Homebrew's etc too, which a package has no use for, so a package runs with none. */
+const NODE_LIBS = ((prefix) => (prefix ? [join(prefix, 'opt'), join(prefix, 'Cellar')] : []))(/^(.+)\/Cellar\//.exec(NODE_HOME)?.[1]);
+/** The kit every view's panel passes (#326, #1454), which the app's replica runs. */
+const PANEL_KIT = 'panel@1';
 /** How long a package gets to start and register, at its conformance run and at its load. */
 const LOAD_MS = 10_000;
 /** How long a package gets to take a batch of events, or to answer a request on a route. */
 const CALL_MS = 10_000;
 /** How long a channel's send or read may take (#65): its provider calls are the hub's, each bounded by the hub. */
 const CHANNEL_MS = 30_000;
+/** How long one op of a work source has, and one run of it (#66). */
+const WORK_CALL_MS = 60_000;
+const WORK_RUN_MS = 30 * 60_000;
 const CHANNEL = 'channel@1';
 const STATE_SOURCE = 'state-source@1';
 /** How long one call into a state source may take (#67). */
@@ -479,7 +519,7 @@ interface Manifest {
   stability?: 'stable' | 'preview'; requires?: { preview?: string[] };
   host?: { runs: 'terminals'; lives: 'past_app'; owns: 'terminals'[] };
   secrets?: { name: string; for: string }[];
-  sources?: { name: string; variant: string; reading?: string }[];
+  sources?: { name: string; variant: string; reading?: string; host?: string }[];
   /** The state sources it registers (#67), each held to state-source@1's kit at install. */
   state_sources?: string[];
 }
@@ -521,6 +561,9 @@ interface Ext {
   kinds: string[];
   /** Environments it registered (#331); at its conformance run, every one it tried. */
   environments: string[];
+  /** Starts and handles owned by this exact load; removal drains them before dropping its handlers. */
+  environmentStarts: Set<Promise<unknown>>;
+  environmentStops: Set<() => Promise<void>>;
   subscribed: Set<string>;
   routes: Set<string>;
   /** The adapter names it registered. */
@@ -539,6 +582,8 @@ interface Ext {
   views: Map<string, string[]>;
   /** Each view's ⌘K commands (#67), as the app shows them while you're in its project. */
   commands: Map<string, { name: string; action: string }[]>;
+  /** Where each view's panel sits (#1454): its folder, its area and its pages. */
+  panels: Map<string, { folder: string; area: string; pages: InstalledView['pages'] }>;
   /** The sources each check kind it registered reads, as declared (#365). */
   checkReads: Map<string, string[]>;
   /** How many times its code started in this copy: a restart imports a hub package's code afresh. */
@@ -788,20 +833,6 @@ const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult
   outcome, testsRun: 0, evidence: [], read: [], mask: null,
   failures: failure ? [{ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: failure }] : [],
 });
-/** check.kind@1's outcomes. */
-const OUTCOMES: readonly string[] = ['passed', 'failed', 'ran_nothing', 'missing', 'overran', 'stopped', 'uncounted'];
-const strings = (v: unknown): boolean => Array.isArray(v) && v.every((s) => typeof s === 'string');
-const isFailure = (f: unknown): boolean => {
-  const x = f as Record<string, unknown> | null;
-  return typeof x === 'object' && x !== null && typeof x.test === 'string' && typeof x.file === 'string' && Number.isInteger(x.line)
-    && (x.stack === null || typeof x.stack === 'string') && typeof x.assertion === 'boolean' && typeof x.message === 'string';
-};
-/** A check result as check.kind@1 defines one, every field; anything else from a package is no result. */
-const isResult = (r: unknown): r is CheckResult => {
-  const x = r as Record<string, unknown> | null;
-  return typeof x === 'object' && x !== null && OUTCOMES.includes(x.outcome as string) && Number.isInteger(x.testsRun) && (x.testsRun as number) >= 0
-    && Array.isArray(x.failures) && x.failures.every(isFailure) && strings(x.evidence) && strings(x.read) && (x.mask === null || typeof x.mask === 'string');
-};
 /** The one permission a piece that hosts shells asks for: run any command you could (#104). */
 const RUN_AS_YOU = 'run_as_you';
 /** Whether the manifest asks for the grant: an access word, or `notices` for a declared notice kind. */
@@ -867,6 +898,11 @@ class Host implements ExtensionHost {
   private readonly sources: Sources;
   private readonly scheduler: Schedules;
   private readonly sending: Sends;
+  /** The work sources you switched on, their runs, tasks and deliveries (#66). */
+  private readonly work: WorkSources;
+  /** The work-source calls under way, by the call ID their context's fetch names (#66). */
+  private readonly workCalls = new Map<string, { ext: Ext; source: string; work: Omit<WorkDecl, 'delivers'>; library?: LibraryDecl; noAnswer: boolean }>();
+  private workCount = 0;
   /** The runs under way, by the scope token their job's calls carry (#365). */
   private readonly runCtx = new Map<string, RunCtx>();
   /** The times of each plug-in's notices in the last minute, which its limit counts (#365). */
@@ -920,11 +956,134 @@ class Host implements ExtensionHost {
       now: options.now,
       newRun: () => `run:${ulid(options.now())}`,
       append: async (data: RunEvent) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind: 'schedule.run', ts: options.now(), data: data as unknown as JsonValue }); },
-      ready: (decl) => this.exts.get(decl.plugin)?.live === true,
-      blocked: (decl) => this.blockedRun(decl),
-      dispatch: (decl, run) => this.dispatchRun(decl, run),
+      ready: (decl) => this.exts.get(decl.plugin)?.live === true && (!this.work.isWork(decl.name) || this.work.on(decl.name)),
+      blocked: (decl) => (this.work.isWork(decl.name) ? this.blockedWork(decl) : this.blockedRun(decl)),
+      dispatch: (decl, run) => (this.work.isWork(decl.name) ? this.work.run(decl.name) : this.dispatchRun(decl, run)),
       saved: (name, settings) => this.save('schedules.json', { ...this.read('schedules.json'), [name]: settings }),
     });
+    this.work = new WorkSources(this.workHost());
+  }
+
+  /** The work sources' side of the host (#66). */
+  private workHost(): ConstructorParameters<typeof WorkSources>[0] {
+    return {
+      record: this.options.record, now: () => this.options.now(), asks: this.options.asks,
+      added: () => this.read<Added>('work-sources.json'), saveAdded: (all) => this.save('work-sources.json', all),
+      decl: (source) => {
+        const ext = this.workExt(source);
+        const d = ext?.sources.get(source);
+        return ext && d?.variant === 'stream' && d.work ? { work: d.work, plugin: ext.entry.id } : undefined;
+      },
+      call: (source, op, arg) => this.workCall(source, op, arg),
+      schedule: async (handle, added, plugin) => {
+        const decl: ScheduleDecl = { name: handle, plugin, cadence: { every: added.every }, deadline: WORK_RUN_MS, declares: { readings: [added.source], notices: [], stores: [], sends: [], noop: true } };
+        await this.scheduler.register(decl, { runs: await this.runs(handle), settings: this.read<Settings>('schedules.json')[handle] ?? {} });
+      },
+      trusted: (connection, what) => this.trustedPath(connection, what),
+    };
+  }
+  private workExt(source: string): Ext | undefined {
+    return [...this.exts.values()].find((e) => e.live && e.ask && e.mode === 'loaded' && (e.sources.get(source) as { work?: unknown } | undefined)?.work);
+  }
+  /** One op of a loaded work source, bounded; its context's fetch goes through the hub under this call's ID. */
+  private async workCall(source: string, op: 'list' | 'item' | 'deliver' | 'find', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }> {
+    const ext = this.workExt(source);
+    const d = ext?.sources.get(source);
+    if (!ext || d?.variant !== 'stream' || !d.work) throw Error(`no loaded package registers the work source ${source}`);
+    const call = `work:${++this.workCount}`;
+    const live = { ext, source, work: d.work, noAnswer: false };
+    this.workCalls.set(call, live);
+    try {
+      const value = await within(WORK_CALL_MS, `${ext.entry.id}'s work source ${source}'s ${op}`, ext.ask!('work', { name: source, op, call, arg }));
+      return { value, noAnswer: live.noAnswer };
+    } catch (e) {
+      throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
+    } finally {
+      this.workCalls.delete(call);
+    }
+  }
+  /** The library sources loaded packages registered (#1731), asset.library@1's fills: each one's name and package. */
+  libraries(): { name: string; extension: string }[] {
+    return [...this.exts.values()].filter((e) => e.live && e.ask && e.mode === 'loaded')
+      .flatMap((e) => [...e.sources.values()].filter((d) => d.variant === 'library').map((d) => ({ name: d.name, extension: e.entry.id })));
+  }
+  private libraryOf(name: string): { ext: Ext; library: LibraryDecl } {
+    for (const ext of this.exts.values()) {
+      const d = ext.live && ext.ask && ext.mode === 'loaded' ? ext.sources.get(name) : undefined;
+      if (d?.variant === 'library') return { ext, library: d.library };
+    }
+    throw Error(`no loaded package registers the library ${name}`);
+  }
+  /**
+   * One op of a loaded library source (#1731), search or fetch, bounded by its timeout: the package's code reads the
+   * library's API through its context's fetch, the hub's call to the library's host; `noAnswer` when a call got none.
+   */
+  async libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }> {
+    const { ext, library } = this.libraryOf(name);
+    const call = `work:${++this.workCount}`;
+    const live = { ext, source: name, work: library, library, noAnswer: false };
+    this.workCalls.set(call, live);
+    try {
+      const value = await within(WORK_CALL_MS, `${ext.entry.id}'s library ${name}'s ${op}`, ext.ask!('library', { name, op, call, arg }));
+      return { value, noAnswer: live.noAnswer };
+    } catch (e) {
+      throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
+    } finally {
+      this.workCalls.delete(call);
+    }
+  }
+  /** A file a library's fetch named, downloaded through its source on its host by the hub, never by the package (#1731). */
+  async libraryFile(name: string, path: string): Promise<{ status: number; bytes: Uint8Array } | { status: null; why: string }> {
+    const { ext, library } = this.libraryOf(name);
+    try {
+      const answer = await this.sources.workFetch(ext.entry.id, name, library, { method: 'GET', path }, { timeout: library.timeout, encoding: 'base64' });
+      return { status: answer.status, bytes: Buffer.from(answer.body, 'base64') };
+    } catch (e) {
+      if (e instanceof NoAnswer) return { status: null, why: e.message };
+      throw e;
+    }
+  }
+  /** A work source's run is BLOCKED while its package isn't loaded or the secret it needs isn't held. */
+  private async blockedWork(decl: ScheduleDecl): Promise<string | null> {
+    const source = decl.declares.readings[0]!;
+    const ext = this.workExt(source);
+    const d = ext?.sources.get(source);
+    if (!ext || d?.variant !== 'stream' || !d.work) return `no loaded package registers the work source ${source}`;
+    if (d.work.secret && !(await this.sources.holds(ext.entry.id, d.work.secret))) return `missing secret ${d.work.secret}`;
+    return null;
+  }
+  async addWorkSource(connection: Connection, spec: { source: string; scope: string; every: number }): Promise<string> {
+    return this.work.add(connection, spec);
+  }
+  async removeWorkSource(connection: Connection, handle: string): Promise<void> {
+    return this.work.remove(connection, handle);
+  }
+  async setWorkRule(connection: Connection, handle: string, rule: { sentence: string }): Promise<string> {
+    return this.work.setRule(connection, handle, rule);
+  }
+  async fix(connection: Connection, id: string): Promise<WorkTask> {
+    return this.work.fix(connection, id);
+  }
+  async workTasks(): Promise<WorkTask[]> {
+    return this.work.workTasks();
+  }
+  async workEvents(task_ref: string): Promise<WorkEvent[]> {
+    return this.work.workEvents(task_ref);
+  }
+  async endTask(connection: Connection, task_ref: string): Promise<void> {
+    return this.work.endTask(connection, task_ref);
+  }
+  async workPage(handle: string): Promise<WorkPage> {
+    return this.work.page(handle);
+  }
+  async deliverResult(task_ref: string, result: WorkResult): Promise<string> {
+    return this.work.deliverResult(task_ref, result);
+  }
+  async deliveries(): Promise<DeliveryRow[]> {
+    return this.work.deliveries();
+  }
+  async workKit(source: string, fixture: WorkKitFixture): Promise<{ verdict: 'PASS' | 'FAIL'; failures: string[] }> {
+    return this.work.kit(source, fixture);
   }
 
   private read<T>(name: string): Record<string, T> {
@@ -1287,6 +1446,12 @@ class Host implements ExtensionHost {
     // A lost one stays listed as lost: what it runs can't be proven from damaged bytes.
     await Promise.all(owned.filter((t) => !t.lost).map((t) => this.terminals.stop(t)));
   }
+  /** A hosted terminal of the hub's own, not a piece's, kept past a restart (#70). */
+  async openTerminal(connection: Connection, spec: OpenSpec): Promise<{ terminal: string; run: string; pid: number }> {
+    if (connection.writer !== 'app') throw Error(`a hosted terminal opens only from the app, not from ${connection.writer}`);
+    const t = await this.terminals.open('hub', spec, true);
+    return { terminal: t.terminal, run: t.run, pid: t.pid };
+  }
   async rawInput(connection: Connection, terminal: string, text: string): Promise<void> {
     if (connection.writer !== 'app' && this.options.plant !== 'input-from-any-writer') {
       throw Error(`raw input for ${terminal} comes only from the panel you focused in the app, not from ${connection.writer}${connection.session ? ` in session ${connection.session}` : ''}`);
@@ -1472,6 +1637,18 @@ class Host implements ExtensionHost {
   projectViews(): ProjectView[] {
     return [...this.inside.keys()].flatMap((project) => this.viewsOf(project));
   }
+  installedViews(): InstalledView[] {
+    return [...this.exts.values()].filter((e) => e.live && e.project === null).flatMap((e) => [...e.panels].map(([name, panel]) => ({
+      name, extension: e.entry.id, version: e.entry.version, ...panel, commands: e.commands.get(name) ?? [],
+      kit: e.entry.kits?.find((k) => k.slot === PANEL_KIT && k.fill === name)?.verdict ?? null,
+    })));
+  }
+  keepKit(id: string, run: KitRun): void {
+    const entry = this.entries[id];
+    if (!entry) return;
+    entry.kits = [...(entry.kits ?? []).filter((k) => k.slot !== run.slot || k.fill !== run.fill), run];
+    this.save('installed.json', this.entries);
+  }
   private packsOf(project: string): Ext[] {
     return [...this.exts.values()].filter((e) => e.project === project);
   }
@@ -1631,6 +1808,7 @@ class Host implements ExtensionHost {
     if (this.closed) return;
     await this.shownTick();
     await this.scheduler.tick();
+    await this.work.tick();
     await this.series?.tick();
   }
   /**
@@ -1704,7 +1882,7 @@ class Host implements ExtensionHost {
       const d = JSON.parse(row.data) as RunEvent;
       const r = runs.get(d.run) ?? { run: d.run, schedule, due: d.due, dispatched: null, ended: null, verdict: null, cause: null, stopped: null, sends: [], changes: [] };
       if (d.phase === 'dispatched') r.dispatched ??= row.ts;
-      if (d.phase === 'ended') Object.assign(r, { ended: row.ts, verdict: d.verdict ?? null, cause: d.cause ?? null, stopped: d.stopped ? 'before dispatch' : null, changes: d.changes ?? [] });
+      if (d.phase === 'ended') Object.assign(r, { ended: row.ts, verdict: d.noop ? 'uncounted' : d.verdict ?? null, cause: d.cause ?? null, stopped: d.stopped ? 'before dispatch' : null, changes: d.changes ?? [] });
       runs.set(d.run, r);
     }
     // Whether each send a run started went out: one still waiting on your answer has not.
@@ -1923,7 +2101,8 @@ class Host implements ExtensionHost {
     return {
       entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
-      adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
+      adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), panels: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
+      environmentStarts: new Set(), environmentStops: new Set(),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -2107,8 +2286,8 @@ class Host implements ExtensionHost {
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(path, resolve); });
       const connected = new Promise<Socket>((resolve) => server.once('connection', resolve));
       const started = await supervisor.start({
-        run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder },
-        grant: { read: [NODE_HOME, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] }, output: { stdout: keep, stderr: keep },
+        run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
+        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] }, output: { stdout: keep, stderr: keep },
       });
       if (started.status !== 'started') throw Error(`the sandbox held it: BLOCKED on ${started.kind}`);
       // Stoppable from here on: an unload while it connects, at close or a revoke, ends its process.
@@ -2207,8 +2386,12 @@ class Host implements ExtensionHost {
   }
   /** Its handlers stop: nothing more is asked of it, and a sandboxed one's process ends. */
   private async stopHandlers(ext: Ext): Promise<void> {
+    await Promise.allSettled([...ext.environmentStarts]);
+    const stopped = await Promise.allSettled([...ext.environmentStops].map((down) => down()));
     delete ext.ask;
     await ext.stop?.();
+    const failed = stopped.flatMap((r) => r.status === 'rejected' ? [r.reason] : []);
+    if (failed.length) throw new AggregateError(failed, `${ext.entry.id}'s environments did not all stop`);
   }
 
   /**
@@ -2438,6 +2621,18 @@ class Host implements ExtensionHost {
         if (!ext.stateSources.includes(name)) ext.stateSources.push(name);
         return null;
       }
+      case 'deep.work.fetch': {
+        // Only a call of its own work source under way: the hub's call, to the source's host, with its secret and quota.
+        const [call, request] = args;
+        const live = typeof call === 'string' ? this.workCalls.get(call) : undefined;
+        if (!live || live.ext !== ext) throw Error(`deep.work.fetch: ${id} has no work source call under way as ${String(call)}`);
+        try {
+          return await this.sources.workFetch(ext.entry.id, live.source, live.work, request as Parameters<Sources['workFetch']>[3], live.library);
+        } catch (e) {
+          if (e instanceof NoAnswer) live.noAnswer = true;
+          throw e;
+        }
+      }
       case 'deep.channel.fetch': {
         // Only a send or read of its own under way: the hub's call, with the channel's settings and token.
         const [call, request] = args;
@@ -2469,6 +2664,8 @@ class Host implements ExtensionHost {
         const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.sources.has(source.name));
         if (owner) throw Error(`deep.registerSource: ${source.name} is already registered by ${owner.entry.id}`);
         ext.sources.set(source.name, source);
+        // A work source (#66): each one you switched on over it gets its schedule again.
+        if (!conformance && source.variant === 'stream' && source.work) await this.work.registered(source.name, ext.entry.id);
         return null;
       }
       case 'deep.registerRoute': {
@@ -2706,6 +2903,7 @@ class Host implements ExtensionHost {
         if (refusal === null) {
           ext.views.set(args[0] as string, ((args[3] as { binds?: string[] } | undefined)?.binds ?? []).slice());
           ext.commands.set(args[0] as string, ((args[3] as { commands?: { name: string; action: string }[] } | undefined)?.commands ?? []).map((c) => ({ name: c.name, action: c.action })));
+          ext.panels.set(args[0] as string, { folder: join(ext.folder, args[1] as string), area: args[2] as string, pages: (args[3] as { pages?: InstalledView['pages'] } | undefined)?.pages ?? [] });
           return null;
         }
         if (conformance) ext.refusals.push(refusal);
@@ -2878,7 +3076,8 @@ class Host implements ExtensionHost {
     let refusal: string | undefined;
     if (m.stability === 'stable') {
       if (this.options.plant !== 'stable-may-call-preview') refusal = `${m.id} declares itself stable and calls ${method}, a preview method; a stable package calls stable methods only`;
-    } else if (!(m.requires?.preview ?? []).includes(method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
+      // A work source's context fetch is part of the deep.registerSource that registered it (#66).
+    } else if (!(m.requires?.preview ?? []).includes(method === 'deep.work.fetch' ? 'deep.registerSource' : method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
     if (!refusal) return;
     // Kept on the run, so a package that never awaits the call is refused all the same.
     ext.refusals.push(refusal);
@@ -3452,21 +3651,41 @@ class Host implements ExtensionHost {
         const bad = badDeadline('deadline', deadline);
         if (bad) throw Error(`an environment start's ${bad}`);
         await current();
-        const value = await this.ask(ext!, deadline, `environment ${name}`, 'env.up', { name, spec, lease, checkout });
-        // An old load's late start is never presented as its replacement's handle.
-        await current();
-        if (!isPlain(value) || typeof value.id !== 'string' || !value.id || value.port !== lease.port || !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0) {
-          throw Error(`environment ${name} returned an invalid handle or a port outside its lease`);
+        // Capture the owning generation's handler: cleanup must work even after it is unpublished.
+        const owner = ext!;
+        const ask = owner.ask!;
+        let cancelled = false;
+        const started = ask('env.up', { name, spec, lease, checkout }).then(async (value): Promise<RunningEnvironment> => {
+          if (!isPlain(value) || typeof value.id !== 'string' || !value.id || value.port !== lease.port || !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0) {
+            throw Error(`environment ${name} returned an invalid handle or a port outside its lease`);
+          }
+          const handle = Object.freeze({ id: value.id, port: lease.port, pid: Number(value.pid) });
+          let stopped: Promise<void> | undefined;
+          const down = (): Promise<void> => stopped ??= within(CALL_MS, `environment ${name} down`, ask('env.down', { name, handle }))
+            .then(() => { owner.environmentStops.delete(down); });
+          owner.environmentStops.add(down);
+          if (cancelled || !owner.live || this.exts.get(owner.entry.id) !== owner) {
+            await down();
+            throw Error(`no loaded extension registered the environment ${name}; its start was cancelled or its load removed`);
+          }
+          return { handle, down };
+        });
+        // Even a start returning after its deadline is observed and cleaned by its own handler.
+        const bounded = within(deadline, `environment ${name}`, started);
+        owner.environmentStarts.add(bounded);
+        try {
+          const running = await bounded;
+          owner.environmentStarts.delete(bounded);
+          await current();
+          return running;
+        } catch (error) {
+          cancelled = true;
+          owner.environmentStarts.delete(bounded);
+          if (error instanceof Overran) await this.unload(owner);
+          throw error;
+        } finally {
+          owner.environmentStarts.delete(bounded);
         }
-        const handle = Object.freeze({ id: value.id, port: lease.port, pid: Number(value.pid) });
-        let down: Promise<void> | undefined;
-        return {
-          handle,
-          down: () => down ??= (async () => {
-            await current();
-            await this.ask(ext!, CALL_MS, `environment ${name} down`, 'env.down', { name, handle });
-          })(),
-        };
       },
     };
   }
@@ -3499,7 +3718,8 @@ class Host implements ExtensionHost {
       this.canvasKeys.set(ext, []);
       const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: this.checkContext(ext, ctx) });
       const read = this.canvasKeys.get(ext) ?? [];
-      if (!isResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
+      const { isCheckResult } = await import('@deepbuild/conformance');
+      if (!isCheckResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
       // A passed run rests on the tests it counted: passed with none counted ran nothing it can vouch for.
       if (result.outcome === 'passed' && result.testsRun === 0) return nothing('ran_nothing', `${ext.entry.id}'s ${kind} reported passed without its results: it counted no test`);
       // A pass built on canvas reads holds only with their content keys as its evidence (Check input: plug-in reads).
@@ -3773,6 +3993,7 @@ class Host implements ExtensionHost {
     this.closed = true;
     clearInterval(this.timer);
     this.sending.close();
+    this.work.close();
     // Starts, loads and conformance runs under way finish first, each then unloaded here, so none leaves a process behind.
     await this.starting.catch(() => undefined);
     await Promise.all([...this.loading.values(), ...[...this.checking].map((c) => c.catch(() => undefined))]);

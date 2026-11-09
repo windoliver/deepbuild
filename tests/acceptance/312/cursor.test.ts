@@ -33,8 +33,10 @@ describe('AC7 a test adapter registered as cursor records its events with agent:
     const reg = withCursor();
     expect(reg.names()).toContain('cursor');
     expect(reg.get('cursor').facts).toEqual(cursorFacts());
-    // The shipped registry does not know cursor; nothing in it was changed for the test adapter to exist.
-    expect(shipped().names().sort()).toEqual(['claude', 'codex']);
+    // The shipped registry does not know cursor; nothing in it was changed for the test adapter to exist. It names
+    // the shipped adapters, more of which (paseo, pi) have shipped since (owner-approved on 2026-11-07, #13).
+    expect(shipped().names()).toEqual(expect.arrayContaining(['claude', 'codex']));
+    expect(shipped().names()).not.toContain('cursor');
   });
 
   it('AC7 every recorded cursor hook maps to its event with agent cursor and the fields the facts decide', () => {

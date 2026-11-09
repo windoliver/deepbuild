@@ -6,7 +6,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export type TargetKind = 'address' | 'host' | 'remote' | 'repo' | 'channel' | 'payee';
+type TargetKind = 'address' | 'host' | 'remote' | 'repo' | 'channel' | 'payee';
 /** Where a step that leaves the machine goes, as its plan names it. */
 export interface Target { kind: TargetKind; ref: string }
 export type TargetOrigin = 'you' | 'decision' | 'repo' | 'read' | 'unknown';
@@ -41,7 +41,7 @@ function url(ref: string): string | undefined {
   }
 }
 /** A target as targets compare: host, address, owner/repo, channel and payee lowercased; a remote URL as `url` reads it; a remote's name as typed. */
-export function normalize(kind: TargetKind, ref: string): string {
+function normalize(kind: TargetKind, ref: string): string {
   const r = ref.trim();
   if (kind === 'remote') return isUrl(r) ? url(r) ?? r : r;
   return kind === 'host' ? r.toLowerCase().replace(/\.$/, '') : r.toLowerCase();
@@ -50,7 +50,7 @@ export function normalize(kind: TargetKind, ref: string): string {
 /** Characters that continue an address, host or name, so a match inside a longer one isn't the target. */
 const PART = /[a-z0-9_%+@-]/;
 /** Whether `text`, lowercased, names the normalized target: a URL by its normalized form, anything else as a whole word. */
-export function names(lower: string, kind: TargetKind, ref: string): boolean {
+function names(lower: string, kind: TargetKind, ref: string): boolean {
   if (kind === 'remote' && isUrl(ref)) {
     // Most texts name no URL with the target's host, so only those are parsed.
     if (!lower.includes(new URL(ref).host)) return false;
@@ -123,9 +123,9 @@ function configured(remotes: Map<string, string>, kind: TargetKind, ref: string)
 }
 
 /** One message of a session's transcript, as the record resolves it. */
-export interface Said { id: string; text: string; role?: string; tool?: string }
+interface Said { id: string; text: string; role?: string; tool?: string }
 /** What the core places targets from, all read from the record for the ask's session. */
-export interface Sources {
+interface Sources {
   session: string;
   /** The texts of prompts a person typed in the session (user.ask from person or the app). */
   prompts: string[];
@@ -136,9 +136,6 @@ export interface Sources {
   /** The decisions covering the ask, each with the normalized targets of the plan it was saved from. */
   decisions: { handle: string; targets: Set<string> }[];
 }
-/** The wrong programs #1098's criteria name that change placing (tests only). */
-export type PlacePlant = 'origin-from-agent-message' | 'first-recipient-origin' | 'push-target-as-repo';
-
 const NOUN: Record<TargetKind, string> = { address: 'address', host: 'host', remote: 'remote', repo: 'repo', channel: 'channel', payee: 'payee' };
 const keyOf = (kind: TargetKind, ref: string): string => `${kind}\u0000${ref.toLowerCase()}`;
 

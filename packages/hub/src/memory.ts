@@ -10,14 +10,16 @@ import { cwdOf } from '@deepbuild/archive';
 import type { EvidenceStore } from '@deepbuild/evidence';
 import { ulid, type Connection, type Message, type RecordStore } from '@deepbuild/record';
 import { startOf } from './wire.js';
-import { call, type Reply } from './client.js';
+import { call, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { dropEntries, writeRejected } from './guards.js';
 
-export type LessonKind = 'guard' | 'shared-rule' | 'removal';
+type LessonKind = 'guard' | 'shared-rule' | 'removal';
 export interface Lesson {
   id: string; kind: LessonKind; text: string; rank: number; claim: string; scope: string;
   sources: { at: string | null; path: string | null; quote: string }[];
+  /** Why a rule on the rules page is offered for removal (#344): the guard that enforces it, or its scope's count of sessions. */
+  why?: string;
 }
 type Raw = RecordStore['raw'];
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
@@ -31,7 +33,7 @@ const NEVER = /^never run `([^`]+)`/i;
 const REJECTED = /(?:^|[.!?]\s+|\n\s*)rejected:[ \t]*`([^`\n]{1,200})`/g;
 /** What an agent's host writes under the user's role: a repo's AGENTS.md, as a Codex rollout carries it, or its environment. */
 const INJECTED = /^\s*(?:<|# AGENTS\.md)/;
-const decisionKey = (lesson: string): string => sha256(`memory ${lesson}`);
+export const decisionKey = (lesson: string): string => sha256(`memory ${lesson}`);
 const rejectedKey = (scope: string, direction: string): string => sha256(`rejected ${scope} ${direction}`);
 
 /** The folder each repo's sessions worked in, read from the first of its transcripts that names one. */
@@ -74,7 +76,7 @@ export async function lessonsOf(raw: Raw, folders: ReadonlyMap<string, string>):
 }
 
 /** Your decision, saved by the core; `subject` is what it came from, when that's a record object. */
-export async function saveDecision(record: RecordStore, you: Connection, now: () => number, d: { key: string; scope: string; answer: string; subject?: string }): Promise<string> {
+async function saveDecision(record: RecordStore, you: Connection, now: () => number, d: { key: string; scope: string; answer: string; subject?: string }): Promise<string> {
   const ts = now();
   const id = ulid(ts);
   await record.append({ writer: 'core', actor: you.actor, scope: you.scope }, {
@@ -102,7 +104,7 @@ export function guardOf(lesson: Lesson): { v: 1; entries: Record<string, unknown
 /** Whether a decision's scope covers a session in a repo. */
 const covers = (scope: string, project: string | undefined, session: string | undefined): boolean =>
   scope === 'all' || (project !== undefined && scope === `repo:${project}`) || (session !== undefined && scope === `session:${letters(session)}`);
-export interface Rejected { direction: string; decision: string; scope: string; said: boolean }
+interface Rejected { direction: string; decision: string; scope: string; said: boolean }
 /**
  * The directions you rejected, from active decisions only: what you said in chat (`said`), and each option you passed over
  * when you answered a choice, keyed by the backticks in its label, unless the option you chose names it too. An option's
@@ -177,7 +179,7 @@ export const reaches = (name: string, scope: unknown, project: string | undefine
   !/^(?:memory|rejected)-/.test(name) || typeof scope !== 'string' || !/^(repo|session):/.test(scope) || covers(scope, project, session);
 
 const words = (text: string): string => ` ${text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
-export interface Taste { ask: string; text: string }
+interface Taste { ask: string; text: string }
 /**
  * Your past taste decisions in this repo for a screen `said` names as a whole word (a branch's name, a first prompt): what
  * you chose, never what you passed over, with its screenshot by hash. Only an option you chose saves a decision, never a default.
@@ -216,9 +218,9 @@ export async function memoryCommand(args: readonly string[]): Promise<number> {
     const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
     const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
     reply = overruling
-      ? await call(hubAddress().path, token, 'decision.overrule', { decision: args[1] }, peer)
+      ? await withPrompt(() => call(hubAddress().path, token, 'decision.overrule', { decision: args[1] }, peer))
       : acting
-      ? await call(hubAddress().path, token, 'memory.act', { verb: args[0], lesson: args[1] }, peer)
+      ? await withPrompt(() => call(hubAddress().path, token, 'memory.act', { verb: args[0], lesson: args[1] }, peer))
       : await call(hubAddress().path, token, 'memory.list', {});
   } catch (error) {
     process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}\n`);

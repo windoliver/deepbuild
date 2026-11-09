@@ -34,6 +34,8 @@ pub struct Flat {
     groups: Option<Groups>,
     /// The last frame's evaluated items and marks, and where each writer layer's marks end.
     last: Option<(Map<String, Value>, Vec<Drawn>, Vec<usize>)>,
+    /// #467: the marks the view last drew; a frame with the same marks draws nothing.
+    shown: Option<Vec<Drawn>>,
 }
 
 /// Whether a document draws as 2D in the live window: it names no camera.
@@ -118,6 +120,7 @@ impl Flat {
             vello: None,
             groups: None,
             last: None,
+            shown: None,
         };
         flat.frame(0)?;
         Ok(flat)
@@ -180,6 +183,15 @@ impl Flat {
         Ok((out, ends))
     }
 
+    /// #467: whether the frame at `t` draws the same marks the view last drew, so the view keeps
+    /// its last frame and records nothing (a still item costs nothing per frame).
+    pub fn still(&mut self, t: i64) -> Result<bool, (&'static str, String)> {
+        let shown = self.shown.take();
+        let same = shown.as_deref() == Some(self.frame(t)?);
+        self.shown = shown;
+        Ok(same)
+    }
+
     /// Records the frame at `t` into `target`, `size` px, timed by `timer` as `session`'s.
     #[allow(clippy::too_many_arguments)]
     pub fn draw(
@@ -196,7 +208,8 @@ impl Flat {
             .vello
             .take()
             .unwrap_or_else(|| Vello2d::new(&device.device, FORMAT));
-        let marks = self.frame(t)?;
+        let marks = self.frame(t)?.to_vec();
+        self.shown = Some(marks.clone());
         let i = timer.start(FLAT_PASS, session);
         let (begin, end) = timer.bracket(i);
         let drawn = if groups::composited(marks.iter()) {
@@ -258,11 +271,13 @@ impl Flat {
             planted: None,
             guard: None,
             other: None,
+            page: None,
+            ground: false,
         };
         let groups = self
             .groups
             .get_or_insert_with(|| Groups::new(&device.device));
-        let (done, _) = groups.compose(device, vello, &layer)?;
+        let (done, ..) = groups.compose(device, vello, &layer)?;
         groups.finish(&device.device, encoder, &done, target, FORMAT, false);
         Ok(())
     }

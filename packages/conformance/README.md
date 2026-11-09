@@ -9,7 +9,9 @@ The one conformance runner and its kits (#313, #314, #349): the adapter kit with
 - `src/index.ts`: the public entry; export only what callers need.
 - `src/slots/<slot>.ts`: a new hub slot's kit, listed in `src/slots/kits.ts`. Shared kit helpers go in `src/slots/shared.ts`.
 - `src/kit.ts`, `src/runner.ts`, `src/fake-agent.ts`, `src/shipped.ts`: the adapter kit (adapter@1).
+- `src/result.ts`, `src/probe.ts`: the check.kind@1 wire result's shape check, and the one run of a check kind's probe under its deadline that `checks-numbers` and `checks-work` share.
 - `runtime/<kit>/`: scripts a kit loads into or starts as other processes; `fixtures/<kit>/`: a kit's fixed cases.
+- `src/gate.ts`, `src/gate-play.ts`: the kit gate@1 (#33), `deep-conformance gate check|run`: its corpus in `fixtures/gate/`, played through `runtime/gate/agent.mjs` on the hub and deep-hook this checkout builds, started as processes, never imported.
 - Tests: `*.test.ts` beside the source they test, under `src/`; this package has no `test/` folder.
 
 ## What it may import
@@ -19,4 +21,5 @@ Sits on the core: it reaches `@deepbuild/adapters` and `@deepbuild/contracts` th
 ## Deviations
 
 - `runtime`: plain `.mjs`, not compiled TypeScript, because each file runs in another process or thread: the check.kind reporter and tracer load into a suite's processes through `NODE_OPTIONS`, and the environment kit's fixture server, helper and probe worker run on their own (see each file's header).
+- `fixtures/gate`: the seeded false dones, each with its clean twin and its expected verdict, one per row of the verdict table and per known way to fake a pass; the kit fails a gate that judges one otherwise, so never "fix" them. A `setup` names what no commit can make (a hub killed mid-run, a full disk, an injected judge fault the shipped hub can't yet produce, through `DEEP_HUB_TEST_JUDGE_FAULT`).
 - `fixtures/check-kind`: small suites with known outcomes, several of them built to fail or hide a run (`known-fail`, `masked-exit`, `erases-evidence`); the kit compares each run against its expected outcome, so never "fix" them.

@@ -1,5 +1,6 @@
-//! The app on gpui-kit. A panel runs under an empty gpui-shell policy plus DeepBuild's one module, `deepbuild`, which
-//! serves recorded quotes. It has no network, files, programs or storage.
+//! The app on gpui-kit. A panel runs under an empty gpui-shell policy and imports only `@deepbuild/panel`, DeepBuild's
+//! own module (#1425, [`panel_module`]), which also serves the `deepbuild` module's recorded quotes under the `spike`
+//! feature. It has no network, files, programs or storage.
 //!
 //! Issue #338 adds the app's shell with its shipped views as dock panels ([`views`]), the fixture
 //! record and inbox projection they draw ([`events`]), the canvas as a registered component
@@ -8,6 +9,10 @@
 //! Issue #1172: the shell is the app's window. #337's spike window is no part of the shipped binary: `spike` is built
 //! only for the suites that keep its proof, behind the feature of that name.
 
+// A release build refuses the planted programs' feature (#1408).
+#[cfg(all(feature = "env-plants", not(debug_assertions)))]
+compile_error!("the env-plants feature is for test builds only, never a release build");
+
 pub mod answer;
 pub mod arming;
 pub mod bound;
@@ -15,21 +20,31 @@ pub mod canvas;
 pub mod card;
 pub mod cells;
 pub mod chrome;
+#[cfg(feature = "chrome-fixture")]
+pub mod chrome_fixture;
+pub mod chrome_fx;
+pub mod chrome_gallery;
 pub mod commands;
 pub mod confirm;
+pub mod device;
+#[cfg(feature = "fixtures")]
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
+pub mod installed;
 pub mod kinds;
 pub mod notify;
 #[cfg(feature = "panel-check")]
 pub mod panel_check;
 #[cfg(feature = "panel-check")]
 pub mod panel_keys;
+pub mod panel_module;
 pub mod panel_tree;
 pub mod panel_values;
+pub mod plain;
 pub mod question;
 pub mod record;
+pub mod rules;
 pub mod setup;
 pub mod show;
 pub mod shown;
@@ -37,6 +52,7 @@ pub mod single;
 #[cfg(feature = "spike")]
 pub mod spike;
 pub mod states;
+pub mod table;
 pub mod text;
 pub mod views;
 
@@ -67,9 +83,12 @@ pub use spike::{
     Spike, SESSION_COUNT,
 };
 
+/// #337's recording. Issue #1454: it left the shipped module with the spike.
+#[cfg(feature = "spike")]
 const QUOTES: &str = include_str!("../fixtures/quotes.json");
 
 /// One recorded stock: its symbol, name and prices, one per tick.
+#[cfg(feature = "spike")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Stock {
     pub symbol: String,
@@ -78,6 +97,7 @@ pub struct Stock {
 }
 
 /// The recording grouped by symbol, in the order the symbols first appear.
+#[cfg(feature = "spike")]
 pub fn stocks() -> Vec<Stock> {
     let raw: serde_json::Value =
         serde_json::from_str(QUOTES).expect("the recorded quotes are valid JSON");
@@ -98,44 +118,44 @@ pub fn stocks() -> Vec<Stock> {
 }
 
 /// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); then what the app
-/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count.
+/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count
+/// sentence (#1455).
 pub fn menu_bar_line() -> String {
     match setup::count().or_else(|| notify::reach().short()) {
         Some(line) => line.to_owned(),
+        None if record::older().is_some() => "Hub is older".to_owned(),
         None if !record::connected() => "No hub".to_owned(),
-        None => views::count().to_string(),
+        None => views::asks_need_you(views::count()),
     }
 }
 
 /// The rebuilds this panel host has taken.
 pub static REBUILDS: AtomicU64 = AtomicU64::new(0);
 
-/// DeepBuild's module for panels: the recorded quotes and the Needs you inbox, as plain data.
+/// DeepBuild's module for panels: the Needs you inbox, as plain data.
 pub fn deepbuild_module() -> HostModule {
-    let module = HostModule::new("deepbuild")
-        .function("needs_you", |_| needs_you())
-        .function("quotes", |_| {
-            let interval: serde_json::Value = serde_json::from_str(QUOTES).expect("valid JSON");
-            let symbols = stocks()
-                .into_iter()
-                .map(|stock| {
-                    HostValue::Object(vec![
-                        ("symbol".into(), HostValue::Str(stock.symbol)),
-                        ("name".into(), HostValue::Str(stock.name)),
-                        (
-                            "prices".into(),
-                            HostValue::Array(
-                                stock.prices.into_iter().map(HostValue::Number).collect(),
-                            ),
-                        ),
-                    ])
-                })
-                .collect();
-            Ok(HostValue::Object(vec![
-                ("interval_s".into(), json_to_host(&interval["interval_s"])),
-                ("symbols".into(), HostValue::Array(symbols)),
-            ]))
-        });
+    let module = HostModule::new("deepbuild").function("needs_you", |_| needs_you());
+    #[cfg(feature = "spike")]
+    let module = module.function("quotes", |_| {
+        let interval: serde_json::Value = serde_json::from_str(QUOTES).expect("valid JSON");
+        let symbols = stocks()
+            .into_iter()
+            .map(|stock| {
+                HostValue::Object(vec![
+                    ("symbol".into(), HostValue::Str(stock.symbol)),
+                    ("name".into(), HostValue::Str(stock.name)),
+                    (
+                        "prices".into(),
+                        HostValue::Array(stock.prices.into_iter().map(HostValue::Number).collect()),
+                    ),
+                ])
+            })
+            .collect();
+        Ok(HostValue::Object(vec![
+            ("interval_s".into(), json_to_host(&interval["interval_s"])),
+            ("symbols".into(), HostValue::Array(symbols)),
+        ]))
+    });
     #[cfg(feature = "panel-check")]
     let module = module
         // #358: a panel's script is a function of how many rebuilds its host has taken.
@@ -159,6 +179,15 @@ pub fn deepbuild_module() -> HostModule {
 
 /// The inbox projection's list for Needs you, as the fixture panels read it: the rows oldest
 /// first, which of them are folded or in Later, and the asks that left the list.
+/// The shipped app has no fixture record, so a panel asking for one is told so.
+#[cfg(not(feature = "fixtures"))]
+fn needs_you() -> Result<HostValue, HostError> {
+    Err(HostError::new(
+        "no fixture record is loaded; the host sets one before a panel draws",
+    ))
+}
+
+#[cfg(feature = "fixtures")]
 fn needs_you() -> Result<HostValue, HostError> {
     let state = views::current_state().ok_or_else(|| {
         HostError::new("no fixture record is loaded; the host sets one before a panel draws")
@@ -188,6 +217,7 @@ fn needs_you() -> Result<HostValue, HostError> {
     ]))
 }
 
+#[cfg(feature = "spike")]
 fn json_to_host(value: &serde_json::Value) -> HostValue {
     use serde_json::Value;
     match value {
@@ -224,6 +254,9 @@ pub fn init(cx: &mut App) {
     views::register_views(cx);
     card::init(cx);
     commands::init(cx);
+    // Chrome effects hold their still pose under macOS's Reduce Motion (#1436).
+    #[cfg(target_os = "macos")]
+    cx.set_reduce_motion(objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion());
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")
@@ -233,22 +266,30 @@ pub fn init(cx: &mut App) {
 }
 
 /// Loads a panel directory's `main.js` and mounts its view. A panel loads nothing from the network: one whose
-/// gpui-shell manifest lists a Git dependency is refused before gpui-shell reads it, so nothing is fetched (#326).
+/// gpui-shell manifest lists a Git dependency is refused before gpui-shell reads it, so nothing is fetched (#326). A
+/// panel that imports the toolkit, or a name off the panel catalog, is refused before it loads too (#1425).
 pub fn mount_panel(
     runtime: &Rc<ShellRuntime>,
     dir: &Path,
     window: &mut Window,
     cx: &mut App,
 ) -> anyhow::Result<Entity<ScriptView>> {
-    if let Some(dependency) = fetched_dependency(dir) {
-        anyhow::bail!("{}", fetch_refusal(&dependency));
-    }
+    admit(dir)?;
     let loaded = runtime.load_application(dir, "main.js")?;
     runtime.mount_application(&loaded, window, cx)
 }
 
-/// The entry a view's page mounts through, written beside its panel's `main.js`.
-const PAGE_ENTRY: &str = ".deepbuild-page.js";
+/// The checks a panel passes before gpui-shell reads it, then `@deepbuild/panel` written where gpui-shell resolves it.
+fn admit(dir: &Path) -> anyhow::Result<()> {
+    if let Some(dependency) = fetched_dependency(dir) {
+        anyhow::bail!("{}", fetch_refusal(&dependency));
+    }
+    // #1425's planted loader skips the module check, as the merge base's did.
+    if !plain::planted("panel-load-unchecked") {
+        panel_module::check(dir).map_err(anyhow::Error::msg)?;
+    }
+    Ok(panel_module::serve(dir)?)
+}
 
 /// Mounts one of a view's pages (#366): the panel in `dir`, its script's `init` given `props.page`. gpui-shell gives a
 /// top-level script no props, so a small entry beside the panel's `main.js` creates the panel as a nested view with
@@ -260,17 +301,15 @@ pub fn mount_page(
     window: &mut Window,
     cx: &mut App,
 ) -> anyhow::Result<Entity<ScriptView>> {
-    if let Some(dependency) = fetched_dependency(dir) {
-        anyhow::bail!("{}", fetch_refusal(&dependency));
-    }
+    admit(dir)?;
     let props = serde_json::json!({ "page": page });
     std::fs::write(
-        dir.join(PAGE_ENTRY),
+        dir.join(panel_module::PAGE_ENTRY),
         format!(
-            "import {{ View }} from \"gpui-kit\";\nimport Panel from \"./main.js\";\n\nexport default class Page extends View {{\n  init(_props, cx) {{\n    this.panel = cx.new(Panel, {props});\n  }}\n\n  render() {{\n    return this.panel;\n  }}\n}}\n"
+            "import {{ View }} from \"@deepbuild/panel\";\nimport Panel from \"./main.js\";\n\nexport default class Page extends View {{\n  init(_props, cx) {{\n    this.panel = cx.new(Panel, {props});\n  }}\n\n  render() {{\n    return this.panel;\n  }}\n}}\n"
         ),
     )?;
-    let loaded = runtime.load_application(dir, PAGE_ENTRY)?;
+    let loaded = runtime.load_application(dir, panel_module::PAGE_ENTRY)?;
     runtime.mount_application(&loaded, window, cx)
 }
 

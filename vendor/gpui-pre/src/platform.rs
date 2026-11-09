@@ -1,6 +1,8 @@
 mod app_menu;
 mod keyboard;
 mod keystroke;
+mod mask_params; // DeepBuild patch (windoliver/deepbuild#390)
+mod mask_rect; // DeepBuild patch (windoliver/deepbuild#1480)
 
 #[cfg(all(target_os = "linux", feature = "wayland"))]
 #[expect(missing_docs)]
@@ -81,6 +83,8 @@ use uuid::Uuid;
 pub use app_menu::*;
 pub use keyboard::*;
 pub use keystroke::*;
+pub use mask_params::RenderMaskParams; // DeepBuild patch (windoliver/deepbuild#390)
+pub use mask_rect::AtlasRectBackend; // DeepBuild patch (windoliver/deepbuild#1480)
 
 /// Whether the platform is presenting a window's frames.
 ///
@@ -1700,19 +1704,7 @@ pub enum AtlasKey {
     Glyph(RenderGlyphParams),
     Svg(RenderSvgParams),
     Image(RenderImageParams),
-    Mask(RenderMaskParams),
-}
-
-/// DeepBuild patch (windoliver/deepbuild#390): the key of one alpha page from a glyph atlas GPUI
-/// doesn't own, uploaded once per `generation` and drawn through [`Window::paint_mask_sprite`].
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct RenderMaskParams {
-    /// Which atlas the page belongs to, chosen by its owner.
-    pub atlas: u32,
-    /// The page within that atlas.
-    pub page: u32,
-    /// Bumped by the owner each time the page's bytes change, so the stale upload is replaced.
-    pub generation: u32,
+    Mask(RenderMaskParams), // DeepBuild patch (windoliver/deepbuild#390)
 }
 
 impl AtlasKey {
@@ -1730,7 +1722,7 @@ impl AtlasKey {
             }
             AtlasKey::Svg(_) => AtlasTextureKind::Monochrome,
             AtlasKey::Image(_) => AtlasTextureKind::Polychrome,
-            AtlasKey::Mask(_) => AtlasTextureKind::Monochrome,
+            AtlasKey::Mask(_) => AtlasTextureKind::Monochrome, // DeepBuild patch (windoliver/deepbuild#390)
         }
     }
 }
@@ -1753,12 +1745,6 @@ impl From<RenderImageParams> for AtlasKey {
     }
 }
 
-impl From<RenderMaskParams> for AtlasKey {
-    fn from(params: RenderMaskParams) -> Self {
-        Self::Mask(params)
-    }
-}
-
 #[expect(missing_docs)]
 pub trait PlatformAtlas {
     /// The builder runs with the atlas locked and must not re-enter the same atlas.
@@ -1768,6 +1754,8 @@ pub trait PlatformAtlas {
         build: &mut dyn FnMut() -> Result<Option<(Size<DevicePixels>, Cow<'a, [u8]>)>>,
     ) -> Result<Option<AtlasTile>>;
     fn remove(&self, key: &AtlasKey);
+    /// DeepBuild patch (windoliver/deepbuild#1480): writes a rectangle of a page, see `mask_rect`.
+    fn write_rect(&self, _: &AtlasKey, _: Bounds<DevicePixels>, _: &[u8], _: usize) -> bool { false }
 
     #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
     fn contains(&self, _key: &AtlasKey) -> bool {

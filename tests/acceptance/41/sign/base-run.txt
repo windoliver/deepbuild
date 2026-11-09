@@ -1,0 +1,199 @@
+
+ RUN  v5.0.5 /Users/<user>/dev/claude-worktrees/doneright/github-issue-41-97fa68
+
+ ❯ tests/acceptance/41/sign/sign.test.ts (13 tests | 12 failed) 525029ms
+   ❯ AC7 #41.377b5cb2 The signed manifest records each archive's sha256 and the commit its preflight report passed on (2)
+     × AC7 #41.377b5cb2 a PASS report on the commit and a key give a manifest with that commit and each archive's sha256, signed over its exact bytes by the key's private half 35241ms
+     × AC7 #41.377b5cb2 the signature binds the manifest: one byte changed after signing fails verification 93929ms
+   ❯ AC7 #41.377b5cb2 The release packs only the commit its preflight report passed on (9)
+     × AC7 #41.377b5cb2 a report whose verdict is FAIL refuses the run, naming the verdict, and leaves no manifest, signature or tarball 107423ms
+     × AC7 #41.377b5cb2 a report whose verdict is BLOCKED refuses the run, naming the verdict, and leaves no manifest, signature or tarball 49671ms
+     × AC7 #41.377b5cb2 a report whose verdict is INCONCLUSIVE refuses the run, naming the verdict, and leaves no manifest, signature or tarball 38273ms
+     × AC7 #41.377b5cb2 a report whose verdict is INVALID refuses the run, naming the verdict, and leaves no manifest, signature or tarball 26377ms
+     × AC7 #41.377b5cb2 a report with no verdict is refused, since nothing missing passes 43189ms
+     × AC7 #41.377b5cb2 a PASS report on another commit refuses the run, naming both commits 25779ms
+     × AC7 #41.377b5cb2 a missing report refuses the run, naming its path 28987ms
+     × AC7 #41.377b5cb2 a report that is not JSON refuses the run, naming its path 21703ms
+   ❯ AC7 #41.377b5cb2 A release manifest is never unsigned: --key and --preflight come together (2)
+     × AC7 #41.377b5cb2 a PASS report without --key refuses the run, naming --key, and writes no manifest 22374ms
+     × AC7 #41.377b5cb2 a key without --preflight refuses the run, naming --preflight, and writes no manifest 23665ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 The signed manifest records each archive's sha256 and the commit its preflight report passed on > AC7 #41.377b5cb2 a PASS report on the commit and a key give a manifest with that commit and each archive's sha256, signed over its exact bytes by the key's private half
+AssertionError: manifest.json.sig must be written beside manifest.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/41/sign/sign.test.ts:127:89
+    125|     }
+    126|
+    127|     expect(existsSync(r.sig), 'manifest.json.sig must be written besid…
+       |                                                                                         ^
+    128|     const sig = readFileSync(r.sig);
+    129|     expect(sig.length, 'a raw Ed25519 signature is 64 bytes').toBe(64);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 The signed manifest records each archive's sha256 and the commit its preflight report passed on > AC7 #41.377b5cb2 the signature binds the manifest: one byte changed after signing fails verification
+Error: ENOENT: no such file or directory, open '/var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-JKjlGD/out/manifest.json.sig'
+ ❯ tests/acceptance/41/sign/sign.test.ts:141:17
+    139|
+    140|     const bytes = readFileSync(r.manifest);
+    141|     const sig = readFileSync(r.sig);
+       |                 ^
+    142|     expect(verify(null, bytes, key.publicKey, sig)).toBe(true);
+    143|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 The release packs only the commit its preflight report passed on > AC7 #41.377b5cb2 a report whose verdict is FAIL refuses the run, naming the verdict, and leaves no manifest, signature or tarball
+AssertionError: release-pack: 3 archives from 967f61308b36a76e2fd7d80c65a1500f177492b6 recorded in /var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-IkdudP/out/manifest.json
+
+: expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/41/sign/sign.test.ts:159:34
+    157|     const report = writeReport(dir, { commit: sha, verdict });
+    158|     const r = pack(repo, sha, out, ['--key', key.path, '--preflight', …
+    159|     expect(r.status, r.text).not.toBe(0);
+       |                                  ^
+    160|     expect(r.text).toContain(verdict);
+    161|     expect(leftovers(out)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 The release packs only the commit its preflight report passed on > AC7 #41.377b5cb2 a report whose verdict is BLOCKED refuses the run, naming the verdict, and leaves no manifest, signature or tarball
+AssertionError: release-pack: 3 archives from e6487a108bde52afd8a3c625b9b876c53df5af51 recorded in /var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-q3JsmS/out/manifest.json
+
+: expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/41/sign/sign.test.ts:159:34
+    157|     const report = writeReport(dir, { commit: sha, verdict });
+    158|     const r = pack(repo, sha, out, ['--key', key.path, '--preflight', …
+    159|     expect(r.status, r.text).not.toBe(0);
+       |                                  ^
+    160|     expect(r.text).toContain(verdict);
+    161|     expect(leftovers(out)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 The release packs only the commit its preflight report passed on > AC7 #41.377b5cb2 a report whose verdict is INCONCLUSIVE refuses the run, naming the verdict, and leaves no manifest, signature or tarball
+AssertionError: release-pack: 3 archives from 46198c98fbef967617de7f69d694fe66b94434e0 recorded in /var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-J0EA0b/out/manifest.json
+
+: expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/41/sign/sign.test.ts:159:34
+    157|     const report = writeReport(dir, { commit: sha, verdict });
+    158|     const r = pack(repo, sha, out, ['--key', key.path, '--preflight', …
+    159|     expect(r.status, r.text).not.toBe(0);
+       |                                  ^
+    160|     expect(r.text).toContain(verdict);
+    161|     expect(leftovers(out)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 The release packs only the commit its preflight report passed on > AC7 #41.377b5cb2 a report whose verdict is INVALID refuses the run, naming the verdict, and leaves no manifest, signature or tarball
+AssertionError: release-pack: 3 archives from c12e7dec461c3ff10ce49cc02d846f772b4e83ac recorded in /var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-ExjNg6/out/manifest.json
+
+: expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/41/sign/sign.test.ts:159:34
+    157|     const report = writeReport(dir, { commit: sha, verdict });
+    158|     const r = pack(repo, sha, out, ['--key', key.path, '--preflight', …
+    159|     expect(r.status, r.text).not.toBe(0);
+       |                                  ^
+    160|     expect(r.text).toContain(verdict);
+    161|     expect(leftovers(out)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 The release packs only the commit its preflight report passed on > AC7 #41.377b5cb2 a report with no verdict is refused, since nothing missing passes
+AssertionError: release-pack: 3 archives from 846a872227c79681754dbcc1c413a348bbfa1ffe recorded in /var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-d90kh9/out/manifest.json
+
+: expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/41/sign/sign.test.ts:169:34
+    167|     const report = writeReport(dir, { commit: sha });
+    168|     const r = pack(repo, sha, out, ['--key', key.path, '--preflight', …
+    169|     expect(r.status, r.text).not.toBe(0);
+       |                                  ^
+    170|     expect(leftovers(out)).toEqual([]);
+    171|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 The release packs only the commit its preflight report passed on > AC7 #41.377b5cb2 a PASS report on another commit refuses the run, naming both commits
+AssertionError: release-pack: 3 archives from 621e9de324684287cd3e17e79fbd56d7b4eb6ed2 recorded in /var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-WOlhME/out/manifest.json
+
+: expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/41/sign/sign.test.ts:182:34
+    180|     const report = writeReport(dir, { commit: first, verdict: 'PASS' }…
+    181|     const r = pack(repo, head, out, ['--key', key.path, '--preflight',…
+    182|     expect(r.status, r.text).not.toBe(0);
+       |                                  ^
+    183|     expect(r.text).toContain(first);
+    184|     expect(r.text).toContain(head);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 The release packs only the commit its preflight report passed on > AC7 #41.377b5cb2 a missing report refuses the run, naming its path
+AssertionError: release-pack: 3 archives from 320a6796d9987a3b805d495ad8435cffb3b60ecc recorded in /var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-HJ1WQY/out/manifest.json
+
+: expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/41/sign/sign.test.ts:204:34
+    202|     const missing = join(dir, 'no-such-preflight.json');
+    203|     const r = pack(repo, sha, out, ['--key', key.path, '--preflight', …
+    204|     expect(r.status, r.text).not.toBe(0);
+       |                                  ^
+    205|     expect(r.text).toContain('no-such-preflight.json');
+    206|     expect(leftovers(out)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 The release packs only the commit its preflight report passed on > AC7 #41.377b5cb2 a report that is not JSON refuses the run, naming its path
+AssertionError: release-pack: 3 archives from c8c445c4b09ff98e38e66c5b23c8a057719b4b07 recorded in /var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-ABal0x/out/manifest.json
+
+: expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/41/sign/sign.test.ts:214:34
+    212|     const report = writeReport(dir, `verdict: PASS\ncommit: ${sha}\n`,…
+    213|     const r = pack(repo, sha, out, ['--key', key.path, '--preflight', …
+    214|     expect(r.status, r.text).not.toBe(0);
+       |                                  ^
+    215|     expect(r.text).toContain('garbled-preflight.json');
+    216|     expect(leftovers(out)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 A release manifest is never unsigned: --key and --preflight come together > AC7 #41.377b5cb2 a PASS report without --key refuses the run, naming --key, and writes no manifest
+AssertionError: release-pack: 3 archives from f2adc035c5836e1ee5cbd5dd32d3b2e3228ad19b recorded in /var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-wA5WuE/out/manifest.json
+
+: expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/41/sign/sign.test.ts:225:34
+    223|     const report = writeReport(dir, { commit: sha, verdict: 'PASS' });
+    224|     const r = pack(repo, sha, out, ['--preflight', report]);
+    225|     expect(r.status, r.text).not.toBe(0);
+       |                                  ^
+    226|     expect(r.text).toContain('--key');
+    227|     expect(leftovers(out)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  tests/acceptance/41/sign/sign.test.ts > AC7 #41.377b5cb2 A release manifest is never unsigned: --key and --preflight come together > AC7 #41.377b5cb2 a key without --preflight refuses the run, naming --preflight, and writes no manifest
+AssertionError: release-pack: 3 archives from d85af85fe4e1cb6d648f2e6a8563c948bfbf6aa0 recorded in /var/folders/2p/k3jt9l3x0gn41dkh2t7vj0jc0000gp/T/dh41s-U0roHW/out/manifest.json
+
+: expected +0 not to be +0 // Object.is equality
+ ❯ tests/acceptance/41/sign/sign.test.ts:234:34
+    232|     const key = makeKey(dir);
+    233|     const r = pack(repo, sha, out, ['--key', key.path]);
+    234|     expect(r.status, r.text).not.toBe(0);
+       |                                  ^
+    235|     expect(r.text).toContain('--preflight');
+    236|     expect(leftovers(out)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  12 failed | 1 passed (13)
+   Start at  17:39:24
+   Duration  525.55s (tests 100%)
+

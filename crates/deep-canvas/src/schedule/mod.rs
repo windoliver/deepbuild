@@ -353,6 +353,9 @@ pub struct OpError {
     pub path: String,
     /// The read term, for `undeclared_read`.
     pub read: Option<String>,
+    /// What the operator found, for an issue that names more than its path (#1732: the
+    /// relations an arrangement still misses).
+    pub actual: Option<Value>,
 }
 
 impl OpError {
@@ -361,7 +364,14 @@ impl OpError {
             code,
             path: path.into(),
             read: None,
+            actual: None,
         }
+    }
+
+    /// The error with what the operator found.
+    pub fn with(mut self, actual: Value) -> OpError {
+        self.actual = Some(actual);
+        self
     }
 }
 
@@ -1046,6 +1056,7 @@ pub struct OpIssue {
     pub item: Option<String>,
     pub path: String,
     pub read: Option<String>,
+    pub actual: Option<Value>,
 }
 
 /// A read an operator made through the core (test builds).
@@ -2370,6 +2381,7 @@ impl Session {
                     item: l.nodes[n].item.map(|i| l.items[i].id.clone()),
                     path: e.path.clone(),
                     read: e.read.clone(),
+                    actual: e.actual.clone(),
                 };
                 // A panic freezes this session alone: every other session goes on.
                 if e.code == "operator_panic" && mode == Mode::Live && self.frozen.is_none() {
@@ -2710,6 +2722,18 @@ impl Session {
             }
         }
         out
+    }
+
+    /// A document array as the last frame read it (#497): for a stepping array, what the last
+    /// step at or before the frame's time left; `None` for an array no document node writes.
+    pub fn array(&self, s: &Scheduler<'_>, name: &str) -> Option<Val> {
+        let l = self.loaded.as_ref()?;
+        l.groups.iter().find_map(|g| {
+            let sop = &s.sealed.ops[g.op];
+            let w = sop.op.writes.iter().position(|w| w == name)?;
+            let node = &l.nodes[*g.nodes.first()?];
+            node.item.is_none().then(|| node.out.get(w).cloned()).flatten()
+        })
     }
 
     /// Every input a perturbed clean evaluation may change: each array the revision's nodes

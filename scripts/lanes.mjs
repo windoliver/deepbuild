@@ -22,25 +22,81 @@ export const ownLane = ['tests/acceptance/684/lean.test.ts'];
  * runner. tests/acceptance/327/ holds answers-redraft/, the blind redraft that is #327 AC2's hub-side test (its README);
  * the earlier answers.test.ts there keeps AC7, AC15 and AC16, so the folder runs whole.
  */
-export const alone = ['tests/acceptance/84/', 'tests/acceptance/580/', 'tests/acceptance/67/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/', 'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/claude.test.ts', 'tests/acceptance/1015/codex.test.ts', 'tests/acceptance/1015/focused.test.ts', 'tests/acceptance/1015/waiter.test.ts', 'tests/acceptance/1015/memory.test.ts', 'tests/acceptance/1015/gpu.test.ts', 'tests/acceptance/1015/redraft/own-repo.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1018/', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/87/gate/',
-  'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/420/', 'tests/acceptance/421/', 'tests/acceptance/423/', 'tests/acceptance/424/', 'tests/acceptance/430/', 'tests/group-compositor.test.ts', 'tests/acceptance/446/', 'tests/acceptance/419/', 'tests/acceptance/428/', 'tests/acceptance/1297/', 'tests/acceptance/422/', 'tests/acceptance/425/', 'tests/scene3d-interface.test.ts', 'tests/scene3d-shading.test.ts', 'tests/scene3d-contact.test.ts', 'tests/scene3d-culled-casters.test.ts', 'tests/acceptance/441/', 'tests/acceptance/440/', 'tests/acceptance/443/', 'tests/acceptance/433/', 'tests/acceptance/671/', 'tests/acceptance/1162/', 'tests/acceptance/381/', 'tests/acceptance/398/', 'tests/acceptance/397/', 'tests/acceptance/406/', 'tests/acceptance/238/', 'tests/acceptance/415/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/105/', 'tests/acceptance/498/', 'tests/acceptance/806/', 'tests/acceptance/402/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/777/', 'tests/acceptance/823/', 'tests/acceptance/856/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
+export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/acceptance/149-redraft-ac5/', 'tests/acceptance/149-redraft-ac10/', 'tests/acceptance/84/', 'tests/acceptance/580/', 'tests/acceptance/67/', 'tests/acceptance/66/', 'tests/acceptance/994/hub.test.ts', 'tests/acceptance/994/deadline-redraft/', 'tests/acceptance/20/', 'tests/acceptance/65/', 'tests/acceptance/82/', 'tests/acceptance/1202/', 'tests/acceptance/55/', 'tests/acceptance/103/', 'tests/acceptance/363/', 'tests/acceptance/365/', 'tests/acceptance/262/', 'tests/acceptance/366/', 'tests/acceptance/356/', 'tests/acceptance/24/', 'tests/acceptance/26/', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/855/', 'tests/acceptance/857/', 'tests/acceptance/854/', 'tests/acceptance/1487/', 'tests/acceptance/896/', 'tests/acceptance/881/', 'tests/acceptance/411/', 'tests/acceptance/488/', 'tests/acceptance/489/', 'tests/acceptance/490/', 'tests/acceptance/490-redraft-2/', 'tests/acceptance/490-oracle/', 'tests/acceptance/490-oracle-redraft/', 'tests/acceptance/491/', 'tests/acceptance/492/', 'tests/acceptance/492-gaps/', 'tests/acceptance/493/', 'tests/acceptance/493-redraft-ac7/', 'tests/acceptance/493-redraft-ac12/', 'tests/acceptance/493-redraft-ac18/', 'tests/acceptance/494/', 'tests/acceptance/495/', 'tests/acceptance/496/', 'tests/acceptance/497/', 'tests/acceptance/388/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/160/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/', 'tests/acceptance/185/', 'tests/acceptance/200/', 'tests/acceptance/417/', 'tests/acceptance/418/', 'tests/acceptance/464/', 'tests/acceptance/467/', 'tests/acceptance/467-redraft-ac2/', 'tests/acceptance/465/', 'tests/acceptance/166/', 'tests/acceptance/481/', 'tests/acceptance/221/', 'tests/acceptance/412/', 'tests/acceptance/1098/budgets.test.ts', 'tests/acceptance/1015/claude.test.ts', 'tests/acceptance/1015/codex.test.ts', 'tests/acceptance/1015/focused.test.ts', 'tests/acceptance/1015/waiter.test.ts', 'tests/acceptance/1015/memory.test.ts', 'tests/acceptance/1015/gpu.test.ts', 'tests/acceptance/1015/redraft/own-repo.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1018/', 'tests/acceptance/1143/', 'tests/acceptance/399/', 'tests/acceptance/87/gate/', 'tests/acceptance/1537/', 'tests/acceptance/1022/',
+  'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/378/', 'tests/acceptance/420/', 'tests/acceptance/421/', 'tests/acceptance/423/', 'tests/acceptance/424/', 'tests/acceptance/430/', 'tests/group-compositor.test.ts', 'tests/acceptance/446/', 'tests/acceptance/419/', 'tests/acceptance/428/', 'tests/acceptance/1297/', 'tests/acceptance/422/', 'tests/acceptance/426/', 'tests/acceptance/425/', 'tests/acceptance/427/', 'tests/scene3d-interface.test.ts', 'tests/scene3d-shading.test.ts', 'tests/scene3d-contact.test.ts', 'tests/scene3d-culled-casters.test.ts', 'tests/acceptance/441/', 'tests/acceptance/440/', 'tests/acceptance/1640/', 'tests/acceptance/443/', 'tests/acceptance/433/', 'tests/acceptance/671/', 'tests/acceptance/1162/', 'tests/acceptance/381/', 'tests/acceptance/398/', 'tests/acceptance/397/', 'tests/acceptance/406/', 'tests/acceptance/238/', 'tests/acceptance/415/', 'tests/acceptance/383/', 'tests/acceptance/384/', 'tests/acceptance/400/', 'tests/acceptance/401/', 'tests/acceptance/105/', 'tests/acceptance/498/', 'tests/acceptance/806/', 'tests/acceptance/402/', 'tests/acceptance/104/', 'tests/acceptance/989/', 'tests/acceptance/327/', 'tests/acceptance/379/', 'tests/acceptance/1413/', 'tests/acceptance/777/', 'tests/acceptance/823/', 'tests/acceptance/856/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/redraft-ac12/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/', 'tests/acceptance/37/', 'packages/checks-journey/test/unrun.test.ts', 'tests/acceptance/315/', ...['replay', 'budgets', 'process-start'].map((f) => `tests/acceptance/21/${f}.test.ts`), 'tests/acceptance/348/', 'tests/acceptance/349/', 'tests/acceptance/351/', 'tests/acceptance/355/', 'tests/acceptance/884/', 'tests/acceptance/139/',
-  'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/567/fast.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/386/', 'tests/acceptance/1174/', 'tests/acceptance/1173/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/', 'tests/acceptance/429/', 'tests/acceptance/483/', 'tests/acceptance/484/',
+  'tests/acceptance/159/budgets.test.ts', 'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/666/fast.test.ts', 'tests/acceptance/668/fast.test.ts', 'tests/acceptance/567/fast.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts', 'tests/acceptance/237/', 'tests/acceptance/34/', 'tests/acceptance/667/', 'tests/acceptance/380/', 'tests/acceptance/382/', 'tests/acceptance/386/', 'tests/acceptance/1174/', 'tests/acceptance/1173/', 'tests/acceptance/371/', 'tests/acceptance/376/', 'tests/acceptance/306/', 'tests/acceptance/403/', 'tests/acceptance/429/', 'tests/acceptance/431/', 'tests/acceptance/432/', 'tests/acceptance/483/', 'tests/acceptance/484/', 'tests/acceptance/252/',
   'tests/acceptance/18/kit/', 'tests/acceptance/18/session/', 'tests/acceptance/18/binding/', ...['callers', 'failures', 'loops', 'mcp', 'prompts', 'record', 'replies'].map((f) => `tests/acceptance/18/mapping/${f}.test.ts`),
   'tests/acceptance/453/',
+  'tests/acceptance/46/', 'packages/github/test/',
   'tests/acceptance/1172/',
-  'tests/acceptance/167/',
+  'tests/acceptance/1454/',
+  'tests/acceptance/1002/first-screen-redraft/',
+  'tests/acceptance/994/first-screen-redraft/',
+  'tests/acceptance/167/', 'tests/acceptance/1328/',
   ...['coexist', 'disable', 'install', 'stophold', 'tamper', 'waiter'].map((f) => `tests/acceptance/18/install/${f}.test.ts`), 'tests/acceptance/19/',
   'tests/acceptance/1312/',
   'tests/acceptance/629/',
-  'tests/acceptance/25/routes/', 'tests/acceptance/25/fallbacks/', 'tests/acceptance/25/live/budgets.test.ts', 'tests/acceptance/321/', 'tests/acceptance/303/', 'tests/acceptance/322/', 'tests/acceptance/323/', 'tests/acceptance/324/', 'tests/acceptance/325/', 'tests/acceptance/347/', 'tests/acceptance/340/',
+  'tests/acceptance/25/routes/', 'tests/acceptance/25/fallbacks/', 'tests/acceptance/25/live/budgets.test.ts', 'tests/acceptance/321/', 'tests/acceptance/303/', 'tests/acceptance/344/', 'tests/acceptance/322/', 'tests/acceptance/323/', 'tests/acceptance/324/', 'tests/acceptance/325/', 'tests/acceptance/347/', 'tests/acceptance/340/',
   'tests/acceptance/29/hub.test.ts', 'tests/acceptance/29/slots.test.ts', 'tests/acceptance/907/slots.test.ts', 'tests/acceptance/907/background.test.ts', 'tests/acceptance/965/', 'tests/acceptance/996/', 'packages/hub/test/loop-starters.test.ts', 'packages/hub/test/loop-transcript.test.ts', 'tests/acceptance/29/budgets.test.ts',
   'tests/acceptance/1175/',
   'tests/acceptance/23/permissions/', 'tests/acceptance/23/match/budgets.test.ts', 'tests/acceptance/83/', 'tests/acceptance/120/budgets.test.ts', 'tests/acceptance/120/budgets-idle-redraft.test.ts',
+  'tests/acceptance/352/',
   ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
   'tests/acceptance/990/',
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
-  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/'];
+  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/'];
+/**
+ * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
+ * in the worktrees and affected.mjs's node --test reports held on 2026-11-07. affected.mjs runs them with --slow and for
+ * a change that adds or edits them, and leaves them otherwise INCONCLUSIVE, never PASS; the release preflight runs them
+ * (docs/parallel-proof.md, section 7a). A file leaves the list once its run is back under two minutes.
+ */
+export const slow = [
+  'packages/conformance/src/slots/environment.test.ts', 'packages/hub/test/loop-starters.test.ts',
+  'packages/hub/test/loop-transcript.test.ts', 'packages/pi/test/guards.test.ts',
+  'tests/acceptance/1002/cli.test.ts', 'tests/acceptance/1002/screens.test.ts',
+  'tests/acceptance/1002/twins.test.ts', 'tests/acceptance/1015/claude.test.ts',
+  'tests/acceptance/1017/floor.test.ts', 'tests/acceptance/1017/placement.test.ts',
+  'tests/acceptance/1017/toolchains.test.ts', 'tests/acceptance/1113/before.test.mjs',
+  'tests/acceptance/1114/lanes.test.mjs', 'tests/acceptance/1117/proofs.test.mjs',
+  'tests/acceptance/112/eval.test.ts', 'tests/acceptance/1162/present.test.ts',
+  'tests/acceptance/1162/query.test.ts', 'tests/acceptance/1297/convex-sun.test.ts',
+  'tests/acceptance/138/release.test.ts', 'tests/acceptance/138/shipped.test.ts',
+  'tests/acceptance/139/apisurface.test.ts', 'tests/acceptance/140/gpu/features.test.ts',
+  'tests/acceptance/149/taste.test.ts', 'tests/acceptance/16/address.test.ts',
+  'tests/acceptance/16/hotpath-ac18-redraft.test.ts', 'tests/acceptance/185/kit.test.ts',
+  'tests/acceptance/185/redraft/kit-behavior-redraft.test.ts', 'tests/acceptance/19/doctor/contract.test.ts',
+  'tests/acceptance/200/fillers.test.ts', 'tests/acceptance/200/gpu.test.ts', 'tests/acceptance/200/listing.test.ts',
+  'tests/acceptance/200/module.test.ts', 'tests/acceptance/200/opening.test.ts',
+  'tests/acceptance/262/retention.test.ts', 'tests/acceptance/27/desktop-redraft-2/desktop.test.ts',
+  'tests/acceptance/27/outcomes-redraft/outcomes.test.ts', 'tests/acceptance/27/waits.test.ts',
+  'tests/acceptance/30/claims.test.ts', 'tests/acceptance/30/mask.test.ts', 'tests/acceptance/31/assertion.test.ts',
+  'tests/acceptance/31/base-runs.test.ts', 'tests/acceptance/31/snapshot.test.ts',
+  'tests/acceptance/314/kits.test.ts', 'tests/acceptance/315/failopen.test.ts',
+  'tests/acceptance/316/corpus.test.ts', 'tests/acceptance/326/setup/click.test.ts',
+  'tests/acceptance/340/app/authority.test.ts', 'tests/acceptance/372/frame.test.ts',
+  'tests/acceptance/379/perf-lane.test.ts', 'tests/acceptance/402/backpressure.test.ts',
+  'tests/acceptance/412/listing.test.ts', 'tests/acceptance/415/navgraph.test.ts',
+  'tests/acceptance/417/state.test.ts', 'tests/acceptance/419/velocity-seek.test.ts',
+  'tests/acceptance/42/doctor.test.ts', 'tests/acceptance/422/showpiece-fixture.test.ts',
+  'tests/acceptance/424/picks.test.ts', 'tests/acceptance/425/redraft/taste.test.ts',
+  'tests/acceptance/48/harness.test.mjs', 'tests/acceptance/484/forest.test.ts',
+  'tests/acceptance/674/default.test.ts', 'tests/acceptance/674/document.test.ts',
+  'tests/acceptance/674/nearest.test.ts', 'tests/acceptance/674/session.test.ts',
+  'tests/acceptance/824/cycles.test.ts', 'tests/acceptance/85/hub/network.test.ts',
+  'tests/acceptance/855/hash.test.ts', 'tests/acceptance/86/concurrent.test.ts',
+  'tests/acceptance/910/ac1-issue-link.test.mjs', 'tests/acceptance/910/ac2-renamed-heading.test.mjs',
+  'tests/acceptance/910/ac3-offline.test.mjs', 'tests/acceptance/965/background.test.ts',
+  'tests/acceptance/965/grace.test.ts', 'tests/acceptance/965/starts.test.ts', 'tests/acceptance/992/agree.test.ts',
+  'tests/live-instancers.test.ts', 'tests/scene3d-interface.test.ts'
+];
+/**
+ * Folders and files the alone block runs with nothing beside them, not even another shard: #16's and #315's files start
+ * real hubs and deep-hook and time their sockets to 2 and 50 ms, and #236's read the system's one sandbox log stream
+ * (docs/parallel-proof.md, section 7).
+ */
+export const exclusive = ['tests/acceptance/16/', 'tests/acceptance/315/', 'tests/acceptance/236/'];
 /**
  * Vitest files run by hand, as their READMEs say: #685's proof checks need Lean 4.35 and Kani 0.68 installed, and
  * minutes; #666's, #668's and #669's live checkpoints and #18's live sessions start real Claude Code sessions on your plan, so
@@ -70,7 +126,7 @@ export const alone = ['tests/acceptance/84/', 'tests/acceptance/580/', 'tests/ac
  * answers affected.mjs's own `cargo metadata` and marks the run started before any block runs; its blind redraft,
  * redraft/own-repo.test.ts, runs in its place.
  */
-export const byHand = ['tests/acceptance/685/', 'tests/acceptance/1202/session.live.test.ts', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/567/session.live.test.ts', 'tests/acceptance/669/session.live.test.ts', 'tests/acceptance/1156/session.live.test.ts', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
+export const byHand = ['tests/acceptance/46/live.test.ts', 'tests/acceptance/685/', 'tests/acceptance/70/', 'tests/proof/70/', 'tests/acceptance/1202/session.live.test.ts', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/567/session.live.test.ts', 'tests/acceptance/669/session.live.test.ts', 'tests/acceptance/1156/session.live.test.ts', 'tests/acceptance/1156/linux/', 'tests/acceptance/668/linux/', 'tests/acceptance/669/linux/', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
   'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/112/live.test.ts', 'tests/acceptance/27/session.live.test.ts', 'tests/acceptance/27/desktop.test.ts', 'tests/acceptance/27/desktop-redraft/', 'tests/acceptance/27/outcomes.test.ts', 'tests/acceptance/806/live.test.ts',
   'tests/acceptance/124/ac1-agents.live.test.ts', 'tests/acceptance/124/ac5-budgets.live.test.ts', 'tests/proof/883/', 'tests/proof/994/', 'tests/acceptance/366/ac1-build.live.test.ts', 'tests/acceptance/140/gpu/color.live.test.ts',
   'tests/acceptance/140/gpu/capture.live.test.ts', ...['empty', 'invalid', 'starts'].map((f) => `tests/acceptance/874/${f}.test.ts`),
@@ -87,9 +143,13 @@ export const byHand = ['tests/acceptance/685/', 'tests/acceptance/1202/session.l
  * `status === 'INCONCLUSIVE'`; those that gate on the load or a reference Mac through a helper of another name, as
  * #120's inconclusiveIfLoaded, #34's notReferenceMac, #104's judge, #25's judgeP95 and #906's mustBeHeld; and those
  * judging a wall-clock budget, named one by one. A rule by what a file imports marks 386 files, so none is used.
+ * Also those that start perf.mjs or preflight.mjs (or tests/preflight.test.mjs) from a copy of the whole scripts/
+ * folder on the machine's own table (tests/takes-timed.test.mjs): each such run requests timed, and while that
+ * request is pending under the block's test grant no top-level grant on the machine starts; under a timed grant
+ * the request passes through.
  */
 export const timed = [
-  'tests/acceptance/1018/budgets.test.ts', 'tests/acceptance/1018/redraft-ac6/budgets.test.ts',
+  'tests/acceptance/1018/budgets.test.ts', 'tests/acceptance/1018/redraft-ac6/budgets.test.ts', 'tests/acceptance/46/budgets.test.ts',
   'tests/acceptance/103/budgets.test.ts', 'tests/acceptance/104/budgets.test.ts',
   'tests/acceptance/105/budgets.test.ts', 'tests/acceptance/105/live.test.ts',
   'tests/acceptance/1097/budgets.test.ts', 'tests/acceptance/1098/budgets.test.ts',
@@ -115,14 +175,14 @@ export const timed = [
   'tests/acceptance/30/budgets.test.ts', 'tests/acceptance/303/budgets.test.ts',
   'tests/acceptance/304/budgets.test.ts', 'tests/acceptance/305/budgets.test.ts',
   'tests/acceptance/306/budgets.test.ts', 'tests/acceptance/31/budget-snapshot.test.ts',
-  'tests/acceptance/31/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts',
+  'tests/acceptance/31/budgets.test.ts', 'tests/acceptance/311/redraft-ac12/budgets.test.ts',
   'tests/acceptance/315/budgets-overhead-redraft.test.ts', 'tests/acceptance/315/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/325/timing.test.ts',
   'tests/acceptance/331/budgets.test.ts', 'tests/acceptance/34/budgets.test.ts',
   'tests/acceptance/37/budgets.test.ts', 'tests/acceptance/37/redraft-ac16/budgets.test.ts',
   'tests/acceptance/340/flow/budgets.test.ts', 'tests/acceptance/348/budgets.test.ts',
   'tests/acceptance/356/budgets.test.ts', 'tests/acceptance/356/click.test.ts',
-  'tests/acceptance/358/spike.live.test.mjs', 'tests/acceptance/365/budgets.test.ts',
+  'tests/acceptance/358/spike.live.test.mjs', 'tests/acceptance/365/budgets.test.ts', 'tests/acceptance/66/budgets.test.ts',
   'tests/acceptance/377/budgets.test.ts', 'tests/acceptance/379/reasons.test.ts',
   'tests/acceptance/380/budgets.test.ts', 'tests/acceptance/383/city.test.ts', 'tests/acceptance/385/spike.test.ts',
   'tests/acceptance/386/budgets.test.ts', 'tests/acceptance/387/budgets.test.ts',
@@ -131,13 +191,15 @@ export const timed = [
   'tests/acceptance/401/budgets.test.ts', 'tests/acceptance/402/budgets.test.ts',
   'tests/acceptance/412/budgets.test.ts', 'tests/acceptance/417/budgets.test.ts',
   'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/489/budgets.test.ts',
-  'tests/acceptance/55/budgets.test.ts', 'tests/acceptance/65/budgets.test.ts', 'tests/acceptance/568/judge.test.mjs',
+  'tests/acceptance/55/budgets.test.ts', 'tests/acceptance/65/budgets.test.ts',
+  'tests/acceptance/246/lanes.test.mjs', 'tests/acceptance/568/', 'tests/acceptance/583/perf-added-tests.test.mjs',
+  'tests/acceptance/724/', 'tests/preflight.test.mjs',
   'tests/acceptance/572/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
   'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/raised.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts',
   'tests/acceptance/68/budgets.test.ts', 'tests/acceptance/69/budgets.test.ts',
   'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/wait.test.ts',
   'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts',
-  'tests/acceptance/83/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/854/idle.test.ts',
+  'tests/acceptance/83/budgets.test.ts', 'tests/acceptance/85/budgets.test.ts', 'tests/acceptance/854/idle.test.ts', 'tests/acceptance/1487/wakeups.test.ts',
   'tests/acceptance/854/patch.test.ts', 'tests/acceptance/854/replica.test.ts',
   'tests/acceptance/854/scene-read.test.ts', 'tests/acceptance/855/costs.test.ts',
   'tests/acceptance/855/keying.test.ts', 'tests/acceptance/857/background.test.ts',
@@ -149,9 +211,62 @@ export const timed = [
   'tests/benchmark.test.mjs'
 ];
 
+// #33's suite runs one file at a time, its live files by hand, and its budget as a timed file.
+alone.push('tests/acceptance/33/');
+// #1427's files build deep-drive and start about 40 replicas; its budget runs by hand on the reference Mac.
+alone.push('tests/acceptance/1427/');
+byHand.push('tests/acceptance/1427/ac8-budget.live.test.ts');
+timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
+// #1550's files build a GPUI text probe and deep-drive, and start replicas.
+alone.push('tests/acceptance/1550/');
+// #1434's files build deep-replica and start a replica each, and ac5 runs #377's handoff suite; its live window files
+// run by hand on the reference Mac, the budgets as a timed file.
+alone.push('tests/acceptance/1434/');
+byHand.push('tests/acceptance/1434/ac6-idle.live.test.ts', 'tests/acceptance/1434/ac7-budgets.live.test.ts', 'tests/acceptance/1434/ac8-snapshots.live.test.ts');
+timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
+// #1436's files build deep-replica and drive the GPU; its live window files (reduced motion's frames, the budgets) open the
+// app's window on this Mac's screen, and its budgets are a timed file.
+alone.push('tests/acceptance/1436/');
+byHand.push('tests/acceptance/1436/ac2-still.live.test.ts', 'tests/acceptance/1436/ac9-budgets.live.test.ts');
+timed.push('tests/acceptance/1436/ac9-budgets.live.test.ts');
+byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
+timed.push('tests/acceptance/33/budget.test.ts');
+
+// #1546's files build deep-drive and start replicas; its live file opens the real window on a real hub, by hand.
+alone.push('tests/acceptance/1546/');
+byHand.push('tests/acceptance/1546/ac4-needs-you.live.test.ts');
+timed.push('tests/acceptance/1546/ac4-needs-you.live.test.ts');
+
+// #1348's suite runs the plain words lane, which builds and draws its fixture run in the replica: one file at a time.
+alone.push('tests/acceptance/1348/');
+// #1455's suite builds deep-drive, the replica and the app, and draws the fixture run in them: one file at a time.
+alone.push('tests/acceptance/1455/');
+// #505's files each build deep-canvas-render (and its formula file deep-show): one file at a time.
+alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
+// #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.
+alone.push('tests/acceptance/1479/');
+// #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
+alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests/acceptance/531-redraft-ac12/');
+// #499's files build deep-show (and deep-logic, deep-canvas-render) in several feature sets, one a release build; the
+// players and out-of-view readings are timed.
+alone.push('tests/acceptance/499/');
+timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/video/out-of-view.test.ts');
+// #532's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome, and read CPU times per frame and per step.
+alone.push('tests/acceptance/532/');
+// #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
+alone.push('tests/acceptance/1731/');
+// #1732's files each build deep-show: one file at a time.
+alone.push('tests/acceptance/1732/');
+
+// #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
+alone.push('tests/acceptance/1477/');
+timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts', 'tests/acceptance/1477/redraft/record.test.ts');
+// #1718's files build deep-show and deep-hook, start hubs and lay out an installed tree.
+alone.push('tests/acceptance/1718/');
+
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
-  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, draw each color a color-literal FAIL line names from the role it names, or regenerate the extension guide with node scripts/guide.mjs.' },
+  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed.' },
   { name: 'unit', commands: [
     // The canvas, text and marks acceptance files each build a binary before spawning it, and cargo
     // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it
@@ -187,14 +302,24 @@ export const checks = [
   // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the
   // contracts package the typecheck lane builds.
   { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.' },
-  // Every link from the design docs and the open issues into docs/*.md lands on a heading or an <a id> (#910). It
-  // reads the open issues the catalogue drift lane fetched.
-  { name: 'design links', commands: [[process.execPath, 'scripts/design-links.mjs']], fix: 'Point each link named above at a heading or <a id> its doc has, or give the doc back the heading it linked; offline, run again with network and gh signed in.' },
+  // Every link from the design docs and the open issues into docs/*.md lands on a heading or an <a id> (#910), and
+  // every `deep` command and agent tool an open issue names is in the design or planned (#1329). It reads the open
+  // issues the catalogue drift lane fetched.
+  { name: 'design links and names', commands: [[process.execPath, 'scripts/design-links.mjs']], fix: 'Point each link named above at a heading or <a id> its doc has, or give the doc back the heading it linked; add each name above to the design in code, or to scripts/planned-names.txt as `<name> #<issue>` while its design waits; remove a stale planned name; offline, run again with network and gh signed in.' },
+  // Public text names no product the project only studied (#1329): the change's added lines, its commit messages and
+  // the open issues, against the salted hashes in scripts/studied-names.json.
+  { name: 'public text', commands: [[process.execPath, 'scripts/public-text.mjs']], fix: 'Restate each finding above in our own words, without the name; a name DeepBuild runs, links, calls, reads or writes leaves the list in its own pull request; offline, run again with network and gh signed in.' },
+  // One set of plain words (#1348): the replica draws the lane's fixture run, and the card, the page, notifications
+  // and the run's end notice show no word contracts/plain-words.json lists and no stack trace; a session's page and
+  // what a row opens keep the real names.
+  { name: 'plain words', commands: [['cargo', 'build', '--locked', '-p', 'deep-replica', '--features', 'env-plants', '--bin', 'deep-plain-words'], [`${process.env.CARGO_TARGET_DIR ?? 'target'}/debug/deep-plain-words`]], fix: 'Say each string above in the plain word it names, or move what it shows one click away to the page its row opens.' },
   // The fixture corpus (#47): every covered agent version has a recorded set holding each event its
   // facts list, each set replays clean through its adapter, and the corpus stays under 200 MB.
   { name: 'corpus', commands: [[process.execPath, 'scripts/corpus.mjs', 'check']], fix: 'Follow the Fix line under each corpus failure above.' },
   // The canvas conformance kit over the shipped canvas modules (#138): every part, headless on Vello CPU and
   // wgpu's noop backend, no GPU. It rewrites crates/deep-show/kit-ledger.json, which a release build seals by.
+  // #1427: the motion check on the shipped journeys for Needs you, a session page and the project page.
+  { name: 'motion', commands: [['cargo', 'build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive'], [process.execPath, 'scripts/motion.mjs']], fix: 'Make the motion each finding above names settle, fade or fly as declared,.' },
   { name: 'canvas kit', commands: [[process.execPath, 'scripts/canvas-kit.mjs']], fix: 'Repair the canvas module and part each line above names; run the kit call alone to replay a failing seed.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
@@ -225,6 +350,12 @@ export const checks = [
  * #668's setup checkpoint, #567's spine exit and #18's live sessions start real Claude Code sessions on your plan, and take minutes.
  */
 export const releaseLanes = [
+  {
+    // #41's: every recorded budget task on this commit and on the last release, which per-change margins can't bound.
+    name: 'release budgets',
+    commands: [[process.execPath, 'scripts/release-budgets.mjs', '--candidate', 'HEAD']],
+    fix: 'Under FAIL, the task named got slower than the last release by more than the release margin: find the change that slowed it and rework it. With no last release, tag the last shipped commit release/<version>.',
+  },
   {
     // #824's: 5,000 cycles beside the merge base's, about 90 minutes, so never in the checks' time budget.
     name: 'hub churn',
@@ -262,21 +393,22 @@ export const releaseLanes = [
     // #668's: deep setup beside your own hook, a real session in deep status with its tool calls and commit, the
     // doctor, off and on, and deep setup --undo leaving your settings byte for byte.
     name: 'setup checkpoint',
-    commands: [['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/668', 'session.live.test.ts']],
+    commands: [['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/668', ...(process.platform === 'linux' ? ['linux/session.live.test.ts'] : ['--exclude', 'linux/**', 'session.live.test.ts'])]],
     fix: 'Repair what each failing test names; a BLOCKED run names what is missing, such as CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` or a Claude Code version the adapter facts cover.',
   },
   {
     // #669's: a real stop that says done before the fix held and sent back with its FAIL line, the fix's PASS naming
     // its commit, deep status matching the chat, and "all done?" answered from the record.
     name: 'done gate checkpoint',
-    commands: [['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/669', 'session.live.test.ts']],
+    commands: [['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/669', ...(process.platform === 'linux' ? ['linux/session.live.test.ts'] : ['--exclude', 'linux/**', 'session.live.test.ts'])]],
     fix: 'Repair what each failing test names; a BLOCKED run names what is missing, such as CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` or a Claude Code version the adapter facts cover.',
   },
   {
     // #1156's: a real session's risky calls stopped before they run: an unreadable push denied, a delete staged, a
-    // push held on its plan until a signed yes, a stack's stand-in and a project extension's deny.
+    // push held on its plan until a signed yes, a stack's stand-in and a project extension's deny. On Linux its twin,
+    // linux/, where polkit confirms the yes (#70).
     name: 'risky calls checkpoint',
-    commands: [['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/1156', 'session.live.test.ts']],
+    commands: [['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/1156', ...(process.platform === 'linux' ? ['linux/session.live.test.ts'] : ['--exclude', 'linux/**', 'session.live.test.ts'])]],
     fix: 'Repair what each failing test names; a BLOCKED run names what is missing, such as CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` or a Claude Code version the adapter facts cover.',
   },
   {

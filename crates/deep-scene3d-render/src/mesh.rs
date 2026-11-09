@@ -7,6 +7,7 @@ use deep_canvas_scene3d::scene::Shape;
 use deep_gpu::device::Device;
 use wgpu::util::DeviceExt as _;
 
+#[derive(Clone)]
 pub struct Mesh {
     pub vertices: wgpu::Buffer,
     pub indices: wgpu::Buffer,
@@ -38,7 +39,7 @@ fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
-fn geometry(shape: Shape) -> (Vec<f32>, Vec<u32>) {
+pub(crate) fn geometry(shape: Shape) -> (Vec<f32>, Vec<u32>) {
     let mut v = Vec::new();
     let mut i = Vec::new();
     match shape {

@@ -3,12 +3,12 @@
 // fields, its text scrubbed of every value the hub holds. Runs in the parser workers, off the event loop.
 import { closeSync, openSync, readFileSync, readSync, readdirSync, fstatSync } from 'node:fs';
 import { join } from 'node:path';
-import { ADAPTERS, factsAdapter, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
+import { ADAPTERS, factsAdapter, readFacts, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
-import { derivedId, refusal, signature, type Draft, type HookMeta, type Parsed, type Plant } from './wire.js';
+import { derivedId, refusal, signature, type Draft, type HookMeta, type Hunk, type Parsed, type Plant } from './wire.js';
 
 /** The hub's moments an agent's own event names stand for, where the agent's differ from the hook names the core reads. */
 const MOMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
@@ -19,6 +19,13 @@ const TOOL_KINDS = ['shell', 'read', 'edit', 'write', 'search', 'fetch', 'mcp', 
 const FROM = ['person', 'scheduled', 'subagent', 'session', 'continuation', 'unknown'];
 const ASKS = ['tool', 'plan', 'question', 'mode'];
 const ATTENTION = ['working', 'waiting', 'finished'];
+/**
+ * The hub's moment for a Codex slash command that fires UserPromptSubmit (#1022): the command isn't a prompt you typed,
+ * so a reader keyed on the prompt's moment (a turn's start, its ask, the continue's count) passes it by.
+ */
+export const SLASH_COMMAND = 'SlashCommand';
+/** Codex's own slash commands, which Codex runs itself: never words for the model. */
+const CODEX_COMMAND = /^\/(compact|review|init|new|clear|undo|diff|status|model|permissions|approvals|mention|mcp|goal|plan|resume|fork|rename|logout|quit|exit|feedback)(?=\s|$)/;
 const SEQ_WHY = 'seq is when the hook started, in ns since the Unix epoch, as a canonical decimal string from 0 to 9223372036854775807: digits only, no sign, no leading zero, never a JSON number.';
 const MAX_MS = 9_007_199_254_740_991n;
 
@@ -33,6 +40,42 @@ const needsSubject = (kind: string): boolean => {
   return needs;
 };
 
+/**
+ * A structuredPatch hunk in line numbers (#352): one hunk per run of removed and added lines, its context lines left
+ * out and its lines equal at both ends taken off, so an insert above a line counts as the insert alone; a run that only
+ * removes marks where it was. Each starts where it stands once the runs above it are applied. The lines' text is
+ * compared here and dropped.
+ */
+function hunkOf(h: JsonObject): Hunk[] {
+  const nums = [h.oldStart, h.oldLines, h.newStart, h.newLines];
+  if (!nums.every((n) => Number.isInteger(n) && Number(n) >= 0) || !Array.isArray(h.lines)) return [];
+  const runs: Hunk[] = [];
+  let line = h.newStart as number;
+  let gone: string[] = [];
+  let came: string[] = [];
+  const flush = () => {
+    let head = 0;
+    while (head < gone.length && head < came.length && gone[head] === came[head]) head++;
+    let tail = 0;
+    while (tail < gone.length - head && tail < came.length - head && gone[gone.length - 1 - tail] === came[came.length - 1 - tail]) tail++;
+    const first = line - came.length + head;
+    const removed = gone.length - head - tail;
+    const added = came.length - head - tail;
+    if (removed || added) runs.push({ oldStart: first, oldLines: removed, newLines: added, changed: added ? Array.from({ length: added }, (_, i) => first + i) : [first] });
+    gone = [];
+    came = [];
+  };
+  for (const raw of h.lines) {
+    const text = str(raw);
+    if (text.startsWith('-')) { if (came.length) flush(); gone.push(text.slice(1)); }
+    else if (text.startsWith('+')) { came.push(text.slice(1)); line++; }
+    // "\ No newline at end of file" is about the line before it, not a line of its own.
+    else if (!text.startsWith('\\')) { flush(); line++; }
+  }
+  flush();
+  return runs;
+}
+
 let adapters: AdapterRegistry | undefined;
 /**
  * The shipped adapters; DEEP_HUB_TEST_FACTS names a folder whose facts files they read instead, as a widened range
@@ -43,10 +86,12 @@ export function hubAdapters(): AdapterRegistry {
   const base = shipped();
   if (!folder) return base;
   const reg = emptyRegistry();
-  for (const file of readdirSync(folder).filter((f) => f.endsWith('.facts.json') && f !== 'mcp-servers.facts.json' && f !== 'loops.facts.json')) {
+  // A facts file for an agent with no shipped adapter (cursor's, opencode's) is data for other readers, as the
+  // MCP and loop facts are: it registers nothing.
+  for (const file of readdirSync(folder).filter((f) => f.endsWith('.facts.json'))) {
     const facts = JSON.parse(readFileSync(join(folder, file), 'utf8')) as JsonObject;
     const name = String(facts.agent);
-    reg.register(name, factsAdapter(facts, base.get(name) as Adapter));
+    if (base.names().includes(name)) reg.register(name, factsAdapter(facts, base.get(name) as Adapter));
   }
   return reg;
 }
@@ -70,7 +115,7 @@ export function toolClasses(): Record<string, 'read'> {
 /** The loop facts (adapters/loops.facts.json): the tools that schedule, cancel and run in the background, per agent. */
 let loopFacts: JsonObject | undefined;
 const loopsOf = (name: string): JsonObject => {
-  loopFacts ??= JSON.parse(readFileSync(new URL('../../../adapters/loops.facts.json', import.meta.url), 'utf8')) as JsonObject;
+  loopFacts ??= readFacts<JsonObject>('loops.facts.json');
   const agents = loopFacts.agents as JsonObject;
   return isObj(agents[name]) ? agents[name] : {};
 };
@@ -123,6 +168,11 @@ export function versionOf(transcript: string): string | undefined {
 function newest(name: string): string {
   const versions = ((registry().get(name).facts as JsonObject).events as JsonObject).versions as JsonObject;
   return Object.keys(versions).at(-1)!;
+}
+/** The adapter an agent's hooks map through, whose caps and facts answer for it; none for a name no adapter maps. */
+export function adapterOf(agent: string | undefined): Adapter | undefined {
+  const name = agent === undefined ? undefined : ADAPTERS[agent];
+  return name === undefined ? undefined : registry().get(name);
 }
 /** Whether the facts of the adapter an agent's hooks map through cover a version. */
 export const coveredBy = (agent: string, version: string): boolean => ((registry().get(ADAPTERS[agent] ?? agent).facts as JsonObject).versions as string[]).includes(version);
@@ -192,17 +242,22 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     const providers = (registry().get(name).facts as JsonObject).providers;
     if (!isObj(providers) || !isObj(providers[provider])) {
       meta.watchOnly = true;
-      meta.paseo.lacks = `This session runs ${provider || 'an unnamed provider'} through paseo, which DeepBuild's paseo facts have no entry for, so it is watch-only: nothing is held, answered or sent for it. The facts it lacks: bridge (its pinned bridge version), permissions (its permission quirks), modelCheck (the check of the exact model before the first prompt) and timeouts.`;
+      meta.paseo.lacks = `This session runs ${provider || 'an unnamed provider'} through paseo, which DeepBuild's paseo facts have no entry for, so it is watch-only: nothing is held, answered or sent for it, while its fail_closed guard entries still deny. The facts it lacks: bridge (its pinned bridge version), permissions (its permission quirks), modelCheck (the check of the exact model before the first prompt) and timeouts.`;
     }
   }
   const tool = str(payload.tool_name);
   if (event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
+  if (plant === 'actor-from-payload' && typeof payload.actor === 'string') meta.payloadActor = payload.actor;
   if (plant === 'matches-text' && tool === 'Bash' && isObj(payload.tool_input)) meta.command = str(payload.tool_input.command);
+  if (event === 'PostToolUse' && isObj(payload.tool_response) && Array.isArray(payload.tool_response.structuredPatch)) {
+    const hunks = payload.tool_response.structuredPatch.flatMap((h) => (isObj(h) ? hunkOf(h) : []));
+    if (hunks.length) meta.hunks = hunks;
+  }
   if ((event === 'PreToolUse' || event === 'PermissionRequest' || event === 'PostToolUse') && tool) {
     meta.call = { mode: str(payload.permission_mode), tool, input: isObj(payload.tool_input) ? payload.tool_input : {}, suggestions: Array.isArray(payload.permission_suggestions) ? payload.permission_suggestions : [] };
   }
-  // A session on a version its agent's facts don't cover has its holds and blocks watch-only. Only a reply that holds
+  // A session on a version its agent's facts don't cover has its holds and every block but the floor watch-only. Only a reply that holds
   // or blocks reads the version here; the core reads it for every other hook, off the acknowledgement's path.
   const replies = event === 'Stop' || event === 'PermissionRequest' || (event === 'PreToolUse' && request.matched.length > 0);
   // An agent whose transcript names no version says it in the payload.
@@ -234,7 +289,14 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     case 'session.end':
       data = { reason: str(payload.reason) || 'other' };
       break;
-    case 'user.ask':
+    case 'user.ask': {
+      // A Codex slash command is no prompt (#1022): a reading naming it, which opens no ask and bounds no turn.
+      const command = name === 'codex' ? CODEX_COMMAND.exec(str(payload.prompt).trim())?.[0] : undefined;
+      if (command) {
+        meta.event = SLASH_COMMAND;
+        meta.reading = `${request.event}: the slash command ${command}`;
+        return { kind: 'hook', drafts: [], meta };
+      }
       // Where the prompt came from is the core's to read, from the transcript entry it joins to.
       data = { msg: 0, text: scrub(str(mapped.text ?? payload.prompt)), tasks: [], from: FROM.includes(str(mapped.from)) ? mapped.from : 'unknown' };
       fill = 'msg';
@@ -243,6 +305,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         v = 2;
       }
       break;
+    }
     case 'tool.before':
     case 'tool.after': {
       // A tool's kind, command and paths are read from its call, which the facts map on PreToolUse.
@@ -280,6 +343,18 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         if (callKind === 'shell' && typeof call.command === 'string' && isPrCreate(call.command)) {
           const url = prUrlIn(typeof payload.tool_response === 'string' ? payload.tool_response : JSON.stringify(payload.tool_response ?? ''));
           if (url) meta.pr = url;
+        }
+        if (callKind === 'shell' && typeof call.command === 'string' && mapped.outcome !== 'failed') {
+          const response = payload.tool_response;
+          meta.ran = { command: call.command, stdout: typeof response === 'string' ? response : isObj(response) && typeof response.stdout === 'string' ? response.stdout : '' };
+          meta.ran.stdout = meta.ran.stdout.slice(0, 65_536);
+        }
+        // All a shell call printed, failed or not, where a started session's own sandbox says what it refused (#1330).
+        if (callKind === 'shell') {
+          const response = payload.tool_response;
+          const parts = typeof response === 'string' ? [response] : isObj(response) ? [response.stdout, response.stderr, response.output] : [];
+          const printed = [...parts, payload.error].filter((p): p is string => typeof p === 'string' && p !== '').join('\n').slice(0, 65_536);
+          if (printed) meta.printed = printed;
         }
       }
       const loop = loopFact(name, tool, event, payload, typeof data.command === 'string' ? data.command : scrub(str(at(payload, 'tool_input.description')) || tool));

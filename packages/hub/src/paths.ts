@@ -1,7 +1,8 @@
 // Where a hub keeps its files, and the one setting every client reads the hub's address from.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { createRequire } from 'node:module';
+import { homedir, userInfo } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,31 +15,70 @@ export function nameWorkspace(folder: string, id: string | undefined): void {
   else workspaces.set(folder, id);
   repos.clear();
 }
+/** The forge repos of the projects people share on this hub (#1337), as `host/owner/name`. */
+const shared = new Set<string>();
+/** Names the forge repos people share: a clone of one reads as that project, by its forge identity. */
+export function shareProjects(forges: Iterable<string>): void {
+  shared.clear();
+  for (const forge of forges) shared.add(forge);
+  repos.clear();
+}
+/** A shared project's ID, from its forge identity: its name and a digest of `host/owner/name`, so every clone reads as one. */
+export const projectIdOf = (forge: string): string => `${basename(forge).replace(/[^0-9A-Za-z]/g, '')}${createHash('sha256').update(forge).digest('hex').slice(0, 8)}`;
+/** A remote's URL as `host/owner/name`, lowercase and without `.git`: the same for its HTTPS and SSH spellings. */
+export function forgeIdentity(url: string): string | undefined {
+  const m = /^(?:[a-z+]+:\/\/)?(?:[^@/\s]+@)?([^/:\s]+)(?::\d+)?[:/]+(.+?)(?:\.git)?\/*$/i.exec(url.trim());
+  if (!m || !m[2]!.includes('/')) return undefined;
+  return `${m[1]}/${m[2]}`.toLowerCase();
+}
+/** The main checkout a folder is in: the folder holding `.git`, a worktree's main checkout for a worktree; undefined outside git. */
+function checkoutOf(cwd: string): string | undefined {
+  for (let dir = cwd; ; dir = dirname(dir)) {
+    const git = join(dir, '.git');
+    try {
+      if (statSync(git).isDirectory()) return dir;
+      // A worktree's .git names its folder under the main checkout's .git/worktrees.
+      const gitdir = resolve(dir, /^gitdir:\s*(.+)$/m.exec(readFileSync(git, 'utf8'))?.[1]?.trim() ?? '');
+      return /[\\/]worktrees[\\/][^\\/]+$/.test(gitdir) ? dirname(dirname(dirname(gitdir))) : dir;
+    } catch { /* not here: look further up */ }
+    if (dirname(dir) === dir) return undefined;
+  }
+}
+/** The forge identity of the repo a folder is in, from its `origin` remote; undefined with none. */
+export function forgeOf(cwd: string): string | undefined {
+  const checkout = checkoutOf(cwd);
+  if (!checkout) return undefined;
+  let config: string;
+  try {
+    const git = join(checkout, '.git');
+    config = readFileSync(statSync(git).isDirectory() ? join(git, 'config') : join(resolve(checkout, /^gitdir:\s*(.+)$/m.exec(readFileSync(git, 'utf8'))?.[1]?.trim() ?? ''), 'config'), 'utf8');
+  } catch {
+    return undefined;
+  }
+  let origin = false;
+  for (const line of config.split('\n')) {
+    const section = /^\s*\[([^\]]*)\]/.exec(line);
+    if (section) origin = /^remote\s+"origin"$/.test(section[1]!.trim());
+    const url = origin ? /^\s*url\s*=\s*(.+?)\s*$/.exec(line) : null;
+    if (url) return forgeIdentity(url[1]!);
+  }
+  return undefined;
+}
 /**
  * The repo a folder is in, as a decision's scope names it (`repo:<id>`, #23): its main checkout's folder name and a
- * digest of its path, the same from every worktree of it. Undefined outside a git repo. Read once per folder.
+ * digest of its path, the same from every worktree of it. A clone of a project people share reads as that project, by
+ * its forge identity (#1337); one with no remote keeps its path. Undefined outside a git repo. Read once per folder.
  */
 export function repoOf(cwd: string): string | undefined {
   if (!cwd) return undefined;
   if (repos.has(cwd)) return repos.get(cwd);
-  let found: string | undefined;
-  for (let dir = cwd; ; dir = dirname(dir)) {
-    const git = join(dir, '.git');
-    try {
-      if (statSync(git).isDirectory()) found = dir;
-      else {
-        // A worktree's .git names its folder under the main checkout's .git/worktrees.
-        const gitdir = resolve(dir, /^gitdir:\s*(.+)$/m.exec(readFileSync(git, 'utf8'))?.[1]?.trim() ?? '');
-        found = /[\\/]worktrees[\\/][^\\/]+$/.test(gitdir) ? dirname(dirname(dirname(gitdir))) : dir;
-      }
-    } catch { /* not here: look further up */ }
-    if (found || dirname(dir) === dir) break;
-  }
+  const found = checkoutOf(cwd);
   let id: string | undefined;
   if (found) {
     let real = found;
     try { real = realpathSync(found); } catch { /* as found */ }
-    id = workspaces.get(real) ?? `${basename(real).replace(/[^0-9A-Za-z]/g, '')}${createHash('sha256').update(real).digest('hex').slice(0, 8)}`;
+    const forge = shared.size ? forgeOf(found) : undefined;
+    id = workspaces.get(real) ?? (forge && shared.has(forge) ? projectIdOf(forge) : undefined) ?? `${basename(real).replace(/[^0-9A-Za-z]/g, '')}${createHash('sha256').update(real).digest('hex').slice(0, 8)}`;
   }
   repos.set(cwd, id);
   return id;
@@ -46,6 +86,15 @@ export function repoOf(cwd: string): string | undefined {
 
 /** The installed hub's root: ~/.deepbuild. A dev hub's is the folder given to --root. */
 export const installedRoot = (): string => join(homedir(), '.deepbuild');
+/**
+ * Drops every test's setting on a process that acts on your own record at `root`, by your account's home, which a
+ * variable can't move: a service's environment is anyone's to set (`systemctl --user set-environment`), and a planted
+ * program or a stand-in for polkit there would count an answer you never gave (#70). A test's hub runs elsewhere.
+ */
+export function dropTestSettings(root: string): void {
+  if (resolve(root) !== join(userInfo().homedir, '.deepbuild')) return;
+  for (const name of Object.keys(process.env)) if (/^DEEP_HUB_(TEST_|PLANT$)/.test(name)) delete process.env[name];
+}
 /** The Node path to write into a file that outlives this run: a login service, an MCP server entry. Homebrew's
  * Cellar path names one version, which the next `brew upgrade` deletes, and every entry naming it then fails to
  * start; its `opt/<formula>` link names the version installed now, so it is written instead, when it runs this Node. */
@@ -143,8 +192,23 @@ function worktreeHub(uses: Record<string, unknown>, cwd: string): string | undef
 }
 
 /** The deep-hook this checkout built, the newer of its release and debug builds. */
+/**
+ * An installed version's programs, through the versions folder's `current` link, which every update switches and
+ * none removes (#41): the paths setup writes into every entry, so an update leaves each entry as it was. Undefined
+ * for a checkout, which has no versions folder.
+ */
+export function installedPrograms(root: string): { deep: string; hook: string } | undefined {
+  const bin = join(root, 'versions', 'current', 'bin');
+  return existsSync(bin) ? { deep: join(bin, 'deep'), hook: join(bin, 'deep-hook') } : undefined;
+}
+/** deep-hook as npm installs it (#41): this platform's optional package beside `deepbuild`; else this checkout's build. */
 export function deepHook(): string {
   const repo = fileURLToPath(new URL('../../../', import.meta.url));
+  try {
+    const pkg = createRequire(join(repo, 'package.json')).resolve(`@deepbuild/deep-hook-${process.platform}-${process.arch}/package.json`);
+    const hook = join(dirname(pkg), 'bin', 'deep-hook');
+    if (existsSync(hook)) return hook;
+  } catch { /* not installed from npm: a checkout */ }
   const built = ['release', 'debug'].map((p) => join(repo, 'target', p, 'deep-hook')).filter((p) => existsSync(p));
   if (!built.length) throw Error(`no deep-hook is built under ${join(repo, 'target')}; run cargo build -p deep-hook first`);
   return built.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]!;

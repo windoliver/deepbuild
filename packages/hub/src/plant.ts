@@ -4,16 +4,41 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { openSync } from 'node:fs';
 import { close as closeInspector } from 'node:inspector';
 import { createServer, type Server } from 'node:net';
 
 /** The planted wrong programs a test selects with DEEP_HUB_PLANT; only tests set it. */
 export type Plant =
+  // #1330's: a start with no approval on the record, a start with no sandbox, a sandbox setting that leaves the agent's
+  // way out open, and a sandbox that cuts the hub's socket.
+  | 'starts-without-approval' | 'starts-without-sandbox' | 'sandbox-way-out-open' | 'sandbox-cuts-hub-socket'
+  // #1325's: rules that read the status's context alone or let the agents' app merge, push the default branch or push an
+  // approval tag, a session's credential that can post a status, and a hub that passes the gate's token to a session.
+  | 'rule-reads-context-alone' | 'agent-credential-merges' | 'agent-credential-pushes-default-branch' | 'agent-credential-pushes-approved-tags'
+  | 'agent-credential-posts-statuses' | 'passes-gate-credential'
+  // #46's: a poster that takes HEAD for the commit a verdict covers, and a recorder that marks every push it reads, or none.
+  | 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none'
+  // #1537's: the hub holds the shipped message kind with no route into a gate run.
+  | 'kind-without-route'
+  // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
+  // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
+  | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
+  // #1337's: a hub that takes an event's actor from its payload, and a person's reads without the scope filter.
+  | 'actor-from-payload' | 'reads-unfiltered'
+  // #1338: a hub that listens on its network listener with no project members.
+  | 'listen-without-members'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
   | 'stops-at-first-bad-line' | 'remove-spool-after-normal' | 'drops-post-tool-use' | 'replay-appends-twice'
   | 'answer-on-peer-check' | 'answer-on-token' | 'answer-inside-session' | 'skip-default-at-deadline'
+  // #70's: a hub that starts kept runs and terminals with no user scope of their own, in its service's cgroup.
+  | 'kept-in-service-cgroup'
+  // #1359's: a CLI whose `deep backup` runs before it checks its arguments for help, as the merge base's did.
+  | 'dispatches-before-help'
+  // #1334's: a build that judges every claim the opposite of its gate, and a hub that speaks a contract a major ahead.
+  | 'judges-claims-wrongly' | 'contract-major-ahead'
   | 'evidence-checks-path-first' | 'binds-first-stamp' | 'unbound-reads-all' | 'errors-without-actual' | 'errors-unscrubbed' | 'trusts-index'
   | 'adapter-decides' | 'unknown-tool-read' | 'unplaced-is-person' | 'loop-from-origins' | 'holds-stop-anyway' | 'restores-at-session-start-only'
   | 'acts-on-peer-check' | 'off-guards-watch-only' | 'undo-reserializes' | 'gates-before-approval' | 'setup-writes-project-settings'
@@ -26,6 +51,8 @@ export type Plant =
   // #84's defaults: an ask naming any effect covers all, every prompt counts whatever its `from`, the hub reads the
   // command line as text, and `--auto` needs no commit and holds no branch.
   | 'ask-covers-every-effect' | 'reads-every-from' | 'defaults-match-text' | 'auto-merge-unpinned'
+  // #1523's: a matcher that reads the program, not what it does, so every call to jj, gt, sl, glab, git town or gh api is held.
+  | 'holds-every-program'
   // #84's sorter: a proceed with no record, an ask keyed from a question's words, a send-back a question should hold,
   // a hold on every ask, a proceed that drops what fails, a task sent back naming no tool, a switch only recorded, a link to an agent's URL.
   | 'proceed-unrecorded' | 'keys-ask-from-words' | 'sends-back-held-stop' | 'holds-every-ask' | 'proceed-alone' | 'sends-back-no-tool' | 'records-switch-only' | 'link-from-agent-url'
@@ -35,6 +62,9 @@ export type Plant =
   // reclaims a stack whose journey runs; and a sandbox that admits any loopback port.
   | 'env-reuses-stale-install' | 'env-keeps-database' | 'env-keeps-redis' | 'env-reuses-web-image' | 'env-keeps-db-mount' | 'env-second-install-store'
   | 'env-clones-next-whole' | 'env-starts-at-every-claim' | 'pool-reclaims-running' | 'sandbox-any-loopback'
+  // #342's: a reaper that takes every volume a session's commands made, a teardown task closed on your word, a pool
+  // that asks which stack to stop, and a reaper that takes a killed session's stack.
+  | 'reap-session-volumes' | 'teardown-closes-on-word' | 'pool-asks-which-stack' | 'reap-on-kill'
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
@@ -48,6 +78,8 @@ export type Plant =
   | 'rule-without-reason' | 'copies-no-standing-rules'
   // #668's: a status that leaves out a session's commits, a doctor that trusts setup's record, and a `deep on` that keeps the gates off.
   | 'status-omits-commit' | 'doctor-misses-hooks' | 'on-stays-off'
+  // #1455's: a doctor that prints a fix under a healthy item.
+  | 'doctor-healthy-fix'
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
   // the text, a stop rule that reads every stop with tool calls as a claim, and a claim whose checks run the file on disk.
   | 'first-prompt-always-task' | 'midturn-always-task' | 'hash-ids-only' | 'hash-check-paths' | 'role-from-text' | 'claim-on-tool-calls'
@@ -55,6 +87,10 @@ export type Plant =
   // substitutes on every allowed host, and the run's CA added to the login keychain.
   | 'standin-value-in-env' | 'env-loads-by-value' | 'standin-every-host' | 'run-ca-in-login-keychain'
   | 'runs-disk-bytes'
+  // #148's: a sync that writes each file as it plans it, replaces from the plan you were shown, keeps a file's original
+  // again before each write, renames without flushing the folder, writes entries unchecked against the agent's facts, and
+  // restarts Codex's daemon as soon as it asks.
+  | 'writes-before-parsing' | 'replaces-from-first-plan' | 'copies-original-each-write' | 'no-folder-flush' | 'skips-entry-check' | 'restarts-without-answer'
   // #325's: a stalled-claim rule that counts any new run as new evidence, and one that counts the stops a question holds.
   | 'new-run-is-evidence' | 'counts-waiting-stops'
   // #120's: the long-wait lines wait for the turn's stop, so a long turn of short calls shows none while it runs.
@@ -104,6 +140,8 @@ export type Plant =
   | 'paseo-delivers-beside-waiter'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
   | 'signature-covers-anything'
+  // #1579's: the one verifier, skipping the time, so a signature counts however old it is.
+  | 'signature-skips-time'
   // #909's: a hub that never checks its lock again once it holds it.
   | 'lock-never-rechecked'
   // #906's: an answer recorded delivered as the hub writes its reply, and one sent again without reading the session.
@@ -149,15 +187,25 @@ export type Plant =
   | 'trusts-channel-proof' | 'last-writer-wins' | 'live-buttons-after-answer' | 'closes-on-failed-send' | 'takes-turns-at-token' | 'reconnects-every-channel' | 'buttons-for-authority' | 'keeps-unpaired-key'
   // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
   // reads it, a store of the newest result per key, and a carry that copies the source run's evidence whole.
-  | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence';
+  | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence'
+  // #41's: a hub that opens a record a newer version wrote for writing, as if it could read every kind in it.
+  | 'append-unknown-kind'
+  // #41's soak: a hub that opens one file each session it ends and never closes it.
+  | 'leak-file-per-session'
+  // #33's: a gate that counts only a drafted spec as approved, so a repo on its maintainer's bootstrap stays watch-only,
+  // one that judges a claim on the bootstrap's commands alone, so a PR says Closes past an unproven criterion, and an
+  // engine that reads a stopped run, a full disk, a missing stack and an expired credential as FAIL.
+  | 'drafted-spec-only' | 'bootstrap-commands-only' | 'failures-as-fail';
 const PLANTS: readonly string[] = [
+  'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
   'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project', 'env-clone-without-record',
   'env-reuses-stale-install', 'env-keeps-database', 'env-keeps-redis', 'env-reuses-web-image', 'env-keeps-db-mount', 'env-second-install-store',
   'env-clones-next-whole', 'env-starts-at-every-claim', 'pool-reclaims-running', 'sandbox-any-loopback',
+  'reap-session-volumes', 'teardown-closes-on-word', 'pool-asks-which-stack', 'reap-on-kill',
   'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
-  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline',
+  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline', 'kept-in-service-cgroup', 'dispatches-before-help', 'judges-claims-wrongly', 'contract-major-ahead',
   'evidence-checks-path-first', 'binds-first-stamp', 'unbound-reads-all', 'errors-without-actual', 'errors-unscrubbed', 'trusts-index',
   'adapter-decides', 'unknown-tool-read', 'unplaced-is-person', 'loop-from-origins', 'holds-stop-anyway', 'restores-at-session-start-only',
   'acts-on-peer-check', 'off-guards-watch-only', 'undo-reserializes', 'gates-before-approval', 'setup-writes-project-settings',
@@ -174,8 +222,10 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
+  'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
+  'writes-before-parsing', 'replaces-from-first-plan', 'copies-original-each-write', 'no-folder-flush', 'skips-entry-check', 'restarts-without-answer',
   'new-run-is-evidence', 'counts-waiting-stops',
   'line-at-stop',
   'turn-closes-at-child-stop',
@@ -197,6 +247,7 @@ const PLANTS: readonly string[] = [
   'no-work-never-sent-back', 'skips-prompt-turns',
   'paseo-delivers-beside-waiter',
   'signature-covers-anything',
+  'signature-skips-time',
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
@@ -214,10 +265,18 @@ const PLANTS: readonly string[] = [
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
-  'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned',
+  'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned', 'holds-every-program',
   'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
+  'append-unknown-kind', 'leak-file-per-session',
+  'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
+  'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
+  'agent-credential-posts-statuses', 'passes-gate-credential',
+  'kind-without-route',
+  'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
+  'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
+  'actor-from-payload', 'reads-unfiltered', 'listen-without-members',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
@@ -234,6 +293,7 @@ const reloads = new EventEmitter().setMaxListeners(0);
 const leftSockets: Server[] = [];
 const leftTimers: NodeJS.Timeout[] = [];
 const leftChildren: ChildProcess[] = [];
+const leftFiles: number[] = [];
 /** 1 KiB no other value shares: 1 MB over 5,000 cycles is 200 bytes a cycle, so a short ID alone would stay under it. */
 const kibibyte = (): string => randomBytes(512).toString('hex');
 
@@ -243,6 +303,7 @@ export function plantedSessionEnd(plant: Plant | undefined, session: string): vo
   if (plant === 'churn-leaves-socket') leftSockets.push(createServer().listen(0, '127.0.0.1').unref());
   if (plant === 'churn-leaves-timer') leftTimers.push(setInterval(() => undefined, 2 ** 30).unref());
   if (plant === 'churn-leaves-child') leftChildren.push(spawn('/bin/sleep', ['86400'], { stdio: 'ignore' }));
+  if (plant === 'leak-file-per-session') leftFiles.push(openSync('/dev/null', 'r'));
 }
 /** What a planted hub leaves behind as an extension reloads. */
 export function plantedReload(plant: Plant | undefined): void {

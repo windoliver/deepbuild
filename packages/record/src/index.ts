@@ -178,7 +178,7 @@ const SCHEMA_VERSION = 1;
 /** Events a replay reads at a time. */
 const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
-const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
+const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'workspace.created', 'workspace.moved', 'state.read', 'work.read', 'work.delivery', 'definition.locked', 'definition.revised', 'definition.stood_in', 'definition.checked', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone', 'deadline.moved',
   'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked', 'card_rule.set']);
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
@@ -270,10 +270,15 @@ interface Prepared {
 interface Pending { prepared: Prepared; resolve(appended: Appended): void; reject(error: Error): void }
 type Outcome = { ok: true; appended: Appended; prepared: Prepared; log_pos: number } | { ok: false; error: RecordError; prepared: Prepared };
 
+/** How many of raw()'s statements stay compiled; SQL that names its values inline is many statements. */
+const READS_KEPT = 256;
+
 class SqliteRecord implements RecordStore {
   private readonly db: Db;
   /** Statements on `events` and `meta`, which no rebuild drops, compiled once: appends run them per event. */
   private readonly statements = new Map<string, Statement<unknown[]>>();
+  /** raw()'s read statements, the READS_KEPT most recently used, compiled once: SQLite recompiles one whose tables a rebuild replaced. */
+  private readonly reads = new Map<string, Statement<unknown[]>>();
   private readonly backend: Backend;
   private readonly projector: Projector;
   private readonly registry: Registry;
@@ -805,8 +810,15 @@ class SqliteRecord implements RecordStore {
   async raw(sql: string, params: readonly (string | number | bigint | null)[] = []): Promise<unknown[]> {
     // Refused before it is prepared: SQLite runs a PRAGMA while compiling it, so a check after prepare is too late.
     if (!/^\s*(SELECT|WITH)\b/i.test(sql) || /;\s*\S/.test(sql)) throw new RecordError('storage', 'raw SQL reads the record with one SELECT; it never writes it');
-    const statement = this.db.prepare(sql);
-    if (!statement.readonly || !statement.reader) throw new RecordError('storage', 'raw SQL reads the record; it never writes it');
+    let statement = this.reads.get(sql);
+    if (statement) this.reads.delete(sql);
+    else {
+      statement = this.db.prepare(sql);
+      if (!statement.readonly || !statement.reader) throw new RecordError('storage', 'raw SQL reads the record; it never writes it');
+      if (this.reads.size >= READS_KEPT) this.reads.delete(this.reads.keys().next().value!);
+    }
+    // Most recently used last, so the oldest goes first.
+    this.reads.set(sql, statement);
     return statement.all(...params);
   }
 

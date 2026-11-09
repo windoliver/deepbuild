@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "efbf8b48da34c5b46893848dcfff548540dbbb79b02dec5a43509882bb3ef80e",
+  "set_digest": "0c2173b1c21ba688feeebf9306f0986854076761dec83a47cee89bbbc23f40c2",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -63,7 +63,7 @@
       }
     },
     "effects@1": {
-      "digest": "a5c48d2d39ec542b3e471645b597ed286640f2114a2e8ccd3b7d82c360e22324",
+      "digest": "d45a9a5ad3664b3c5a5849ae6bf54992cadea2d518fac39a4a5cc16c936dce78",
       "reference": "effects",
       "kit": [
         "fixtures",
@@ -92,7 +92,7 @@
       }
     },
     "graph@1": {
-      "digest": "840570cf1f3a314adfeb0cb2d42b736e0590426d107bf6e231ab3c0535256415",
+      "digest": "42cebb9cb1568a4ae30c1e1163bb021d0efd2393630840e50167520dc92c646c",
       "reference": "graph",
       "kit": [
         "fixtures",
@@ -179,7 +179,7 @@
       }
     },
     "motion@1": {
-      "digest": "def0784a75255943cbe31d9b104fc00297447171a92b0b229cb139b5949d3663",
+      "digest": "b345fa202abce017f322143ebab888c21c57e764cbe7eb61752f944e60f603cb",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -237,7 +237,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "06336effe820630c6b21b7c10341baaacb5ab1c23bf396f4c2dccceeb7e5d937",
+      "digest": "1235792443270721f90858c1162ff00a38d4f9238363f0d227ec44796376365d",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -370,6 +370,18 @@
     ],
     "plan": [
       {
+        "operator": "motion.arrange",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "motion.arranged"
+        ],
+        "per": "document"
+      },
+      {
         "operator": "motion.compile",
         "module": "motion",
         "version": "1.0.0",
@@ -459,6 +471,20 @@
         "per": "item"
       },
       {
+        "operator": "motion.arrangelive",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.arrangelive"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.channels",
         "module": "motion",
         "version": "1.0.0",
@@ -471,19 +497,6 @@
         "writes": [
           "motion.at",
           "motion.fields"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "core.world",
-        "module": "core",
-        "version": "0.0.0",
-        "reads": [
-          "core.transform",
-          "parent"
-        ],
-        "writes": [
-          "core.world"
         ],
         "per": "item"
       },
@@ -535,6 +548,31 @@
           "motion.next"
         ],
         "per": "document"
+      },
+      {
+        "operator": "motion.placed",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.arranged"
+        ],
+        "writes": [
+          "motion.placed"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
+        ],
+        "per": "item"
       },
       {
         "operator": "record.salience",
@@ -795,7 +833,8 @@
       "look.status"
     ],
     "core.transform": [
-      "motion.at"
+      "motion.at",
+      "motion.placed"
     ]
   }
 }

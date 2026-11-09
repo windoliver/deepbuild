@@ -131,7 +131,7 @@ class Buyer implements Buying {
     if (!isPrice(rule.max_usd)) throw new BuyingRefused('a card rule pays up to an amount in dollars, zero or more', { field: 'max_usd' });
     const now = this.o.now();
     const id = ulid(now);
-    await this.o.record.append(this.core(connection), {
+    await this.o.record.append(asCore(connection), {
       v: 1, id, kind: 'card_rule.set', ts: now, data: { seller: rule.seller, max_usd: rule.max_usd, card: rule.card, via },
     });
     return id;
@@ -145,7 +145,7 @@ class Buyer implements Buying {
     };
     const run = { run: p.purchase, check: `purchase from ${p.seller}`, inputs: sha256Hex(canonicalize({ purchase: p as unknown as JsonValue })), issue: `purchase ${p.purchase}` };
     // The price is reserved before anything is paid, against the budget it names, counting what's still unpriced.
-    const outcome = await this.o.ledger.reserveIn(this.core(connection), run, p.budget, p.usd, step);
+    const outcome = await this.o.ledger.reserveIn(asCore(connection), run, p.budget, p.usd, step);
     if (outcome.status !== 'started') {
       if ('ask' in outcome) return { purchase: p.purchase, status: 'asked', ask: outcome.ask };
       throw new BuyingRefused(`${p.purchase} can't reserve its price`, { purchase: p.purchase });
@@ -169,13 +169,9 @@ class Buyer implements Buying {
   private async keep(connection: Connection, purchase: string, bytes: Uint8Array, usd: number): Promise<string> {
     const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
     const kept = cardNumbers(text).length ? new TextEncoder().encode(masked(text)) : bytes;
-    const handle = await this.o.record.keep(this.core(connection), { bytes: kept, kind: 'receipt', source: `receipt of ${purchase}` });
-    await this.o.ledger.charge(this.core(connection), purchase, usd, [handle.replace(/^ev:/, '')]);
+    const handle = await this.o.record.keep(asCore(connection), { bytes: kept, kind: 'receipt', source: `receipt of ${purchase}` });
+    await this.o.ledger.charge(asCore(connection), purchase, usd, [handle.replace(/^ev:/, '')]);
     return handle;
-  }
-
-  private core(connection: Connection): Connection {
-    return asCore(connection);
   }
 
   /** Reads the card rules the log gained. */

@@ -50,6 +50,8 @@ test-leave-out-data = []
 test-leave-out-motion = []
 test-ease-in-motion = []
 test-ease-renumbered = []
+# Issue #493: the planted layout that registers camera@1 in the scene3d module, not the core.
+test-camera-in-scene3d = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
 # deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
 # test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
@@ -94,6 +96,8 @@ test-scatter = ["dep:deep-canvas-test-modules"]
 # number (the #488 acceptance README: The test canvas modules).
 test-tick = ["dep:deep-canvas-test-modules"]
 test-frame-cache = ["dep:deep-canvas-test-modules"]
+# Issue #497: a module stepping at its item's step_rate into a held array.
+test-held = ["dep:deep-canvas-test-modules"]
 # Issue #388: test builds that leave look, or text, out of the build set's list; the seal
 # refuses each at startup, naming the module.
 test-leave-out-look = []
@@ -197,6 +201,16 @@ test-rules-shared = ["dep:deep-canvas-test-modules"]
 test-rules-isolated = ["dep:deep-canvas-test-modules"]
 test-registries-load = ["dep:deep-canvas-test-modules"]
 test-leave-out-effects = []
+# Issue #499: a build without the media module; the test module that probes an asset through the
+# decode worker, and its planted twin that calls through media; the planted media@1 whose reverb
+# checkpoint leaves out its tail.
+test-leave-out-media = []
+test-probe = ["dep:deep-canvas-test-modules"]
+test-probe-via-media = ["dep:deep-canvas-test-modules"]
+test-media-checkpoint-without-tail = []
+# #308: the full set without the input module, and the test control kind test.dial.
+test-leave-out-input = []
+test-control-kind = []
 test-steps-in-effects = []
 
 [dependencies]
@@ -210,7 +224,13 @@ deep-canvas-sheet = { path = "../deep-canvas-sheet" }
 deep-canvas-cells = { path = "../deep-canvas-cells" }
 deep-canvas-vector = { path = "../deep-canvas-vector" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+# Issue #308: the input module, controls and control@1, in the full build set.
+deep-canvas-input = { path = "../deep-canvas-input" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+# Issue #499: the media module, media@1; the logic module's world, which a live play steps on the
+# transport's clock.
+deep-canvas-media = { path = "../deep-canvas-media" }
+deep-logic = { path = "../deep-logic" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
@@ -249,3 +269,7 @@ gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49
 # the window's occlusion state and accessibility tree through AppKit; all already in the lockfile.
 objc2 = "0.6"
 raw-window-handle = "0.6"
+# Issue #1551: a still window stops its display link. The vendored gpui-pre-macos's frame-link hook
+# and plants, and the pointer move a `wake` posts at a point (NSPoint); both already in the lockfile.
+gpui-pre-macos = "=0.3.9"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry"] }

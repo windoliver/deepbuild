@@ -5,10 +5,11 @@
 
 use std::collections::BTreeSet;
 
+use deep_canvas::grammar::FLICKS_PER_SECOND;
 use serde_json::{json, Map, Value};
 
 use crate::curve::Sample;
-use crate::doc::{Extend, Motion, Placement};
+use crate::doc::{Blending, Extend, Motion, Placement, Policy, Repeat, DOCUMENT};
 use crate::program::{Program, State, TRANSFORM};
 
 /// Where a placement is at a timeline position: the pass the time falls in and the local time
@@ -32,8 +33,42 @@ pub fn position(motion: &Motion, t: i64) -> (i64, i64) {
 }
 
 impl Placement {
-    fn span(&self, motion: &Motion) -> i64 {
+    fn clip_span(&self, motion: &Motion) -> i64 {
         motion.clip(&self.clip).map_or(1, |c| c.span)
+    }
+
+    /// The flicks the clip's repeats run for in local time.
+    fn total(&self, clip_span: i64) -> i64 {
+        clip_span * i64::from(self.count)
+    }
+
+    /// How long it's active, given its clip's span: its own `span`, or what the local time left
+    /// after `in` takes at its rate.
+    pub fn active_for(&self, clip_span: i64) -> i64 {
+        let t = &self.timing;
+        t.span.unwrap_or_else(|| {
+            let left = i128::from((self.total(clip_span) - t.trim).max(0));
+            let (num, den) = (i128::from(t.rate.0), i128::from(t.rate.1));
+            ((left * den + num - 1).div_euclid(num)) as i64
+        })
+    }
+
+    pub fn active_span(&self, motion: &Motion) -> i64 {
+        self.active_for(self.clip_span(motion))
+    }
+
+    /// Whether its time is the timeline's from its start, as a plain placement's is.
+    fn plain(&self) -> bool {
+        let t = &self.timing;
+        t.trim == 0
+            && t.rate == (1, 1)
+            && t.span.is_none()
+            && t.repeat == Repeat::Wrap
+            && t.hold_at.is_none()
+            && t.quantize.is_none()
+            && t.remap.is_none()
+            && t.start_on.is_none()
+            && self.blending == Blending::default()
     }
 
     /// The stagger delay of the placement's first target, which its reported pass and local
@@ -47,29 +82,119 @@ impl Placement {
         self.local_after(motion, p, self.first_delay())
     }
 
+    /// The run in force at `p` for a target `delay` after the start, as that run's start with the
+    /// target's delay in it: a run a close started turns the stagger around (`reverse_on_close`).
+    pub(crate) fn run_start(&self, p: i64, delay: i64) -> Option<i64> {
+        let t = &self.timing;
+        if t.start_on.is_none() {
+            return Some(self.start + delay);
+        }
+        let of = |i: usize| t.runs[i] + self.run_delay(i, delay);
+        (0..t.runs.len()).rev().map(of).find(|start| *start <= p)
+    }
+
+    /// A target's delay in run `i`.
+    fn run_delay(&self, i: usize, delay: i64) -> i64 {
+        let t = &self.timing;
+        match t.reach {
+            Some(reach) if t.closes.get(i) == Some(&true) => reach - delay,
+            _ => delay,
+        }
+    }
+
+    /// With `policy: overlap`, the starts of every run still going at `p`, oldest first, each a
+    /// write of its own; none for any other placement.
+    pub(crate) fn overlapping<'a>(&'a self, motion: &Motion, p: i64, delay: i64) -> impl Iterator<Item = i64> + 'a {
+        let t = &self.timing;
+        let overlaps = t.start_on.as_ref().is_some_and(|s| s.policy == Policy::Overlap);
+        let active = self.active_span(motion);
+        (0..if overlaps { t.runs.len() } else { 0 })
+            .map(move |i| t.runs[i] + self.run_delay(i, delay))
+            .filter(move |start| *start <= p && p < start + active)
+    }
+
+    /// Local time at `p` in the run that starts at `start`.
+    pub(crate) fn local_in_run(&self, motion: &Motion, p: i64, start: i64) -> Local {
+        self.at_offset(motion, self.clip_span(motion), p - start)
+    }
+
+    /// Local time `d` flicks into the run: `in`, then the rate, floored, then a remap, then
+    /// repeat, hold and quantize, in that order (Placement).
+    fn at_offset(&self, motion: &Motion, clip_span: i64, d: i64) -> Local {
+        let t = &self.timing;
+        let parent = t.trim + floor_rate(d, t.rate);
+        let child = match t.remap {
+            Some(r) if motion.remaps[r].clamp => motion.remaps[r].child(parent).max(0),
+            Some(r) => motion.remaps[r].child(parent),
+            None => parent,
+        };
+        let last = i64::from(self.count) - 1;
+        let (iteration, local) = if child >= self.total(clip_span) {
+            let at_start = t.repeat == Repeat::PingPong && self.count.is_multiple_of(2);
+            (last, if at_start { 0 } else { clip_span })
+        } else {
+            let (k, into) = (child.div_euclid(clip_span), child.rem_euclid(clip_span));
+            let back = t.repeat == Repeat::PingPong && k % 2 == 1;
+            (k, if back { clip_span - into } else { into })
+        };
+        let held = t.hold_at.map_or(local, |h| local.min(h));
+        let local = t.quantize.map_or(held, |rate| grid(held, rate));
+        Local {
+            iteration: u32::try_from(iteration).unwrap_or(u32::MAX),
+            local,
+        }
+    }
+
     /// The pass and local time of a target `delay` after the start, at timeline position `p`:
     /// active on [start, end) with local time 0 at each wrap (right-continuous); before the start
     /// or from the end on, what `extend` holds.
     pub(crate) fn local_after(&self, motion: &Motion, p: i64, delay: i64) -> Option<Local> {
-        let span = self.span(motion);
-        let start = self.start + delay;
+        let clip_span = self.clip_span(motion);
+        let active = self.active_for(clip_span);
+        let Some(start) = self.run_start(p, delay) else {
+            return (self.before == Extend::Hold).then(|| self.at_offset(motion, clip_span, 0));
+        };
         if p < start {
-            return (self.before == Extend::Hold).then_some(Local {
-                iteration: 0,
-                local: 0,
-            });
+            return (self.before == Extend::Hold).then(|| self.at_offset(motion, clip_span, 0));
         }
-        if p >= start + i64::from(self.count) * span {
-            return (self.after == Extend::Hold).then_some(Local {
-                iteration: self.count - 1,
-                local: span,
-            });
+        if p >= start + active {
+            return (self.after == Extend::Hold).then(|| self.at_offset(motion, clip_span, active));
         }
+        Some(self.at_offset(motion, clip_span, p - start))
+    }
+
+    /// The first target's local time at `p` before any remap: what its remap reads as parent time.
+    pub fn parent_time(&self, motion: &Motion, p: i64) -> i64 {
+        let start = self.run_start(p, self.first_delay()).unwrap_or(self.start);
+        let d = (p - start).clamp(0, self.active_span(motion));
+        self.timing.trim + floor_rate(d, self.timing.rate)
+    }
+
+    /// What a target's clip time gains per second of timeline at `p`: its rate times the remap's
+    /// derivative, turned by ping-pong, 0 while something holds it.
+    pub(crate) fn rate_after(&self, motion: &Motion, p: i64, delay: i64) -> f64 {
+        let t = &self.timing;
+        let clip_span = self.clip_span(motion);
+        let start = self.run_start(p, delay).unwrap_or(self.start + delay);
         let d = p - start;
-        Some(Local {
-            iteration: u32::try_from(d / span).unwrap_or(u32::MAX),
-            local: d % span,
-        })
+        if d < 0 || d >= self.active_for(clip_span) {
+            return 0.0;
+        }
+        let rate = t.rate.0 as f64 / t.rate.1 as f64;
+        let parent = t.trim + floor_rate(d, t.rate);
+        let (scale, child) = match t.remap {
+            Some(r) => (motion.remaps[r].rate(parent), motion.remaps[r].child(parent).max(0)),
+            None => (1.0, parent),
+        };
+        if child >= self.total(clip_span) || t.quantize.is_some() {
+            return 0.0;
+        }
+        let local = self.at_offset(motion, clip_span, d).local;
+        if t.hold_at.is_some_and(|h| local >= h) {
+            return 0.0;
+        }
+        let back = t.repeat == Repeat::PingPong && child.div_euclid(clip_span) % 2 == 1;
+        rate * scale * if back { -1.0 } else { 1.0 }
     }
 
     /// The first target's wraps in (`from`, `to`]: each start of a pass after the first; the end
@@ -78,15 +203,16 @@ impl Placement {
         if to <= from {
             return 0;
         }
-        let span = self.span(motion);
+        let clip_span = self.clip_span(motion);
         let start = self.start + self.first_delay();
-        // Wrap k sits at start + k × span, k in 1..count.
+        let active = self.active_for(clip_span);
+        // Wrap k falls where local time reaches k × span, k in 1..count.
         let count_upto = |p: i64| -> i64 {
-            if p < start + span {
-                0
-            } else {
-                ((p - start) / span).min(i64::from(self.count) - 1)
+            if p < start {
+                return 0;
             }
+            let local = self.timing.trim + floor_rate((p - start).min(active), self.timing.rate);
+            (local / clip_span).min(i64::from(self.count) - 1)
         };
         u32::try_from(count_upto(to) - count_upto(from)).unwrap_or(0)
     }
@@ -94,17 +220,24 @@ impl Placement {
     /// The earliest timeline position after `p` at which what any of its targets shows may change.
     fn next_change(&self, motion: &Motion, p: i64) -> Option<i64> {
         let clip = motion.clip(&self.clip)?;
+        let active = self.active_for(clip.span);
         self.bindings
             .iter()
             .map(|b| b.delay)
             .chain(self.bindings.is_empty().then_some(0))
             .filter_map(|delay| {
+                if !self.timing.runs.is_empty() || self.timing.start_on.is_some() {
+                    return self.next_run_change(p, delay, active);
+                }
                 let start = self.start + delay;
                 if p < start {
                     return Some(start);
                 }
-                if p >= start + i64::from(self.count) * clip.span {
+                if p >= start + active {
                     return None;
+                }
+                if !self.plain() {
+                    return Some(p + 1);
                 }
                 let local = self.local_after(motion, p, delay)?;
                 let pass_start = start + i64::from(local.iteration) * clip.span;
@@ -120,6 +253,37 @@ impl Placement {
             })
             .min()
     }
+
+    /// [`Placement::next_change`] for `start_on`: every flick of a run, then the next run.
+    fn next_run_change(&self, p: i64, delay: i64, active: i64) -> Option<i64> {
+        let running = self.run_start(p, delay).is_some_and(|start| p < start + active);
+        if running {
+            return Some(p + 1);
+        }
+        let runs = &self.timing.runs;
+        (0..runs.len()).map(|i| runs[i] + self.run_delay(i, delay)).filter(|r| *r > p).min()
+    }
+}
+
+/// `d` flicks at a whole-number rate, floored.
+fn floor_rate(d: i64, (num, den): (i64, i64)) -> i64 {
+    (i128::from(d) * i128::from(num)).div_euclid(i128::from(den)) as i64
+}
+
+/// The first flick after `t` on that grid.
+pub(crate) fn next_grid(t: i64, (num, den): (u32, u32)) -> i64 {
+    let (n, d) = (i128::from(num), i128::from(den));
+    let second = i128::from(FLICKS_PER_SECOND);
+    let k = (i128::from(t) * n).div_euclid(second * d) + 1;
+    ((k * second * d) / n) as i64
+}
+
+/// `t` stepped down to the frame grid of `num/den` frames a second, on whole flicks.
+pub(crate) fn grid(t: i64, (num, den): (u32, u32)) -> i64 {
+    let (num, den) = (i128::from(num), i128::from(den));
+    let second = i128::from(FLICKS_PER_SECOND);
+    let k = (i128::from(t) * num).div_euclid(second * den);
+    ((k * second * den) / num) as i64
 }
 
 /// One frame's evaluation.
@@ -144,6 +308,13 @@ pub struct Frame {
 pub enum Validity {
     Full,
     IgnorePlacements,
+}
+
+/// Which channels and placements a frame's `valid_until` counts, by index: `None` counts all.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Counts<'a> {
+    pub channels: Option<&'a [bool]>,
+    pub placements: Option<&'a [bool]>,
 }
 
 /// The item's `at` as an object, whatever the item wrote.
@@ -230,9 +401,23 @@ fn through_op(op: &mut Value) -> &mut Value {
     inner
 }
 
-/// The frame's `valid_until`: the earliest `t` at which anything it shows changes next.
-pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validity) -> Option<i64> {
-    let channels = motion.channels.iter().filter_map(|c| {
+/// The frame's `valid_until`: the earliest `t` at which anything it shows changes next, over the
+/// channels and placements `counts` keeps (#1487: those a view shows; every one otherwise).
+pub(crate) fn valid_until(
+    motion: &Motion,
+    t: i64,
+    doc_t: i64,
+    validity: Validity,
+    counts: Counts<'_>,
+) -> Option<i64> {
+    // A document remap moves every read off the timeline's own clock.
+    if motion.remaps.iter().any(|r| r.target == DOCUMENT) {
+        return Some(t + 1);
+    }
+    let kept = |list: Option<&[bool]>, i: usize| list.is_none_or(|l| l[i]);
+    let channels = motion.channels.iter().enumerate();
+    let channels = channels.filter(|(i, _)| kept(counts.channels, *i));
+    let channels = channels.filter_map(|(_, c)| {
         // A modified channel may change at every flick, and so may a remapped one, whose
         // child time runs other than the timeline.
         if c.modifiers.is_empty() && !motion.remapped(&c.target.owner) {
@@ -244,9 +429,13 @@ pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validit
     let placements = motion
         .placements
         .iter()
-        .filter(|_| validity == Validity::Full)
-        .filter_map(|p| p.next_change(motion, doc_t));
+        .enumerate()
+        .filter(|(i, _)| validity == Validity::Full && kept(counts.placements, *i))
+        .filter_map(|(_, p)| p.next_change(motion, doc_t));
     let next = channels.chain(placements).min();
+    // Whether anything counted moves at all: a wrap changes only what moved.
+    let none_counted = (0..motion.channels.len()).all(|i| !kept(counts.channels, i))
+        && (0..motion.placements.len()).all(|i| !kept(counts.placements, i));
     let tr = motion.transport;
     match tr.span {
         Some(span) if tr.wrap => {
@@ -257,7 +446,7 @@ pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validit
             match next {
                 Some(n) if n < wrap_at => Some(n + offset),
                 Some(_) => Some(wrap_at + offset),
-                None if motion.channels.is_empty() && motion.placements.is_empty() => None,
+                None if none_counted => None,
                 None => Some(wrap_at + offset),
             }
         }
@@ -272,7 +461,9 @@ pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<
         Some(Value::Object(items)) => items.clone(),
         _ => Map::new(),
     };
-    evaluated(items, program, state)
+    let mut items = evaluated(items, program, state);
+    crate::held::apply(doc, program, state, &mut items);
+    items
 }
 
 /// [`items`] of only the items a field names, each as [`items`] gives it: every other evaluated
@@ -298,7 +489,7 @@ pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Ma
 }
 
 /// `items` with each one's slots and fields written, as [`items`] evaluates them.
-fn evaluated(
+pub(crate) fn evaluated(
     mut items: Map<String, Value>,
     program: &Program,
     state: &State,
@@ -324,6 +515,26 @@ fn evaluated(
         let run = &state.slots[field.slot..field.slot + field.width];
         let value = match run {
             [one] if field.boolean => json!(*one >= 0.5),
+            run if field.shape.is_some() => {
+                let shape = crate::morph::unflat(run, field.shape.as_ref().expect("a shape"));
+                // An item's own `path` is what it draws: a vector import's outline, or a path's
+                // `d`, in place of its columns.
+                if field.path == ["path"] {
+                    if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
+                        let d = json!(crate::morph::d_of(&shape));
+                        if let Some(outline) = params.get_mut("outline").and_then(Value::as_object_mut) {
+                            outline.insert("d".into(), d);
+                            outline.remove("svg");
+                        } else {
+                            params.remove("verbs");
+                            params.remove("pts");
+                            params.insert("d".into(), d);
+                        }
+                    }
+                    continue;
+                }
+                crate::morph::value_of(&shape)
+            }
             [one] if field.enumerated => json!(program.label(*one)),
             [one] => json!(one),
             many => json!(many),

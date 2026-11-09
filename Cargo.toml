@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/deep-contracts", "crates/deep-canvas-seams", "crates/deep-relay", "crates/deep-codecs", "crates/deep-hook", "crates/deep-app", "crates/deep-panel-host", "crates/deep-canvas", "crates/deep-gpu", "crates/deep-gpu-layer", "crates/deep-canvas-motion", "crates/deep-motion", "crates/deep-canvas-scene3d", "crates/deep-scene3d-render", "crates/deep-canvas-effects", "crates/deep-effects-render", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-cells", "crates/deep-canvas-vector", "crates/deep-canvas-sandbox", "crates/deep-canvas-loop", "crates/deep-sandbox-wasmtime", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-gpui", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
+members = ["crates/deep-contracts", "crates/deep-canvas-seams", "crates/deep-relay", "crates/deep-codecs", "crates/deep-hook", "crates/deep-app", "crates/deep-panel-host", "crates/deep-canvas", "crates/deep-gpu", "crates/deep-gpu-layer", "crates/deep-canvas-motion", "crates/deep-canvas-media", "crates/deep-motion", "crates/deep-canvas-input", "crates/deep-input", "crates/deep-canvas-scene3d", "crates/deep-scene3d-render", "crates/deep-canvas-effects", "crates/deep-effects-render", "crates/deep-canvas-marks", "crates/deep-canvas-drawn", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-cells", "crates/deep-canvas-vector", "crates/deep-canvas-sandbox", "crates/deep-canvas-loop", "crates/deep-sandbox-wasmtime", "crates/deep-logic", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-gpui", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
 resolver = "2"
 
 # Issue #390: the canvas's glyph rasterizer at release speed in dev builds, so the text tests
@@ -25,6 +25,14 @@ opt-level = 3
 # Issue #399: a 10,000-node graph laid out incrementally in under 50 ms per change, read off the
 # dev binary.
 [profile.dev.package.deep-canvas-graph]
+opt-level = 3
+# Issue #1436: the dev replica's pack check runs every chrome-fx@1 graph on the CPU interpreter,
+# its fixture and 48 frames of its flash rate, and twenty-four twins' checks each do it again.
+[profile.dev.package.deep-canvas-effects]
+opt-level = 3
+# Issue #499: the media module's mix, read off the dev binary: AC6 renders ten minutes of reverb
+# three times.
+[profile.dev.package.deep-canvas-media]
 opt-level = 3
 [profile.dev.package.serde_json]
 opt-level = 3

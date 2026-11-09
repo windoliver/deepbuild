@@ -1,5 +1,24 @@
 // Generated from packages/contracts/schemas by generateTypeScript. Do not edit.
 
+/** acceptance.state@1 */
+export interface AcceptanceState {
+  v: 1;
+  id: string;
+  kind: "acceptance.state";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    issue: string;
+    entry: unknown;
+  };
+  evidence?: Array<string>;
+}
+
 /** access@1 */
 export interface Access {
   words: Array<string>;
@@ -192,6 +211,7 @@ export interface AdapterFacts {
     conformance: AdapterFactsText;
     home: Array<AdapterFactsText>;
     path: AdapterFactsText;
+    archived?: AdapterFactsText;
   };
   appLinks: {
     readBy: AdapterFactsText;
@@ -386,6 +406,50 @@ export interface AdapterFacts {
   };
   classifyStop?: AdapterFactsOperation;
   skills?: AdapterFactsOperation;
+  entries?: {
+    readBy?: string;
+    name: string;
+    home?: string;
+    mcp?: {
+      file: string;
+      format: "json" | "toml";
+      key: string;
+      perProject?: string;
+      transports: {
+        stdio?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+        http?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+      };
+      refused: Array<{
+        transport: "stdio" | "http";
+        field: string;
+        reason?: string;
+      }>;
+      list?: Array<string>;
+    };
+    skills?: {
+      write: string;
+      readFrom: Array<string>;
+    };
+  };
+  daemon?: {
+    readBy?: string;
+    restart: Array<string>;
+    picksUp: { [key: string]: {
+      "hooks.json": boolean;
+      mcp_servers: boolean;
+      readBy?: string;
+    } };
+  };
 }
 
 export type AdapterFactsV2Text = string;
@@ -667,6 +731,50 @@ export interface AdapterFactsV2 {
     readBy: AdapterFactsV2Text;
     conformance: AdapterFactsV2Text;
     source: AdapterFactsV2Text;
+  };
+  entries?: {
+    readBy?: string;
+    name: string;
+    home?: string;
+    mcp?: {
+      file: string;
+      format: "json" | "toml";
+      key: string;
+      perProject?: string;
+      transports: {
+        stdio?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+        http?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+      };
+      refused: Array<{
+        transport: "stdio" | "http";
+        field: string;
+        reason?: string;
+      }>;
+      list?: Array<string>;
+    };
+    skills?: {
+      write: string;
+      readFrom: Array<string>;
+    };
+  };
+  daemon?: {
+    readBy?: string;
+    restart: Array<string>;
+    picksUp: { [key: string]: {
+      "hooks.json": boolean;
+      mcp_servers: boolean;
+      readBy?: string;
+    } };
   };
 }
 
@@ -963,6 +1071,806 @@ export interface AdapterFactsV3 {
     modelCheck?: AdapterFactsV3Text;
     timeouts?: { [key: string]: number };
   } };
+}
+
+export type AdapterFactsV4Text = string;
+
+export type AdapterFactsV4Match = { [key: string]: unknown };
+
+export type AdapterFactsV4Texts = Array<AdapterFactsV4Text>;
+
+export type AdapterFactsV4Version = string;
+
+export type AdapterFactsV4TextMap = { [key: string]: AdapterFactsV4Text };
+
+export type AdapterFactsV4DataTemplate = { [key: string]: AdapterFactsV4Text };
+
+export type AdapterFactsV4FieldTypes = { [key: string]: string };
+
+export type AdapterFactsV4Payload = {
+  required: AdapterFactsV4FieldTypes;
+  optional: AdapterFactsV4FieldTypes;
+  tools?: { [key: string]: AdapterFactsV4FieldTypes };
+};
+
+export type AdapterFactsV4ToolKind = "shell" | "read" | "edit" | "write" | "search" | "fetch" | "mcp" | "unknown";
+
+export type AdapterFactsV4StopCause = "sign_in_required" | "token_refresh_failed" | "plan_window_spent" | "rate_limited" | "refusal" | "max_turns" | "context_overflow" | "tool_schema_rejected" | "agent_crashed" | "timed_out" | "unknown";
+
+export type AdapterFactsV4CauseMap = { [key: string]: AdapterFactsV4StopCause };
+
+export type AdapterFactsV4OriginRule = {
+  prompt?: AdapterFactsV4Text;
+  match?: { [key: string]: unknown };
+  from: AdapterFactsV4Text;
+};
+
+export type AdapterFactsV4HookRule = {
+  kind: string;
+  data?: AdapterFactsV4DataTemplate;
+  origin?: {
+    join?: {
+      payload: AdapterFactsV4Text;
+      transcript: AdapterFactsV4Text;
+    };
+    rules: Array<AdapterFactsV4OriginRule>;
+    otherwise: AdapterFactsV4Text;
+  };
+  call?: "kind" | "detail";
+  stop?: boolean;
+  cause?: {
+    field: AdapterFactsV4Text;
+    values: AdapterFactsV4CauseMap;
+    otherwise: AdapterFactsV4StopCause;
+  };
+  state?: {
+    field: AdapterFactsV4Text;
+    values: { [key: string]: "working" | "waiting" | "finished" };
+  };
+};
+
+export type AdapterFactsV4Operation = {
+  readBy: AdapterFactsV4Text;
+  conformance: AdapterFactsV4Text;
+};
+
+export type AdapterFactsV4MarkerMap = { [key: string]: AdapterFactsV4Text };
+
+/** adapter.facts@4 */
+export interface AdapterFactsV4 {
+  schema: "adapter.facts@4";
+  versions: Array<AdapterFactsV4Version>;
+  agent: string;
+  hookTimeouts: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    defaultMs?: number | null;
+    perHook?: { [key: string]: number };
+  };
+  continuation: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    cap?: number;
+    field?: AdapterFactsV4Text;
+  };
+  launch: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    session?: {
+      readBy?: AdapterFactsV4Text;
+      args: AdapterFactsV4Texts;
+    };
+    readOnlyJob?: {
+      readBy?: AdapterFactsV4Text;
+      args: AdapterFactsV4Texts;
+      prompt: AdapterFactsV4Text;
+    };
+    started?: {
+      readBy?: AdapterFactsV4Text;
+      args: AdapterFactsV4Texts;
+      asks: AdapterFactsV4Text;
+      modes: AdapterFactsV4TextMap;
+      skipping: AdapterFactsV4Texts;
+      nested: AdapterFactsV4Texts;
+      home: AdapterFactsV4Text;
+      defaultHome: AdapterFactsV4Text;
+      trust?: {
+        readBy?: AdapterFactsV4Text;
+        file: AdapterFactsV4Text;
+        homeFile: AdapterFactsV4Text;
+        set: AdapterFactsV4Text;
+      };
+    };
+  };
+  sandbox?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    versions: { [key: string]: {
+      settings?: AdapterFactsV4Text;
+      args?: AdapterFactsV4Texts;
+      modes?: AdapterFactsV4TextMap;
+      walls: {
+        writes?: AdapterFactsV4Text;
+        credentials?: AdapterFactsV4Text;
+        network?: AdapterFactsV4Text;
+      };
+      wayOut: {
+        call: AdapterFactsV4Text;
+        setting: AdapterFactsV4Text;
+        off: boolean;
+      };
+    } };
+  };
+  modelFamily: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    families: AdapterFactsV4TextMap;
+  };
+  billing: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    apiKeyVariables: AdapterFactsV4Texts;
+  };
+  usage: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    cost: "reported" | "estimated" | "unpriced";
+    costFrom: AdapterFactsV4Text;
+    tokens: AdapterFactsV4Text;
+  };
+  questionTools: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    tools: AdapterFactsV4Texts;
+  };
+  transcripts: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    home: Array<AdapterFactsV4Text>;
+    path: AdapterFactsV4Text;
+    archived?: AdapterFactsV4Text;
+  };
+  appLinks: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    open: AdapterFactsV4Text;
+  };
+  errorTexts: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    causes: AdapterFactsV4CauseMap;
+  };
+  events: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    versions: { [key: string]: { [key: string]: AdapterFactsV4Payload } };
+  };
+  mapping: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    common: AdapterFactsV4DataTemplate;
+    SessionStart?: AdapterFactsV4HookRule;
+    UserPromptSubmit?: AdapterFactsV4HookRule;
+    PreToolUse?: AdapterFactsV4HookRule;
+    PermissionRequest?: AdapterFactsV4HookRule;
+    PostToolUse?: AdapterFactsV4HookRule;
+    PostToolUseFailure?: AdapterFactsV4HookRule;
+    Stop?: AdapterFactsV4HookRule;
+    StopFailure?: AdapterFactsV4HookRule;
+    SessionEnd?: AdapterFactsV4HookRule;
+    SubagentStart?: AdapterFactsV4HookRule;
+    SubagentStop?: AdapterFactsV4HookRule;
+    TaskCreated?: AdapterFactsV4HookRule;
+    TaskCompleted?: AdapterFactsV4HookRule;
+    Notification?: AdapterFactsV4HookRule;
+    Elicitation?: AdapterFactsV4HookRule;
+    ElicitationResult?: AdapterFactsV4HookRule;
+    TeammateIdle?: AdapterFactsV4HookRule;
+    WorktreeCreate?: AdapterFactsV4HookRule;
+    WorktreeRemove?: AdapterFactsV4HookRule;
+    PreCompact?: AdapterFactsV4HookRule;
+    PostCompact?: AdapterFactsV4HookRule;
+    Interrupt?: AdapterFactsV4HookRule;
+    sessionStart?: AdapterFactsV4HookRule;
+    sessionEnd?: AdapterFactsV4HookRule;
+    preToolUse?: AdapterFactsV4HookRule;
+    postToolUse?: AdapterFactsV4HookRule;
+    stop?: AdapterFactsV4HookRule;
+  };
+  toolKinds: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    tools: { [key: string]: AdapterFactsV4ToolKind };
+    prefixes?: { [key: string]: AdapterFactsV4ToolKind };
+    otherwise: AdapterFactsV4ToolKind;
+  };
+  toolDetail?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    command?: AdapterFactsV4TextMap;
+    paths?: AdapterFactsV4TextMap;
+    mcp?: {
+      tool: AdapterFactsV4Text;
+    };
+  };
+  patch?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    tools: AdapterFactsV4Texts;
+    command: AdapterFactsV4Text;
+    shell: AdapterFactsV4Text;
+  };
+  turnWithoutPrompt?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    payloadField: AdapterFactsV4Text;
+    startedBy: AdapterFactsV4Texts;
+    turnEntry: AdapterFactsV4Text;
+    turnField: AdapterFactsV4Text;
+    messageRole: {
+      path: AdapterFactsV4Text;
+      value: AdapterFactsV4Text;
+    };
+    messageText: AdapterFactsV4Text;
+    values: AdapterFactsV4MarkerMap;
+    otherwise: AdapterFactsV4Text;
+  };
+  signIn?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    args: AdapterFactsV4Texts;
+    signedIn: AdapterFactsV4Text;
+  };
+  stop?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    turn: {
+      payload: AdapterFactsV4Text;
+      transcript: AdapterFactsV4Text;
+      elsewhere?: AdapterFactsV4Text;
+    };
+    cause: {
+      readBy?: AdapterFactsV4Text;
+      payload?: {
+        field: AdapterFactsV4Text;
+        values: AdapterFactsV4CauseMap;
+      };
+      errors?: {
+        match: AdapterFactsV4Match;
+        field: AdapterFactsV4Text;
+        values: AdapterFactsV4CauseMap;
+      };
+      rateLimits?: {
+        match: AdapterFactsV4Match;
+        reached: AdapterFactsV4Text;
+        windows: AdapterFactsV4Texts;
+        used: AdapterFactsV4Text;
+        resetsAt: AdapterFactsV4Text;
+        toMs: number;
+        spent: AdapterFactsV4StopCause;
+        withoutReset: AdapterFactsV4StopCause;
+      };
+      otherwise: AdapterFactsV4StopCause;
+    };
+    usage: {
+      readBy?: AdapterFactsV4Text;
+      covers: "turn" | "session";
+      records: {
+        match: AdapterFactsV4Match;
+        has: AdapterFactsV4Text;
+        skip?: AdapterFactsV4Match;
+        once?: AdapterFactsV4Text;
+      };
+      take: "sum" | "last";
+      counts: {
+        input: AdapterFactsV4Texts;
+        cached: AdapterFactsV4Texts;
+        output: AdapterFactsV4Texts;
+      };
+      exact: boolean;
+      model: {
+        record?: AdapterFactsV4Text;
+        payload?: AdapterFactsV4Text;
+      };
+      contextFill?: {
+        used: AdapterFactsV4Texts;
+        window: AdapterFactsV4Text;
+      };
+    };
+  };
+  readUsage?: AdapterFactsV4Operation;
+  taskList?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    tool: AdapterFactsV4Text;
+    items: AdapterFactsV4Text;
+    text: AdapterFactsV4Text;
+    status: AdapterFactsV4Text;
+    open: AdapterFactsV4Texts;
+  };
+  tokenizer?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    name: AdapterFactsV4Text;
+    package: AdapterFactsV4Text;
+    version: AdapterFactsV4Version;
+  };
+  mods?: {
+    readBy: AdapterFactsV4Text;
+    conformance: AdapterFactsV4Text;
+    since: {
+      terminal: AdapterFactsV4Version;
+      desktop: AdapterFactsV4Version;
+    };
+    validate: {
+      args: AdapterFactsV4Texts;
+      hooks: AdapterFactsV4Text;
+      calls: AdapterFactsV4Text;
+    };
+    overrides: {
+      event: AdapterFactsV4Text;
+      past: AdapterFactsV4Text;
+    };
+    promptCalls: AdapterFactsV4Texts;
+    holdsWhen: Array<{
+      case: "managed" | "login" | "plan" | "interactive";
+      text: AdapterFactsV4Text;
+      subscriptionTypes?: AdapterFactsV4Texts;
+      mode?: AdapterFactsV4Text;
+      since?: AdapterFactsV4Version;
+      tools?: AdapterFactsV4Texts;
+    }>;
+  };
+  classifyStop?: AdapterFactsV4Operation;
+  skills?: AdapterFactsV4Operation;
+  entries?: {
+    readBy?: string;
+    name: string;
+    home?: string;
+    mcp?: {
+      file: string;
+      format: "json" | "toml";
+      key: string;
+      perProject?: string;
+      transports: {
+        stdio?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+        http?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+      };
+      refused: Array<{
+        transport: "stdio" | "http";
+        field: string;
+        reason?: string;
+      }>;
+      list?: Array<string>;
+    };
+    skills?: {
+      write: string;
+      readFrom: Array<string>;
+    };
+  };
+  daemon?: {
+    readBy?: string;
+    restart: Array<string>;
+    picksUp: { [key: string]: {
+      "hooks.json": boolean;
+      mcp_servers: boolean;
+      readBy?: string;
+    } };
+  };
+}
+
+export type AdapterFactsV5Text = string;
+
+export type AdapterFactsV5Match = { [key: string]: unknown };
+
+export type AdapterFactsV5Texts = Array<AdapterFactsV5Text>;
+
+export type AdapterFactsV5Version = string;
+
+export type AdapterFactsV5TextMap = { [key: string]: AdapterFactsV5Text };
+
+export type AdapterFactsV5DataTemplate = { [key: string]: AdapterFactsV5Text };
+
+export type AdapterFactsV5FieldTypes = { [key: string]: string };
+
+export type AdapterFactsV5Payload = {
+  required: AdapterFactsV5FieldTypes;
+  optional: AdapterFactsV5FieldTypes;
+  tools?: { [key: string]: AdapterFactsV5FieldTypes };
+};
+
+export type AdapterFactsV5ToolKind = "shell" | "read" | "edit" | "write" | "search" | "fetch" | "mcp" | "unknown";
+
+export type AdapterFactsV5StopCause = "sign_in_required" | "token_refresh_failed" | "plan_window_spent" | "rate_limited" | "refusal" | "max_turns" | "context_overflow" | "tool_schema_rejected" | "agent_crashed" | "timed_out" | "unknown";
+
+export type AdapterFactsV5CauseMap = { [key: string]: AdapterFactsV5StopCause };
+
+export type AdapterFactsV5OriginRule = {
+  prompt?: AdapterFactsV5Text;
+  match?: { [key: string]: unknown };
+  from: AdapterFactsV5Text;
+};
+
+export type AdapterFactsV5HookRule = {
+  kind: string;
+  data?: AdapterFactsV5DataTemplate;
+  origin?: {
+    join?: {
+      payload: AdapterFactsV5Text;
+      transcript: AdapterFactsV5Text;
+    };
+    rules: Array<AdapterFactsV5OriginRule>;
+    otherwise: AdapterFactsV5Text;
+  };
+  call?: "kind" | "detail";
+  stop?: boolean;
+  cause?: {
+    field: AdapterFactsV5Text;
+    values: AdapterFactsV5CauseMap;
+    otherwise: AdapterFactsV5StopCause;
+  };
+  state?: {
+    field: AdapterFactsV5Text;
+    values: { [key: string]: "working" | "waiting" | "finished" };
+  };
+};
+
+export type AdapterFactsV5Operation = {
+  readBy: AdapterFactsV5Text;
+  conformance: AdapterFactsV5Text;
+};
+
+export type AdapterFactsV5MarkerMap = { [key: string]: AdapterFactsV5Text };
+
+/** adapter.facts@5 */
+export interface AdapterFactsV5 {
+  schema: "adapter.facts@5";
+  versions: Array<AdapterFactsV5Version>;
+  agent: string;
+  hookTimeouts: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    defaultMs?: number | null;
+    perHook?: { [key: string]: number };
+  };
+  routes?: {
+    network: {
+      readBy: AdapterFactsV5Text;
+      measured: AdapterFactsV5Text;
+      hookOverheadMs: number;
+      failOpenMs: number;
+    };
+  };
+  continuation: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    cap?: number;
+    field?: AdapterFactsV5Text;
+  };
+  launch: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    session?: {
+      readBy?: AdapterFactsV5Text;
+      args: AdapterFactsV5Texts;
+    };
+    readOnlyJob?: {
+      readBy?: AdapterFactsV5Text;
+      args: AdapterFactsV5Texts;
+      prompt: AdapterFactsV5Text;
+    };
+    started?: {
+      readBy?: AdapterFactsV5Text;
+      args: AdapterFactsV5Texts;
+      asks: AdapterFactsV5Text;
+      modes: AdapterFactsV5TextMap;
+      skipping: AdapterFactsV5Texts;
+      nested: AdapterFactsV5Texts;
+      home: AdapterFactsV5Text;
+      defaultHome: AdapterFactsV5Text;
+      trust?: {
+        readBy?: AdapterFactsV5Text;
+        file: AdapterFactsV5Text;
+        homeFile: AdapterFactsV5Text;
+        set: AdapterFactsV5Text;
+      };
+    };
+  };
+  sandbox?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    versions: { [key: string]: {
+      settings?: AdapterFactsV5Text;
+      args?: AdapterFactsV5Texts;
+      modes?: AdapterFactsV5TextMap;
+      walls: {
+        writes?: AdapterFactsV5Text;
+        credentials?: AdapterFactsV5Text;
+        network?: AdapterFactsV5Text;
+      };
+      wayOut: {
+        call: AdapterFactsV5Text;
+        setting: AdapterFactsV5Text;
+        off: boolean;
+      };
+    } };
+  };
+  modelFamily: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    families: AdapterFactsV5TextMap;
+  };
+  billing: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    apiKeyVariables: AdapterFactsV5Texts;
+  };
+  usage: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    cost: "reported" | "estimated" | "unpriced";
+    costFrom: AdapterFactsV5Text;
+    tokens: AdapterFactsV5Text;
+  };
+  questionTools: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    tools: AdapterFactsV5Texts;
+  };
+  transcripts: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    home: Array<AdapterFactsV5Text>;
+    path: AdapterFactsV5Text;
+    archived?: AdapterFactsV5Text;
+  };
+  appLinks: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    open: AdapterFactsV5Text;
+  };
+  errorTexts: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    causes: AdapterFactsV5CauseMap;
+  };
+  events: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    versions: { [key: string]: { [key: string]: AdapterFactsV5Payload } };
+  };
+  mapping: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    common: AdapterFactsV5DataTemplate;
+    SessionStart?: AdapterFactsV5HookRule;
+    UserPromptSubmit?: AdapterFactsV5HookRule;
+    PreToolUse?: AdapterFactsV5HookRule;
+    PermissionRequest?: AdapterFactsV5HookRule;
+    PostToolUse?: AdapterFactsV5HookRule;
+    PostToolUseFailure?: AdapterFactsV5HookRule;
+    Stop?: AdapterFactsV5HookRule;
+    StopFailure?: AdapterFactsV5HookRule;
+    SessionEnd?: AdapterFactsV5HookRule;
+    SubagentStart?: AdapterFactsV5HookRule;
+    SubagentStop?: AdapterFactsV5HookRule;
+    TaskCreated?: AdapterFactsV5HookRule;
+    TaskCompleted?: AdapterFactsV5HookRule;
+    Notification?: AdapterFactsV5HookRule;
+    Elicitation?: AdapterFactsV5HookRule;
+    ElicitationResult?: AdapterFactsV5HookRule;
+    TeammateIdle?: AdapterFactsV5HookRule;
+    WorktreeCreate?: AdapterFactsV5HookRule;
+    WorktreeRemove?: AdapterFactsV5HookRule;
+    PreCompact?: AdapterFactsV5HookRule;
+    PostCompact?: AdapterFactsV5HookRule;
+    Interrupt?: AdapterFactsV5HookRule;
+    sessionStart?: AdapterFactsV5HookRule;
+    sessionEnd?: AdapterFactsV5HookRule;
+    preToolUse?: AdapterFactsV5HookRule;
+    postToolUse?: AdapterFactsV5HookRule;
+    stop?: AdapterFactsV5HookRule;
+  };
+  toolKinds: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    tools: { [key: string]: AdapterFactsV5ToolKind };
+    prefixes?: { [key: string]: AdapterFactsV5ToolKind };
+    otherwise: AdapterFactsV5ToolKind;
+  };
+  toolDetail?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    command?: AdapterFactsV5TextMap;
+    paths?: AdapterFactsV5TextMap;
+    mcp?: {
+      tool: AdapterFactsV5Text;
+    };
+  };
+  patch?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    tools: AdapterFactsV5Texts;
+    command: AdapterFactsV5Text;
+    shell: AdapterFactsV5Text;
+  };
+  turnWithoutPrompt?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    payloadField: AdapterFactsV5Text;
+    startedBy: AdapterFactsV5Texts;
+    turnEntry: AdapterFactsV5Text;
+    turnField: AdapterFactsV5Text;
+    messageRole: {
+      path: AdapterFactsV5Text;
+      value: AdapterFactsV5Text;
+    };
+    messageText: AdapterFactsV5Text;
+    values: AdapterFactsV5MarkerMap;
+    otherwise: AdapterFactsV5Text;
+  };
+  signIn?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    args: AdapterFactsV5Texts;
+    signedIn: AdapterFactsV5Text;
+  };
+  stop?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    turn: {
+      payload: AdapterFactsV5Text;
+      transcript: AdapterFactsV5Text;
+      elsewhere?: AdapterFactsV5Text;
+    };
+    cause: {
+      readBy?: AdapterFactsV5Text;
+      payload?: {
+        field: AdapterFactsV5Text;
+        values: AdapterFactsV5CauseMap;
+      };
+      errors?: {
+        match: AdapterFactsV5Match;
+        field: AdapterFactsV5Text;
+        values: AdapterFactsV5CauseMap;
+      };
+      rateLimits?: {
+        match: AdapterFactsV5Match;
+        reached: AdapterFactsV5Text;
+        windows: AdapterFactsV5Texts;
+        used: AdapterFactsV5Text;
+        resetsAt: AdapterFactsV5Text;
+        toMs: number;
+        spent: AdapterFactsV5StopCause;
+        withoutReset: AdapterFactsV5StopCause;
+      };
+      otherwise: AdapterFactsV5StopCause;
+    };
+    usage: {
+      readBy?: AdapterFactsV5Text;
+      covers: "turn" | "session";
+      records: {
+        match: AdapterFactsV5Match;
+        has: AdapterFactsV5Text;
+        skip?: AdapterFactsV5Match;
+        once?: AdapterFactsV5Text;
+      };
+      take: "sum" | "last";
+      counts: {
+        input: AdapterFactsV5Texts;
+        cached: AdapterFactsV5Texts;
+        output: AdapterFactsV5Texts;
+      };
+      exact: boolean;
+      model: {
+        record?: AdapterFactsV5Text;
+        payload?: AdapterFactsV5Text;
+      };
+      contextFill?: {
+        used: AdapterFactsV5Texts;
+        window: AdapterFactsV5Text;
+      };
+    };
+  };
+  readUsage?: AdapterFactsV5Operation;
+  taskList?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    tool: AdapterFactsV5Text;
+    items: AdapterFactsV5Text;
+    text: AdapterFactsV5Text;
+    status: AdapterFactsV5Text;
+    open: AdapterFactsV5Texts;
+  };
+  tokenizer?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    name: AdapterFactsV5Text;
+    package: AdapterFactsV5Text;
+    version: AdapterFactsV5Version;
+  };
+  mods?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    since: {
+      terminal: AdapterFactsV5Version;
+      desktop: AdapterFactsV5Version;
+    };
+    validate: {
+      args: AdapterFactsV5Texts;
+      hooks: AdapterFactsV5Text;
+      calls: AdapterFactsV5Text;
+    };
+    overrides: {
+      event: AdapterFactsV5Text;
+      past: AdapterFactsV5Text;
+    };
+    promptCalls: AdapterFactsV5Texts;
+    holdsWhen: Array<{
+      case: "managed" | "login" | "plan" | "interactive";
+      text: AdapterFactsV5Text;
+      subscriptionTypes?: AdapterFactsV5Texts;
+      mode?: AdapterFactsV5Text;
+      since?: AdapterFactsV5Version;
+      tools?: AdapterFactsV5Texts;
+    }>;
+  };
+  classifyStop?: AdapterFactsV5Operation;
+  skills?: AdapterFactsV5Operation;
+  entries?: {
+    readBy?: string;
+    name: string;
+    home?: string;
+    mcp?: {
+      file: string;
+      format: "json" | "toml";
+      key: string;
+      perProject?: string;
+      transports: {
+        stdio?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+        http?: {
+          type?: string;
+          fields: Array<string>;
+          names?: { [key: string]: string };
+          commandArray?: boolean;
+        };
+      };
+      refused: Array<{
+        transport: "stdio" | "http";
+        field: string;
+        reason?: string;
+      }>;
+      list?: Array<string>;
+    };
+    skills?: {
+      write: string;
+      readFrom: Array<string>;
+    };
+  };
+  daemon?: {
+    readBy?: string;
+    restart: Array<string>;
+    picksUp: { [key: string]: {
+      "hooks.json": boolean;
+      mcp_servers: boolean;
+      readBy?: string;
+    } };
+  };
 }
 
 /** adapter.unsupported@1 */
@@ -1585,6 +2493,56 @@ export interface AgentStopV5 {
     signature?: string;
     owner?: "agent" | "you" | "service";
     loop?: AgentStopV5Loop;
+  };
+  evidence?: Array<string>;
+}
+
+/** agents.synced@1 */
+export interface AgentsSynced {
+  v: 1;
+  id: string;
+  kind: "agents.synced";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    sync: string;
+    item: {
+      kind: "server" | "skill";
+      server?: {
+        name: string;
+        transport: "stdio" | "http";
+        command?: string;
+        args?: Array<string>;
+        env?: { [key: string]: string };
+        url?: string;
+        headers?: { [key: string]: string };
+        secrets?: Array<string>;
+        scope?: {
+          repos: Array<string>;
+        };
+      };
+      skill?: {
+        name: string;
+        repo: string;
+        commit: string;
+        path: string;
+        digest: string;
+        files: Array<{
+          rel: string;
+          mode: number;
+          sha: string;
+        }>;
+        license: string;
+        scripts: Array<string>;
+        findings: Array<string>;
+      };
+    };
+    agents: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -2560,6 +3518,46 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
+/** attempt.started@1 */
+export interface AttemptStarted {
+  v: 1;
+  id: string;
+  kind: "attempt.started";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    issue: string;
+    branch: string;
+    commit: string;
+    base: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** build.rolled_back@1 */
+export interface BuildRolledBack {
+  v: 1;
+  id: string;
+  kind: "build.rolled_back";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    commit: string;
+    restored: string;
+    why: string;
+  };
+}
+
 /** call.overrun@1 */
 export interface CallOverrun {
   v: 1;
@@ -2717,7 +3715,7 @@ export interface ChannelRefused {
     channel: string;
     thread_key: string;
     answer: string;
-    field?: "device" | "ask" | "revision" | "card_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id";
+    field?: "device" | "ask" | "revision" | "card_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id" | "method" | "once" | "params";
     reason: string;
   };
   evidence?: Array<string>;
@@ -3754,6 +4752,74 @@ export interface DefinitionLockedV8 {
   evidence?: Array<string>;
 }
 
+/** definition.locked@9 */
+export interface DefinitionLockedV9 {
+  v: 9;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+      targets?: Array<string>;
+      paid?: "live call" | "hosted browser run" | "model job";
+      runs?: number;
+      held_out?: Array<{
+        files: { [key: string]: string };
+      }>;
+      timing?: boolean;
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.revised@1 */
 export interface DefinitionRevised {
   v: 1;
@@ -3919,7 +4985,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -4103,6 +5169,28 @@ export interface ExtensionManifest {
   codes?: Array<string>;
   notices?: Array<string>;
   actions?: Array<string>;
+}
+
+/** forge.refused@1 */
+export interface ForgeRefused {
+  v: 1;
+  id: string;
+  kind: "forge.refused";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    session: string;
+    action: "post-status" | "merge" | "push-default-branch" | "push-approved-tag";
+    target: string;
+    call: string | null;
+  };
+  evidence?: Array<string>;
 }
 
 /** guard.overridden@1 */
@@ -4378,6 +5466,11 @@ export interface JobRecorded {
     folder: string;
     prompt: string;
     waiting: Array<string>;
+    inputs?: Array<{
+      kind: "issue" | "design" | "base" | "criterion";
+      ref: string;
+      sha256?: string;
+    }>;
   };
   evidence?: Array<string>;
 }
@@ -4893,6 +5986,33 @@ export interface NoteOpened {
   evidence?: Array<string>;
 }
 
+/** notice.delivered@1 */
+export interface NoticeDelivered {
+  v: 1;
+  id: string;
+  kind: "notice.delivered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    notice: string;
+    type: "interface" | "dependency" | "behavior" | "test" | "configuration";
+    source: string | null;
+    target: string;
+    files: Array<string>;
+    pr: number | null;
+    key: string;
+    version: string;
+    via: "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "waiter";
+    text: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** notice.sent@1 */
 export interface NoticeSent {
   v: 1;
@@ -5355,6 +6475,23 @@ export interface QuestionProceeded {
   evidence?: Array<string>;
 }
 
+/** race.started@1 */
+export interface RaceStarted {
+  v: 1;
+  id: string;
+  kind: "race.started";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    issue: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** reading.answer@1 */
 export interface ReadingAnswer {
   findings: Array<{
@@ -5501,6 +6638,28 @@ export interface ReadingSlice {
   }>;
 }
 
+/** ref.unguarded@1 */
+export interface RefUnguarded {
+  v: 1;
+  id: string;
+  kind: "ref.unguarded";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ref: string;
+    commit: string;
+    pusher: string | null;
+    call: string | null;
+    command: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** request.cost@1 */
 export interface RequestCost {
   v: 1;
@@ -5526,6 +6685,29 @@ export interface RequestCost {
       exact: boolean;
     };
     reading: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** resource.created@1 */
+export interface ResourceCreated {
+  v: 1;
+  id: string;
+  kind: "resource.created";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    resource: string;
+    kind: string;
+    key?: string;
+    cost_usd: number;
+    check: string;
+    cwd: string;
   };
   evidence?: Array<string>;
 }
@@ -5760,6 +6942,29 @@ export interface RunStartedV3 {
   evidence?: Array<string>;
 }
 
+/** run.under_load@1 */
+export interface RunUnderLoad {
+  v: 1;
+  id: string;
+  kind: "run.under_load";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    claim: string;
+    under_load: true;
+    load: number;
+    cores: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** runner.answered@1 */
 export interface RunnerAnswered {
   v: 1;
@@ -5825,6 +7030,28 @@ export interface SandboxDeniedV2 {
   evidence?: Array<string>;
 }
 
+/** sandbox.refused@1 */
+export interface SandboxRefused {
+  v: 1;
+  id: string;
+  kind: "sandbox.refused";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    session: string;
+    operation: string;
+    target: string;
+    call: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** schedule.run@1 */
 export interface ScheduleRun {
   v: 1;
@@ -5844,9 +7071,10 @@ export interface ScheduleRun {
     phase: "queued" | "dispatched" | "ended";
     due: number;
     resumed?: boolean;
-    verdict?: "PASS" | "FAIL" | "BLOCKED" | "INCONCLUSIVE" | "INVALID" | "uncounted";
+    verdict?: "PASS" | "FAIL" | "BLOCKED" | "INCONCLUSIVE" | "INVALID";
     cause?: string | null;
     stopped?: boolean;
+    noop?: boolean;
     changes?: Array<string>;
   };
   evidence?: Array<string>;
@@ -5919,6 +7147,24 @@ export interface SessionActivity {
   log_pos?: number;
   data: {
     activity: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.archived@1 */
+export interface SessionArchived {
+  v: 1;
+  id: string;
+  kind: "session.archived";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    transcript: string;
   };
   evidence?: Array<string>;
 }
@@ -6036,6 +7282,49 @@ export interface SessionGone {
   evidence?: Array<string>;
 }
 
+/** session.never_started@1 */
+export interface SessionNeverStarted {
+  v: 1;
+  id: string;
+  kind: "session.never_started";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    after_ms: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.pushed@1 */
+export interface SessionPushed {
+  v: 1;
+  id: string;
+  kind: "session.pushed";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ref: string;
+    commit: string;
+    pusher: string;
+    session: string | null;
+    run: string | null;
+    approval: string | null;
+    approved_by: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** session.reading@1 */
 export interface SessionReading {
   v: 1;
@@ -6050,6 +7339,26 @@ export interface SessionReading {
   log_pos?: number;
   data: {
     reading: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.rules_delivered@1 */
+export interface SessionRulesDelivered {
+  v: 1;
+  id: string;
+  kind: "session.rules_delivered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    via: "start" | "prompt" | "notice";
+    pos: number;
+    rules: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -6403,6 +7712,119 @@ export interface StackWaiting {
     check: string;
     wait_ms: number;
     expected_ms: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** start.approval@1 */
+export interface StartApproval {
+  v: 1;
+  id: string;
+  kind: "start.approval";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    repo: string;
+    issues: Array<number>;
+    agents: Array<string>;
+    homes: { [key: string]: string };
+    modes: { [key: string]: string };
+    at_once: number;
+    plan_share: number;
+    until: number | null;
+    hosts: Array<string>;
+    sandbox: { [key: string]: {
+      sandboxed: boolean;
+      walls: {
+        writes: boolean;
+        credentials: boolean;
+        network: boolean;
+      };
+    } };
+  };
+  evidence?: Array<string>;
+}
+
+/** start.refused@1 */
+export interface StartRefused {
+  v: 1;
+  id: string;
+  kind: "start.refused";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    caller: string;
+    bound: "approval" | "set" | "agent" | "mode" | "end" | "at_once" | "plan_share" | "version" | "caller";
+    reason: string;
+    repo: string | null;
+    issue: number | null;
+    agent: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** start.session@1 */
+export interface StartSession {
+  v: 1;
+  id: string;
+  kind: "start.session";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    session: string;
+    agent: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** start.started@1 */
+export interface StartStarted {
+  v: 1;
+  id: string;
+  kind: "start.started";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    ask: string;
+    repo: string;
+    issue: number;
+    agent: string;
+    version: string;
+    home: string;
+    mode: string;
+    worktree: string;
+    branch: string;
+    base: string;
+    sandbox: {
+      sandboxed: boolean;
+      walls: {
+        writes: boolean;
+        credentials: boolean;
+        network: boolean;
+      };
+    };
   };
   evidence?: Array<string>;
 }
@@ -7555,6 +8977,29 @@ export interface WorkBroke {
   evidence?: Array<string>;
 }
 
+/** work.delivery@1 */
+export interface WorkDelivery {
+  v: 1;
+  id: string;
+  kind: "work.delivery";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    key: string;
+    task_ref: string;
+    source: string;
+    thread: string;
+    phase: "recorded" | "asked" | "claimed" | "sent" | "tried" | "gone" | "refused" | "unknown";
+    detail: unknown;
+  };
+  evidence?: Array<string>;
+}
+
 /** work.item@1 */
 export interface WorkItem {
   source_id: string;
@@ -7582,6 +9027,26 @@ export interface WorkItemV2 {
     automated?: boolean;
   }>;
   updated: string;
+}
+
+/** work.read@1 */
+export interface WorkRead {
+  v: 1;
+  id: string;
+  kind: "work.read";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    source: string;
+    position: string | null;
+    state: unknown;
+  };
+  evidence?: Array<string>;
 }
 
 /** workspace.created@1 */

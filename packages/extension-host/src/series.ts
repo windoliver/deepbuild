@@ -13,8 +13,8 @@ import type { Batch } from './sources.js';
 
 /** The most named values one call of a series source may return. */
 export const SERIES_MAX = 10_000;
-export const MINUTE_MS = 60_000;
-export const HOUR_MS = 3_600_000;
+const MINUTE_MS = 60_000;
+const HOUR_MS = 3_600_000;
 
 const BATCH = 0x31425344; // "DSB1"
 const ROLLUP = 0x31525344; // "DSR1"
@@ -25,8 +25,8 @@ export interface Rollup { min: number; max: number; mean: number; last: number; 
 export type Span = 'minute' | 'hour';
 
 /** The names file: one name a line, in the order a batch's and a rollup's indexes count. */
-export const namesFile = (names: readonly string[]): Uint8Array => Buffer.from(names.join('\n'), 'utf8');
-export const readNames = (bytes: Uint8Array): string[] => (bytes.length ? Buffer.from(bytes).toString('utf8').split('\n') : []);
+const namesFile = (names: readonly string[]): Uint8Array => Buffer.from(names.join('\n'), 'utf8');
+const readNames = (bytes: Uint8Array): string[] => (bytes.length ? Buffer.from(bytes).toString('utf8').split('\n') : []);
 
 function head(magic: number, names: string, at: number, n: number, size: number): Buffer {
   const out = Buffer.alloc(HEAD + size);
@@ -43,7 +43,7 @@ function opened(bytes: Uint8Array, magic: number, what: string): { buf: Buffer; 
 }
 
 /** A batch file: the names file's hash and the call's as-of time, then each value as its name's index and the number. */
-export function batchFile(names: string, asOf: number, values: readonly number[]): Uint8Array {
+function batchFile(names: string, asOf: number, values: readonly number[]): Uint8Array {
   const out = head(BATCH, names, asOf, values.length, values.length * 12);
   for (let i = 0; i < values.length; i++) {
     out.writeUInt32LE(i, HEAD + i * 12);
@@ -51,7 +51,7 @@ export function batchFile(names: string, asOf: number, values: readonly number[]
   }
   return out;
 }
-export function readBatch(bytes: Uint8Array): { names: string; values: Map<number, number> } {
+function readBatch(bytes: Uint8Array): { names: string; values: Map<number, number> } {
   const { buf, names, n } = opened(bytes, BATCH, 'batch');
   if (buf.length !== HEAD + n * 12) throw Error('its length isn\'t its values\'');
   const values = new Map<number, number>();
@@ -60,12 +60,12 @@ export function readBatch(bytes: Uint8Array): { names: string; values: Map<numbe
 }
 
 /** A rollup file: the names file's hash and the window's start, then each series' min, max, mean, last and count, in the names' order. */
-export function rollupFile(names: string, start: number, rollups: readonly Rollup[]): Uint8Array {
+function rollupFile(names: string, start: number, rollups: readonly Rollup[]): Uint8Array {
   const out = head(ROLLUP, names, start, rollups.length, rollups.length * 40);
   rollups.forEach((r, i) => [r.min, r.max, r.mean, r.last, r.count].forEach((v, j) => out.writeDoubleLE(v, HEAD + i * 40 + j * 8)));
   return out;
 }
-export function readRollup(bytes: Uint8Array): { names: string; rollups: Rollup[] } {
+function readRollup(bytes: Uint8Array): { names: string; rollups: Rollup[] } {
   const { buf, names, n } = opened(bytes, ROLLUP, 'rollup');
   if (buf.length !== HEAD + n * 40) throw Error('its length isn\'t its series\'');
   const at = (i: number, j: number) => buf.readDoubleLE(HEAD + i * 40 + j * 8);
@@ -77,7 +77,7 @@ interface Acc { min: number; max: number; sum: number; last: number; lastAt: num
 interface Window { span: Span; start: number; series: Map<string, Acc> }
 
 /** The open minute and hour windows of one source, and the ones that closed. */
-export class Rollups {
+class Rollups {
   private readonly open = new Map<string, Window>();
 
   constructor(private readonly timeout: number) {}
@@ -139,7 +139,7 @@ export const shownValue = (handle: string, value: number, asOf: number, more: Pa
 /** One landed batch, as the record holds it. */
 interface Landed { log_pos: number; as_of: number; handle: string; file: string }
 /** The evidence kinds a series' files are kept as: the rollups' kinds name their span, for retention. */
-export const SERIES_KINDS: ReadonlySet<string> = new Set(['reading.batch', 'reading.rollup.minute', 'reading.rollup.hour']);
+const SERIES_KINDS: ReadonlySet<string> = new Set(['reading.batch', 'reading.rollup.minute', 'reading.rollup.hour']);
 const NAMES_KIND = 'reading.names';
 /** How often a names file in use is stored again, which keeps it as long as what names it. */
 const NAMES_REPUT_MS = 86_400_000;

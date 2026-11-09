@@ -1,0 +1,8 @@
+{
+  "id": "test/tracker",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["hosts"] },
+  "sources": [{ "name": "ext.tracker.issues", "variant": "stream", "reading": "work.item@1" }],
+  "requires": { "preview": ["deep.registerSource"] }
+}

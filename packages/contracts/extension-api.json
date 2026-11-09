@@ -59,7 +59,8 @@
     "variants": [
       "stream",
       "polled",
-      "mcp"
+      "mcp",
+      "library"
     ],
     "since": "R1",
     "stability": "preview",
@@ -399,6 +400,48 @@
     "since": "R2",
     "stability": "preview",
     "tracking": "#65",
+    "digest": "d1:2ee78dc93e151a8ca07d3d5623dddd159f5f0dcdee2c3f22083b582632a6675e",
+    "params": {
+      "type": "object",
+      "properties": {
+        "call": {
+          "type": "string"
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "GET",
+                "POST"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^/"
+            }
+          },
+          "required": [
+            "method",
+            "path"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "call",
+        "request"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.work.fetch",
+    "variants": null,
+    "since": "R2",
+    "stability": "preview",
+    "tracking": "#66",
     "digest": "d1:2ee78dc93e151a8ca07d3d5623dddd159f5f0dcdee2c3f22083b582632a6675e",
     "params": {
       "type": "object",

@@ -3,9 +3,10 @@ use anyhow::{Context as _, Result};
 use block2::RcBlock;
 use core_graphics::geometry::CGSize;
 use gpui::{
-    point, size, AtlasTextureId, Background, Bounds, ContentMask, DevicePixels, PaintSurface, Path,
-    Point, PrimitiveBatch, ScaledPixels, Scene, Size,
+    AtlasTextureId, Background, Bounds, ContentMask, DevicePixels, PaintSurface, Path, Point,
+    PrimitiveBatch, ScaledPixels, Scene, Size, point, size,
 };
+// DeepBuild patch (windoliver/deepbuild#140): the color check reads a drawable back in any build.
 use image::RgbaImage;
 use objc2::runtime::AnyObject;
 
@@ -16,217 +17,24 @@ use metal::{
 };
 use objc2_core_foundation::CFRetained;
 use objc2_core_video::{
-    kCVPixelFormatType_32BGRA, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
     CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBufferGetHeight,
     CVPixelBufferGetHeightOfPlane, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
-    CVPixelBufferGetWidthOfPlane,
+    CVPixelBufferGetWidthOfPlane, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
 };
 use parking_lot::Mutex;
 
-use std::{cell::Cell, ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice, sync::Arc};
+use std::{ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice, sync::Arc};
 
 // Exported to metal
 pub(crate) type PointF = gpui::Point<f32>;
 
-/// DeepBuild patch (windoliver/deepbuild#391): a count of the frame command buffers this process
-/// committed and completed, and the GPU time they took (each one's GPU start to its GPU end), so a
-/// canvas can show that a still view uses no GPU time. Every frame renders through one command
-/// buffer from `render_frame`, which this counts.
-pub mod gpu_ledger {
-    use objc2::runtime::AnyObject;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    static COMMITTED: AtomicU64 = AtomicU64::new(0);
-    static COMPLETED: AtomicU64 = AtomicU64::new(0);
-    static GPU_NS: AtomicU64 = AtomicU64::new(0);
-
-    /// What the ledger holds so far.
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-    pub struct Ledger {
-        pub committed: u64,
-        pub completed: u64,
-        pub gpu_ns: u64,
-    }
-
-    pub fn read() -> Ledger {
-        Ledger {
-            committed: COMMITTED.load(Ordering::SeqCst),
-            completed: COMPLETED.load(Ordering::SeqCst),
-            gpu_ns: GPU_NS.load(Ordering::SeqCst),
-        }
-    }
-
-    pub(super) fn committed() {
-        COMMITTED.fetch_add(1, Ordering::SeqCst);
-    }
-
-    pub(super) fn completed(buffer: &AnyObject) -> u64 {
-        // SAFETY: `GPUStartTime` and `GPUEndTime` are `MTLCommandBuffer` properties returning
-        // `CFTimeInterval` (seconds as f64), read once the buffer completed.
-        let (start, end): (f64, f64) = unsafe {
-            (
-                objc2::msg_send![buffer, GPUStartTime],
-                objc2::msg_send![buffer, GPUEndTime],
-            )
-        };
-        let ns = ((end - start).max(0.0) * 1e9).round() as u64;
-        GPU_NS.fetch_add(ns, Ordering::SeqCst);
-        COMPLETED.fetch_add(1, Ordering::SeqCst);
-        ns
-    }
-}
-
-/// DeepBuild patch (windoliver/deepbuild#140): the color seam's checks on a window's layer. The
-/// planted twin sets every window layer's colorspace nil (untagged); and the next frame
-/// a window draws can be read back from its layer's drawable, as the compositor receives it.
-pub mod layer_colorspace {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Mutex;
-
-    use image::RgbaImage;
-
-    static UNTAGGED: AtomicBool = AtomicBool::new(false);
-    static READ_NEXT: AtomicBool = AtomicBool::new(false);
-    static READ: Mutex<Option<RgbaImage>> = Mutex::new(None);
-
-    pub fn plant_untagged() {
-        UNTAGGED.store(true, Ordering::SeqCst);
-    }
-
-    pub fn untagged() -> bool {
-        UNTAGGED.load(Ordering::SeqCst)
-    }
-
-    /// Reads back the next frame any window draws, from its layer's drawable.
-    pub fn read_next_frame() {
-        READ_NEXT.store(true, Ordering::SeqCst);
-    }
-
-    /// The frame read back, once a window has drawn one since `read_next_frame`.
-    pub fn take_frame() -> Option<RgbaImage> {
-        READ.lock().ok()?.take()
-    }
-
-    pub(crate) fn reading() -> bool {
-        READ_NEXT.swap(false, Ordering::SeqCst)
-    }
-
-    pub(crate) fn read(frame: RgbaImage) {
-        if let Ok(mut read) = READ.lock() {
-            *read = Some(frame);
-        }
-    }
-}
-
-/// DeepBuild patch (windoliver/deepbuild#377): what the canvas's GPU layer needs from the frame
-/// command buffers that show its surfaces. A BGRA surface (a slot another renderer drew into an
-/// IOSurface) composites premultiplied, with source factor one and destination factor one minus
-/// source alpha. Each frame command buffer that samples one reports the pixel buffers it samples
-/// when it is committed, and again when it completes, so a slot is released only once GPUI is
-/// done reading it. The planted twins exist for the GPU layer's acceptance tests: one divides
-/// alpha out of the surface, the other draws surfaces after the rest of the scene.
-pub mod gpu_surfaces {
-    use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
-    use std::sync::{Arc, RwLock};
-
-    /// A frame's report: the identity of each BGRA pixel buffer its command buffer samples (the
-    /// `CVPixelBuffer`'s address), once the buffer is encoded, then its completion with the GPU
-    /// time it took. `frame` numbers only the frames that sample a surface while a hook is set.
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    pub enum Event {
-        Encoded { frame: u64, surfaces: Vec<u64> },
-        Completed { frame: u64, gpu_ns: u64 },
-    }
-
-    /// A planted wrong compositor, for the tests that must catch it.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    #[repr(u8)]
-    pub enum Planted {
-        None = 0,
-        /// Divides the surface's color by its alpha and blends it as straight alpha.
-        DividesAlpha = 1,
-        /// Draws every surface after the rest of the scene, over whatever was painted above it.
-        AfterScene = 2,
-    }
-
-    pub type Hook = Arc<dyn Fn(Event) + Send + Sync>;
-
-    static HOOK: RwLock<Option<Hook>> = RwLock::new(None);
-    static PLANTED: AtomicU8 = AtomicU8::new(Planted::None as u8);
-    static NEXT_FRAME: AtomicU64 = AtomicU64::new(1);
-
-    /// Installs the hook that receives every report, replacing any earlier one, or removes it.
-    /// The earlier hook is dropped with the lock released, so what it captured may use these
-    /// functions as it drops.
-    pub fn set_hook(hook: Option<Hook>) {
-        let mut guard = HOOK.write().unwrap_or_else(|e| e.into_inner());
-        let old = std::mem::replace(&mut *guard, hook);
-        drop(guard);
-        drop(old);
-    }
-
-    pub fn plant(planted: Planted) {
-        PLANTED.store(planted as u8, Ordering::SeqCst);
-    }
-
-    pub(super) fn planted() -> Planted {
-        match PLANTED.load(Ordering::SeqCst) {
-            1 => Planted::DividesAlpha,
-            2 => Planted::AfterScene,
-            _ => Planted::None,
-        }
-    }
-
-    fn hook() -> Option<Hook> {
-        HOOK.read().unwrap_or_else(|e| e.into_inner()).clone()
-    }
-
-    pub(super) fn has_hook() -> bool {
-        hook().is_some()
-    }
-
-    pub(super) fn next_frame() -> u64 {
-        NEXT_FRAME.fetch_add(1, Ordering::SeqCst)
-    }
-
-    /// Calls the hook with the lock released, so the hook may replace itself.
-    pub(super) fn report(event: Event) {
-        if let Some(hook) = hook() {
-            hook(event);
-        }
-    }
-}
-
-/// DeepBuild patch (windoliver/deepbuild#140): the display seam's presentation feedback on macOS
-/// (canvas primitives: Frame callback and presentation feedback). While a hook is set, each
-/// drawable a window's `draw` presents carries a presented handler that reports the label the app
-/// set for that frame before the draw and the drawable's `presentedTime`: host time in seconds,
-/// the clock `mach_absolute_time` counts, or 0 when the drawable was never shown.
-pub mod presentation {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::{Arc, RwLock};
-
-    pub type Hook = Arc<dyn Fn(u64, f64) + Send + Sync>;
-
-    static HOOK: RwLock<Option<Hook>> = RwLock::new(None);
-    static LABEL: AtomicU64 = AtomicU64::new(0);
-
-    /// Installs the hook that receives every presented drawable, or removes it.
-    pub fn set_hook(hook: Option<Hook>) {
-        let old = std::mem::replace(&mut *HOOK.write().unwrap_or_else(|e| e.into_inner()), hook);
-        drop(old);
-    }
-
-    /// Labels the next drawable a window presents; an unlabelled one reports 0.
-    pub fn label_next(label: u64) {
-        LABEL.store(label, Ordering::SeqCst);
-    }
-
-    pub(super) fn take() -> Option<(Hook, u64)> {
-        let hook = HOOK.read().unwrap_or_else(|e| e.into_inner()).clone()?;
-        Some((hook, LABEL.swap(0, Ordering::SeqCst)))
-    }
-}
+mod bgra_surface; // DeepBuild patch (windoliver/deepbuild#377)
+mod ycbcr_surface; // DeepBuild patch (windoliver/deepbuild#499)
+pub mod chrome_layers; // DeepBuild patch (windoliver/deepbuild#1434)
+pub mod gpu_ledger; // DeepBuild patch (windoliver/deepbuild#391)
+pub mod gpu_surfaces; // DeepBuild patch (windoliver/deepbuild#377)
+pub mod layer_colorspace; // DeepBuild patch (windoliver/deepbuild#140)
+pub mod presentation; // DeepBuild patch (windoliver/deepbuild#140)
 
 #[cfg(not(feature = "runtime_shaders"))]
 const SHADERS_METALLIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
@@ -324,11 +132,13 @@ pub struct MetalRenderer {
     monochrome_sprites_pipeline_state: metal::RenderPipelineState,
     polychrome_sprites_pipeline_state: metal::RenderPipelineState,
     surfaces_pipeline_state: metal::RenderPipelineState,
-    /// DeepBuild patch (windoliver/deepbuild#377): BGRA surfaces, premultiplied, and the planted
-    /// twin that divides alpha out.
-    surfaces_bgra_pipeline_state: metal::RenderPipelineState,
-    surfaces_bgra_divided_pipeline_state: metal::RenderPipelineState,
-    /// The pixel buffers the frame being encoded samples, for `gpu_surfaces`.
+    ycbcr_pipeline_state: metal::RenderPipelineState, // DeepBuild patch (windoliver/deepbuild#499)
+    // DeepBuild patch (windoliver/deepbuild#499): committed frames' instance buffers and surface
+    // reports, and the one completed handler that releases them in order.
+    completions: Arc<Mutex<std::collections::VecDeque<(InstanceBuffer, Option<u64>)>>>,
+    completed: RcBlock<dyn Fn(ptr::NonNull<AnyObject>)>,
+    /// DeepBuild patch (windoliver/deepbuild#377): the BGRA pipelines and the pixel buffers the frame samples.
+    bgra_surfaces: bgra_surface::BgraSurfaces,
     sampled_surfaces: Vec<u64>,
     unit_vertices: metal::Buffer,
     #[allow(clippy::arc_with_non_send_sync)]
@@ -397,14 +207,7 @@ impl MetalRenderer {
         let objc2_layer: &objc2_quartz_core::CAMetalLayer = unsafe { &*layer.as_ptr().cast() };
         objc2_layer.setAllowsNextDrawableTimeout(false);
         objc2_layer.setNeedsDisplayOnBoundsChange(true);
-        // DeepBuild patch (windoliver/deepbuild#140): the layer holds sRGB-encoded BGRA8, so it is
-        // tagged sRGB and the compositor never reinterprets it. GPUI alone sets no colorspace and
-        // leaves it to whatever AppKit gives a view's backing layer (sRGB on macOS 26); the
-        // planted twin sets it nil.
-        let srgb = objc2_core_graphics::CGColorSpace::with_name(Some(unsafe {
-            objc2_core_graphics::kCGColorSpaceSRGB
-        }));
-        objc2_layer.setColorspace(srgb.as_deref().filter(|_| !layer_colorspace::untagged()));
+        layer_colorspace::tag_srgb(objc2_layer); // DeepBuild patch (windoliver/deepbuild#140)
         // UIKit sizes a view's backing layer itself; only AppKit-hosted
         // layers need to track their superlayer's bounds.
         #[cfg(target_os = "macos")]
@@ -573,23 +376,8 @@ impl MetalRenderer {
             "surface_fragment",
             MTLPixelFormat::BGRA8Unorm,
         );
-        // DeepBuild patch (windoliver/deepbuild#377): the slot stays premultiplied into the window.
-        let surfaces_bgra_pipeline_state = build_path_sprite_pipeline_state(
-            &device,
-            &library,
-            "surfaces_bgra",
-            "surface_vertex",
-            "surface_bgra_fragment",
-            MTLPixelFormat::BGRA8Unorm,
-        );
-        let surfaces_bgra_divided_pipeline_state = build_pipeline_state(
-            &device,
-            &library,
-            "surfaces_bgra_divided",
-            "surface_vertex",
-            "surface_bgra_divided_fragment",
-            MTLPixelFormat::BGRA8Unorm,
-        );
+        let bgra_surfaces = bgra_surface::BgraSurfaces::new(&device, &library); // DeepBuild patch (windoliver/deepbuild#377)
+        let ycbcr_pipeline_state = ycbcr_surface::pipeline(&device, &library); // DeepBuild patch (windoliver/deepbuild#499)
 
         let command_queue = device.new_command_queue();
         let supports_shared_storage = cfg!(target_os = "ios") || is_apple_gpu;
@@ -614,7 +402,23 @@ impl MetalRenderer {
             CFRetained::from_raw(ptr::NonNull::new(cache).expect("CoreVideo returned a null cache"))
         };
 
+        // DeepBuild patch (windoliver/deepbuild#499): one completed handler for every frame.
+        let completions: Arc<Mutex<std::collections::VecDeque<(InstanceBuffer, Option<u64>)>>> =
+            Arc::new(Mutex::new(std::collections::VecDeque::with_capacity(64)));
+        let completed = {
+            let completions = completions.clone();
+            let pool = instance_buffer_pool.clone();
+            RcBlock::new(move |buffer: ptr::NonNull<AnyObject>| {
+                let next = completions.lock().pop_front();
+                if let Some((instance_buffer, surfaces_frame)) = next {
+                    pool.lock().release(instance_buffer);
+                    bgra_surface::completed(buffer, surfaces_frame); // DeepBuild patch (windoliver/deepbuild#377)
+                }
+            })
+        };
         Self {
+            completions,
+            completed,
             device,
             layer,
             presents_with_transaction: false,
@@ -630,8 +434,8 @@ impl MetalRenderer {
             monochrome_sprites_pipeline_state,
             polychrome_sprites_pipeline_state,
             surfaces_pipeline_state,
-            surfaces_bgra_pipeline_state,
-            surfaces_bgra_divided_pipeline_state,
+            ycbcr_pipeline_state, // DeepBuild patch (windoliver/deepbuild#499)
+            bgra_surfaces, // DeepBuild patch (windoliver/deepbuild#377)
             sampled_surfaces: Vec::new(),
             unit_vertices,
             instance_buffer_pool,
@@ -738,11 +542,7 @@ impl MetalRenderer {
             (viewport_size.width.ceil() as i32).into(),
             (viewport_size.height.ceil() as i32).into(),
         );
-        // DeepBuild patch (windoliver/deepbuild#140): a drawable the color check reads back.
-        let reading = layer_colorspace::reading();
-        if reading {
-            layer.set_framebuffer_only(false);
-        }
+        let reading = layer_colorspace::reading(&layer); // DeepBuild patch (windoliver/deepbuild#140)
         let drawable = if let Some(drawable) = layer.next_drawable() {
             drawable
         } else {
@@ -761,23 +561,9 @@ impl MetalRenderer {
             }
         };
 
+        // DeepBuild patch (windoliver/deepbuild#140): the drawable's read-back and presented time.
         let texture = reading.then(|| drawable.texture().to_owned());
-        // DeepBuild patch (windoliver/deepbuild#140): the drawable's presented time, reported
-        // once the display shows it (`presentedTime` is 0 for a drawable never shown).
-        if let Some((hook, label)) = presentation::take() {
-            let block = RcBlock::new(move |shown: ptr::NonNull<AnyObject>| {
-                // SAFETY: Metal hands a presented handler the drawable it presented, and
-                // `presentedTime` is an `MTLDrawable` property returning `CFTimeInterval`.
-                let at: f64 = unsafe { objc2::msg_send![shown.as_ref(), presentedTime] };
-                hook(label, at);
-            });
-            // SAFETY: `addPresentedHandler:` is an `MTLDrawable` method taking a block of this
-            // signature, which Metal copies; it is added before the drawable is presented.
-            unsafe {
-                let target = drawable.as_ptr().cast::<AnyObject>();
-                let _: () = objc2::msg_send![&*target, addPresentedHandler: &*block];
-            }
-        }
+        presentation::report_when_shown(&drawable);
         if self.presents_with_transaction {
             command_buffer.commit();
             command_buffer.wait_until_scheduled();
@@ -786,13 +572,7 @@ impl MetalRenderer {
             command_buffer.present_drawable(drawable);
             command_buffer.commit();
         }
-        if let Some(texture) = texture {
-            command_buffer.wait_until_completed();
-            match read_texture_to_image(&texture) {
-                Ok(frame) => layer_colorspace::read(frame),
-                Err(error) => log::error!("failed to read the drawable back: {error:#}"),
-            }
-        }
+        layer_colorspace::read_back(&command_buffer, texture); // DeepBuild patch (windoliver/deepbuild#140)
     }
 
     fn render_frame(
@@ -818,7 +598,7 @@ impl MetalRenderer {
                 scene.surfaces.len(),
             )
         })?;
-        self.sampled_surfaces.clear();
+        self.sampled_surfaces.clear(); // DeepBuild patch (windoliver/deepbuild#377)
         let command_buffer = self.draw_primitives_to_texture(
             scene,
             &instance_bindings,
@@ -827,33 +607,18 @@ impl MetalRenderer {
             viewport_size,
         )?;
 
-        let instance_buffer_pool = self.instance_buffer_pool.clone();
-        let instance_buffer = Cell::new(Some(writer.finish()));
-        gpu_ledger::committed();
-        // DeepBuild patch (windoliver/deepbuild#377): every caller commits the buffer it gets back,
-        // so the surfaces it samples are reported here, before its completed handler can run.
-        let surfaces_frame =
-            (!self.sampled_surfaces.is_empty() && gpu_surfaces::has_hook()).then(|| {
-                let frame = gpu_surfaces::next_frame();
-                gpu_surfaces::report(gpu_surfaces::Event::Encoded {
-                    frame,
-                    surfaces: mem::take(&mut self.sampled_surfaces),
-                });
-                frame
-            });
-        let block = RcBlock::new(move |buffer: ptr::NonNull<AnyObject>| {
-            if let Some(instance_buffer) = instance_buffer.take() {
-                instance_buffer_pool.lock().release(instance_buffer);
-            }
-            // SAFETY: Metal hands a completed handler the command buffer it completed.
-            let gpu_ns = gpu_ledger::completed(unsafe { buffer.as_ref() });
-            if let Some(frame) = surfaces_frame {
-                gpu_surfaces::report(gpu_surfaces::Event::Completed { frame, gpu_ns });
-            }
-        });
+        // DeepBuild patch (windoliver/deepbuild#499): the frame's instance buffer and surfaces
+        // report wait in a queue one completed handler made once drains, in commit order, so a
+        // frame allocates no block of its own.
+        let instance_buffer = writer.finish();
+        // DeepBuild patch (windoliver/deepbuild#377): reported here, before the completed handler can run.
+        let surfaces_frame = self.surfaces_encoded();
+        self.completions
+            .lock()
+            .push_back((instance_buffer, surfaces_frame));
         // SAFETY: Both pointee types are opaque views of the same Objective-C block pointer ABI.
         unsafe {
-            command_buffer.add_completed_handler(&*RcBlock::as_ptr(&block).cast());
+            command_buffer.add_completed_handler(&*RcBlock::as_ptr(&self.completed).cast());
         }
 
         Ok(command_buffer)
@@ -1068,7 +833,7 @@ impl MetalRenderer {
                         viewport_size,
                         command_encoder,
                     ),
-                PrimitiveBatch::Surfaces(_) if surfaces_last => {}
+                PrimitiveBatch::Surfaces(_) if surfaces_last => {} // DeepBuild patch (windoliver/deepbuild#377)
                 PrimitiveBatch::Surfaces(range) => self.draw_surfaces(
                     &scene.surfaces[range.clone()],
                     range.start,
@@ -1077,16 +842,12 @@ impl MetalRenderer {
                     command_encoder,
                 ),
                 PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
+                PrimitiveBatch::Chrome(i) => command_encoder = self.draw_chrome(&scene.chrome[i], writer, texture, viewport_size, command_buffer, command_encoder)?, // DeepBuild patch (windoliver/deepbuild#1434)
             }
         }
+        // DeepBuild patch (windoliver/deepbuild#377): the planted twin's late draw.
         if surfaces_last {
-            self.draw_surfaces(
-                &scene.surfaces,
-                0,
-                instance_bindings,
-                viewport_size,
-                command_encoder,
-            );
+            self.draw_surfaces(&scene.surfaces, 0, instance_bindings, viewport_size, command_encoder);
         }
 
         command_encoder.end_encoding();
@@ -1509,22 +1270,20 @@ impl MetalRenderer {
                 DevicePixels::from(CVPixelBufferGetHeight(image_buffer) as i32),
             );
 
-            // DeepBuild patch (windoliver/deepbuild#377): a BGRA surface with alpha, sampled from
-            // its one plane and composited premultiplied (or by the planted divided twin).
-            if CVPixelBufferGetPixelFormatType(image_buffer) == kCVPixelFormatType_32BGRA {
-                self.draw_bgra_surface(
-                    image_buffer,
-                    texture_size,
-                    (first_surface + index) as u64,
-                    command_encoder,
-                );
-                command_encoder.set_render_pipeline_state(&self.surfaces_pipeline_state);
+            // DeepBuild patch (windoliver/deepbuild#377): a BGRA surface draws on its own path.
+            if self.draw_bgra_surface(image_buffer, texture_size, first_surface + index, command_encoder) {
+                continue;
+            }
+            // DeepBuild patch (windoliver/deepbuild#499): an NV12 surface draws by its own tags.
+            if self.draw_ycbcr_surface(image_buffer, texture_size, first_surface + index, command_encoder) {
                 continue;
             }
 
-            assert_eq!(
-                CVPixelBufferGetPixelFormatType(image_buffer),
-                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+            // DeepBuild patch (windoliver/deepbuild#499): the planted stock fragment reads any NV12.
+            assert!(
+                CVPixelBufferGetPixelFormatType(image_buffer)
+                    == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+                    || gpu_surfaces::planted() == gpu_surfaces::Planted::StockFragment
             );
 
             let plane_texture = |plane, format| unsafe {
@@ -1579,66 +1338,6 @@ impl MetalRenderer {
                 (first_surface + index) as u64,
             );
         }
-    }
-}
-
-impl MetalRenderer {
-    /// DeepBuild patch (windoliver/deepbuild#377): draws one BGRA surface and notes the pixel
-    /// buffer as sampled by the frame being encoded.
-    fn draw_bgra_surface(
-        &mut self,
-        image_buffer: &objc2_core_video::CVPixelBuffer,
-        texture_size: Size<DevicePixels>,
-        instance: u64,
-        command_encoder: &metal::RenderCommandEncoderRef,
-    ) {
-        let texture = unsafe {
-            let mut texture = ptr::null_mut();
-            let status = CVMetalTextureCache::create_texture_from_image(
-                None,
-                &self.core_video_texture_cache,
-                image_buffer,
-                None,
-                objc2_metal::MTLPixelFormat::BGRA8Unorm,
-                CVPixelBufferGetWidth(image_buffer),
-                CVPixelBufferGetHeight(image_buffer),
-                0,
-                ptr::NonNull::from(&mut texture),
-            );
-            assert_eq!(
-                status, kCVReturnSuccess,
-                "failed to create CoreVideo Metal texture"
-            );
-            CFRetained::<CVMetalTexture>::from_raw(
-                ptr::NonNull::new(texture).expect("CoreVideo returned a null texture"),
-            )
-        };
-        let pipeline = match gpu_surfaces::planted() {
-            gpu_surfaces::Planted::DividesAlpha => &self.surfaces_bgra_divided_pipeline_state,
-            _ => &self.surfaces_bgra_pipeline_state,
-        };
-        command_encoder.set_render_pipeline_state(pipeline);
-        command_encoder.set_vertex_bytes(
-            SurfaceInputIndex::TextureSize as u64,
-            mem::size_of_val(&texture_size) as u64,
-            &texture_size as *const Size<DevicePixels> as *const _,
-        );
-        command_encoder.set_fragment_texture(SurfaceInputIndex::YTexture as u64, unsafe {
-            let texture =
-                CVMetalTextureGetTexture(&texture).expect("CoreVideo returned no Metal texture");
-            Some(metal::TextureRef::from_ptr(
-                objc2::rc::Retained::as_ptr(&texture) as *mut _,
-            ))
-        });
-        command_encoder.draw_primitives_instanced_base_instance(
-            metal::MTLPrimitiveType::Triangle,
-            0,
-            6,
-            1,
-            instance,
-        );
-        self.sampled_surfaces
-            .push(ptr::from_ref(image_buffer) as usize as u64);
     }
 }
 
@@ -2068,65 +1767,10 @@ mod tests {
     use super::*;
     use objc2_core_foundation::{CFDictionary, CFType};
     use objc2_core_video::{
-        kCVPixelBufferIOSurfacePropertiesKey, CVPixelBufferCreate,
-        CVPixelBufferGetBaseAddressOfPlane, CVPixelBufferGetBytesPerRowOfPlane,
-        CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags, CVPixelBufferUnlockBaseAddress,
+        CVPixelBufferCreate, CVPixelBufferGetBaseAddressOfPlane,
+        CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags,
+        CVPixelBufferUnlockBaseAddress, kCVPixelBufferIOSurfacePropertiesKey,
     };
-    use std::time::Duration;
-
-    /// DeepBuild patch (windoliver/deepbuild#711): a hook may replace itself from inside a report,
-    /// since the renderer reports from Metal's completion thread and a stuck hook there would
-    /// stall every frame's completion.
-    #[test]
-    fn surface_hook_may_replace_itself() {
-        let replaced = Arc::new(Mutex::new(false));
-        gpu_surfaces::set_hook(Some(Arc::new({
-            let replaced = replaced.clone();
-            move |_| {
-                gpu_surfaces::set_hook(None);
-                *replaced.lock() = true;
-            }
-        })));
-        let (sender, receiver) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            gpu_surfaces::report(gpu_surfaces::Event::Completed {
-                frame: 0,
-                gpu_ns: 0,
-            });
-            sender.send(()).unwrap();
-        });
-        if receiver.recv_timeout(Duration::from_secs(5)).is_err() {
-            // The stuck thread holds the lock, so uninstalling the hook would hang too.
-            panic!("report deadlocked: the hook could not replace itself");
-        }
-        assert!(*replaced.lock());
-        gpu_surfaces::set_hook(None);
-    }
-
-    /// DeepBuild patch (windoliver/deepbuild#711): replacing the hook drops the old one outside
-    /// the lock, so whatever it captured may use the hook functions as it drops.
-    #[test]
-    fn set_hook_drops_the_old_hook_outside_the_lock() {
-        struct AsksOnDrop;
-        impl Drop for AsksOnDrop {
-            fn drop(&mut self) {
-                gpu_surfaces::has_hook();
-            }
-        }
-        let asks = AsksOnDrop;
-        gpu_surfaces::set_hook(Some(Arc::new(move |_| {
-            let _ = &asks;
-        })));
-        let (sender, receiver) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            gpu_surfaces::set_hook(None);
-            sender.send(()).unwrap();
-        });
-        if receiver.recv_timeout(Duration::from_secs(5)).is_err() {
-            panic!("set_hook deadlocked: the old hook was dropped under the lock");
-        }
-        assert!(!gpu_surfaces::has_hook());
-    }
 
     #[test]
     fn render_core_video_surface() {

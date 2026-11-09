@@ -21,7 +21,9 @@ function load(fill: Fill): void {
   if (!isObject(fill as unknown) || !isObject(fill.adapter as unknown)) throw refuse('required', '/adapter', undefined, 'Give the fill its adapter.');
   const adapter = fill.adapter;
   if (!('facts' in adapter)) throw refuse('required', '/adapter/facts', undefined, 'Give the adapter its adapter.facts@1 data.');
-  const facts = validate('adapter.facts@1', adapter.facts);
+  // A later minor of the facts (pi's install, paseo's providers, #1330's sandbox) is held to its own schema, as the registry holds it.
+  const named = isObject(adapter.facts as unknown) ? (adapter.facts as { schema?: unknown }).schema : undefined;
+  const facts = validate(typeof named === 'string' && /^adapter\.facts@[2345]$/.test(named) ? named : 'adapter.facts@1', adapter.facts);
   if (!facts.ok) { const first = facts.issues[0] as ContractIssue; throw new ContractError({ ...first, path: `/adapter/facts${first.path}` }); }
   if (typeof adapter.doctor !== 'function') throw refuse('required', '/adapter/doctor', undefined, 'Give the adapter a doctor() that lists its checks, each ok, warn, fail or skip.');
   let items: unknown;
@@ -180,7 +182,7 @@ function runCase(c: Case, fill: Fill, headless: boolean): Ran {
   return { outcome: 'PASS', message: '', codes: [], reached, probes, unsupported };
 }
 
-const PRECEDENCE: Verdict[] = ['FAIL', 'BLOCKED', 'INVALID', 'INCONCLUSIVE', 'PASS'];
+const PRECEDENCE: Verdict[] = ['FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE', 'PASS'];
 /** The verdict that decides a run: the first of PRECEDENCE among its verdicts; none is INCONCLUSIVE. */
 export const worst = (verdicts: Verdict[]): Verdict => (verdicts.length ? PRECEDENCE.find((v) => verdicts.includes(v))! : 'INCONCLUSIVE');
 

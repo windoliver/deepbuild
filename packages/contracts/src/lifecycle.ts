@@ -38,9 +38,13 @@ const LIFECYCLE_GUARDS: Readonly<Record<string, string>> = {
   own_session: "it ends the attempt's own session",
 };
 
-/** Every lifecycle table in schemas/, parsed as its file holds it, in file-name order. */
+/**
+ * Every lifecycle table, parsed as its file holds it, in file-name order: each one digests.json freezes and any new one
+ * in schemas/. A frozen table missing from schemas/, as from an install missing a file (#41), fails naming its file.
+ */
 export function machines(): Machine[] {
-  return readdirSync(SCHEMAS).filter((file) => MACHINE_FILE.test(file)).sort()
+  const frozen = Object.keys(JSON.parse(readFileSync(new URL('../digests.json', import.meta.url), 'utf8')) as object).map((id) => `${id}.json`);
+  return [...new Set([...frozen, ...readdirSync(SCHEMAS)])].filter((file) => MACHINE_FILE.test(file)).sort()
     .map((file) => JSON.parse(readFileSync(new URL(file, SCHEMAS), 'utf8')) as Machine);
 }
 

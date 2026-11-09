@@ -43,7 +43,7 @@ function firstDiff(a: unknown, b: unknown, at = ''): string | null {
  * keeps no digests (a manifest from before #103) is held to its name and minor alone. `namesAlone` is the planted
  * hub that compares names only.
  */
-export function mismatch(use: UseRow, row: ProvideRow, namesAlone = false): string | null {
+function mismatch(use: UseRow, row: ProvideRow, namesAlone = false): string | null {
   if (row.interface === use.interface && (namesAlone || ((row.minor ?? 0) >= (use.minor ?? 0) && (row.digests === undefined || row.digests[String(use.minor ?? 0)] === use.digest)))) return null;
   return firstDiff(use.schema ?? {}, row.schema ?? {}) ?? '/';
 }

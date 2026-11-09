@@ -16,7 +16,8 @@ use deep_canvas_scene3d::frames::Frames;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Depth, Labels, Refused};
-use deep_effects_render::docops::{item_of_mark, DocOps, Rec, Row, Times};
+use deep_effects_render::docops::{item_of_mark, DocOps, Fusing, Pool, Rec, Row, Times};
+use deep_scene3d_render::created::Created;
 use deep_effects_render::runner::Frame;
 use deep_gpu::alloc::outside;
 use deep_gpu::device::Device;
@@ -31,6 +32,19 @@ use serde_json::Value;
 pub const SLOTS: u32 = 3;
 pub const HISTORY: &str = "look.history";
 pub const PLACEHOLDER: &str = "surface.placeholder";
+
+/// The placeholder a view shows while its device is lost (#1413), drawn on the CPU since no
+/// device can: BGRA, two greys in diagonal stripes, so it is never blank or flat.
+pub fn placeholder_picture(size: [u32; 2]) -> Vec<u8> {
+    let (w, h) = (size[0] as usize, size[1] as usize);
+    let mut bgra = vec![0; w * h * 4];
+    for (i, px) in bgra.chunks_exact_mut(4).enumerate() {
+        let (x, y) = (i % w, i / w);
+        let grey = if (x + y) / 16 % 2 == 0 { 96 } else { 148 };
+        px.copy_from_slice(&[grey, grey, grey, 255]);
+    }
+    bgra
+}
 
 const SHADER: &str = include_str!("effects.wgsl");
 
@@ -535,6 +549,10 @@ pub struct View {
     /// The document's composed pass and compute operators (#429), each at the resolution its
     /// writer's meter gives it, and what each drew last frame.
     pub ops: DocOps,
+    /// The session's operator pipelines, kept across its revisions and variant switches, and how
+    /// its chain fuses (#432).
+    pub pool: Pool,
+    pub fusing: Fusing,
     pub op_resolution: BTreeMap<String, f64>,
     pub op_rows: Vec<Row>,
     /// #429's planted render-back, which draws live-only operators as the live view does.
@@ -584,11 +602,15 @@ impl View {
         look: &Look3,
         labels: &mut Labels,
         planted: Planted3,
+        warm_shadows: bool,
     ) -> Result<View, String> {
         let ((slots, renderer, frames, prepared), base_bytes) = memory::across(device, || {
             let slots: Result<Vec<_>, String> =
                 (0..slots).map(|_| allocate(device, path, size)).collect();
             let mut renderer = Renderer::new(device, planted);
+            renderer.warm_shadows = warm_shadows;
+            // The view opens at check: what its first scene compiles is the warm-up's (#432).
+            renderer.log.warming = true;
             let mut frames = frames;
             let prepared = match &mut frames {
                 Content::Scene(frames) => match frames.at(0, size, &Offsets::default(), labels) {
@@ -600,6 +622,7 @@ impl View {
                 },
                 Content::Flat(_) => false,
             };
+            renderer.log.warming = false;
             (slots, renderer, frames, prepared)
         });
         Ok(View {
@@ -618,12 +641,47 @@ impl View {
             base_bytes,
             still: None,
             ops: DocOps::empty(),
+            pool: Pool::default(),
+            fusing: Fusing::default(),
             op_resolution: BTreeMap::new(),
             op_rows: Vec::new(),
             canonical_draws_live_only: false,
             #[cfg(feature = "test-meter")]
             test: crate::testgpu::Items::default(),
         })
+    }
+
+    /// The warm-up at check (#432): prepares each scene a revision can reach, so every pipeline
+    /// they draw with is compiled before its first frame; none of them is a frame's.
+    pub fn warm(&mut self, device: &Device, look: &Look3, scenes: &[deep_canvas_scene3d::scene::Scene]) {
+        self.renderer.log.warming = true;
+        for scene in scenes {
+            self.renderer.prepare(device, scene, look);
+        }
+        self.renderer.log.warming = false;
+        self.prepared = false;
+    }
+
+    /// Starts a frame's list of pipelines made.
+    pub fn begin_frame(&mut self) {
+        self.renderer.log.begin_frame();
+        self.pool.log.begin_frame();
+    }
+
+    /// Every pipeline made since the frame began that the warm-up didn't make (#432).
+    pub fn created(&self) -> Vec<Created> {
+        self.renderer
+            .log
+            .this_frame()
+            .chain(self.pool.log.this_frame())
+            .cloned()
+            .collect()
+    }
+
+    /// The operator pipelines the session holds: its pass and compute operators' and its
+    /// material operators'.
+    pub fn operator_pipelines(&self) -> usize {
+        self.pool.len() + self.renderer.material_ops()
     }
 
     /// Draws `frames` from the next frame on: a revision's document.
@@ -633,15 +691,36 @@ impl View {
         self.still = None;
     }
 
-    /// What the view itself holds on the device, as the device reports it.
+    /// The core targets its frames build (#431): those its operators read, or both under the
+    /// planted core.
+    pub fn want_targets(&mut self, doc: &Value, all: bool) {
+        self.renderer.core.want = deep_scene3d_render::targets::Want {
+            velocity: all || deep_canvas_effects::module::reads_core(doc, "velocity"),
+            emission: all || deep_canvas_effects::module::reads_core(doc, "emission"),
+        };
+    }
+
+    /// Each core target the view holds (#431): its name, the bytes the meter counts for it
+    /// (width × height × its texel's bytes) and the size the device reports for it.
+    pub fn targets(&self, device: &Device) -> Vec<(&'static str, u64, Option<u64>)> {
+        self.renderer
+            .target_rows()
+            .into_iter()
+            .map(|(name, texture, bytes)| (name, bytes, memory::texture(device, texture)))
+            .collect()
+    }
+
+    /// What the view itself holds on the device, as the device reports it; the core's velocity
+    /// and emission targets, made after it opened and only while read, as the meter counts them.
     pub fn own_bytes(&self) -> Option<u64> {
         let low = Some(self.renderer.low_bytes());
+        let core: u64 = self.renderer.core.held().iter().map(|(_, _, b)| b).sum();
         let history = self.history.as_ref().map_or(Some(0), |h| h.bytes);
         #[cfg(feature = "test-meter")]
         let test = self.test.bytes();
         #[cfg(not(feature = "test-meter"))]
         let test = Some(0);
-        Some(self.base_bytes? + low? + history? + test?)
+        Some(self.base_bytes? + low? + history? + test? + core)
     }
 
     /// The pixels its effect pass shades, while it has one.
@@ -726,6 +805,14 @@ impl View {
                 }
                 self.still = Some((drawing.rung, scale, still.map_or(0, |n| n + 1)));
                 true
+            }
+            // #467: a 2D frame that draws what the view last drew records nothing.
+            Content::Flat(flat) if !drawing.canonical && drawing.rung != Rung::Placeholder => {
+                let still = flat.still(t).map_err(|(code, path)| Refused { code, path })?;
+                if still && self.shown.is_some() {
+                    return Ok(false);
+                }
+                false
             }
             _ => {
                 self.still = None;
@@ -832,6 +919,12 @@ impl View {
                 .collect();
             let res = &self.op_resolution;
             let canonical = drawing.canonical && !self.canonical_draws_live_only;
+            self.ops.core = ["velocity", "emission"]
+                .into_iter()
+                .filter_map(|n| Some((n, self.renderer.core_target(n)?.clone())))
+                .collect();
+            // Stepped operators count fixed steps from the exact time, not its f32 (#252).
+            self.ops.clock = Some(t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64);
             self.ops.plan(
                 device,
                 &linear,

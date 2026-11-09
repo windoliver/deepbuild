@@ -4,6 +4,7 @@
 //! frame evaluates into a [`State`] the program sized up front. After the first frame, evaluating
 //! allocates nothing: no map, string or vector is made per frame.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use deep_canvas::expr::{Expr, Scope};
@@ -40,6 +41,8 @@ pub struct Field {
     pub written: bool,
     /// A keyed data value's name (`data/<name>`), which owns the field in place of an item.
     pub data: Option<String>,
+    /// #494: a path channel's field, its sub-paths' structure, written as an SVG path string.
+    pub shape: Option<crate::morph::Structure>,
 }
 
 /// One step of a driver's compiled expression, over the program's slots.
@@ -89,6 +92,12 @@ pub(crate) enum CoreInput {
     },
     /// An occurrence read over a list filtered at check (#491).
     Occurrence(Arc<crate::occurrence::Read>),
+    /// A channel's rate per second.
+    Rate(usize),
+    /// A remap's `.active`, or with `true` its `.progress`.
+    Remap(usize, bool),
+    /// #495: `lag(var, dt)`: a slot, the time or a control as it reads at t − dt flicks.
+    Lag(Box<CoreInput>, i64),
 }
 
 /// A driver's ops at most (Driver: "≤ 64 ops"), and so its stack's depth.
@@ -112,6 +121,8 @@ enum Event {
     Follow(usize),
     /// A placement's write, with the slots it wrote.
     Placement(usize, std::ops::Range<usize>),
+    /// One path's mix placements.
+    Mix(usize),
     Driver(usize),
     Limit(usize, usize),
 }
@@ -122,6 +133,8 @@ pub(crate) enum Step {
     Channel(usize),
     /// Placement `p`'s write `w`.
     Write(usize, usize),
+    /// One path's mix placements, in canonical order.
+    Mix(usize),
     Driver(usize),
     Limit(usize),
     Constraint(usize),
@@ -140,12 +153,24 @@ pub(crate) struct Compiled {
 }
 
 /// A placement's write: one clip channel into one bound item's slots, after its target's delay.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Write {
     pub(crate) channel: usize,
     pub(crate) delay: i64,
     pub(crate) slot: usize,
     pub(crate) width: usize,
+    /// An add placement's reference pose (`add_from`).
+    pub(crate) reference: [f64; 4],
+}
+
+/// The mix placements on one path: each placement and write, by placement ID (Placement:
+/// order-free mix).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Mix {
+    pub(crate) slot: usize,
+    pub(crate) width: usize,
+    pub(crate) turns: bool,
+    pub(crate) members: Vec<(usize, usize)>,
 }
 
 /// The planted wrong programs the #489 acceptance tests must fail, reachable only through
@@ -174,6 +199,52 @@ pub enum Planted {
     EaseRenumbered,
     /// #491: a beat grid kept in f32 seconds.
     BeatGridF32,
+    /// #492: a placement that turns t into f32 seconds before the repeat wraps it.
+    PlacementF32Seconds,
+    /// #492: a replay that runs at rate 1, whatever its rate says.
+    ReplayAtRate1,
+    /// #492: rotations blended per component, signs unaligned.
+    BlendPerComponent,
+    /// #492: rotations slerped the long way round.
+    SlerpLongArc,
+    /// #492: an active placement that puts every other path on its item back to the base.
+    UnkeyedResetsToBase,
+    /// #492: a ramp that sums the rate times the frame step.
+    RampSumsPerFrame,
+    /// #492: a `then: lag` hitstop that matches in parent time.
+    HitstopMatchesParentTime,
+    /// #493: a log zoom that eases the view width, not its logarithm.
+    LogZoomEasesWidth,
+    /// #493: framing that bounds the kept items from 30 samples a second.
+    FramerSamples30Hz,
+    /// #493: framing that fits the frames' samples, never refusing a bound it can't settle.
+    FramerFitsSamples,
+    /// #493: a lens zoom that eases the field of view in degrees.
+    LensZoomEasesFovDegrees,
+    /// #493: a lens zoom that dollies at its starting field of view.
+    LensZoomDollies,
+    /// #493: a whip that eases each half in and out.
+    WhipEasesHalves,
+    /// #493: a shake drawing a new random offset each frame.
+    ShakeFreshPerFrame,
+    /// #493: a shot that writes roll 0 whatever its roll.
+    ShotWritesRoll0,
+    /// #493: a pan that turns right whatever its angle.
+    PanIgnoresAngle,
+    /// #493: a match cut's incoming shot framed by its keep, ignoring the match.
+    MatchFramerIgnoresMatch,
+    /// #493: a kick drawing a fresh random offset each frame.
+    KickFreshPerFrame,
+}
+
+impl Planted {
+    fn arc(self) -> crate::quat::Arc {
+        match self {
+            Planted::BlendPerComponent => crate::quat::Arc::Chord,
+            Planted::SlerpLongArc => crate::quat::Arc::Long,
+            _ => crate::quat::Arc::Short,
+        }
+    }
 }
 
 /// What an evaluation takes besides the document: the input track's entries, the viewer's
@@ -215,12 +286,16 @@ impl PartialEq for Layout {
     }
 }
 
-/// The input track's hash: SHA-256 over each entry's time, seq, control and value.
+/// The input track's hash: SHA-256 over each entry's time, player, seq, control and value, in
+/// the track's (t, player, seq) order, so the order entries arrived in never enters it (#497).
 pub fn track_hash(entries: &[Entry]) -> String {
+    let mut sorted: Vec<&Entry> = entries.iter().collect();
+    sorted.sort_by_key(|e| e.key());
     let mut bytes = Vec::new();
-    for e in entries {
+    for e in sorted {
         let value = e.value.to_string();
         bytes.extend(e.t.to_le_bytes());
+        bytes.extend(e.player.to_le_bytes());
         bytes.extend(e.seq.to_le_bytes());
         for text in [&e.control, &value] {
             bytes.extend((text.len() as u64).to_le_bytes());
@@ -249,6 +324,9 @@ pub struct Program {
     /// What the input track moves (#417): with no track, each control's default.
     pub(crate) inputs: Inputs,
     pub(crate) placements: Vec<Vec<Write>>,
+    pub(crate) mixes: Vec<Mix>,
+    /// The look's `quantize_hz`, stepping the document's time first.
+    pub(crate) quantize: Option<(u32, u32)>,
     pub(crate) parents: Vec<(usize, usize)>,
     /// Each driver's target slot and compiled expression, in driver order.
     pub(crate) drivers: Vec<(usize, Vec<Op>)>,
@@ -270,6 +348,10 @@ pub struct Program {
     /// The mark sets whose rows come from occurrence lists.
     pub(crate) rows: Vec<crate::rows::RowList>,
     pub options: Options,
+    /// #493: the document's shots and their transitions, compiled at check.
+    pub shots: Option<Arc<crate::shots::Plan>>,
+    /// #494: the match morphs between two items in one shot.
+    pub betweens: Vec<crate::morph::Between>,
 }
 
 /// What one evaluation fills, sized by [`Program::state`] and reused frame after frame.
@@ -292,10 +374,57 @@ pub struct State {
     pub reports: Vec<(u64, f64)>,
     /// The planted follow stepper's last frame: its time and state, per channel.
     pub(crate) last: Vec<Option<(i64, crate::follow::Out)>>,
+    /// Each constraint but `limit`: whether its aim had no direction this frame.
+    pub degenerate: Vec<bool>,
+    /// An earlier chain a lag reads (#495), which leaves the lagging drivers out.
+    nested: bool,
 }
 
 fn number(v: Option<&Value>) -> Option<f64> {
     v.and_then(Value::as_f64).filter(|n| n.is_finite())
+}
+
+/// #494: each path key `{of: ID[#part]}` takes that item's evaluated path at the key's time, in
+/// its own item's space, from the document evaluated without the channels that hold such keys;
+/// then its channel's keys are matched as any path keys are.
+fn resolve_of(doc: &Map<String, Value>, motion: &mut doc::Motion, options: &Options) -> Result<(), Refused> {
+    let holds = |c: &doc::Channel| c.path.as_ref().is_some_and(|p| !p.of.is_empty());
+    if !motion.channels.iter().any(holds) {
+        return Ok(());
+    }
+    let mut without = doc.clone();
+    if let Some(Value::Object(channels)) = without.get_mut("channels") {
+        for c in motion.channels.iter().filter(|c| holds(c)) {
+            channels.remove(&c.id);
+        }
+    }
+    let base = Program::compile_with(&without, options.clone())?;
+    let mut state = base.state();
+    for c in motion.channels.iter_mut().filter(|c| holds(c)) {
+        let path = format!("channels/{}", c.id);
+        let keyed = c.path.as_mut().expect("a path channel");
+        for (i, of) in keyed.of.clone() {
+            let key = &c.curve.keys[i];
+            let at = format!("{path}/keys/{}/value/of", key.id);
+            base.evaluate(key.t, Validity::Full, &mut state);
+            let items = crate::eval::items(doc, &base, &state);
+            let (id, part) = match of.split_once('#') {
+                Some((id, part)) => (id, Some(part)),
+                None => (of.as_str(), None),
+            };
+            let unresolved = || Refused { code: "ref_unresolved", path: at.clone(), detail: None };
+            let item = items.get(id).ok_or_else(unresolved)?;
+            let shape = crate::morph::of_item(item, part).ok_or_else(unresolved)?;
+            let world = crate::morph::placed(item, &shape);
+            keyed.shapes[i] = Some(match items.get(&c.target.owner) {
+                Some(own) => crate::morph::unplaced(own, &world),
+                None => world,
+            });
+        }
+        keyed.of.clear();
+        doc::match_path(&c.id, keyed, &mut c.curve.keys, &path)?;
+    }
+    Ok(())
 }
 
 /// The authored value at `path` inside `item`, `width` components wide.
@@ -331,7 +460,8 @@ impl Program {
 
     /// [`Program::compile`] with the input track, the view and a planted program.
     pub fn compile_with(doc: &Map<String, Value>, options: Options) -> Result<Program, Refused> {
-        let mut motion = doc::read_with(doc, options.planted == Planted::BeatGridF32)?;
+        crate::held::check(doc)?;
+        let mut motion = doc::read_with(doc, options.planted == Planted::BeatGridF32, options.planted.arc())?;
         if options.planted == Planted::SpringDropsVelocity {
             for c in &mut motion.channels {
                 c.curve.keys.iter_mut().for_each(|k| k.velocity.clear());
@@ -345,6 +475,7 @@ impl Program {
             }
         }
         open_eases(&mut motion, &options)?;
+        resolve_of(doc, &mut motion, &options)?;
         for c in &motion.channels {
             range_check(c)?;
         }
@@ -378,6 +509,8 @@ impl Program {
             follows: Vec::new(),
             inputs: Inputs::new(&motion, Feel::default(), &[]).unwrap_or_default(),
             placements: Vec::new(),
+            mixes: Vec::new(),
+            quantize: None,
             parents: Vec::new(),
             drivers: Vec::new(),
             cores: Vec::new(),
@@ -390,6 +523,8 @@ impl Program {
             rows: Vec::new(),
             options,
             motion: motion.clone(),
+            shots: None,
+            betweens: Vec::new(),
         };
         // Only a document with frames is laid out; it is refused here only when a key glides
         // its layout, since the layout is otherwise not motion's to check. A glide needs a frame
@@ -414,11 +549,20 @@ impl Program {
                 Err(_) => {}
             }
         }
+        let on_euler = |c: &doc::Channel| c.ty == doc::ValueType::Quat && c.target.field == ["at", "rot"];
+        let rotations = motion.channels.iter().chain(motion.clips.iter().flat_map(|c| &c.channels));
+        if let Some(c) = rotations.into_iter().find(|c| on_euler(c)) {
+            // A transform's rot is three Euler degrees; four numbers there would draw as nonsense.
+            return Err(Refused { code: "bad_type", path: format!("channels/{}/type", c.id), detail: None });
+        }
         let mut values = 0;
         for channel in &motion.channels {
             let width = channel.curve.keys.first().map_or(1, |k| k.value.len());
             let slot = program.slot(items_json, &channel.target.owner, &channel.target, width);
             program.mark_type(slot, channel.ty);
+            if let (Some(p), Some(f)) = (&channel.path, program.fields.iter_mut().find(|f| f.slot == slot)) {
+                f.shape = Some(p.structure.clone());
+            }
             program.mark_written(slot);
             program.channels.push((slot, width));
             program.values.push(values);
@@ -442,11 +586,22 @@ impl Program {
                         let slot = program.slot(items_json, &binding.item, &channel.target, width);
                         program.mark_type(slot, channel.ty);
                         program.mark_written(slot);
+                        let mut reference = [0.0; 4];
+                        let run = &mut reference[..width.min(4)];
+                        match placement.blending.add_from {
+                            doc::AddFrom::First => channel.curve.sample_into(i64::MIN / 2, run),
+                            doc::AddFrom::At(t) => channel.curve.sample_into(t, run),
+                            doc::AddFrom::Bind => {
+                                run.copy_from_slice(&program.base[slot..slot + width.min(4)]);
+                                0
+                            }
+                        };
                         writes.push(Write {
                             channel: c,
                             delay: binding.delay,
                             slot,
                             width,
+                            reference,
                         });
                     }
                 }
@@ -459,6 +614,8 @@ impl Program {
             program.motion.markers.push(marker);
         }
         program.motion.markers.sort_by(|a, b| a.id.cmp(&b.id));
+        program.resolve_times(doc)?;
+        program.gather_mixes();
         program.rows = program.occurrence_rows(items_json, doc.get("controls").and_then(Value::as_object))?;
         for driver in &motion.drivers {
             let path = format!("drivers/{}", driver.id);
@@ -484,6 +641,39 @@ impl Program {
                 }
             };
             program.drivers.push((slot, ops));
+        }
+        // A lag evaluates the chain again at another time, so a lagged slot is never one a lagging
+        // driver writes: that chain would evaluate itself without end.
+        let lags = |program: &Program, d: usize| match program.drivers[d].1.as_slice() {
+            [Op::Core(i)] => program.cores[*i]
+                .inputs
+                .iter()
+                .any(|x| matches!(x, CoreInput::Lag(..))),
+            _ => false,
+        };
+        for (d, (_, ops)) in program.drivers.iter().enumerate() {
+            let [Op::Core(i)] = ops.as_slice() else {
+                continue;
+            };
+            for input in &program.cores[*i].inputs {
+                let CoreInput::Lag(inner, _) = input else {
+                    continue;
+                };
+                let CoreInput::Slot(s) = **inner else {
+                    continue;
+                };
+                if let Some(other) = (0..program.drivers.len())
+                    .find(|&o| program.drivers[o].0 == s && lags(&program, o))
+                {
+                    return Err(Refused {
+                        code: "lag_cycle",
+                        path: format!("drivers/{}/expr", motion.drivers[d].id),
+                        detail: Some(Box::new(
+                            json!({"driver": motion.drivers[d].id, "why": format!("it lags a slot drivers/{} writes with a lag of its own", motion.drivers[other].id)}),
+                        )),
+                    });
+                }
+            }
         }
         for limit in &motion.limits {
             let Some(i) = program.items.iter().position(|x| *x == limit.owner) else {
@@ -558,6 +748,8 @@ impl Program {
             .iter()
             .filter_map(|(child, parent)| Some((index(child)?, index(parent)?)))
             .collect();
+        program.refuse_second_writers(doc)?;
+        program.refuse_look_ahead()?;
         program.schedule(program.options.planted == Planted::SchedulesWholeItems)?;
         program.channel_follows = program.build_follows();
         // A keyed data value holds its document value until something writes it.
@@ -567,7 +759,262 @@ impl Program {
                 program.base[field.slot] = v;
             }
         }
+        // #493: the shots read the compiled program: their framing bounds its writers' forms.
+        program.shots = crate::shots::Plan::compile(doc, &program)?.map(Arc::new);
+        program.betweens = crate::morph::betweens_of(doc, &doc::Ctx::of(program.motion.frame_rate))?;
         Ok(program)
+    }
+
+    /// What reads occurrences or the input track, once the markers are in: each remap's pieces
+    /// and each `start_on` placement's runs.
+    fn resolve_times(&mut self, doc: &Map<String, Value>) -> Result<(), Refused> {
+        use crate::remap::{self, Pending};
+        let controls = doc.get("controls").and_then(Value::as_object);
+        let times = |this: &Program, filter: &crate::occurrence::Filter, path: String| -> Result<Vec<crate::occurrence::Occurrence>, Refused> {
+            let list = this.occurrences(filter, controls).ok_or_else(|| Refused { code: "ref_unresolved", path: path.clone(), detail: None })?;
+            crate::occurrence::filtered(filter, list).map_err(|r| Refused { code: r.code, path, detail: Some(Box::new(json!({"why": r.why}))) })
+        };
+        for r in 0..self.motion.remaps.len() {
+            let Some(pending) = self.motion.remaps[r].pending.clone() else { continue };
+            let path = format!("time_remaps/{}/map", self.motion.remaps[r].id);
+            let segs = match &pending {
+                Pending::Hitstop { at, on, hold, rejoin } => {
+                    let mut matches = at.clone();
+                    if let Some(on) = on {
+                        matches.extend(times(self, on, path)?.iter().map(|o| o.t));
+                    }
+                    if *rejoin {
+                        remap::hitstop_rejoin(&matches, *hold)
+                    } else if self.options.planted == Planted::HitstopMatchesParentTime {
+                        remap::hitstop_lag_in_parent_time(&matches, *hold)
+                    } else {
+                        remap::hitstop_lag(&matches, *hold)
+                    }
+                }
+                Pending::Replay { on, before, after, rate } => {
+                    let list: Vec<i64> = times(self, on, path)?.iter().map(|o| o.t).collect();
+                    let rate = if self.options.planted == Planted::ReplayAtRate1 { (1, 1) } else { *rate };
+                    let class = |e: &&Entry| controls.and_then(|c| c.get(&e.control)?.get("class")?.as_str()) == Some("document");
+                    let ends: Vec<i64> = self.options.input.iter().filter(class).map(|e| e.t).collect();
+                    remap::replay(&list, &ends, *before, *after, rate)
+                }
+                Pending::Scrub { control } => {
+                    let default = controls.and_then(|c| c.get(control)).and_then(|c| c.get("default")).and_then(Value::as_f64).unwrap_or(0.0);
+                    remap::scrub(&self.control_entries(control), default)
+                }
+            };
+            self.motion.remaps[r].segs = segs;
+        }
+        if self.options.planted == Planted::RampSumsPerFrame {
+            let (p, q) = self.motion.frame_rate;
+            let step = deep_canvas::grammar::FLICKS_PER_SECOND * i64::from(q) / i64::from(p);
+            let end = self.motion.transport.span.unwrap_or(0);
+            for r in &mut self.motion.remaps {
+                r.segs = remap::summed_per_frame(r, step, end);
+            }
+        }
+        for p in 0..self.motion.placements.len() {
+            let Some(start_on) = self.motion.placements[p].timing.start_on.clone() else { continue };
+            let path = format!("placements/{}/start_on", self.motion.placements[p].id);
+            let mut list = times(self, &start_on.on, path)?;
+            list.sort_by_key(|o| o.t);
+            let clip_span = self.motion.clip(&self.motion.placements[p].clip).map_or(1, |c| c.span);
+            let active = self.motion.placements[p].active_for(clip_span);
+            let mut runs: Vec<i64> = Vec::new();
+            let mut closes: Vec<bool> = Vec::new();
+            let mut last = None;
+            for o in &list {
+                let changed = last.as_ref() != Some(&o.payload);
+                last = Some(o.payload.clone());
+                let busy = runs.last().is_some_and(|r| o.t < r + active);
+                if (start_on.change && !changed) || (start_on.policy == doc::Policy::Ignore && busy) {
+                    continue;
+                }
+                runs.push(o.t);
+                let value = &o.payload["value"];
+                closes.push(*value == json!(false) || value.as_f64() == Some(0.0));
+            }
+            self.motion.placements[p].timing.runs = runs;
+            self.motion.placements[p].timing.closes = closes;
+        }
+        for p in 0..self.motion.placements.len() {
+            let Some(switch) = &self.motion.placements[p].blending.switch else { continue };
+            let default = controls.and_then(|c| c.get(&switch.control)).and_then(|c| c.get("default")).cloned();
+            let Some(first) = default else {
+                return Err(Refused { code: "ref_unresolved", path: format!("placements/{}/switch/control", self.motion.placements[p].id), detail: None });
+            };
+            let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == switch.control).collect();
+            entries.sort_by_key(|e| e.key());
+            // A synced change waits for the placement's next pass, or for the change before it.
+            let placement = &self.motion.placements[p];
+            let pass = placement.active_for(self.motion.clip(&placement.clip).map_or(1, |c| c.span)) / i64::from(placement.count);
+            let (sync, origin) = (switch.sync, placement.start);
+            let mut held = first.clone();
+            let mut changes: Vec<(i64, Value)> = Vec::new();
+            for e in entries {
+                if e.value != held {
+                    held = e.value.clone();
+                    let at = if sync { origin + (e.t - origin + pass - 1).div_euclid(pass) * pass } else { e.t };
+                    changes.push((at, held.clone()));
+                }
+            }
+            if let Some(switch) = &mut self.motion.placements[p].blending.switch {
+                switch.first = first;
+                switch.changes = changes;
+            }
+        }
+        Ok(())
+    }
+
+    /// `control`'s input track entries in time order, with values as numbers.
+    fn control_entries(&self, control: &str) -> Vec<(i64, f64)> {
+        let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == control).collect();
+        entries.sort_by_key(|e| e.key());
+        entries.into_iter().filter_map(|e| Some((e.t, e.value.as_f64()?))).collect()
+    }
+
+    /// Groups each path's mix placements, by placement ID, so neither placement nor writer order
+    /// changes the result.
+    fn gather_mixes(&mut self) {
+        let mut groups: std::collections::BTreeMap<(usize, usize), Vec<(usize, usize)>> = Default::default();
+        for (p, writes) in self.placements.iter().enumerate() {
+            if self.motion.placements[p].blending.blend != doc::Blend::Mix {
+                continue;
+            }
+            for (w, write) in writes.iter().enumerate() {
+                groups.entry((write.slot, write.width)).or_default().push((p, w));
+            }
+        }
+        self.mixes = groups
+            .into_iter()
+            .map(|((slot, width), mut members)| {
+                members.sort_by(|a, b| self.motion.placements[a.0].id.cmp(&self.motion.placements[b.0].id));
+                let (p, w) = members[0];
+                let clip = self.motion.clip(&self.motion.placements[p].clip);
+                let channel = clip.map(|c| &c.channels[self.placements[p][w].channel]);
+                let turns = channel.is_some_and(|c| c.ty == doc::ValueType::Quat);
+                Mix { slot, width, turns, members }
+            })
+            .collect();
+    }
+
+    /// A path takes one writer (The order of one evaluation): the placements on it, or one
+    /// channel, follow or bound value; then at most one driver. A second is refused, naming both.
+    fn refuse_second_writers(&self, doc: &Map<String, Value>) -> Result<(), Refused> {
+        let refused = |a: &str, b: &str, slot: usize| Refused {
+            code: "second_writer",
+            path: format!("{a} and {b}"),
+            detail: Some(Box::new(json!({"writers": [a, b], "item": self.item_of(slot)}))),
+        };
+        let mut writers: std::collections::BTreeMap<usize, String> = Default::default();
+        let mut claim = |slot: usize, entry: String| -> Result<(), Refused> {
+            match writers.get(&slot) {
+                Some(other) if *other != entry && !(other.starts_with("placements/") && entry.starts_with("placements/")) => Err(refused(other, &entry, slot)),
+                _ => {
+                    writers.entry(slot).or_insert(entry);
+                    Ok(())
+                }
+            }
+        };
+        for (c, &(slot, width)) in self.channels.iter().enumerate() {
+            for s in slot..slot + width {
+                claim(s, format!("channels/{}", self.motion.channels[c].id))?;
+            }
+        }
+        for (f, &slot) in self.follows.iter().enumerate() {
+            claim(slot, format!("channels/{}", self.motion.follows[f].id))?;
+        }
+        for (p, writes) in self.placements.iter().enumerate() {
+            for w in writes {
+                for s in w.slot..w.slot + w.width {
+                    claim(s, format!("placements/{}", self.motion.placements[p].id))?;
+                }
+            }
+        }
+        // A status binding owns its paint slot: nothing else writes it.
+        for (id, binding) in doc.get("status_bindings").and_then(Value::as_object).into_iter().flatten() {
+            let Some(target) = binding.get("target").and_then(Value::as_str) else { continue };
+            for c in &self.motion.channels {
+                if format!("items/{}/{}", c.target.owner, c.target.field.join("/")) == target {
+                    return Err(refused(&format!("channels/{}", c.id), &format!("status_bindings/{id}"), self.channels.first().map_or(0, |c| c.0)));
+                }
+            }
+        }
+        let mut drivers: std::collections::BTreeMap<usize, &str> = Default::default();
+        for (d, (slot, _)) in self.drivers.iter().enumerate() {
+            let id = self.motion.drivers[d].id.as_str();
+            if let Some(other) = drivers.insert(*slot, id) {
+                return Err(refused(&format!("drivers/{other}"), &format!("drivers/{id}"), *slot));
+            }
+        }
+        Ok(())
+    }
+
+    /// The world `<world ID>.occurrences` names, with whether it declares inputs.
+    fn world_of(&self, list: &str) -> Option<&(String, bool)> {
+        let id = list.strip_suffix(".occurrences")?;
+        self.motion.worlds.iter().find(|w| w.0 == id)
+    }
+
+    /// The first input a remap's target reads, naming the read: on its drivers, its follow
+    /// channels, or the target placement's influence, switch or `start_on`.
+    fn input_read(&self, r: &crate::remap::Remap) -> Option<String> {
+        let motion = &self.motion;
+        let placement = motion.placements.iter().find(|p| p.id == r.target);
+        let targets = |item: &str| match placement {
+            Some(p) => p.bindings.iter().any(|b| b.item == item),
+            None => motion.applies(r, item),
+        };
+        let drivers = motion.drivers.iter().filter(|d| targets(&d.target.owner)).find_map(|d| {
+            d.inputs.iter().find_map(|(name, input)| {
+                let source = match input {
+                    doc::DriverInput::Control(c) => format!("controls/{c}"),
+                    doc::DriverInput::List(f) if f.list.starts_with("input.") => f.list.clone(),
+                    doc::DriverInput::List(f) if self.world_of(&f.list).is_some_and(|w| w.1) => format!("worlds/{}", f.list),
+                    _ => return None,
+                };
+                Some(format!("drivers/{}/vars/{name} ({source})", d.id))
+            })
+        });
+        let follows = || {
+            let keyed = motion.channels.iter().filter(|c| targets(&c.target.owner)).find_map(|c| match &c.follow.as_ref()?.source {
+                crate::follow::Source::Control(control) => Some(format!("channels/{} (controls/{control})", c.id)),
+                crate::follow::Source::Keys(_) => None,
+            });
+            keyed.or_else(|| {
+                let f = motion.follows.iter().find(|f| targets(&f.target.owner))?;
+                Some(format!("channels/{} (controls/{})", f.id, motion.controls[f.control].id))
+            })
+        };
+        let own = || {
+            let p = placement?;
+            let at = format!("placements/{}", p.id);
+            if let doc::Influence::Control(control) = &p.blending.influence {
+                return Some(format!("{at}/influence (controls/{control})"));
+            }
+            if let Some(s) = &p.blending.switch {
+                return Some(format!("{at}/switch (controls/{})", s.control));
+            }
+            let start = p.timing.start_on.as_ref()?;
+            let live = start.on.list.starts_with("input.") || self.world_of(&start.on.list).is_some_and(|w| w.1);
+            live.then(|| format!("{at}/start_on ({})", start.on.list))
+        };
+        drivers.or_else(follows).or_else(own)
+    }
+
+    /// A remap whose child time can pass its parent's is refused when its target reads what
+    /// doesn't exist yet: the input track, a control, a view input or a world that takes inputs.
+    fn refuse_look_ahead(&self) -> Result<(), Refused> {
+        for r in self.motion.remaps.iter().filter(|r| r.runs_ahead()) {
+            if let Some(read) = self.input_read(r) {
+                return Err(Refused {
+                    code: "look_ahead_on_input",
+                    path: format!("time_remaps/{}: {read}", r.id),
+                    detail: Some(Box::new(json!({"remap": r.id, "read": read}))),
+                });
+            }
+        }
+        Ok(())
     }
 
     /// Each laid-out item's box at `doc_t` (#491): the document's layout, where a key on a frame's
@@ -737,7 +1184,7 @@ impl Program {
                     Source::Control(id) => {
                         let default = self.motion.control_defaults.iter().find(|(c, _)| c == id).map_or(0.0, |c| c.1);
                         let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
-                        entries.sort_by_key(|e| (e.t, e.seq));
+                        entries.sort_by_key(|e| e.key());
                         let value = |e: &Entry| e.value.as_f64().or_else(|| e.value.as_bool().map(|b| f64::from(u8::from(b))));
                         (default, entries.iter().filter_map(|e| Some((e.t, value(e)?))).collect())
                     }
@@ -759,6 +1206,7 @@ impl Program {
     /// entry naming a control it doesn't read or a value outside the control's options.
     pub fn with_inputs(mut self, feel: Feel, track: &[Entry]) -> Option<Program> {
         self.inputs = Inputs::new(&self.motion, feel, track)?;
+        self.quantize = feel.quantize;
         Some(self)
     }
 
@@ -767,6 +1215,11 @@ impl Program {
         if let Some(f) = self.fields.iter_mut().find(|f| f.slot == slot) {
             f.boolean |= ty == doc::ValueType::Bool;
             f.enumerated |= ty == doc::ValueType::Enum;
+            // A rotation nothing authored rests at the identity.
+            let run = &mut self.base[slot..slot + f.width];
+            if ty == doc::ValueType::Quat && run.iter().all(|v| *v == 0.0) {
+                run.copy_from_slice(&crate::quat::IDENTITY);
+            }
         }
     }
 
@@ -795,6 +1248,13 @@ impl Program {
         width: usize,
     ) -> usize {
         let item = self.items.iter().position(|i| i == owner);
+        // A vec3 on a whole `at` vector writes the transform's own three slots, so a frame draws
+        // it as it draws a component's.
+        if let (Some(i), [at, name], 3) = (item, target.field.as_slice(), width) {
+            if let (true, Some(g)) = (at == "at", ["pos", "rot", "scale"].iter().position(|n| n == name)) {
+                return i * TRANSFORM + 3 * g;
+            }
+        }
         if let (Some(i), [at, name, k]) = (item, target.field.as_slice()) {
             let group = ["pos", "rot", "scale"].iter().position(|n| n == name);
             if let (true, Some(g), Ok(k)) = (at == "at", group, k.parse::<usize>()) {
@@ -830,6 +1290,7 @@ impl Program {
             enumerated: false,
             written: false,
             data,
+            shape: None,
         });
         slot
     }
@@ -849,6 +1310,8 @@ impl Program {
             follow: vec![Default::default(); self.motion.channels.len()],
             reports: vec![(0, f64::NAN); self.limits.len() + self.constraints.len()],
             last: vec![None; self.motion.channels.len()],
+            degenerate: vec![false; self.constraints.len()],
+            nested: false,
         }
     }
 
@@ -895,10 +1358,14 @@ impl Program {
         for (c, moves) in self.inputs.cameras.iter().enumerate() {
             state.cameras[c] = moves.at(t);
         }
+        // The look's quantize steps the document's time first; a document remap comes next, and
+        // the clock's `valid_until` still counts from the timeline's own position.
+        let shown = self.quantize.map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
+        let timeline = self.timeline(doc_t);
         for (p, placement) in motion.placements.iter().enumerate() {
-            state.locals[p] = placement.local(motion, doc_t);
+            state.locals[p] = placement.local(motion, timeline);
         }
-        let mut scratch = [0.0; 3];
+        let mut scratch = [0.0; 4];
         for step in &self.order {
             match *step {
                 Step::Channel(c) => {
@@ -907,9 +1374,9 @@ impl Program {
                     let run = &mut state.values[self.values[c]..self.values[c] + width];
                     // A channel on an item a time remap targets reads the item's own time.
                     let doc_t = if motion.remaps.is_empty() {
-                        doc_t
+                        shown
                     } else {
-                        motion.item_time(&channel.target.owner, doc_t)
+                        motion.item_time(&channel.target.owner, shown)
                     };
                     if let Some(follow) = &self.channel_follows[c] {
                         let out = if self.options.planted == Planted::FollowStepsFromPreviousFrame {
@@ -921,7 +1388,7 @@ impl Program {
                         state.follow[c] = out;
                         run[0] = out.value;
                     } else {
-                        state.iterations[c] = channel.curve.sample_into(doc_t, run);
+                        state.iterations[c] = channel.curve.sample_into(channel.stepped(doc_t), run);
                     }
                     for m in &channel.modifiers {
                         run[0] = m.apply(run[0], doc_t - motion.transport.start);
@@ -942,23 +1409,91 @@ impl Program {
                         continue;
                     };
                     let w = &self.placements[p][w];
-                    let Some(l) = placement.local_after(motion, doc_t, w.delay) else {
-                        continue;
+                    let at = if self.options.planted == Planted::PlacementF32Seconds {
+                        let seconds = (timeline as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64) as f32;
+                        (f64::from(seconds) * deep_canvas::grammar::FLICKS_PER_SECOND as f64) as i64
+                    } else {
+                        timeline
                     };
-                    let run = &mut scratch[..w.width.min(3)];
-                    clip.channels[w.channel].curve.sample_into(l.local, run);
-                    state.slots[w.slot..w.slot + run.len()].copy_from_slice(run);
+                    let channel = &clip.channels[w.channel];
+                    let run = &mut scratch[..w.width.min(4)];
+                    if self.options.planted == Planted::UnkeyedResetsToBase && placement.local_after(motion, at, w.delay).is_some() {
+                        for other in self.placements.iter().flatten().filter(|o| o.slot != w.slot) {
+                            state.slots[other.slot..other.slot + other.width].copy_from_slice(&self.base[other.slot..other.slot + other.width]);
+                        }
+                    }
+                    let slots = &mut state.slots[w.slot..w.slot + run.len()];
+                    let mut land = |local: i64, start: i64| {
+                        channel.read(local, run);
+                        let weight = self.weight(p, start, timeline);
+                        crate::blend::over(placement.blending.blend, channel.ty, self.options.planted.arc(), weight, run, &w.reference[..run.len()], slots);
+                    };
+                    let mut overlaps = false;
+                    for start in placement.overlapping(motion, at, w.delay) {
+                        land(placement.local_in_run(motion, at, start).local, start);
+                        overlaps = true;
+                    }
+                    if !overlaps {
+                        let Some(l) = placement.local_after(motion, at, w.delay) else {
+                            continue;
+                        };
+                        land(l.local, placement.run_start(at, w.delay).unwrap_or(placement.start + w.delay));
+                    }
+                    let run = &scratch[..w.width.min(4)];
                     note(
                         &Event::Placement(p, w.slot..w.slot + run.len()),
                         &[],
                         &state.slots,
                     );
                 }
+                Step::Mix(m) => {
+                    let mix = &self.mixes[m];
+                    let base = &self.base[mix.slot..mix.slot + mix.width];
+                    let sum = &mut state.slots[mix.slot..mix.slot + mix.width];
+                    sum.copy_from_slice(base);
+                    let mut moved = false;
+                    for &(p, w) in &mix.members {
+                        let placement = &motion.placements[p];
+                        let w = &self.placements[p][w];
+                        let Some(clip) = motion.clip(&placement.clip) else {
+                            continue;
+                        };
+                        let mut land = |local: i64, start: i64| {
+                            let weight = self.weight(p, start, timeline);
+                            if weight != 0.0 {
+                                let run = &mut scratch[..mix.width];
+                                clip.channels[w.channel].read(local, run);
+                                crate::blend::mix_in(mix.turns, weight, run, base, sum);
+                                moved = true;
+                            }
+                        };
+                        let mut overlaps = false;
+                        for start in placement.overlapping(motion, timeline, w.delay) {
+                            land(placement.local_in_run(motion, timeline, start).local, start);
+                            overlaps = true;
+                        }
+                        if !overlaps {
+                            if let Some(l) = placement.local_after(motion, timeline, w.delay) {
+                                land(l.local, placement.run_start(timeline, w.delay).unwrap_or(placement.start + w.delay));
+                            }
+                        }
+                    }
+                    if moved && mix.turns {
+                        sum.copy_from_slice(&crate::quat::normalized(crate::quat::of(sum)));
+                    }
+                    note(&Event::Mix(m), &[], &state.slots);
+                }
                 Step::Driver(d) => {
                     let (slot, ops) = &self.drivers[d];
+                    // A lag's earlier chain skips the drivers that lag themselves: none writes a slot a lag reads.
+                    if state.nested
+                        && matches!(ops.as_slice(), [Op::Core(i)] if self.cores[*i].inputs.iter().any(|x| matches!(x, CoreInput::Lag(..))))
+                    {
+                        continue;
+                    }
                     let slots = &state.slots;
                     let value = match ops.as_slice() {
-                        [Op::Core(i)] => self.evaluate_core(*i, slots, doc_t),
+                        [Op::Core(i)] => self.evaluate_core(*i, slots, doc_t, t, validity),
                         _ => evaluate_ops(ops, slots, |i, k| self.world(slots, i)[k]),
                     };
                     if value.is_finite() {
@@ -981,15 +1516,123 @@ impl Program {
                     }
                 }
                 Step::Constraint(k) => {
+                    state.degenerate[k] = self.aims_nowhere(k, &state.slots);
                     state.reports[self.limits.len() + k] = self.constrain(k, &mut state.slots);
                 }
             }
         }
-        let timeline = crate::eval::valid_until(motion, t, doc_t, validity);
-        state.valid_until = match (timeline, self.inputs.next_change(t)) {
+        state.valid_until = self.next_change(t, doc_t, validity, Default::default());
+    }
+
+    /// The earliest `t` after a frame at `t` (timeline position `doc_t`) at which what `counts`
+    /// keeps, or the input track, changes next.
+    fn next_change(
+        &self,
+        t: i64,
+        doc_t: i64,
+        validity: Validity,
+        counts: crate::eval::Counts<'_>,
+    ) -> Option<i64> {
+        let shown = self
+            .quantize
+            .map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
+        let timeline = crate::eval::valid_until(&self.motion, t, shown, validity, counts);
+        // Under the look's steps a change shows only on the next step.
+        let timeline = match self.quantize {
+            Some(rate) => timeline.map(|n| n.max(crate::eval::next_grid(doc_t, rate) + t - doc_t)),
+            None => timeline,
+        };
+        match (timeline, self.inputs.next_change(t)) {
             (Some(a), Some(b)) => Some(a.min(b)),
             (a, b) => a.or(b),
+        }
+    }
+
+    /// #1487: the `valid_until` of the frame `state` holds, counting only items a view shows
+    /// (Frame clock and scheduler: "A document's `valid_until` takes only items whose bounds meet
+    /// the view"). `meets` says whether an item's bounds meet the view; it answers true for an
+    /// item it can't bound. An item out of view still counts when it can move into view (by a
+    /// channel, driver or constraint on anything but its own rotation or paint, or a turn that
+    /// carries children), and when the driver of an item that counts reads it. The evaluation
+    /// is unchanged; only the time the clock next arms is.
+    pub fn valid_until_in_view(
+        &self,
+        state: &State,
+        validity: Validity,
+        meets: impl Fn(&str) -> bool,
+    ) -> Option<i64> {
+        let motion = &self.motion;
+        // A rotation about the item's own origin or a paint keeps it within the bounds a view
+        // reads for it, unless it carries children with it.
+        let parents: BTreeSet<&str> = motion.parents.iter().map(|(_, p)| p.as_str()).collect();
+        let stays = |owner: &str, field: &[String]| {
+            let rotation = field.len() >= 2 && field[0] == "at" && field[1] == "rot";
+            let paint = field.len() >= 2 && field[0] == "params" && field[1] == "paint";
+            paint || (rotation && !parents.contains(owner))
         };
+        let mut kept: BTreeSet<&str> = self
+            .items
+            .iter()
+            .map(String::as_str)
+            .filter(|i| meets(i))
+            .collect();
+        for c in &motion.channels {
+            if !stays(&c.target.owner, &c.target.field) {
+                kept.insert(&c.target.owner);
+            }
+        }
+        for p in &motion.placements {
+            let clip = motion.clip(&p.clip);
+            for b in &p.bindings {
+                let moves = clip.is_some_and(|c| {
+                    c.channels
+                        .iter()
+                        .filter(|ch| ch.target.owner == b.slot)
+                        .any(|ch| !stays(&b.item, &ch.target.field))
+                });
+                if moves {
+                    kept.insert(&b.item);
+                }
+            }
+        }
+        for d in &motion.drivers {
+            if !stays(&d.target.owner, &d.target.field) {
+                kept.insert(&d.target.owner);
+            }
+        }
+        // A constraint moves its owner by what it reads.
+        for k in &motion.constraints {
+            kept.insert(&k.owner);
+            kept.extend(k.kind.reads());
+        }
+        // What a counted item's drivers read counts, and what those read, until nothing is added.
+        loop {
+            let before = kept.len();
+            for d in &motion.drivers {
+                if kept.contains(d.target.owner.as_str()) {
+                    kept.extend(d.vars.iter().map(|(_, v)| v.owner.as_str()));
+                }
+            }
+            if kept.len() == before {
+                break;
+            }
+        }
+        let counts = |owner: &str| kept.contains(owner) || !self.items.iter().any(|i| i == owner);
+        let channels: Vec<bool> = motion
+            .channels
+            .iter()
+            .map(|c| counts(&c.target.owner))
+            .collect();
+        let placements: Vec<bool> = motion
+            .placements
+            .iter()
+            .map(|p| p.bindings.iter().any(|b| counts(&b.item)))
+            .collect();
+        let counts = crate::eval::Counts {
+            channels: Some(&channels),
+            placements: Some(&placements),
+        };
+        self.next_change(state.t, state.doc_t, validity, counts)
     }
 
     /// The item `id`'s own transform (pos, rot and scale, three each) and every field a channel
@@ -1004,6 +1647,11 @@ impl Program {
             .filter(|f| f.item == Some(i) && f.written)
             .map(|f| {
                 let run = &state.slots[f.slot..f.slot + f.width];
+                // #494: an item's own path draws as its `d`; a vector import draws as a path too.
+                if let (Some(structure), true) = (&f.shape, f.path == ["path"]) {
+                    let d = crate::morph::d_of(&crate::morph::unflat(run, structure));
+                    return (vec!["params".to_string(), "d".to_string()], Datum::Text(d));
+                }
                 let value = match run {
                     [one] if f.boolean => Datum::Bool(*one >= 0.5),
                     [one] if f.enumerated => Datum::Text(self.label(*one).to_string()),
@@ -1261,6 +1909,115 @@ fn groups(first: usize, groups: &[usize]) -> Vec<usize> {
 }
 
 impl Program {
+    /// Whether constraint `k` is a `look_at` whose aim has no heading.
+    fn aims_nowhere(&self, k: usize, slots: &[f64]) -> bool {
+        let c = &self.constraints[k];
+        let (doc::Kind::LookAt { .. }, Some((i, group))) = (&self.motion.constraints[k].kind, c.other) else {
+            return false;
+        };
+        let other = match group {
+            None => pose(&self.world(slots, i), 0),
+            Some(_) => pose(slots, i * TRANSFORM),
+        };
+        crate::constraint::aimless(&pose(slots, c.owner * TRANSFORM), other.pos)
+    }
+
+    /// The timeline position placements read at `doc_t`: the look's quantize, then a document
+    /// remap.
+    pub fn timeline(&self, doc_t: i64) -> i64 {
+        let shown = self.quantize.map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
+        self.motion.document_time(shown)
+    }
+
+    /// The export frame `doc_t` falls in: start + k × Δ, floored, in exact flicks.
+    pub fn frame_index(&self, doc_t: i64) -> i64 {
+        let (p, q) = self.motion.frame_rate;
+        let d = i128::from(doc_t - self.motion.transport.start) * i128::from(p);
+        d.div_euclid(i128::from(deep_canvas::grammar::FLICKS_PER_SECOND) * i128::from(q)) as i64
+    }
+
+    /// What remap `r` reads as parent time at `doc_t`: its placement's local time before the
+    /// remap, or the timeline's from the transport's start.
+    pub fn remap_parent(&self, r: usize, doc_t: i64) -> i64 {
+        let motion = &self.motion;
+        let at = self.timeline(doc_t);
+        match motion.placements.iter().find(|p| p.timing.remap == Some(r)) {
+            Some(p) => p.parent_time(motion, at),
+            None => at - motion.transport.start,
+        }
+    }
+
+    /// Channel `c`'s first component's rate per second at `doc_t`, a remapped item's by its
+    /// remaps' derivatives.
+    fn channel_rate(&self, c: usize, doc_t: i64) -> f64 {
+        let channel = &self.motion.channels[c];
+        let motion = &self.motion;
+        let start = motion.transport.start;
+        let shown = self.quantize.map_or(doc_t, |rate| crate::eval::grid(doc_t, rate));
+        let mut t = shown;
+        let mut scale = 1.0;
+        for r in motion.remaps.iter().filter(|r| motion.applies(r, &channel.target.owner)) {
+            scale *= r.rate(t - start);
+            t = start + r.child(t - start);
+        }
+        let mut out = [0.0; 4];
+        let width = self.channels[c].1.min(4);
+        channel.rate(t, &mut out[..width]);
+        out[0] * scale
+    }
+
+    /// Placement `p`'s first target's rate per second, per clip channel: the segment's derivative
+    /// times the placement's rate times the remap's derivative.
+    pub fn placement_rates(&self, p: usize, doc_t: i64) -> Vec<(String, Vec<f64>)> {
+        let placement = &self.motion.placements[p];
+        let Some(clip) = self.motion.clip(&placement.clip) else {
+            return Vec::new();
+        };
+        let at = self.timeline(doc_t);
+        let delay = placement.bindings.first().map_or(0, |b| b.delay);
+        let (local, scale) = match placement.local_after(&self.motion, at, delay) {
+            Some(l) => (l.local, placement.rate_after(&self.motion, at, delay)),
+            None => (0, 0.0),
+        };
+        clip.channels
+            .iter()
+            .map(|c| {
+                let mut out = vec![0.0; c.curve.keys.first().map_or(1, |k| k.value.len())];
+                c.rate(local, &mut out);
+                out.iter_mut().for_each(|v| *v *= scale);
+                (c.id.clone(), out)
+            })
+            .collect()
+    }
+
+    /// Placement `p`'s weight at timeline position `at`, in its run from `start`: its influence by
+    /// its switch and its fades.
+    fn weight(&self, p: usize, start: i64, at: i64) -> f64 {
+        let placement = &self.motion.placements[p];
+        let b = &placement.blending;
+        let influence = match &b.influence {
+            doc::Influence::Value(v) => *v,
+            doc::Influence::Keys(curve) => {
+                let mut v = [0.0];
+                curve.sample_into(at, &mut v);
+                v[0]
+            }
+            doc::Influence::Control(control) => {
+                let last = self.options.input.iter().filter(|e| e.control == *control && e.t <= at).max_by_key(|e| e.key());
+                last.and_then(|e| e.value.as_f64()).unwrap_or_else(|| {
+                    self.motion.control_defaults.iter().find(|(id, _)| id == control).map_or(0.0, |c| c.1)
+                })
+            }
+        };
+        let influence = b.switch.as_ref().map_or(influence, |s| influence * s.weight(at));
+        if b.fade_in == 0 && b.fade_out == 0 {
+            return influence;
+        }
+        let end = start + placement.active_span(&self.motion);
+        let ramp = |d: i64, span: i64| if span == 0 { 1.0 } else { (d as f64 / span as f64).clamp(0.0, 1.0) };
+        influence * ramp(at - start, b.fade_in) * ramp(end - at, b.fade_out)
+    }
+
     /// The item a slot belongs to: its transform's, or the field's item.
     fn item_of(&self, slot: usize) -> String {
         if slot < self.items.len() * TRANSFORM {
@@ -1338,14 +2095,30 @@ impl Program {
             steps.push(step);
             nodes.push(node);
         };
+        // Mixes first on their paths, so replace, add and multiply apply over them.
+        for (m, mix) in self.mixes.iter().enumerate() {
+            let entry = format!("placements/{}", self.motion.placements[mix.members[0].0].id);
+            push(Step::Mix(m), Node { entry, item: self.item_of(mix.slot), stage: Stage::Channels, reads: vec![], writes: (mix.slot..mix.slot + mix.width).collect() });
+        }
         for (c, &(slot, width)) in self.channels.iter().enumerate() {
             let entry = format!("channels/{}", self.motion.channels[c].id);
             push(Step::Channel(c), Node { entry, item: self.item_of(slot), stage: Stage::Channels, reads: vec![], writes: (slot..slot + width).collect() });
         }
-        for (p, writes) in self.placements.iter().enumerate() {
+        // The other blends by writer layer, then order, then time: never by how the document
+        // happens to list them.
+        let mut ranked: Vec<usize> = (0..self.placements.len()).collect();
+        ranked.sort_by_key(|&p| {
+            let placement = &self.motion.placements[p];
+            (&placement.rank, placement.start, &placement.id)
+        });
+        for p in ranked {
+            let writes = &self.placements[p];
+            if self.motion.placements[p].blending.blend == doc::Blend::Mix {
+                continue;
+            }
             for (w, write) in writes.iter().enumerate() {
                 let entry = format!("placements/{}", self.motion.placements[p].id);
-                let slots = (write.slot..write.slot + write.width.min(3)).collect();
+                let slots = (write.slot..write.slot + write.width.min(4)).collect();
                 push(Step::Write(p, w), Node { entry, item: self.item_of(write.slot), stage: Stage::Channels, reads: vec![], writes: slots });
             }
         }
@@ -1440,7 +2213,15 @@ impl Program {
             path: format!("{path}/expr"),
             detail: Some(Box::new(json!({"driver": driver.id, "why": why}))),
         };
-        let (text, found) = crate::occurrence::rewrite(&driver.text, &lists).map_err(|r| refused(r.code, r.why))?;
+        let frame_rate = doc
+            .get("transport")
+            .and_then(|t| t.get("frame_rate"))
+            .and_then(Value::as_array)
+            .and_then(|r| Some((r.first()?.as_u64()? as u32, r.get(1)?.as_u64()? as u32)))
+            .unwrap_or_default();
+        let time = deep_canvas::grammar::TimeContext { frame_rate, ..Default::default() };
+        let (text, lagged) = crate::lag::rewrite(&driver.text, &time).map_err(|r| refused(r.code, r.why))?;
+        let (text, found) = crate::occurrence::rewrite(&text, &lists).map_err(|r| refused(r.code, r.why))?;
         for f in &found {
             let Some((_, doc::DriverInput::List(filter))) = driver.inputs.iter().find(|(n, _)| *n == f.list) else {
                 continue;
@@ -1477,7 +2258,32 @@ impl Program {
         for (name, input) in &driver.inputs {
             let input = match input {
                 doc::DriverInput::List(_) => continue,
+                doc::DriverInput::Array(array) => {
+                    // #497: a stepping module's array has no steps after t yet, as the input
+                    // track has no entries after t, so a lag or smooth that looks ahead through it
+                    // is refused; motion's evaluation reads no module's array at any time.
+                    if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
+                        return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
+                    }
+                    return Err(Refused {
+                        code: "ref_unresolved",
+                        path: format!("{path}/vars/{name}"),
+                        detail: Some(Box::new(json!({"driver": driver.id, "array": array, "why": "motion's drivers read no canvas module's array"}))),
+                    });
+                }
                 doc::DriverInput::Time => CoreInput::Time,
+                doc::DriverInput::Rate(id) => {
+                    let Some(c) = self.motion.channels.iter().position(|c| c.id == *id) else {
+                        return Err(Refused { code: "ref_unresolved", path: format!("{path}/vars/{name}"), detail: None });
+                    };
+                    CoreInput::Rate(c)
+                }
+                doc::DriverInput::Remap(id, progress) => {
+                    let Some(r) = self.motion.remaps.iter().position(|r| r.id == *id) else {
+                        return Err(Refused { code: "ref_unresolved", path: format!("{path}/vars/{name}"), detail: None });
+                    };
+                    CoreInput::Remap(r, *progress)
+                }
                 doc::DriverInput::Control(id) => {
                     let c = controls.and_then(|c| c.get(id));
                     let range = c.and_then(|c| c.get("range")).and_then(Value::as_array);
@@ -1490,14 +2296,10 @@ impl Program {
                     };
                     let (lo, hi) = (lo.as_f64().unwrap_or(0.0), hi.as_f64().unwrap_or(0.0));
                     scope.maxes.insert(name.clone(), hi);
-                    let mut entries: Vec<(i64, i64, f64)> = self
-                        .options
-                        .input
-                        .iter()
-                        .filter(|e| e.control == *id)
-                        .filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?)))
-                        .collect();
-                    entries.sort_by_key(|e| (e.0, e.1));
+                    let mut track: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
+                    track.sort_by_key(|e| e.key());
+                    let entries: Vec<(i64, i64, f64)> =
+                        track.into_iter().filter_map(|e| Some((e.t, e.seq, e.value.as_f64()?))).collect();
                     CoreInput::Control {
                         entries,
                         default: c.get("default").and_then(Value::as_f64).unwrap_or(lo),
@@ -1506,6 +2308,26 @@ impl Program {
                 }
             };
             inputs_of.push((name.as_str(), input));
+        }
+        for l in &lagged {
+            let Some((_, input)) = inputs_of.iter().find(|(n, _)| *n == l.var) else {
+                return Err(refused(
+                    "ref_unresolved",
+                    format!("lag reads `{}`, which is not one of its vars", l.var),
+                ));
+            };
+            let input = match input {
+                CoreInput::Control { .. } if l.dt < 0 => {
+                    let id = driver.inputs.iter().find_map(|(n, i)| match i {
+                        doc::DriverInput::Control(c) if *n == l.var => Some(c.as_str()),
+                        _ => None,
+                    });
+                    return Err(refused("look_ahead_on_control", format!("lag({}) looks ahead through the control `{}`, which the input track feeds", l.var, id.unwrap_or_default())));
+                }
+                CoreInput::Slot(_) | CoreInput::Time | CoreInput::Control { .. } => input.clone(),
+                _ => return Err(refused("lag_unsupported", format!("lag({}) reads a number, bound value, list or live simulation, which draws once", l.var))),
+            };
+            inputs_of.push((l.name.as_str(), CoreInput::Lag(Box::new(input), l.dt)));
         }
         if self.options.planted == Planted::TableFormSamples8 {
             scope.planted = Some(deep_canvas::expr::Planted::TableFormSamples8);
@@ -1548,7 +2370,14 @@ impl Program {
     }
 
     /// A core driver's value over the slots at `doc_t`.
-    fn evaluate_core(&self, c: usize, slots: &[f64], doc_t: i64) -> f64 {
+    fn evaluate_core(
+        &self,
+        c: usize,
+        slots: &[f64],
+        doc_t: i64,
+        t_run: i64,
+        validity: Validity,
+    ) -> f64 {
         let core = &self.cores[c];
         // The document's time from the transport's start, held to its span, the range its
         // bound reads.
@@ -1557,8 +2386,43 @@ impl Program {
             .saturating_sub(transport.start)
             .clamp(0, transport.span.unwrap_or(i64::MAX));
         let mut vals = [0.0f64; DRIVER_OPS];
+        // Each time a lag reaches, evaluated once: the program again at t − dt, nothing kept.
+        let mut earlier: Vec<(i64, State)> = Vec::new();
         for (v, input) in vals.iter_mut().zip(&core.inputs) {
             *v = match input {
+                CoreInput::Lag(inner, dt) => match &**inner {
+                    CoreInput::Slot(s) => {
+                        let i = match earlier.iter().position(|e| e.0 == *dt) {
+                            Some(i) => i,
+                            None => {
+                                let mut state = self.state();
+                                state.nested = true;
+                                self.run(t_run - dt, validity, &mut state, |_, _, _| {});
+                                earlier.push((*dt, state));
+                                earlier.len() - 1
+                            }
+                        };
+                        earlier[i].1.slots[*s]
+                    }
+                    CoreInput::Time => {
+                        let at = (doc_t - dt)
+                            .saturating_sub(transport.start)
+                            .clamp(0, transport.span.unwrap_or(i64::MAX));
+                        at as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
+                    }
+                    CoreInput::Control {
+                        entries,
+                        default,
+                        range,
+                    } => {
+                        let at = doc_t - dt;
+                        let i = entries.partition_point(|e| e.0 <= at);
+                        i.checked_sub(1)
+                            .map_or(*default, |i| entries[i].2)
+                            .clamp(range.0, range.1)
+                    }
+                    _ => f64::NAN,
+                },
                 CoreInput::Occurrence(read) => match read.at(t) {
                     Some(v) => v,
                     None => return core.fallback.unwrap_or(f64::NAN),
@@ -1566,6 +2430,16 @@ impl Program {
                 CoreInput::Slot(s) => slots[*s],
                 CoreInput::World(i, k) => self.world(slots, *i)[*k],
                 CoreInput::Time => t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64,
+                CoreInput::Rate(c) => self.channel_rate(*c, doc_t),
+                CoreInput::Remap(r, progress) => {
+                    let parent = self.remap_parent(*r, doc_t);
+                    let remap = &self.motion.remaps[*r];
+                    if *progress {
+                        remap.progress(parent)
+                    } else {
+                        f64::from(u8::from(remap.active(parent)))
+                    }
+                }
                 // A control's value, held to its declared range.
                 CoreInput::Control {
                     entries,
@@ -1630,7 +2504,8 @@ impl Program {
     }
 
     /// The occurrences a list names: `markers.<kind>`, or `input.<control>`, the input track's
-    /// entries for a control, each a match whose payload is `{value}`.
+    /// entries for a control in the track's order, each a match whose payload is `{value,
+    /// player}`, so a `where` can count one player's (#497).
     fn occurrences(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
         use crate::occurrence::Occurrence;
         // A list names a marker kind or a declared control; any other would read empty forever.
@@ -1655,15 +2530,19 @@ impl Program {
                     .collect(),
             );
         }
+        // A world's occurrences come from its bake, which no evaluation here has run.
+        if self.world_of(&filter.list).is_some() {
+            return Some(Vec::new());
+        }
         let control = filter.list.strip_prefix("input.")?;
         if !controls.is_some_and(|c| c.contains_key(control)) {
             return None;
         }
+        let mut entries: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == control).collect();
+        entries.sort_by_key(|e| e.key());
         Some(
-            self.options
-                .input
-                .iter()
-                .filter(|e| e.control == control)
+            entries
+                .into_iter()
                 .map(|e| Occurrence {
                     t: e.t,
                     end: e.t,
@@ -1671,7 +2550,7 @@ impl Program {
                     b: None,
                     kind: "input".into(),
                     tags: Vec::new(),
-                    payload: json!({"value": e.value}),
+                    payload: json!({"value": e.value, "player": e.player}),
                 })
                 .collect(),
         )
@@ -1683,15 +2562,54 @@ impl Program {
         let span = self.motion.transport.span.map_or(f64::INFINITY, |s| {
             s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
         });
+        self.core_bound_in(core, Iv::new(0.0, span))
+    }
+
+    /// #493: what slot `s` holds over the document times `time` (seconds), from its writer's
+    /// interval form: a core driver's over that time, a lone channel's whole bound, or the base
+    /// where nothing writes it; `None` where no form bounds it (another writer, or a channel the
+    /// forms don't settle). A driver's form may be unbounded there: a pole the caller refuses.
+    pub fn slot_bound_over(&self, s: usize, time: Iv) -> Option<Iv> {
+        if let Some((_, ops)) = self.drivers.iter().rev().find(|(slot, _)| *slot == s) {
+            return match ops.as_slice() {
+                [Op::Core(i)] => Some(self.core_bound_in(&self.cores[*i], time)),
+                _ => None,
+            };
+        }
+        (!self.writes(s..s + 1)).then(|| Iv::point(self.base[s]))
+    }
+
+    /// #493: the key times of the channels that write slot `s`, where a channel's monotone
+    /// segments reach their extremes.
+    pub fn slot_key_times(&self, s: usize) -> Vec<i64> {
+        self.channels
+            .iter()
+            .zip(&self.motion.channels)
+            .filter(|((slot, width), _)| (*slot..slot + width).contains(&s))
+            .flat_map(|(_, c)| c.curve.keys.iter().map(|k| k.t))
+            .collect()
+    }
+
+    /// A core driver's bound with time over `time`.
+    fn core_bound_in(&self, core: &Core, time: Iv) -> Iv {
+        let span = self.motion.transport.span.map_or(f64::INFINITY, |s| {
+            s as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64
+        });
         let vars: Vec<Iv> = core
             .inputs
             .iter()
             .map(|input| match input {
-                CoreInput::Time => Iv::new(0.0, span),
+                CoreInput::Time => time,
                 CoreInput::Control { range, .. } => Iv::new(range.0, range.1),
                 CoreInput::Slot(s) => self.slot_bound(*s),
-                CoreInput::World(..) => Iv::ENTIRE,
+                CoreInput::World(..) | CoreInput::Rate(_) => Iv::ENTIRE,
+                CoreInput::Remap(..) => Iv::new(0.0, 1.0),
                 CoreInput::Occurrence(read) => read.bound(span),
+                CoreInput::Lag(inner, _) => match &**inner {
+                    CoreInput::Slot(s) => self.slot_bound(*s),
+                    CoreInput::Control { range, .. } => Iv::new(range.0, range.1),
+                    _ => Iv::new(0.0, span),
+                },
             })
             .collect();
         let b = core.expr.bound_num(&vars);
@@ -1904,6 +2822,13 @@ impl Program {
                 },
                 Event::Placement(p, written) if written.contains(&slot) => Traced {
                     entry: format!("placements/{}", self.motion.placements[*p].id),
+                    operator: "channels",
+                    value: slots[slot],
+                    limit: false,
+                    reads: Vec::new(),
+                },
+                Event::Mix(m) if (self.mixes[*m].slot..self.mixes[*m].slot + self.mixes[*m].width).contains(&slot) => Traced {
+                    entry: format!("placements/{}", self.motion.placements[self.mixes[*m].members[0].0].id),
                     operator: "channels",
                     value: slots[slot],
                     limit: false,

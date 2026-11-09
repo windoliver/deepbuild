@@ -12,7 +12,7 @@ export interface ApprovedCheck {
   reads: string[];
   declares: { tests?: string[]; fixtures?: string[]; expected?: string[]; runner_config?: string[]; script?: { file: string; target: string } };
 }
-export type SourcePlant = 'every-read-file-is-own' | 'declared-only' | 'ignores-script-target';
+type SourcePlant = 'every-read-file-is-own' | 'declared-only' | 'ignores-script-target';
 
 /** The folders a read file under is the check's own. */
 const OWN_FOLDERS = new Set(['test', 'tests', '__tests__', 'fixtures', '__fixtures__', '__snapshots__', 'scripts', 'spec']);
@@ -23,6 +23,33 @@ const show = (repo: string, rev: string, path: string): string | null => {
 
 /** Whether a file a check's run read is its own: one under the repo's test, fixture and script folders. */
 export const ownRead = (path: string): boolean => path.split('/').slice(0, -1).some((part) => OWN_FOLDERS.has(part));
+
+/** A test runner's config, or pytest's conftest.py: the tool finds and loads it by its own rules, wherever it lies. */
+const LOADED_BY_TOOL = /(^|\/)((vitest|vite|jest)\.config\.[cm]?[jt]s|vitest\.workspace\.[cm]?[jt]s|pytest\.ini|conftest\.py)$/;
+export type ChangesPlant = 'edited-check-approved' | 'own-files-test-folders-only';
+/**
+ * The files a claim changed that are its check's own (#33; design: Whose checks count): among the files its runs read,
+ * those under the repo's test, fixture and script folders; and, wherever they lie, the files the test tool loads by its
+ * own discovery rules: a runner's config, pytest's conftest.py, and any file a runner config names, such as a setup
+ * file; and the root package.json when its scripts changed and the run read it. `configs` holds each runner config
+ * the claim's tree has, by path, with its text; `scripts`, whether the claim changed package.json's scripts.
+ */
+export function ownChanges(changes: { changed: readonly string[]; configs: ReadonlyMap<string, string>; scripts: boolean }, read: readonly string[], plant?: ChangesPlant): string[] {
+  if (plant === 'edited-check-approved') return [];
+  const { changed, configs } = changes;
+  const reads = new Set(read);
+  const named = (path: string): boolean => [...configs].some(([config, text]) => {
+    const dir = config.includes('/') ? config.slice(0, config.lastIndexOf('/') + 1) : '';
+    if (!path.startsWith(dir)) return false;
+    const rel = path.slice(dir.length);
+    return [rel, rel.replace(/\.[cm]?[jt]s$/, '')].some((name) => new RegExp(`['"\`](\\./)?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"\`]`).test(text));
+  });
+  // A package.json whose scripts changed, which the run read: the script target it runs is the check's own.
+  const script = (path: string): boolean => path === 'package.json' && changes.scripts && reads.has(path);
+  return changed.filter((path) => (reads.has(path) && ownRead(path)) || (plant !== 'own-files-test-folders-only' && (LOADED_BY_TOOL.test(path) || named(path) || script(path))));
+}
+/** Whether a path is a test runner's config, whose text names the files the tool loads. */
+export const runnerConfig = (path: string): boolean => LOADED_BY_TOOL.test(path) && !path.endsWith('conftest.py');
 
 /** What a script target runs, from a file's text: a package.json script, or a Makefile or justfile recipe. */
 function targetBody(file: string, text: string | null, target: string): string | null {

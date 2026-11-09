@@ -20,21 +20,37 @@ const INPUTS_BINDING: u32 = 1 + 2 * crate::maps::SLOTS as u32;
 const FRAME_GROUP: u32 = 9;
 const ENTRY: &str = include_str!("op.wgsl");
 
+/// What one of a material operator's texture inputs binds (#431): an image by its hash, decoded
+/// as a map is with its mips, or the copy of the opaque scene `backdrop` reads.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum TexIn {
+    Asset(String),
+    Backdrop,
+}
+
 /// One material operator on the GPU: its pipeline, and its group's layout and inputs, which
 /// bind with each solid's maps.
 pub(crate) struct MatOp {
     pub pipeline: wgpu::RenderPipeline,
+    /// Its pipeline as a see-through part draws it, blending over what's behind (#431), at the
+    /// frame's samples, and after the resolve at one, as the parts after the opaque copy draw.
+    pub blend: wgpu::RenderPipeline,
+    pub blend_late: wgpu::RenderPipeline,
+    /// A fade's depth pass and its color where that depth is equal, through it (#432).
+    pub fade: [wgpu::RenderPipeline; 2],
     /// Its depth pipeline for a shadow map, when it writes its coverage (#446).
     pub shadow: Option<wgpu::RenderPipeline>,
     pub layout: wgpu::BindGroupLayout,
+    /// Its texture inputs in binding order, after its uniform and sampler.
+    pub textures: Vec<TexIn>,
     buffer: wgpu::Buffer,
     sampler: wgpu::Sampler,
 }
 
 impl MatOp {
-    /// Its inputs as entries after the maps' own.
-    pub fn entries(&self) -> Vec<wgpu::BindGroupEntry<'_>> {
-        vec![
+    /// Its inputs as entries after the maps' own: `views` one per texture input, in order.
+    pub fn entries<'a>(&'a self, views: &[&'a wgpu::TextureView]) -> Vec<wgpu::BindGroupEntry<'a>> {
+        let mut out = vec![
             wgpu::BindGroupEntry {
                 binding: INPUTS_BINDING,
                 resource: self.buffer.as_entire_binding(),
@@ -43,7 +59,19 @@ impl MatOp {
                 binding: INPUTS_BINDING + 1,
                 resource: wgpu::BindingResource::Sampler(&self.sampler),
             },
-        ]
+        ];
+        for (k, v) in views.iter().enumerate() {
+            out.push(wgpu::BindGroupEntry {
+                binding: INPUTS_BINDING + 2 + k as u32,
+                resource: wgpu::BindingResource::TextureView(v),
+            });
+        }
+        out
+    }
+
+    /// Whether it reads the opaque scene's copy.
+    pub fn reads_backdrop(&self) -> bool {
+        self.textures.contains(&TexIn::Backdrop)
     }
 }
 
@@ -100,6 +128,13 @@ pub(crate) fn coverage_moves(op: &SolidOp, any_t: bool) -> bool {
     o.inputs.keys().chain(o.steps.keys()).any(|name| time(name))
 }
 
+/// Whether a solid's material operator reads the opaque scene's copy (#431).
+pub(crate) fn reads_backdrop(op: &SolidOp) -> bool {
+    module::operator_of(&op.id, &op.item)
+        .and_then(|i| graph::read(&i).ok())
+        .is_some_and(|o| module::backdrop_step(&o.steps).is_some())
+}
+
 /// The solid's seed for `seed@1`: a hash of the document's seed and its ID, as the GPU layer keys
 /// an item's effects (Effect: `seed: item`).
 pub(crate) fn seed(doc_seed: u64, id: &str) -> u32 {
@@ -120,6 +155,7 @@ pub(crate) fn compile(
     scene: &str,
     groups: [&wgpu::BindGroupLayout; 3],
     forward_z: bool,
+    options: emit::Options,
     samples: u32,
     op: &SolidOp,
 ) -> Result<MatOp, String> {
@@ -136,26 +172,43 @@ pub(crate) fn compile(
     if checked.op.kind != graph::Kind::Material {
         return Err("not a material operator".into());
     }
+    // An image by its hash and the opaque scene's copy draw in 3D (#431); storage and other
+    // targets land with the 3D frame's targets.
+    let texture_of = |from: &From| match from {
+        From::Asset(sha) => Some(TexIn::Asset(sha.clone())),
+        From::Target { op, output } if op == "core" && output == "backdrop" => {
+            Some(TexIn::Backdrop)
+        }
+        _ => None,
+    };
     if let Some((name, _)) = checked.op.inputs.iter().find(|(_, i)| {
-        matches!(i.ty, Ty::Tex(_) | Ty::Storage(..))
-            || matches!(i.from, From::Target { .. } | From::Storage { .. })
+        matches!(i.ty, Ty::Storage(..) | Ty::Tex3(_))
+            || matches!(i.from, From::Storage { .. })
+            || (matches!(i.from, From::Target { .. }) && texture_of(&i.from).is_none())
     }) {
         return Err(format!(
-            "input {name}: a material operator's texture and storage inputs don't draw in 3D yet"
+            "input {name}: a material operator's storage and target inputs don't draw in 3D yet"
         ));
     }
-    let snippet = emit::material(
-        &checked,
-        emit::Options::default(),
-        [FRAME_GROUP, INPUTS_GROUP],
-    );
+    let textures: Vec<TexIn> = checked
+        .textures
+        .iter()
+        .filter_map(|n| texture_of(&checked.op.inputs[n].from))
+        .collect();
+    let snippet = emit::material(&checked, options, [FRAME_GROUP, INPUTS_GROUP]);
     let frame = format!("@group({FRAME_GROUP}) @binding(0) var<uniform> op_frame: OpFrame;");
     if !snippet.contains(&frame) {
         return Err("the emitter's frame binding moved".into());
     }
-    // Its inputs move after the maps' bindings, which share the group.
+    // Its inputs move after the maps' bindings, which share the group: the uniform, the
+    // sampler, then each texture.
     let mut snippet = snippet.replace(&frame, "");
-    for (k, decl) in ["var<uniform> op_inputs", "var op_smp"].iter().enumerate() {
+    let mut decls = vec![
+        "var<uniform> op_inputs".to_string(),
+        "var op_smp".to_string(),
+    ];
+    decls.extend(checked.textures.iter().map(|n| format!("var in_{n}")));
+    for (k, decl) in decls.iter().enumerate() {
         let at = format!("@group({INPUTS_GROUP}) @binding({k}) {decl}");
         if !snippet.contains(&at) {
             return Err("the emitter's input bindings moved".into());
@@ -181,11 +234,23 @@ pub(crate) fn compile(
         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
         count: None,
     });
+    for k in 0..textures.len() as u32 {
+        entries.push(wgpu::BindGroupLayoutEntry {
+            binding: INPUTS_BINDING + 2 + k,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        });
+    }
     let inputs_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("scene3d material operator"),
         entries: &entries,
     });
-    let scope = d.push_error_scope(wgpu::ErrorFilter::Validation);
+    let scope = deep_gpu::device::push_scope(d, wgpu::ErrorFilter::Validation);
     let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("scene3d material operator"),
         source: wgpu::ShaderSource::Wgsl(source.into()),
@@ -211,6 +276,11 @@ pub(crate) fn compile(
         "op_mesh_fs",
         &mesh_buffers(),
     );
+    // As a see-through part (#431): its premultiplied color over what's behind, depth-tested
+    // and writing no depth or object ID, as the renderer's blend parts draw.
+    let blend = crate::op_blend_pipeline(d, samples, &module, &layout, forward_z, false);
+    let blend_late = crate::op_blend_pipeline(d, samples, &module, &layout, forward_z, true);
+    let fade = crate::fade_pipelines(d, samples, &module, &layout, forward_z, "op_mesh_fs");
     // Its coverage holes let the light through (#446): the shadow passes' depth state, drawn
     // under the frame group and its own alone.
     let cuts = |o: &graph::Operator| {
@@ -247,11 +317,17 @@ pub(crate) fn compile(
         label: Some("scene3d material operator"),
         mag_filter: wgpu::FilterMode::Linear,
         min_filter: wgpu::FilterMode::Linear,
+        // Trilinear between an image's mips (#431), as the operators' runner samples.
+        mipmap_filter: wgpu::MipmapFilterMode::Linear,
         ..Default::default()
     });
     Ok(MatOp {
         pipeline,
+        blend,
+        blend_late,
+        fade,
         shadow,
+        textures,
         layout: inputs_layout,
         buffer,
         sampler,

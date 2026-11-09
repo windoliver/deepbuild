@@ -1,0 +1,9 @@
+{
+  "#1334.775c65d4": ["slow-rollback", "two-notices", "notice-names-restored", "fresh-root-on-rollback"],
+  "#1334.14e4b3e9": ["pings-only", "judges-in-promote"],
+  "#1334.a6dc45e5": ["promotes-while-red", "no-drain", "refuses-while-turn"],
+  "#1334.32b63e42": ["temp-only", "flags-every-service", "names-no-path"],
+  "#1334.33ca60cb": ["silent-refusal", "replays-as-normal"],
+  "scope: promoted only from a passed commit": ["promotes-any-commit"],
+  "scope: fails closed": ["fails-open"]
+}

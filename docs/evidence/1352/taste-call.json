@@ -1,0 +1,13 @@
+{
+ "criterion": "#1352.28fd1eed",
+ "by": "you",
+ "who": "Claude, on the owner's standing instruction to finish and close each issue, as #1336's call was made",
+ "when": "2026-11-08T19:13:56Z",
+ "text": {
+  "file": "docs/technical-design.md",
+  "anchor": "cloud-hub",
+  "sha256": "7f96048ad84d0df53304ad3835aaf6dd2240a65b186983579a3d338b29822743"
+ },
+ "call": "reads_right",
+ "note": "Read whole against the issue's eight Scope decisions: each is answered in one bullet with its own Not taken, in the design's plain register, and agrees with Socket roles, Privacy, the threats table and One hub for a project. The agent routes table was read from each provider's own page on November 8, 2026. The seven new Decided rows say the same in short, each with what reopens it. Lines that said DeepBuild runs no service now say no relay, and the project hub's not-taken hosted service is now a service keeping many projects' records. The others on the project are told on #1352 and can overrule this call."
+}

@@ -12,7 +12,8 @@ use super::{
 };
 use crate::cost::Coefficients;
 use crate::grammar::{
-    forms_for, Handle, Id, Path, Refusal, Section, Time, TimeContext, UnitContext, UnitLiteral,
+    forms_for, lower_frame_literals, Handle, Id, Path, Refusal, Section, Time, TimeContext,
+    UnitContext, UnitLiteral,
 };
 use crate::kinds::{
     lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
@@ -114,6 +115,14 @@ fn check_by(
     let mut notices = Vec::new();
     let mut draws = Vec::new();
     let mut lowered = copy_of(doc);
+    // `fw` and `fh` read the document's design size (Units and axes).
+    if let (Some(size), Some(Value::Object(items))) = (frame_of(doc), lowered.get_mut("items")) {
+        for item in items.values_mut() {
+            if let Some(params) = item.get_mut("params") {
+                lower_frame_literals(params, size);
+            }
+        }
+    }
 
     check_envelope(doc, &mut issues);
     check_transport(doc, &mut issues);
@@ -258,7 +267,7 @@ fn check_by(
                 Tail::Budget => budget_check(&lowered, sealed, coefficients, &mut issues),
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
-                    check_controls(&lowered, &mut issues);
+                    check_controls(&lowered, sealed, &mut issues);
                     check_time_remaps(&lowered, &expansions, &mut issues);
                     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
                     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
@@ -426,7 +435,15 @@ fn module_checks(
                     .iter()
                     .find(|c| c.code == r.code)
                     .map(|c| c.fix.clone());
+                // An issue at another item's or a strip's field names it too (#499's av_unlinked).
+                let other = ["strips/", "items/"]
+                    .iter()
+                    .find_map(|p| r.path.strip_prefix(p))
+                    .and_then(|p| p.split('/').next())
+                    .filter(|o| *o != id)
+                    .map(str::to_string);
                 let mut issue = Issue::error(r.code, id, r.path, actual, &r.what);
+                issue.ids.extend(other);
                 issue.severity = if r.severity == "warning" {
                     "warning"
                 } else {
@@ -474,7 +491,11 @@ fn lights_check(lowered: &Value, issues: &mut Vec<Issue>) {
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
-        .filter(|(_, item)| kind_text(item).is_some_and(|k| k.starts_with("light.")))
+        // A probe (#427) is no light: it captures light and gives none.
+        .filter(|(_, item)| {
+            kind_text(item)
+                .is_some_and(|k| k.starts_with("light.") && !k.starts_with("light.probe@"))
+        })
         .map(|(id, _)| id.clone())
         .collect();
     if lights.len() as u64 > cap {
@@ -727,6 +748,25 @@ fn recheck_by(
                 .get(p)
                 .and_then(|i| member(i, "parent"))
                 .and_then(Value::as_str);
+        }
+    }
+    // #499: the items that play an asset an affected item plays (a video's picture and its
+    // sound strip, by the asset's hash), which a check links them by.
+    let mut assets: BTreeSet<String> = BTreeSet::new();
+    for id in &affected {
+        if let Some(params) = items.get(id).and_then(|i| member(i, "params")) {
+            strings_in(params, &mut |s| {
+                if s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    assets.insert(s.to_string());
+                }
+            });
+        }
+    }
+    if !assets.is_empty() {
+        for (id, item) in items {
+            if member(item, "params").is_some_and(|p| names_any(p, &assets)) {
+                context.insert(id.clone());
+            }
         }
     }
     let mut reduced = Map::new();
@@ -1861,6 +1901,11 @@ fn check_params(
                                 param.max.unwrap_or(f64::INFINITY)
                             ),
                         ));
+                    } else if param.unit == "Hz" {
+                        // A step rate (issue #497): valid only with a whole-flick step.
+                        if let Err(why) = crate::time::step_length(n) {
+                            issues.push(Issue::error("bad_rate", key, path(), json!(n), &why));
+                        }
                     }
                 }
             }
@@ -1872,6 +1917,13 @@ fn check_params(
     for (name, n) in converted {
         params.insert(name, json!(n));
     }
+}
+
+/// A document's design size, as `fw` and `fh` read it.
+pub fn frame_of(doc: &Value) -> Option<(u32, u32)> {
+    let size = member(doc, "size")?.as_array()?;
+    let side = |i: usize| size.get(i)?.as_f64().map(|v| v as u32);
+    Some((side(0)?, side(1)?))
 }
 
 /// A unit literal's value in a field declared in `unit`, as an f64.
@@ -1929,7 +1981,9 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
 /// Every control carries a role, so a screen reader can say what it is (Rules every primitive
 /// follows: Accessible; Control: `role`, an ARIA role). A control without one is refused, naming
 /// the control and the field; the section and its keys are [`check_id_maps`]'s.
-fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
+/// A control `kind` is an entry of the input module's `control@1` (#308), so a build whose set
+/// holds the input module and that left it out refuses one with `module_missing`, naming it.
+fn check_controls(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) {
     let Some(entries) = member(doc, "controls").and_then(Value::as_object) else {
         return;
     };
@@ -1937,6 +1991,17 @@ fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
         let Some(fields) = entry.as_object() else {
             continue;
         };
+        if let Some(kind) = fields.get("kind").and_then(Value::as_str) {
+            if sealed.lacks("input") {
+                issues.push(Issue::error(
+                    "module_missing",
+                    key,
+                    format!("controls/{key}/kind"),
+                    json!(kind),
+                    &format!("control kind `{kind}` is the input module's, which this build lacks"),
+                ));
+            }
+        }
         let what = match fields.get("role") {
             None => "required, and absent",
             Some(Value::String(role)) if !role.is_empty() => continue,
@@ -1953,14 +2018,15 @@ fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
     }
 }
 
-/// Each time remap (Time remap; #429): its target a recipe instance the check expanded, and its
-/// map `reverse`, the one preset this build plays, over the document's span; the other maps and a
-/// placement target land later and are refused, naming the field.
+/// Each time remap (Time remap): its target a recipe instance the check expanded, a placement or
+/// the document, and its map `reverse`, a preset or a channel of keys, whose fields the motion
+/// module reads. A reverse over anything but a placement runs over the document's span.
 fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Issue>) {
     let Some(entries) = member(doc, "time_remaps").and_then(Value::as_object) else {
         return;
     };
     let span = member(doc, "transport").and_then(|t| member(t, "span"));
+    let placements = member(doc, "placements").and_then(Value::as_object);
     for (key, entry) in entries {
         let Some(fields) = entry.as_object() else {
             continue;
@@ -1976,21 +2042,25 @@ fn check_time_remaps(doc: &Value, expansions: &[Expansion], issues: &mut Vec<Iss
             }
         }
         let target = fields.get("target").and_then(Value::as_str);
-        if !target.is_some_and(|t| expansions.iter().any(|e| e.instance == t)) {
+        let placed = target.is_some_and(|t| placements.is_some_and(|p| p.contains_key(t)));
+        let known = target.is_some_and(|t| t == "document" || expansions.iter().any(|e| e.instance == t));
+        if !known && !placed {
             bad(
                 "ref_unresolved",
                 "target",
-                "names no recipe instance of the document",
+                "names no recipe instance or placement of the document",
             );
         }
-        if fields.get("map").and_then(Value::as_str) != Some("reverse") {
+        let map = fields.get("map");
+        if !map.is_some_and(|m| m.as_str() == Some("reverse") || m.is_object()) {
             bad(
                 "out_of_range",
                 "map",
-                "this build plays a time remap's `reverse` map; the other maps land later",
+                "a time remap's map is `reverse`, a preset or a channel of keys",
             );
         }
-        if span.is_none_or(|s| s == "auto" || s == "open") {
+        let reverses = map.and_then(Value::as_str) == Some("reverse");
+        if reverses && !placed && span.is_none_or(|s| s == "auto" || s == "open") {
             bad(
                 "out_of_range",
                 "map",
@@ -2153,11 +2223,13 @@ const BOUND_VALUE_FIELDS: &[&str] = &[
     "missing",
 ];
 
-/// The transport's `frame_rate` as `[p, q]`, or as `p/q` text, when it is one.
+/// The transport's `frame_rate` as `[p, q]`, as `p/q` text, or as a whole number `p` (p/1),
+/// when it is one.
 pub fn frame_rate_of(transport: &Value) -> Option<(u32, u32)> {
     let whole = |v: &Value| u32::try_from(v.as_u64()?).ok();
     match member(transport, "frame_rate")? {
         Value::Array(pq) if pq.len() == 2 => Some((whole(&pq[0])?, whole(&pq[1])?)),
+        n @ Value::Number(_) => Some((whole(n)?, 1)),
         Value::String(s) => {
             let (p, q) = s.split_once('/').unwrap_or((s, "1"));
             Some((p.trim().parse().ok()?, q.trim().parse().ok()?))
@@ -2324,6 +2396,9 @@ pub(crate) fn resolve(
     }
     match fields.as_slice() {
         [] | ["params"] | ["at"] => Ok(()),
+        // #494: what a path or a vector import draws is a path channel's target (Channel and
+        // key: path).
+        ["path"] if matches!(kind_text(target), Some("path@1" | "vector@1")) => Ok(()),
         // A step inside a param, such as a camera's `orbit/azimuth`, must reach a value the item
         // holds: no kind gives a param's parts a schema in this slice.
         ["params", name, rest @ ..] if !rest.is_empty() => {

@@ -155,6 +155,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("material", "scene3d"),
     ("sky", "scene3d"),
     ("vector", "vector"),
+    // #494: a graph is the graph module's, so a match morph pairs its nodes by key.
+    ("graph", "graph"),
     // R1's mark sets, scales and axes are the data module's, which marks2d draws.
     ("marks", "data"),
     ("axis", "data"),
@@ -162,6 +164,9 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("puff", "scene3d"),
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),
+    ("effect", "scene3d"),
+    // #1732: placement by relation in 3D is the motion module's.
+    ("arrange", "motion"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
@@ -383,6 +388,9 @@ pub struct Kind {
     pub preview: Option<String>,
     /// Its one-line description, as the sheet `deep_kinds` serves prints it (#412).
     pub description: Option<String>,
+    /// The param naming an asset whose probe the check reads (#499): the core has the decode
+    /// worker probe it, so a module reads an asset without the media module.
+    pub probes: Option<String>,
 }
 
 /// An array, with one writer: its owner (canvas primitives: Array and table).
@@ -427,6 +435,8 @@ pub type Run = fn(&mut crate::schedule::View<'_>) -> Result<(), crate::schedule:
 /// Which items an operator per item has a node on: `(document, item ID, item)`; per document,
 /// whether the document has its node (`(document, "", null)`).
 pub type Applies = fn(&Value, &str, &Value) -> bool;
+/// A stepping operator's step length in flicks as the document sets it, or `None` (#497).
+pub type StepRate = fn(&Value) -> Option<i64>;
 
 /// What a per-item node's key holds of its item and document in place of the whole item and
 /// document (Content key: "each declared read"): `(document, item ID, item, planted)` to the
@@ -534,6 +544,9 @@ pub struct Operator {
     pub run: Option<Run>,
     /// A stepping operator's step length in flicks: it steps in simulate at every multiple of it.
     pub step: Option<i64>,
+    /// Where the document sets the step instead (issue #497: a module's `step_rate`), the step
+    /// length it reads from the document; `step` holds where it reads none.
+    pub rate: Option<StepRate>,
     /// It isn't thread-safe: its nodes run only on the scheduler's own thread (#857).
     pub serial: bool,
     /// Its determinism class (Determinism class): `exact` for CPU work and GPU work of integer
@@ -574,6 +587,13 @@ impl Operator {
         self.step = Some(flicks);
         self.per = Per::Document;
         self
+    }
+
+    /// Steps in simulate at the step `rate` reads from the document, every `flicks` where it
+    /// reads none, once per document.
+    pub fn steps_at(&mut self, flicks: i64, rate: StepRate) -> &mut Self {
+        self.rate = Some(rate);
+        self.steps(flicks)
     }
 
     /// Its determinism class, as its steps compute it: one of [`CLASSES`].
@@ -730,7 +750,16 @@ impl Registrar {
             deprecated: None,
             preview: None,
             description: None,
+            probes: None,
         });
+        self
+    }
+
+    /// The last kind registered reads the probe of the asset its param `param` names (#499).
+    pub fn probes(&mut self, param: &str) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.probes = Some(param.into());
+        }
         self
     }
 
@@ -898,6 +927,7 @@ impl Registrar {
             applies: None,
             run: None,
             step: None,
+            rate: None,
             serial: false,
             determinism: "exact",
             keyed: None,
@@ -1106,6 +1136,9 @@ pub enum Fault {
     /// Declares `ease@1` in the motion module instead of the core (#490): the core declares
     /// none, so a build without motion has no eases.
     EaseInMotion,
+    /// Registers `camera@1` in the scene3d module instead of the core (#493), so a build
+    /// without scene3d has no camera.
+    CameraInScene3d,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
@@ -1275,6 +1308,8 @@ pub struct Sealed {
     /// How the document check names close names: `NoCloseNames` and `CloseBySpelling` are the
     /// planted checks (#412); `None` is the right one.
     pub close_fault: Option<Fault>,
+    /// The planted layout that registers `camera@1` in scene3d (#493).
+    pub camera_in_scene3d: bool,
     /// Each entry of `outline.source@1` the build's modules fill, with the module and its Rust
     /// (#443), sorted by module then entry.
     pub outlines: Vec<SealedOutline>,
@@ -1411,6 +1446,16 @@ impl Sealed {
             .map(|k| k.draws_as.as_str())
     }
 
+    /// The param of `kind_text` naming an asset the decode worker probes at check (#499).
+    pub fn probed_param(&self, kind_text: &str) -> Option<&str> {
+        let (full, major) = crate::kinds::parse_kind(kind_text)?;
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.kinds.iter())
+            .find(|k| k.entry.is(&full) && k.entry.version(major).is_some())
+            .and_then(|k| k.probes.as_deref())
+    }
+
     /// The `rect@1` params a sealed module's kind draws as, when it registered a drawing.
     pub fn draw_of(&self, kind_text: &str) -> Option<DrawFn> {
         let (full, major) = crate::kinds::parse_kind(kind_text)?;
@@ -1500,10 +1545,22 @@ impl Sealed {
             .map(|m| m.name.as_str())
     }
 
+    /// Whether this build's set names the design module `module` and this build left it out
+    /// (#308: a control kind in a full build without the input module).
+    pub(crate) fn lacks(&self, module: &str) -> bool {
+        KNOWN_MODULES
+            .iter()
+            .any(|(name, set)| *name == module && *set <= self.build_set)
+            && !self.has(module)
+    }
+
     /// The canvas module a kind's family belongs to when this build lacks it: a registered
     /// kind's module, or a design-named module whose kind family this is.
     pub(crate) fn missing_for_kind(&self, kind_name: &str) -> Option<String> {
         let full = kind_name.split('@').next().unwrap_or(kind_name);
+        if self.camera_in_scene3d && full == "camera" && !self.has("scene3d") {
+            return Some("scene3d".into());
+        }
         for m in &self.modules {
             if m.shapes.kinds.iter().any(|k| k.entry.is(full)) {
                 return self.left_out_kinds.get(full).cloned();
@@ -1987,7 +2044,7 @@ impl Registry {
                 .chain(r.tables.iter().map(|t| &t.name))
                 .find(|n| {
                     !n.starts_with(&own)
-                        || !well_named(n)
+                        || !id_named(n)
                         || known
                             .iter()
                             .any(|k| k.len() > name.len() && n.starts_with(&format!("{k}.")))
@@ -1997,7 +2054,7 @@ impl Registry {
                     "not_own_name",
                     &[name],
                     &[misnamed],
-                    format!("`{name}` registers `{misnamed}`; an array or table of `{name}` is named `{name}.<x>` in [a-z0-9]+ segments, with no other module's name between"),
+                    format!("`{name}` registers `{misnamed}`; an array or table of `{name}` is named `{name}.<x>` in ID segments ([a-z0-9][a-z0-9_-]*), with no other module's name between"),
                 ));
             }
         }
@@ -2949,6 +3006,7 @@ impl Registry {
             close_fault: self
                 .fault
                 .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
+            camera_in_scene3d: self.fault == Some(Fault::CameraInScene3d),
             outlines,
             costs: self
                 .costs
@@ -3053,6 +3111,18 @@ pub(crate) fn well_named(name: &str) -> bool {
         && name
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.')
+}
+
+/// An array's or table's name: segments joined by `.`, each as the ID grammar's
+/// (`[a-z0-9][a-z0-9_-]{0,47}`; canvas primitives: Value types, `ID`).
+pub(crate) fn id_named(name: &str) -> bool {
+    name.split('.').all(|seg| {
+        let b = seg.as_bytes();
+        !b.is_empty()
+            && b.len() <= 48
+            && (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
+            && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
+    })
 }
 
 /// True when `name`'s manifest names `dep` in `depends_on`; every module reads the core's own.

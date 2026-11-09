@@ -5,9 +5,10 @@ use deep_canvas::schedule::Canonical;
 
 use crate::curve::{Curve, Ease, Interp, Key};
 use crate::doc::{
-    Binding, Channel, Clip, Constraint, Control, Cut, Driver, DriverInput, Extend, Follow, Kind, Limit, Marker,
-    Motion, Placement, Shot, Target, Transport, ValueType,
+    AddFrom, Along, Binding, Blending, Channel, Clip, Constraint, Control, Cut, Driver, DriverInput, Extend, Follow,
+    Influence, Kind, Limit, Marker, Motion, Placement, Shot, Target, Timing, Transport, ValueType,
 };
+use crate::remap::{Piece, Remap};
 use crate::follow;
 use crate::modifier::{Kind as ModKind, Modifier, Rate, Shape};
 use crate::input::{Change, Inputs, Moves};
@@ -36,6 +37,10 @@ impl Canonical for Interp {
             }
             Interp::CatmullRom => out.push(6),
             Interp::Table => out.push(7),
+            Interp::Quantize { n, jump } => {
+                out.push(8);
+                (u64::from(n), jump as u8).encode(out);
+            }
         }
     }
 }
@@ -69,6 +74,7 @@ impl Canonical for Modifier {
                 ease.encode(out);
             }
             ModKind::Limits { min, max } => (3u8, *min, *max).encode(out),
+            ModKind::Quantize { hz, jump } => (4u8, *hz, *jump as u8).encode(out),
         }
     }
 }
@@ -176,6 +182,11 @@ impl deep_canvas::schedule::Canonical for Key {
             ),
             out,
         );
+        // #494: a key's travel, only on a key that has one.
+        if let Some(t) = &self.travel {
+            format!("{:?}", t.travel).encode(out);
+            (&t.dim, &t.subs).encode(out);
+        }
         // A pack's ease table: its name and its knots, so another table keys another program.
         if let Some((name, table)) = &self.table {
             name.encode(out);
@@ -211,6 +222,13 @@ impl deep_canvas::schedule::Canonical for Channel {
         if let Some(glide) = &self.glide {
             glide.encode(out);
         }
+        // #494: a path channel's structure and strictness.
+        if let Some(p) = &self.path {
+            p.strict.encode(out);
+            for (n, closed) in &p.structure {
+                (n, closed).encode(out);
+            }
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Clip {
@@ -237,6 +255,61 @@ impl deep_canvas::schedule::Canonical for Placement {
             out,
         );
         deep_canvas::schedule::Canonical::encode(&self.after, out);
+        // #492's fields, only where a placement sets one, so every earlier placement keys as it
+        // did.
+        let (t, b) = (&self.timing, &self.blending);
+        if *t != Timing::default() || *b != Blending::default() || self.rank != Default::default() {
+            (t.trim, t.span, t.rate.0, t.rate.1).encode(out);
+            (t.repeat as u8, t.hold_at, t.quantize.map(|q| (u64::from(q.0), u64::from(q.1)))).encode(out);
+            t.remap.map(|r| r as u64).encode(out);
+            if let Some(s) = &t.start_on {
+                (&s.on.list, &s.on.kinds, (&s.on.a, &s.on.b)).encode(out);
+                (&s.on.tags, &s.on.where_, s.change, s.policy as u8).encode(out);
+            }
+            t.runs.encode(out);
+            (b.blend as u8, b.fade_in, b.fade_out).encode(out);
+            match &b.influence {
+                Influence::Value(v) => (0u8, *v).encode(out),
+                Influence::Keys(c) => (1u8, c).encode(out),
+                Influence::Control(c) => (2u8, c).encode(out),
+            }
+            match b.add_from {
+                AddFrom::First => (0u8, 0i64).encode(out),
+                AddFrom::Bind => (1u8, 0i64).encode(out),
+                AddFrom::At(t) => (2u8, t).encode(out),
+            }
+            self.rank.encode(out);
+            if let Some(s) = &b.switch {
+                (&s.control, s.case.to_string(), s.span).encode(out);
+                (s.first.to_string(), s.changes.iter().map(|c| (c.0, c.1.to_string())).collect::<Vec<_>>()).encode(out);
+                match s.along {
+                    Along::Ease(e) => {
+                        (0u8, s.sync).encode(out);
+                        e.encode(out);
+                    }
+                    Along::Spring(spring) => (1u8, s.sync, spring.w0, spring.zeta).encode(out),
+                }
+            }
+            if let Some(reach) = t.reach {
+                (reach, t.closes.iter().map(|c| u8::from(*c)).collect::<Vec<_>>()).encode(out);
+            }
+        }
+    }
+}
+impl deep_canvas::schedule::Canonical for Remap {
+    fn encode(&self, out: &mut Vec<u8>) {
+        (&self.id, &self.target, self.clamp).encode(out);
+        for s in &self.segs {
+            (s.t, s.c, s.active.map(|a| (a.0, a.1))).encode(out);
+            match &s.piece {
+                Piece::Line(r) => (0u8, r.0, r.1).encode(out),
+                Piece::Ramp { from, to, over, ease } => {
+                    (1u8, *from, *to, *over).encode(out);
+                    ease.encode(out);
+                }
+                Piece::Map(c) => (2u8, c).encode(out),
+            }
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Cut {
@@ -279,6 +352,9 @@ impl deep_canvas::schedule::Canonical for Driver {
                 match input {
                     DriverInput::Time => out.push(0),
                     DriverInput::Control(c) => (1u8, c).encode(out),
+                    DriverInput::Rate(c) => (3u8, c).encode(out),
+                    DriverInput::Remap(r, progress) => (4u8, r, *progress).encode(out),
+                    DriverInput::Array(a) => (5u8, a).encode(out),
                     DriverInput::List(f) => {
                         (2u8, &f.list, &f.kinds, (&f.a, &f.b)).encode(out);
                         (&f.tags, &f.where_).encode(out);
@@ -357,6 +433,9 @@ impl deep_canvas::schedule::Canonical for Motion {
         if !self.remaps.is_empty() {
             deep_canvas::schedule::Canonical::encode(&self.remaps, out);
         }
+        for (id, inputs) in &self.worlds {
+            (id, *inputs).encode(out);
+        }
     }
 }
 impl deep_canvas::schedule::Canonical for Field {
@@ -373,6 +452,10 @@ impl deep_canvas::schedule::Canonical for Field {
         );
         self.written.encode(out);
         self.enumerated.encode(out);
+        // #494: a path field's structure, only on a path field.
+        for (n, closed) in self.shape.iter().flatten() {
+            (n, closed).encode(out);
+        }
         // Only a keyed data value holds one, so every other field keeps its key.
         if let Some(name) = &self.data {
             name.encode(out);

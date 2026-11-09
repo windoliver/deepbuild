@@ -1,5 +1,6 @@
 //! The effects module's render side (issue #380): see the crate manifest.
 
+pub mod chrome;
 pub mod compile;
 pub mod docops;
 pub mod frame;
@@ -8,4 +9,5 @@ pub mod mips;
 pub mod planted;
 pub mod reference;
 pub mod runner;
+mod uniformity;
 pub use deep_gpu::structural;
