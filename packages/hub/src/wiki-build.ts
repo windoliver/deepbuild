@@ -22,7 +22,7 @@ import { writeJson } from './claude-settings.js';
 import { captureRejected } from './memory.js';
 import { repoOf, type Root } from './paths.js';
 
-export interface WikiBuildOptions {
+interface WikiBuildOptions {
   record: RecordStore;
   root: Root;
   store: EvidenceStore;

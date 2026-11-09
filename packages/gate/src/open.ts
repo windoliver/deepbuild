@@ -25,7 +25,7 @@ function heading(line: string): { name: string; rest: string } | null {
 const clean = (text: string): string => text.replace(/\s+/g, ' ').trim();
 
 /** Each item of the text's open sections, with its heading: a bullet each, or the section's paragraph when it lists none. */
-export function openSections(text: string): { text: string; section: string }[] {
+function openSections(text: string): { text: string; section: string }[] {
   const out: { text: string; section: string }[] = [];
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
@@ -178,9 +178,9 @@ const THRESHOLD = new RegExp(`(?:${OP.source})\\s*(\\d+(?:\\.\\d+)?)(?:\\s*(%|[A
 const NOT_UNIT = new Set(['of', 'and', 'or', 'the', 'a', 'an', 'to', 'in', 'on', 'for', 'with', 'at', 'by', 'then', 'when', 'if', 'than', 'is', 'are', 'it']);
 const UPPER = new Set(['under', 'below', 'less than', 'fewer than', 'at most', 'no more than', 'within', '<', '<=', '≤']);
 /** One threshold a requirement's text states: the words before it, which way it bounds, its number and its unit (null when none). */
-export interface Threshold { subject: string; upper: boolean; value: number; unit: string | null; text: string }
+interface Threshold { subject: string; upper: boolean; value: number; unit: string | null; text: string }
 /** The thresholds a text states. */
-export function thresholds(text: string): Threshold[] {
+function thresholds(text: string): Threshold[] {
   const out: Threshold[] = [];
   for (const m of text.matchAll(THRESHOLD)) {
     const op = (m[1] ?? m[2]!).toLowerCase();
@@ -194,7 +194,7 @@ export function thresholds(text: string): Threshold[] {
 export const unitless = (text: string): Threshold[] => thresholds(text).filter((t) => t.unit === null);
 
 /** A requirement as the solve line reads it: its ID, its words, its check and the digest of the check's bytes. */
-export interface SolveRequirement { id: string; text: string; check: string | null; check_sha256?: string | null }
+interface SolveRequirement { id: string; text: string; check: string | null; check_sha256?: string | null }
 /**
  * A definition's one solve line: fully covered, or the first of what keeps it from being solved, in this order: a
  * requirement with no check, two checks covering the same thing (the same bytes, or the same words), two that

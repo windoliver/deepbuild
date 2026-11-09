@@ -13,6 +13,7 @@
 //! time, for the checks that must catch it.
 
 mod check;
+mod frames;
 pub mod glyphs;
 mod locate;
 mod motion;
@@ -202,6 +203,8 @@ struct Replica {
     motion: Option<motion::Recorder>,
     reduced: bool,
     script: Option<Entity<gpui_shell::ScriptView>>,
+    /// Issue #1546: in `launch.frames: "dirty"`, the frames GPUI drew on request and each step's comparison.
+    dirty: Option<frames::Dirty>,
 }
 
 impl Replica {
@@ -222,9 +225,16 @@ impl Replica {
             }
         };
         let from = word("from", &["fixture", "record_copy", "empty"], "fixture")?;
-        let center = word("center", &[NEEDS_YOU, HOME, SESSION, WELCOME, AGENTS], NEEDS_YOU)?;
+        let center = word(
+            "center",
+            &[NEEDS_YOU, HOME, SESSION, WELCOME, AGENTS],
+            NEEDS_YOU,
+        )?;
         let theme = word("theme", &["light", "dark"], "light")?;
         let clock = word("clock", &["virtual", "real"], "virtual")?;
+        // #1546: "every" draws every view each frame; "dirty" only the frames GPUI says the window needs.
+        let frames = word("frames", &["every", "dirty"], "every")?;
+        let dirty = frames == "dirty";
         let scale = match &args["scale"] {
             Value::Null => 2.,
             v if v == 2 => 2.,
@@ -452,6 +462,12 @@ impl Replica {
                     origin: Point::default(),
                     size: gpui_kit::size(px(size.0), px(size.1)),
                 })),
+                // The dirty mode's frames are paced by the replica's clock alone, never by the wall clock's throttle.
+                inactive_frame_interval: if dirty {
+                    None
+                } else {
+                    crate::shell::window_options().inactive_frame_interval
+                },
                 ..crate::shell::window_options()
             };
             // A panel goes in the sidebar's slot, as an installed one would; with none, the shipped sidebar does.
@@ -546,13 +562,19 @@ impl Replica {
             motion: None,
             reduced,
             script,
+            dirty: None,
         };
         replica.draw();
         replica.draw();
+        if dirty {
+            replica.cx.draw_on_request();
+            replica.dirty = Some(frames::Dirty::new(replica.live_tree()));
+        }
         let reply = json!({
             "replica": replica.id,
             "window": {"size": [size.0 as u32, size.1 as u32], "scale": scale as u32},
             "locale": locale,
+            "frames": frames,
         });
         replica
             .trace
@@ -565,8 +587,11 @@ impl Replica {
         let index = self.steps.len() + 1;
         let acts = name == "act";
         let before = acts.then(|| self.snapshot_file());
+        self.begin_step();
         let result = match name {
             "act" => self.act(call),
+            "feed" => self.feed(call),
+            "resize" => self.resize(call),
             "wait_for" => self.wait_for(call),
             "see" => self.see(call),
             "probe" => self.probe(call),
@@ -577,13 +602,14 @@ impl Replica {
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, motion, expect, close, ui_check and motion_check"),
+                format!("{other:?} is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();
         if let Some(fields) = digested.as_object_mut() {
             fields.remove("replica");
         }
+        self.end_step(index, name);
         let id = format!("step {index}: {name}");
         self.steps
             .push(json!({"id": id, "digest": sha256(digested.to_string().as_bytes())}));
@@ -633,11 +659,16 @@ impl Replica {
         };
         let before = nanos(self.clock.t);
         self.clock.t += step;
+        if self.dirty.is_some() {
+            self.move_views_clock();
+        }
         self.cx
             .advance_clock(Duration::from_nanos(nanos(self.clock.t) - before));
         self.cx.run_until_parked();
         if self.motion.is_some() {
             self.sample();
+        } else if self.dirty.is_some() {
+            self.request();
         } else {
             self.draw();
         }
@@ -646,6 +677,9 @@ impl Replica {
     }
 
     fn frame(&mut self) -> Frame {
+        if let Some(dirty) = &self.dirty {
+            return dirty.drawn().1;
+        }
         let glyphs = self.glyphs.clone();
         self.cx
             .update_window(self.window, |_, window, _| Frame::read(window, &glyphs))
@@ -721,9 +755,13 @@ impl Replica {
     }
 
     fn input(&mut self, event: PlatformInput) {
+        // In the dirty mode the window draws what the input changed at its next frame, as a real one does (#1546).
+        let forced = self.dirty.is_none();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
             window.dispatch_event(event, cx);
-            window.render_frame(cx);
+            if forced {
+                window.render_frame(cx);
+            }
         });
     }
 
@@ -849,6 +887,9 @@ impl Replica {
         }
         if !locator.is_null() {
             self.focus = Some(target.clone());
+        }
+        if matches!(kind.as_str(), "type" | "press" | "drag" | "set") {
+            self.input_drew();
         }
         self.tick();
         self.tick();
@@ -1137,7 +1178,19 @@ impl Replica {
     /// The text snapshot, as #338's: roles, names, values and bounds of every element with a role, the strings drawn
     /// that no element already names, and the canvas items with their values.
     fn tree(&mut self) -> (Value, Frame) {
-        let frame = self.frame();
+        match &self.dirty {
+            Some(dirty) => dirty.drawn(),
+            None => self.live_tree(),
+        }
+    }
+
+    /// The snapshot of what the window holds now.
+    fn live_tree(&mut self) -> (Value, Frame) {
+        let glyphs = self.glyphs.clone();
+        let frame = self
+            .cx
+            .update_window(self.window, |_, window, _| Frame::read(window, &glyphs))
+            .expect("the replica's window is open");
         let snapshot = self
             .cx
             .update_window(self.window, |_, window, _| from_observed(window))
@@ -1398,13 +1451,17 @@ impl Replica {
         let _ = std::fs::write(&path, bytes);
         let mut evidence = self.evidence.clone();
         evidence.push(json!({"slot": "trace", "state": "captured", "sha256": hash}));
-        json!({
+        let mut closed = json!({
             "journey": {
                 "outcome": outcome, "tests_run": self.assertions, "failures": self.failures, "steps": self.steps,
                 "evidence": evidence,
             },
             "trace": {"sha256": hash, "path": path},
-        })
+        });
+        if let Some(dirty) = &self.dirty {
+            closed["frames"] = dirty.report();
+        }
+        closed
     }
 }
 
