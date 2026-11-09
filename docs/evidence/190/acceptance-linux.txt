@@ -1,0 +1,83 @@
+# #190 blind suite (tests/acceptance/190), on spark-c89f (Linux aarch64), 2026-11-09, worktree at base 6042ef5a plus this change
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/190 --testTimeout=600000 --no-file-parallelism
+# Result: 14 passed, 4 BLOCKED (failed with BLOCKED:, never passed): criterion 4's Mac+Linux x86_64 test and both of 10's need macOS arm64; criterion 5's second machine needs Docker's linux/amd64 image, which this box can't run.
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/190
+
+ ❯ ac10-budgets.test.ts (2 tests | 2 failed) 59133ms
+   ❯ #190.29b58f9e linking, fixtures and unlinked items keep their budgets (2)
+     × #190.29b58f9e linking a 1 MB program with two 500 KB libraries takes under 300 ms once at check, and each library's fixtures run once per hash in under 5 s 10509ms
+     × #190.29b58f9e an item without links gains no work at check or per frame, compared with the merge base 16ms
+ ❯ ac04-machines-browser.test.ts (2 tests | 1 failed) 1690ms
+   ❯ #190.2d5bb5ea the merged programs and the fixtures' hashes are the same on every host (2)
+     × #190.2d5bb5ea the two pieces' merged programs are byte for byte the same on macOS arm64 and Linux x86_64 265ms
+ ❯ ac05-library-trap.test.ts (1 test | 1 failed) 962ms
+   ❯ #190.99970527 a trap in library code names the library and its function (1)
+     × #190.99970527 a fuel trap inside grid_path on a grid too large for one step names the item, the step, the kind and find_route, at the same offset on two machines 600ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac04-machines-browser.test.ts > #190.2d5bb5ea the merged programs and the fixtures' hashes are the same on every host > #190.2d5bb5ea the two pieces' merged programs are byte for byte the same on macOS arm64 and Linux x86_64
+Error: BLOCKED: the first machine of the comparison runs on macOS arm64 (the reference Mac); this host is linux/arm64
+ ❯ blocked helpers.ts:40:56
+     38|
+     39| /** A host or tool this machine lacks: the test fails with this messag…
+     40| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     41| /** Criteria 4 and 10 name macOS arm64 ("the reference Mac"): anywhere…
+     42| export function requireMacArm64(what: string): void {
+ ❯ requireMacArm64 helpers.ts:43:66
+ ❯ ac04-machines-browser.test.ts:23:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  ac05-library-trap.test.ts > #190.99970527 a trap in library code names the library and its function > #190.99970527 a fuel trap inside grid_path on a grid too large for one step names the item, the step, the kind and find_route, at the same offset on two machines
+Error: BLOCKED: Docker has no linux/amd64 image rust:1.99.1-slim-bookworm here and this suite pulls nothing; run: docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm
+ ❯ blocked helpers.ts:40:56
+     38|
+     39| /** A host or tool this machine lacks: the test fails with this messag…
+     40| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     41| /** Criteria 4 and 10 name macOS arm64 ("the reference Mac"): anywhere…
+     42| export function requireMacArm64(what: string): void {
+ ❯ linuxLogic helpers.ts:282:27
+ ❯ onLinux helpers.ts:300:3
+ ❯ ac05-library-trap.test.ts:25:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  ac10-budgets.test.ts > #190.29b58f9e linking, fixtures and unlinked items keep their budgets > #190.29b58f9e linking a 1 MB program with two 500 KB libraries takes under 300 ms once at check, and each library's fixtures run once per hash in under 5 s
+Error: BLOCKED: the budgets' reference machine runs on macOS arm64 (the reference Mac); this host is linux/arm64
+ ❯ blocked helpers.ts:40:56
+     38|
+     39| /** A host or tool this machine lacks: the test fails with this messag…
+     40| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     41| /** Criteria 4 and 10 name macOS arm64 ("the reference Mac"): anywhere…
+     42| export function requireMacArm64(what: string): void {
+ ❯ requireMacArm64 helpers.ts:43:66
+ ❯ ac10-budgets.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  ac10-budgets.test.ts > #190.29b58f9e linking, fixtures and unlinked items keep their budgets > #190.29b58f9e an item without links gains no work at check or per frame, compared with the merge base
+Error: BLOCKED: the budgets' reference machine runs on macOS arm64 (the reference Mac); this host is linux/arm64
+ ❯ blocked helpers.ts:40:56
+     38|
+     39| /** A host or tool this machine lacks: the test fails with this messag…
+     40| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     41| /** Criteria 4 and 10 name macOS arm64 ("the reference Mac"): anywhere…
+     42| export function requireMacArm64(what: string): void {
+ ❯ requireMacArm64 helpers.ts:43:66
+ ❯ ac10-budgets.test.ts:56:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed | 7 passed (10)
+      Tests  4 failed | 14 passed (18)
+   Start at  02:04:25
+   Duration  74.35s (tests 99%, import 1%)
+
