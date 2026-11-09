@@ -1,0 +1,223 @@
+
+ RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/github-issue-1732-247c39/agent-ad275b8d1c382b664/tests/acceptance/1732
+
+ ❯ ac2-stacked.test.ts (2 tests | 2 failed) 12914ms
+   ❯ AC2 #1732.c7ddc865 chairs stacked at the room's centre solve apart; a solve that ignores pair overlap fails the audit (2)
+     × AC2 #1732.c7ddc865 from four chairs stacked at the centre, the same relations hold to 1 mm and 1°, no two chairs overlap, and the audit names no chair pair 2715ms
+     × AC2 #1732.c7ddc865 the planted arrange_ignores_pair_overlap leaves two chairs in each other, and the audit fails naming both 807ms
+ ❯ ac3-six-chairs.test.ts (1 test | 1 failed) 14871ms
+   ❯ AC3 #1732.88ac1cf0 six chairs next_to a 1.2 m table, where only four fit, are refused at check (1)
+     × AC3 #1732.88ac1cf0 the revision is refused with arrange_unsatisfied, naming a chair's next_to table relation and its shortfall in m 3851ms
+ ❯ ac4-no-solve-per-frame.test.ts (2 tests | 2 failed) 15290ms
+   ❯ AC4 #1732.f19db12b a frame with no change to any item the arrangement reads runs no solve (2)
+     × AC4 #1732.f19db12b frames that turn only the fan run no solve of the arrangement, by the scheduler's counters 3098ms
+     × AC4 #1732.f19db12b the planted arrange_solves_per_frame fails, naming arrangement 1764ms
+ ❯ ac5-break-out.test.ts (2 tests | 2 failed) 13996ms
+   ❯ AC5 #1732.8a28edd6 a patch that moves the lamp breaks it out of the arrangement (2)
+     × AC5 #1732.8a28edd6 a patch lifting the lamp 0.3 m off the table: it stands there, the others keep their solved places, and the audit reports lamp on table missed 3497ms
+     × AC5 #1732.8a28edd6 a patch sliding the lamp along the table's top: it stands there, the others keep their solved places, and the audit reports nothing of the lamp 1519ms
+ ❯ ac1-room.test.ts (2 tests | 2 failed) 11295ms
+   ❯ AC1 #1732.1a7a49ce the furnished room solves, held to 1 mm and 1°, with nothing interpenetrating (2)
+     × AC1 #1732.1a7a49ce every relation holds to 1 mm and 1° on the solved transforms, and the geometry audit finds no interpenetration past 1 mm 3293ms
+     × AC1 #1732.1a7a49ce the same document solves to the same transforms on two runs and in a fresh process, compared by hash 2457ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-room.test.ts > AC1 #1732.1a7a49ce the furnished room solves, held to 1 mm and 1°, with nothing interpenetrating > AC1 #1732.1a7a49ce every relation holds to 1 mm and 1° on the solved transforms, and the geometry audit finds no interpenetration past 1 mm
+AssertionError: the room: no item skipped as an unknown kind: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"actual\":\"arrange@1\",\"code\":\"unknown_kind\",\"ids\":[\"arrangement\"],\"path\":\"items/arrangement/kind\",\"severity\":\"notice\",\"what\":\"kind `arrange@1` is not registered in this build; the item is skipped\"}",
++ ]
+
+ ❯ presented helpers.ts:163:77
+    161|   expect(errors.map((e) => canon(e.raw)), `${what}: no error issue`).t…
+    162|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    163|   expect(skipped.map(canon), `${what}: no item skipped as an unknown k…
+       |                                                                             ^
+    164|   expect(reply['outcome'], `${what}: presented, got ${shown(reply)}`).…
+    165| }
+ ❯ ac1-room.test.ts:20:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  ac1-room.test.ts > AC1 #1732.1a7a49ce the furnished room solves, held to 1 mm and 1°, with nothing interpenetrating > AC1 #1732.1a7a49ce the same document solves to the same transforms on two runs and in a fresh process, compared by hash
+AssertionError: run 1: no item skipped as an unknown kind: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"actual\":\"arrange@1\",\"code\":\"unknown_kind\",\"ids\":[\"arrangement\"],\"path\":\"items/arrangement/kind\",\"severity\":\"notice\",\"what\":\"kind `arrange@1` is not registered in this build; the item is skipped\"}",
++ ]
+
+ ❯ presented helpers.ts:163:77
+    161|   expect(errors.map((e) => canon(e.raw)), `${what}: no error issue`).t…
+    162|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    163|   expect(skipped.map(canon), `${what}: no item skipped as an unknown k…
+       |                                                                             ^
+    164|   expect(reply['outcome'], `${what}: presented, got ${shown(reply)}`).…
+    165| }
+ ❯ ac1-room.test.ts:30:118
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  ac2-stacked.test.ts > AC2 #1732.c7ddc865 chairs stacked at the room's centre solve apart; a solve that ignores pair overlap fails the audit > AC2 #1732.c7ddc865 from four chairs stacked at the centre, the same relations hold to 1 mm and 1°, no two chairs overlap, and the audit names no chair pair
+AssertionError: the stacked room: no item skipped as an unknown kind: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"actual\":\"arrange@1\",\"code\":\"unknown_kind\",\"ids\":[\"arrangement\"],\"path\":\"items/arrangement/kind\",\"severity\":\"notice\",\"what\":\"kind `arrange@1` is not registered in this build; the item is skipped\"}",
++ ]
+
+ ❯ presented helpers.ts:163:77
+    161|   expect(errors.map((e) => canon(e.raw)), `${what}: no error issue`).t…
+    162|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    163|   expect(skipped.map(canon), `${what}: no item skipped as an unknown k…
+       |                                                                             ^
+    164|   expect(reply['outcome'], `${what}: presented, got ${shown(reply)}`).…
+    165| }
+ ❯ ac2-stacked.test.ts:19:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  ac2-stacked.test.ts > AC2 #1732.c7ddc865 chairs stacked at the room's centre solve apart; a solve that ignores pair overlap fails the audit > AC2 #1732.c7ddc865 the planted arrange_ignores_pair_overlap leaves two chairs in each other, and the audit fails naming both
+AssertionError: deep-show accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:138:77
+    136|   expect(lines.length, 'one answer line').toBe(1);
+    137|   const answer = obj(JSON.parse(lines[0]!) as JsonValue, 'the answer');
+    138|   expect(answer['ok'], `deep-show accepted the scenario: ${shown(answe…
+       |                                                                             ^
+    139|   const replies = arr(answer['replies'], 'replies').map((r, i) => obj(…
+    140|   expect(replies.length, 'one reply per call').toBe(arr(sc['calls'], '…
+ ❯ ac2-stacked.test.ts:28:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  ac3-six-chairs.test.ts > AC3 #1732.88ac1cf0 six chairs next_to a 1.2 m table, where only four fit, are refused at check > AC3 #1732.88ac1cf0 the revision is refused with arrange_unsatisfied, naming a chair's next_to table relation and its shortfall in m
+AssertionError: the revision is refused at check, never placed half right: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["arrangement"],"path":"items/arrangement/kind","actual":"arrange@1","what":"kind `arrange@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["arrangement","chair_1","chair_2","chair_3","chair_4","chair_5","chair_6","floor","room","table","wall_e","wall_n","wall_s","wall_w"],"removed":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"0189c3fcaeb309bf1a2eddaa3d6c07ee0a0290522b27252661a7a7d856e32f8c"}: expected 'presented' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "presented"
+
+ ❯ ac3-six-chairs.test.ts:14:109
+     12|   it(`${AC[3]} the revision is refused with arrange_unsatisfied, namin…
+     13|     const [reply] = runShow(bin(), scenario(dir(), [DOC.a], [show(DOC.…
+     14|     expect(reply!['outcome'], `the revision is refused at check, never…
+       |                                                                                                             ^
+     15|     const refusal = issuesOf(reply!).find((i) => i.severity === 'error…
+     16|     expect(refusal, `an error issue arrange_unsatisfied: ${shown(reply…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  ac4-no-solve-per-frame.test.ts > AC4 #1732.f19db12b a frame with no change to any item the arrangement reads runs no solve > AC4 #1732.f19db12b frames that turn only the fan run no solve of the arrangement, by the scheduler's counters
+AssertionError: the room with a fan: no item skipped as an unknown kind: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"actual\":\"arrange@1\",\"code\":\"unknown_kind\",\"ids\":[\"arrangement\"],\"path\":\"items/arrangement/kind\",\"severity\":\"notice\",\"what\":\"kind `arrange@1` is not registered in this build; the item is skipped\"}",
++ ]
+
+ ❯ presented helpers.ts:163:77
+    161|   expect(errors.map((e) => canon(e.raw)), `${what}: no error issue`).t…
+    162|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    163|   expect(skipped.map(canon), `${what}: no item skipped as an unknown k…
+       |                                                                             ^
+    164|   expect(reply['outcome'], `${what}: presented, got ${shown(reply)}`).…
+    165| }
+ ❯ counted ac4-no-solve-per-frame.test.ts:17:3
+ ❯ ac4-no-solve-per-frame.test.ts:36:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  ac4-no-solve-per-frame.test.ts > AC4 #1732.f19db12b a frame with no change to any item the arrangement reads runs no solve > AC4 #1732.f19db12b the planted arrange_solves_per_frame fails, naming arrangement
+AssertionError: deep-show accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:138:77
+    136|   expect(lines.length, 'one answer line').toBe(1);
+    137|   const answer = obj(JSON.parse(lines[0]!) as JsonValue, 'the answer');
+    138|   expect(answer['ok'], `deep-show accepted the scenario: ${shown(answe…
+       |                                                                             ^
+    139|   const replies = arr(answer['replies'], 'replies').map((r, i) => obj(…
+    140|   expect(replies.length, 'one reply per call').toBe(arr(sc['calls'], '…
+ ❯ counted ac4-no-solve-per-frame.test.ts:16:27
+ ❯ ac4-no-solve-per-frame.test.ts:43:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  ac5-break-out.test.ts > AC5 #1732.8a28edd6 a patch that moves the lamp breaks it out of the arrangement > AC5 #1732.8a28edd6 a patch lifting the lamp 0.3 m off the table: it stands there, the others keep their solved places, and the audit reports lamp on table missed
+AssertionError: the room: no item skipped as an unknown kind: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"actual\":\"arrange@1\",\"code\":\"unknown_kind\",\"ids\":[\"arrangement\"],\"path\":\"items/arrangement/kind\",\"severity\":\"notice\",\"what\":\"kind `arrange@1` is not registered in this build; the item is skipped\"}",
++ ]
+
+ ❯ presented helpers.ts:163:77
+    161|   expect(errors.map((e) => canon(e.raw)), `${what}: no error issue`).t…
+    162|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    163|   expect(skipped.map(canon), `${what}: no item skipped as an unknown k…
+       |                                                                             ^
+    164|   expect(reply['outcome'], `${what}: presented, got ${shown(reply)}`).…
+    165| }
+ ❯ solved ac5-break-out.test.ts:20:3
+ ❯ ac5-break-out.test.ts:48:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  ac5-break-out.test.ts > AC5 #1732.8a28edd6 a patch that moves the lamp breaks it out of the arrangement > AC5 #1732.8a28edd6 a patch sliding the lamp along the table's top: it stands there, the others keep their solved places, and the audit reports nothing of the lamp
+AssertionError: the room: no item skipped as an unknown kind: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"actual\":\"arrange@1\",\"code\":\"unknown_kind\",\"ids\":[\"arrangement\"],\"path\":\"items/arrangement/kind\",\"severity\":\"notice\",\"what\":\"kind `arrange@1` is not registered in this build; the item is skipped\"}",
++ ]
+
+ ❯ presented helpers.ts:163:77
+    161|   expect(errors.map((e) => canon(e.raw)), `${what}: no error issue`).t…
+    162|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    163|   expect(skipped.map(canon), `${what}: no item skipped as an unknown k…
+       |                                                                             ^
+    164|   expect(reply['outcome'], `${what}: presented, got ${shown(reply)}`).…
+    165| }
+ ❯ solved ac5-break-out.test.ts:20:3
+ ❯ ac5-break-out.test.ts:57:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  9 failed (9)
+   Start at  01:08:38
+   Duration  73.69s (tests 98%, import 1%, transform 1%)
+
