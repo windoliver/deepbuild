@@ -154,6 +154,27 @@ fn wake(state: &Arc<Mutex<MacWindowState>>) {
     });
 }
 
+/// AppKit's screen change: upstream resizes the window to the new screen's scale, which redraws
+/// it. AppKit also reports one, every few seconds, for a window on the screen it was on, its
+/// scale and size as they were; the layer's last frame is still right then, so nothing is
+/// resized or redrawn.
+pub(super) fn screen_changed(state: &Arc<Mutex<MacWindowState>>) {
+    let unchanged = {
+        let lock = state.lock();
+        let scale = lock.scale_factor();
+        let size = lock.content_size().to_device_pixels(scale);
+        lock.renderer.layer().is_some_and(|layer| {
+            let drawable = layer.drawable_size();
+            layer.contents_scale() == f64::from(scale)
+                && drawable.width == f64::from(size.width.0)
+                && drawable.height == f64::from(size.height.0)
+        })
+    };
+    if !unchanged {
+        super::update_window_scale_factor(state);
+    }
+}
+
 pub(super) fn schedule_frame(state: &Arc<Mutex<MacWindowState>>) {
     if planted() != Planted::IgnoresScheduleFrame {
         wake(state);
