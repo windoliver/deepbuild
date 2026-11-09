@@ -2212,6 +2212,7 @@ dependencies = [
  "deep-canvas-drawn",
  "deep-canvas-effects",
  "deep-canvas-graph",
+ "deep-canvas-input",
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-canvas-record",
