@@ -2447,9 +2447,10 @@ class Host implements ExtensionHost {
     await this.serial(id, async () => {
       const ext = this.exts.get(id);
       if (!ext) return;
-      // AC9's wrong program: its handlers stop while it's still published and its users still read through it.
+      // AC9's wrong program: its handlers stop while it's still published and its users still read through it. Its
+      // process keeps running until the unload: ending it here would unload it at once, through its connection's close.
       if (this.options.plant === 'stop-provider-first') {
-        await this.stopHandlers(ext);
+        delete ext.ask;
         await sleep(200);
       }
       await this.unload(ext);
