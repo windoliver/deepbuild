@@ -9,6 +9,7 @@ import net from 'node:net';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFacts } from '@deepbuild/adapters';
 import { canvasItems } from './canvas-doctor.js';
 import { claudeSettings, commands, installed, readJson } from './claude-settings.js';
 import { call } from './client.js';
@@ -23,7 +24,6 @@ import { claudeHomes, denyHolds, homeMods, managedSettings, overrideWords } from
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
-const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 import { codexHooks, hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
 
@@ -48,7 +48,7 @@ async function which(name: string, path: string): Promise<string | undefined> {
   }
   return undefined;
 }
-const facts = (agent: string): { versions: string[]; billing?: { apiKeyVariables?: string[] } } => JSON.parse(readFileSync(join(REPO, 'adapters', `${agent}.facts.json`), 'utf8')) as { versions: string[] };
+const facts = (agent: string): { versions: string[]; billing?: { apiKeyVariables?: string[] } } => readFacts(`${agent}.facts.json`);
 const parts = (v: string) => v.split(/[.-]/).map((p) => (/^\d+$/.test(p) ? Number(p) : p));
 function compare(a: string, b: string): number {
   const x = parts(a), y = parts(b);
@@ -102,6 +102,13 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
     if (answering) add('hub.socket', 'deepbuild', 'healthy', 'ok', `the hub answers at unix:${socket}`, 'Nothing to do.');
     // Before setup, `deep hub start` would start a hub that no hook reaches: setup adds the hooks and starts it.
     else add('hub.socket', 'deepbuild', 'hub_unreachable', 'fail', `no hub answers at unix:${socket}`, installed(root) ? 'Run `deep hub start`; deep setup installs it as a login service.' : 'Run `deep setup`, which adds the hooks and starts the hub at login.');
+  }
+  // Linux's trusted path (#70): polkit knows the action only from a root-owned file, and without it nothing you confirm counts.
+  if (process.platform === 'linux') {
+    const known = await new Promise<boolean>((done) => { execFile('/usr/bin/pkaction', ['--action-id', 'dev.deepbuild.confirm'], { timeout: 5000 }, (error) => done(!error)); });
+    const policy = fileURLToPath(new URL('../native/dev.deepbuild.confirm.policy', import.meta.url));
+    if (known) add('hub.polkit', 'deepbuild', 'healthy', 'ok', 'polkit knows dev.deepbuild.confirm', 'Nothing to do.');
+    else add('hub.polkit', 'deepbuild', 'polkit_action_missing', 'fail', 'polkit has no dev.deepbuild.confirm, so no answer, secret or confirmation of yours can count', `Run \`sudo install -m 644 ${policy} /usr/share/polkit-1/actions/\`.`);
   }
   // The hub's background jobs (#909): one failing at its third run in a row or later, each with when the row began.
   if (answering) {

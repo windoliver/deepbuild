@@ -9,16 +9,16 @@ import { spawn } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { readFacts } from '@deepbuild/adapters';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 export interface Counted { counts: 'read' | 'change' | 'send' | 'destructive'; effect?: string }
 
-const FACTS = new URL('../../../adapters/mcp-servers.facts.json', import.meta.url);
 let facts: Obj | undefined;
 const servers = (): Obj => {
-  facts ??= JSON.parse(readFileSync(FACTS, 'utf8')) as Obj;
+  facts ??= readFacts<Obj>('mcp-servers.facts.json');
   return isObj(facts.servers) ? facts.servers : {};
 };
 

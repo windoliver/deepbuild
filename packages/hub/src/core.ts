@@ -11,7 +11,7 @@ import { Numbers } from './numbers.js';
 import { availableParallelism, homedir, loadavg, networkInterfaces } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ADAPTERS, shipped } from '@deepbuild/adapters';
+import { ADAPTERS, readFacts, shipped } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
 import { AskRefused, duration, openAsks, subjectKey, type Asks, type Delivery, type Resolver } from '@deepbuild/asks';
 import { openLedger, type BudgetInput, type Ledger } from '@deepbuild/budget';
@@ -41,12 +41,13 @@ import { AskTasks, type WorkItem } from './ask-tasks.js';
 import { SizeScope } from './scope.js';
 import { codexTrusted } from './codex-settings.js';
 import { Holds } from './holds.js';
+import { Spool } from './spool.js';
 import { countMcp } from './mcp-servers.js';
 import { opensOf, Questions, type Sorted } from './questions.js';
 import { couldDo, reachOf, struck, type Reach, type ReachTool } from './could-do.js';
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
-import { SLASH_COMMAND, coveredBy, loopFact, parseLine, registry, toolClasses, versionOf } from './hookmap.js';
+import { SLASH_COMMAND, coveredBy, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { cachedRuleFiles, creditOf, handleOf as ruleHandle, pageLines, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, setOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
@@ -91,7 +92,7 @@ import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
-import { copySynced, disk, synced, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
+import { copySynced, disk, synced, testVfs, writeSynced, type Durable } from './vfs.js';
 import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
 
 /** A process running Codex's own binary, by the path it was started from. */
@@ -114,8 +115,6 @@ const ghToken = (): Promise<string | undefined> => {
   return new Promise((done) => execFile('gh', ['auth', 'token'], { timeout: 5000 }, (error, out) => done(error || !out.trim() ? undefined : out.trim())));
 };
 const SECRETS_TTL = 10_000;
-/** The spool file every deep-hook appends to. */
-const SPOOL = 'spool.jsonl';
 const REACHED = 10_000;
 /** The reading a session gets for a turn with tool calls none of whose hooks reached the hub. */
 const HOOKS_MISSING = 'hooks not reaching DeepBuild';
@@ -169,10 +168,9 @@ const HOLDS_NO_PROMPT = new Set(['pi', 'paseo']);
 /** The commands that take effect only once the OS confirms you (#19), as `you.confirm` names them. */
 /** The sign-in command each agent's facts name, by the agent's name as a task would say it (#84). */
 function signInCommands(): Record<string, string> {
-  return (JSON.parse(readFileSync(new URL('../../../adapters/sign-in.json', import.meta.url), 'utf8')) as { commands: Record<string, string> }).commands;
+  return readFacts<{ commands: Record<string, string> }>('sign-in.json').commands;
 }
 const AUTHORITY = new Set(['deep off', 'deep on', 'deep hub stop', 'deep hub use', 'deep setup --undo']);
-const REQUEST = Buffer.from('{"v":1,"agent":');
 type Obj = Record<string, unknown>;
 /** The PIDs a test says another process now holds (DEEP_HUB_TEST_PID_REUSE, a JSON list read at each check); only tests set it. */
 const reusedPids = (): number[] => {
@@ -412,6 +410,7 @@ export class Core {
   private readonly root: Root;
   private readonly now: () => number;
   private readonly durable: Durable;
+  private readonly spool: Spool;
   private record!: RecordStore;
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
@@ -590,7 +589,6 @@ export class Core {
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
   private dropped = false;
-  private doubled = false;
   /** Whether appends came back during a replay, so the files it kept are taken again after it. */
   private retake = false;
   /** Every session the hooks named, checked or not, by ID. */
@@ -713,7 +711,14 @@ export class Core {
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
     this.devices = new Devices(this.root.devices);
-    this.confirmer = new Confirmer({ devices: this.devices, key: this.root.confirmKey, ...(options.confirm !== undefined ? { stub: options.confirm } : {}), ...(options.plant ? { plant: options.plant } : {}) });
+    this.confirmer = new Confirmer({ devices: this.devices, key: this.root.confirmKey, ...(options.confirm !== undefined ? { stub: options.confirm } : {}), ...(options.polkit !== undefined ? { polkit: options.polkit } : {}), ...(options.plant ? { plant: options.plant } : {}) });
+    this.spool = new Spool({
+      dir: this.root.spool, held: options.held, plant: options.plant, durable: this.durable, stopping: () => this.stopping,
+      raw: (query, params) => this.record.raw(query, params), appendCore: (kind, data) => this.appendCore(kind, data),
+      tryNetwork: (drafts, meta, tries) => this.tryNetwork(drafts, meta, tries),
+      replay: (drafts, meta) => this.queue(() => this.handleHook(drafts, meta, 'hook', true), true).then(({ settled }) => settled),
+      sync: () => this.record.sync(),
+    });
     this.holds = new Holds({
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
@@ -1040,6 +1045,8 @@ export class Core {
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
       resources: [port, compose], leases,
+      kept: join(this.root.dir, 'kept'),
+      ...(this.options.plant === 'kept-in-service-cgroup' ? { plant: 'kept-in-service-cgroup' as const } : {}),
       ...(this.options.plant === 'env-holds-lease-for-helper' ? { plant: 'holds-lease-while-taken' as const } : {}),
       ...(this.options.plant === 'standin-value-in-env' || this.options.plant === 'standin-every-host' || this.options.plant === 'run-ca-in-login-keychain' || this.options.plant === 'sandbox-any-loopback' ? { plant: this.options.plant } : {}),
       ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}),
@@ -1117,7 +1124,7 @@ export class Core {
       // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
       else await this.panelKits(pkg.id, true);
     }
-    await this.replaySpool();
+    await this.spool.replay();
     // The replay is done: the extensions start, and each that can't is unloaded and named.
     await extensions.ready().catch((error: unknown) => process.stderr.write(`deep hub: ${error instanceof Error ? error.message : String(error)}\n`));
     // Your channels (#65): the asks reach you where you said, and each answer a channel returns is checked here.
@@ -1461,11 +1468,10 @@ export class Core {
       return;
     }
     // A file a failed replay kept is taken again once appends work again.
-    const waiting = existsSync(join(this.root.spool, SPOOL)) || (kept && existsSync(this.root.spool) && readdirSync(this.root.spool).some((f) => f.endsWith('.jsonl')));
-    if (!waiting) return;
+    if (!this.spool.waiting(kept)) return;
     // A hub that couldn't start replays nothing; its start reports why.
     this.replaying = this.ready
-      .then(() => this.replaySpool(), () => undefined)
+      .then(() => this.spool.replay(), () => undefined)
       .catch((error: unknown) => process.stderr.write(`deep hub: the spool replay stopped: ${error instanceof Error ? error.message : String(error)}\n`))
       .finally(() => {
         this.replaying = undefined;
@@ -4263,7 +4269,7 @@ export class Core {
     if (!lesson) throw new Refused(refusal('not_found', '/params/lesson', `No lesson ${String(params.lesson)}; deep memory lists the lessons left.`, params.lesson));
     // An agent may start this; the OS prompt is yours to refuse, so it says so, and shows the whole rule a guard would install.
     const agent = await this.agentAbove(context.peer);
-    const why = await this.confirmer.you(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, { handle: lesson.id, revision: lesson.claim });
+    const why = await this.confirmer.you(`${verb === 'keep' ? 'keep' : 'remove'} the lesson “${lesson.text}”${agent ? `, asked from inside agent session ${agent}` : ''}`, { handle: lesson.id, revision: lesson.claim, process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing changed: the OS didn't confirm you (${why}).`, lesson.id, true));
     if (verb === 'remove' && lesson.claim.startsWith('wiki:rules#') && lesson.why) return this.removeRule(lesson);
     if (verb === 'remove') return { decision: await this.wikiBuild.forget(lesson.claim) };
@@ -5589,9 +5595,15 @@ export class Core {
       case 'agents.restart': await this.ready; return this.agents.restart(params);
       case 'agents.undo': return this.agents.undo(params);
       case 'mcp.exec': return this.agents.exec(params);
-      case 'device.pair': return this.pair(params);
+      // A hosted terminal the hub keeps past a restart: what the app's tab reads and types into (#70).
+      case 'terminal.open': return this.terminal().open(this.connection('app'), params as unknown as Parameters<ExtensionHost['openTerminal']>[1]);
+      case 'terminal.tab': return this.terminal().tab(this.connection('app'), String(params.terminal)) as unknown as Obj;
+      case 'terminal.input': return this.terminal().rawInput(this.connection('app'), String(params.terminal), String(params.text)).then(() => ({ sent: true }));
+      case 'secret.enter': return this.enterSecret(params, context);
+      case 'secret.list': return { held: await this.extensions?.heldSecrets() ?? [] };
+      case 'device.pair': return this.pair(params, context);
       case 'device.unpair': return this.unpair(params, context);
-      case 'channel.link': return this.link(params);
+      case 'channel.link': return this.link(params, context);
       case 'confirm.enroll': return this.enrollAgain(params, context);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
@@ -5865,7 +5877,7 @@ export class Core {
     }
     const plant = this.options.plant;
     if (plant === 'answer-on-token' || plant === 'answer-on-peer-check') return;
-    const why = await this.confirmer.you(what, { handle, revision });
+    const why = await this.confirmer.you(what, { handle, revision, process: context.peer });
     if (why) {
       throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.`, handle, true));
     }
@@ -6096,11 +6108,31 @@ export class Core {
     await syncRejected(this.raw, this.root.dir).catch(() => undefined);
     return { overruled: id };
   }
+  /**
+   * A new secret for a package, on the trusted path (#70): it counts as an answer does, so a deep command in an agent's
+   * process tree can't add one, and goes straight to the OS secret store. Neither the value nor anything made from it
+   * is recorded.
+   */
+  private async enterSecret(params: Obj, context: CallContext): Promise<Obj> {
+    const { extension, name, value } = params;
+    if (typeof extension !== 'string' || typeof name !== 'string' || typeof value !== 'string' || !value) throw new Refused(refusal('required', '/params', 'Name the package and the secret, and give its value.', null));
+    if (!this.extensions) throw new Refused(refusal('unavailable', '/params/extension', `${extension} isn't loaded, so nothing can name ${name}.`, extension));
+    await this.trusted(params, context, `add the secret ${name} for ${extension}`, `secret:${extension}/${name}`, name);
+    const { saved, test } = await this.extensions.enterSecret(this.connection('cli'), extension, name, value);
+    return { saved, test };
+  }
+
+  private terminal(): { open: ExtensionHost['openTerminal']; tab: ExtensionHost['tab']; rawInput: ExtensionHost['rawInput'] } {
+    const host = this.extensions;
+    if (!host) throw new Refused(refusal('unavailable', '/method', 'This hub hosts no terminals: its extension host isn\'t open.', null));
+    return { open: (c, spec) => host.openTerminal(c, spec), tab: (c, t) => host.tab(c, t), rawInput: (c, t, text) => host.rawInput(c, t, text) };
+  }
+
   /** Pairs a device's key, once the OS confirms you, so the control token alone can't pair one. */
-  private async pair(params: Obj): Promise<Obj> {
+  private async pair(params: Obj, context: CallContext): Promise<Obj> {
     if (typeof params.name !== 'string' || !params.name) throw new Refused(refusal('required', '/params/name', 'Name the device you pair.', params.name));
     const key = checkKey(params.public_key);
-    const why = await this.confirmer.you(`pair “${params.name.slice(0, 80)}” with DeepBuild, so what it signs answers for you`, { handle: `device:${params.name.slice(0, 80)}`, revision: key });
+    const why = await this.confirmer.you(`pair “${params.name.slice(0, 80)}” with DeepBuild, so what it signs answers for you`, { handle: `device:${params.name.slice(0, 80)}`, revision: key, process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was paired: the OS didn't confirm you (${why}).`, params.name, true));
     const device = `device:${ulid(this.now())}`;
     this.devices.pair(device, params.name, key, this.now());
@@ -6138,11 +6170,11 @@ export class Core {
     return { unpaired: device };
   }
   /** Links your account on a channel, once the OS confirms you (#65): its answers count for "I did it", taste and choice. */
-  private async link(params: Obj): Promise<Obj> {
+  private async link(params: Obj, context: CallContext): Promise<Obj> {
     const { channel, account } = params;
     if (typeof channel !== 'string' || !/^[a-z][a-z0-9-]*$/.test(channel)) throw new Refused(refusal('pattern', '/params/channel', 'Name the channel as it registered.', channel));
     if (typeof account !== 'string' || !account || account.length > 200) throw new Refused(refusal('type', '/params/account', 'Name your account on the channel.', account));
-    const why = await this.confirmer.you(`link the account ${account} on ${channel}, so its "I did it", taste and choice answers count`, { handle: `channel:${channel}`, revision: account });
+    const why = await this.confirmer.you(`link the account ${account} on ${channel}, so its "I did it", taste and choice answers count`, { handle: `channel:${channel}`, revision: account, process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was linked: the OS didn't confirm you (${why}).`, channel, true));
     if (!this.channels) throw new Refused(refusal('unavailable', '', 'The hub has no channels yet; try again once it is ready.', channel, true));
     this.channels.link(channel, account);
@@ -6222,7 +6254,7 @@ export class Core {
       .catch(() => ({ id: undefined, version: undefined, publisher_key: undefined }));
     const key = params.trust_key === true ? m.publisher_key : undefined;
     if (params.trust_key === true && (typeof key !== 'string' || typeof m.id !== 'string')) throw new Refused(refusal('required', '/params/trust_key', 'Only a signed package names a publisher key to trust.', from));
-    const why = await this.confirmer.you(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}`, { handle: `package:${String(m.id)}`, revision: String(m.version) });
+    const why = await this.confirmer.you(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}`, { handle: `package:${String(m.id)}`, revision: String(m.version), process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was installed: the OS didn't confirm you (${why}).`, from, true));
     if (!this.extensions) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', from, true));
     try {
@@ -6295,7 +6327,7 @@ export class Core {
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/params/command', `${what} changed nothing: it runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent changes what watches it. Run it from your own terminal.`, command));
     if (this.options.plant === 'acts-on-peer-check') return { confirmed: command };
-    const why = await this.confirmer.you(what, { handle: `command:${command}`, revision: what });
+    const why = await this.confirmer.you(what, { handle: `command:${command}`, revision: what, process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '/params/command', `${what} changed nothing: the OS didn't confirm you (${why}). It takes effect only once the OS confirms you; run it again and confirm.`, command, true));
     return { confirmed: command };
   }
@@ -6310,7 +6342,7 @@ export class Core {
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing was added: this deep command runs inside agent session ${agent}'s process tree, and no agent changes your rules. Add it from your own terminal.`, 'guard.add'));
     const names = isObj(params.guards) && isObj(params.guards.entries) ? Object.keys(params.guards.entries) : [];
-    const why = await this.confirmer.you(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your rules`, { handle: 'command:guard add', revision: names.join(',') });
+    const why = await this.confirmer.you(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your rules`, { handle: 'command:guard add', revision: names.join(','), process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was added: the OS didn't confirm you (${why}).`, names.join(', '), true));
     return addGuards(this.root.dir, params.guards, { deepHook: deepHook(), classes: toolClasses(), plant: this.options.plant });
   }
@@ -7483,92 +7515,6 @@ export class Core {
   }
 
   // ---- Spool, retention and the test load.
-
-  /**
-   * Replays deep-hook's spool: each line once, in the order it was written. A line that doesn't parse, cut by a
-   * write that never finished, is skipped and recorded naming its offset, and every request after it is kept,
-   * one appended right after the cut bytes included. A file is removed only once its events are in a FULL commit.
-   */
-  private async replaySpool(): Promise<void> {
-    // One try per host for the pass: a spool of stops from one outage holds later hooks for one try at most.
-    const tries = new Map<string, Promise<boolean>>();
-    if (!existsSync(this.root.spool)) return;
-    // Every deep-hook appends to spool.jsonl. It moves aside first, so a hook that spools during the replay begins
-    // a new file, which the next replay takes. A hook whose write lands in the moved file sees the path no longer
-    // names it and writes the line again to the new one (deep-hook's spool), so nothing written late is lost; the
-    // short wait only lets a write in flight finish here rather than read as a cut line.
-    const live = join(this.root.spool, SPOOL);
-    if (existsSync(live)) {
-      // Named after every file a replay kept, whatever the clock says now: the files replay in name order.
-      const kept = readdirSync(this.root.spool).filter((f) => /^replay-[0-9A-HJKMNP-TV-Z]{26}\.jsonl$/.test(f)).sort().at(-1);
-      const after = kept ? ulidTime(kept.slice(7, 33)) + 1 : 0;
-      const moved = join(this.root.spool, `replay-${ulid(Math.max(Date.now(), after))}.jsonl`);
-      renameSync(live, moved);
-      await new Promise((done) => setTimeout(done, 100));
-      // deep-hook syncs spool.jsonl by its name, so a line written just before the move may be synced by no one:
-      // the moved file and the move are synced here before any of it is read.
-      syncPath(moved);
-      syncPath(this.root.spool);
-    }
-    for (const name of readdirSync(this.root.spool).filter((f) => f.endsWith('.jsonl') && f !== SPOOL).sort()) {
-      const file = join(this.root.spool, name);
-      const text = readFileSync(file);
-      this.durable.point('spool_read');
-      let failed = false;
-      // A cut line is recorded once, however often its kept file is replayed.
-      const skip = async (offset: number, reason: string) => {
-        try {
-          const known = await this.record.raw(`SELECT 1 FROM events WHERE kind = 'spool.refused' AND json_extract(data, '$.file') = ? AND json_extract(data, '$.offset') = ? LIMIT 1`, [name, offset]);
-          if (!known.length) await this.appendCore('spool.refused', { file: name, offset, reason });
-        } catch {
-          failed = true;
-        }
-      };
-      for (let offset = 0; offset < text.length;) {
-        // A stopping hub keeps the rest of the file for its next start.
-        if (this.stopping) {
-          failed = true;
-          break;
-        }
-        let end = text.indexOf(0x0a, offset);
-        if (end < 0) end = text.length;
-        const line = text.subarray(offset, end);
-        let parsed = line.length ? parseLine(line, true, this.options.held, this.options.plant) : undefined;
-        if (parsed?.kind === 'refused' && parsed.error.code === 'not_json') {
-          await skip(offset, 'a cut line: a spooled write that never finished, so it does not parse');
-          if (this.options.plant === 'stops-at-first-bad-line') break;
-          // A request appended right after the cut bytes shares their line; each begins as deep-hook writes it.
-          parsed = undefined;
-          for (let at = line.indexOf(REQUEST, 1); at > 0 && !parsed; at = line.indexOf(REQUEST, at + 1)) {
-            const glued = parseLine(line.subarray(at), true, this.options.held, this.options.plant);
-            if (glued.kind !== 'refused' || glued.error.code !== 'not_json') parsed = glued;
-          }
-        }
-        if (parsed?.kind === 'hook') {
-          const { drafts, meta } = parsed;
-          await this.tryNetwork(drafts, meta, tries);
-          await this.queue(() => this.handleHook(drafts, meta, 'hook', true), true).then(({ settled }) => settled).catch((error: unknown) => {
-            failed = true;
-            process.stderr.write(`deep hub: ${name} kept: ${meta.id} not replayed: ${error instanceof Error ? error.message : String(error)}\n`);
-          });
-          // The planted wrong program appends the first event it replays a second time, under a new ID.
-          if (this.options.plant === 'replay-appends-twice' && !this.doubled) {
-            this.doubled = true;
-            const again = ulid(Date.now());
-            await this.queue(() => this.handleHook(drafts.map((d) => ({ ...d, id: again })), { ...meta, id: again }, 'hook', true), true).then(({ settled }) => settled);
-          }
-        } else if (parsed) {
-          await skip(offset, parsed.kind === 'refused' ? `refused: ${parsed.error.code} at ${parsed.error.path || '/'}` : 'not a hook request');
-        }
-        offset = end + 1;
-      }
-      if (failed) continue;
-      // The planted wrong program removes the file with its events still in NORMAL commits only.
-      if (this.options.plant !== 'remove-spool-after-normal') await this.record.sync();
-      rmSync(file);
-      this.durable.point('spool_removal');
-    }
-  }
 
   /** The retention pass (retention.ts). */
   private async retain(): Promise<void> {
