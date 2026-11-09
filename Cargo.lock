@@ -2266,10 +2266,12 @@ dependencies = [
  "deep-canvas-sandbox",
  "deep-sandbox-wasmtime",
  "gimli 0.33.0",
+ "libc",
  "serde_json",
  "sha2 0.10.9",
  "wasmparser 0.258.3",
  "wasmtime",
+ "wat",
 ]
 
 [[package]]

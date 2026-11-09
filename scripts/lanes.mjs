@@ -240,6 +240,8 @@ alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
 alone.push('tests/acceptance/1479/');
 // #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
 alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests/acceptance/531-redraft-ac12/');
+// #532's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome, and read CPU times per frame and per step.
+alone.push('tests/acceptance/532/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
