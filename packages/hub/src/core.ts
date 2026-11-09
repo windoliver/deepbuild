@@ -1940,7 +1940,7 @@ export class Core {
     const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
     const rules = readJson(join(this.root.dir, 'rules.json'));
     const entries = isObj(rules) && isObj(rules.entries) ? rules.entries : {};
-    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
+    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|unrestorable-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
     return blocks.length ? { guard: blocks.join(', ').slice(0, 2000), label: callOf(d, effectEntries(this.root.dir)).label.slice(0, 2000) } : undefined;
   }
 
