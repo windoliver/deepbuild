@@ -60,20 +60,47 @@ pub struct Mesh {
 }
 
 /// What a mesh-edge line draws.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EdgeKind {
     All,
     Quads,
     Cage,
+    /// The edges sharper than `angle` degrees, and with `border` those of one face (#1640).
+    Crease { angle: f64, border: bool },
 }
 
 impl EdgeKind {
-    pub fn named(name: &str) -> Option<EdgeKind> {
-        Some(match name {
-            "all" => EdgeKind::All,
-            "quads" => EdgeKind::Quads,
-            "cage" => EdgeKind::Cage,
-            _ => return None,
+    /// A mesh-edge line's `edges`: its kind, and a crease's `angle` (default 30, 0 to 180) and
+    /// `border` (default true); `Err` names the field it refuses.
+    pub fn read(edges: &Value) -> Result<EdgeKind, &'static str> {
+        // A crease is `"crease"` or `{"crease": {"angle": deg}}`, as other variants with fields.
+        let (name, fields) = match edges.get("kind") {
+            None | Some(Value::Null) => ("quads", &Value::Null),
+            Some(Value::String(s)) => (s.as_str(), &Value::Null),
+            Some(Value::Object(o)) if o.len() == 1 => {
+                let (k, v) = o.iter().next().expect("one key");
+                (k.as_str(), v)
+            }
+            Some(_) => return Err("kind"),
+        };
+        Ok(match name {
+            "all" if fields.is_null() => EdgeKind::All,
+            "quads" if fields.is_null() => EdgeKind::Quads,
+            "cage" if fields.is_null() => EdgeKind::Cage,
+            "crease" => EdgeKind::Crease {
+                angle: match fields.get("angle") {
+                    None | Some(Value::Null) => 30.0,
+                    Some(v) => v
+                        .as_f64()
+                        .filter(|a| (0.0..=180.0).contains(a))
+                        .ok_or("kind/crease/angle")?,
+                },
+                border: match edges.get("border") {
+                    None | Some(Value::Null) => true,
+                    Some(v) => v.as_bool().ok_or("border")?,
+                },
+            },
+            _ => return Err("kind"),
         })
     }
 }
@@ -394,17 +421,7 @@ impl Mesh {
     /// `all` draws every triangle edge, `quads` leaves out an edge both of whose triangles are one
     /// face. `welded: false` is the planted reader that keys edges by vertex index.
     pub fn edges(&self, all: bool, welded: bool) -> Vec<[V3; 2]> {
-        let mut ids: BTreeMap<[i64; 3], u32> = BTreeMap::new();
-        let mut at = Vec::with_capacity(self.positions.len());
-        for (k, p) in self.positions.iter().enumerate() {
-            if !welded {
-                at.push(k as u32);
-                continue;
-            }
-            let key = p.map(|x| (x / 1e-6).round() as i64);
-            let next = ids.len() as u32;
-            at.push(*ids.entry(key).or_insert(next));
-        }
+        let at = self.welded_ids(welded);
         // Each edge by its sorted ends, with the faces of the triangles on it and one position
         // per end.
         let mut edges: BTreeMap<(u32, u32), (Vec<u32>, [V3; 2])> = BTreeMap::new();
@@ -430,6 +447,61 @@ impl Mesh {
             .collect()
     }
 
+    /// Each vertex's point on positions welded to 1e-6 m, numbered in first-seen order; with
+    /// `welded: false`, its own index.
+    fn welded_ids(&self, welded: bool) -> Vec<u32> {
+        if !welded {
+            return (0..self.positions.len() as u32).collect();
+        }
+        let mut ids: BTreeMap<[i64; 3], u32> = BTreeMap::new();
+        self.positions
+            .iter()
+            .map(|p| {
+                let next = ids.len() as u32;
+                *ids.entry(p.map(|x| (x / 1e-6).round() as i64)).or_insert(next)
+            })
+            .collect()
+    }
+
+    /// The edges where the surface turns (Marks in 3D: mesh edges, kind `crease`; #1640), each
+    /// by its two ends, on positions welded to 1e-6 m: an edge whose two triangles' normals part
+    /// by more than `angle` degrees, one more than two triangles meet at, and with `border` one
+    /// that bounds a single triangle. A triangle welding collapses or of no area bounds no edge.
+    /// `below` is #1640's planted reader, which keeps the edges at or under the angle instead.
+    pub fn creases(&self, angle: f64, border: bool, below: bool) -> Vec<[V3; 2]> {
+        let at = self.welded_ids(true);
+        let cos = deep_canvas::ops::cos(deep_canvas::ops::rad(angle));
+        let mut edges: BTreeMap<(u32, u32), (Vec<V3>, [V3; 2])> = BTreeMap::new();
+        for t in 0..self.triangles() {
+            let v = [0, 1, 2].map(|j| self.indices[3 * t + j]);
+            let w = v.map(|i| at[i as usize]);
+            let p = v.map(|i| self.positions[i as usize]);
+            let n = cross(sub(p[1], p[0]), sub(p[2], p[0]));
+            if w[0] == w[1] || w[1] == w[2] || w[0] == w[2] || dot(n, n) < 1e-24 {
+                continue;
+            }
+            for j in 0..3 {
+                let (i, k) = (v[j], v[(j + 1) % 3]);
+                let (a, b) = (w[j], w[(j + 1) % 3]);
+                let ends = if a < b { [i, k] } else { [k, i] };
+                edges
+                    .entry((a.min(b), a.max(b)))
+                    .or_insert_with(|| (Vec::new(), ends.map(|e| self.positions[e as usize])))
+                    .0
+                    .push(unit(n));
+            }
+        }
+        edges
+            .into_values()
+            .filter(|(n, _)| match n.as_slice() {
+                [_] => border,
+                [a, b] => (dot(*a, *b) < cos) != below,
+                _ => true,
+            })
+            .map(|(_, ends)| ends)
+            .collect()
+    }
+
     /// The edges a mesh-edge line of `kind` draws (Marks in 3D: mesh edges): `cage` the quads
     /// the stack left before its first subdivide (the mesh's own quads when it has none), with
     /// #440's planted readers: `quads_keep_diagonals` (quads drawn as all) and
@@ -442,7 +514,44 @@ impl Mesh {
                 Some(cage) if planted != Some("cage_reads_subdivided") => cage.clone(),
                 _ => self.edges(false, true),
             },
+            EdgeKind::Crease { angle, border } => {
+                self.crease_set(angle, border, planted).0.as_ref().clone()
+            }
         }
+    }
+
+    /// The crease set and whether this call derived it: derived once per content key (its
+    /// positions and triangles, the angle and `border`) and kept while the process runs, at most
+    /// 64 sets. #1640's planted readers: `crease_below_angle` keeps the edges under the angle,
+    /// `edges_derive_every_frame` skips the cache.
+    pub fn crease_set(
+        &self,
+        angle: f64,
+        border: bool,
+        planted: Option<&str>,
+    ) -> (std::sync::Arc<Vec<[V3; 2]>>, bool) {
+        use std::collections::HashMap;
+        use std::sync::{Arc, Mutex, OnceLock};
+        static MADE: OnceLock<Mutex<HashMap<[u8; 16], Arc<Vec<[V3; 2]>>>>> = OnceLock::new();
+        let below = planted == Some("crease_below_angle");
+        let mut h = deep_canvas::schedule::Hasher::new("scene3d.creases");
+        h.bytes(&(&self.positions, &self.indices).canonical_bytes())
+            .bytes(&angle.to_le_bytes())
+            .int(i64::from(border) | (i64::from(below) << 1));
+        let key = h.finish().0;
+        let made = MADE.get_or_init(Default::default);
+        let cached = planted != Some("edges_derive_every_frame");
+        if let Some(set) = cached.then(|| made.lock().ok()?.get(&key).cloned()).flatten() {
+            return (set, false);
+        }
+        let set = Arc::new(self.creases(angle, border, below));
+        if let (true, Ok(mut m)) = (cached, made.lock()) {
+            if m.len() >= 64 {
+                m.clear();
+            }
+            m.insert(key, set.clone());
+        }
+        (set, true)
     }
 
     /// The mesh as the `geometry` call reports it.

@@ -1,0 +1,17 @@
+[package]
+name = "deep-canvas-media"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #499: the media module's own processing code (canvas primitives: Sound and video on the
+# picture's clock): strips on tracks, buses with processors that checkpoint their tails, emitters,
+# the audio clock and a video's frame at t. Named deep-canvas* so the canvas lint reads it: every
+# transcendental goes through deep-canvas's ops module on pinned libm.
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+sha2 = "0.10"
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }

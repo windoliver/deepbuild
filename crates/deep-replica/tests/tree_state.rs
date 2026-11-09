@@ -141,8 +141,8 @@ fn the_snapshot_holds_the_menu_bar_title_and_the_ringed_row_as_focus() {
     let before = drive.see();
     assert_eq!(
         before["menu_bar"]["title"],
-        with_id(&before, "ask:").len().to_string(),
-        "the menu bar counts the asks Needs you lists"
+        format!("{} asks need you", with_id(&before, "ask:").len()),
+        "the menu bar counts the asks Needs you lists, in #1455's sentence"
     );
     assert_eq!(
         before["focus"],

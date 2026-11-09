@@ -1,0 +1,25 @@
+Not run: the disk this job ran on is nearly full and shared with other sessions, so no cargo build was made and no
+vitest run. What follows is read from the base's source, not from a run.
+
+At the base (worktree head 42319109, holding f1e8736e and #531's deep-logic), both tests fail because the surface they
+drive doesn't exist:
+
+- deep-show run has #498's gate calls (open, close, play, gate, output, reserved) and reads no `audio` field: there is
+  no test audio backend, no device but #498's ideal 48 kHz one, and `output` ignores `device`. It has no `transport`,
+  `audio_device` or `full_state` call (crates/deep-show/src/main.rs and gate.rs parse none of them), so it answers
+  `{"ok": false, "code": "bad_input"}` to any scenario holding one. Its `planted` values don't include
+  clock_follows_display, backend_keeps_removed_device or clock_restarts_from_sample_0. Its `gate` reply has no
+  `notice`, and `open` takes no `piece`: deep-show runs no logic item.
+
+- follow.test.ts (criterion 1): the first step (open, your click) can answer ok, since unknown scenario fields are read
+  with `get` and ignored; the second step carries `transport` and answers bad_input, so the test fails at
+  "ten minutes: the play: deep-show run answers the scenario ok …".
+
+- switch.test.ts (criterion 11): deep-logic builds and its bake of the fixture game can run (the headless half); the
+  live game's second step carries `transport` and answers bad_input, so the test fails at "the live game: the play's
+  first second: deep-show run answers the scenario ok …".
+
+At f1e8736e itself there is also no deep-logic, so switch.test.ts fails earlier, at
+`cargo build --locked --bin deep-logic`.
+
+That is the missing behaviour, not a test mistake.

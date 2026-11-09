@@ -233,6 +233,9 @@ pub fn visible(boxes: Vec<(String, [f64; 4])>, scale: f64, size: [u16; 2]) -> Va
 pub struct Renderer {
     shaper: Shaper,
     resources: Resources,
+    /// #499: each video asset's frame at the time being drawn, by asset, set before a frame is
+    /// prepared; an image mark of one draws it in place of a decoded picture.
+    pub videos: BTreeMap<String, Arc<Pixmap>>,
 }
 
 fn color(c: Rgb) -> AlphaColor<Srgb> {
@@ -337,19 +340,43 @@ fn decode(evidence: &Path, asset: &str, item: &str) -> Result<Arc<Pixmap>, Unfit
     let (Ok(w), Ok(h)) = (u16::try_from(w), u16::try_from(h)) else {
         return unfit("out_of_range", path);
     };
+    Ok(pixmap_of(rgba.into_raw(), w, h))
+}
+
+/// Whether the evidence store's file for `asset` is a movie (an MP4 or MOV box at its start).
+fn is_video_file(evidence: &Path, asset: &str) -> bool {
+    use std::io::Read;
+    let (Some(a), Some(b)) = (asset.get(..2), asset.get(2..)) else {
+        return false;
+    };
+    let mut head = [0u8; 8];
+    std::fs::File::open(evidence.join(a).join(b))
+        .and_then(|mut f| f.read_exact(&mut head))
+        .is_ok_and(|()| &head[4..] == b"ftyp" || &head[4..] == b"moov")
+}
+
+/// An opaque or premultiplied RGBA picture as the raster draws it.
+pub fn pixmap_of(rgba: Vec<u8>, w: u16, h: u16) -> Arc<Pixmap> {
     let meta = vello_cpu::PixelMetadata::new(vello_cpu::peniko::ImageAlphaType::Alpha, true);
-    Ok(Arc::new(Pixmap::from_parts(rgba.into_raw(), w, h, meta)))
+    Arc::new(Pixmap::from_parts(rgba, w, h, meta))
 }
 
 /// Every image `frame` draws, decoded once each.
 fn decode_all(
     frame: &scene::Frame,
     evidence: &Path,
+    videos: &BTreeMap<String, Arc<Pixmap>>,
 ) -> Result<BTreeMap<String, Arc<Pixmap>>, Unfit> {
     let mut images = BTreeMap::new();
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
         if let Mark::Image { item, asset, .. } = &drawn.mark {
-            if !images.contains_key(asset) {
+            if let Some(frame) = videos.get(asset) {
+                images.insert(asset.clone(), frame.clone());
+            } else if is_video_file(evidence, asset) {
+                // #499: a video's frame comes from the decode worker for the time drawn; a
+                // drawing made without one leaves the item empty rather than misread.
+                continue;
+            } else if !images.contains_key(asset) {
                 images.insert(asset.clone(), decode(evidence, asset, item)?);
             }
         }
@@ -362,6 +389,7 @@ impl Renderer {
         Renderer {
             shaper: Shaper::new(),
             resources: Resources::new(),
+            videos: BTreeMap::new(),
         }
     }
 
@@ -390,7 +418,7 @@ impl Renderer {
             frame.size[1],
             &mut self.shaper,
         ));
-        let images = decode_all(&frame, evidence)?;
+        let images = decode_all(&frame, evidence, &self.videos)?;
         // Each text mark's font names a role the shaper bundles.
         for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
             if let Mark::Text { item, spec, .. } = &drawn.mark {
@@ -437,7 +465,7 @@ impl Renderer {
             frame: drawing.frame.clone(),
             boxes: Vec::new(),
             status,
-            images: decode_all(&drawing.frame, evidence)?,
+            images: decode_all(&drawing.frame, evidence, &self.videos)?,
             runs: drawing.runs.clone(),
             animated: drawing.animated.clone(),
             view: None,
@@ -723,6 +751,7 @@ impl Renderer {
                 sampling,
                 opacity,
                 adjust,
+                crop,
                 ..
             } => {
                 let Some(pixmap) = drawn.images.get(asset) else {
@@ -740,7 +769,14 @@ impl Renderer {
                     adjusted = Arc::new(image(straight, size, 1.0, adjust));
                     &adjusted
                 };
-                let size = [u32::from(pixmap.width()), u32::from(pixmap.height())];
+                // #499: a crop (image px) is the part of the picture the box shows.
+                let [cx, cy, cw, ch] = crop.unwrap_or([
+                    0.0,
+                    0.0,
+                    f64::from(pixmap.width()),
+                    f64::from(pixmap.height()),
+                ]);
+                let size = [cw.round().max(1.0) as u32, ch.round().max(1.0) as u32];
                 let [x, y, w, h] = fit.fitted(*bounds, size);
                 ctx.set_paint(Image {
                     image: ImageSource::Pixmap(pixmap.clone()),
@@ -751,7 +787,8 @@ impl Renderer {
                 });
                 ctx.set_paint_transform(
                     Affine::translate((x, y))
-                        * Affine::scale_non_uniform(w / f64::from(size[0]), h / f64::from(size[1])),
+                        * Affine::scale_non_uniform(w / cw.max(1e-9), h / ch.max(1e-9))
+                        * Affine::translate((-cx, -cy)),
                 );
                 let [bx, by, bw, bh] = *bounds;
                 let shown = Rect::new(

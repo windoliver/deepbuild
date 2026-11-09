@@ -23,6 +23,7 @@ pub mod chrome;
 #[cfg(feature = "chrome-fixture")]
 pub mod chrome_fixture;
 pub mod chrome_fx;
+pub mod chrome_gallery;
 pub mod commands;
 pub mod confirm;
 pub mod device;
@@ -117,13 +118,14 @@ pub fn stocks() -> Vec<Stock> {
 }
 
 /// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); then what the app
-/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count.
+/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count
+/// sentence (#1455).
 pub fn menu_bar_line() -> String {
     match setup::count().or_else(|| notify::reach().short()) {
         Some(line) => line.to_owned(),
         None if record::older().is_some() => "Hub is older".to_owned(),
         None if !record::connected() => "No hub".to_owned(),
-        None => views::count().to_string(),
+        None => views::asks_need_you(views::count()),
     }
 }
 
@@ -304,6 +306,9 @@ pub fn init(cx: &mut App) {
     views::register_views(cx);
     card::init(cx);
     commands::init(cx);
+    // Chrome effects hold their still pose under macOS's Reduce Motion (#1436).
+    #[cfg(target_os = "macos")]
+    cx.set_reduce_motion(objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion());
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")
