@@ -662,6 +662,14 @@ pub fn role_exports(role: &str) -> Option<&'static [(&'static str, ExternalKind)
             ("out_at", Global),
         ],
         "validator" => &[("memory", Memory), ("validate", Func), ("in_at", Global)],
+        // A logic item (Logic `logic@1`: Exports; #531).
+        "logic" => &[
+            ("memory", Memory),
+            ("init", Func),
+            ("step", Func),
+            ("reads_at", Global),
+            ("writes_at", Global),
+        ],
         "migration" => &[("old_at", Global), ("remap_at", Global), ("new_at", Global)],
         _ => return None,
     })
