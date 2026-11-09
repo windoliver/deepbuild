@@ -439,6 +439,44 @@ struct Usage {
     interrupts: u64,
     /// User and system CPU, every thread's, in ns.
     cpu_ns: u64,
+    /// Energy, in nanojoules.
+    energy_nj: u64,
+}
+
+/// The kernel's `rusage_info_v6`: libc stops at v4, and v6 is where Apple Silicon's energy counter is.
+#[repr(C)]
+struct RusageV6 {
+    v4: libc::rusage_info_v4,
+    ri_flags: u64,
+    ri_user_ptime: u64,
+    ri_system_ptime: u64,
+    ri_pinstructions: u64,
+    ri_pcycles: u64,
+    ri_energy_nj: u64,
+    ri_penergy_nj: u64,
+    reserved: [u64; 14],
+}
+
+/// The counter the idle report's energy reading comes from.
+const ENERGY_COUNTER: &str = "ri_energy_nj";
+
+/// Energy this process has used, in nanojoules, as the kernel counts it; 0 when the counter reads zero or the call fails.
+fn energy_nj() -> u64 {
+    // SAFETY: an all-zero RusageV6 is valid for the call to fill.
+    let mut info: RusageV6 = unsafe { std::mem::zeroed() };
+    // SAFETY: `info` is laid out as rusage_info_v6, the flavor asked for (6).
+    let status = unsafe {
+        libc::proc_pid_rusage(
+            libc::getpid(),
+            6,
+            (&raw mut info).cast::<libc::rusage_info_t>(),
+        )
+    };
+    if status == 0 {
+        info.ri_energy_nj
+    } else {
+        0
+    }
 }
 
 fn usage() -> Usage {
@@ -459,6 +497,7 @@ fn usage() -> Usage {
         wakeups: info.ri_pkg_idle_wkups,
         interrupts: info.ri_interrupt_wkups,
         cpu_ns: ns(ru.ru_utime) + ns(ru.ru_stime),
+        energy_nj: energy_nj(),
     }
 }
 
@@ -1552,6 +1591,8 @@ impl Renderer {
                 "drawn": drawn, "wakeups": after.wakeups - before.wakeups,
                 "interrupt_wakeups": after.interrupts - before.interrupts, "cpu_ms": cpu_ms,
                 "cpu_fraction": cpu_ms / (seconds * 1000.0),
+                // A reading only; 0 when the counter reads zero.
+                "energy": { "counter": ENERGY_COUNTER, "nj": after.energy_nj.saturating_sub(before.energy_nj) },
             }))
         })();
         self.close(session);
