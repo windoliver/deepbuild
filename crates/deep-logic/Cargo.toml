@@ -1,0 +1,27 @@
+[package]
+name = "deep-logic"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #531: the logic module (canvas primitives: Logic `logic@1`): a logic item's check, its
+# steps at a fixed rate on sandbox@1's rewritten bytes (#238), its regions, seeds, checkpoints,
+# restores, traps by source line and logic.budget, and the web player's runtime for the same
+# bytes. It runs the program in wasmtime, so like deep-sandbox-wasmtime it stays outside the
+# canvas lint's scope: every value a check reads is what the rewritten program computes.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
+deep-sandbox-wasmtime = { path = "../deep-sandbox-wasmtime" }
+wasmtime = { version = "=49.0.2", default-features = false, features = ["cranelift", "runtime", "std", "addr2line"] }
+wasmparser = { version = "=0.258.3", default-features = false, features = ["std", "validate", "features", "simd"] }
+addr2line = { version = "=0.26.1", default-features = false }
+gimli = { version = "=0.33.0", default-features = false, features = ["read", "std", "endian-reader"] }
+base64 = "0.22"
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+sha2 = "0.10"
+
+[[bin]]
+name = "deep-logic"
+path = "src/main.rs"

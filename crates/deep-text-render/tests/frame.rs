@@ -91,9 +91,10 @@ fn two_labels_of_different_text_on_one_page_are_one_upload() {
 
 #[test]
 fn a_label_that_fills_the_atlas_is_drawn_whole_and_so_are_its_neighbors() {
-    // 175 distinct letters and digits, Latin, Greek and Cyrillic; at 250 px about 30 fill a page,
-    // so the two big labels (one per size, each glyph a raster of its own) need more than the
-    // atlas's eight pages, and the second starts the atlas over partway through.
+    // 175 distinct letters and digits, Latin, Greek and Cyrillic, eight times over so each glyph
+    // meets all eight sub-pixel phases: 1,400 rasters a label. Glyphs above 64 device px draw as
+    // paths (#1479), so the big labels stay at 64 px and under, one size each; drawn alone they
+    // take 11 pages between them, more than the atlas's eight, so a later one starts it over.
     let alphabet: String = (0x41..0x5b)
         .chain(0x61..0x7b)
         .chain(0x30..0x3a)
@@ -103,17 +104,43 @@ fn a_label_that_fills_the_atlas_is_drawn_whole_and_so_are_its_neighbors() {
         .map(|c| char::from_u32(c).unwrap())
         .collect();
     assert_eq!(alphabet.chars().count(), 175);
+    let text = alphabet.repeat(8);
+    let big: Vec<(u32, u32, [u8; 3])> = vec![
+        (300, 64, [255, 0, 0]),
+        (390, 60, [0, 255, 0]),
+        (480, 56, [0, 0, 255]),
+        (570, 52, [255, 255, 0]),
+    ];
     let dir =
         std::env::temp_dir().join(format!("deep-text-render-rollover-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let out = dir.join("card.png");
-    let answers = render(&format!(
-        "{{\"out\":{:?},\"card\":{{\"w\":400,\"h\":400,\"color\":[0,0,0]}},\"labels\":[{},{},{}]}}\n",
-        out.to_str().unwrap(),
-        tinted("Ready", 10, 250, [255, 255, 255]),
-        tinted(&alphabet, 300, 250, [255, 0, 0]),
-        tinted(&alphabet, 600, 240, [0, 255, 0]),
-    ));
+    let card = |labels: &[String]| {
+        format!(
+            "{{\"out\":{:?},\"card\":{{\"w\":400,\"h\":400,\"color\":[0,0,0]}},\"labels\":[{}]}}\n",
+            out.to_str().unwrap(),
+            labels.join(","),
+        )
+    };
+    // Each big label alone, in a fresh process: together they need more pages than there are.
+    let alone: usize = big
+        .iter()
+        .map(|&(y, size, color)| {
+            let answer = &render(&card(&[tinted(&text, y, size, color)]))[0];
+            assert_eq!(answer["ok"], true, "{answer}");
+            answer["pages"].as_array().unwrap().len()
+        })
+        .sum();
+    assert!(
+        alone > 8,
+        "the big labels alone take {alone} pages, so drawn together they must start the atlas over"
+    );
+    let mut labels = vec![tinted("Ready", 10, 64, [255, 255, 255])];
+    labels.extend(
+        big.iter()
+            .map(|&(y, size, color)| tinted(&text, y, size, color)),
+    );
+    let answers = render(&card(&labels));
     let _ = std::fs::remove_dir_all(&dir);
     let answer = &answers[0];
     assert_eq!(answer["ok"], true, "{answer}");
@@ -122,16 +149,13 @@ fn a_label_that_fills_the_atlas_is_drawn_whole_and_so_are_its_neighbors() {
         5,
         "the label before the rollover: {answer}"
     );
-    assert_eq!(
-        sprites(answer, [255, 0, 0]),
-        175,
-        "the first big label: {answer}"
-    );
-    assert_eq!(
-        sprites(answer, [0, 255, 0]),
-        175,
-        "the label that filled the atlas: {answer}"
-    );
+    for &(_, size, color) in &big {
+        assert_eq!(
+            sprites(answer, color),
+            1_400,
+            "the {size} px label is drawn whole: {answer}"
+        );
+    }
     assert!(
         answer["pages"].as_array().unwrap().len() <= 8,
         "no frame draws from more pages than the atlas holds: {answer}"

@@ -1,0 +1,75 @@
+Two runs: the suite's base, dd83ac2f (items 1-8 in, 9-11 not), and 3d30b4ef (the base of PR #1403, before items 1-8).
+
+Built first in each checkout: npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-hook
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1359 --no-file-parallelism
+  with DEEP1359_OLD_NODE=~/.cache/uv/archive-v0/66o0bdjpQoLIZW6n/playwright/driver/node (Node 20.11.0, Playwright's own;
+  the only Node older than 24.22.0 on this machine), and for the second run DEEP1359_CHECKOUT=<a temporary git worktree of
+  3d30b4ef, built as above, removed afterwards>.
+Date: 2026-11-08  Machine: Mac17,10 (Apple M5 Max), macOS 27.2, 1-minute load about 35 to 70 (other sessions)
+Node: ~/.local/share/fnm/node-versions/v24.22.0 (v24.22.0)  vitest 5.0.5
+
+=== Run 1: base dd83ac2fc7c6563b2d395d154bc877032ba16ec1 (main, 2026-11-08) ===
+Exit code: 1
+Result: Test Files 3 failed | 8 passed (11); Tests 16 failed | 19 passed (35). Duration 53 s.
+
+Passed (AC1-AC8, implemented by PR #1403):
+  AC1 doctor-fix.test.ts (2), AC2 lasting-node.test.ts (3), AC3 setup-lines.test.ts (2), AC4 help-words.test.ts (2),
+  AC5 status-empty.test.ts (1), AC6 old-node.test.ts (1, under Node 20.11.0: all 47 commands exit 2 naming 24.22.0 and
+  20.11.0, home unchanged), AC7 no-cargo.test.ts (1), AC8 readme.test.ts (5).
+Passed, as the base is the wrong program they guard against:
+  AC10 "the table fails on the planted dispatches-before-help, naming deep backup": the base's own deep backup --help
+    dispatches, so the table names it with or without the plant. Once the fix lands it passes only if the plant is in.
+  AC11 "deep xyzzy exits 2, names deep --help and no command": the base prints "Unsupported command. Run deep --help for
+    available commands." (a regression guard for the suggestion's reach).
+
+Failed, each at its named assertion (none at a load error):
+  AC9 help-acts-nothing.test.ts, all 13:
+    deep status --help and deep inbox -h: "deep status --help wrote in a home nobody set up (exit 3, ... stderr "deep hub
+      start: .../refusing-launcher exited 1: deep setup: the hub didn't start through its login service ...")":
+      "the home: the first file written was .deepbuild/setup-stopped.json (added); 16 paths changed in all: added
+      .deepbuild, .deepbuild/setup-stopped.json, .deepbuild/rules.json, .deepbuild/setup.json,
+      .deepbuild/claude-hooks.json, .deepbuild/config.json, .claude, .claude/settings.json, .claude.json, .claude/skills/
+      deepbuild, ..." -- setup ran before the command read its arguments (item 10).
+    status help, inbox -h answer, inbox answer a1 help, off --help, on -h, env up --help, install help, guard add -h,
+      memory --help --json, memory keep help: the same, setup's 16 paths, first file .deepbuild/setup-stopped.json.
+    The table: "55 of 55 commands acted on --help": the item-10 commands wrote setup's 16 paths; every other command
+      exited 2 (most with their usage on stderr, mcp, kinds, update and debug bundle with "Unsupported command"), and
+      numbers baseline, rules credit, session rules and backup tried the hub's socket.
+  AC10 help-table.test.ts, 2 of 3:
+    deep backup --help with the hub running: "deep backup --help wrote in the working folder: the first file written was
+      --help/wiki/you.md (added)" (stdout "Backed up the record, its evidence and its wiki to <work>/--help. ...", exit 0), as the
+      issue's comment reproduced.
+    The table: "7 of 55 commands acted on --help": numbers baseline, memory keep, memory remove, memory overrule, rules
+      credit, session rules and backup each "opened a socket: <pid> connect <home>/.deepbuild/hub.sock; reached the hub
+      1 time".
+  AC11 unknown-command.test.ts, 1 of 2: "deep stauts must name the nearest real command, deep status; the suggestion is
+    missing: exit 2, stdout "", stderr "Unsupported command. Run deep --help for available commands.""
+
+=== Run 2: 3d30b4ef (base of PR #1403), built in a temporary worktree, pointed at with DEEP1359_CHECKOUT ===
+Exit code: 1
+Result: Test Files 11 failed (11); Tests 30 failed | 5 passed (35). Duration 41 s.
+
+Failed, each for its criterion's reason:
+  AC1 "in a home nobody set up, names deep setup and never deep hub start": fix "Run `deep hub start`; deep setup
+    installs it as a login service." (the set-up half passes: it names deep hub start, as before).
+  AC2 "under a Homebrew Node whose opt link runs the same Node": "the login service .../com.deepbuild.hub.plist must start
+    <prefix>/opt/node/bin/node, which brew upgrade keeps: expected '<prefix>/Cellar/node/24.22.0/bin/node'" (the two
+    "elsewhere" cases pass).
+  AC3 both: stdout holds the summary and five lines "OK stop hold holds ...", "OK waiter holds ...", "OK deep_ask holds
+    ...", "OK stop continuations hold ...", "OK asks and batches hold ..." (and, with MCP_TOOL_TIMEOUT 5000, the BROKEN
+    line beside the four OK ones).
+  AC4 both: "deep help: exit 2, stderr "Unsupported command. ..."", the same for deep -h.
+  AC5: "exit 0, stdout "Reading the hub at unix:...\n0 sessions\n"": no next step.
+  AC6: "under Node 20.11.0 ..., 47 of 47 commands didn't stop first": e.g. "deep : exited 0; named no Node 24.22.0; named
+    not the Node found, 20.11.0".
+  AC7: "setup's stop reason in stderr must name rustup: stderr "deep setup: spawnSync cargo ENOENT"".
+  AC8 all 5: the README says "running the skeleton installs no hooks and starts no service"; no paragraph says deep setup
+    and deep status set DeepBuild up, none says to start a Claude Code or Codex session, none says to build again after
+    a pull, and deep setup --undo is not named.
+  AC9 all 13, AC10 2 of 3 (the table: "5 of 43 commands"), AC11 deep stauts: as in run 1.
+Passed: AC1's set-up half, AC2's two "elsewhere" cases, AC10's plant case and AC11's deep xyzzy, for the reasons above.
+
+Harness checks made while writing (not kept as tests): the command list parses to the 55 above at dd83ac2f (43 at
+3d30b4ef); the spy saw the base's numbers baseline --help connect to the fixture hub; a command that only prints its usage
+(deep setup --help at the base) left the home, the working folder and the spy log unchanged in both the fresh-home and
+the fixture-hub tables.

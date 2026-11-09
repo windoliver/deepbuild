@@ -1,7 +1,6 @@
 // A latency check (#37): the changed journeys or commands timed on the branch and on the merge base, the same number
 // of runs each, failing when the branch is slower by more than the proof bar's margin, showing both times.
-export interface Timed { side: 'branch' | 'base'; ms: number[] }
-export interface LatencyVerdict {
+interface LatencyVerdict {
   outcome: 'passed' | 'failed' | 'INVALID';
   branch: { runs: number; median: number };
   base: { runs: number; median: number };
@@ -9,7 +8,7 @@ export interface LatencyVerdict {
   margin: number;
   message: string;
 }
-export const median = (xs: readonly number[]): number => {
+const median = (xs: readonly number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
   return s.length ? (s.length % 2 ? s[(s.length - 1) / 2]! : (s[s.length / 2 - 1]! + s[s.length / 2]!) / 2) : NaN;
 };

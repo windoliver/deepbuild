@@ -9,6 +9,7 @@
 //! and screenshot capture via [`HeadlessAppContext::capture_screenshot`].
 
 mod present_frame; // DeepBuild patch (windoliver/deepbuild#391)
+mod request_frame; // DeepBuild patch (windoliver/deepbuild#1546)
 mod scale_factor; // DeepBuild patch (windoliver/deepbuild#390)
 
 use crate::{

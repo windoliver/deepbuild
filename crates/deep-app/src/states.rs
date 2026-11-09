@@ -88,10 +88,9 @@ impl State {
                 expected_ms: Some(ms),
             } => format!("says done · checks take {}", span(*ms)),
             State::Quiet { last_seen } => {
-                format!(
-                    "quiet · last seen {} ago",
-                    span(now.saturating_sub(*last_seen))
-                )
+                let age = now.saturating_sub(*last_seen);
+                changes_after(changes_in(age));
+                format!("quiet · last seen {} ago", span(age))
             }
             other => other.word().to_owned(),
         }
@@ -110,6 +109,35 @@ pub fn span_until(deadline: u64, now: u64) -> String {
     } else {
         span(left)
     }
+}
+
+thread_local! {
+    /// In ms from the `now` it was written at, when the soonest age a state's text showed since [`ages_written`]
+    /// next reads differently (#1546).
+    static AGE_CHANGES: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+/// When the soonest age written since the last call next reads differently, in ms from the `now` it was written at;
+/// `None` when no text written since showed an age. A view draws its texts, then takes this to set its next tick.
+pub fn ages_written() -> Option<u64> {
+    AGE_CHANGES.with(std::cell::Cell::take)
+}
+
+/// Notes that something just written from the clock reads differently `wait` ms from now.
+pub fn changes_after(wait: u64) {
+    AGE_CHANGES.with(|soonest| {
+        soonest.set(Some(soonest.get().map_or(wait, |was: u64| was.min(wait))));
+    });
+}
+
+/// How long until [`span`] of an age `ms` reads differently: at the next whole second, minute or hour it shows.
+pub fn changes_in(ms: u64) -> u64 {
+    let unit = match ms / 1000 {
+        s if s >= 3600 => 3_600_000,
+        s if s >= 60 => 60_000,
+        _ => 1000,
+    };
+    unit - ms % unit
 }
 
 /// A span of time as a person reads it: "4 min", "2 h", "12 s".
@@ -781,6 +809,28 @@ pub fn menu(table: &Table, now: u64) -> Vec<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.
+    #[test]
+    fn an_age_changes_exactly_when_its_span_next_reads_differently() {
+        let ages = (0..200_000)
+            .step_by(997)
+            .chain([59_999, 60_000, 90_000, 3_599_999, 3_600_000, 7_300_123]);
+        for age in ages {
+            let wait = changes_in(age);
+            assert!(wait > 0, "{age}");
+            assert_eq!(
+                span(age + wait - 1),
+                span(age),
+                "{age} reads the same until {wait} ms on"
+            );
+            assert_ne!(
+                span(age + wait),
+                span(age),
+                "{age} reads differently {wait} ms on"
+            );
+        }
+    }
 
     fn table(events: &[Value]) -> Table {
         let mut table = Table::default();

@@ -59,7 +59,7 @@ const CHANGE = /^(?:add|make|fix|implement|change|update|remove|delete|drop|crea
 const ASKS = /^(?:why|what|how|where|when|which|who|whose|is|are|was|were|does|do|did|can|could|would|should|will|has|have|explain|describe|tell me|walk me through|summari[sz]e|list|compare)\b/i;
 
 /** Whether a prompt you typed asks for new or changed behavior: not a question, and not a rename alone. */
-export function asksForChange(text: string): boolean {
+function asksForChange(text: string): boolean {
   const clauses = text.trim().split(/[;\n]+|\.\s+|,?\s+\b(?:and then|and|then|also)\b\s+/i).map((c) => c.trim().replace(LEAD, '')).filter(Boolean);
   if (!clauses.length) return false;
   // A rename changes no behavior; it is judged by the repo's spec alone, unless another clause asks for a change.
@@ -94,7 +94,7 @@ const WRONG_CASE = /\b(?:fails?(?:\s+it)?|must fail|is refused|is rejected|is de
 /** The proof depth: a unit test, an integration test, a journey (end to end, a browser, a simulator), or a live run. */
 const DEPTH = /\b(?:unit(?:\s+test)?s?|integration(?:\s+test)?s?|end[- ]to[- ]end|e2e|journey|browser|playwright|cypress|simulator|emulator|live(?:\s+run)?|in production|against the (?:app|stack|server)|proven by|through the (?:api|cli|ui|command|route|page))\b/i;
 /** The parts a criterion lacks, each as the flag names it: its observable, its threshold with its unit, the wrong case, its depth. */
-export function lintCriterion(text: string, plant?: Plant | undefined): { observable: boolean; threshold: boolean; unit: boolean; wrong_case: boolean; depth: boolean } {
+function lintCriterion(text: string, plant?: Plant | undefined): { observable: boolean; threshold: boolean; unit: boolean; wrong_case: boolean; depth: boolean } {
   const t = thresholds(text);
   // The planted wrong program only looks for a number: any number passes as a threshold with its unit.
   const threshold = plant === 'lint-number-only' ? /\d/.test(text) : t.threshold;
@@ -102,7 +102,7 @@ export function lintCriterion(text: string, plant?: Plant | undefined): { observ
   return { observable: OBSERVABLE.test(text), threshold, unit, wrong_case: WRONG_CASE.test(text), depth: DEPTH.test(text) };
 }
 /** What the flag says a criterion lacks, in words; empty when it lacks nothing. */
-export function lacking(text: string, plant?: Plant | undefined): string[] {
+function lacking(text: string, plant?: Plant | undefined): string[] {
   const l = lintCriterion(text, plant);
   return [
     ...(l.observable ? [] : ['its observable']),
@@ -119,7 +119,7 @@ function depthOf(text: string): string {
   return 'unit';
 }
 /** A criterion's ID as scripts/proof-change.mjs computes it: #<issue>.<first 8 hex of the SHA-256 of its text, trimmed, white space collapsed>. */
-export const criterionId = (issue: number, text: string): string => `#${issue}.${sha256Hex(new TextEncoder().encode(text.trim().replace(/\s+/g, ' '))).slice(0, 8)}`;
+const criterionId = (issue: number, text: string): string => `#${issue}.${sha256Hex(new TextEncoder().encode(text.trim().replace(/\s+/g, ' '))).slice(0, 8)}`;
 /** The issue number a work item's source ID ends with (`owner/repo#12`, `item-12`), or undefined. */
 const issueNumber = (source_id: string): number | undefined => { const m = /(\d+)$/.exec(source_id); return m ? Number(m[1]) : undefined; };
 
@@ -128,7 +128,7 @@ const issueNumber = (source_id: string): number | undefined => { const m = /(\d+
 interface Requirement { expected_ms?: number; deadline_ms?: number; runs?: number; held_out?: HeldOut[]; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind; timing?: boolean }
 interface Author { handle: string; role: string; automated?: boolean }
 /** A held-out variant of a check (#1018): the files written over the claim's checkout for a run of its own, kept by digest. */
-export interface HeldOut { files: Record<string, string> }
+interface HeldOut { files: Record<string, string> }
 interface Handed { ask?: string; issue?: string; requirements: Obj[]; deliverables?: string[]; budget?: JsonValue; waives?: { id: string; source_line: string }[]; kind?: unknown; plan?: unknown }
 /**
  * A task's plan (#324), handed with its definition: whether it marks the issue as large, and its scope section, the
@@ -175,7 +175,7 @@ function hasForm(s: Surface): boolean {
   return s.kind === 'page';
 }
 
-export interface AskTaskOptions {
+interface AskTaskOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   asks: () => Asks;
   now: () => number;

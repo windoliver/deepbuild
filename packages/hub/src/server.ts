@@ -10,7 +10,6 @@ import net from 'node:net';
 import tls from 'node:tls';
 import { basename, dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
-import { JUDGE_FAULTS } from '@deepbuild/gate';
 import type { HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
@@ -262,7 +261,9 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
   };
 }
 
-function parserPool(held: string[], plant: Plant | undefined): Parsers {
+function parserPool(given: readonly string[], plant: Plant | undefined): Parsers {
+  // The pool's own list: each scrub's values join it, so a parser started later begins with all its elder was sent.
+  const held = [...given];
   const pending = new Map<number, (parsed: Parsed) => void>();
   let n = 0;
   const make = () => {
@@ -273,20 +274,23 @@ function parserPool(held: string[], plant: Plant | undefined): Parsers {
     });
     return worker;
   };
-  // One parser for small lines and one kept for large ones.
+  // One parser for small lines, and one for large ones, started at the first: an idle hub holds one thread fewer.
   const small = make();
-  const big = make();
+  let big: Worker | undefined;
   return {
     parse(chunks, first) {
       const size = chunks.reduce((sum, c) => sum + c.length, 0);
-      const worker = size > BIG ? big : small;
+      const worker = size > BIG ? (big ??= make()) : small;
       return new Promise((resolve) => {
         pending.set(++n, resolve);
         worker.postMessage({ n, chunks, first });
       });
     },
-    scrub(values) { for (const worker of [small, big]) worker.postMessage({ scrub: values }); },
-    close: async () => { await Promise.all([small, big].map((w) => w.terminate())); },
+    scrub(values) {
+      held.push(...values);
+      for (const worker of [small, big]) worker?.postMessage({ scrub: values });
+    },
+    close: async () => { await Promise.all([small, big].map((w) => w?.terminate())); },
   };
 }
 /** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
@@ -1421,7 +1425,8 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
   // The kit gate@1's fault for rows no commit reaches (#33): only the kit sets it, and a name it doesn't know stops the hub.
   const fault = process.env.DEEP_HUB_TEST_JUDGE_FAULT;
-  if (fault && !(JUDGE_FAULTS as readonly string[]).includes(fault)) throw Error(`DEEP_HUB_TEST_JUDGE_FAULT=${fault} names no fault the kit plays`);
+  // The gate's modules load only then: the hub's thread runs none of them.
+  if (fault && !((await import('@deepbuild/gate')).JUDGE_FAULTS as readonly string[]).includes(fault)) throw Error(`DEEP_HUB_TEST_JUDGE_FAULT=${fault} names no fault the kit plays`);
   plantedStart(plant);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.

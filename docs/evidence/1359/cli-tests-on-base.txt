@@ -1,0 +1,122 @@
+Base: dd83ac2f (main), packages/cli/src/main.ts at the base, the new tests in packages/cli/test/cli.test.ts
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run packages/cli/test/cli.test.ts -t 'help|unknown command'
+Node 24.22.0, 2026-11-08
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-1359-ee77ac
+
+ ❯ packages/cli/test/cli.test.ts (17 tests | 6 failed | 6 skipped) 2084ms
+   ❯ deep <command> --help (5)
+     × deep status --help in a fresh home prints its usage and leaves the home byte-identical 457ms
+     × deep inbox -h in a fresh home prints its usage and leaves the home byte-identical 236ms
+     × deep memory help in a fresh home prints its usage and leaves the home byte-identical 308ms
+     × deep backup --help with a hub running writes no folder and calls no hub 216ms
+     × deep backup -h with a hub running writes no folder and calls no hub 213ms
+   ❯ an unknown command (2)
+     × names the command a typo meant, on one stderr line 63ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/cli/test/cli.test.ts > deep <command> --help > deep status --help in a fresh home prints its usage and leaves the home byte-identical
+AssertionError: deep status --help wrote /private/tmp/deep-cli-help-0Uitme/.deepbuild (deep setup: deep-hook isn't built and cargo isn't installed: install Rust with rustup (https://rustup.rs), then run cargo build --locked -p deep-hook in the checkout, or npm run build): expected '/private/tmp/deep-cli-help-0Uitme/.de…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"/private/tmp/deep-cli-help-0Uitme/.deepbuild"
+
+ ❯ packages/cli/test/cli.test.ts:99:107
+     97|       const after = snapshot(home);
+     98|       const written = [...after].find(([path, state]) => before.get(pa…
+     99|       expect(written, `deep ${command} ${word} wrote ${written} (${res…
+       |                                                                                                           ^
+    100|       expect(result.status).toBe(0);
+    101|       expect(result.stdout).toContain(`deep ${command}`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  packages/cli/test/cli.test.ts > deep <command> --help > deep inbox -h in a fresh home prints its usage and leaves the home byte-identical
+AssertionError: deep inbox -h wrote /private/tmp/deep-cli-help-IeKkxL/.deepbuild (deep setup: deep-hook isn't built and cargo isn't installed: install Rust with rustup (https://rustup.rs), then run cargo build --locked -p deep-hook in the checkout, or npm run build): expected '/private/tmp/deep-cli-help-IeKkxL/.de…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"/private/tmp/deep-cli-help-IeKkxL/.deepbuild"
+
+ ❯ packages/cli/test/cli.test.ts:99:107
+     97|       const after = snapshot(home);
+     98|       const written = [...after].find(([path, state]) => before.get(pa…
+     99|       expect(written, `deep ${command} ${word} wrote ${written} (${res…
+       |                                                                                                           ^
+    100|       expect(result.status).toBe(0);
+    101|       expect(result.stdout).toContain(`deep ${command}`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  packages/cli/test/cli.test.ts > deep <command> --help > deep memory help in a fresh home prints its usage and leaves the home byte-identical
+AssertionError: deep memory help wrote /private/tmp/deep-cli-help-VmfhRC/.deepbuild (deep setup: deep-hook isn't built and cargo isn't installed: install Rust with rustup (https://rustup.rs), then run cargo build --locked -p deep-hook in the checkout, or npm run build): expected '/private/tmp/deep-cli-help-VmfhRC/.de…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"/private/tmp/deep-cli-help-VmfhRC/.deepbuild"
+
+ ❯ packages/cli/test/cli.test.ts:99:107
+     97|       const after = snapshot(home);
+     98|       const written = [...after].find(([path, state]) => before.get(pa…
+     99|       expect(written, `deep ${command} ${word} wrote ${written} (${res…
+       |                                                                                                           ^
+    100|       expect(result.status).toBe(0);
+    101|       expect(result.stdout).toContain(`deep ${command}`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  packages/cli/test/cli.test.ts > deep <command> --help > deep backup --help with a hub running writes no folder and calls no hub
+ FAIL  packages/cli/test/cli.test.ts > deep <command> --help > deep backup -h with a hub running writes no folder and calls no hub
+AssertionError: deep backup called the hub: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ packages/cli/test/cli.test.ts:124:51
+    122|         child.on('close', (status) => done({ status, stdout }));
+    123|       });
+    124|       expect(calls, 'deep backup called the hub').toBe(0);
+       |                                                   ^
+    125|       expect(existsSync(join(home, word)), `deep backup made ${join(ho…
+    126|       expect(result.status).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  packages/cli/test/cli.test.ts > an unknown command > names the command a typo meant, on one stderr line
+AssertionError: expected 'Unsupported command. Run deep --help …' to contain 'deep status'
+
+- Expected
++ Received
+
+- deep status
++ Unsupported command. Run deep --help for available commands.
++
+
+ ❯ packages/cli/test/cli.test.ts:142:27
+    140|     expect(result.stdout).toBe('');
+    141|     expect(result.stderr.trim().split('\n')).toHaveLength(1);
+    142|     expect(result.stderr).toContain('deep status');
+       |                           ^
+    143|   });
+    144|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 5 passed | 6 skipped (17)
+   Start at  16:18:38
+   Duration  2.32s (tests 94%, import 3%, transform 2%)
+
