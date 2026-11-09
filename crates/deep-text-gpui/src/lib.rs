@@ -121,6 +121,23 @@ pub struct Painted {
     /// Pages this paint handed GPUI at a generation the window didn't hold (none when every
     /// label was prepared before the frame's first paint, or once the pages are warm).
     pub uploaded: usize,
+    /// Atlas bytes this paint handed this window's GPUI atlas (#1480): a rect counts its own
+    /// bytes, a whole page [`PAGE`]².
+    pub upload_bytes: usize,
+    /// The rects (page, x, y, w, h) it wrote into pages the window already held.
+    pub upload_rects: Vec<(u32, [u32; 4])>,
+    /// Whole-page uploads: a page at a new generation, or one the window fell behind on.
+    pub upload_whole_pages: usize,
+}
+
+/// What a window holds of one atlas page (#1480).
+struct Held {
+    generation: u32,
+    /// The page's rects this window has read up to ([`deep_text::Page::written`]).
+    read: u64,
+    /// The generation the page is uploaded under: the page's own, except in the planted
+    /// whole-page path.
+    key: u32,
 }
 
 struct Text {
@@ -131,7 +148,11 @@ struct Text {
     frame: HashSet<ShapeKey>,
     /// Per window (each has its own sprite atlas), the generation of each page it holds, so a
     /// changed page is uploaded again, once, and the page it replaces is let go.
-    uploaded: HashMap<WindowId, HashMap<u32, u32>>,
+    uploaded: HashMap<WindowId, HashMap<u32, Held>>,
+    /// The (w, h) of each glyph rasterized since [`take_new_glyphs`], while watched.
+    new_glyphs: Option<Vec<(u32, u32)>>,
+    /// The planted pre-#1480 path: see [`plant_whole_page_upload`].
+    whole_page: bool,
 }
 
 impl Text {
@@ -142,6 +163,8 @@ impl Text {
             shaped: HashMap::new(),
             frame: HashSet::new(),
             uploaded: HashMap::new(),
+            new_glyphs: None,
+            whole_page: false,
         }
     }
 
@@ -181,10 +204,16 @@ impl Text {
             for glyph in &shaped.glyphs {
                 let (x, px) = pen(origin[0] + glyph.x * scale);
                 let (y, py) = pen(origin[1] + glyph.y * scale);
-                match self
+                let before = self.atlas.rasterized();
+                let at = self
                     .atlas
-                    .glyph_at(&glyph.font, glyph.id, glyph.size * scale, [px, py])
-                {
+                    .glyph_at(&glyph.font, glyph.id, glyph.size * scale, [px, py]);
+                if let (Some(place), Some(log)) = (at, &mut self.new_glyphs) {
+                    if self.atlas.rasterized() > before {
+                        log.push((place.w, place.h));
+                    }
+                }
+                match at {
                     Some(place) => placed.push((place, x, y, glyph.grapheme)),
                     None if !restarted && self.atlas.make_room() => {
                         restarted = true;
@@ -213,6 +242,29 @@ thread_local! {
 /// The label's shaped run, shaped on first sight and reused after.
 pub fn shape(label: &Label) -> Arc<Shaped> {
     TEXT.with(|text| text.borrow_mut().shape(label))
+}
+
+/// Starts, or stops, recording the bitmap size of each glyph the atlas rasterizes, for the proof
+/// binary's report; [`take_new_glyphs`] drains it.
+pub fn watch_new_glyphs(on: bool) {
+    TEXT.with(|text| text.borrow_mut().new_glyphs = on.then(Vec::new));
+}
+
+/// The (w, h) of the glyphs rasterized since the last call, while watched.
+pub fn take_new_glyphs() -> Vec<(u32, u32)> {
+    TEXT.with(|text| {
+        text.borrow_mut()
+            .new_glyphs
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    })
+}
+
+/// The planted twin of #1480: on, every changed page goes to every window whole under a new
+/// generation, as before the rect path. Only the proof binary turns it on.
+pub fn plant_whole_page_upload(on: bool) {
+    TEXT.with(|text| text.borrow_mut().whole_page = on);
 }
 
 /// The size a label takes, for a layout that sizes to its text.
@@ -299,7 +351,10 @@ pub fn paint_runs(
             })
             .collect();
         let Text {
-            atlas, uploaded, ..
+            atlas,
+            uploaded,
+            whole_page,
+            ..
         } = &mut *text;
         let mut painted = Painted {
             rasterized: atlas.rasterized() - before,
@@ -310,33 +365,116 @@ pub fn paint_runs(
         let held = uploaded
             .entry(window.window_handle().window_id())
             .or_default();
-        held.retain(|&page, &mut generation| {
+        held.retain(|&page, h| {
             let current = atlas
                 .pages()
                 .get(page as usize)
-                .is_some_and(|current| current.generation() == generation);
+                .is_some_and(|current| current.generation() == h.generation);
             if !current {
                 retire(
                     window,
                     RenderMaskParams {
                         atlas: ATLAS,
                         page,
-                        generation,
+                        generation: h.key,
                     },
                 );
             }
             current
         });
+        // Each page this paint draws from is brought up to what the atlas has, once: new rects
+        // only, or the whole page for a window that fell behind (#1480).
+        let mut synced: Vec<u32> = Vec::new();
+        for (place, ..) in &placed {
+            if synced.contains(&place.page) {
+                continue;
+            }
+            synced.push(place.page);
+            let page = &atlas.pages()[place.page as usize];
+            let (generation, written) = (page.generation(), page.written());
+            let mut params = RenderMaskParams {
+                atlas: ATLAS,
+                page: place.page,
+                generation,
+            };
+            let whole = |painted: &mut Painted| {
+                painted.upload_bytes += (PAGE * PAGE) as usize;
+                painted.upload_whole_pages += 1;
+            };
+            match held.get(&place.page) {
+                Some(h) if h.read == written => continue,
+                Some(h) if !*whole_page => {
+                    params.generation = h.key;
+                    let rects: Option<Vec<_>> = page.changed_since(h.read).map(Iterator::collect);
+                    let all = deep_text::Rect {
+                        x: 0,
+                        y: 0,
+                        w: PAGE,
+                        h: PAGE,
+                    };
+                    let todo = rects.as_deref().unwrap_or(std::slice::from_ref(&all));
+                    let ok = todo.iter().all(|r| {
+                        window.write_mask_rect(
+                            params.clone(),
+                            device_rect(r),
+                            page.bytes(),
+                            PAGE as usize,
+                        )
+                    });
+                    if ok {
+                        if rects.is_some() {
+                            for r in todo {
+                                painted.upload_bytes += (r.w * r.h) as usize;
+                                painted
+                                    .upload_rects
+                                    .push((place.page, [r.x, r.y, r.w, r.h]));
+                            }
+                        } else {
+                            whole(&mut painted);
+                        }
+                        held.get_mut(&place.page).expect("held").read = written;
+                        continue;
+                    }
+                    // The window's atlas can't write a rect, or lost the page: the sprite below
+                    // uploads it whole.
+                    window.remove_mask_page(params.clone());
+                }
+                Some(h) => retire(
+                    window,
+                    RenderMaskParams {
+                        generation: h.key,
+                        ..params.clone()
+                    },
+                ),
+                None => {}
+            }
+            // A page at a new generation, or the planted path's every change: whole, once, by the
+            // first sprite drawn from it.
+            params.generation = if *whole_page {
+                generation
+                    .wrapping_mul(1 << 16)
+                    .wrapping_add(written as u32)
+            } else {
+                generation
+            };
+            whole(&mut painted);
+            painted.uploaded += 1;
+            held.insert(
+                place.page,
+                Held {
+                    generation,
+                    read: written,
+                    key: params.generation,
+                },
+            );
+        }
         for (place, x, y, color) in placed {
             let page = &atlas.pages()[place.page as usize];
             let params = RenderMaskParams {
                 atlas: ATLAS,
                 page: place.page,
-                generation: page.generation(),
+                generation: held[&place.page].key,
             };
-            if held.insert(place.page, page.generation()) != Some(page.generation()) {
-                painted.uploaded += 1;
-            }
             let bounds = Bounds {
                 origin: point(px(x as f32 / scale), px(y as f32 / scale)),
                 size: size(px(place.w as f32 / scale), px(place.h as f32 / scale)),
@@ -365,4 +503,11 @@ pub fn paint_runs(
         }
         painted
     })
+}
+
+fn device_rect(r: &deep_text::Rect) -> Bounds<DevicePixels> {
+    Bounds {
+        origin: point(DevicePixels(r.x as i32), DevicePixels(r.y as i32)),
+        size: size(DevicePixels(r.w as i32), DevicePixels(r.h as i32)),
+    }
 }

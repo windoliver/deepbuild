@@ -1,0 +1,29 @@
+#432 acceptance suite at the base, 0c3b9d48 (Merge pull request #1696), before any implementation.
+
+Not run at the base: no cargo binary was built and no test was run there, to spare a shared machine under load, and because
+the surfaces plainly don't exist (checked by reading the base):
+
+- crates/deep-gpu-layer/src/main.rs: Planted::parse knows none of warms_in_use_at_t0, fuses_default_options or
+  warms_view_only, so `deep-gpu run --planted <name>` prints {"ok": false, "code": "bad_input"} and exits 2. The three
+  planted tests (product, finish, shadows) fail at startup.
+- crates/deep-gpu-layer/src/live.rs: `parse` accepts only the events open, close, revise, hold, camera, rung, canonical
+  and window_state, so a live call with an `input` event is answered {"code": "bad_input"} (product.test.ts, finish.test.ts
+  fail at "was answered, not refused"). Its view rows carry no `created` and no `operator_pipelines`, so every live reply
+  fails to read (depth-equal.test.ts's first-frame test, fusion.test.ts, finish.test.ts's edit orders, shadows.test.ts).
+  Its pass rows carry no `key` and no `operators`, and nothing reads `calibration`.
+- crates/deep-canvas-effects/src/graph.rs: FIELDS has no `fuse`, so the unfused chain's operators are refused as
+  unknown fields; `inline_functions` resolves `use@1` only against packs' step functions, so `use@1 {name: "blur@1"}`
+  is refused and check_operator answers no `parts` (blur-split.test.ts).
+- Nothing at the base reads a document's `variants`; a control's `binds` is read by the 2D draw path
+  (crates/deep-canvas/src/draw.rs) as a bool written to its path, with no `range` or `options` mapping; and nothing
+  enumerates reachable feature sets at check, so the cap figure isn't refused over_budget (product.test.ts).
+
+What may pass at the base, and isn't credited: depth-equal.test.ts's first test (a fade's color pass meets its depth pass;
+scene3d.wgsl's MeshOut already marks its position @invariant for fades, #424). AC1 still fails at the base on its second
+test.
+
+Checked instead: `tsc -p tests/acceptance/432/tsconfig.json` exits 0 (with node_modules linked from the owner's checkout for
+the type-check only, not committed); and by node on helpers.ts, every fixture document builds (10 documents, from 4 to 70
+items), the frame of the first time after 2.9 s at 30 fps is 89 (t = 2.933 s) and of 4 s is 121, the ball's frame corner
+is 3.62 m from its centre (inside its 5 m radius), and the finish figure carries the variant sets time, medium and look
+(nine options).

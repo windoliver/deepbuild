@@ -2,6 +2,7 @@ mod app_menu;
 mod keyboard;
 mod keystroke;
 mod mask_params; // DeepBuild patch (windoliver/deepbuild#390)
+mod mask_rect; // DeepBuild patch (windoliver/deepbuild#1480)
 
 #[cfg(all(target_os = "linux", feature = "wayland"))]
 #[expect(missing_docs)]
@@ -83,6 +84,7 @@ pub use app_menu::*;
 pub use keyboard::*;
 pub use keystroke::*;
 pub use mask_params::RenderMaskParams; // DeepBuild patch (windoliver/deepbuild#390)
+pub use mask_rect::AtlasRectBackend; // DeepBuild patch (windoliver/deepbuild#1480)
 
 /// Whether the platform is presenting a window's frames.
 ///
@@ -1752,6 +1754,8 @@ pub trait PlatformAtlas {
         build: &mut dyn FnMut() -> Result<Option<(Size<DevicePixels>, Cow<'a, [u8]>)>>,
     ) -> Result<Option<AtlasTile>>;
     fn remove(&self, key: &AtlasKey);
+    /// DeepBuild patch (windoliver/deepbuild#1480): writes a rectangle of a page, see `mask_rect`.
+    fn write_rect(&self, _: &AtlasKey, _: Bounds<DevicePixels>, _: &[u8], _: usize) -> bool { false }
 
     #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
     fn contains(&self, _key: &AtlasKey) -> bool {
