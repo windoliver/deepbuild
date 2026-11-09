@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "0189c3fcaeb309bf1a2eddaa3d6c07ee0a0290522b27252661a7a7d856e32f8c",
+    "digest": "ce42b24c487adb99cb71a86508d1d1eaafb73602025a20f64340e4bd6d33e852",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -161,13 +161,18 @@
   },
   "media": {
     "version": "1.0.0",
-    "digest": "646fb0ad6aeeb16878bcda7109cde8f549c03841904e3cab4c21972c67cb73c3",
+    "digest": "3248cd86932ae98bf199c04e9a4f48fff1784e69696b9f95934b1079dfdbed98",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
+      "read_set": "PASS",
+      "order": "PASS",
       "schedule": "PASS",
+      "repair_loop": "PASS",
+      "carried_state": "PASS",
+      "time_order": "PASS",
       "catalog": "PASS"
     }
   },
