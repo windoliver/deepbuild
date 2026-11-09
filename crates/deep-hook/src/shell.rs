@@ -2129,7 +2129,7 @@ impl Reader {
             }
         }
         at.scripted = true;
-        self.shell(&text, &at, cwd, env, Stdin::default());
+        self.shell(text, &at, cwd, env, Stdin::default());
         None
     }
 
