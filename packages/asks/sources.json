@@ -1484,6 +1484,83 @@
     }
   },
   {
+    "source": "library.fetch",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Fetch oak-chair from ext.shelf.library: 1,276 bytes in 2 files, under CC-BY-4.0 (credit: Ana Ruiz, Shelf)?",
+        "options": [
+          {
+            "id": "fetch",
+            "label": "Fetch it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't fetch it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "7c4a1e0b9d8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "7c4a1e0b9d8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "library.unblock",
+    "kind": "unblock",
+    "fixture": {
+      "ask": {
+        "kind": "unblock",
+        "question": "ext.shelf.library can't fetch shelf-armchair: its license, LicenseRef-shelf-standard, is one DeepBuild doesn't know. Read its terms?",
+        "options": [
+          {
+            "id": "done",
+            "label": "I did it",
+            "decision": "none"
+          }
+        ],
+        "recommended": "done",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "done",
+        "provisional": false,
+        "owner": "you",
+        "key": "8d5b2f1c0e9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "8d5b2f1c0e9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c"
+        },
+        "steps": [
+          "Read the license's terms at https://shelf.example/license",
+          "If you accept them, add LicenseRef-shelf-standard to the library's standing rule, and fetch it again"
+        ],
+        "where": "the library's site",
+        "why": "an unknown license is never treated as free",
+        "unblocks": [
+          "req:8d5b2f1c0e9a8b7c"
+        ],
+        "proves": "license of shelf-armchair"
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "claim.stalled",
     "kind": "exception",
     "fixture": {
