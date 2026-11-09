@@ -148,6 +148,13 @@ impl Arena {
     }
 
     fn force_clear(&mut self) {
+        // DeepBuild patch (windoliver/deepbuild#499): an arena nothing was allocated in since its
+        // last clear has handed out no box, so it keeps its validity cell and allocates nothing:
+        // a frame that is only presented again (a video surface's new contents) stays at zero.
+        if self.elements.is_empty() && self.current_chunk_index == 0 {
+            self.chunks[0].reset();
+            return;
+        }
         self.valid.set(false);
         self.valid = Rc::new(Cell::new(true));
         self.elements.clear();

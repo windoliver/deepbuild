@@ -230,6 +230,8 @@ deep-sandbox-wasmtime = { path = "../deep-sandbox-wasmtime" }
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 # Issue #498: the decode worker and the encode tool, which this binary's copies run as.
 deep-codecs = { path = "../deep-codecs" }
+# Issue #499: a video's frame at t, looked up in its stream's own time base.
+deep-canvas-media = { path = "../deep-canvas-media" }
 # Issue #309: the network seam's macOS backend and relay@1.
 deep-relay = { path = "../deep-relay" }
 deep-gpu = { path = "../deep-gpu" }

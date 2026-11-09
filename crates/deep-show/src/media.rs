@@ -92,6 +92,8 @@ pub struct Media {
     encoder: Option<Helper>,
     /// Proxies and exports so far, which name their scratch files.
     exports: usize,
+    /// #499: video assets' probes and decoded frames.
+    pub video: crate::video::Cache,
 }
 
 /// The worker-side name of a planted wrong program, if it is one the decode worker runs.
@@ -171,12 +173,19 @@ impl Hub<'_> {
                 job.insert("out".into(), json!(tmp.to_string_lossy()));
                 let (mut reply, pid) = self.media_job(DECODE_WORKER, Value::Object(job));
                 reply["worker"] = json!({"pid": pid});
-                // The proxy is kept by its hash beside the asset.
-                if let Ok(bytes) = std::fs::read(&tmp) {
-                    let _ = evidence::put(&self.scenario.evidence, &bytes);
+                // #499: the worker's scaled frames encoded by the encode tool into a short-GOP
+                // H.264 file (the worker never encodes), kept by its hash beside the asset.
+                if let Ok(raw) = std::fs::read(&tmp) {
                     let _ = std::fs::remove_file(&tmp);
-                    if let Some(p) = reply.get_mut("proxy").and_then(Value::as_object_mut) {
-                        p.remove("path");
+                    match self.encode_proxy(&raw, &tmp) {
+                        Ok(bytes) => {
+                            let sha = evidence::put(&self.scenario.evidence, &bytes).ok();
+                            if let Some(p) = reply.get_mut("proxy").and_then(Value::as_object_mut) {
+                                p.remove("path");
+                                p.insert("sha256".into(), json!(sha));
+                            }
+                        }
+                        Err(e) => return e,
                     }
                 }
                 reply
@@ -192,6 +201,41 @@ impl Hub<'_> {
                 json!({"workers": list})
             }
         }
+    }
+
+    /// #499: a proxy's raw frames (the worker's header line, then I420 frames) through the encode
+    /// tool at the proxy's GOP; the MP4's bytes.
+    fn encode_proxy(&mut self, raw: &[u8], tmp: &std::path::Path) -> Result<Vec<u8>, Value> {
+        let end = raw
+            .iter()
+            .position(|b| *b == b'\n')
+            .ok_or_else(|| refused("bad_proxy"))?;
+        let head: Value = serde_json::from_slice(&raw[..end]).map_err(|_| refused("bad_proxy"))?;
+        let (w, h) = (
+            head["size"][0].as_u64().unwrap_or(0) as usize,
+            head["size"][1].as_u64().unwrap_or(0) as usize,
+        );
+        let frame = w * h * 3 / 2;
+        let pts: Vec<i64> = (head["pts"].as_array().into_iter().flatten())
+            .filter_map(|p| p[0].as_i64())
+            .collect();
+        let timescale = head["pts"][0][1].as_i64().unwrap_or(1);
+        let dir = tmp.with_extension("frames");
+        std::fs::create_dir_all(&dir).map_err(|_| refused("proxy_unwritable"))?;
+        let mut paths = Vec::new();
+        for (k, f) in raw[end + 1..].chunks_exact(frame.max(1)).enumerate() {
+            let p = dir.join(format!("{k}.yuv"));
+            std::fs::write(&p, f).map_err(|_| refused("proxy_unwritable"))?;
+            paths.push(p.to_string_lossy().into_owned());
+        }
+        let out = tmp.with_extension("mp4");
+        let job = json!({"op": "encode", "frames": paths, "pts": pts, "timescale": timescale,
+            "size": [w, h], "gop": head["gop"], "out": out.to_string_lossy()});
+        let (coded, _) = self.media_job(ENCODE_TOOL, job);
+        let _ = std::fs::remove_dir_all(&dir);
+        let bytes = std::fs::read(&out).map_err(|_| coded.clone())?;
+        let _ = std::fs::remove_file(&out);
+        Ok(bytes)
     }
 
     /// #397 (canvas primitives: Asset: tables): the table's bytes kept in the evidence store by

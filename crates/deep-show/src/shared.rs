@@ -1372,6 +1372,9 @@ impl Hub<'_> {
         if !three && !issues.iter().any(|i| i.severity == "error" && !i.carried) {
             // Each recipe instance's derived items draw in its place (#306).
             let shown = drawable(&crate::packs::drawn(&doc, &result.expansions));
+            // #499: a video image item draws its frame at the revision's time.
+            let (_, pictures) = self.videos_at(&shown, show.t, false);
+            self.renderer.videos = pictures;
             match self.renderer.prepare(
                 shown.as_object().expect("a document is an object"),
                 show.t,
