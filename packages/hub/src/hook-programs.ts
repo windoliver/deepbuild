@@ -4,6 +4,7 @@
 // `deep doctor` and the hub both read this.
 import { accessSync, constants, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { ADAPTERS } from '@deepbuild/adapters';
 import { claudeSettings, installed } from './claude-settings.js';
 import { recordedEntries, recordedHome } from './codex-settings.js';
 
@@ -44,8 +45,9 @@ export function unrunnable(root: string): Unrunnable[] {
 export const describe = (u: Unrunnable): string =>
   `DeepBuild's ${u.events.join(', ')} hook entr${u.events.length === 1 ? 'y' : 'ies'} in ${u.file} run${u.events.length === 1 ? 's' : ''} ${u.path}, which is ${u.why}`;
 
-/** The agents whose hooks each agent's settings carry: Cursor's CLI and Grok run the hooks in Claude Code's. */
-export const RUN_BY: Readonly<Record<Unrunnable['agent'], readonly string[]>> = { 'claude-code': ['claude-code', 'claude', 'cursor', 'grok'], codex: ['codex'] };
+const mappedBy = (adapter: string): string[] => Object.keys(ADAPTERS).filter((agent) => ADAPTERS[agent] === adapter);
+/** The agents whose hooks each agent's settings carry, as the adapters map them: Cursor's CLI and Grok run the hooks in Claude Code's. */
+export const RUN_BY: Readonly<Record<Unrunnable['agent'], readonly string[]>> = { 'claude-code': mappedBy('claude'), codex: mappedBy('codex') };
 /** A session's reading while its agent's hooks can't run, and the one once they can again (#993). */
 export const CANT_RUN = 'BLOCKED: hooks can\'t run';
 export const CAN_RUN = 'Hooks can run again';

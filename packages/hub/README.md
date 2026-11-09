@@ -6,7 +6,7 @@ The hub daemon on its socket (#16), the one writer to the record and evidence st
 
 ## Where new code goes
 
-- `src/server.ts`: the socket and event loop; `src/core.ts`: the core, run in a worker (`src/core-worker.ts`); `src/wire.ts`: what crosses the socket and threads.
+- `src/server.ts`: the socket and event loop; `src/core.ts`: the core, run in a worker (`src/core-worker.ts`); `src/wire.ts`: what crosses the socket and threads. `src/log-reads.ts`: the log's pages, read-ahead and stream, a seam of the core's with its own state.
 - `src/hub-command.ts`: `deep hub run | start | status | stop | use`, the package's `./hub` entry, so the running hub loads the server's modules and none of the other commands'.
 - `src/stacks.ts`: worktree and check-run stack policy (`deep env`, `deep_env`, #331, #332), through a supplied lifecycle provider. The composition root currently supplies env-local. Runtime selection of an installed `environment@1` remains unimplemented; the empty release list is a separate limitation, not proof that replacement works.
 - `src/teardowns.ts`: the teardown task each outside resource gets, from the `resources` of a repo's done.yaml and its sessions' own calls (#342); only its check closes it.
