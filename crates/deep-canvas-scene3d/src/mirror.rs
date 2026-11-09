@@ -115,6 +115,26 @@ pub fn find<'a>(
     }))
 }
 
+/// #166: a water's own mirror (Material: water): at strength 1 with no blur, in the plane of its
+/// first part, over its parts. `None` when that part isn't planar.
+pub fn own(layers: &[Layer3], eye: Vec3, water: &crate::water::Water) -> Option<Mirror> {
+    let plane = water.parts.iter().next()?;
+    let part = layers
+        .iter()
+        .flat_map(|l| &l.solids)
+        .find(|s| &s.id == plane)?;
+    let (normal, offset) = plane_of(part, eye)?;
+    Some(Mirror {
+        material: water.material.clone(),
+        parts: water.parts.clone(),
+        plane: plane.clone(),
+        normal,
+        offset,
+        strength: 1.0,
+        blur: 0.0,
+    })
+}
+
 /// A planar part's plane: its thinnest axis, through its face toward `eye`. `None` for a part
 /// that isn't planar (its thinnest side over a tenth of the next).
 fn plane_of(part: &crate::scene::Solid, eye: Vec3) -> Option<(Vec3, f64)> {
@@ -228,6 +248,7 @@ pub fn view(scene: &Scene, m: &Mirror, size: [u32; 2]) -> Scene {
     };
     s.set_cutaway(Some(cutaway));
     s.mirror = None;
+    s.read_reflection = false;
     // A flare is the lens's, not the reflection's.
     s.flare = None;
     s

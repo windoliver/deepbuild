@@ -689,6 +689,13 @@ pub struct Scene {
     pub mirror: Option<crate::mirror::Mirror>,
     /// The view's flare (#465; Effect: flare): the first `effect@1` of kind flare.
     pub flare: Option<Arc<crate::flare::Flare>>,
+    /// The view's water (#166; Material: water), which its own pass draws after the mirror's.
+    pub water: Option<Arc<crate::water::Water>>,
+    /// #166: whether the view reads back each mirror part's lookup (view3d's `reflection`).
+    pub read_reflection: bool,
+    /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
+    /// in item order. They draw nothing in the look.
+    pub probes: Vec<crate::probe::Probe>,
 }
 
 impl Scene {
@@ -1730,6 +1737,8 @@ fn evaluate_any(
     let Some(map) = doc.as_object() else {
         return refused("out_of_range", "");
     };
+    // #166: a wake behind an item a logic array moves, refused at check before anything else.
+    crate::water::logic_moved(map)?;
     let program = Program::compile(map).map_err(|r| Refused {
         code: r.code,
         path: r.path,
@@ -1890,7 +1899,7 @@ fn lod_of(
 }
 
 /// A built solid's world bounds' corners.
-fn corners_of(s: &Solid) -> Vec<Vec3> {
+pub(crate) fn corners_of(s: &Solid) -> Vec<Vec3> {
     let Some(mesh) = &s.mesh else {
         return Vec::new();
     };
@@ -2174,6 +2183,7 @@ pub(crate) fn evaluate_compiled(
     let mut instancers: Vec<(usize, String)> = Vec::new();
     let mut cutaway = None;
     let mut flare: Option<Arc<crate::flare::Flare>> = None;
+    let mut probe_items: Vec<crate::probe::Wanted> = Vec::new();
     // The IES tables the lights name (#446).
     let mut tables: Vec<Arc<crate::ies::Distribution>> = Vec::new();
     for layer_id in &order {
@@ -2622,6 +2632,11 @@ pub(crate) fn evaluate_compiled(
                     )?);
                 }
                 "cutaway@1" => {}
+                // #427: a probe draws nothing; its capture is made once the lights are read.
+                "light.probe@1" => {
+                    let pos = origin(&world(&items, id));
+                    probe_items.push(crate::probe::read(id, params, pos, &path)?);
+                }
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),
@@ -2822,6 +2837,7 @@ pub(crate) fn evaluate_compiled(
         return refused("out_of_range", "budget/puffs");
     }
     crate::sets::compile(map, &mut lights, &mut layers)?;
+    let probes = probes(map, probe_items, &lights, &layers, sky.as_ref())?;
     // #149: a drawing look lights its marks from its own light, with no Light item.
     if let (None, true, Some(l)) = (&sun, lights.is_empty(), drawn_light(look)) {
         sun = Some(l);
@@ -2858,10 +2874,142 @@ pub(crate) fn evaluate_compiled(
         ),
         mirror: None,
         flare,
+        water: None,
+        read_reflection: false,
+        probes,
     };
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
+    // #166: the water, its wake's path, and its own mirror unless a material names one.
+    let seed = map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
+    if let Some(mut w) = crate::water::find(&scene.layers, |id| items.get(id), seed, seconds)? {
+        if let Some(wake) = &mut w.wake {
+            let step = frame_interval(map);
+            wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
+            let times = crate::water::wake_times(t, step, wake.span);
+            wake.path = wake_path(map, program, &items, &w.material, &wake.item, &times)?;
+        }
+        if scene.mirror.is_none() {
+            scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &w);
+        }
+        scene.water = Some(Arc::new(w));
+    }
     Ok(scene)
+}
+
+/// #166: where a wake's item stood in the water's plane (x, z) at each of `times`, read through
+/// the chain a trail reads: its channels and parents, or a physics bake's output kept through the
+/// world's span, never an earlier frame ([`crate::water::logic_moved`] refuses an item a logic
+/// array moves before this).
+fn wake_path(
+    map: &Map<String, Value>,
+    program: &Program,
+    items: &Items<'_>,
+    material: &str,
+    item: &str,
+    times: &[i64],
+) -> Result<Vec<[f64; 2]>, Refused> {
+    let unresolved = || {
+        refused(
+            "ref_unresolved",
+            format!("items/{material}/params/water/wake/item"),
+        )
+    };
+    // A body of a baked world: `<world>#<body>`.
+    if let Some((owner, body)) = item.split_once('#') {
+        let Some(world) = items
+            .get(owner)
+            .filter(|w| w.get("kind").and_then(Value::as_str) == Some("fixture.world@1"))
+        else {
+            return unresolved();
+        };
+        let params = world.get("params").cloned().unwrap_or(Value::Null);
+        let bake = crate::fixtures::bake(&params, &format!("items/{owner}/params"))?;
+        let Some(k) = bake.bodies.iter().position(|b| b.id == body) else {
+            return unresolved();
+        };
+        return Ok(times
+            .iter()
+            .map(|&at| {
+                let p = bake.at(at)[k];
+                [p[0], p[2]]
+            })
+            .collect());
+    }
+    if items.get(item).is_none() {
+        return unresolved();
+    }
+    Ok(times
+        .iter()
+        .map(|&at| {
+            let o = origin_at(map, program, item, at);
+            [o[0], o[2]]
+        })
+        .collect())
+}
+
+/// The document's frame interval in flicks: its transport's `frame_rate`, 60/1 by default.
+fn frame_interval(map: &Map<String, Value>) -> i64 {
+    let (p, q) = map
+        .get("transport")
+        .and_then(deep_canvas::document::frame_rate_of)
+        .filter(|(p, q)| *p > 0 && *q > 0)
+        .unwrap_or((60, 1));
+    deep_canvas::camera::FLICKS_PER_SECOND as i64 * i64::from(q) / i64::from(p)
+}
+
+/// Item `id`'s world origin at `t`, through the chain its channels and parents give: what a
+/// wake reads at an earlier time, never an earlier frame.
+fn origin_at(map: &Map<String, Value>, program: &Program, id: &str, t: i64) -> Vec3 {
+    let mut state = program.state();
+    program.evaluate_local(t, eval::Validity::Full, &mut state);
+    let empty = Map::new();
+    let doc_items = map
+        .get("items")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let written = eval::written(map, program, &state);
+    let items = Items::new(doc_items, &written, &state);
+    origin(&world(&items, id))
+}
+
+/// The document's light probes, each captured or baked from what it sees (#427). Figures and
+/// data views refuse probes, and `budget.probes` caps each type (reflection 8, irradiance 4).
+fn probes(
+    map: &Map<String, Value>,
+    wanted: Vec<crate::probe::Wanted>,
+    lights: &[crate::light::Light],
+    layers: &[Layer3],
+    sky: Option<&crate::sky::Sky>,
+) -> Result<Vec<crate::probe::Probe>, Refused> {
+    use crate::probe::{ProbeKind, MAX_IRRADIANCE, MAX_REFLECTION};
+    let Some(first) = wanted.first() else {
+        return Ok(Vec::new());
+    };
+    if matches!(
+        map.get("profile").and_then(Value::as_str),
+        Some("figure" | "view" | "chart" | "sheet" | "cells")
+    ) {
+        return refused("out_of_range", format!("items/{}/kind", first.id));
+    }
+    for (kind, name, most) in [
+        (ProbeKind::Reflection, "reflection", MAX_REFLECTION),
+        (ProbeKind::Irradiance, "irradiance", MAX_IRRADIANCE),
+    ] {
+        let cap = map
+            .get("budget")
+            .and_then(|b| b.pointer(&format!("/probes/{name}")))
+            .and_then(Value::as_u64)
+            .map_or(most, |c| (c as usize).min(most));
+        if wanted.iter().filter(|w| w.kind == kind).count() > cap {
+            return refused("out_of_range", format!("budget/probes/{name}"));
+        }
+    }
+    let around = crate::probe::Surroundings::of(layers, sky.map(|s| s.ambient));
+    Ok(wanted
+        .into_iter()
+        .map(|w| crate::probe::capture(w, lights, &around))
+        .collect())
 }
 
 /// Whether `id` and each of its parents are visible (Item: `visible`, inherited).

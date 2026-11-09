@@ -494,6 +494,26 @@ pub(crate) fn evaluated(
         let run = &state.slots[field.slot..field.slot + field.width];
         let value = match run {
             [one] if field.boolean => json!(*one >= 0.5),
+            run if field.shape.is_some() => {
+                let shape = crate::morph::unflat(run, field.shape.as_ref().expect("a shape"));
+                // An item's own `path` is what it draws: a vector import's outline, or a path's
+                // `d`, in place of its columns.
+                if field.path == ["path"] {
+                    if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
+                        let d = json!(crate::morph::d_of(&shape));
+                        if let Some(outline) = params.get_mut("outline").and_then(Value::as_object_mut) {
+                            outline.insert("d".into(), d);
+                            outline.remove("svg");
+                        } else {
+                            params.remove("verbs");
+                            params.remove("pts");
+                            params.insert("d".into(), d);
+                        }
+                    }
+                    continue;
+                }
+                crate::morph::value_of(&shape)
+            }
             [one] if field.enumerated => json!(program.label(*one)),
             [one] => json!(one),
             many => json!(many),

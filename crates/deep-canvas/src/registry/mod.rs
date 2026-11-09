@@ -155,6 +155,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("material", "scene3d"),
     ("sky", "scene3d"),
     ("vector", "vector"),
+    // #494: a graph is the graph module's, so a match morph pairs its nodes by key.
+    ("graph", "graph"),
     // R1's mark sets, scales and axes are the data module's, which marks2d draws.
     ("marks", "data"),
     ("axis", "data"),
@@ -428,6 +430,8 @@ pub type Run = fn(&mut crate::schedule::View<'_>) -> Result<(), crate::schedule:
 /// Which items an operator per item has a node on: `(document, item ID, item)`; per document,
 /// whether the document has its node (`(document, "", null)`).
 pub type Applies = fn(&Value, &str, &Value) -> bool;
+/// A stepping operator's step length in flicks as the document sets it, or `None` (#497).
+pub type StepRate = fn(&Value) -> Option<i64>;
 
 /// What a per-item node's key holds of its item and document in place of the whole item and
 /// document (Content key: "each declared read"): `(document, item ID, item, planted)` to the
@@ -535,6 +539,9 @@ pub struct Operator {
     pub run: Option<Run>,
     /// A stepping operator's step length in flicks: it steps in simulate at every multiple of it.
     pub step: Option<i64>,
+    /// Where the document sets the step instead (issue #497: a module's `step_rate`), the step
+    /// length it reads from the document; `step` holds where it reads none.
+    pub rate: Option<StepRate>,
     /// It isn't thread-safe: its nodes run only on the scheduler's own thread (#857).
     pub serial: bool,
     /// Its determinism class (Determinism class): `exact` for CPU work and GPU work of integer
@@ -575,6 +582,13 @@ impl Operator {
         self.step = Some(flicks);
         self.per = Per::Document;
         self
+    }
+
+    /// Steps in simulate at the step `rate` reads from the document, every `flicks` where it
+    /// reads none, once per document.
+    pub fn steps_at(&mut self, flicks: i64, rate: StepRate) -> &mut Self {
+        self.rate = Some(rate);
+        self.steps(flicks)
     }
 
     /// Its determinism class, as its steps compute it: one of [`CLASSES`].
@@ -899,6 +913,7 @@ impl Registrar {
             applies: None,
             run: None,
             step: None,
+            rate: None,
             serial: false,
             determinism: "exact",
             keyed: None,
@@ -1107,6 +1122,9 @@ pub enum Fault {
     /// Declares `ease@1` in the motion module instead of the core (#490): the core declares
     /// none, so a build without motion has no eases.
     EaseInMotion,
+    /// Registers `camera@1` in the scene3d module instead of the core (#493), so a build
+    /// without scene3d has no camera.
+    CameraInScene3d,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
@@ -1276,6 +1294,8 @@ pub struct Sealed {
     /// How the document check names close names: `NoCloseNames` and `CloseBySpelling` are the
     /// planted checks (#412); `None` is the right one.
     pub close_fault: Option<Fault>,
+    /// The planted layout that registers `camera@1` in scene3d (#493).
+    pub camera_in_scene3d: bool,
     /// Each entry of `outline.source@1` the build's modules fill, with the module and its Rust
     /// (#443), sorted by module then entry.
     pub outlines: Vec<SealedOutline>,
@@ -1501,10 +1521,22 @@ impl Sealed {
             .map(|m| m.name.as_str())
     }
 
+    /// Whether this build's set names the design module `module` and this build left it out
+    /// (#308: a control kind in a full build without the input module).
+    pub(crate) fn lacks(&self, module: &str) -> bool {
+        KNOWN_MODULES
+            .iter()
+            .any(|(name, set)| *name == module && *set <= self.build_set)
+            && !self.has(module)
+    }
+
     /// The canvas module a kind's family belongs to when this build lacks it: a registered
     /// kind's module, or a design-named module whose kind family this is.
     pub(crate) fn missing_for_kind(&self, kind_name: &str) -> Option<String> {
         let full = kind_name.split('@').next().unwrap_or(kind_name);
+        if self.camera_in_scene3d && full == "camera" && !self.has("scene3d") {
+            return Some("scene3d".into());
+        }
         for m in &self.modules {
             if m.shapes.kinds.iter().any(|k| k.entry.is(full)) {
                 return self.left_out_kinds.get(full).cloned();
@@ -2950,6 +2982,7 @@ impl Registry {
             close_fault: self
                 .fault
                 .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
+            camera_in_scene3d: self.fault == Some(Fault::CameraInScene3d),
             outlines,
             costs: self
                 .costs

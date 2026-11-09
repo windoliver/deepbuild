@@ -17,4 +17,4 @@ Core layer. It stands on `@deepbuild/contracts` only, through its package entry,
 
 ## Deviations
 
-- `src/index.ts`: imports `mapHook` from `../../../adapters/index.mjs` by relative path. The facts engine and the facts files live in the repo's top-level `adapters/` folder, which is not a workspace package and is also run by `scripts/corpus.mjs` and the CLI, so there is no package entry to go through (commit 179441ca).
+- `src/index.ts`: imports `mapHook` from `../../../adapters/index.mjs` by relative path. The facts engine and the facts files live in the repo's top-level `adapters/` folder, which is not a workspace package and is also run by `scripts/corpus.mjs` and the CLI, so there is no package entry to go through (commit 179441ca). The facts files are read from the same folder, and `readFacts(name)` is the one way every other package reads them; `tests/facts-entry.test.mjs` fails on any package but this one and the CLI that names the folder by path.
