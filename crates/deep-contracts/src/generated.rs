@@ -28435,6 +28435,9 @@ pub enum ChannelRefusedDataField {
     Signature,
     Answer,
     AccountLinkId,
+    Method,
+    Once,
+    Params,
 }
 
 impl Contract for ChannelRefusedDataField {
@@ -28449,6 +28452,9 @@ impl Contract for ChannelRefusedDataField {
             "signature" => Ok(Self::Signature),
             "answer" => Ok(Self::Answer),
             "account_link_id" => Ok(Self::AccountLinkId),
+            "method" => Ok(Self::Method),
+            "once" => Ok(Self::Once),
+            "params" => Ok(Self::Params),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
     }
@@ -28463,6 +28469,9 @@ impl Contract for ChannelRefusedDataField {
             Self::Signature => "signature",
             Self::Answer => "answer",
             Self::AccountLinkId => "account_link_id",
+            Self::Method => "method",
+            Self::Once => "once",
+            Self::Params => "params",
         }.to_string())
     }
 }
