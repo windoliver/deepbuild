@@ -71,6 +71,7 @@ mod prompts;
 
 mod hits; // DeepBuild patch (windoliver/deepbuild#124)
 mod painted; // DeepBuild patch (windoliver/deepbuild#1427)
+mod present_only; // DeepBuild patch (windoliver/deepbuild#1551)
 pub use painted::{Painted, note_paints, take_painted};
 
 pub use a11y::A11ySubtreeBuilder;
