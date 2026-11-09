@@ -1,13 +1,17 @@
 //! Issue #1454: the app as a device you paired (design: The trusted path is a device you paired). Its first answer
 //! makes an Ed25519 key, kept under the hub's root and readable only by you, and pairs it with the hub, which has the
-//! OS confirm you. From then on the app signs what it sends: Ed25519 over the RFC 8785 bytes of the params with `device`
-//! in them and `signature` left out, as the hub checks it (packages/hub/src/trusted.ts).
+//! OS confirm you. From then on the app signs what it sends, as the hub checks it (packages/hub/src/trusted.ts).
+//!
+//! Issue #1579: a signature says what it's for. The params gain one field, `signature: { signed, sig }`, where `signed`
+//! names the device, the method, the hub's ID from its hello, the time, a once-only ID and the SHA-256 of the params'
+//! RFC 8785 bytes, and `sig` is Ed25519 over the RFC 8785 bytes of `signed`.
 
 use std::io::Read as _;
 use std::path::PathBuf;
 
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde_json::{json, Map, Value};
+use sha2::{Digest as _, Sha256};
 
 use crate::hub::{HubClient, HubError};
 
@@ -38,8 +42,7 @@ impl Device {
 
     /// Makes a key and pairs it: the hub has the OS confirm you first, so a key alone never pairs.
     fn pair(client: &mut HubClient) -> Result<Device, HubError> {
-        let mut seed = [0u8; KEY_BYTES];
-        std::fs::File::open("/dev/urandom")?.read_exact(&mut seed)?;
+        let seed: [u8; KEY_BYTES] = random()?;
         let key = SigningKey::from_bytes(&seed);
         let public_key = encode(key.verifying_key().as_bytes());
         let reply = client.call(
@@ -67,18 +70,37 @@ impl Device {
         let _ = std::fs::remove_file(file());
     }
 
-    /// `params` with this device named and signed over exactly those bytes.
-    pub fn sign(&self, mut params: Map<String, Value>) -> Value {
-        params.insert("device".into(), Value::String(self.id.clone()));
+    /// `params` signed for `method` on the hub whose hello names `hub`, now, once.
+    pub fn sign(
+        &self,
+        method: &str,
+        hub: &str,
+        mut params: Map<String, Value>,
+    ) -> Result<Value, HubError> {
         let mut body = String::new();
         canonical(&Value::Object(params.clone()), &mut body);
-        let signature = self.key.sign(body.as_bytes());
-        params.insert(
-            "signature".into(),
-            Value::String(encode(&signature.to_bytes())),
-        );
-        Value::Object(params)
+        let once: [u8; 16] = random()?;
+        let at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| HubError::Protocol(e.to_string()))?
+            .as_millis() as u64;
+        let signed = json!({
+            "device": self.id, "method": method, "hub": hub, "at": at, "once": encode(&once),
+            "params_hash": Sha256::digest(body.as_bytes()).iter().map(|b| format!("{b:02x}")).collect::<String>(),
+        });
+        let mut bytes = String::new();
+        canonical(&signed, &mut bytes);
+        let sig = encode(&self.key.sign(bytes.as_bytes()).to_bytes());
+        params.insert("signature".into(), json!({ "signed": signed, "sig": sig }));
+        Ok(Value::Object(params))
     }
+}
+
+/// `N` random bytes from the OS.
+fn random<const N: usize>() -> std::io::Result<[u8; N]> {
+    let mut bytes = [0u8; N];
+    std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
+    Ok(bytes)
 }
 
 /// Writes the device file, readable only by you from its first byte, as the control token is.
@@ -194,7 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn a_signature_covers_the_params_with_the_device_in_them() {
+    fn a_signature_covers_the_method_hub_time_once_and_params() {
         let key = SigningKey::from_bytes(&[7; KEY_BYTES]);
         let device = Device {
             id: "device:01ABC".into(),
@@ -203,23 +225,31 @@ mod tests {
         let mut params = Map::new();
         params.insert("ask".into(), json!("ask:01A"));
         params.insert("option".into(), json!("yes"));
-        let signed = device.sign(params);
+        let sent = device.sign("ask.answer", "hub-id", params.clone()).unwrap();
+        assert!(sent.get("device").is_none());
+        let signed = &sent["signature"]["signed"];
         assert_eq!(signed["device"], "device:01ABC");
-        let mut body = signed.as_object().unwrap().clone();
-        let signature = decode(body.remove("signature").unwrap().as_str().unwrap()).unwrap();
-        let signature = Signature::from_slice(&signature).unwrap();
+        assert_eq!(signed["method"], "ask.answer");
+        assert_eq!(signed["hub"], "hub-id");
+        assert!(signed["at"].as_u64().unwrap() > 1_700_000_000_000);
+        let mut body = String::new();
+        canonical(&Value::Object(params.clone()), &mut body);
+        let hash: String = Sha256::digest(body.as_bytes())
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_eq!(signed["params_hash"], hash.as_str());
+        let again = device.sign("ask.answer", "hub-id", params).unwrap();
+        assert_ne!(signed["once"], again["signature"]["signed"]["once"]);
+        let sig = decode(sent["signature"]["sig"].as_str().unwrap()).unwrap();
+        let sig = Signature::from_slice(&sig).unwrap();
         let mut bytes = String::new();
-        canonical(&Value::Object(body.clone()), &mut bytes);
-        assert!(key
-            .verifying_key()
-            .verify(bytes.as_bytes(), &signature)
-            .is_ok());
-        body.insert("option".into(), json!("no"));
-        let mut other = String::new();
-        canonical(&Value::Object(body), &mut other);
-        assert!(key
-            .verifying_key()
-            .verify(other.as_bytes(), &signature)
-            .is_err());
+        canonical(signed, &mut bytes);
+        assert!(key.verifying_key().verify(bytes.as_bytes(), &sig).is_ok());
+        let mut other = signed.clone();
+        other["method"] = json!("ask.undo");
+        let mut wrong = String::new();
+        canonical(&other, &mut wrong);
+        assert!(key.verifying_key().verify(wrong.as_bytes(), &sig).is_err());
     }
 }

@@ -189,7 +189,7 @@ const isUnder = (path: string, dir: string) => {
  * What a connection brings to a call: its role, the session it is bound to, for deep mcp the process it serves, and
  * for the app or the CLI the process its hello named as its own.
  */
-export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string }; waiter?: number }
+export interface CallContext { role: string; /** The paired device whose signature the request carried, once it held (#1579). */ signer?: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string }; waiter?: number }
 /** The asks core's refusal as the socket's error@3, with the code that fits what it names. */
 const asRefused = (error: unknown): unknown => {
   if (!(error instanceof AskRefused)) return error;
@@ -4061,7 +4061,7 @@ export class Core {
     if (typeof handle !== 'string' || !/^offer:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/offer', 'Name the offer by its handle, offer:<id>, as deep inbox lists it.', handle));
     const offer = this.offers.get(handle);
     if (!offer) throw new Refused(refusal('not_found', '/params/offer', `No offer ${handle}; save one deep inbox lists.`, handle));
-    await this.trusted(params, context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle, offer.scope);
+    await this.trusted(context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle, offer.scope);
     return this.saveOffer(handle, this.connection(context.role === 'app' ? 'app' : 'cli'));
   }
   /** The offer saved: its permission raised as an authority ask and answered yes on the trusted path, which saves it for the repo. */
@@ -5583,7 +5583,12 @@ export class Core {
   call(method: string, params: unknown, context: CallContext): Promise<unknown> {
     const p = isObj(params) ? params : {};
     if (method === 'mcp.call') return this.mcpCall(p, context);
-    return this.queue(async () => undefined).then(() => this.dispatch(method, p, context));
+    if (p.signature === undefined) return this.queue(async () => undefined).then(() => this.dispatch(method, p, context));
+    // A signed request (#1579): its signature is judged before anything else it carries, by the one verifier.
+    const { signature, ...rest } = p;
+    const signer = this.devices.verify(signature, this.hubId(), this.now(), { method, params_hash: sha256Hex(canonicalize(rest as JsonValue)), once: true }, this.options.plant);
+    if (typeof signer !== 'string') return Promise.reject(new Refused(refusal('credential', `/params/signature/signed/${signer.field}`, `Nothing counted: ${signer.reason}. Sign the request with a device you paired, for this method, this hub and now, once.`, signer.field)));
+    return this.queue(async () => undefined).then(() => this.dispatch(method, rest, { ...context, signer }));
   }
   private async dispatch(method: string, params: Obj, context: CallContext): Promise<unknown> {
     switch (method) {
@@ -5639,7 +5644,7 @@ export class Core {
       case 'device.pair': return this.pair(params, context);
       case 'device.unpair': return this.unpair(params, context);
       case 'channel.link': return this.link(params, context);
-      case 'confirm.enroll': return this.enrollAgain(params, context);
+      case 'confirm.enroll': return this.enrollAgain(context);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
       case 'ask.confirm': return this.confirmCard(params);
@@ -5904,16 +5909,20 @@ export class Core {
 
   // ---- Answers on the trusted path (#24, #34).
 
+  /** The hub's ID, as every hello names it (#1338): what a paired device's signature is made for (#1579). */
+  private hubId(): string {
+    this.ownId ??= identityAt(join(this.root.dir, 'hub.key'), 'deep-hub').id;
+    return this.ownId;
+  }
+  private ownId: string | undefined;
+
   /**
-   * Whether an answer may count: a paired device's valid signature, from any role; otherwise, from the CLI alone,
-   * the OS confirming you with a prompt that names what you answer. The control token and the peer check alone
-   * never make one count, and a deep command run inside an agent's process tree acts as that agent's session.
+   * Whether an answer may count: a paired device's valid signature, from any role, which `call` judged; otherwise,
+   * from the CLI alone, the OS confirming you with a prompt that names what you answer. The control token and the peer
+   * check alone never make one count, and a deep command run inside an agent's process tree acts as that agent's session.
    */
-  private async trusted(params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void> {
-    if (params.signature !== undefined || params.device !== undefined) {
-      if (this.devices.signed(params)) return;
-      throw new Refused(refusal('credential', '/params/signature', 'Sign the answer with a device you paired, over exactly the params it sends.', params.device));
-    }
+  private async trusted(context: CallContext, what: string, handle: string, revision: string): Promise<void> {
+    if (context.signer) return;
     if (context.role !== 'cli') throw new Refused(refusal('unconfirmed', '/params/signature', `${handle} stays open: an answer from the app counts only when a device you paired signs it.`, handle));
     const agent = await this.agentAbove(context.peer);
     if (agent && this.options.plant !== 'answer-inside-session') {
@@ -6015,7 +6024,7 @@ export class Core {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
     // A channel's answer was checked by the channels (#65): a paired device's signature over the card it showed, or an account link.
-    if (!channel) await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
+    if (!channel) await this.trusted(context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
     // A paired phone's yes binds the plan its card stood for, and its own token, as the app's click does.
     if (channel?.proof === 'device' && chosen?.decision === 'allow') {
       input.token = `${channel.channel}:${ulid(this.now())}`;
@@ -6132,7 +6141,7 @@ export class Core {
     // A definition that locked on the default stands: a different answer now would change nothing but the record of it.
     const locked = await this.tasks.lockedOn(handle);
     if (locked) throw new Refused(refusal('locked', '/params/ask', `${handle} took its default and the definition of ${locked} locked on it; a change to that definition goes through a dispute, not an undo.`, handle));
-    await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle, await this.revisionOf(handle, { pinned_to: row.pinned_to ? JSON.parse(row.pinned_to) as { ref?: string } : undefined }));
+    await this.trusted(context, `undo the default “${row.question.slice(0, 120)}” took`, handle, await this.revisionOf(handle, { pinned_to: row.pinned_to ? JSON.parse(row.pinned_to) as { ref?: string } : undefined }));
     await this.asks.undo(this.connection(context.role === 'app' ? 'app' : 'cli'), handle).catch((error: unknown) => { throw asRefused(error); });
     const [open] = (await this.record.raw(`SELECT deadline FROM asks WHERE id = ?`, [handle.slice(4)])) as { deadline: number }[];
     return { ask: handle, deadline: open?.deadline ?? null };
@@ -6144,7 +6153,7 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT key, answer, state FROM decisions WHERE id = ?`, [id.slice(9)])) as { key: string; answer: string; state: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
     if (row.state === 'revoked') return { overruled: id };
-    await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id, row.state);
+    await this.trusted(context, `overrule the saved decision ${row.answer}`, id, row.state);
     // First: a retry finds a revoked decision done, so a guard left behind would never go.
     dropKept(this.root.dir, row.key);
     await this.appendCore('decision.overruled', { decision: id }, { subject: id });
@@ -6161,7 +6170,7 @@ export class Core {
     const { extension, name, value } = params;
     if (typeof extension !== 'string' || typeof name !== 'string' || typeof value !== 'string' || !value) throw new Refused(refusal('required', '/params', 'Name the package and the secret, and give its value.', null));
     if (!this.extensions) throw new Refused(refusal('unavailable', '/params/extension', `${extension} isn't loaded, so nothing can name ${name}.`, extension));
-    await this.trusted(params, context, `add the secret ${name} for ${extension}`, `secret:${extension}/${name}`, name);
+    await this.trusted(context, `add the secret ${name} for ${extension}`, `secret:${extension}/${name}`, name);
     const { saved, test } = await this.extensions.enterSecret(this.connection('cli'), extension, name, value);
     return { saved, test };
   }
@@ -6207,8 +6216,7 @@ export class Core {
     const device = params.device;
     if (typeof device !== 'string' || !/^device:[0-9A-Za-z]+$/.test(device)) throw new Refused(refusal('pattern', '/params/device', 'Name the device as device:<id>, as device.pair returned it.', device));
     if (!this.devices.keyOf(device)) throw new Refused(refusal('not_found', '/params/device', `No paired device ${device}.`, device));
-    const { device: _unpaired, ...rest } = params;
-    await this.trusted(rest, context, `unpair ${device}, so what it signs counts for nothing`, device, 'unpair');
+    await this.trusted(context, `unpair ${device}, so what it signs counts for nothing`, device, 'unpair');
     this.devices.unpair(device, this.now());
     this.channels?.unpaired(device);
     return { unpaired: device };
@@ -6309,10 +6317,10 @@ export class Core {
    * counted once you confirm with the new key, when the old one stops counting. The helper's code signature is
    * recorded again with it, so a rebuilt helper counts only from here.
    */
-  private async enrollAgain(params: Obj, context: CallContext): Promise<Obj> {
+  private async enrollAgain(context: CallContext): Promise<Obj> {
     if (context.role !== 'app') throw new Refused(refusal('role', '/method', "deep-confirm's key is set up again from the app, on the trusted path.", 'confirm.enroll'));
-    await this.trusted(params, context, "set up deep-confirm's key again", 'device:deep-confirm', 'enroll');
-    const why = await this.confirmer.enroll(this.now(), { words: "set up DeepBuild's confirmation key again on this Mac", subject: { handle: 'device:deep-confirm', revision: String(params.device) } });
+    await this.trusted(context, "set up deep-confirm's key again", 'device:deep-confirm', 'enroll');
+    const why = await this.confirmer.enroll(this.now(), { words: "set up DeepBuild's confirmation key again on this Mac", subject: { handle: 'device:deep-confirm', revision: String(context.signer) } });
     if (why) throw new Refused(refusal('unconfirmed', '', `deep-confirm's key stays as it was: ${why}.`, 'confirm.enroll', true));
     return { device: this.devices.enclave()!.device };
   }

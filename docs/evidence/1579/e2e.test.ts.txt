@@ -1,0 +1,37 @@
+// Manual end-to-end check for #1579 against a real `deep hub run` (HOME a temp folder): each signed request as it was
+// sent (sig cut short) and the hub's reply, verbatim. Run with the repo path as argv[2].
+const repo = process.env.E2E_REPO!;
+it('e2e', async () => {
+const h = await import(`${repo}/tests/acceptance/1579/helpers.ts`);
+const show = (title: string, sent: Record<string, any>, reply: Record<string, any>) => {
+  const s = sent.signature && typeof sent.signature === 'object' ? { ...sent, signature: { ...sent.signature, sig: `${String(sent.signature.sig).slice(0, 12)}…` } } : sent;
+  console.log(`\n### ${title}\nsent:  ${JSON.stringify(s)}\nreply: ${JSON.stringify(reply)}`);
+};
+const w = await h.world({ open: 3, defaulting: 1 });
+try {
+  console.log(`hub ${w.hubId} (from its hello), app device ${w.device.id}`);
+  const [a1, a2, a3, d] = w.asks;
+  await h.letDefault(w, d.handle);
+  const undo = h.signFor('ask.undo', { ask: d.handle }, w.device, w.hubId, await h.hubNow(w));
+  show('1. a signed undo of a defaulted ask (counts)', undo, await w.app.call('ask.undo', undo, 20_000));
+  show('2. the same undo signature sent as ask.answer (wrong method)', undo, await w.app.call('ask.answer', undo, 20_000));
+  const elsewhere = h.sha256('another hub');
+  const cross = h.signFor('ask.answer', { ask: a1.handle, option: 'green' }, w.device, elsewhere, await h.hubNow(w));
+  show('3. an answer signed for another hub (cross-hub)', cross, await w.app.call('ask.answer', cross, 20_000));
+  const stale = h.signFor('ask.answer', { ask: a2.handle, option: 'green' }, w.device, w.hubId, await h.hubNow(w));
+  await h.step(w, 11 * h.MINUTE);
+  show('4. an answer signed 11 minutes ago on the hub clock (stale)', stale, await w.app.call('ask.answer', stale, 20_000));
+  await h.letDefault(w, d.handle);
+  const other = await h.asApp(w.hub);
+  show('5. the spent undo replayed from another connection after the ask defaulted again (replay)', undo, await other.call('ask.undo', undo, 20_000));
+  const good = h.signFor('ask.answer', { ask: a3.handle, option: 'green' }, w.device, w.hubId, await h.hubNow(w));
+  show('6. a fresh, correct answer (counts)', good, await w.app.call('ask.answer', good, 20_000));
+  const phone = await h.another(w, 'the test phone');
+  const unpair = h.signFor('device.unpair', { device: phone.id }, w.device, w.hubId, await h.hubNow(w));
+  show('7. a signed unpair of the phone (counts)', unpair, await w.app.call('device.unpair', unpair, 20_000));
+  console.log('\n### inbox outcomes');
+  for (const a of w.asks) console.log(`${a.handle}: ${await h.outcomeOf(w, a.handle)}`);
+} finally {
+  await h.cleanup();
+}
+}, 900_000);

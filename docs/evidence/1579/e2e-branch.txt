@@ -1,0 +1,45 @@
+ RUN  v5.0.5 <scratchpad>/e2e
+stdout | e2e.test.ts > e2e
+hub 4c445313c618d48b59d15be0c4da8074d604c30968cc33befc30cde77aaef3a6 (from its hello), app device device:01M6ZVEB4QFEGXKT7SBRD1M6DN
+stdout | e2e.test.ts > e2e
+### 1. a signed undo of a defaulted ask (counts)
+sent:  {"ask":"ask:01M6ZVEAMNBV6ZKPQM3NZQZD0F","signature":{"signed":{"device":"device:01M6ZVEB4QFEGXKT7SBRD1M6DN","method":"ask.undo","hub":"4c445313c618d48b59d15be0c4da8074d604c30968cc33befc30cde77aaef3a6","at":1794221416113,"once":"OLypRMCr51lEW1QhUXa82w","params_hash":"55b833db462f2adb6f1fcbcdecb1cbd3133210b9f4db86852aad92c8c30e327b"},"sig":"Jb9KHrJTcS9W…"}}
+reply: {"v":1,"id":"ask.undo#14","result":{"ask":"ask:01M6ZVEAMNBV6ZKPQM3NZQZD0F","deadline":1794225016213}}
+stdout | e2e.test.ts > e2e
+### 2. the same undo signature sent as ask.answer (wrong method)
+sent:  {"ask":"ask:01M6ZVEAMNBV6ZKPQM3NZQZD0F","signature":{"signed":{"device":"device:01M6ZVEB4QFEGXKT7SBRD1M6DN","method":"ask.undo","hub":"4c445313c618d48b59d15be0c4da8074d604c30968cc33befc30cde77aaef3a6","at":1794221416113,"once":"OLypRMCr51lEW1QhUXa82w","params_hash":"55b833db462f2adb6f1fcbcdecb1cbd3133210b9f4db86852aad92c8c30e327b"},"sig":"Jb9KHrJTcS9W…"}}
+reply: {"v":1,"id":"ask.answer#15","error":{"code":"credential","retryable":false,"remediation":"Nothing counted: it signs method ask.undo, not ask.answer. Sign the request with a device you paired, for this method, this hub and now, once.","path":"/params/signature/signed/method","actual":"method","evidence":[]}}
+stdout | e2e.test.ts > e2e
+### 3. an answer signed for another hub (cross-hub)
+sent:  {"ask":"ask:01M6ZVEAKMWGJCE19437NCRNYZ","option":"green","signature":{"signed":{"device":"device:01M6ZVEB4QFEGXKT7SBRD1M6DN","method":"ask.answer","hub":"376226bc43b3937451153f97bcc5767de9edaadaf0eda0d0729bf7a087b04463","at":1794221416223,"once":"4sdXkqqvJxtBzUmNRFZGag","params_hash":"281e0be580a16382383e7c63fe9765fa66e20d6eb031f16f24b1d0d317e9c219"},"sig":"MwuoymAxXLv9…"}}
+reply: {"v":1,"id":"ask.answer#16","error":{"code":"credential","retryable":false,"remediation":"Nothing counted: it was signed for the hub 376226bc43b3937451153f97bcc5767de9edaadaf0eda0d0729bf7a087b04463, not this one (4c445313c618d48b59d15be0c4da8074d604c30968cc33befc30cde77aaef3a6). Sign the request with a device you paired, for this method, this hub and now, once.","path":"/params/signature/signed/hub","actual":"hub","evidence":[]}}
+stdout | e2e.test.ts > e2e
+### 4. an answer signed 11 minutes ago on the hub clock (stale)
+sent:  {"ask":"ask:01M6ZVEAMEYE0RT010RJJM3STB","option":"green","signature":{"signed":{"device":"device:01M6ZVEB4QFEGXKT7SBRD1M6DN","method":"ask.answer","hub":"4c445313c618d48b59d15be0c4da8074d604c30968cc33befc30cde77aaef3a6","at":1794221416224,"once":"lu8miZp944UeCBGiy5n6rA","params_hash":"4a3178bae7e610392700920068d053eb7a8698ba156714cbc7a96f90b1a8969e"},"sig":"LWuKkN34Zrz8…"}}
+reply: {"v":1,"id":"ask.answer#17","error":{"code":"credential","retryable":false,"remediation":"Nothing counted: it was signed at 1794221416224, more than 10 minutes from now (1794222076225). Sign the request with a device you paired, for this method, this hub and now, once.","path":"/params/signature/signed/at","actual":"at","evidence":[]}}
+stdout | e2e.test.ts > e2e
+### 5. the spent undo replayed from another connection after the ask defaulted again (replay)
+sent:  {"ask":"ask:01M6ZVEAMNBV6ZKPQM3NZQZD0F","signature":{"signed":{"device":"device:01M6ZVEB4QFEGXKT7SBRD1M6DN","method":"ask.undo","hub":"4c445313c618d48b59d15be0c4da8074d604c30968cc33befc30cde77aaef3a6","at":1794221416113,"once":"OLypRMCr51lEW1QhUXa82w","params_hash":"55b833db462f2adb6f1fcbcdecb1cbd3133210b9f4db86852aad92c8c30e327b"},"sig":"Jb9KHrJTcS9W…"}}
+reply: {"v":1,"id":"ask.undo#1","error":{"code":"credential","retryable":false,"remediation":"Nothing counted: its once-only ID OLypRMCr51lEW1QhUXa82w was spent already, so it counts only the first time. Sign the request with a device you paired, for this method, this hub and now, once.","path":"/params/signature/signed/once","actual":"once","evidence":[]}}
+stdout | e2e.test.ts > e2e
+### 6. a fresh, correct answer (counts)
+sent:  {"ask":"ask:01M6ZVEAMJJXQY2NDV1QYZAPC4","option":"green","signature":{"signed":{"device":"device:01M6ZVEB4QFEGXKT7SBRD1M6DN","method":"ask.answer","hub":"4c445313c618d48b59d15be0c4da8074d604c30968cc33befc30cde77aaef3a6","at":1794225677146,"once":"kGvBo_MViHv_n0tz9irg0w","params_hash":"880dd8b37d9762be62ad28dd173e1c5eebdc9cb4e90b31cdc95fb4b8aebef223"},"sig":"i_xnf43HdwW1…"}}
+reply: {"v":1,"id":"ask.answer#30","result":{"ask":"ask:01M6ZVEAMJJXQY2NDV1QYZAPC4","answer":"green","scope":null}}
+stdout | e2e.test.ts > e2e
+### 7. a signed unpair of the phone (counts)
+sent:  {"device":"device:01M702Y8WF5NYV4Y5P1G6PABZR","signature":{"signed":{"device":"device:01M6ZVEB4QFEGXKT7SBRD1M6DN","method":"device.unpair","hub":"4c445313c618d48b59d15be0c4da8074d604c30968cc33befc30cde77aaef3a6","at":1794225677201,"once":"Z1xNT1j4DDQ_3BEvtmn6Kw","params_hash":"b639af48850278ebffacef40614fc59c0ae4f66d265e2e8c893f9b1571a684ba"},"sig":"Rs1CaXl3etsy…"}}
+reply: {"v":1,"id":"device.unpair#32","result":{"unpaired":"device:01M702Y8WF5NYV4Y5P1G6PABZR"}}
+### inbox outcomes
+stdout | e2e.test.ts > e2e
+ask:01M6ZVEAKMWGJCE19437NCRNYZ: unanswered
+stdout | e2e.test.ts > e2e
+ask:01M6ZVEAMEYE0RT010RJJM3STB: unanswered
+stdout | e2e.test.ts > e2e
+ask:01M6ZVEAMJJXQY2NDV1QYZAPC4: answered
+stdout | e2e.test.ts > e2e
+ask:01M6ZVEAMNBV6ZKPQM3NZQZD0F: defaulted
+ ✓ e2e.test.ts > e2e 3287ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  01:50:14
+   Duration  3.39s (tests 99%)

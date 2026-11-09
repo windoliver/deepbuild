@@ -1,0 +1,10 @@
+ RUN  v5.0.5 <repo>/tests/acceptance/1579/base
+ ✓ merge-base.check.ts > the merge base > AC1 base: an undo the app signs counts, and the very same signed params, sent as an answer to the ask it opened, count too 1804ms
+ ✓ merge-base.check.ts > the merge base > AC1 base: the app's signed undo { ask, device } passes the signature check on ask.answer; only the missing option stops it 1747ms
+ ✓ merge-base.check.ts > the merge base > AC2 base: an answer the app signed 11 minutes earlier counts 643ms
+ ✓ merge-base.check.ts > the merge base > AC2 base: a signed undo that counted, replayed from another connection once its ask defaults again, counts again 2635ms
+ ✓ merge-base.check.ts > the merge base > AC4 base: an unpair the app signs is refused, however it is signed, and the phone stays paired 701ms
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  01:50:27
+   Duration  8.05s (tests 95%, transform 4%, import 1%)

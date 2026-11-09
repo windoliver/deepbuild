@@ -2,11 +2,12 @@
 // the old public key stops counting at that moment"): from the app alone, signed by a device you paired, and counted
 // once you confirm with the new key. Built on #880's acceptance rig: a copy of the hub whose helper is a signed test
 // binary holding a software P-256 key, so no Touch ID shows.
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { generateKeyPairSync, randomUUID, sign, X509Certificate } from 'node:crypto';
 import { copyFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { canonicalize, type JsonValue } from '../../contracts/src/index.ts';
+import { canonicalize, sha256Hex, type JsonValue } from '../../contracts/src/index.ts';
+import { idOf } from '../src/identity.ts';
 import { Conn } from '../../../tests/acceptance/24/helpers.ts';
 import { cleanup, deep, expectCountedOnce, expectOpen, MINUTE, ready, rootOf, type Hub } from '../../../tests/acceptance/880/helpers.ts';
 
@@ -29,9 +30,11 @@ it('sets the key up again only from the app with a paired device, and the old ke
   const raw = device.publicKey.export({ format: 'jwk' }).x!;
   const paired = await cli.call('device.pair', { name: 'test app', public_key: raw }, MINUTE);
   expect(paired.result?.device, JSON.stringify(paired)).toMatch(/^device:/);
-  const signed = (params: Record<string, unknown>) => {
-    const body = { ...params, device: paired.result!.device as string };
-    return { ...body, signature: sign(null, canonicalize(body as JsonValue), device.privateKey).toString('base64url') };
+  // Signed as #1579 has it: for the method, this hub, now and once, over the params' hash.
+  const hubId = idOf(new X509Certificate(readFileSync(join(rootOf(rig), 'hub.key.cert'))));
+  const signed = (method: string, params: Record<string, unknown>) => {
+    const body = { device: paired.result!.device as string, method, hub: hubId, at: Date.now(), once: randomUUID(), params_hash: sha256Hex(canonicalize(params as JsonValue)) };
+    return { ...params, signature: { signed: body, sig: sign(null, canonicalize(body as JsonValue), device.privateKey).toString('base64url') } };
   };
 
   // Not from the CLI, and not from the app without a paired device's signature.
@@ -42,7 +45,7 @@ it('sets the key up again only from the app with a paired device, and the old ke
   expect(readFileSync(helperKey, 'utf8'), 'nothing was set up').toBe(readFileSync(oldKey, 'utf8'));
 
   // Signed by the paired device: the helper makes a new key and signs with it.
-  const again = await app.call('confirm.enroll', signed({}), MINUTE);
+  const again = await app.call('confirm.enroll', signed('confirm.enroll', {}), MINUTE);
   expect(again.result?.device, JSON.stringify(again)).toMatch(/^device:/);
   app.close();
   expect(readFileSync(helperKey, 'utf8'), 'the helper made a new key').not.toBe(readFileSync(oldKey, 'utf8'));
