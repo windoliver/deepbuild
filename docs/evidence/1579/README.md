@@ -41,10 +41,22 @@ signed request over the hub's socket as the app does. Each request (sig cut shor
     - `tests/acceptance/1097/warn.test.ts` failed on deep-hook's 50 ms sync at load 21, and passes twice on the branch and twice
       at the base at load 12.
     - `env-resources`, `1556/twins` and `39/replies` (no codex) fail at the base too.
-  - **Caused by this change, then fixed with the owner's approval:** five tests in `tests/acceptance/34/answers.test.ts`
-    failed because #34's `signed()` helper signed in the retired format. The helper now signs in #1579's format, with the hub
-    ID that `pair()` reads from the hello, and suite 65's own pairing sets it too; no assertion changed. Afterwards
-    `answers.test.ts` passes 7/7. `tests/acceptance/327/answers-redraft/ac2.test.ts` fails as it does at the base (the ask
-    "was already answered").
+  - **Caused by this change:** five tests in `tests/acceptance/34/answers.test.ts` failed, because #34's `signed()` helper
+    signed in the retired format. A hand edit of the helper (`helper-draft-hand.diff`) was reverted. The owner chose the
+    design's blind redraft, so a fresh job redrafted the helper from #1579's issue and the base alone
+    (`helper-draft-blind.md`). The suite fails 5/7 with the base helper and passes 7/7 with the redraft, with no assertion
+    changed. The rest of suite 34 fails as it does at the base: `app.test.ts` can't build deep-app on Linux, and the 5
+    `stream.test.ts` tests fail at the base too. `tests/acceptance/327` fails only `answers-redraft/ac2.test.ts`, as it
+    does at the base (the ask "was already answered").
 - `tests/acceptance/65` (channels): 27/30 fail at the base and on the branch alike on Linux, because `deep install` refuses the
-  channel packages' envelope digest here. The channel half of the one verifier still needs a run on the Mac.
+  channel packages' envelope digest here.
+  - On the Mac at a1e0e945, the branch and the base shared 17 failures. One test was new: AC16, where a phone's answer
+    replayed to a second hub was refused naming `card_hash` instead of `hub`.
+  - The channel now judges hub, device and key before the card it never sent.
+  - The re-run on the Mac at the new head is pending.
+
+## The app on the Mac
+
+At a1e0e945 the suite `tests/acceptance/1579` passed 18/18, the app half included. deep-app's `device::` tests and
+`confirm-enroll` passed too. Since then the app and the hub's trusted path haven't changed; only the channel check order
+and the test helpers have.
