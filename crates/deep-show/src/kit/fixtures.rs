@@ -303,8 +303,8 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
             let mut case = Case::new(format!("{}#codes", f.name), Verdict::Pass)
                 .with("fixture", json!(f.name));
             if let Some(mut fl) = exact(hub, &mut case, module, "fixtures", &f.name, &want, &got) {
-                // #1417: a budget the fixture expects refused and isn't names what each operator
-                // was charged, so an operator that declares too little shows.
+                // #1417: a fixture expected over budget and found within it names what each
+                // operator was charged, so an operator that declares too little shows.
                 if want.iter().any(|c| c == "over_budget")
                     && !got.iter().any(|c| c == "over_budget")
                 {

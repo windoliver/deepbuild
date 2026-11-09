@@ -724,6 +724,55 @@ mod tests {
     }
 
     #[test]
+    fn a_document_with_no_budget_is_warned_when_an_operators_declared_cost_passes_the_frame() {
+        let sealed = sized_with_tick();
+        let warned = |rows: f64| {
+            let mut doc = board(0, false);
+            doc["items"]["m"]["params"]["rows"] = json!(rows);
+            crate::document::check_in(&doc, &sealed)
+                .issues
+                .into_iter()
+                .find(|i| i.code == "over_budget")
+        };
+        // 20 ms declared, past the 16 ms frame: a warning naming the item.
+        let issue = warned(40.0).expect("warned");
+        assert_eq!(issue.severity, "warning");
+        assert_eq!(issue.ids, ["m"]);
+        // 10 ms fits the frame.
+        assert!(warned(20.0).is_none());
+    }
+
+    #[test]
+    fn a_document_with_a_budget_class_is_judged_by_its_class_not_the_frames_warning() {
+        let sealed = sized_with_tick();
+        // An export has no frame cap: 20 ms declared is neither refused nor warned.
+        let mut doc = board(0, false);
+        doc["budget"] = json!({"class": "export"});
+        doc["items"]["m"]["params"]["rows"] = json!(40);
+        let issues = crate::document::check_in(&doc, &sealed).issues;
+        assert!(!issues.iter().any(|i| i.code == "over_budget"), "{issues:?}");
+    }
+
+    #[test]
+    fn a_patch_to_one_costly_item_is_warned_on_what_the_whole_document_declares() {
+        let sealed = sized_with_tick();
+        // 1 ms and 10 ms fit the frame; the patch makes them 10 ms and 10 ms, which doesn't.
+        let mut before = board(1, false);
+        before["items"]["m"]["params"]["rows"] = json!(2);
+        before["items"]["s0"]["params"]["rows"] = json!(20);
+        let prev = crate::document::check_in(&before, &sealed).issues;
+        assert!(!prev.iter().any(|i| i.code == "over_budget"));
+        let mut after = before.clone();
+        after["items"]["m"]["params"]["rows"] = json!(20);
+        let changed = std::collections::BTreeSet::from(["m".to_string()]);
+        let rechecked = crate::document::recheck(&after, &prev, &changed, &sealed);
+        assert!(
+            rechecked.is_none_or(|issues| issues.iter().any(|i| i.code == "over_budget")),
+            "a recheck of the patched item alone misses the other's 10 ms"
+        );
+    }
+
+    #[test]
     fn a_file_from_a_build_that_isnt_optimized_is_refused_naming_its_profile() {
         let file = |build: &str| format!(r#"{{"fingerprint": {{}}, {build} "terms": {{}}}}"#);
         let dev = Coefficients::read(&file(
