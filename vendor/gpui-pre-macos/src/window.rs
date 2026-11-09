@@ -3140,7 +3140,7 @@ extern "C" fn window_did_change_screen(this: &Object, _: Sel, _: id) {
     let mut lock = window_state.as_ref().lock();
     lock.start_display_link();
     drop(lock);
-    update_window_scale_factor(&window_state);
+    frame_link::screen_changed(&window_state); // DeepBuild patch (windoliver/deepbuild#1551)
     report_display_change(&window_state);
 }
 
