@@ -24,9 +24,10 @@ use crate::snapshot::{self, Drawn, Unfit};
 /// An operator's error as a revision's issue.
 pub fn op_issue(i: &OpIssue) -> Issue {
     let what = format!("{} can't evaluate this", i.operator);
+    let actual = i.actual.clone().unwrap_or(Value::Null);
     match &i.item {
-        Some(id) => Issue::error(i.code, id, i.path.clone(), Value::Null, &what),
-        None => Issue::envelope(i.code, i.path.clone(), Value::Null, &what),
+        Some(id) => Issue::error(i.code, id, i.path.clone(), actual, &what),
+        None => Issue::envelope(i.code, i.path.clone(), actual, &what),
     }
 }
 
@@ -481,6 +482,7 @@ impl<'a> Hub<'a> {
         // The last frame's drawing and its hash: an unchanged drawing isn't drawn again.
         let mut last: Option<(Option<*const Drawing>, Option<*const StatusDrawing>, String)> = None;
         let mut out = Vec::with_capacity(f.count);
+        let mut revised_now = false;
         for k in 0..f.count {
             if f.paced {
                 let due = started + period * k as u32;
@@ -503,6 +505,7 @@ impl<'a> Hub<'a> {
             {
                 let (document, _) = pending.take().expect("checked above");
                 revised = self.revise(&f.doc, document);
+                revised_now = true;
             }
             let Some(session) = self.sessions.get_mut(&f.doc) else {
                 break;
@@ -525,6 +528,9 @@ impl<'a> Hub<'a> {
             let mut frame = json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms,
                                    "frame_ms": ms, "settling": pending.is_some(),
                                    "json_values": json_values});
+            // #1732: the solves of each arrangement this frame ran, from the scheduler's nodes.
+            frame["solves"] = solves(&self.sched, &self.sessions[&f.doc], revised_now);
+            revised_now = false;
             let mut capture = 0;
             if f.pixels {
                 let before = thread_cpu_ns();
@@ -1267,4 +1273,49 @@ mod story_tests {
             assert_eq!(at_dot, Some(dot), "an item on #head at {t}");
         }
     }
+}
+
+/// How many solves of each arrangement the session's last frame ran (#1732): the document's
+/// check-phase solve when the frame took a new revision, and a frame-phase solve that wrote a
+/// result.
+fn solves(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &deep_canvas::schedule::Session,
+    revised: bool,
+) -> Value {
+    let mut out = Map::new();
+    let items = session
+        .document()
+        .and_then(|d| d.get("items"))
+        .and_then(Value::as_object);
+    for (id, _) in items
+        .into_iter()
+        .flatten()
+        .filter(|(_, i)| deep_canvas_motion::arrange::is_arrangement(i))
+    {
+        out.insert(id.clone(), json!(0));
+    }
+    for n in session.nodes(sched) {
+        if n.run != deep_canvas::schedule::Run::Ran {
+            continue;
+        }
+        // The check-phase solve covers every arrangement of the document at once.
+        let ids: Vec<String> = match (n.operator.as_str(), &n.item) {
+            ("motion.arrange", None) if revised => out.keys().cloned().collect(),
+            ("motion.arrangelive", Some(id))
+                if n.values
+                    .iter()
+                    .any(|v| !matches!(v, deep_canvas::schedule::Val::None)) =>
+            {
+                vec![id.clone()]
+            }
+            _ => Vec::new(),
+        };
+        for id in ids {
+            if let Some(c) = out.get_mut(&id) {
+                *c = json!(c.as_u64().unwrap_or(0) + 1);
+            }
+        }
+    }
+    Value::Object(out)
 }
