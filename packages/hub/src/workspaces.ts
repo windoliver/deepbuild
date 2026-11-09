@@ -19,11 +19,11 @@ import type { Plant } from './plant.js';
 
 type Obj = Record<string, unknown>;
 type Source = Omit<StateSource, 'fixture'>;
-export interface Space { id: string; folder: string; name: string }
+interface Space { id: string; folder: string; name: string }
 interface Read { touch: string; source: string; digest: string }
 interface Reads { req: string; check: string | null; touches: string[] }
 interface StateRead { workspace: string; task_ref: string; claim: string | null; readings: Read[]; reads: Reads[] }
-export interface WorkspaceDeps {
+interface WorkspaceDeps {
   root: string;
   now(): number;
   plant?: Plant | undefined;

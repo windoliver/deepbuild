@@ -24,14 +24,14 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const DAY = 86_400_000;
 /** How long a started agent has to write its first event before it ends as never started. */
-export const FIRST_EVENT_MS = 60_000;
+const FIRST_EVENT_MS = 60_000;
 /** The folders no command in a started session may read: your keys and the sign-ins other tools keep. */
 const CREDENTIALS = ['.ssh', '.aws', '.gnupg', '.config/gh', '.netrc', '.docker', '.kube', 'Library/Keychains', '.codex/auth.json', '.claude/.credentials.json'];
 /** The agents a start can name, and the name their facts and binary go by. */
 const AGENTS: Record<string, string> = { 'claude-code': 'claude', codex: 'codex' };
 const WALLS = ['writes', 'credentials', 'network'] as const;
 type Walls = Record<(typeof WALLS)[number], boolean>;
-export interface Sandbox { sandboxed: boolean; walls: Walls }
+interface Sandbox { sandboxed: boolean; walls: Walls }
 const NONE: Sandbox = { sandboxed: false, walls: { writes: false, credentials: false, network: false } };
 
 /** A run you approved, as `start.approval` records it, and the ask whose yes makes it count. */
@@ -40,11 +40,11 @@ interface Approval { ask: string; at: number; repo: string; issues: number[]; ag
 interface Started { run: string; ask: string; agent: string; pid?: number; dir?: string; session?: string; sandbox: Sandbox; ended: boolean; timer?: NodeJS.Timeout; worktree?: string; token?: string }
 /** A session's own forge credential while it lives, and the login GitHub records its pushes as. */
 interface Credential { token: string; login: string | null }
-export type StartResult = { status: 'started'; run: string; worktree: string; branch: string; agent: string; version: string; mode: string; sandbox: Sandbox } | { status: 'refused'; reason: string; bound: string };
+type StartResult = { status: 'started'; run: string; worktree: string; branch: string; agent: string; version: string; mode: string; sandbox: Sandbox } | { status: 'refused'; reason: string; bound: string };
 /** Who asks for a start: you in your terminal, by the process the CLI names; the core reads the rest from the connection. */
-export interface Caller { role: string; peer?: { pid: number; start: string }; session?: string | null }
+interface Caller { role: string; peer?: { pid: number; start: string }; session?: string | null }
 
-export interface StartsOptions {
+interface StartsOptions {
   root: string;
   /** The hub's socket: a started session's hooks and deep commands reach it from inside the sandbox. */
   socket: string;
@@ -551,7 +551,7 @@ export class Starts {
  * What a command's output says the sandbox refused it: Node's EPERM on a path or a connection, a program's "Operation
  * not permitted" on a path, and the sandbox's own `deny` lines. A refusal that printed nothing isn't seen.
  */
-export function refusedIn(text: string): { operation: string; target: string }[] {
+function refusedIn(text: string): { operation: string; target: string }[] {
   const out: { operation: string; target: string }[] = [];
   for (const m of text.matchAll(/EPERM: operation not permitted, (\w+) '([^'\n]+)'/g)) out.push({ operation: m[1]!, target: m[2]! });
   for (const m of text.matchAll(/^(?:[^:\n]+: )?(\/[^:\n]+): Operation not permitted$/gm)) out.push({ operation: 'open', target: m[1]! });

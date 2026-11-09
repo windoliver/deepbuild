@@ -8,14 +8,14 @@ import { fail } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { object, text, word } from './shared.js';
 
-export const READING_SOURCE = 'reading.source@1';
+const READING_SOURCE = 'reading.source@1';
 
-export interface Reading { value: number; unit: string; as_of: number }
+interface Reading { value: number; unit: string; as_of: number }
 /** What the hub gives a source to read from: a poll, or an MCP tool described by its schema digest. */
-export interface Upstream { poll(): Reading; describe(): { tool: string; schema_digest: string }; call(): Reading }
-export interface ReadRequest { name: string; unit: string; digest: string; upstream: Upstream; clock: { now(): number } }
-export type Answer = { name: string; value: number; unit: string; as_of: number; source: string } | { refused: 'schema_digest_changed'; expected: string; actual: string };
-export interface ReadingSourceFill extends SlotFill {
+interface Upstream { poll(): Reading; describe(): { tool: string; schema_digest: string }; call(): Reading }
+interface ReadRequest { name: string; unit: string; digest: string; upstream: Upstream; clock: { now(): number } }
+type Answer = { name: string; value: number; unit: string; as_of: number; source: string } | { refused: 'schema_digest_changed'; expected: string; actual: string };
+interface ReadingSourceFill extends SlotFill {
   slot: 'reading.source@1';
   variant: 'polled' | 'mcp';
   read(request: ReadRequest): Answer;
