@@ -36,6 +36,8 @@ pub(crate) struct MatOp {
     /// frame's samples, and after the resolve at one, as the parts after the opaque copy draw.
     pub blend: wgpu::RenderPipeline,
     pub blend_late: wgpu::RenderPipeline,
+    /// A fade's depth pass and its color where that depth is equal, through it (#432).
+    pub fade: [wgpu::RenderPipeline; 2],
     /// Its depth pipeline for a shadow map, when it writes its coverage (#446).
     pub shadow: Option<wgpu::RenderPipeline>,
     pub layout: wgpu::BindGroupLayout,
@@ -278,6 +280,7 @@ pub(crate) fn compile(
     // and writing no depth or object ID, as the renderer's blend parts draw.
     let blend = crate::op_blend_pipeline(d, samples, &module, &layout, forward_z, false);
     let blend_late = crate::op_blend_pipeline(d, samples, &module, &layout, forward_z, true);
+    let fade = crate::fade_pipelines(d, samples, &module, &layout, forward_z, "op_mesh_fs");
     // Its coverage holes let the light through (#446): the shadow passes' depth state, drawn
     // under the frame group and its own alone.
     let cuts = |o: &graph::Operator| {
@@ -322,6 +325,7 @@ pub(crate) fn compile(
         pipeline,
         blend,
         blend_late,
+        fade,
         shadow,
         textures,
         layout: inputs_layout,
