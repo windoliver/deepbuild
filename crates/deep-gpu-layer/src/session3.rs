@@ -81,7 +81,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         },
         ids_by_compacted_place: p == Some(Planted::IdsByCompactedRow),
         count_read_back: p == Some(Planted::CountReadBack),
-        // #428's shading plants, a bit each in scene3d.wgsl's order.
+        // #428's and #481's shading plants, a bit each in scene3d.wgsl's order.
         lobes: [
             Planted::AbsorptionIgnoresThickness,
             Planted::TransmissionIgnoresRoughness,
@@ -92,6 +92,9 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             Planted::OrenNayarUncompensated,
             Planted::RetroreflectionIgnored,
             Planted::FlakesByPixel,
+            // #481's.
+            Planted::SubsurfaceAcrossParts,
+            Planted::SubsurfaceAddsToDiffuse,
         ]
         .iter()
         .position(|q| p == Some(*q))

@@ -6,7 +6,7 @@ The extension host (#348-#351): loads a package in the hub's process when it is 
 
 ## Where new code goes
 
-- `src/host.ts`: loading, grants, slots and installs; `src/replies.ts`: hook reply checks and joins; `src/trust.ts`: re-exports project trust, which lives in `@deepbuild/record`.
+- `src/host.ts`: loading, grants, slots and installs; each load owns its runtime environment starts and handles, drains starts during removal, and closes handles before dropping its handlers. Cleanup retains the old load's handler, never the replacement's. `src/replies.ts`: hook reply checks and joins; `src/trust.ts`: re-exports project trust, which lives in `@deepbuild/record`.
 - `src/compose.ts`: composition's rules as data (#103): matching a use to a provider by type, the first schema path that differs, serving a reading at the use's minor, cycles and dependents. The host wires, stages, tests and reopens with them.
 - `src/sources.ts`: sources and secrets; `src/jobs.ts`: a plug-in's model jobs; `src/terminals.ts`: hosted terminals; `src/digest.ts`: a package folder's digest; `src/kit.ts`: the host's kit.
 - The extension API schema and the sandbox side live in `runtime/`; `src/index.ts` re-exports the schema.

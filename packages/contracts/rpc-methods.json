@@ -411,5 +411,26 @@
     "stability": "preview",
     "tracking": "#148",
     "called_by": "deep mcp-exec"
+  },
+  {
+    "method": "hub.drain",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1334",
+    "called_by": "deep hub promote"
+  },
+  {
+    "method": "hub.check",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1334",
+    "called_by": "deep hub promote"
+  },
+  {
+    "method": "build.rolled_back",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1334",
+    "called_by": "deep hub promote"
   }
 ]

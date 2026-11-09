@@ -306,6 +306,10 @@ pub enum Planted {
     OrenNayarUncompensated,
     RetroreflectionIgnored,
     FlakesByPixel,
+    // #481: the subsurface spread takes every tap, whatever part it lands on; the spread light is
+    // added to the whole diffuse.
+    SubsurfaceAcrossParts,
+    SubsurfaceAddsToDiffuse,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -509,6 +513,8 @@ impl Planted {
             "oren_nayar_uncompensated" => Planted::OrenNayarUncompensated,
             "retroreflection_ignored" => Planted::RetroreflectionIgnored,
             "flakes_by_pixel" => Planted::FlakesByPixel,
+            "subsurface_across_parts" => Planted::SubsurfaceAcrossParts,
+            "subsurface_adds_to_diffuse" => Planted::SubsurfaceAddsToDiffuse,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,
