@@ -1,0 +1,26 @@
+Issue #1470's acceptance tests on the base commit c88d9ae1 (main), which exports no Menu from @deepbuild/panel (the
+catalog refuses it as not offered) and has no menu-release-always planted replica in deep-drive.
+
+Command, from the checkout's root, Node 24.22.0 first on PATH, after npm ci:
+
+  CARGO_INCREMENTAL=0 npx vitest run --root tests/acceptance/1470 --no-file-parallelism --reporter=verbose
+  npx tsc -p tests/acceptance/1470/tsconfig.json          # exit 0
+
+Result: Test Files 1 failed (1); Tests 8 failed (8); duration 501 s, almost all of it the first cargo build of deep-drive.
+7 fail at launch on the missing export, with the replica's own refusal:
+
+  AssertionError: launch: {"ok":false,"t":0,"error":{"code":"refused","message":"the panel didn't load: main.js:5 uses
+  `Menu`, which is not on the panel catalog. It draws outside its parent, where it could cover the question card. The
+  closest name on it is `Input`"}}: expected false to be true
+
+  x #1470.afc3862b  press on the trigger, move to row 2, release (AC1)
+  x #1470.da7a71f2  press and release within 3 px leaves it open, a later click picks (AC2)
+  x #1470.ce34d940  a release outside closes it and runs nothing (AC3)
+  x #1470.6f44b5b9  keyboard: Enter and Space open; same text by key and click; Escape; Down/Up and Enter (AC4, 4 tests)
+
+The 8th, the planted always-release (AC2), is BLOCKED because the binary has no such planted replica yet:
+
+  AssertionError: BLOCKED: deep-drive didn't say {"ready": true} with DEEP_DRIVE_PLANT=menu-release-always:
+  {"ready":false,"error":"no planted replica menu-release-always"}
+
+Every failure is the missing surface, never a test error.

@@ -110,7 +110,8 @@ test('a failed checkout is blocked without building the merge base', (t) => {
 test('the full run with the change\'s own tests is still held to the peak-memory cap', (t) => {
   // The run without the change's tests also regresses against the base, so neither failure may hide the other.
   const { cwd, git, perf } = repository(t, () => `
-    if (process.cwd().includes('without-tests')) { const start = process.cpuUsage(); for (let used; (used = process.cpuUsage(start)).user + used.system < 200_000;); }
+    // 500 ms against one node start, which would have to read over 313 ms to hide it (#1421).
+    if (process.cwd().includes('without-tests')) { const start = process.cpuUsage(); for (let used; (used = process.cpuUsage(start)).user + used.system < 500_000;); }
   `);
   writeFileSync(join(cwd, 'benchmarks/budgets.json'), JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: 300_000, peakBytes: 1e9 }, initialReason: 'Fixture base.' }, tasks: [] }));
   git('commit', '-qam', 'cap');
@@ -308,6 +309,8 @@ test('the copy\'s throwaway repository tracks the merge base\'s files, not the l
 test('the copy without the change\'s own tests keeps links as links and skips a checkout\'s own target link', (t) => {
   const { cwd, git, perf } = repository(t, (root) => `
     import { lstatSync, readFileSync, readlinkSync, appendFileSync } from 'node:fs';
+    // Both sides measure 200 ms of CPU, so one node start's spread can't read as a regression (#1421).
+    { const start = process.cpuUsage(); for (let used; (used = process.cpuUsage(start)).user + used.system < 200_000;); }
     if (process.cwd().includes('without-tests')) appendFileSync(${JSON.stringify(join(root, 'without-links'))}, JSON.stringify({ docs: readlinkSync('docs-link'), target: readlinkSync('target'), outside: lstatSync('outside-link').isFile() && readFileSync('outside-link', 'utf8'), inner: readFileSync('outside-dir-link/inner.txt', 'utf8'), absolute: lstatSync('absolute-link').isSymbolicLink() }));
   `);
   symlinkSync('benchmarks', join(cwd, 'docs-link'));

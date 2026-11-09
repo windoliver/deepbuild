@@ -1,0 +1,274 @@
+{
+  "spike": 1477,
+  "what": "Long lists and tables in a real 1,200 × 700 window, 32 px rows, 8 columns, two rows (64 px) of scroll a frame, each arm in a process of its own: an empty window (blank), gpui-kit's DataTable with a Rust delegate (kit), the same through a panel's render_cell in gpui-shell (panel), a variable-height list at 10,000 and 100,000 rows, and, when built, ours. Update is the time from the root view's render to the end of its paint; allocations and CPU are the process's over the counted frames, per frame; working set is the physical footprint.",
+  "arms": {
+    "blank": {
+      "arm": "blank",
+      "status": "measured",
+      "window": [
+        1200,
+        700
+      ],
+      "seconds": 8,
+      "elapsed_s": 8.00732,
+      "frames": 933,
+      "scroll_px_per_frame": 64.0,
+      "raw": {
+        "p50_ms": 0.10008299999999999,
+        "p95_ms": 0.121584,
+        "p99_ms": 0.13954200000000003,
+        "allocations_per_frame": 73.0139335476956,
+        "cpu_ms_per_frame": 0.6698628081457663,
+        "working_set_bytes": 208143344,
+        "data_bytes": 0
+      },
+      "fingerprint": {
+        "model": "Mac15,7",
+        "chip": "Apple M3 Pro",
+        "memoryBytes": 38654705664,
+        "power": "battery",
+        "lowPowerMode": false,
+        "thermalState": "nominal",
+        "macosBuild": "25G241"
+      },
+      "load": {
+        "start": 31.10986328125,
+        "end": 29.94091796875
+      }
+    },
+    "kit": {
+      "arm": "kit",
+      "status": "measured",
+      "window": [
+        1200,
+        700
+      ],
+      "seconds": 8,
+      "elapsed_s": 8.008276083,
+      "frames": 957,
+      "scroll_px_per_frame": 64.0,
+      "raw": {
+        "p50_ms": 2.259209,
+        "p95_ms": 2.3981250000000003,
+        "p99_ms": 2.450583,
+        "allocations_per_frame": 5668.051201671891,
+        "cpu_ms_per_frame": 3.1557774294670846,
+        "working_set_bytes": 232440816,
+        "data_bytes": 39911120
+      },
+      "rows": 100000,
+      "columns": 8,
+      "fingerprint": {
+        "model": "Mac15,7",
+        "chip": "Apple M3 Pro",
+        "memoryBytes": 38654705664,
+        "power": "battery",
+        "lowPowerMode": false,
+        "thermalState": "nominal",
+        "macosBuild": "25G241"
+      },
+      "load": {
+        "start": 29.94091796875,
+        "end": 30.2470703125
+      },
+      "net": {
+        "p50_ms": 2.1591259999999997,
+        "p95_ms": 2.2765410000000004,
+        "p99_ms": 2.311041,
+        "allocations_per_frame": 5595.037268124196,
+        "cpu_ms_per_frame": 2.485914621321318,
+        "working_set_above_data_bytes": -15613648.0
+      }
+    },
+    "panel": {
+      "arm": "panel",
+      "status": "missed",
+      "reason": "the panel's table drew no rows: gpui-shell refuses its 100,000 rows of 8 columns (it caps a component's data at 10,000 array items, 4,096 nodes and 1,024 object keys, so a panel's DataTable holds at most 127 such rows) and shows the error instead",
+      "rows": 100000,
+      "columns": 8,
+      "fingerprint": {
+        "model": "Mac15,7",
+        "chip": "Apple M3 Pro",
+        "memoryBytes": 38654705664,
+        "power": "battery",
+        "lowPowerMode": false,
+        "thermalState": "nominal",
+        "macosBuild": "25G241"
+      },
+      "load": {
+        "start": 30.2470703125,
+        "end": 30.2470703125
+      }
+    },
+    "list-10k": {
+      "arm": "list-10k",
+      "status": "measured",
+      "window": [
+        1200,
+        700
+      ],
+      "seconds": 8,
+      "elapsed_s": 8.008032083,
+      "frames": 961,
+      "scroll_px_per_frame": 64.0,
+      "raw": {
+        "p50_ms": 0.547583,
+        "p95_ms": 0.648959,
+        "p99_ms": 1.112709,
+        "allocations_per_frame": 119.34755463059314,
+        "cpu_ms_per_frame": 1.2501508844953173,
+        "working_set_bytes": 236356616,
+        "data_bytes": 1746670
+      },
+      "rows": 10000,
+      "assistive": false,
+      "access_allocations": 0,
+      "run_cache": {
+        "lines": 3072,
+        "bytes": 13474425,
+        "bound": 8192
+      },
+      "list": "deep-app table::view::TableView, variable row heights (#1477's element; the kit's list can't count strings shaped)",
+      "shaped": {
+        "frames": 120,
+        "down": 2.683333333333333,
+        "back": 0.025
+      },
+      "fingerprint": {
+        "model": "Mac15,7",
+        "chip": "Apple M3 Pro",
+        "memoryBytes": 38654705664,
+        "power": "battery",
+        "lowPowerMode": false,
+        "thermalState": "nominal",
+        "macosBuild": "25G241"
+      },
+      "load": {
+        "start": 30.2470703125,
+        "end": 28.94482421875
+      },
+      "net": {
+        "p50_ms": 0.44750000000000006,
+        "p95_ms": 0.5273749999999999,
+        "p99_ms": 0.9731669999999999,
+        "allocations_per_frame": 46.33362108289754,
+        "cpu_ms_per_frame": 0.580288076349551,
+        "working_set_above_data_bytes": 26466602.0
+      }
+    },
+    "list-100k": {
+      "arm": "list-100k",
+      "status": "measured",
+      "window": [
+        1200,
+        700
+      ],
+      "seconds": 8,
+      "elapsed_s": 8.005286417,
+      "frames": 960,
+      "scroll_px_per_frame": 64.0,
+      "raw": {
+        "p50_ms": 0.509625,
+        "p95_ms": 0.592458,
+        "p99_ms": 0.641208,
+        "allocations_per_frame": 119.35104166666666,
+        "cpu_ms_per_frame": 1.1862770833333334,
+        "working_set_bytes": 259589200,
+        "data_bytes": 17766670
+      },
+      "rows": 100000,
+      "assistive": false,
+      "access_allocations": 0,
+      "run_cache": {
+        "lines": 3069,
+        "bytes": 13461195,
+        "bound": 8192
+      },
+      "list": "deep-app table::view::TableView, variable row heights (#1477's element; the kit's list can't count strings shaped)",
+      "shaped": {
+        "frames": 120,
+        "down": 2.658333333333333,
+        "back": 0.041666666666666664
+      },
+      "fingerprint": {
+        "model": "Mac15,7",
+        "chip": "Apple M3 Pro",
+        "memoryBytes": 38654705664,
+        "power": "battery",
+        "lowPowerMode": false,
+        "thermalState": "nominal",
+        "macosBuild": "25G241"
+      },
+      "load": {
+        "start": 28.94482421875,
+        "end": 33.4677734375
+      },
+      "net": {
+        "p50_ms": 0.409542,
+        "p95_ms": 0.470874,
+        "p99_ms": 0.501666,
+        "allocations_per_frame": 46.33710811897106,
+        "cpu_ms_per_frame": 0.5164142751875671,
+        "working_set_above_data_bytes": 33679186.0
+      }
+    },
+    "ours": {
+      "arm": "ours",
+      "status": "measured",
+      "window": [
+        1200,
+        700
+      ],
+      "seconds": 8,
+      "elapsed_s": 8.000035208,
+      "frames": 960,
+      "scroll_px_per_frame": 64.0,
+      "raw": {
+        "p50_ms": 0.949875,
+        "p95_ms": 0.999541,
+        "p99_ms": 1.8951669999999998,
+        "allocations_per_frame": 194.12916666666666,
+        "cpu_ms_per_frame": 1.7299520833333333,
+        "working_set_bytes": 356992128,
+        "data_bytes": 27111120
+      },
+      "rows": 100000,
+      "columns": 8,
+      "assistive": false,
+      "access_allocations": 0,
+      "run_cache": {
+        "lines": 7264,
+        "bytes": 26041440,
+        "bound": 8192
+      },
+      "fingerprint": {
+        "model": "Mac15,7",
+        "chip": "Apple M3 Pro",
+        "memoryBytes": 38654705664,
+        "power": "battery",
+        "lowPowerMode": false,
+        "thermalState": "nominal",
+        "macosBuild": "25G241"
+      },
+      "load": {
+        "start": 33.4677734375,
+        "end": 39.94775390625
+      },
+      "net": {
+        "p50_ms": 0.849792,
+        "p95_ms": 0.877957,
+        "p99_ms": 1.7556249999999998,
+        "allocations_per_frame": 121.11523311897106,
+        "cpu_ms_per_frame": 1.060089275187567,
+        "working_set_above_data_bytes": 121737664.0
+      }
+    }
+  },
+  "gpui_fast": {
+    "issue": 1433,
+    "record": "docs/spikes/1433/record.json",
+    "at": null,
+    "reading": null
+  },
+  "decision": "build: kit p99 2.311 ms net of the blank arm; panel missed (the panel's table drew no rows: gpui-shell refuses its 100,000 rows of 8 columns (it caps a component's data at 10,000 array items, 4,096 nodes and 1,024 object keys, so a panel's DataTable holds at most 127 such rows) and shows the error instead); against 4 ms; ours p99 1.756 ms, 121 allocations a frame net; #1433's gpui-fast list reading: none yet (docs/spikes/1433/record.json doesn't exist)"
+}
