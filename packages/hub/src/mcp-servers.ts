@@ -100,8 +100,10 @@ export async function toolLists(cwd: string): Promise<Listed[]> {
   const user = json(join(homedir(), '.claude.json'));
   const project = user && isObj(user.projects) && isObj(user.projects[cwd]) ? user.projects[cwd] : {};
   const names = new Set([project.mcpServers, json(join(cwd, '.mcp.json'))?.mcpServers, user?.mcpServers].flatMap((s) => (isObj(s) ? Object.keys(s) : [])));
-  // Our own server's tools (deep_ask and the rest) are DeepBuild's, and the gate never holds them.
+  // Our own server's tools (deep_ask and the rest) are DeepBuild's, and the gate never holds them. `deep setup` names
+  // it `deepbuild` for Claude Code; Codex and pi call it `deep`.
   names.delete('deep');
+  names.delete('deepbuild');
   const out = await Promise.all([...names].map(async (server) => {
     const source = sourceOf(server, cwd);
     if (!source || typeof source.config.command !== 'string' || (source.config.type !== undefined && source.config.type !== 'stdio')) return undefined;
