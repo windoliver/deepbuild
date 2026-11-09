@@ -1,0 +1,294 @@
+Run once at the base (a3efe5c8) on an Apple Silicon Mac with Metal, Nov 8, with `CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1640 --no-file-parallelism
+--no-color` (unleased: scripts/lease found no `deep` CLI). 10 of 12 tests fail, each on an assertion: crease counts
+(the base reads the object `kind` as `quads`, so the cylinder draws 96 and the ball 992), `border: false` ignored, no
+`dash` on 3D lines, no `edge_sets_derived`, and the three new planted names answered `bad_input`.
+
+The 2 that pass are AC4's depth half, the clean check and #420's `edges_skip_depth` twin: at the base the crease
+object falls back to `quads`, which on a slab cube draws the same 12 edges under #420's depth rule. They hold the
+crease line to that rule once it exists; AC1 is what fails when the crease kind is missing.
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1640
+
+ ❯ depth-dash.test.ts (5 tests | 3 failed) 70262ms
+   ❯ AC4 #1640.4ab59ee2 crease edges keep mesh edges' depth rule, and dash in their size space (5)
+     × AC4 #1640.4ab59ee2 with size_space screen and dash [8, 8] px the crease edges dash every 16 px on screen (reference Mac) 4834ms
+     × AC4 #1640.4ab59ee2 with size_space world and dash [0.1, 0.1] m the crease edges dash every 0.2 m along the edge (reference Mac) 22223ms
+     × AC4 #1640.4ab59ee2 the planted edges_dash_other_space reads the dash in the other size space and fails both, naming the line and the edges 61ms
+ ❯ orbit.test.ts (3 tests | 3 failed) 425729ms
+   ❯ AC3 #1640.e3cdf8ce a 10 s orbit of a 100,000-triangle asset with crease edges (3)
+     × AC3 #1640.e3cdf8ce derives the crease set once over the 600 frames, the reference's 4 fold lines (noop lane) 173337ms
+     × AC3 #1640.e3cdf8ce the comparison run, edges_derive_every_frame, derives the set in every frame (noop lane) 509ms
+     × AC3 #1640.e3cdf8ce every frame of the orbit equals by pixel hash the run that derives the set every frame; a run with another edge set differs (reference Mac) 242178ms
+ ❯ crease.test.ts (2 tests | 2 failed) 30894ms
+   ❯ AC1 #1640.b30fa4ba crease {angle: 30} on a cube, a cylinder and a UV ball (2)
+     × AC1 #1640.b30fa4ba the cube draws exactly its 12 edges, the cylinder its two rims (64) and none on its side, the ball 0 (noop lane) 8344ms
+     × AC1 #1640.b30fa4ba the planted crease_below_angle keeps the edges below the angle and fails, naming each item and its count 263ms
+ ❯ border.test.ts (2 tests | 2 failed) 28247ms
+   ❯ AC2 #1640.1f4212e3 border edges of a 2-triangle plane (2)
+     × AC2 #1640.1f4212e3 with border: true the plane draws its 4 border segments and never its diagonal; with border: false, 0 (noop lane) 7825ms
+     × AC2 #1640.1f4212e3 the planted crease_below_angle draws the plane's diagonal and fails, naming it 227ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  border.test.ts > AC2 #1640.1f4212e3 border edges of a 2-triangle plane > AC2 #1640.1f4212e3 with border: true the plane draws its 4 border segments and never its diagonal; with border: false, 0 (noop lane)
+AssertionError: the plane's border edges:
+  with border: false, crease edges of plane draw 4 segments, not 0: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "with border: false, crease edges of plane draw 4 segments, not 0",
++ ]
+
+ ❯ none helpers.ts:72:60
+     70| /** No failures; the message lists them. */
+     71| export function none(failures: readonly string[], what: string): void {
+     72|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     73| }
+     74| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ border.test.ts:32:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  border.test.ts > AC2 #1640.1f4212e3 border edges of a 2-triangle plane > AC2 #1640.1f4212e3 the planted crease_below_angle draws the plane's diagonal and fails, naming it
+AssertionError: deep-gpu run --backend noop --planted crease_below_angle exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:162:151
+    160|   const stdout = run.stdout ?? '';
+    161|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    162|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    163|   const lines = stdout.split('\n').filter((l) => l !== '');
+    164|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ drawScene edge-sets.ts:37:19
+ ❯ border.test.ts:37:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  crease.test.ts > AC1 #1640.b30fa4ba crease {angle: 30} on a cube, a cylinder and a UV ball > AC1 #1640.b30fa4ba the cube draws exactly its 12 edges, the cylinder its two rims (64) and none on its side, the ball 0 (noop lane)
+AssertionError: the crease edges:
+  crease edges of cylinder draw 96 segments, not 64
+  crease edges of cylinder draw 32 segments on its side
+  crease edges of ball draw 992 segments, not 0: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "crease edges of cylinder draw 96 segments, not 64",
++   "crease edges of cylinder draw 32 segments on its side",
++   "crease edges of ball draw 992 segments, not 0",
++ ]
+
+ ❯ none helpers.ts:72:60
+     70| /** No failures; the message lists them. */
+     71| export function none(failures: readonly string[], what: string): void {
+     72|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     73| }
+     74| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ crease.test.ts:38:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  crease.test.ts > AC1 #1640.b30fa4ba crease {angle: 30} on a cube, a cylinder and a UV ball > AC1 #1640.b30fa4ba the planted crease_below_angle keeps the edges below the angle and fails, naming each item and its count
+AssertionError: deep-gpu run --backend noop --planted crease_below_angle exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:162:151
+    160|   const stdout = run.stdout ?? '';
+    161|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    162|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    163|   const lines = stdout.split('\n').filter((l) => l !== '');
+    164|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ drawScene edge-sets.ts:37:19
+ ❯ crease.test.ts:43:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  depth-dash.test.ts > AC4 #1640.4ab59ee2 crease edges keep mesh edges' depth rule, and dash in their size space > AC4 #1640.4ab59ee2 with size_space screen and dash [8, 8] px the crease edges dash every 16 px on screen (reference Mac)
+AssertionError: the screen-space dash:
+  crease (screen dash): edge (+,−,+)–(+,−,−) is solid: no gap in its middle 70%, so no dash of period 16 px
+  crease (screen dash): edge (+,+,−)–(+,−,−) is solid: no gap in its middle 70%, so no dash of period 16 px
+  crease (screen dash): edge (+,−,+)–(−,−,+) is solid: no gap in its middle 70%, so no dash of period 16 px
+  crease (screen dash): edge (+,+,+)–(+,−,+) is solid: no gap in its middle 70%, so no dash of period 16 px
+  crease (screen dash): edge (−,+,+)–(−,−,+) is solid: no gap in its middle 70%, so no dash of period 16 px
+  crease (screen dash): edge (+,+,−)–(−,+,−) is solid: no gap in its middle 70%, so no dash of period 16 px
+  crease (screen dash): edge (−,+,+)–(−,+,−) is solid: no gap in its middle 70%, so no dash of period 16 px
+  crease (screen dash): edge (+,+,+)–(+,+,−) is solid: no gap in its middle 70%, so no dash of period 16 px
+  crease (screen dash): edge (+,+,+)–(−,+,+) is solid: no gap in its middle 70%, so no dash of period 16 px: expected [ …(9) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "crease (screen dash): edge (+,−,+)–(+,−,−) is solid: no gap in its middle 70%, so no dash of period 16 px",
++   "crease (screen dash): edge (+,+,−)–(+,−,−) is solid: no gap in its middle 70%, so no dash of period 16 px",
++   "crease (screen dash): edge (+,−,+)–(−,−,+) is solid: no gap in its middle 70%, so no dash of period 16 px",
++   "crease (screen dash): edge (+,+,+)–(+,−,+) is solid: no gap in its middle 70%, so no dash of period 16 px",
++   "crease (screen dash): edge (−,+,+)–(−,−,+) is solid: no gap in its middle 70%, so no dash of period 16 px",
++   "crease (screen dash): edge (+,+,−)–(−,+,−) is solid: no gap in its middle 70%, so no dash of period 16 px",
++   "crease (screen dash): edge (−,+,+)–(−,+,−) is solid: no gap in its middle 70%, so no dash of period 16 px",
++   "crease (screen dash): edge (+,+,+)–(+,+,−) is solid: no gap in its middle 70%, so no dash of period 16 px",
++   "crease (screen dash): edge (+,+,+)–(−,+,+) is solid: no gap in its middle 70%, so no dash of period 16 px",
++ ]
+
+ ❯ none helpers.ts:72:60
+     70| /** No failures; the message lists them. */
+     71| export function none(failures: readonly string[], what: string): void {
+     72|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     73| }
+     74| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ depth-dash.test.ts:173:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  depth-dash.test.ts > AC4 #1640.4ab59ee2 crease edges keep mesh edges' depth rule, and dash in their size space > AC4 #1640.4ab59ee2 with size_space world and dash [0.1, 0.1] m the crease edges dash every 0.2 m along the edge (reference Mac)
+AssertionError: the world-space dash:
+  crease (world dash): edge (+,−,+)–(+,−,−) is solid: no gap in its middle 70%, so no dash of period 0.2 m
+  crease (world dash): edge (+,+,−)–(+,−,−) is solid: no gap in its middle 70%, so no dash of period 0.2 m
+  crease (world dash): edge (+,−,+)–(−,−,+) is solid: no gap in its middle 70%, so no dash of period 0.2 m
+  crease (world dash): edge (+,+,+)–(+,−,+) is solid: no gap in its middle 70%, so no dash of period 0.2 m
+  crease (world dash): edge (−,+,+)–(−,−,+) is solid: no gap in its middle 70%, so no dash of period 0.2 m
+  crease (world dash): edge (+,+,−)–(−,+,−) is solid: no gap in its middle 70%, so no dash of period 0.2 m
+  crease (world dash): edge (−,+,+)–(−,+,−) is solid: no gap in its middle 70%, so no dash of period 0.2 m
+  crease (world dash): edge (+,+,+)–(+,+,−) is solid: no gap in its middle 70%, so no dash of period 0.2 m
+  crease (world dash): edge (+,+,+)–(−,+,+) is solid: no gap in its middle 70%, so no dash of period 0.2 m: expected [ …(9) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "crease (world dash): edge (+,−,+)–(+,−,−) is solid: no gap in its middle 70%, so no dash of period 0.2 m",
++   "crease (world dash): edge (+,+,−)–(+,−,−) is solid: no gap in its middle 70%, so no dash of period 0.2 m",
++   "crease (world dash): edge (+,−,+)–(−,−,+) is solid: no gap in its middle 70%, so no dash of period 0.2 m",
++   "crease (world dash): edge (+,+,+)–(+,−,+) is solid: no gap in its middle 70%, so no dash of period 0.2 m",
++   "crease (world dash): edge (−,+,+)–(−,−,+) is solid: no gap in its middle 70%, so no dash of period 0.2 m",
++   "crease (world dash): edge (+,+,−)–(−,+,−) is solid: no gap in its middle 70%, so no dash of period 0.2 m",
++   "crease (world dash): edge (−,+,+)–(−,+,−) is solid: no gap in its middle 70%, so no dash of period 0.2 m",
++   "crease (world dash): edge (+,+,+)–(+,+,−) is solid: no gap in its middle 70%, so no dash of period 0.2 m",
++   "crease (world dash): edge (+,+,+)–(−,+,+) is solid: no gap in its middle 70%, so no dash of period 0.2 m",
++ ]
+
+ ❯ none helpers.ts:72:60
+     70| /** No failures; the message lists them. */
+     71| export function none(failures: readonly string[], what: string): void {
+     72|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     73| }
+     74| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ depth-dash.test.ts:180:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  depth-dash.test.ts > AC4 #1640.4ab59ee2 crease edges keep mesh edges' depth rule, and dash in their size space > AC4 #1640.4ab59ee2 the planted edges_dash_other_space reads the dash in the other size space and fails both, naming the line and the edges
+AssertionError: deep-gpu run --planted edges_dash_other_space exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:162:151
+    160|   const stdout = run.stdout ?? '';
+    161|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    162|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    163|   const lines = stdout.split('\n').filter((l) => l !== '');
+    164|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ draw depth-dash.test.ts:40:19
+ ❯ depth-dash.test.ts:185:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  orbit.test.ts > AC3 #1640.e3cdf8ce a 10 s orbit of a 100,000-triangle asset with crease edges > AC3 #1640.e3cdf8ce derives the crease set once over the 600 frames, the reference's 4 fold lines (noop lane)
+AssertionError: the orbit on noop: frame 0 reports edge_sets_derived (counts: true): expected null not to be null
+ ❯ orbit.test.ts:49:97
+     47| function derivedOf(frames: Frame3[], what: string): number[] {
+     48|   return frames.map((f) => {
+     49|     expect(f.derived, `${what}: frame ${f.frame} reports edge_sets_der…
+       |                                                                                                 ^
+     50|     const n = f.derived!.get(LINE);
+     51|     expect(n, `${what}: frame ${f.frame} reports ${LINE} in edge_sets_…
+ ❯ derivedOf orbit.test.ts:48:17
+ ❯ orbit.test.ts:72:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  orbit.test.ts > AC3 #1640.e3cdf8ce a 10 s orbit of a 100,000-triangle asset with crease edges > AC3 #1640.e3cdf8ce the comparison run, edges_derive_every_frame, derives the set in every frame (noop lane)
+AssertionError: deep-gpu run --backend noop --planted edges_derive_every_frame exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:162:151
+    160|   const stdout = run.stdout ?? '';
+    161|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    162|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    163|   const lines = stdout.split('\n').filter((l) => l !== '');
+    164|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ orbit orbit.test.ts:42:19
+ ❯ orbit.test.ts:96:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  orbit.test.ts > AC3 #1640.e3cdf8ce a 10 s orbit of a 100,000-triangle asset with crease edges > AC3 #1640.e3cdf8ce every frame of the orbit equals by pixel hash the run that derives the set every frame; a run with another edge set differs (reference Mac)
+AssertionError: deep-gpu run --planted edges_derive_every_frame exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:162:151
+    160|   const stdout = run.stdout ?? '';
+    161|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    162|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    163|   const lines = stdout.split('\n').filter((l) => l !== '');
+    164|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ orbit orbit.test.ts:42:19
+ ❯ orbit.test.ts:104:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  10 failed | 2 passed (12)
+   Start at  22:42:21
+   Duration  564.71s (tests 99%)
+
+
+[exited with code 1]
