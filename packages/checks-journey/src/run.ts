@@ -16,31 +16,31 @@ const DRIVER = fileURLToPath(new URL('../runtime/driver.mjs', import.meta.url));
 export interface Profile { width: number; height: number; locale: string; timezone: string; colorScheme: 'light' | 'dark'; reducedMotion: 'reduce' | 'no-preference' }
 export const PROFILE: Profile = { width: 1280, height: 720, locale: 'en-US', timezone: 'UTC', colorScheme: 'light', reducedMotion: 'reduce' };
 
-export interface JobStep { id: string; line: number | null; deadlineMs: number; timeoutMs: number; actions: unknown[]; expects: unknown[] }
-export interface JobEnd { id: string; line: number | null; oracle: string; locator?: DriverLocator; text?: string; visible?: boolean; timeoutMs?: number }
+interface JobStep { id: string; line: number | null; deadlineMs: number; timeoutMs: number; actions: unknown[]; expects: unknown[] }
+interface JobEnd { id: string; line: number | null; oracle: string; locator?: DriverLocator; text?: string; visible?: boolean; timeoutMs?: number }
 export interface Job { url: string; profile: Profile; video: boolean; trace: boolean; settle: boolean; settleMs: number; hold: boolean; masks: DriverLocator[]; steps: JobStep[]; endState: JobEnd[] }
 
 interface Control { role: string; name: string; testId?: string }
 interface AnimationEntry { target: Control | null; property: string; from: string; to: string; duration: number | null; delay: number; easing: string }
 export interface ScreenElement { role: string; name: string; testId: string | null; label: string | null; explicitRole: string | null; tag: string; box: Box }
 interface ReportFailure { step: string; line: number | null; assertion: boolean; message: string; selector?: string; screenshot?: string | null; box?: Box | null; action?: string; outside?: boolean; stack?: string | null }
-export interface ReportStep {
+interface ReportStep {
   id: string; index: number; startMs: number; endMs: number | null; outcome: 'passed' | 'failed' | 'overran'; failure: ReportFailure | null;
   route: { path: string; query: string; raw: string } | null; controls: { appeared: Control[]; left: Control[]; changed: Control[] } | null;
   screenshot: string | null; snapshot: string; dom: string[]; animations: AnimationEntry[]; firstFrame: { opacity: number; transform: string } | null;
   masks: { selector: string; box: Box | null; count: number }[]; still: boolean; unstable: Box | null; elements: ScreenElement[];
   expects: { line: number | null; selector: string | null; outcome: string; box: Box | null }[];
 }
-export interface ReportEnd { id: string; line: number | null; oracle: string; outcome: 'passed' | 'failed' | 'reading'; selector: string | null; box: Box | null; screenshot: string | null; message: string | null; value: string | null; snapshot: string | null }
-export type ReportError = { kind: 'uncaught'; message: string; at: number; step: string | null } | { kind: 'request'; url: string; status: number | null; unfinished: boolean; at: number; step: string | null };
-export interface ReportRequest { url: string; method: string; type: string; started: number; ended: number | null; status: number | null; size: number | null; step: string | null; failed: string | null; unfinished: boolean }
+interface ReportEnd { id: string; line: number | null; oracle: string; outcome: 'passed' | 'failed' | 'reading'; selector: string | null; box: Box | null; screenshot: string | null; message: string | null; value: string | null; snapshot: string | null }
+type ReportError = { kind: 'uncaught'; message: string; at: number; step: string | null } | { kind: 'request'; url: string; status: number | null; unfinished: boolean; at: number; step: string | null };
+interface ReportRequest { url: string; method: string; type: string; started: number; ended: number | null; status: number | null; size: number | null; step: string | null; failed: string | null; unfinished: boolean }
 export interface Report {
   started: string | null; steps: ReportStep[]; endState: ReportEnd[]; requests: ReportRequest[]; errors: ReportError[]; console: { text: string; at: number; step: string | null }[];
   video: string | null; trace: string | null; redaction: { state: 'complete' | 'incomplete'; since: string | null; sinceMs?: number; field?: string }; secretTyped: boolean; bundle: Record<string, number>;
   ended: number | null; died: string | null; playwright: { started: number; ended: number; own: number };
 }
 /** A file the run wrote, kept with its digest and size, checked when read. */
-export interface Artifact { name: string; path: string; sha256: string; size: number; kind: 'png' | 'webm' | 'zip' | 'json' }
+interface Artifact { name: string; path: string; sha256: string; size: number; kind: 'png' | 'webm' | 'zip' | 'json' }
 export interface DriverRun { report: Report | null; dir: string; out: string; artifacts: Artifact[]; exit: { code: number | null; cause: 'exit' | 'deadline' | 'stop'; failed: string | null; output: string }; wallMs: number; /** The driver process gone, awaited before its folder is removed. */ settled: Promise<unknown> }
 
 const sha256 = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');

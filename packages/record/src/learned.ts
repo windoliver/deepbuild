@@ -55,7 +55,7 @@ export const CHECKED = new Set(['learn.applied', 'learn.widened']);
 /** The kinds of the changes that can be in force. */
 const IN_FORCE = "kind IN ('learn.applied', 'learn.widened') AND state = 'applied'";
 
-export interface Quote { at: string; quote: string }
+interface Quote { at: string; quote: string }
 export interface LearnedChange { layer: string; target: string; diff: string; evidence: Quote[]; scope: string; applied_by: string | null; supersedes?: string | null }
 interface Check { outcome: 'refused' | 'held'; reason: string }
 export interface SliceEntry { target: string; text: string }

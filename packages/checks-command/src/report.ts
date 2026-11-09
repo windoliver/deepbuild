@@ -78,7 +78,7 @@ function failure(checkout: string, test: string, testFile: string | null, error:
   return { test, file: at.file, line: at.line, stack: error.stack, assertion: named, message: error.message };
 }
 
-export type Attempt = 'passed' | 'failed';
+type Attempt = 'passed' | 'failed';
 export interface Ran { test: string; file: string | null; attempts: Attempt[]; meta: Record<string, unknown> }
 /** `malformed`: lines the tool's reporter can't have written, which leave the run uncounted. */
 export interface Reported { ran: Ran[]; failures: Failure[]; malformed: number }

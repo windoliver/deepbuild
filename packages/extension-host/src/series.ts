@@ -51,7 +51,7 @@ function batchFile(names: string, asOf: number, values: readonly number[]): Uint
   }
   return out;
 }
-export function readBatch(bytes: Uint8Array): { names: string; values: Map<number, number> } {
+function readBatch(bytes: Uint8Array): { names: string; values: Map<number, number> } {
   const { buf, names, n } = opened(bytes, BATCH, 'batch');
   if (buf.length !== HEAD + n * 12) throw Error('its length isn\'t its values\'');
   const values = new Map<number, number>();
@@ -65,7 +65,7 @@ function rollupFile(names: string, start: number, rollups: readonly Rollup[]): U
   rollups.forEach((r, i) => [r.min, r.max, r.mean, r.last, r.count].forEach((v, j) => out.writeDoubleLE(v, HEAD + i * 40 + j * 8)));
   return out;
 }
-export function readRollup(bytes: Uint8Array): { names: string; rollups: Rollup[] } {
+function readRollup(bytes: Uint8Array): { names: string; rollups: Rollup[] } {
   const { buf, names, n } = opened(bytes, ROLLUP, 'rollup');
   if (buf.length !== HEAD + n * 40) throw Error('its length isn\'t its series\'');
   const at = (i: number, j: number) => buf.readDoubleLE(HEAD + i * 40 + j * 8);

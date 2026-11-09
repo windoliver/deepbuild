@@ -259,7 +259,7 @@ const configTables = (file = codexConfig()): Tables | undefined => {
 };
 /** `text` with our MCP server added at its end, or the same bytes once a server of that name is there. */
 /** DeepBuild's MCP server as setup writes it into Codex's config.toml: the program and its arguments. */
-export interface Server { command: string; args: string[] }
+interface Server { command: string; args: string[] }
 /** A server given as Node and the CLI's script, as setup wrote it before installed versions, or as its program and arguments. */
 const serverOf = (server: Server | string, cli?: string): Server => (typeof server === 'string' ? { command: server, args: [cli ?? '', 'mcp'] } : server);
 export function withServer(text: string, given: Server | string, cli?: string): string {
