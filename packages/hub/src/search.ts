@@ -66,7 +66,7 @@ export async function aboutSessions(raw: Raw, ids: readonly string[]): Promise<M
   }
   return out;
 }
-export interface Claim { id: string; page: string; source: string; text: string }
+interface Claim { id: string; page: string; source: string; text: string }
 interface IndexHit { claim: string; page: string; quote: string; source: string; [mark: string]: unknown }
 /** index@1's surface, as packages/conformance/src/slots/wiki-index.ts defines it; a fill that runs elsewhere answers later. */
 export interface IndexFill {

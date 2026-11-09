@@ -1,0 +1,16 @@
+{
+  "outcome": "refused",
+  "code": "asset_blocked",
+  "issues": [
+    {
+      "severity": "error",
+      "code": "asset.unlicensed",
+      "ids": [
+        "armchair"
+      ],
+      "path": "/items/armchair/from/asset",
+      "message": "BLOCKED: armchair names asset 3e552680422013c6412a3c961a36bec38124b68b4e42017cde283d5bc794de2e, which no fetch kept with a license; fetch it from a library first"
+    }
+  ],
+  "snapshots": []
+}

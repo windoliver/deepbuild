@@ -1,0 +1,234 @@
+# Base run: commit dd83ac2f, before any implementation, on this Mac (Apple silicon, macOS 27.2; loaded: 1-minute load average about 48 to 74 during the run).
+# CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1479 --no-file-parallelism
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1479
+
+ ❯ threshold.test.ts (3 tests | 3 failed) 3730ms
+   ❯ C3 crossing the 64 device px threshold (1)
+     × C3 32 u text at 63.04 and 64.96 device px: the atlas draws one side and outlines the other, and GPUI's coverage centroid against Vello CPU's moves by at most 0.1 device px 1419ms
+   ❯ C4 above the threshold the atlas rasterizes 0 glyphs (2)
+     × C4 40 u text at 80, 160 and 240 device px and 300 u text at 600 device px: every glyph drawn, 0 rasterized by the atlas 1449ms
+     × C4 under the threshold the same frame report counts the glyphs the atlas rasterized: 13 u at 1× 232ms
+ ❯ label.test.ts (2 tests | 2 failed) 2211ms
+   ❯ C1 a 300 u label at scale 2 draws every glyph and holds #385's first criterion against Vello CPU (2)
+     × C1 every glyph of the 300 u label is drawn at scale 2, and its glyph run is within 2% of Vello CPU's summed coverage and 0.1 device px of its centroid 1383ms
+     × C1 a planted drop of the second glyph (render planted drops_glyph) fails, naming that glyph and no other 424ms
+ ❯ zoom.test.ts (1 test | 1 failed) 6018ms
+   ❯ C2 a 40 u title zoomed 1× to 16× over 120 frames (1)
+     × C2 no frame of the 120, from 1× to 16×, has a missing glyph 5623ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  label.test.ts > C1 a 300 u label at scale 2 draws every glyph and holds #385's first criterion against Vello CPU > C1 every glyph of the 300 u label is drawn at scale 2, and its glyph run is within 2% of Vello CPU's summed coverage and 0.1 device px of its centroid
+AssertionError: GPUI's frame against Vello CPU's snapshot of the 600 device px label: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "label at scale 2: glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 59875.1 by Vello CPU in its band [16.0, 461.9) device px",
++   "label at scale 2: glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 24299.9 by Vello CPU in its band [461.9, 623.0) device px",
++   "label at scale 2: glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 89731.9 by Vello CPU in its band [623.0, 1165.0) device px",
++   "label at scale 2: glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 71107.6 by Vello CPU in its band [1165.0, 1617.1) device px",
++   "label at scale 2: item label:glyphs: summed coverage 0.00 by GPUI against 245014.49 by Vello CPU, more than 2% apart",
++   "label at scale 2: item label:glyphs: coverage centroid (NaN, NaN) by GPUI against (843.534, 397.819) by Vello CPU, NaN device px apart",
++ ]
+
+ ❯ label.test.ts:36:98
+     34| describe('C1 a 300 u label at scale 2 draws every glyph and holds #385…
+     35|   it('C1 every glyph of the 300 u label is drawn at scale 2, and its g…
+     36|     expect(problems(), 'GPUI\'s frame against Vello CPU\'s snapshot of…
+       |                                                                                                  ^
+     37|   }, 1_800_000);
+     38|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  label.test.ts > C1 a 300 u label at scale 2 draws every glyph and holds #385's first criterion against Vello CPU > C1 a planted drop of the second glyph (render planted drops_glyph) fails, naming that glyph and no other
+AssertionError: render (GPUI) at scale 2 planted drops_glyph answered ok: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ readFrame helpers.ts:240:89
+    238| export function readFrame(line: JsonObject, answer: JsonObject, what: …
+    239|   notUnsupported(answer, what);
+    240|   expect(answer['ok'], `${what} answered ok: ${JSON.stringify(answer).…
+       |                                                                                         ^
+    241|   const out = String(line['out']);
+    242|   expect(existsSync(out), `${what}: the PNG was written`).toBe(true);
+ ❯ problems label.test.ts:25:16
+ ❯ label.test.ts:40:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  threshold.test.ts > C3 crossing the 64 device px threshold > C3 32 u text at 63.04 and 64.96 device px: the atlas draws one side and outlines the other, and GPUI's coverage centroid against Vello CPU's moves by at most 0.1 device px
+AssertionError: under the threshold: the frame report's rasterized is a finite number, got null: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num helpers.ts:47:138
+     45| }
+     46| export function num(value: JsonValue | undefined, what: string): numbe…
+     47|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                                          ^
+     48|   return value as number;
+     49| }
+ ❯ rasterized helpers.ts:314:13
+ ❯ threshold.test.ts:52:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  threshold.test.ts > C4 above the threshold the atlas rasterizes 0 glyphs > C4 40 u text at 80, 160 and 240 device px and 300 u text at 600 device px: every glyph drawn, 0 rasterized by the atlas
+AssertionError: over the threshold: every glyph drawn, none rasterized by the atlas: expected [ …(8) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "40 u at 2×, 80 device px: the frame report gives no rasterized count, got null",
++   "40 u at 4×, 160 device px: the frame report gives no rasterized count, got null",
++   "40 u at 6×, 240 device px: the frame report gives no rasterized count, got null",
++   "300 u at 2×, 600 device px: glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 59875.1 by Vello CPU in its band [16.0, 461.9) device px",
++   "300 u at 2×, 600 device px: glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 24299.9 by Vello CPU in its band [461.9, 623.0) device px",
++   "300 u at 2×, 600 device px: glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 89731.9 by Vello CPU in its band [623.0, 1165.0) device px",
++   "300 u at 2×, 600 device px: glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 71107.6 by Vello CPU in its band [1165.0, 1617.1) device px",
++   "300 u at 2×, 600 device px: the frame report gives no rasterized count, got null",
++ ]
+
+ ❯ threshold.test.ts:76:93
+     74|       else if (d.rasterized !== 0) problems.push(`${what}: the atlas r…
+     75|     }
+     76|     expect(problems, 'over the threshold: every glyph drawn, none rast…
+       |                                                                                             ^
+     77|   }, 1_800_000);
+     78|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  threshold.test.ts > C4 above the threshold the atlas rasterizes 0 glyphs > C4 under the threshold the same frame report counts the glyphs the atlas rasterized: 13 u at 1×
+AssertionError: 13 u at 1×: the frame report's rasterized is a finite number, got null: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num helpers.ts:47:138
+     45| }
+     46| export function num(value: JsonValue | undefined, what: string): numbe…
+     47|   expect(typeof value === 'number' && Number.isFinite(value), `${what}…
+       |                                                                                                                                          ^
+     48|   return value as number;
+     49| }
+ ❯ rasterized helpers.ts:314:13
+ ❯ threshold.test.ts:82:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  zoom.test.ts > C2 a 40 u title zoomed 1× to 16× over 120 frames > C2 no frame of the 120, from 1× to 16×, has a missing glyph
+AssertionError: frames with a missing glyph (70 problems): expected [ …(70) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "frame 80 at 6.449× (258.0 device px a em): glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 11067.8 by Vello CPU in its band [25.8, 217.5) device px",
++   "frame 80 at 6.449× (258.0 device px a em): glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 4491.0 by Vello CPU in its band [217.5, 286.8) device px",
++   "frame 80 at 6.449× (258.0 device px a em): glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 16579.7 by Vello CPU in its band [286.8, 519.8) device px",
++   "frame 80 at 6.449× (258.0 device px a em): glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 13138.5 by Vello CPU in its band [519.8, 714.2) device px",
++   "frame 81 at 6.601× (264.0 device px a em): glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 11594.9 by Vello CPU in its band [26.4, 222.6) device px",
++   "frame 81 at 6.601× (264.0 device px a em): glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 4706.0 by Vello CPU in its band [222.6, 293.5) device px",
++   "frame 81 at 6.601× (264.0 device px a em): glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 17370.7 by Vello CPU in its band [293.5, 532.1) device px",
++   "frame 81 at 6.601× (264.0 device px a em): glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 13765.4 by Vello CPU in its band [532.1, 731.0) device px",
++   "frame 82 at 6.757× (270.3 device px a em): glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 12148.4 by Vello CPU in its band [27.0, 227.9) device px",
++   "frame 82 at 6.757× (270.3 device px a em): glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 4930.3 by Vello CPU in its band [227.9, 300.5) device px",
++   "frame 82 at 6.757× (270.3 device px a em): glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 18198.6 by Vello CPU in its band [300.5, 544.6) device px",
++   "frame 82 at 6.757× (270.3 device px a em): glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 14421.7 by Vello CPU in its band [544.6, 748.2) device px",
++   "frame 83 at 6.916× (276.6 device px a em): glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 12728.4 by Vello CPU in its band [27.7, 233.2) device px",
++   "frame 83 at 6.916× (276.6 device px a em): glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 5165.1 by Vello CPU in its band [233.2, 307.5) device px",
++   "frame 83 at 6.916× (276.6 device px a em): glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 19067.1 by Vello CPU in its band [307.5, 557.4) device px",
++   "frame 83 at 6.916× (276.6 device px a em): glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 15110.4 by Vello CPU in its band [557.4, 765.9) device px",
++   "frame 84 at 7.079× (283.2 device px a em): glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 13334.3 by Vello CPU in its band [28.3, 238.7) device px",
++   "frame 84 at 7.079× (283.2 device px a em): glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 5411.8 by Vello CPU in its band [238.7, 314.8) device px",
++   "frame 84 at 7.079× (283.2 device px a em): glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 19976.3 by Vello CPU in its band [314.8, 570.6) device px",
++   "frame 84 at 7.079× (283.2 device px a em): glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 15829.9 by Vello CPU in its band [570.6, 783.9) device px",
++   "frame 85 at 7.246× (289.8 device px a em): glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 13971.5 by Vello CPU in its band [29.0, 244.4) device px",
++   "frame 85 at 7.246× (289.8 device px a em): glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 5669.3 by Vello CPU in its band [244.4, 322.2) device px",
++   "frame 85 at 7.246× (289.8 device px a em): glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 20929.0 by Vello CPU in its band [322.2, 584.0) device px",
++   "frame 85 at 7.246× (289.8 device px a em): glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 16586.1 by Vello CPU in its band [584.0, 802.4) device px",
++   "frame 86 at 7.417× (296.7 device px a em): glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 14636.5 by Vello CPU in its band [29.7, 250.1) device px",
++   "frame 86 at 7.417× (296.7 device px a em): glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 5940.0 by Vello CPU in its band [250.1, 329.8) device px",
++   "frame 86 at 7.417× (296.7 device px a em): glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 21926.9 by Vello CPU in its band [329.8, 597.8) device px",
++   "frame 86 at 7.417× (296.7 device px a em): glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 17376.5 by Vello CPU in its band [597.8, 821.3) device px",
++   "frame 87 at 7.591× (303.7 device px a em): glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 15336.0 by Vello CPU in its band [30.4, 256.0) device px",
++   "frame 87 at 7.591× (303.7 device px a em): glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 6223.9 by Vello CPU in its band [256.0, 337.6) device px",
++   "frame 87 at 7.591× (303.7 device px a em): glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 22973.6 by Vello CPU in its band [337.6, 611.9) device px",
++   "frame 87 at 7.591× (303.7 device px a em): glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 18206.2 by Vello CPU in its band [611.9, 840.7) device px",
++   "frame 88 at 7.770× (310.8 device px a em): glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 16066.6 by Vello CPU in its band [31.1, 262.1) device px",
++   "frame 88 at 7.770× (310.8 device px a em): glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 6520.5 by Vello CPU in its band [262.1, 345.5) device px",
++   "frame 88 at 7.770× (310.8 device px a em): glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 24069.4 by Vello CPU in its band [345.5, 626.3) device px",
++   "frame 88 at 7.770× (310.8 device px a em): glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 19073.7 by Vello CPU in its band [626.3, 860.5) device px",
++   "frame 89 at 7.954× (318.1 device px a em): glyph 0 \"H\" (id 161) is missing: coverage 0.0 by GPUI against 16832.8 by Vello CPU in its band [31.8, 268.2) device px",
++   "frame 89 at 7.954× (318.1 device px a em): glyph 1 \"I\" (id 197) is missing: coverage 0.0 by GPUI against 6831.2 by Vello CPU in its band [268.2, 353.7) device px",
++   "frame 89 at 7.954× (318.1 device px a em): glyph 2 \"M\" (id 292) is missing: coverage 0.0 by GPUI against 25217.5 by Vello CPU in its band [353.7, 641.1) device px",
++   "frame 89 at 7.954× (318.1 device px a em): glyph 3 \"N\" (id 300) is missing: coverage 0.0 by GPUI against 19984.5 by Vello CPU in its band [641.1, 880.8) device px",
++   "frame 90 at 8.141× (325.6 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 91 at 8.333× (333.3 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 92 at 8.529× (341.2 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 93 at 8.730× (349.2 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 94 at 8.936× (357.4 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 95 at 9.147× (365.9 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 96 at 9.362× (374.5 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 97 at 9.583× (383.3 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 98 at 9.809× (392.4 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 99 at 10.040× (401.6 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 100 at 10.277× (411.1 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 101 at 10.519× (420.8 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 102 at 10.767× (430.7 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 103 at 11.021× (440.8 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 104 at 11.281× (451.2 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 105 at 11.547× (461.9 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 106 at 11.819× (472.8 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 107 at 12.098× (483.9 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 108 at 12.383× (495.3 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 109 at 12.675× (507.0 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 110 at 12.973× (518.9 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 111 at 13.279× (531.2 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 112 at 13.592× (543.7 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 113 at 13.913× (556.5 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 114 at 14.241× (569.6 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 115 at 14.576× (583.0 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 116 at 14.920× (596.8 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 117 at 15.272× (610.9 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 118 at 15.632× (625.3 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "frame 119 at 16.000× (640.0 device px a em): GPUI's frame was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++ ]
+
+ ❯ zoom.test.ts:38:83
+     36|       problems.push(...missingGlyphs(WORD, gpui.image, vello.image, gl…
+     37|     }
+     38|     expect(problems, `frames with a missing glyph (${problems.length} …
+       |                                                                                   ^
+     39|   }, 3_600_000);
+     40| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  6 failed (6)
+   Start at  16:31:05
+   Duration  12.18s (tests 100%)
+

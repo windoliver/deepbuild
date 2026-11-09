@@ -642,6 +642,8 @@ impl LineLayoutCache {
             } else {
                 SmallVec::new()
             };
+            // DeepBuild patch (windoliver/deepbuild#1550): rows by UAX #14, in text order.
+            let (unwrapped_layout, wrap_boundaries) = LineWrapper::rows(&*self.platform_text_system, &text, runs, wrap_width.map(|width| (width, max_lines)), (unwrapped_layout, wrap_boundaries));
             let layout = Arc::new(WrappedLineLayout {
                 unwrapped_layout,
                 wrap_boundaries,

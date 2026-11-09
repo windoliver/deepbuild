@@ -91,6 +91,7 @@ import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
+import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts, type AssetKind } from './libraries.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { copySynced, disk, synced, testVfs, writeSynced, type Durable } from './vfs.js';
@@ -416,6 +417,8 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   private asks!: Asks;
+  /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
+  private libraries?: Libraries;
   /** What the app last said of macOS and its notifications (#994). */
   private notifications: string | null = null;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
@@ -627,7 +630,7 @@ export class Core {
   /** When this core started: a deny from before it is read back from the record (#1033). */
   private readonly bootAt = Date.now();
   /** Each Claude Code home's mods as last read, by what they were read from (#1033). */
-  private readonly modsSeen = new Map<string, { at: number; read: HomeMods }>();
+  private readonly modsSeen = new Map<string, { at: number; read: Promise<HomeMods> }>();
   /** Each Claude Code home's login plan as `claude auth status` last read it, by the files a sign-in rewrites. */
   private readonly plansSeen = new Map<string, { key: string; at: number; plan: Promise<unknown> }>();
   /** The continues being read, one reading at a time, so the timer's and a prompt's never carry the same one twice. */
@@ -1117,6 +1120,11 @@ export class Core {
       },
     });
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite') });
+    this.libraries = new Libraries({
+      root: this.root.dir, now: this.now, host: () => this.extensions,
+      keep: async (bytes, kind, source, license) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind, source, redaction: 'complete', license }), `${kind} from ${source}`)).sha256,
+      raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
+    });
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
@@ -1867,12 +1875,15 @@ export class Core {
     if (meta.agent !== 'claude-code' && meta.agent !== 'claude') return { home: '', mods: [] };
     const dirs = pluginDirs(await argsOf(meta.ppid).catch(() => ''));
     const home = homeOfTranscript(meta.transcript) ?? claudeHomes(process.env)[0]!;
-    // Read again only when what Claude Code lists them from changes, or after MODS_MS: each read starts claude several times.
+    // Read again only when what Claude Code lists them from changes, or after MODS_MS: each read starts claude several
+    // times. A read in flight is shared, so starts that arrive together start claude once.
     const key = JSON.stringify([home, meta.cwd, dirs, ...[join(home, 'plugins', 'installed_plugins.json'), join(home, 'settings.json'), join(home, 'skills'), ...dirs].map(statKey)]);
     const seen = this.modsSeen.get(key);
     if (seen && this.now() - seen.at < MODS_MS) return seen.read;
-    const read = await homeMods(home, claudeOnPath(process.env), process.env, { cwd: meta.cwd, dirs });
+    const read = homeMods(home, claudeOnPath(process.env), process.env, { cwd: meta.cwd, dirs });
     this.modsSeen.set(key, { at: this.now(), read });
+    // A read that failed is not kept: the next start reads again.
+    read.catch(() => { if (this.modsSeen.get(key)?.read === read) this.modsSeen.delete(key); });
     return read;
   }
   /**
@@ -1943,7 +1954,7 @@ export class Core {
     const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
     const rules = readJson(join(this.root.dir, 'rules.json'));
     const entries = isObj(rules) && isObj(rules.entries) ? rules.entries : {};
-    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
+    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|unrestorable-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
     return blocks.length ? { guard: blocks.join(', ').slice(0, 2000), label: callOf(d, effectEntries(this.root.dir)).label.slice(0, 2000) } : undefined;
   }
 
@@ -3051,6 +3062,8 @@ export class Core {
     // A permission prompt's answer goes back through the prompt it holds (#23).
     this.permits.get(delivery.ask)?.(delivery);
     if (this.prompts.has(delivery.ask)) return;
+    // Your answer to a library fetch's authority ask (#1731), which no session raised: a yes runs the fetch's job.
+    if (this.libraries?.answered(delivery.ask, delivery.decision)) return;
     this.tasks.answered(delivery);
     this.acceptance?.answered(delivery);
     this.delivery(delivery);
@@ -5600,6 +5613,7 @@ export class Core {
       case 'inbox.read': return this.reflecting(() => this.inbox());
       case 'sessions.read': return this.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
       case 'person.add': return this.addPerson(params, context);
+      case 'library.on': case 'library.off': case 'library.rule': return this.library(method, params, context);
       case 'person.invite': return this.invitePerson(params, context);
       case 'person.revoke': return this.revokePerson(params, context);
       // An invite spent over the network (#1338): only the server's network hello calls it, with the key the joining machine proved.
@@ -6330,16 +6344,18 @@ export class Core {
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing was installed: this deep command runs inside agent session ${agent}'s process tree, and no agent installs a package. Install it from your own terminal.`, 'extension.install'));
     // Only for the prompt's words: the installer reads the manifest again, as data, and refuses what it must.
-    const m = await readFile(join(from, 'deepbuild.json'), 'utf8').then((text) => JSON.parse(text) as { id?: unknown; version?: unknown; publisher_key?: unknown })
-      .catch(() => ({ id: undefined, version: undefined, publisher_key: undefined }));
+    const m = await readFile(join(from, 'deepbuild.json'), 'utf8').then((text) => JSON.parse(text) as { id?: unknown; version?: unknown; publisher_key?: unknown; sources?: { variant?: string; host?: string }[] })
+      .catch(() => ({ id: undefined, version: undefined, publisher_key: undefined, sources: undefined }));
+    // The hosts its library sources name (#1731), which this install grants, each at its source's own quota or under.
+    const hosts = libraryHosts(m);
     const key = params.trust_key === true ? m.publisher_key : undefined;
     if (params.trust_key === true && (typeof key !== 'string' || typeof m.id !== 'string')) throw new Refused(refusal('required', '/params/trust_key', 'Only a signed package names a publisher key to trust.', from));
-    const why = await this.confirmer.you(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}`, { handle: `package:${String(m.id)}`, revision: String(m.version), process: context.peer });
+    const why = await this.confirmer.you(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}${hosts.length ? `, reaching ${hosts.join(', ')}` : ''}`, { handle: `package:${String(m.id)}`, revision: String(m.version), process: context.peer });
     if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was installed: the OS didn't confirm you (${why}).`, from, true));
     if (!this.extensions) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', from, true));
     try {
       if (key) await this.extensions.trustKey(this.connection('cli'), String(m.id), String(key));
-      const pkg = await this.extensions.install({ from, builtBy: null });
+      const pkg = await this.extensions.install({ from, builtBy: null, ...(hosts.length ? { grant: { record: [], hosts: hosts.map((host) => ({ host, quota: LIBRARY_HOST_QUOTA })) } } : {}) });
       const installed = { status: 'installed', id: pkg.id, version: pkg.version, digest: pkg.digest };
       // Nothing loads before its conformance passes (#348): it runs now, and the package loads at once; its result,
       // kept for these bytes, lets each later start load it. One that fails stays installed, and the reason is shown.
@@ -6621,9 +6637,14 @@ export class Core {
       if (rev === null) rev = ((await this.canvasCall({ call: 'revisions', doc: call.doc })).revisions as { rev: number; state: string }[] | undefined)?.find((r) => r.state === 'current')?.rev ?? 0;
       return this.canvasCall({ ...call, rev, session: as.session });
     }
+    // An asset.game@1 item naming an asset by hash (#1066's from: {asset}, #1731) takes the license kept with it.
+    const game = this.gameAssets(call);
+    if (game.refused) return game.refused;
+    call = game.call;
     const via = 'you' in as ? { peer: { pid: 0, start: 0 } } : { session: as.session };
     const name = 'you' in as ? 'deep show' : 'deep_show';
-    const { reply, presented } = await this.canvas().call(await this.canvasWorld(), { call: name, ...via, ...call });
+    const { reply: drawn, presented } = await this.canvas().call(await this.canvasWorld(), { call: name, ...via, ...call });
+    const reply = game.assets.length ? { ...drawn, assets: game.assets } : drawn;
     if (presented) await this.recordRevision(as, presented, reply);
     // The planted hub waits for an app to draw the revision instead of rendering back headless.
     if (this.options.plant === 'deep-show-waits-for-app' && reply.outcome === 'presented' && !(await waitForApp(this.appOpen))) {
@@ -6632,16 +6653,97 @@ export class Core {
     return reply;
   }
   /**
+   * The asset.game@1 items of a document that name an asset by hash (#1731; #1066's `from: {asset}`): each expands to
+   * the mesh.asset@1 it draws, with the license the asset was kept with at fetch, listed in the reply's `assets`. An
+   * asset no fetch kept with its license is BLOCKED, naming the item and the asset, so the revision is refused.
+   */
+  private gameAssets(call: Obj): { call: Obj; assets: Obj[]; refused?: Obj } {
+    const doc = call.document;
+    if (!isObj(doc) || !isObj(doc.items)) return { call, assets: [] };
+    const items: Obj = {};
+    const assets: Obj[] = [];
+    const issues: Obj[] = [];
+    for (const [key, item] of Object.entries(doc.items)) {
+      const sha = isObj(item) && item.kind === 'asset.game@1' && isObj(item.from) ? item.from.asset : undefined;
+      if (typeof sha !== 'string') { items[key] = item; continue; }
+      const it = item as Obj;
+      const id = typeof it.id === 'string' ? it.id : key;
+      const kept = this.libraries?.asset(sha);
+      if (!kept) {
+        issues.push({ severity: 'error', code: 'asset.unlicensed', ids: [id], path: `/items/${key}/from/asset`, message: `BLOCKED: ${id} names asset ${sha}, which no fetch kept with a license; fetch it from a library first` });
+        continue;
+      }
+      assets.push({ item: id, asset: sha, license: kept.license, upstream: kept.upstream, library: kept.library });
+      const { from: _from, budget: _budget, params: _params, ...rest } = it;
+      items[key] = { ...rest, kind: 'mesh.asset@1', order: typeof rest.order === 'string' ? rest.order : `a${assets.length - 1}`, params: { sha256: sha, node: 0 } };
+    }
+    if (issues.length) return { call, assets, refused: { outcome: 'refused', code: 'asset_blocked', issues, snapshots: [] } };
+    if (!assets.length) return { call, assets };
+    // What the expansion draws with is scene3d's, so the document requires it, as one that wrote mesh.asset@1 would.
+    const requires = isObj(doc.requires) ? doc.requires : {};
+    const modules = isObj(requires.modules) ? requires.modules : {};
+    const needs = 'scene3d' in modules ? requires : { ...requires, modules: { ...modules, scene3d: '^1' } };
+    return { call: { ...call, document: { ...doc, requires: needs, items } }, assets };
+  }
+  /**
    * deep_kinds (#412): the canvas core's listing, words, guides and gallery. It reads and changes nothing, so it needs
    * no session; a refusal is the canvas core's error@2, at its path under the call's arguments.
    */
   private async kinds(args: Obj): Promise<Obj> {
+    // Asset search and fetch (#1731) span the enabled libraries, which the hub reads; the canvas core holds none.
+    if (args.op === 'assets' || args.op === 'fetch') return this.assets(args);
     const call: Obj = { call: 'deep_kinds' };
     for (const [k, v] of Object.entries(args)) if (v !== null) call[k] = v;
     const reply = await this.canvasCall(call);
     const e = reply.error;
     if (isObj(e)) throw refuse(String(e.code), `/params/arguments${String(e.path)}`, String(e.remediation), e.actual);
     return reply;
+  }
+  /**
+   * deep_kinds `assets` and `fetch` (#1731): one ranked list over the enabled libraries' rows, and a fetch of one row
+   * by its library and id, held on your answer, refused naming why, or BLOCKED with one unblock ask.
+   */
+  private async assets(args: Obj): Promise<Obj> {
+    const libraries = this.libraries;
+    if (!libraries) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_kinds', true);
+    for (const k of Object.keys(args)) {
+      const takes = args.op === 'assets' ? ['op', 'query', 'kind', 'size_m', 'license', 'limit'] : ['op', 'library', 'id'];
+      if (args[k] !== null && args[k] !== undefined && !takes.includes(k)) throw refuse('unlisted_field', `/params/arguments/${k}`, `Leave out ${k}: ${String(args.op)} takes only ${takes.slice(1).join(', ')}.`, k);
+    }
+    try {
+      if (args.op === 'fetch') {
+        if (typeof args.library !== 'string' || typeof args.id !== 'string') throw refuse('required', `/params/arguments/${typeof args.library === 'string' ? 'id' : 'library'}`, 'Give library and id, as a search row names them.', null);
+        return { ...(await libraries.fetch(args.library, args.id)) };
+      }
+      if (typeof args.query !== 'string' || !args.query.trim()) throw refuse('required', '/params/arguments/query', 'Give query, the words to search the libraries for.', args.query ?? null);
+      const size = args.size_m as number[] | null;
+      if (size !== null && (size.length !== 2 || !(size[0]! >= 0 && size[0]! <= size[1]!))) throw refuse('type', '/params/arguments/size_m', 'Give size_m as [least, most] in metres.', size);
+      const limit = (args.limit as number | null) ?? LIMIT_MAX;
+      if (limit < 1 || limit > LIMIT_MAX) throw refuse('maximum', '/params/arguments/limit', `Give limit from 1 to ${LIMIT_MAX}.`, limit);
+      return { ...(await libraries.search({ words: args.query, kind: (args.kind as AssetKind | null) ?? null, size_m: size ? [size[0]!, size[1]!] : null, license: (args.license as string[] | null) ?? null, limit })) };
+    } catch (e) {
+      if (e instanceof LibraryRefused) return { status: 'refused', reason: e.message };
+      throw e;
+    }
+  }
+  /** `library.on`, `library.off` and `library.rule` (#1731): yours alone, from your own terminal, once the OS confirms you. */
+  private async library(method: string, params: Obj, context: CallContext): Promise<Obj> {
+    const { library, licenses } = params;
+    if (typeof library !== 'string' || !library) throw new Refused(refusal('type', '/params/library', 'Name the library by its source name, as a search row\'s from names it.', library));
+    if (method === 'library.rule' && (!Array.isArray(licenses) || !licenses.every((l) => typeof l === 'string' && l))) throw new Refused(refusal('type', '/params/licenses', 'List the licenses the rule allows, by SPDX ID.', licenses));
+    if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A library is turned on or off, and its rule set, from your own terminal, once the OS confirms you.', method));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent changes a library. Run it from your own terminal.`, method));
+    const what = method === 'library.rule' ? `let ${library} fetch under ${(licenses as string[]).join(', ') || 'no license'} with no ask` : `turn ${library} ${method === 'library.on' ? 'on' : 'off'}`;
+    const why = await this.confirmer.you(what, { handle: `library:${library}`, revision: what });
+    if (why) throw new Refused(refusal('unconfirmed', '/method', `${what} changed nothing: the OS didn't confirm you (${why}).`, method, true));
+    if (!this.libraries) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', method, true));
+    try {
+      return method === 'library.rule' ? { ...this.libraries.rule(library, licenses as string[]) } : { ...this.libraries.turn(library, method === 'library.on') };
+    } catch (e) {
+      if (e instanceof LibraryRefused) throw new Refused(refusal('not_found', '/params/library', `${e.message}.`, library));
+      throw e;
+    }
   }
   /** A revision the canvas core made current: recorded by its hash, its canonical document in evidence, and presented to the app. */
   private async recordRevision(as: { session: string | null } | { you: true }, p: Obj, reply: Obj): Promise<void> {

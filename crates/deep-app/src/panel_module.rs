@@ -32,6 +32,10 @@ const SERVED: &str = "@deepbuild/panel.js";
 /// The entry `mount_page` writes beside a panel's `main.js`; DeepBuild's, not the panel's.
 pub(crate) const PAGE_ENTRY: &str = ".deepbuild-page.js";
 
+/// The catalog's `from` for a component DeepBuild writes itself (#1470's menu), and its source.
+const MENU_MODULE: &str = "deepbuild-menu";
+const MENU: &str = include_str!("../panel-menu.js");
+
 /// A panel's scripts are read up to this many files, so a package can't make the check walk forever.
 const MAX_SCRIPTS: usize = 256;
 
@@ -95,16 +99,7 @@ fn data() -> Vec<&'static str> {
     names
 }
 
-/// Whether a test build runs the named wrong program (#1408's plants): never outside a build with `env-plants`.
-pub(crate) fn planted(plant: &str) -> bool {
-    #[cfg(feature = "env-plants")]
-    return std::env::var("DEEP_HUB_PLANT").as_deref() == Ok(plant);
-    #[cfg(not(feature = "env-plants"))]
-    {
-        let _ = plant;
-        false
-    }
-}
+use crate::plain::planted;
 
 /// The module's source: each name on the catalog re-exported from the toolkit module that serves it. A panel that
 /// imports the module whole gets those names and no others. Only #1425's planted pack check, which lets a component
@@ -112,14 +107,17 @@ pub(crate) fn planted(plant: &str) -> bool {
 fn source() -> &'static str {
     static SOURCE: OnceLock<String> = OnceLock::new();
     static PLANTED: OnceLock<String> = OnceLock::new();
-    if planted("panel-per-frame-unchecked") {
-        PLANTED.get_or_init(|| write_source(true))
+    static RELEASE_PLANTED: OnceLock<String> = OnceLock::new();
+    if planted("menu-release-always") {
+        RELEASE_PLANTED.get_or_init(|| write_source(false, true))
+    } else if planted("panel-per-frame-unchecked") {
+        PLANTED.get_or_init(|| write_source(true, false))
     } else {
-        SOURCE.get_or_init(|| write_source(false))
+        SOURCE.get_or_init(|| write_source(false, false))
     }
 }
 
-fn write_source(per_frame: bool) -> String {
+fn write_source(per_frame: bool, release_always: bool) -> String {
     let catalog = catalog();
     let mut by_module: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     let per_frame = catalog
@@ -128,6 +126,10 @@ fn write_source(per_frame: bool) -> String {
         .filter(|_| per_frame)
         .filter_map(|(name, (_, from))| Some((name, from.as_ref()?)));
     for (name, from) in catalog.offered.iter().chain(per_frame) {
+        // DeepBuild's own components are written out below, not re-exported.
+        if from == MENU_MODULE {
+            continue;
+        }
         by_module.entry(from).or_default().push(name);
     }
     let mut source = String::from(
@@ -139,6 +141,10 @@ fn write_source(per_frame: bool) -> String {
             names.join(", ")
         ));
     }
+    source.push_str(&MENU.replace(
+        "const RELEASE_ALWAYS = false;",
+        &format!("const RELEASE_ALWAYS = {release_always};"),
+    ));
     source
 }
 

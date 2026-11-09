@@ -230,10 +230,24 @@ const helpWords = ['--help', '-h', 'help'];
 const asksHelp = args.length === 0 || (args.includes('--') ? args.slice(0, args.indexOf('--')) : args).some((arg) => helpWords.includes(arg));
 // The planted wrong program runs deep backup before its help check, so #1359's table must name it.
 const help = asksHelp && !(args[0] === 'backup' && (await import('@deepbuild/hub')).activePlant() === 'dispatches-before-help');
+// What a person runs first, then their work, then what developers run (#1455); a command no group names is a developer's.
+const groups: [string, string[]][] = [
+  ['Start here', ['setup', 'status', 'inbox', 'doctor', 'off', 'install', 'memory', 'secret', 'update']],
+  ['Your work', ['fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
+  ['For developers', ['explain', 'run', 'hub', 'mcp', 'env', 'lease', 'show', 'export', 'kinds', 'mcp-exec', 'read', 'find']],
+];
+const groupOf = (line: string): number => {
+  const at = groups.findIndex(([, names]) => names.includes(commandsOf(line)[0]!));
+  return at < 0 ? groups.length - 1 : at;
+};
 function printHelp(): void {
   const lines = usage.filter((line) => commandsOf(line).includes(args[0] ?? ''));
   if (args.length === 0 || helpWords.includes(args[0]!) || args[0] === '--version') {
-    console.log(`${banner()}\nUsage: deep [--help | --version]\n       ${usage.join('\n       ')}\n\nRepository skeleton.`);
+    console.log(`${banner()}\nUsage: deep [--help | --version]\n\n${groups.map(([title, names], at) => `${title}:\n${usage
+      .filter((line) => groupOf(line) === at)
+      .sort((a, b) => names.indexOf(commandsOf(a)[0]!) - names.indexOf(commandsOf(b)[0]!))
+      .map((line) => `  ${line}`)
+      .join('\n')}`).join('\n\n')}`);
   } else if (lines.length > 0) {
     console.log(`Usage: ${lines.join('\n       ')}`);
   } else {

@@ -7,10 +7,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { APPROVERS, people, tag } from '../../fixtures/approver.mjs';
 
 export const root = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
 export const BASE = '7fc4f14a65d10cb6ad4a3102de7980563cdd8a58'; // origin/main when these tests were drafted; no proof lanes
@@ -48,28 +49,13 @@ export function write(cwd, files) {
 }
 
 /**
- * The maintainer's SSH key, listed in the approvers file (an SSH allowed-signers file), and a
- * stranger's key that isn't. DEEP_APPROVERS names the file.
- */
-function keys(t) {
-  const directory = scratch(t, 'deep-proof-569-keys-');
-  for (const name of ['maintainer', 'stranger'])
-    execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', `${name}@example.invalid`, '-f', join(directory, name)], { stdio: ['ignore', 'pipe', 'pipe'] });
-  const approvers = join(directory, 'approvers');
-  writeFileSync(approvers, `maintainer@example.invalid namespaces="git" ${readFileSync(join(directory, 'maintainer.pub'), 'utf8').trim()}\n`);
-  return { approvers, key: (name) => join(directory, name) };
-}
-
-/**
  * Approves `commit` as a proposal: an annotated tag `deep/approved/<n>` pointing at it, whose
- * message holds one `Approves: <item>` line per item, SSH-signed with `signer`'s key (`maintainer`
- * or `stranger`), or left unsigned when `signer` is null.
+ * message holds one `Approves: <item>` line per item, signed by `signer`'s security key (`maintainer`,
+ * whom the merge base's .deepbuild/approvers lists, or `stranger`), or left unsigned when `signer` is null.
  */
 export function approve(scene, commit, items, signer = 'maintainer') {
   const name = `deep/approved/${++scene.approvals}`;
-  const message = items.map((item) => `Approves: ${item}`).join('\n');
-  if (signer) git(scene.cwd, '-c', 'gpg.format=ssh', '-c', `user.signingkey=${scene.keys.key(signer)}`, 'tag', '-s', '-m', message, name, commit);
-  else git(scene.cwd, 'tag', '-a', '-m', message, name, commit);
+  tag(scene.cwd, name, commit, items, signer && scene.keys[signer]);
   return name;
 }
 
@@ -81,8 +67,9 @@ export function approve(scene, commit, items, signer = 'maintainer') {
  */
 export function repo(t, { base = {}, commits = [], uncommitted = {}, issues = {}, link = false } = {}) {
   const cwd = scratch(t);
+  const keys = people();
   git(cwd, 'init', '-q', '-b', 'main');
-  write(cwd, base);
+  write(cwd, { [APPROVERS]: keys.list, ...base });
   git(cwd, 'add', '-A');
   git(cwd, 'commit', '-q', '--allow-empty', '-m', 'base');
   git(cwd, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
@@ -97,8 +84,8 @@ export function repo(t, { base = {}, commits = [], uncommitted = {}, issues = {}
   }
   const issuesDir = scratch(t, 'deep-proof-569-issues-');
   for (const [number, criteria] of Object.entries(issues)) writeFileSync(join(issuesDir, `${number}.md`), issueBody(criteria));
-  const scene = { cwd, keys: keys(t), approvals: 0, commits: [] };
-  scene.env = { DEEP_PROOF_ISSUES: issuesDir, DEEP_APPROVERS: scene.keys.approvers };
+  const scene = { cwd, keys, approvals: 0, commits: [] };
+  scene.env = { DEEP_PROOF_ISSUES: issuesDir };
   for (const { files = {}, message = 'change', approve: approval } of commits) {
     write(cwd, files);
     git(cwd, 'add', '-A');
