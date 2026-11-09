@@ -1,4 +1,4 @@
-// AC3 #1338.3bfe844f: "A client that has seen generation 3 refuses a hub at generation 2, naming both."
+// AC3 #1338.33efbf60: "A client that has seen generation 3 refuses a hub at generation 2, naming both."
 //
 // maya's hub: its record is raised to generation 3 by the record's own restore, and a copy of it at generation 2 is
 // kept, as the hub left behind on another machine would hold it. Two clients see the hub at generation 3: the CLI
@@ -14,8 +14,8 @@ import {
 
 afterAll(cleanup, 60_000);
 
-describe('AC3 #1338.3bfe844f a client that has seen generation 3 refuses a hub at generation 2, naming both', () => {
-  it('AC3 #1338.3bfe844f the CLI and deep-hook, having seen generation 3, refuse the hub left behind at generation 2, naming 3 and 2', async () => {
+describe('AC3 #1338.33efbf60 a client that has seen generation 3 refuses a hub at generation 2, naming both', () => {
+  it('AC3 #1338.33efbf60 the CLI and deep-hook, having seen generation 3, refuse the hub left behind at generation 2, naming 3 and 2', async () => {
     needDeepHook();
     const w = await world();
     let stale = '';
