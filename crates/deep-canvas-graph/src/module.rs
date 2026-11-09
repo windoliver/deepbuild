@@ -31,7 +31,7 @@ pub fn tie_by_registration() -> Module {
 
 /// A planted implementation of graph@1 (#1417's `test-graph-layout-no-cost`): under its own
 /// name, it lays out as the reference does but its `layout` declares no cost, so its
-/// `over_budget` fixture is never refused and the kit fails it.
+/// `over_budget` fixture is never warned and the kit fails it.
 pub fn layout_no_cost() -> Module {
     Module {
         manifest: manifest("graph.layout_no_cost"),
@@ -145,7 +145,7 @@ fn register(
         "oracles": ["analytic"],
         "codes": [],
     }));
-    // #1417: a graph whose layout alone passes the frame CPU its board allows, refused at check.
+    // #1417: a graph whose layout alone passes the frame's CPU, warned at check and still shown.
     r.fixture("over_budget", over_budget_board(), None)
         .sidecar(json!({
             "checks": [{"kind": "document.validate"}],
@@ -252,13 +252,13 @@ fn board() -> Value {
     })
 }
 
-/// 600 steps in 30 ranks of 20, each fed from the step above it, on a board that allows 0.2 ms of
-/// CPU a frame: the layout's cost (about 0.55 ms) passes it, every other operator's stays under.
+/// 15,000 steps in 150 ranks of 100, each fed from the step above it, on a board with no budget
+/// class: the layout's declared cost (about 20 ms) passes the 16 ms frame.
 fn over_budget_board() -> Value {
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
-    for r in 0..30 {
-        for j in 0..20 {
+    for r in 0..150 {
+        for j in 0..100 {
             nodes.push(json!({"id": format!("v{r}x{j}"), "w": 40, "h": 30}));
             if r > 0 {
                 edges.push(json!({"id": format!("e{r}x{j}"), "a": format!("v{}x{j}", r - 1), "b": format!("v{r}x{j}")}));
@@ -267,9 +267,8 @@ fn over_budget_board() -> Value {
     }
     json!({
         "format": 1, "profile": "board", "seed": 1417, "title": "Big flow", "requires": {"modules": {"graph": "^1"}},
-        "description": "Six hundred steps laid out in layers past the board's frame CPU: the graph module's over_budget fixture.",
+        "description": "Fifteen thousand steps laid out in layers past the frame's CPU: the graph module's over_budget fixture.",
         "size": [320, 240],
-        "budget": {"class": "data_view", "frame_cpu_ms": 0.2},
         "items": {
             "flow": {"id": "flow", "kind": "graph@1", "name": "Big flow", "order": "a0",
                      "params": {
