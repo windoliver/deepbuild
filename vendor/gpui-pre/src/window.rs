@@ -71,6 +71,8 @@ mod prompts;
 
 mod hits; // DeepBuild patch (windoliver/deepbuild#124)
 mod painted; // DeepBuild patch (windoliver/deepbuild#1427)
+mod chrome_layer; // DeepBuild patch (windoliver/deepbuild#1434)
+pub use chrome_layer::plant_multiplies_per_element;
 pub use painted::{Painted, note_paints, take_painted};
 
 pub use a11y::A11ySubtreeBuilder;
