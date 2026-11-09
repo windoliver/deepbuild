@@ -3,6 +3,18 @@
   "phases": {
     "plan": [
       {
+        "operator": "motion.arrange",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "motion.arranged"
+        ],
+        "per": "document"
+      },
+      {
         "operator": "motion.compile",
         "module": "motion",
         "version": "1.0.0",
@@ -16,6 +28,20 @@
       }
     ],
     "items": [
+      {
+        "operator": "motion.arrangelive",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.arrangelive"
+        ],
+        "per": "item"
+      },
       {
         "operator": "motion.channels",
         "module": "motion",
@@ -44,6 +70,18 @@
           "motion.next"
         ],
         "per": "document"
+      },
+      {
+        "operator": "motion.placed",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.arranged"
+        ],
+        "writes": [
+          "motion.placed"
+        ],
+        "per": "item"
       }
     ]
   },
@@ -52,7 +90,8 @@
       "motion.fields"
     ],
     "core.transform": [
-      "motion.at"
+      "motion.at",
+      "motion.placed"
     ]
   }
 }

@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "ce42b24c487adb99cb71a86508d1d1eaafb73602025a20f64340e4bd6d33e852",
+  "set_digest": "c405df073407624fc4f6dfb8e2aa1351022769ae419d8c01fa760b0038e905ea",
   "interfaces": {
     "building@1": {
       "digest": "0d13ed593138e9ee44e857752ef4b2a0392f03bc17c10b4f99b48746f6d580e1",
@@ -295,7 +295,7 @@
       }
     },
     "motion@1": {
-      "digest": "def0784a75255943cbe31d9b104fc00297447171a92b0b229cb139b5949d3663",
+      "digest": "b345fa202abce017f322143ebab888c21c57e764cbe7eb61752f944e60f603cb",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -393,7 +393,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "5989ddd4d26c956d94e8c9164d3a2acdb5b3cd1ab736a9af037930c7a6b19d07",
+      "digest": "1235792443270721f90858c1162ff00a38d4f9238363f0d227ec44796376365d",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -526,6 +526,18 @@
     ],
     "plan": [
       {
+        "operator": "motion.arrange",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "motion.arranged"
+        ],
+        "per": "document"
+      },
+      {
         "operator": "motion.compile",
         "module": "motion",
         "version": "1.0.0",
@@ -615,6 +627,20 @@
         "per": "item"
       },
       {
+        "operator": "motion.arrangelive",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.arrangelive"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.channels",
         "module": "motion",
         "version": "1.0.0",
@@ -654,19 +680,6 @@
         ],
         "writes": [
           "building.shaded"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "core.world",
-        "module": "core",
-        "version": "0.0.0",
-        "reads": [
-          "core.transform",
-          "parent"
-        ],
-        "writes": [
-          "core.world"
         ],
         "per": "item"
       },
@@ -718,6 +731,31 @@
           "motion.next"
         ],
         "per": "document"
+      },
+      {
+        "operator": "motion.placed",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.arranged"
+        ],
+        "writes": [
+          "motion.placed"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
+        ],
+        "per": "item"
       },
       {
         "operator": "record.salience",
@@ -978,7 +1016,8 @@
       "look.status"
     ],
     "core.transform": [
-      "motion.at"
+      "motion.at",
+      "motion.placed"
     ]
   }
 }
