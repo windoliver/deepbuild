@@ -932,7 +932,18 @@ function judgeEfficiency(current) {
   }
   const statuses = Object.values(judged).map((v) => v.status);
   const status = ['FAIL', 'BLOCKED', 'INCONCLUSIVE'].find((s) => statuses.includes(s)) ?? 'PASS';
-  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
+  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(task === 'canvas-idle' ? { energy: energyReading(current.runs ?? []) } : {}),
+    ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
+}
+
+/** The idle task's energy, a reading beside CPU and never a target (#1492): the counter's nanojoules a run, or BLOCKED naming it when a run reads zero. */
+function energyReading(runs) {
+  const counter = runs.find((r) => r.energy?.counter)?.energy.counter ?? 'ri_energy_nj';
+  const nj = runs.map((r) => r.energy?.nj);
+  if (nj.length === 0 || nj.some((v) => !(Number.isFinite(v) && v > 0))) {
+    return { status: 'BLOCKED', counter, reason: `the counter ${counter} read ${JSON.stringify(nj)} nJ over the runs; a reading of zero is not energy` };
+  }
+  return { status: 'READING', counter, runs: nj };
 }
 
 // #417's looks (tests/acceptance/417/README.md, "AC5's reports"): a release `deep-gpu`'s `film2d` plays a 2D film
