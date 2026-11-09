@@ -753,13 +753,18 @@ fn exchange(
     let ack_deadline = (!cfg!(feature = "plant-connect-timeout-only")).then_some(ack_due);
     let late = Outcome::Down { late: true };
     let down = Outcome::Down { late: false };
+    // A joined project's route that doesn't connect is late, as a hub reached here that doesn't acknowledge is.
+    REACHED.store(joined.is_some(), Ordering::SeqCst);
     let stream = match joined {
         Some(joined) => match remote::connect(&home(), joined, ack_due) {
             Some(stream) => stream,
             None => return (None, late, String::new()),
         },
         None => match UnixStream::connect(address()) {
-            Ok(stream) => remote::Stream::Unix(stream),
+            Ok(stream) => {
+                REACHED.store(true, Ordering::SeqCst);
+                remote::Stream::Unix(stream)
+            }
             Err(_) => return (None, down, String::new()),
         },
     };
@@ -1070,8 +1075,9 @@ fn stall() -> Option<usize> {
         .and_then(|text| text.parse::<usize>().ok())
 }
 
-/// How long after the hook's start deep-hook stops waiting for its spool write and exits with its decision: a
-/// filesystem that stalls loses the spooled copy, never the 50 ms.
+/// How long after its spool thread starts deep-hook stops waiting for the write and exits with its decision: a
+/// filesystem that stalls the write loses the spooled copy. It isn't counted from the hook's start: a hook the machine
+/// gave no time would lose its line on a disk that was fine.
 const SPOOL_DEADLINE: Duration = Duration::from_millis(45);
 
 /// How long after the hook's start deep-hook waits for a written line's sync. The line is in the spool already, and
@@ -1079,18 +1085,20 @@ const SPOOL_DEADLINE: Duration = Duration::from_millis(45);
 /// machine no time to exit within the 50 ms.
 const SYNC_DEADLINE: Duration = Duration::from_millis(25);
 
-/// How a spool on its own thread is going: its line written, then its sync done or failed.
+/// How a spool on its own thread is going: the thread running, its line written, then its sync done or failed.
 enum Spooling {
+    Begun,
     Written,
     Done(io::Result<()>),
 }
 
-/// Spools on a thread of its own and waits for its write only until SPOOL_DEADLINE after `start`, and for the
-/// sync of a written line only until SYNC_DEADLINE, in steps (see sleep_until). Says whether a write that ran out
-/// of time had its line in the spool, so it will be replayed.
+/// Spools on a thread of its own and waits for its write only until SPOOL_DEADLINE after the thread is seen running,
+/// and for the sync of a written line only until SYNC_DEADLINE after `start`, in steps (see sleep_until). Says
+/// whether a write that ran out of time had its line in the spool, so it will be replayed.
 fn spool_by(request: String, id: &str, start: Instant) {
     let (tell, told) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
+        let _ = tell.send(Spooling::Begun);
         let written = tell.clone();
         let result = spool(&request, &mut || {
             let _ = written.send(Spooling::Written);
@@ -1101,20 +1109,22 @@ fn spool_by(request: String, id: &str, start: Instant) {
     let forever = stall().is_some();
     #[cfg(not(debug_assertions))]
     let forever = false;
+    // A thread the machine hasn't run yet holds no write up: its deadline starts once it runs.
+    let mut begun: Option<Instant> = None;
     let mut written = false;
     let result = loop {
-        let due = if written {
-            SYNC_DEADLINE
-        } else {
-            SPOOL_DEADLINE
+        let left = match (written, begun) {
+            (true, _) => SYNC_DEADLINE.saturating_sub(start.elapsed()),
+            (false, Some(begun)) => SPOOL_DEADLINE.saturating_sub(begun.elapsed()),
+            (false, None) => STEP,
         };
-        let left = due.saturating_sub(start.elapsed());
         let step = if forever {
             Duration::MAX
         } else {
             left.min(STEP)
         };
         match told.recv_timeout(step) {
+            Ok(Spooling::Begun) => begun = Some(Instant::now()),
             Ok(Spooling::Written) => written = true,
             Ok(Spooling::Done(result)) => break Some(result),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) if forever || !left.is_zero() => {}
@@ -1144,6 +1154,12 @@ fn sleep_until(start: Instant, after: Duration) {
         }
         std::thread::sleep(left.min(STEP));
     }
+}
+
+/// Marks a request line late: a call let through because the hub was late is spooled so.
+fn mark_late(request: &mut String) {
+    request.truncate(request.len() - 2);
+    request.push_str(",\"late\":true}\n");
 }
 
 fn forward(agent: &str, event: &str) -> ExitCode {
@@ -1188,8 +1204,27 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         Ok(_) => {}
     }
     READ_RULES.store(true, Ordering::SeqCst);
-    let mut input = String::new();
-    let _ = io::stdin().read_to_string(&mut input);
+    // The call is one JSON object: read up to its end, or stdin's. An agent the machine gives no time may close stdin
+    // well after it wrote the call. Not UTF-8, it reads as nothing, as read_to_string leaves it.
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 8192];
+    loop {
+        match io::stdin().read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                bytes.extend_from_slice(&chunk[..n]);
+                let whole = bytes.trim_ascii_end().ends_with(b"}")
+                    && std::str::from_utf8(&bytes)
+                        .is_ok_and(|text| matches!(parse(text.trim()), Ok(Value::Object(_))));
+                if whole {
+                    break;
+                }
+            }
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(_) => break,
+        }
+    }
+    let input = String::from_utf8(bytes).unwrap_or_default();
     let parsed = parse(&input).ok();
     if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
         let _ = CWD.set(PathBuf::from(cwd));
@@ -1304,7 +1339,13 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             agent_pid(),
         )
     };
+    let _ = PENDING.set((line(&[]), id.clone()));
     let (sent, outcome, last) = exchange(start, &id, line);
+    // From here the hub's answer says whether the call is late, should the watchdog decide it first.
+    REACHED.store(
+        matches!(outcome, Outcome::Down { late: true }),
+        Ordering::SeqCst,
+    );
     let late = match outcome {
         Outcome::Reply {
             exit,
@@ -1338,9 +1379,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     }
     let mut request = sent.unwrap_or_else(|| line(&[]));
     if late {
-        // A call let through because the hub was late is spooled marked late.
-        request.truncate(request.len() - 2);
-        request.push_str(",\"late\":true}\n");
+        mark_late(&mut request);
     }
     decide();
     // Before an acknowledgement the 50 ms run from the hook's start; after a hold the hub acknowledged ran out or
@@ -1436,6 +1475,10 @@ static RULING: AtomicBool = AtomicBool::new(false);
 static RULED: AtomicBool = AtomicBool::new(false);
 /// Set once rules.json is read, before the call is.
 static READ_RULES: AtomicBool = AtomicBool::new(false);
+/// The request line as the hook would send it and its ID, once the call is read and matched: what the watchdog spools.
+static PENDING: OnceLock<(String, String)> = OnceLock::new();
+/// Set once a hub was reached, or a joined project's route tried: a call the watchdog decides from then is late.
+static REACHED: AtomicBool = AtomicBool::new(false);
 /// When, after the hook's start, the watchdog decides for a hook the hub hasn't acknowledged.
 const WATCHDOG: Duration = Duration::from_millis(48);
 /// The watchdog's time on this hook's route, in ms: WATCHDOG, or the network route's (#1338).
@@ -1456,10 +1499,13 @@ fn decide() {
     let _ = std::panic::take_hook();
 }
 
-/// Keeps the 50 ms whatever holds the hook up before the hub acknowledges it (a stdin that never ends, a slow
-/// disk under rules.json): at WATCHDOG it exits with the decision for the hub away, deny when a fail_closed entry
-/// has matched and allow otherwise; while rules.json or, with a fail_closed entry installed, the call is still being
-/// read or matched, it waits for that until RULING_LIMIT and then denies. That call isn't spooled; a turn of its tool calls then reads as not reaching the hub. The builds that must hang for a test (a connect timeout only, a stalled spool write) run without it.
+/// Keeps the 50 ms whatever holds the hook up before the hub acknowledges it, once the hook has made its request: at
+/// WATCHDOG it spools that request, as with the hub away, and exits with the decision for the hub away, deny when a
+/// fail_closed entry has matched and allow otherwise. Until the request is made it waits for it, until RULING_LIMIT: a
+/// hook or agent the machine gave no time is slow, not held up, and its call is spooled, never let through unrecorded.
+/// Past that, a call still unread or unmatched while a fail_closed entry is installed, or while rules.json is still
+/// being read, is denied, and any other is allowed; neither is spooled, and a turn of its tool calls then reads as not
+/// reaching the hub. The builds that must hang for a test (a connect timeout only, a stalled spool write) run without it.
 fn watchdog(start: Instant) {
     if cfg!(feature = "plant-connect-timeout-only") {
         return;
@@ -1479,11 +1525,12 @@ fn watchdog(start: Instant) {
             std::thread::sleep((due - start.elapsed()).min(Duration::from_millis(5)));
         }
         // A call a fail_closed entry may hold is decided by its match, not the clock: the watchdog gives the hook
-        // until RULING_LIMIT to read the call and match it, and only past that denies it unchecked.
-        while RULING.load(Ordering::SeqCst)
-            && !RULED.load(Ordering::SeqCst)
-            && !ACKED.load(Ordering::SeqCst)
+        // until RULING_LIMIT to read the call and match it, and only past that denies it unchecked. Any hook gets
+        // until then to make its request, so a call that came is spooled, not lost.
+        while !ACKED.load(Ordering::SeqCst)
             && start.elapsed() < RULING_LIMIT
+            && (RULING.load(Ordering::SeqCst) && !RULED.load(Ordering::SeqCst)
+                || PENDING.get().is_none())
         {
             std::thread::sleep(STEP);
         }
@@ -1499,6 +1546,14 @@ fn watchdog(start: Instant) {
 fn unanswered() -> ! {
     // RULED first: the hook sets a denial before it sets RULED, so once RULED is read as set, DENIAL is final.
     let ruled = RULED.load(Ordering::SeqCst);
+    if let Some((request, id)) = PENDING.get() {
+        let mut request = request.clone();
+        if REACHED.load(Ordering::SeqCst) {
+            mark_late(&mut request);
+        }
+        // The hook has had its 50 ms already: the spool's time runs from now.
+        spool_by(request, id, Instant::now());
+    }
     match DENIAL.get() {
         Some(denial) => {
             eprintln!("{denial}");
