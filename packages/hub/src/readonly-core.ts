@@ -9,7 +9,7 @@ import { rootOf } from './paths.js';
 import type { CoreOptions } from './wire.js';
 
 type Obj = Record<string, unknown>;
-export interface Unreadable { newer: { kind: string; v: number }[]; backup: string | null; reason: string }
+interface Unreadable { newer: { kind: string; v: number }[]; backup: string | null; reason: string }
 
 /** The kinds this build knows, each with the newest version it can read. */
 function newestKnown(): Map<string, number> {

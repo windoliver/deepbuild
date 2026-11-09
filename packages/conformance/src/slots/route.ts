@@ -11,8 +11,8 @@ import { object, word } from './shared.js';
 
 const ROUTE = 'route@1';
 
-export interface RouteRequest { method: string; path: string; headers: Record<string, string>; body: string }
-export interface RouteReply { status: number; body: string }
+interface RouteRequest { method: string; path: string; headers: Record<string, string>; body: string }
+interface RouteReply { status: number; body: string }
 export interface RouteFill extends SlotFill {
   slot: 'route@1';
   route: string;
