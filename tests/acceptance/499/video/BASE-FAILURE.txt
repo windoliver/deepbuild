@@ -1,0 +1,33 @@
+#499 video part: why every test fails at the base f1e8736e. A note, not a run.
+
+The suite was not built or run at the base: the job was told not to run cargo or vitest, since the machine's disk was
+nearly full. What follows is read from the base's code, not from its output.
+
+The surfaces these tests read (README: The surface under test) don't exist at the base:
+
+- deep-show run
+  - No image@1 plays a video: crates/deep-canvas-marks/src/scene.rs reads image@1's `asset` as a still picture, with
+    no `frames`, `anchors` or video probe; nothing in the hub sends an image's asset to the decode worker.
+  - `eval` has no `video` block (crates/deep-show/src/main.rs: `eval` takes debug_text, doc, t, view, clean,
+    perturb, pixels, film, size, arrays), and `determinism`'s `play` and `seek` sides carry only `pixels` and
+    `nodes` (crates/deep-show/src/time.rs).
+  - The scenario's `planted` knows #498's names and others, not `lookup_floors_frame_rate` or `seek_reads_proxy`, so a
+    run with either answers {"ok": false, "code": "bad_input"}.
+- deep-canvas-render
+  - `render` draws image@1 from `store` as a still picture (crates/deep-marks-render/src/asset.rs); an MP4 isn't one,
+    and there is no NV12 path or shader taking the probe's matrix and range. `planted` knows `gpui_oklab_gradient`
+    only, so `stock_bt601_fragment` answers bad_input.
+  - `idle` takes no `store` and no `pans`, and its answer has no `players`, no `views` and no `allocs` on `drawn`.
+
+So, expected at the base (not observed):
+
+- frames.test.ts (2), interval.test.ts (1), proxy.test.ts (1): each fails at its first read of `video`
+  ("… video (the video image items' frames) is an object, got undefined"), or earlier, if the base refuses or can't
+  draw a document whose image@1 names a video. proxy.test.ts's `media_proxy` step works at the base (#498).
+- shader.test.ts (1): `render` refuses or misdraws the bars, and the planted line answers bad_input.
+- players.test.ts (2), out-of-view.test.ts (2): each fails reading `players` (or `views`, or `drawn[].allocs`), or
+  earlier, if `idle` can't load the video; off macOS they fail BLOCKED.
+- taste.test.ts (1): fails INCONCLUSIVE: docs/evidence/499/ holds none of the five pictures.
+
+That is the missing behaviour, not a test mistake. A run at the base, with home paths redacted, should replace this
+note once the machine has the disk for it.

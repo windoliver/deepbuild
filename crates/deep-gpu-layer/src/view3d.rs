@@ -1079,6 +1079,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
+        // #1640's wrong programs for mesh-edge lines, by their planted names.
+        let edge_plant = match app.planted {
+            Some(Planted::CreaseBelowAngle) => Some("crease_below_angle"),
+            Some(Planted::EdgesDeriveEveryFrame) => Some("edges_derive_every_frame"),
+            Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
+            _ => None,
+        };
         for n in frame_order(args.from, args.frames, &args.seeks) {
             let frame_started = std::time::Instant::now();
             // A seek applies every patch up to the frame it opens at.
@@ -1195,6 +1202,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             scene.plant_edges(
                 app.planted == Some(Planted::EdgesUnwelded),
                 app.planted == Some(Planted::EdgesSkipDepth),
+                edge_plant,
             );
             // #268's wrong field: the shore measured from each item's centre.
             if app.planted == Some(Planted::ShoreFieldFromCentre) {
@@ -1203,6 +1211,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     .map_err(|r| refused(r.code, r.path))?;
             }
             let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
+            // How many times this frame derived each mesh-edge line's edge set (#1640).
+            let edge_sets_derived: Map<String, Value> = scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.lines)
+                .filter_map(|l| Some((l.id.clone(), json!(u32::from(l.edges.as_ref()?.derived)))))
+                .collect();
             // Each mesh-edge line's segments, in world metres, as `counts` reports them.
             let edge_segments: Map<String, Value> = scene
                 .layers
@@ -1365,6 +1380,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let edges = (
                 app.planted == Some(Planted::EdgesUnwelded),
                 app.planted == Some(Planted::EdgesSkipDepth),
+                edge_plant,
             );
             let at_time = |tk: i64, labels: &mut Labels| -> Result<Scene, Value> {
                 let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)
@@ -1372,7 +1388,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 sc.texels.clone_from(&scene.texels);
                 sc.ground = scene.ground;
                 sc.set_cutaway(scene.cutaway.clone());
-                sc.plant_edges(edges.0, edges.1);
+                sc.plant_edges(edges.0, edges.1, edges.2);
                 if let Some(status) = status.as_ref().filter(|_| bound) {
                     status::strokes(&mut sc, status, &bindings, &args.states)?;
                 }
@@ -1901,6 +1917,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
                 frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
+                frame.insert("edge_sets_derived".into(), Value::Object(edge_sets_derived));
             }
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));

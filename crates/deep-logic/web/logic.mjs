@@ -104,7 +104,33 @@ class Record {
 async function instance(item) {
   if (!item.module) { item.module = await WebAssembly.compile(bytesOf(item.rewritten)); item.map = offsets(item.module); }
   const inst = await WebAssembly.instantiate(item.module, {});
-  return { item, ex: inst.exports, map: item.map, failed: false, next: 0, arrays: new Uint8Array(item.writes_size), cursor: new Map(), pending: new Map(), dirty: new Set(), stored: [], checked: null };
+  return { item, ex: inst.exports, map: item.map, failed: false, next: 0, arrays: new Uint8Array(item.writes_size), cursor: new Map(), pending: new Map(), dirty: new Set(), stored: [], checked: null, spacing: item.every };
+}
+
+// The ring past its byte budget: the spacing doubles, and each checkpoint off it is dropped, its pages
+// merged into the next one kept or, past the last, into the pages the next checkpoint takes.
+const storedBytes = (s) => (s.memory.whole ? s.memory.whole.length : s.memory.pages.length * PAGE) + s.arrays.length + 8 * s.globals.length;
+function merge(earlier, later) {
+  if (!earlier || later.whole) return later;
+  if (earlier.whole) { const m = earlier.whole; for (const [p, b] of later.pages) m.set(b, p * PAGE); return { whole: m }; }
+  const pages = new Map(earlier.pages);
+  for (const [p, b] of later.pages) pages.set(p, b);
+  return { pages: [...pages].sort((a, b) => a[0] - b[0]) };
+}
+function thin(live) {
+  while (live.stored.length > 1 && live.stored.reduce((n, s) => n + storedBytes(s), 0) > live.item.ring) {
+    live.spacing *= 2;
+    const kept = [];
+    let carry = null;
+    for (const s of live.stored) {
+      if (s.step % live.spacing !== 0) { carry = merge(carry, s.memory); continue; }
+      if (carry) { s.memory = merge(carry, s.memory); carry = null; }
+      kept.push(s);
+    }
+    live.stored = kept;
+    if (carry?.whole) for (let p = 0; p < carry.whole.length / PAGE; p++) live.dirty.add(p);
+    else if (carry) for (const [p] of carry.pages) live.dirty.add(p);
+  }
 }
 
 class World {
@@ -112,6 +138,8 @@ class World {
     const w = new World(req, trackOf(req.track), true);
     for (const item of req.items) {
       const live = await instance(item);
+      // The data assets, copied once before the start function: then they're memory.
+      if (item.assets) memoryOf(live).set(bytesOf(item.assets), item.assets_at);
       const calls = [];
       if (typeof live.ex['sandbox.start'] === 'function') calls.push(['sandbox.start', []]);
       calls.push(['init', [await stepSeed(req.seed, item.id, 0)]]);
@@ -128,7 +156,7 @@ class World {
   at() { const k = this.lives[0]?.next; return this.lives.every((l) => l.next === k) ? k : null; }
 
   async checkpoint(live, rec) {
-    if (live.failed || live.next % live.item.every !== 0 || live.checked === live.next) return;
+    if (live.failed || live.next % live.spacing !== 0 || live.checked === live.next) return;
     live.checked = live.next;
     const deep = await deepHash(live);
     (rec.checkpoints[live.item.id] ??= []).push({ step: live.next, deep_hash: deep });
@@ -139,6 +167,7 @@ class World {
       : { pages: [...live.dirty].sort((a, b) => a - b).map((p) => [p, m.slice(p * PAGE, (p + 1) * PAGE)]) };
     live.stored.push({ step: live.next, globals: live.item.globals.map(([n]) => live.ex[n].value), arrays: live.arrays.slice(), cursor: new Map(live.cursor), pending: new Map([...live.pending].map(([c, q]) => [c, q.slice()])), memory });
     live.dirty.clear();
+    thin(live);
   }
 
   async run(until, rec, before) {
@@ -234,7 +263,7 @@ class World {
       for (const s of l.stored.slice(whole + 1, j + 1)) for (const [p, bytes] of s.memory.pages ?? []) memory.set(bytes, p * PAGE);
       const s = l.stored[j];
       const live = await w.load(l.item, memory, s.globals);
-      Object.assign(live, { next: c, arrays: s.arrays.slice(), cursor: new Map(s.cursor), pending: new Map([...s.pending].map(([x, q]) => [x, q.slice()])) });
+      Object.assign(live, { next: c, spacing: l.spacing, arrays: s.arrays.slice(), cursor: new Map(s.cursor), pending: new Map([...s.pending].map(([x, q]) => [x, q.slice()])) });
       w.lives.push(live);
     }
     w.published = w.lives.map((l) => l.arrays.slice());
@@ -248,7 +277,7 @@ class World {
     const w = new World(this.req, trackOf([...kept, ...entries]), false);
     for (const l of this.lives) {
       const live = await w.load(l.item, memoryOf(l).slice(), l.item.globals.map(([n]) => l.ex[n].value));
-      Object.assign(live, { failed: l.failed, next: l.next, arrays: l.arrays.slice(), cursor: new Map(l.cursor), pending: new Map([...l.pending].map(([x, q]) => [x, q.slice()])) });
+      Object.assign(live, { failed: l.failed, next: l.next, spacing: l.spacing, arrays: l.arrays.slice(), cursor: new Map(l.cursor), pending: new Map([...l.pending].map(([x, q]) => [x, q.slice()])) });
       w.lives.push(live);
     }
     w.published = this.published.map((a) => a.slice());

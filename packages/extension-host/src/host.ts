@@ -54,7 +54,7 @@ import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type 
 import { missing, SeriesStore, shownValue, type BoundValue, type Rollup, type Span } from './series.js';
 import { Sends, type SendRow, type SendRule } from './sends.js';
 import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
-import { declareSource, handleOf, NoAnswer, nodeHttp, openBrowser, osSecrets, Sources, type WorkDecl, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
+import { declareSource, handleOf, NoAnswer, nodeHttp, openBrowser, osSecrets, Sources, type LibraryDecl, type WorkDecl, type Declared, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamEvent, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
@@ -331,6 +331,12 @@ export interface ExtensionHost {
   heldSecrets(): Promise<{ secret: string; provider: string }[]>;
   /** A reading of a loaded polled source, as what needs it would read it: from the cache while fresh, else one call. */
   readSource(name: string): Promise<SourceRead>;
+  /** The library sources loaded packages registered (#1731): each one's name and package. */
+  libraries(): { name: string; extension: string }[];
+  /** One search or fetch of a loaded library source (#1731), its calls the hub's; `noAnswer` when one got none. */
+  libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }>;
+  /** A file a library's fetch named, downloaded through its source by the hub (#1731); `status` null when its host gave no answer. */
+  libraryFile(name: string, path: string): Promise<{ status: number; bytes: Uint8Array } | { status: null; why: string }>;
   /** Every source call this host made, with its secrets stripped. */
   recording(): Recording;
   /** The readings the record holds of a source with an as-of time in the window, both ends in, in as-of order. */
@@ -513,7 +519,7 @@ interface Manifest {
   stability?: 'stable' | 'preview'; requires?: { preview?: string[] };
   host?: { runs: 'terminals'; lives: 'past_app'; owns: 'terminals'[] };
   secrets?: { name: string; for: string }[];
-  sources?: { name: string; variant: string; reading?: string }[];
+  sources?: { name: string; variant: string; reading?: string; host?: string }[];
   /** The state sources it registers (#67), each held to state-source@1's kit at install. */
   state_sources?: string[];
 }
@@ -555,6 +561,9 @@ interface Ext {
   kinds: string[];
   /** Environments it registered (#331); at its conformance run, every one it tried. */
   environments: string[];
+  /** Starts and handles owned by this exact load; removal drains them before dropping its handlers. */
+  environmentStarts: Set<Promise<unknown>>;
+  environmentStops: Set<() => Promise<void>>;
   subscribed: Set<string>;
   routes: Set<string>;
   /** The adapter names it registered. */
@@ -824,20 +833,6 @@ const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult
   outcome, testsRun: 0, evidence: [], read: [], mask: null,
   failures: failure ? [{ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: failure }] : [],
 });
-/** check.kind@1's outcomes. */
-const OUTCOMES: readonly string[] = ['passed', 'failed', 'ran_nothing', 'missing', 'overran', 'stopped', 'uncounted'];
-const strings = (v: unknown): boolean => Array.isArray(v) && v.every((s) => typeof s === 'string');
-const isFailure = (f: unknown): boolean => {
-  const x = f as Record<string, unknown> | null;
-  return typeof x === 'object' && x !== null && typeof x.test === 'string' && typeof x.file === 'string' && Number.isInteger(x.line)
-    && (x.stack === null || typeof x.stack === 'string') && typeof x.assertion === 'boolean' && typeof x.message === 'string';
-};
-/** A check result as check.kind@1 defines one, every field; anything else from a package is no result. */
-const isResult = (r: unknown): r is CheckResult => {
-  const x = r as Record<string, unknown> | null;
-  return typeof x === 'object' && x !== null && OUTCOMES.includes(x.outcome as string) && Number.isInteger(x.testsRun) && (x.testsRun as number) >= 0
-    && Array.isArray(x.failures) && x.failures.every(isFailure) && strings(x.evidence) && strings(x.read) && (x.mask === null || typeof x.mask === 'string');
-};
 /** The one permission a piece that hosts shells asks for: run any command you could (#104). */
 const RUN_AS_YOU = 'run_as_you';
 /** Whether the manifest asks for the grant: an access word, or `notices` for a declared notice kind. */
@@ -906,7 +901,7 @@ class Host implements ExtensionHost {
   /** The work sources you switched on, their runs, tasks and deliveries (#66). */
   private readonly work: WorkSources;
   /** The work-source calls under way, by the call ID their context's fetch names (#66). */
-  private readonly workCalls = new Map<string, { ext: Ext; source: string; work: WorkDecl; noAnswer: boolean }>();
+  private readonly workCalls = new Map<string, { ext: Ext; source: string; work: Omit<WorkDecl, 'delivers'>; library?: LibraryDecl; noAnswer: boolean }>();
   private workCount = 0;
   /** The runs under way, by the scope token their job's calls carry (#365). */
   private readonly runCtx = new Map<string, RunCtx>();
@@ -1005,6 +1000,47 @@ class Host implements ExtensionHost {
       throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
     } finally {
       this.workCalls.delete(call);
+    }
+  }
+  /** The library sources loaded packages registered (#1731), asset.library@1's fills: each one's name and package. */
+  libraries(): { name: string; extension: string }[] {
+    return [...this.exts.values()].filter((e) => e.live && e.ask && e.mode === 'loaded')
+      .flatMap((e) => [...e.sources.values()].filter((d) => d.variant === 'library').map((d) => ({ name: d.name, extension: e.entry.id })));
+  }
+  private libraryOf(name: string): { ext: Ext; library: LibraryDecl } {
+    for (const ext of this.exts.values()) {
+      const d = ext.live && ext.ask && ext.mode === 'loaded' ? ext.sources.get(name) : undefined;
+      if (d?.variant === 'library') return { ext, library: d.library };
+    }
+    throw Error(`no loaded package registers the library ${name}`);
+  }
+  /**
+   * One op of a loaded library source (#1731), search or fetch, bounded by its timeout: the package's code reads the
+   * library's API through its context's fetch, the hub's call to the library's host; `noAnswer` when a call got none.
+   */
+  async libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }> {
+    const { ext, library } = this.libraryOf(name);
+    const call = `work:${++this.workCount}`;
+    const live = { ext, source: name, work: library, library, noAnswer: false };
+    this.workCalls.set(call, live);
+    try {
+      const value = await within(WORK_CALL_MS, `${ext.entry.id}'s library ${name}'s ${op}`, ext.ask!('library', { name, op, call, arg }));
+      return { value, noAnswer: live.noAnswer };
+    } catch (e) {
+      throw Object.assign(e instanceof Error ? e : Error(String(e)), { noAnswer: live.noAnswer });
+    } finally {
+      this.workCalls.delete(call);
+    }
+  }
+  /** A file a library's fetch named, downloaded through its source on its host by the hub, never by the package (#1731). */
+  async libraryFile(name: string, path: string): Promise<{ status: number; bytes: Uint8Array } | { status: null; why: string }> {
+    const { ext, library } = this.libraryOf(name);
+    try {
+      const answer = await this.sources.workFetch(ext.entry.id, name, library, { method: 'GET', path }, { timeout: library.timeout, encoding: 'base64' });
+      return { status: answer.status, bytes: Buffer.from(answer.body, 'base64') };
+    } catch (e) {
+      if (e instanceof NoAnswer) return { status: null, why: e.message };
+      throw e;
     }
   }
   /** A work source's run is BLOCKED while its package isn't loaded or the secret it needs isn't held. */
@@ -2066,6 +2102,7 @@ class Host implements ExtensionHost {
       entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
       adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), panels: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
+      environmentStarts: new Set(), environmentStops: new Set(),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -2349,8 +2386,12 @@ class Host implements ExtensionHost {
   }
   /** Its handlers stop: nothing more is asked of it, and a sandboxed one's process ends. */
   private async stopHandlers(ext: Ext): Promise<void> {
+    await Promise.allSettled([...ext.environmentStarts]);
+    const stopped = await Promise.allSettled([...ext.environmentStops].map((down) => down()));
     delete ext.ask;
     await ext.stop?.();
+    const failed = stopped.flatMap((r) => r.status === 'rejected' ? [r.reason] : []);
+    if (failed.length) throw new AggregateError(failed, `${ext.entry.id}'s environments did not all stop`);
   }
 
   /**
@@ -2586,7 +2627,7 @@ class Host implements ExtensionHost {
         const live = typeof call === 'string' ? this.workCalls.get(call) : undefined;
         if (!live || live.ext !== ext) throw Error(`deep.work.fetch: ${id} has no work source call under way as ${String(call)}`);
         try {
-          return await this.sources.workFetch(ext.entry.id, live.source, live.work, request as Parameters<Sources['workFetch']>[3]);
+          return await this.sources.workFetch(ext.entry.id, live.source, live.work, request as Parameters<Sources['workFetch']>[3], live.library);
         } catch (e) {
           if (e instanceof NoAnswer) live.noAnswer = true;
           throw e;
@@ -3610,21 +3651,41 @@ class Host implements ExtensionHost {
         const bad = badDeadline('deadline', deadline);
         if (bad) throw Error(`an environment start's ${bad}`);
         await current();
-        const value = await this.ask(ext!, deadline, `environment ${name}`, 'env.up', { name, spec, lease, checkout });
-        // An old load's late start is never presented as its replacement's handle.
-        await current();
-        if (!isPlain(value) || typeof value.id !== 'string' || !value.id || value.port !== lease.port || !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0) {
-          throw Error(`environment ${name} returned an invalid handle or a port outside its lease`);
+        // Capture the owning generation's handler: cleanup must work even after it is unpublished.
+        const owner = ext!;
+        const ask = owner.ask!;
+        let cancelled = false;
+        const started = ask('env.up', { name, spec, lease, checkout }).then(async (value): Promise<RunningEnvironment> => {
+          if (!isPlain(value) || typeof value.id !== 'string' || !value.id || value.port !== lease.port || !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0) {
+            throw Error(`environment ${name} returned an invalid handle or a port outside its lease`);
+          }
+          const handle = Object.freeze({ id: value.id, port: lease.port, pid: Number(value.pid) });
+          let stopped: Promise<void> | undefined;
+          const down = (): Promise<void> => stopped ??= within(CALL_MS, `environment ${name} down`, ask('env.down', { name, handle }))
+            .then(() => { owner.environmentStops.delete(down); });
+          owner.environmentStops.add(down);
+          if (cancelled || !owner.live || this.exts.get(owner.entry.id) !== owner) {
+            await down();
+            throw Error(`no loaded extension registered the environment ${name}; its start was cancelled or its load removed`);
+          }
+          return { handle, down };
+        });
+        // Even a start returning after its deadline is observed and cleaned by its own handler.
+        const bounded = within(deadline, `environment ${name}`, started);
+        owner.environmentStarts.add(bounded);
+        try {
+          const running = await bounded;
+          owner.environmentStarts.delete(bounded);
+          await current();
+          return running;
+        } catch (error) {
+          cancelled = true;
+          owner.environmentStarts.delete(bounded);
+          if (error instanceof Overran) await this.unload(owner);
+          throw error;
+        } finally {
+          owner.environmentStarts.delete(bounded);
         }
-        const handle = Object.freeze({ id: value.id, port: lease.port, pid: Number(value.pid) });
-        let down: Promise<void> | undefined;
-        return {
-          handle,
-          down: () => down ??= (async () => {
-            await current();
-            await this.ask(ext!, CALL_MS, `environment ${name} down`, 'env.down', { name, handle });
-          })(),
-        };
       },
     };
   }
@@ -3657,7 +3718,8 @@ class Host implements ExtensionHost {
       this.canvasKeys.set(ext, []);
       const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: this.checkContext(ext, ctx) });
       const read = this.canvasKeys.get(ext) ?? [];
-      if (!isResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
+      const { isCheckResult } = await import('@deepbuild/conformance');
+      if (!isCheckResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
       // A passed run rests on the tests it counted: passed with none counted ran nothing it can vouch for.
       if (result.outcome === 'passed' && result.testsRun === 0) return nothing('ran_nothing', `${ext.entry.id}'s ${kind} reported passed without its results: it counted no test`);
       // A pass built on canvas reads holds only with their content keys as its evidence (Check input: plug-in reads).

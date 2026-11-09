@@ -1,0 +1,34 @@
+[
+  {
+    "handle": "ask:01M6ZTEKQ3NSCHNW10CFGBYEME",
+    "kind": "authority",
+    "text": "{\"kind\":\"authority\",\"question\":\"Fetch oak-chair from ext.shelf.library: 1292 bytes in 2 files, under CC-BY-4.0 (credit: Ana Ruiz, Shelf)?\",\"options\":[{\"id\":\"fetch\",\"label\":\"Fetch it\",\"decision\":\"allow\"},{\"id\":\"decline\",\"label\":\"Don't fetch it\",\"decision\":\"deny\"}],\"recommended\":null,\"deadline\":1794303175392,\"fallback\":\"you\",\"default\":\"decline\",\"provisional\":false,\"owner\":\"you\",\"key\":\"affb6002585431c93584f3bcc7eba18a6db759db94f6e765d3ff5436e28b8788\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"affb6002585431c93584f3bcc7eba18a6db759db94f6e765d3ff5436e28b8788\"}}",
+    "data": {
+      "kind": "authority",
+      "question": "Fetch oak-chair from ext.shelf.library: 1292 bytes in 2 files, under CC-BY-4.0 (credit: Ana Ruiz, Shelf)?",
+      "options": [
+        {
+          "id": "fetch",
+          "label": "Fetch it",
+          "decision": "allow"
+        },
+        {
+          "id": "decline",
+          "label": "Don't fetch it",
+          "decision": "deny"
+        }
+      ],
+      "recommended": null,
+      "deadline": 1794303175392,
+      "fallback": "you",
+      "default": "decline",
+      "provisional": false,
+      "owner": "you",
+      "key": "affb6002585431c93584f3bcc7eba18a6db759db94f6e765d3ff5436e28b8788",
+      "pinned_to": {
+        "kind": "evidence",
+        "ref": "affb6002585431c93584f3bcc7eba18a6db759db94f6e765d3ff5436e28b8788"
+      }
+    }
+  }
+]

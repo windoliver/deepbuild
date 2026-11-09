@@ -5,9 +5,6 @@
 //! work; nothing here makes a sound.
 
 use deep_canvas::camera::Vec3;
-use deep_canvas::registry::{
-    Dependency, Implementation, Manifest, Module, Range, Registrar, Semver,
-};
 use serde_json::{json, Map, Value};
 
 use crate::scene::{placed_at, Refused};
@@ -136,45 +133,8 @@ fn forward(m: &crate::scene::Affine3) -> Vec3 {
     }
 }
 
-fn manifest() -> Manifest {
-    let dep = |r: &str| Dependency {
-        range: Range::parse(r).expect("a range"),
-        optional: false,
-    };
-    Manifest {
-        name: "media".into(),
-        version: Semver {
-            major: 1,
-            minor: 0,
-            patch: 0,
-        },
-        core: Range::parse("*").expect("a range"),
-        depends_on: [("scene3d".to_string(), dep("^1"))].into_iter().collect(),
-        feature: "media".into(),
-        license: "Apache-2.0".into(),
-        implements: "media@1".into(),
-        implementation: Implementation::reference(
-            "media",
-            Semver::parse("1.0.0").expect("a version"),
-        ),
-    }
-}
-
-/// `media`: strips and emitters, read as data.
-pub fn module() -> Module {
-    Module {
-        manifest: manifest(),
-        register,
-    }
-}
-
-fn register(r: &mut Registrar) {
-    // A bell on a box, so the kit checks a document with strips and an emitter.
-    r.fixture("bell", bell(), None)
-        .sidecar(json!({"codes": []}));
-}
-
-fn bell() -> Value {
+/// A bell on a box: a document with strips and an emitter (#427), a media module fixture.
+pub fn bell() -> Value {
     json!({
         "format": 1, "profile": "scene", "title": "A bell",
         "description": "A small box with a positional voice playing a sine chime.",
