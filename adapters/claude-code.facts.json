@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@4",
+  "schema": "adapter.facts@5",
   "versions": ["2.1.299", "2.1.304", "2.1.308"],
   "agent": "claude",
   "hookTimeouts": {
@@ -7,6 +7,14 @@
     "conformance": "claude/hookTimeouts/hold-within-timeout",
     "defaultMs": 60000,
     "perHook": { "Stop": 600000, "UserPromptSubmit": 30000 }
+  },
+  "routes": {
+    "network": {
+      "readBy": "deep-hook waits failOpenMs from the hook's start for a joined project's hub to acknowledge over its TLS connection, then decides as with the hub away; its fast rules stay local",
+      "measured": "PreToolUse p95 647, 748 and 661 ms in three runs of ten (#1338 AC2), on a link holding every chunk 100 ms each way, three round trips: the TLS handshake, the hub's hello, the hook; this Mac at load 120 to 156, Nov 8 2026",
+      "hookOverheadMs": 900,
+      "failOpenMs": 1500
+    }
   },
   "continuation": {
     "readBy": "a stop hold continues a turn at most cap times in a row, counted per turn and from its last tool call; past it, what would continue the turn goes by the next prompt",

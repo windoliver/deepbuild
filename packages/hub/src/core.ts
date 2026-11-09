@@ -34,7 +34,7 @@ import { Confirmer } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
-import { sessionStates, statusRows, WAITING_QUIET_MS } from './status.js';
+import { sessionStates, statusRows, WAITING_QUIET_MS, type StatusRow } from './status.js';
 import { addGuards, blocksCall, provenGuards, writeStanding } from './guards.js';
 import { captureRejected, decisionKey, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -58,8 +58,9 @@ import { GateRunner, type ClaimCheck, type DefinitionState, type RunKey, type St
 import { Siblings } from './siblings.js';
 import type { KeyFacts } from './shared-runs.js';
 import { argsOf, groupUnder, parents, startOf } from './children.js';
-import { deepHook, forgeOf, repoOf, rootOf, type Root } from './paths.js';
-import { OWNER, People, scopeOf } from './people.js';
+import { deepHook, forgeOf, projectIdOf, repoOf, rootOf, type Root } from './paths.js';
+import { inviteText, OWNER, People, scopeOf } from './people.js';
+import { identityAt } from './identity.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
@@ -1419,6 +1420,11 @@ export class Core {
    * One hook's events, checked and handed to the record in the order hooks arrived; the next hook waits only
    * for that, not for the commit. Resolves once each append settled.
    */
+  /** A hook another machine spooled for this hub while its link was down (#1338): recorded once, as a spool's line is. */
+  async replayed(drafts: Draft[], meta: HookMeta): Promise<void> {
+    this.track(meta);
+    await (await this.queue(() => this.handleHook(drafts, meta, 'hook', true))).settled;
+  }
   hook(drafts: Draft[], meta: HookMeta, writer: string): Promise<void> {
     this.track(meta);
     // What deep-hook spooled ran before this hook, so a replay this hook starts, or one running, goes first.
@@ -5574,6 +5580,15 @@ export class Core {
       case 'inbox.read': return this.reflecting(() => this.inbox());
       case 'sessions.read': return this.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
       case 'person.add': return this.addPerson(params, context);
+      case 'person.invite': return this.invitePerson(params, context);
+      case 'person.revoke': return this.revokePerson(params, context);
+      // An invite spent over the network (#1338): only the server's network hello calls it, with the key the joining machine proved.
+      case 'person.join': {
+        if (context.role !== 'network' || typeof params.key !== 'string') throw new Refused(refusal('role', '/method', 'An invite is spent only over the network, by the machine that proves its key.', method));
+        const joined = this.people.redeem(params.invite, params.key);
+        if (!joined) throw new Refused(refusal('credential', '/invite', 'This invite is spent, lapsed or not one this hub issued.'));
+        return joined;
+      }
       case 'numbers.read': return this.reflecting(async () => {
         const read = await this.numbers.read() as unknown as { rows: unknown[] };
         return { ...read, rows: [...read.rows, await this.handbacks()] } as unknown as Obj;
@@ -5614,7 +5629,7 @@ export class Core {
       case 'status.read':
         this.replayLate();
         // The state pass under way lands first (#992): what deep status lists is in the record the app draws from.
-        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) })));
+        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.reflecting(async () => ({ rows: await this.statusSeen(context.role) })));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);
@@ -5760,6 +5775,14 @@ export class Core {
   private async page(after: number, limit: number, kinds?: string[], seen = ''): Promise<{ log_pos: number; json: string }[]> {
     const only = kinds ? ` AND kind IN (${kinds.map((k) => `'${k.replace(/'/g, "''")}'`).join(',')})` : '';
     return (await this.record.raw(`SELECT log_pos, ${EVENT_TEXT} AS json FROM events WHERE log_pos > ${after}${only}${seen} ORDER BY log_pos LIMIT ${limit}`)) as { log_pos: number; json: string }[];
+  }
+  /** deep status's rows, a person's only of the sessions they may see (#1338). */
+  private async statusSeen(role: string): Promise<StatusRow[]> {
+    const rows = await statusRows((sql) => this.record.raw(sql), this.now());
+    const seen = role.startsWith('person:') ? this.seenBy(role) : '';
+    if (!seen) return rows;
+    const visible = new Set(((await this.record.raw(`SELECT DISTINCT session_id AS id FROM events WHERE session_id IS NOT NULL${seen}`)) as { id: string }[]).map((r) => r.id));
+    return rows.filter((row) => visible.has(row.id));
   }
   /**
    * The events a reader may see, as SQL (#1337): a person reads their own personal scope and the projects they are
@@ -6203,6 +6226,42 @@ export class Core {
     } catch (error) {
       throw new Refused(refusal('pattern', '/params/person', `Nobody was added: ${error instanceof Error ? error.message : String(error)}.`, person));
     }
+  }
+  /**
+   * A one-time invite to the project of a clone's repo (#1338): the address the person's machine reaches this hub at,
+   * which the inviter knows and the hub can't, this hub's ID, which that machine checks before it sends anything, and a
+   * secret kept here only as its digest. No address lives in the repo. Asked once the OS confirms you, as adding is.
+   */
+  private async invitePerson(params: Obj, context: CallContext): Promise<Obj> {
+    const { person, repo, address } = params;
+    if (typeof person !== 'string') throw new Refused(refusal('type', '/params/person', 'Name the person as their forge login.', person));
+    if (typeof repo !== 'string' || !isAbsolute(repo)) throw new Refused(refusal('type', '/params/repo', "Name a clone of the project's repo by its absolute path.", repo));
+    if (typeof address !== 'string' || !/^[^\s:]+:\d{1,5}$/.test(address)) throw new Refused(refusal('pattern', '/params/address', "Name where the person's machine reaches this hub, as <host>:<port>.", address));
+    const forge = forgeOf(repo);
+    if (!forge) throw new Refused(refusal('not_found', '/params/repo', `${repo} is in no repo with an origin remote: a repo with no remote keeps its path scope, so it can't be shared.`, repo));
+    await this.asYou(context, 'person.invite', `invite ${person} to ${forge}`, `invite:${person}`, forge);
+    try {
+      const secret = this.people.invite(person, forge);
+      const hub = identityAt(join(this.options.root, 'hub.key'), 'deep-hub').id;
+      return { invite: inviteText({ v: 1, address, hub, secret, project: forge, person }), person, project: projectIdOf(forge) };
+    } catch (error) {
+      throw new Refused(refusal('pattern', '/params/person', `Nobody was invited: ${error instanceof Error ? error.message : String(error)}.`, person));
+    }
+  }
+  /** Revokes a person's credentials and open invites (#1338); the server then closes their connections. */
+  private async revokePerson(params: Obj, context: CallContext): Promise<Obj> {
+    const { person } = params;
+    if (typeof person !== 'string' || !person) throw new Refused(refusal('type', '/params/person', 'Name the person as their forge login.', person));
+    await this.asYou(context, 'person.revoke', `revoke ${person}'s credentials`, `revoke:${person}`, person);
+    return { person, revoked: this.people.revoke(person) };
+  }
+  /** A change to who is on a project counts only from your own terminal, never an agent's, once the OS confirms you. */
+  private async asYou(context: CallContext, method: string, what: string, handle: string, revision: string): Promise<void> {
+    if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'Who is on a project changes from your own terminal, once the OS confirms you.', method));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent changes who is on a project. Run it from your own terminal.`, method));
+    const why = await this.confirmer.you(what, { handle, revision });
+    if (why) throw new Refused(refusal('unconfirmed', '/method', `${what} changed nothing: the OS didn't confirm you (${why}).`, method, true));
   }
   /** `deep race <issue>` (#352): you start a race on an issue, so its sessions settle on the first PASS and raise no "keep which?" ask. */
   private async race(params: Obj, context: CallContext): Promise<Obj> {
