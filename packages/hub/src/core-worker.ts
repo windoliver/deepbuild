@@ -22,6 +22,8 @@ export type CoreRequest =
   | { op: 'stop'; reason: string };
 export type CoreMessage =
   | { op: 'hook'; drafts: Draft[]; meta: HookMeta; writer: string }
+  // A hook another machine spooled while its link was down, sent once it was back (#1338): recorded as a replay is.
+  | { op: 'replayed'; drafts: Draft[]; meta: HookMeta }
   | { op: 'waiter-gone'; key: number }
   | { op: 'notifier-gone' }
   | { op: 'hook-gone'; id: string; session: string }
@@ -68,6 +70,7 @@ if (parentPort && workerData?.core) {
   );
   port.on('message', (message: CoreMessage) => {
     if (message.op === 'hook') return void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
+    if (message.op === 'replayed') return void core.replayed(message.drafts, message.meta).catch(() => undefined);
     if (message.op === 'waiter-gone') return core.waiterGone(message.key);
     if (message.op === 'notifier-gone') return void core.notifierGone();
     if (message.op === 'hook-gone') return core.hookGone(message.id, message.session);

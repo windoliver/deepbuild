@@ -15,12 +15,12 @@ import type { HookMeta, Plant } from './wire.js';
 import { couldDo, SECRET_NAME, struck, type Found, type Reach } from './could-do.js';
 
 type Obj = Record<string, unknown>;
-export interface Requirement { id: string; text: string }
+interface Requirement { id: string; text: string }
 /** What an offered step does, by the guard engine's effect classes; commit counts only where your rules reserve it. */
 export type Effect = 'commit' | 'push' | 'pr' | 'merge' | 'dispatch' | 'send' | 'delete' | 'spend';
-export type Opens = { kind: 'secret'; name: string } | { kind: 'sign_in'; command: string };
-export interface Choice { question: string; options: { id: string; label: string }[]; recommended: string | null; requirement: string | null; own: boolean }
-export type Read =
+type Opens = { kind: 'secret'; name: string } | { kind: 'sign_in'; command: string };
+interface Choice { question: string; options: { id: string; label: string }[]; recommended: string | null; requirement: string | null; own: boolean }
+type Read =
   | { sort: 'none' }
   | { sort: 'unblock'; step: string }
   | { sort: 'choice'; choice: Choice }
@@ -46,12 +46,12 @@ const lastSentence = (text: string) => text.trim().split(/\n+/).at(-1)!.split(/(
 const sameOption = (a: string, b: string) => { const bare = (s: string) => s.toLowerCase().replace(/^(?:the|a|an)\s+/, ''); return bare(a) === bare(b); };
 
 /** The effect an offered step would have. */
-export function effectOf(step: string): Effect | null {
+function effectOf(step: string): Effect | null {
   return EFFECTS.find(([, re]) => re.test(step))?.[0] ?? null;
 }
 
 /** What a final message hands over, read from its form: a task, a choice, an offer, or a question nothing keys. */
-export function readStop(message: string, requirements: readonly Requirement[]): Read {
+function readStop(message: string, requirements: readonly Requirement[]): Read {
   const task = UNBLOCK.exec(message);
   if (task) return { sort: 'unblock', step: task[1]!.trim() };
   const own = OWN.exec(message);
@@ -93,7 +93,7 @@ function rulesReserveCommits(cwd: string): boolean {
   return false;
 }
 
-export interface QuestionOptions {
+interface QuestionOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   asks: () => Asks;
   holds: Holds;
@@ -120,7 +120,7 @@ export interface Sorted {
   noHold: boolean;
 }
 /** What a card's sort decided: the reason its call is answered with, or the answers `AskUserQuestion` gets. */
-export interface CardReply { reason?: string; answers?: Record<string, string> }
+interface CardReply { reason?: string; answers?: Record<string, string> }
 
 export class Questions {
   /** Each session's questions already sent on or sent back once, by their text. */

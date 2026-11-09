@@ -85,3 +85,82 @@ float4 exact_gradient_mix(float4 color0, float4 color1, float t) {
   }
   return oklab_color;
 }
+
+// DeepBuild patch (windoliver/deepbuild#1434): chrome layers. A composite draws a premultiplied
+// source (a layer's offscreen target, texel for texel, or an effect's output, scaled) over
+// `drawn`, its clip's rounded shape at `bounds` with `radii`, and a soft edge `edge` px wide.
+struct ChromeComposite {
+  Bounds_ScaledPixels bounds;
+  Bounds_ScaledPixels drawn;
+  Corners_ScaledPixels radii;
+  float opacity;
+  float edge;
+  uint texel_for_texel;
+  uint pad;
+  float2 source_origin;
+  float2 pad2;
+};
+
+struct ChromeVertexOutput {
+  float4 position [[position]];
+  float2 pixel;
+};
+
+vertex ChromeVertexOutput chrome_vertex(uint unit_vertex_id [[vertex_id]],
+                                        constant float2 *unit_vertices [[buffer(0)]],
+                                        constant ChromeComposite *composite [[buffer(1)]],
+                                        constant Size_DevicePixels *viewport_size [[buffer(2)]]) {
+  float2 unit_vertex = unit_vertices[unit_vertex_id];
+  Bounds_ScaledPixels drawn = composite->drawn;
+  float2 pixel = unit_vertex * float2(drawn.size.width, drawn.size.height) +
+                 float2(drawn.origin.x, drawn.origin.y);
+  return ChromeVertexOutput{to_device_position(unit_vertex, drawn, viewport_size), pixel};
+}
+
+fragment float4 chrome_fragment(ChromeVertexOutput input [[stage_in]],
+                                constant ChromeComposite *composite [[buffer(1)]],
+                                texture2d<float> source [[texture(0)]]) {
+  float distance = quad_sdf(input.pixel, composite->bounds, composite->radii);
+  float coverage = composite->edge > 0.0 ? saturate(-distance / composite->edge)
+                                         : saturate(0.5 - distance);
+  float4 color;
+  if (composite->texel_for_texel != 0) {
+    color = source.read(uint2(input.pixel - composite->source_origin));
+  } else {
+    constexpr sampler linear_sampler(mag_filter::linear, min_filter::linear,
+                                     address::clamp_to_edge);
+    Bounds_ScaledPixels drawn = composite->drawn;
+    float2 uv = (input.pixel - float2(drawn.origin.x, drawn.origin.y)) /
+                float2(drawn.size.width, drawn.size.height);
+    color = source.sample(linear_sampler, uv);
+  }
+  return color * (composite->opacity * coverage);
+}
+
+// DeepBuild patch (windoliver/deepbuild#1434): a backdrop read at half or a quarter scale: each
+// output pixel is the mean of the `step` × `step` block of the target under it.
+struct ChromeDownsample {
+  uint2 origin;
+  uint step;
+  uint pad;
+};
+
+vertex float4 chrome_fullscreen_vertex(uint vertex_id [[vertex_id]]) {
+  float2 p = float2((vertex_id << 1) & 2, vertex_id & 2);
+  return float4(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0, 0.0, 1.0);
+}
+
+fragment float4 chrome_downsample_fragment(float4 position [[position]],
+                                           constant ChromeDownsample *downsample [[buffer(0)]],
+                                           texture2d<float> target [[texture(0)]]) {
+  uint step = downsample->step;
+  uint2 base = downsample->origin + uint2(position.xy) * step;
+  uint2 last = uint2(target.get_width() - 1, target.get_height() - 1);
+  float4 sum = float4(0.0);
+  for (uint y = 0; y < step; y++) {
+    for (uint x = 0; x < step; x++) {
+      sum += target.read(min(base + uint2(x, y), last));
+    }
+  }
+  return sum / float(step * step);
+}

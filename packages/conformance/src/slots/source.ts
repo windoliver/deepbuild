@@ -7,12 +7,12 @@ import { fail, Finding } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { canonical, list, object, same, word } from './shared.js';
 
-export const SOURCE = 'source@1';
+const SOURCE = 'source@1';
 
-export interface StreamEvent { seq: number; kind: string; data: string }
-export interface Stream { events: StreamEvent[] }
-export interface Page { events: StreamEvent[]; cursor: string | null }
-export interface SourceFill extends SlotFill {
+interface StreamEvent { seq: number; kind: string; data: string }
+interface Stream { events: StreamEvent[] }
+interface Page { events: StreamEvent[]; cursor: string | null }
+interface SourceFill extends SlotFill {
   slot: 'source@1';
   /** The next page after `cursor` (null for the start), at most `limit` events, and the cursor after it. */
   read(stream: Stream, cursor: string | null, limit: number): Page;

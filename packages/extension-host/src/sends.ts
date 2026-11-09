@@ -18,7 +18,7 @@ export interface SendRow {
 /** A standing rule for sends: the piece that sends, its recipients and, for a scheduled send, the schedule. */
 export interface SendRule { sentence: string; piece: string; recipients: string[]; schedule: string | null }
 /** What a send is for: the piece, and the run or action call it is made in. */
-export interface SendFor { piece: string; hosts: string[]; schedule: string | null; run: string | null; call: string | null; until: number; ended: () => boolean }
+interface SendFor { piece: string; hosts: string[]; schedule: string | null; run: string | null; call: string | null; until: number; ended: () => boolean }
 interface Made { key: string; piece: string; phase: 'asked' | 'claimed' | 'answered' | 'refused'; kind: string; to: string[]; plan: string; schedule: string | null; run: string | null; call: string | null; rule: string | null; ask: string | null; status?: number }
 
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };

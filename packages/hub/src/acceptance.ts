@@ -43,7 +43,7 @@ interface Entry {
   /** Waiting for a slot, and holding one: an issue with an ask open does neither. */
   queued: boolean; slot: boolean;
 }
-export interface AcceptanceOptions {
+interface AcceptanceOptions {
   record: RecordStore;
   runner(): Runner;
   supervisor(): Supervisor;
@@ -71,7 +71,7 @@ function git(cwd: string, args: string[], o: { input?: Uint8Array | string; env?
   });
 }
 /** What the job's own stream shows it did past its reach: a read outside its folder, a write outside its issue's, or any other tool. */
-export function pastReach(stdout: string, folder: string, writes: string): string | undefined {
+function pastReach(stdout: string, folder: string, writes: string): string | undefined {
   const inside = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
   for (const line of stdout.split('\n')) {
     let event: { type?: string; message?: { content?: { type?: string; name?: string; input?: Record<string, unknown> }[] } };

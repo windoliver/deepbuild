@@ -3,9 +3,9 @@
 // never from what a step's own response claimed, which is why the last response is handed back apart.
 import type { Failure, RunOutcome } from '@deepbuild/conformance';
 
-export interface ApiStep { id: string; line: number; deadlineMs: number; method: string; path: string; body?: unknown; expect: { status: number } }
-export interface ApiJourney { id: string; steps: ApiStep[]; endState: never[] }
-export interface ApiRun { run: string; outcome: RunOutcome; testsRun: number; failures: Failure[]; message: string | null; steps: { id: string; startMs: number; endMs: number; status: number | null }[]; last: unknown }
+interface ApiStep { id: string; line: number; deadlineMs: number; method: string; path: string; body?: unknown; expect: { status: number } }
+interface ApiJourney { id: string; steps: ApiStep[]; endState: never[] }
+interface ApiRun { run: string; outcome: RunOutcome; testsRun: number; failures: Failure[]; message: string | null; steps: { id: string; startMs: number; endMs: number; status: number | null }[]; last: unknown }
 
 /** Drives the stack at `url` through the journey's requests. */
 export async function runApiJourney(o: { run: string; journey: ApiJourney; url: string; file: string; secrets?: Record<string, string> }): Promise<ApiRun> {

@@ -9,6 +9,8 @@ use metal::Device;
 use parking_lot::Mutex;
 use std::borrow::Cow;
 
+mod rect; // DeepBuild patch (windoliver/deepbuild#1480)
+
 pub struct MetalAtlas(Mutex<AtlasState<MetalAtlasTextures>>);
 
 impl MetalAtlas {
@@ -48,6 +50,11 @@ impl PlatformAtlas for MetalAtlas {
 
     fn remove(&self, key: &AtlasKey) {
         self.0.lock().remove(key);
+    }
+
+    // DeepBuild patch (windoliver/deepbuild#1480)
+    fn write_rect(&self, key: &AtlasKey, region: Bounds<DevicePixels>, bytes: &[u8], stride: usize) -> bool {
+        self.0.lock().write_rect(key, region, bytes, stride)
     }
 }
 

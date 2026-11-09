@@ -1,0 +1,76 @@
+# Base run: commit dd83ac2f, before any implementation, on this Mac (Apple silicon, macOS 27.2; loaded: 1-minute load average about 32 to 37 during the run).
+# NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1479 --no-file-parallelism taste
+#
+# It fails on its own assertion: render and raster answer bad_input to view.zoom above 8, so the 16x screenshot (both
+# sides) and the recording's last 31 frames (8.141x to 16x) can't be taken. Nothing was written to docs/evidence/1479/.
+# The test reads no picture, so the base's other fault, no glyph drawn past 256 device px (6.4x for the 40 u title), is not
+# what it fails on; a scratch copy of this file capped at 8x (not part of the suite) wrote the pictures at the base, and
+# GPUI's 8x frame and the recording's 8x frame hold no lit pixel while Vello CPU's 8x snapshot shows the title.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1479
+
+ ❯ taste/taste.test.ts (1 test | 1 failed) 49151ms
+   ❯ C5 #1479.67deff55 the screenshots at 1×, 8× and 16×, the recording of the zoom, and the one taste call on them (1)
+     × C5 #1479.67deff55 the run draws the title at the reference window by GPUI beside Vello CPU and records the zoom, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS 46519ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  taste/taste.test.ts > C5 #1479.67deff55 the screenshots at 1×, 8× and 16×, the recording of the zoom, and the one taste call on them > C5 #1479.67deff55 the run draws the title at the reference window by GPUI beside Vello CPU and records the zoom, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: the check run takes every picture at the reference window (32 refused): expected [ …(32) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "GPUI's frame (render) at 16.000× (640.0 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "Vello CPU's snapshot (raster) at 16.000× (640.0 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 8.141× (325.6 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 8.333× (333.3 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 8.529× (341.2 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 8.730× (349.2 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 8.936× (357.4 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 9.147× (365.9 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 9.362× (374.5 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 9.583× (383.3 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 9.809× (392.4 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 10.040× (401.6 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 10.277× (411.1 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 10.519× (420.8 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 10.767× (430.7 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 11.021× (440.8 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 11.281× (451.2 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 11.547× (461.9 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 11.819× (472.8 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 12.098× (483.9 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 12.383× (495.3 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 12.675× (507.0 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 12.973× (518.9 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 13.279× (531.2 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 13.592× (543.7 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 13.913× (556.5 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 14.241× (569.6 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 14.576× (583.0 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 14.920× (596.8 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 15.272× (610.9 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 15.632× (625.3 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++   "the recording's frame (render) at 16.000× (640.0 device px a em) was refused: {\"ok\":false,\"code\":\"bad_input\"}",
++ ]
+
+ ❯ taste/taste.test.ts:158:110
+    156|       });
+    157|     }
+    158|     expect(refused, `the check run takes every picture at the referenc…
+       |                                                                                                              ^
+    159|
+    160|     const files: Record<string, Buffer> = {};
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  20:29:46
+   Duration  49.28s (tests 100%)
+
