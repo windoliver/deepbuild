@@ -12,7 +12,7 @@ pub mod outlines;
 pub mod shape;
 pub mod unicode;
 
-pub use atlas::{raster_size, Atlas, Page, Placed, PAGE, PAGES, PHASES};
+pub use atlas::{raster_size, Atlas, Page, Placed, Rect, PAGE, PAGES, PHASES, RING};
 pub use fonts::{face_of, Face, Role, FACES};
 pub use parley::FontData;
 pub use shape::{Align, Fit, Glyph, Shaped, Shaper, Spec};
