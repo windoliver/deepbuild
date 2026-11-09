@@ -216,6 +216,8 @@ interface Session {
   results?: string[];
   /** The thread its ID joins: IDs rotated by `/clear`, `/compact` or a fork are one thread. */
   thread: string;
+  /** Ended by a SessionEnd whose reason is `clear`: its process goes on under a new ID (#1632). */
+  cleared?: boolean;
   read: number; turn: Turn | undefined; closed: Turn[]; reached: Set<string>;
   /** Calls whose hooks' events are on their way to the record, and how many: their turns wait for them. */
   pending: Map<string, number>;
@@ -1599,7 +1601,10 @@ export class Core {
       // Only an event checked against its session acts on it: an unverified SessionEnd ends nothing.
       // pi resumes a session it replaced in the same process, so the same session can start again.
       if (meta.event === 'SessionStart' && meta.agent === 'pi') session.ended = false;
-      if (meta.event === 'SessionEnd') this.sessionOver(session);
+      if (meta.event === 'SessionEnd') {
+        this.sessionOver(session);
+        if (drafts.some((d) => d.kind === 'session.end' && d.data.reason === 'clear')) session.cleared = true;
+      }
       // A replayed PreToolUse was let through late; its call has run, so it stamps nothing a later call could bind.
       if (verified && meta.stamp && !replayed) this.stamps.push({ session: session.id, tool: meta.stamp.tool, digest: meta.stamp.digest });
     }
@@ -6486,7 +6491,7 @@ export class Core {
       await (this.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
-      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'find_actions'));
+      const session = await this.queue(async () => this.bind(tool, sent, await this.rebound(context), tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'find_actions'));
       switch (tool) {
         case 'find_actions': return await this.findActions(args.query as string | null);
         case 'call_action': return await this.callPluginAction(session!, args);
@@ -6516,6 +6521,23 @@ export class Core {
     const out: Partial<Refusal> = { ...refused.refusal, remediation: scrub(refused.refusal.remediation), actual: scrub(refused.whole ?? refused.refusal.actual).slice(0, 8192) };
     if (plant === 'errors-without-actual') delete out.actual;
     return new Refused(out as Refusal);
+  }
+  /**
+   * A deep mcp whose session `/clear` rotated in its own process (#1632): a SessionEnd `clear`, then a live session of the
+   * same process, by PID and start time, on its thread. Its calls then bind one by one by their own stamps, as an unbound
+   * connection's do, so each acts for the new ID and none inherits the old one. A session that ended any other way, or
+   * whose successor runs in another process, keeps its binding, and its calls are refused naming it.
+   */
+  private async rebound(context: CallContext): Promise<CallContext> {
+    const { session: id, parent } = context;
+    if (!id || !parent || this.sessions.get(id)?.ended === false) return context;
+    const was = this.sessions.get(id);
+    // Forgotten past ENDED_KEPT (#824): the record keeps its thread and how it ended.
+    const [row] = was ? [] : (await this.record.raw(`SELECT s.thread_id AS thread, EXISTS (SELECT 1 FROM events WHERE kind = 'session.end' AND session_id = s.id AND json_extract(data, '$.reason') = 'clear') AS cleared FROM sessions s WHERE s.id = ?`, [id])) as { thread: string | null; cleared: number }[];
+    const thread = was ? was.thread : row?.thread ?? id;
+    if (!(was ? was.cleared && was.pid === parent.pid && was.start === parent.start : row?.cleared)) return context;
+    const rotated = [...this.sessions.values()].some((s) => !s.ended && s.id !== id && s.thread === thread && s.pid === parent.pid && s.start === parent.start);
+    return rotated ? { ...context, session: null } : context;
   }
   /**
    * The session a deep_* call acts for: its deep mcp's own, or the one unspent PreToolUse stamped for this very call,
