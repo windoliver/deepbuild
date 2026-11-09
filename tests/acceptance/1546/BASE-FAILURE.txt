@@ -1,0 +1,77 @@
+Base-commit failure output for tests/acceptance/1546 (issue #1546: a change reaches the window by itself, and the replica
+draws only the frames a real window would)
+
+Base: dd83ac2f (origin/main, "Merge pull request #1692"), worktree clean but for this folder.
+Machine: macOS, 18 cores, load average 54 to 88 during the runs (other sessions' builds).
+Built: cargo build --locked -p deep-replica --bin deep-drive --bin deep-live --features env-plants; for the live file also
+       npm run build --workspaces and cargo build --locked -p deep-hook (the hub refuses to start without deep-hook).
+
+Run 1, the suite:   npx vitest run --root tests/acceptance/1546 --no-file-parallelism
+Run 2, by hand:     DEEP_LIVE_1546=1 npx vitest run --root tests/acceptance/1546 ac4-needs-you.live.test.ts
+
+Result: nothing passes at the base. Run 1: 11 failed, 1 skipped (the live file, skipped unless DEEP_LIVE_1546=1).
+Run 2: 1 failed. Every failure is the surface or a plant missing, test by test:
+
+ac1-journey.test.ts (6 failed)
+  - all six: `launch` with frames: "dirty" answers no `frames` field: the base ignores the field and launches its every-frame
+    replica. AssertionError: launch answers frames: "dirty", the mode that draws only when GPUI says the window is dirty:
+    {"replica":"replica:10797x1","window":{"size":[1512,982],"scale":2},"locale":"en-US","ok":true,"t":0}: expected undefined
+    to be 'dirty'. (The two planted tests set DEEP_HUB_PLANT=record-in-thread-local, a name the base app doesn't know and so
+    ignores; they fail at the same line.)
+ac2-quiet-row.test.ts (2 failed)
+  - both: the same missing `frames: "dirty"` at launch (the planted one with DEEP_HUB_PLANT=no-age-timer, ignored at the base).
+ac3-every-step-dirty.test.ts (3 failed)
+  - notifies-every-step, and the test with both plants: the plant is missing. BLOCKED: deep-drive didn't say {"ready": true}
+    with DEEP_DRIVE_PLANT=notifies-every-step: {"ready":false,"error":"no planted replica notifies-every-step"}
+  - the twin without the plant: the missing `frames: "dirty"` at launch.
+ac4-needs-you.live.test.ts (run 2: 1 failed; a real hub and an agent stand-in started)
+  - deep-live has no --watch mode: AssertionError: deep-live --watch exited 2 before it was ready: deep-live: unknown argument --watch
+
+What lies past that first failure was checked by hand on the same base binary (one deep-drive process, the fixture of this
+folder, no plant), so each later step also fails for a missing surface, not for a wrong expected value:
+  - {"call":"feed",...}   -> {"ok":false,"error":{"code":"refused","message":"\"feed\" is no call; the calls are launch, act,
+                              wait_for, see, probe, screenshot, record, motion, expect, close, ui_check and motion_check"}}
+  - {"call":"resize",...} -> {"ok":false,"error":{"code":"refused","message":"\"resize\" is no call; ..."}}
+  - {"call":"close"}      -> keys: journey, ok, t, trace; no `frames`
+  - the fixture draws as the README says at launch: "2 asks need you", the two asks' rows, and
+    "○ Session 01KBQT5Q · quiet · last seen 1 min ago"; after wait_for 30 s of the clock the row still reads "1 min",
+    because the base's deep-drive sets the views' clock once at launch and never moves it.
+
+Run 1, as vitest printed it:
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1546
+ ❯ ac1-journey.test.ts (6 tests | 6 failed) 2803ms
+   ❯ #1546 AC1 a record event reaches the window by itself, and the replica reads the frame it drew (2)
+     × an ask raised on the record is drawn with no input: the frame drawn after it lists the row and the new count, and equals a forced one 1955ms
+     × planted record-in-thread-local: the drawn frame keeps the old count and rows, and the check fails naming Needs you, the ask's row and the step 106ms
+   ❯ #1546 AC1 seeded journeys of record events, clock steps, hovers and resizes (4)
+     × seed 1546: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 99ms
+     × seed 7: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 96ms
+     × seed 2026: the window draws only when dirty, every step's forced frame equals the last drawn one, and the claim is PASS 255ms
+     × seed 1546 with the planted view: FAIL, its first finding at a record event, naming Needs you and a raised ask's row at that ask's step 232ms
+ ❯ ac2-quiet-row.test.ts (2 tests | 2 failed) 1923ms
+   ❯ #1546 AC2 a quiet session's row updates its age by the next minute, on the virtual clock, with no input (2)
+     × the row reads 1, 2, 3 then 4 min, each from its minute on, drawn by the window itself 1767ms
+     × planted no-age-timer: the drawn row keeps "1 min" past the minute, and both the judge and the check fail, naming the row 101ms
+ ❯ ac3-every-step-dirty.test.ts (3 tests | 3 failed) 1946ms
+   ❯ #1546 AC3 a run where every step was dirty proves nothing: INCONCLUSIVE, never PASS (3)
+     × planted notifies-every-step: every step that passed a frame drew one, nothing differs, and the claim reads INCONCLUSIVE 1760ms
+     × the same journey without the plant has clean steps and reads PASS 126ms
+     × with the stale view planted too, every step's redraw hides it, and the claim still never reads PASS 7ms
+
+ Test Files  3 failed | 1 skipped (4)
+      Tests  11 failed | 1 skipped (12)
+
+Run 2, as vitest printed it:
+
+ ❯ ac4-needs-you.live.test.ts (1 test | 1 failed) 3488ms
+   ❯ #1546 AC4 against a real hub, an ask.created changes Needs you in deep-live with no input, within the reader's tick plus one frame (1)
+     × three asks, each drawn in Needs you within 250 ms plus one frame of its record time, by a window that draws nothing while the record is still 3427ms
+ AssertionError: deep-live --watch exited 2 before it was ready: deep-live: unknown argument --watch
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+
+Not run: none of these tests has run against an implementation (none exists), so no test here has been seen to pass. The seeded
+journeys' composition was checked by a throwaway vitest file in the session's scratchpad (outside the repo; not in this
+folder): seeds 1546, 7 and 2026 each hold record events, clock steps, hovers and resizes, with 8, 8 and 10 asks raised.
