@@ -212,6 +212,7 @@
   "session.child_started@1": "d1:ba9803945d172e4aec76f944e4ebef64c3f01cb19f1610d5766eb78cb582af78",
   "session.continued@1": "d1:d7079a11dc9f42de4d0b7de46244746d1f2c79e5b0951ef0785e562c55d08266",
   "session.end@1": "d1:a71aed1b1b72d1b47c35747cc09fd43447b7ec928c7163e6306a1ae3f62279c7",
+  "session.end@2": "d1:a4ec3cd632122e750412e5ce1f824c21f83cb3c96049a28e5bdf948d054c25c1",
   "session.gone@1": "d1:f15a97d86fd799affbd39253a4883c0f09f55d8f0159cc0cc84f6c0ee88fdbeb",
   "session.never_started@1": "d1:a9c1daf460e8cec8034dc5d12a77984775cd75c49cc652f87494b0293c6223e2",
   "session.pushed@1": "d1:faa92f61849e8e5ba4d152229844edf01039964b738d92d868b8d6c8abcbbc91",
