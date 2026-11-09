@@ -4,6 +4,11 @@
 > [`tests/acceptance/1417-redraft-ac1/`](../1417-redraft-ac1/README.md). Main's #494 made a `graph@1` document that
 > doesn't name the graph module in `requires.modules` invalid, so this file's board was refused at `out_of_range` on
 > main. Approved by the user (JingW6, "Approve (Recommended)"). Everything else in this folder is unchanged.
+>
+> **Retired 2026-11-09:** `estimate.test.ts` (AC3, `#1417.c04ec518`) is replaced by its blind redraft in
+> [`tests/acceptance/1417-redraft-ac3/`](../1417-redraft-ac3/README.md). Its machine gate took only `costs.json`'s
+> fingerprint (Mac15,7, M3 Pro, 36 GB, macOS 25G241), while the design counts a run on any of its reference Macs.
+> Decided by the user (JingW6, "use macbook air to prove instead"). Everything else in this folder is unchanged.
 
 Written first, from issue #1417 (its scope, four acceptance criteria and proof line), the design sections it touches,
 and base commit `ede4b367` ("Merge pull request #1284 …"), by a job that never saw an implementation; none existed.
