@@ -8,6 +8,7 @@ The replica (#338): a headless copy of the app on GPUI's virtual clock that chec
 
 - `src/replica.rs`: the app headless as paired devices (#326) and the question card (#327). `src/shell.rs`, `src/snapshot.rs` and `src/kit.rs`: opening the shell, the text snapshot and the Needs you and notifier kits.
 - `src/drive/`: deep_drive's locators and hit test, drawn-glyph reading, planted guards, the UI check (`check.rs`), and the motion recording and check (`motion.rs`, #1427), which reads each element's painted bounds and opacity through the vendored GPUI patch `window/painted.rs`.
+- `src/chrome.rs`: `deep-replica --chrome <fixture>`, #1434's `chrome@1` fixture drawn headless, under the `chrome-fixture` feature only.
 - One binary root per `[[bin]]` in `Cargo.toml`: `src/main.rs`, `src/live.rs`, `src/deep_drive.rs`, `src/canvas.rs`.
 - Tests: `headless.rs` and `card_size.rs` at the crate root; `tests/drive.rs` drives `deep-drive`; blind acceptance suites stay in tests/acceptance/326 and 327.
 - App views and state belong in deep-app; the replica only drives and reads them.
