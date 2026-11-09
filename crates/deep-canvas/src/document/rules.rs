@@ -347,20 +347,24 @@ pub fn shown_inside(doc: &Value) -> Vec<Issue> {
     issues
 }
 
-/// The path under `value` to its first status role (a `role`, or an entry of a `range`), each
-/// step after a `/`, and the role. The path is written only for a role found, since every item's
-/// params are searched.
+/// The path under `value` to its first status role (a `role`, or an entry of a `range` or of
+/// `stops`), each step after a `/`, and the role. The path is written only for a role found,
+/// since every item's params are searched.
 fn status_role(value: &Value) -> Option<(String, String)> {
     match value {
         Value::Object(map) => map.iter().find_map(|(k, v)| match (k.as_str(), v) {
             ("role", Value::String(s)) if s.starts_with(STATUS_ROLE) => {
                 Some((format!("/{k}"), s.clone()))
             }
-            ("range", Value::Array(list)) => list.iter().enumerate().find_map(|(i, r)| {
-                r.as_str()
-                    .filter(|s| s.starts_with(STATUS_ROLE))
-                    .map(|s| (format!("/{k}/{i}"), s.to_string()))
-            }),
+            // #1646: a dither fill's stops are role names.
+            ("range" | "stops", Value::Array(list)) => {
+                list.iter().enumerate().find_map(|(i, r)| match r {
+                    Value::String(s) if s.starts_with(STATUS_ROLE) => {
+                        Some((format!("/{k}/{i}"), s.clone()))
+                    }
+                    _ => status_role(r).map(|(path, role)| (format!("/{k}/{i}{path}"), role)),
+                })
+            }
             _ => status_role(v).map(|(path, role)| (format!("/{k}{path}"), role)),
         }),
         Value::Array(list) => list

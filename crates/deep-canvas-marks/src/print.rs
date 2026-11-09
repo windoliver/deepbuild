@@ -513,6 +513,35 @@ fn screen(o: &Map<String, Value>, path: &str) -> Result<Option<Screen>, Refused>
     Ok((!identity).then_some(s))
 }
 
+/// #1646: the look's CRT afterglow, the phosphor's decay time in flicks: the `afterglow` of a
+/// `screen` finish of kind `crt`. The text animator draws it from each unit's reveal time, so it
+/// is no field of the finish pass; `None` without one.
+pub fn afterglow(look: &Value) -> Result<Option<i64>, Refused> {
+    for (i, entry) in look
+        .get("finish")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        let Some(screen) = entry.get("screen").and_then(Value::as_object) else {
+            continue;
+        };
+        let Some(v) = screen.get("afterglow").filter(|v| !v.is_null()) else {
+            continue;
+        };
+        let path = format!("look/finish/{i}/screen/afterglow");
+        if screen.get("kind").and_then(Value::as_str).unwrap_or("crt") != "crt" {
+            return refuse("out_of_range", path);
+        }
+        return match deep_canvas::document::duration(&Value::Null, v) {
+            Ok(flicks) => Ok(Some(flicks)),
+            Err(_) => refuse("bad_input", path),
+        };
+    }
+    Ok(None)
+}
+
 /// The integer hash the finish pass draws from (a lowbias32 avalanche of three words), exact on
 /// every machine; print.wgsl's `hash3` is the same function.
 pub fn hash3(a: u32, b: u32, c: u32) -> u32 {
