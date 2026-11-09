@@ -1,9 +1,9 @@
 ;; The 8,000-agent steering fixture of spike #245 (Logic: step blocks), which #212 reuses: a logic
 ;; item at 60 Hz in a 2048 x 2048 world whose step bins the agents into 16-unit cells of a
 ;; 128 x 128 grid and whose 8 blocks steer 1,000 agents each (separation, alignment and cohesion
-;; over at most 12 agents within 8, and a weak seek toward a goal of its own that moves every 2 s),
-;; writing slice b of each of the two out regions, NPOS and NVEL, and each agent's near
-;; count in scratch. `join` copies NPOS and NVEL back over POS and VEL.
+;; over the agents within 8 among each agent's first 12 candidates, and a weak seek toward a goal
+;; of its own that moves every 2 s), writing slice b of each of the two out regions, NPOS and
+;; NVEL, and each agent's near count in scratch. `join` copies NPOS and NVEL back over POS and VEL.
 ;;
 ;; Fields as #212 declares them: parallel {blocks: 8, out: [{at: npos_at, stride: 16000},
 ;; {at: nvel_at, stride: 16000}], scratch: [{at: scratch_at, bytes: 8192}]}.

@@ -36,7 +36,7 @@ const record = {
     chip: machine.chip,
     memory_bytes: machine.memoryBytes,
     os: mac ? 'macOS' : process.platform,
-    os_build: mac ? `${read('sw_vers', '-productVersion')} (${machine.macosBuild})` : read('uname', '-sr'),
+    os_build: mac ? (machine.macosBuild && `${read('sw_vers', '-productVersion')} (${machine.macosBuild})`) : read('uname', '-sr'),
     power: machine.power,
     low_power_mode: machine.lowPowerMode,
     thermal: machine.thermalState,

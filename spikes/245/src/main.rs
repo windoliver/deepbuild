@@ -116,6 +116,17 @@ impl Inst {
         let join = f(&mut store, "join")?.typed(&store).map_err(|e| e.to_string())?;
         let init: TypedFunc<(), ()> = f(&mut store, "init")?.typed(&store).map_err(|e| e.to_string())?;
         let memory = instance.get_memory(&mut store, "memory").ok_or("the program lacks memory")?;
+        // The layout this harness reads and touches is the fixture's own (steer.wat's globals).
+        let layout = [("npos_at", OUT[0]), ("nvel_at", OUT[1]), ("scratch_at", SCRATCH.0), ("agents", AGENTS), ("blocks", BLOCKS)];
+        for (n, want) in layout {
+            let got = g(&mut store, n)?.get(&mut store).unwrap_i32() as usize;
+            if got != want {
+                return Err(format!("the fixture's {n} is {got}, not the harness's {want}"));
+            }
+        }
+        if memory.data_size(&store) != MEM {
+            return Err(format!("the fixture's memory is not {MEM} bytes"));
+        }
         let mut inst = Inst { store, step, block, join, fuel, stack, cap, trap, pages, globals, memory };
         inst.arm(STEP_FUEL)?;
         init.call(&mut inst.store, ()).map_err(|e| e.to_string())?;
@@ -286,6 +297,8 @@ fn hash(bytes: &[u8]) -> String {
 struct Run {
     samples: Vec<Sample>,
     hashes: BTreeMap<usize, String>,
+    /// The memory file's kind, on copy-on-write.
+    file: Option<&'static str>,
 }
 
 fn one_instance(engine: &Engine, module: &Module, steps: usize) -> Result<Run, String> {
@@ -295,7 +308,7 @@ fn one_instance(engine: &Engine, module: &Module, steps: usize) -> Result<Run, S
     let mut s_out = vec![0u8; hi - lo];
     let mut s_scr = vec![0u8; shi - slo];
     let mut aside = vec![[vec![0u8; STRIDE], vec![0u8; STRIDE]]; BLOCKS];
-    let mut run = Run { samples: Vec::new(), hashes: BTreeMap::new() };
+    let mut run = Run { samples: Vec::new(), hashes: BTreeMap::new(), file: None };
     let clock = Clock { start: Instant::now() };
     for k in 0..steps + WARMUP {
         clock.wait(k);
@@ -309,7 +322,7 @@ fn one_instance(engine: &Engine, module: &Module, steps: usize) -> Result<Run, S
         s_scr.copy_from_slice(&inst.bytes()[slo..shi]);
         let globals = inst.get_globals();
         x.restore_ns += ns(t.elapsed());
-        for b in 0..BLOCKS {
+        for (b, kept) in aside.iter_mut().enumerate() {
             let t = Instant::now();
             inst.memory.data_mut(&mut inst.store)[SCRATCH.0..SCRATCH.0 + SCRATCH.1].fill(0);
             x.restore_ns += ns(t.elapsed());
@@ -334,7 +347,7 @@ fn one_instance(engine: &Engine, module: &Module, steps: usize) -> Result<Run, S
             let mem = inst.memory.data_mut(&mut inst.store);
             for r in 0..2 {
                 let (a, z) = ok[r];
-                aside[b][r].copy_from_slice(&mem[a..z]);
+                kept[r].copy_from_slice(&mem[a..z]);
                 mem[a..z].copy_from_slice(&s_out[a - lo..z - lo]);
             }
             mem[SCRATCH.0..SCRATCH.0 + SCRATCH.1].copy_from_slice(&s_scr[SCRATCH.0 - slo..]);
@@ -362,28 +375,47 @@ fn one_instance(engine: &Engine, module: &Module, steps: usize) -> Result<Run, S
 }
 
 /// The memory file S lives in: the main instance maps it shared, each block's instance privately.
+/// On Linux a memfd; elsewhere a POSIX shm object if the OS maps one privately, else an unlinked
+/// file in the temp folder. `kind` names which.
 struct File {
     fd: libc::c_int,
+    kind: &'static str,
+}
+
+/// An fd sized to the memory, if a private mapping of it works.
+fn sized(fd: libc::c_int) -> Option<libc::c_int> {
+    if fd < 0 || unsafe { libc::ftruncate(fd, MEM as libc::off_t) } != 0 {
+        return None;
+    }
+    let rw = libc::PROT_READ | libc::PROT_WRITE;
+    let p = unsafe { libc::mmap(std::ptr::null_mut(), MEM, rw, libc::MAP_PRIVATE, fd, 0) };
+    if p == libc::MAP_FAILED {
+        unsafe { libc::close(fd) };
+        return None;
+    }
+    unsafe { libc::munmap(p, MEM) };
+    Some(fd)
 }
 
 impl File {
     fn new() -> Result<File, String> {
         #[cfg(target_os = "linux")]
-        let fd = unsafe { libc::memfd_create(c"spike-245".as_ptr(), libc::MFD_CLOEXEC) };
+        let tried = sized(unsafe { libc::memfd_create(c"spike-245".as_ptr(), libc::MFD_CLOEXEC) }).map(|fd| (fd, "memfd"));
         #[cfg(not(target_os = "linux"))]
-        let fd = unsafe {
+        let tried = {
             let name = std::ffi::CString::new(format!("/spike-245-{}", std::process::id())).unwrap();
-            let fd = libc::shm_open(name.as_ptr(), libc::O_RDWR | libc::O_CREAT | libc::O_EXCL, 0o600);
-            libc::shm_unlink(name.as_ptr());
-            fd
+            let fd = unsafe { libc::shm_open(name.as_ptr(), libc::O_RDWR | libc::O_CREAT | libc::O_EXCL, 0o600) };
+            unsafe { libc::shm_unlink(name.as_ptr()) };
+            sized(fd).map(|fd| (fd, "shm")).or_else(|| {
+                let path = std::env::temp_dir().join(format!("spike-245-{}", std::process::id()));
+                let path = std::ffi::CString::new(path.to_string_lossy().into_owned()).unwrap();
+                let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR | libc::O_CREAT | libc::O_EXCL, 0o600) };
+                unsafe { libc::unlink(path.as_ptr()) };
+                sized(fd).map(|fd| (fd, "tmpfile"))
+            })
         };
-        if fd < 0 {
-            return Err(format!("no memory file: {}", std::io::Error::last_os_error()));
-        }
-        if unsafe { libc::ftruncate(fd, MEM as libc::off_t) } != 0 {
-            return Err(format!("ftruncate: {}", std::io::Error::last_os_error()));
-        }
-        Ok(File { fd })
+        let (fd, kind) = tried.ok_or_else(|| format!("no memory file maps privately: {}", std::io::Error::last_os_error()))?;
+        Ok(File { fd, kind })
     }
 }
 
@@ -520,14 +552,15 @@ fn pretouch(base: usize, b: usize) -> u64 {
 }
 
 /// This thread's minor faults so far, where the OS counts them per thread.
+#[cfg(target_os = "linux")]
 fn thread_faults() -> Option<u64> {
-    #[cfg(target_os = "linux")]
-    {
-        let mut u: libc::rusage = unsafe { std::mem::zeroed() };
-        unsafe { libc::getrusage(libc::RUSAGE_THREAD, &mut u) };
-        Some(u.ru_minflt as u64)
-    }
-    #[cfg(not(target_os = "linux"))]
+    let mut u: libc::rusage = unsafe { std::mem::zeroed() };
+    unsafe { libc::getrusage(libc::RUSAGE_THREAD, &mut u) };
+    Some(u.ru_minflt as u64)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn thread_faults() -> Option<u64> {
     None
 }
 
@@ -588,6 +621,9 @@ fn copy_on_write(module_bytes: &[u8], steps: usize) -> Result<Run, String> {
                     bi.inst.run_block(k, bi.b)
                 });
                 d.late_faults = before.zip(thread_faults()).map(|(a, z)| z - a);
+                if d.late_faults.is_some_and(|f| f > 0) {
+                    d.error = Some(format!("block {} faulted after its touches: reads() misses a page", bi.b));
+                }
                 match ran {
                     Ok((fuel, written)) => {
                         d.fuel = fuel;
@@ -607,7 +643,7 @@ fn copy_on_write(module_bytes: &[u8], steps: usize) -> Result<Run, String> {
             back.wait();
         }));
     }
-    let mut run = Run { samples: Vec::new(), hashes: BTreeMap::new() };
+    let mut run = Run { samples: Vec::new(), hashes: BTreeMap::new(), file: Some(file.kind) };
     let clock = Clock { start: Instant::now() };
     let mut failed = None;
     for k in 0..steps + WARMUP {
@@ -715,6 +751,7 @@ fn summary(run: &Run, threads: usize) -> Value {
         "fault_ms": stat(pick(&|s| s.fault_ns)),
         "restore_ms": stat(pick(&|s| s.restore_ns)),
         "check_ms": stat(pick(&|s| s.check_ns)),
+        "memory_file": run.file,
         "touched_pages": quantile(&pick(&|s| s.touched), 0.5),
         "late_faults_max": run.samples.iter().map(|s| s.late_faults).max().flatten(),
         "minor_faults": {"p50": quantile(&pick(&|s| s.minor_faults), 0.5), "p95": quantile(&pick(&|s| s.minor_faults), 0.95)},
