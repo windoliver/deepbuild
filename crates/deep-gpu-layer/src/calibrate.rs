@@ -42,6 +42,9 @@ struct Graph {
     name: String,
     origin: &'static str,
     stages: Vec<Value>,
+    /// Costed by this measurement, not by the op table: the shipped blur's passes, which a
+    /// composed pass that calls the blur costs at what they measure (#432).
+    measured: bool,
 }
 
 /// Whether any step of `steps`, in any body, is a seeded noise step, whose octave weight the
@@ -91,6 +94,7 @@ fn fixtures() -> Vec<Graph> {
     let noisy = |id: &str, about: &str, step: Value| Graph {
         name: id.into(),
         origin: "fixture",
+        measured: false,
         stages: vec![fixture_pass(
             id,
             about,
@@ -204,6 +208,7 @@ fn fixtures() -> Vec<Graph> {
         Graph {
             name: "fixture.math@1".into(),
             origin: "fixture",
+            measured: false,
             stages: vec![fixture_pass(
                 "fixture.math@1",
                 "Calibration fixture: eight rounds of sin, cos, sqrt, a divide and an add.",
@@ -214,6 +219,7 @@ fn fixtures() -> Vec<Graph> {
         Graph {
             name: "fixture.taps@1".into(),
             origin: "fixture",
+            measured: false,
             stages: vec![fixture_pass(
                 "fixture.taps@1",
                 "Calibration fixture: sixteen bilinear taps of the scene color, averaged.",
@@ -224,6 +230,7 @@ fn fixtures() -> Vec<Graph> {
         Graph {
             name: "fixture.hash@1".into(),
             origin: "fixture",
+            measured: false,
             stages: vec![fixture_pass(
                 "fixture.hash@1",
                 "Calibration fixture: two integer hashes of each pixel, then a rand.",
@@ -259,6 +266,7 @@ fn fixtures() -> Vec<Graph> {
         Graph {
             name: "fixture.fbm_elements@1".into(),
             origin: "fixture",
+            measured: false,
             stages: vec![compute],
         },
     ]
@@ -520,9 +528,16 @@ pub fn calibrate(app: &mut App) -> Value {
             name: s.name.into(),
             origin: "shipped",
             stages: s.stages,
+            measured: false,
         })
         .collect();
     graphs.extend(fixtures());
+    graphs.extend(["x", "y"].map(|axis| Graph {
+        name: format!("blur.{axis}@1"),
+        origin: "shipped",
+        stages: vec![shipped::blur(axis)],
+        measured: true,
+    }));
     app.worker.call(move |state| {
         let device = state.gpu.device();
         let Some(period) = device.timestamps.period_ns.map(f64::from) else {
@@ -580,12 +595,13 @@ pub fn calibrate(app: &mut App) -> Value {
                 }
             }
             let measured = runs.iter().copied().fold(0.0, f64::max);
-            if (estimate - measured).abs() > BOUND * measured {
+            if !g.measured && (estimate - measured).abs() > BOUND * measured {
                 outside.push(json!({"name": g.name, "steps": names, "estimate_ns": estimate, "measured_ns": measured}));
             }
             rows.push(json!({
                 "name": g.name, "origin": g.origin, "uses_noise": noise, "own_pass": true, "warmup": true,
                 "p95_ns": runs, "estimate_ns": estimate, "stages": g.stages.len(),
+                "costed_by": if g.measured { "measurement" } else { "estimate" }, "measured_ns": measured,
             }));
         }
         let pass = outside.is_empty();

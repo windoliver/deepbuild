@@ -51,6 +51,8 @@ deep-canvas-graph = { path = "../deep-canvas-graph" }
 deep-canvas-record = { path = "../deep-canvas-record" }
 deep-canvas-sheet = { path = "../deep-canvas-sheet" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+# The controls a live document plays through (#432): the input module's control@1 kinds.
+deep-canvas-input = { path = "../deep-canvas-input" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 # Issue #423: the run's decode worker, which makes a material's maps ready for the GPU.

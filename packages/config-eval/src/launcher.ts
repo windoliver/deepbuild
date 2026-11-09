@@ -60,7 +60,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 /** The run's final reply and the tokens it reported, read from the CLI's JSON lines. */
-export function resultOf(cli: Cli, lines: unknown[]): AgentResult {
+function resultOf(cli: Cli, lines: unknown[]): AgentResult {
   if (cli === 'claude') {
     const end = lines.filter(isObj).findLast((l) => l.type === 'result');
     if (!end || end.is_error === true || end.subtype !== 'success') return { ok: false };

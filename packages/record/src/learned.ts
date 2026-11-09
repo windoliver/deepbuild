@@ -57,7 +57,7 @@ const IN_FORCE = "kind IN ('learn.applied', 'learn.widened') AND state = 'applie
 
 export interface Quote { at: string; quote: string }
 export interface LearnedChange { layer: string; target: string; diff: string; evidence: Quote[]; scope: string; applied_by: string | null; supersedes?: string | null }
-export interface Check { outcome: 'refused' | 'held'; reason: string }
+interface Check { outcome: 'refused' | 'held'; reason: string }
 export interface SliceEntry { target: string; text: string }
 
 type Obj = { [key: string]: JsonValue };
@@ -300,7 +300,7 @@ const fieldsOf = (lines: string[]): Field[] => lines.map((line) => {
  * field the classifier doesn't know inside a step or an extension. Such a change counts as aimed at the base, so
  * it is held for you whatever its replay shows, its reason quoting the clause that loosens.
  */
-export function loosens(target: string, diff: string): string | undefined {
+function loosens(target: string, diff: string): string | undefined {
   const say = (line: string, why: string): string => `${clip(target, 200)} is held for you: "${clip(line, 4000)}" ${why}`;
   const added = linesOf(diff, '+');
   for (const line of added) for (const [flag, name] of VERIFY_OFF) if (flag.test(line)) return say(line, `switches verification off (${name})`);
