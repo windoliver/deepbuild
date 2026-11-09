@@ -929,6 +929,10 @@ pub fn check_operator(app: &mut App, out: &str, call: &Value) -> Value {
     let (emit_options, mut check_options) = operator_plants(app.planted);
     // The class the check's limits apply under, as a document's budget class (#431).
     check_options.wide_fetches = matches!(call["class"].as_str(), Some("showpiece" | "export"));
+    // A composed pass that calls the shipped blur compiles into its parts (#432).
+    if let Some(parts) = deep_canvas_effects::fusion::split_blur(&call["operator"]) {
+        return check_parts(app, parts, assets, emit_options, check_options);
+    }
     // The packs' step functions `use@1` calls, inlined before the check (#431).
     let functions = match pack_functions(&call["packs"]) {
         Ok(f) => f,
@@ -1006,6 +1010,59 @@ pub fn check_operator(app: &mut App, out: &str, call: &Value) -> Value {
             o.extend(extra);
         }
         reply
+    })
+}
+
+/// A composed pass split around the shipped blur (#432), each part checked, written, validated
+/// and run once as a pass of its own: its steps' parts costed by their estimate, the blur's at
+/// what the calibration run measured; the operator's estimate is the parts' sum.
+fn check_parts(
+    app: &mut App,
+    parts: Vec<deep_canvas_effects::fusion::Part>,
+    assets: BTreeMap<String, PathBuf>,
+    emit_options: deep_canvas_effects::emit::Options,
+    check_options: check::CheckOptions,
+) -> Value {
+    app.worker.call(move |state| {
+        let device = state.gpu.device();
+        let mut reached = Reached::default();
+        let mut rows = Vec::new();
+        let mut total = 0.0;
+        for p in &parts {
+            let c = match compile_planted(&p.graph, &assets, emit_options, check_options) {
+                Ok(c) => c,
+                Err(issues) => {
+                    let issues: Vec<Value> = issues
+                        .iter()
+                        .map(|i| {
+                            let mut j = i.to_json();
+                            j["part"] = json!(p.of);
+                            j
+                        })
+                        .collect();
+                    return json!({"outcome": "refused", "issues": issues, "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}});
+                }
+            };
+            reached.naga = true;
+            if let Err(e) = run_once(&device, &c, &mut reached) {
+                let issue = graph::Issue::at_path("operator_compile", "", e).to_json();
+                return json!({"outcome": "refused", "issues": [issue], "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu}});
+            }
+            let measured = deep_canvas_effects::shipped::BLUR_MEASURED_NS_PER_PX
+                .iter()
+                .find(|(name, _)| *name == p.of)
+                .map(|(_, ns)| *ns);
+            let estimate = measured.unwrap_or(c.checked.estimate);
+            total += estimate;
+            rows.push(json!({
+                "of": p.of, "steps": p.steps, "fetches": c.checked.fetches, "estimate_ns": estimate,
+                "cost": if measured.is_some() { "measured" } else { "estimated" },
+            }));
+        }
+        json!({
+            "outcome": "accepted", "issues": [], "parts": rows, "estimate_ns": total,
+            "reached": {"naga": reached.naga, "pipeline": reached.pipeline, "gpu": reached.gpu},
+        })
     })
 }
 
