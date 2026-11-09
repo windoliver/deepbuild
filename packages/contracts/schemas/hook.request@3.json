@@ -69,7 +69,7 @@
         },
         "maxItems": 256
       },
-      "description": "For a matched entry the hub stages for, by name: with effect:unknown-reach-delete, the absolute folders the delete names, for a copy-on-write copy before it runs; with effect:discard-edits, the absolute paths under which it discards tracked edits; with effect:drop-stash, the folder it works in, then the entry it drops, or no entry for all of them. An entry with no list here names a value the line can't know: nothing can be staged for it."
+      "description": "For a matched entry the hub stages for, by name: with effect:unknown-reach-delete, the absolute folders the delete names, for a copy-on-write copy before it runs; with effect:unrestorable-delete, the absolute paths past its worktree a delete names, or the folder a git clean that deletes works in, copied the same way; with effect:discard-edits, the absolute paths under which it discards tracked edits; with effect:drop-stash, the folder it works in, then the entry it drops, or no entry for all of them. An entry with no list here names a value the line can't know: nothing can be staged for it."
     },
     "heavy": {
       "type": "object",
