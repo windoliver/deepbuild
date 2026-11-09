@@ -82,6 +82,22 @@ const FEATURES: &[&str] = if cfg!(feature = "plant-f-test") {
     &[]
 };
 
+/// The hub contract this deep-hook speaks, "major.minor": the hub's own is `CONTRACT` in packages/hub/src/wire.ts.
+const CONTRACT: &str = "1.0";
+
+/// Why a hub whose hello names a contract a major apart from this deep-hook's gets nothing (#1334); none when they agree.
+fn contract_mismatch(hub: Option<&Value>) -> Option<String> {
+    let Some(Value::String(theirs)) = hub else {
+        return None;
+    };
+    let major = |c: &str| c.split('.').next().unwrap_or_default().to_string();
+    (major(theirs) != major(CONTRACT)).then(|| {
+        format!(
+            "deep-hook: the hub speaks contract {theirs} and this deep-hook speaks contract {CONTRACT}, a major apart, so nothing was sent to it and its fail_closed guard entries apply. Promote a build whose deep-hook matches the hub's contract (deep hub promote), then start the session again."
+        )
+    })
+}
+
 fn home() -> PathBuf {
     PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".deepbuild")
 }
@@ -685,7 +701,8 @@ enum Outcome {
     /// The hub isn't there, refused the request or sent what doesn't parse; `late` when it was there but
     /// didn't acknowledge in time or didn't reply by its hold.
     Down { late: bool },
-    /// A hub below the writer generation this machine has seen of it (#1338): nothing was sent, and nothing spooled.
+    /// A hub below the writer generation this machine has seen of it (#1338), or a contract major apart from this
+    /// deep-hook's (#1334): nothing was sent, and nothing spooled.
     Stale(String),
 }
 
@@ -781,6 +798,11 @@ fn exchange(
     if let Some(why) =
         remote::refused_generation(&home(), &hub, integer(member(&hello_value, "generation")))
     {
+        return (None, Outcome::Stale(why), hello);
+    }
+    // A hub a contract major apart fails closed with its reason, as a stale one does: nothing is sent or spooled, so
+    // nothing of the session is judged by a hub whose contract it doesn't speak (#1334).
+    if let Some(why) = contract_mismatch(member(&hello_value, "contract")) {
         return (None, Outcome::Stale(why), hello);
     }
     let listed = match member(&hello_value, "features") {
