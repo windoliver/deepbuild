@@ -6,7 +6,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export type TargetKind = 'address' | 'host' | 'remote' | 'repo' | 'channel' | 'payee';
+type TargetKind = 'address' | 'host' | 'remote' | 'repo' | 'channel' | 'payee';
 /** Where a step that leaves the machine goes, as its plan names it. */
 export interface Target { kind: TargetKind; ref: string }
 export type TargetOrigin = 'you' | 'decision' | 'repo' | 'read' | 'unknown';
