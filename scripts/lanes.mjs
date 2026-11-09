@@ -255,6 +255,8 @@ timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/v
 alone.push('tests/acceptance/532/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
+// #1732's files each build deep-show: one file at a time.
+alone.push('tests/acceptance/1732/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');

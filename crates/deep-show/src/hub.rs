@@ -1954,7 +1954,9 @@ impl<'a> Hub<'a> {
         let mut fresh: Option<(Vec<Expansion>, f64)> = None;
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
-            Ok(doc) => {
+            Ok(mut doc) => {
+                // #1732: a revision that moves an arranged item breaks it out of its arrangement.
+                deep_canvas_motion::arrange::carry_break_outs(current_doc.as_ref(), &mut doc);
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
@@ -2149,6 +2151,11 @@ impl<'a> Hub<'a> {
         if let Some(session) = self.sessions.get_mut(&show.doc) {
             session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
         }
+        // #1732: render-back's geometry audit of the revision, on its frame at `t`.
+        if show.include.iter().any(|i| matches!(i, Include::Audit)) {
+            let audit = self.audit_of(&show.doc, show.t);
+            reply.insert("audit".into(), audit);
+        }
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         // A revision with 3D writer layers renders back on the GPU (#378).
         let three = visible && wants_pixels && deep_canvas_scene3d::scene::has_3d(&doc);
@@ -2160,9 +2167,51 @@ impl<'a> Hub<'a> {
             None
         };
         if three {
-            self.pending3d = Some(self.draw3d(&doc, show.t, show.size));
+            let placed = self.arranged(&show.doc, &doc);
+            self.pending3d = Some(self.draw3d(&placed, show.t, show.size));
         }
         self.present(show, visible, drawn.as_ref(), reply)
+    }
+
+    /// #1732: `document` as a 3D frame draws it, each arranged item at the place its session's
+    /// check solved (the derived value), never solved again here.
+    pub(crate) fn arranged(&self, doc: &str, document: &Value) -> Value {
+        let mut out = document.clone();
+        if let Some((v, _)) = self
+            .sessions
+            .get(doc)
+            .and_then(|s| s.read(&self.sched, "motion.arranged", None))
+        {
+            if let Some(a) = v.as_typed::<deep_canvas_motion::arrange::Arranged>() {
+                a.apply(&mut out);
+            }
+        }
+        out
+    }
+
+    /// The geometry audit of a document's current revision on its session's frame at `t`
+    /// (Geometry audit: scenes): `{failures}`.
+    fn audit_of(&mut self, doc: &str, t: i64) -> Value {
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"failures": []});
+        };
+        let view = crate::frames::session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let session = &self.sessions[doc];
+        let Some(document) = session.document() else {
+            return json!({"failures": []});
+        };
+        let sched = &self.sched;
+        let at_of = |id: &str, item: &Value| {
+            session
+                .read(sched, "core.transform", Some(id))
+                .and_then(|(v, _)| {
+                    v.as_typed::<deep_canvas::schedule::core_ops::Transform>()
+                        .map(|t| deep_canvas_motion::arrange::At { pos: t.pos, rot: t.rot, scale: t.scale })
+                })
+                .unwrap_or_else(|| deep_canvas_motion::arrange::At::of(item.get("at")))
+        };
+        json!({"failures": deep_canvas_motion::arrange::audit(document, &at_of)})
     }
 
     /// The check's notices as a reply carries them. The planted check that loads a deprecated
@@ -2185,6 +2234,19 @@ impl<'a> Hub<'a> {
     /// cap, with an empty list of snapshots. True when one is an error not carried.
     pub fn issue_reply(&self, issues: &[Issue], reply: &mut Map<String, Value>) -> bool {
         let mut list: Vec<Value> = issues.iter().map(Issue::to_json).collect();
+        // #1732: an unsatisfied arrangement names the relations it misses and the pairs that
+        // overlap on the issue itself.
+        for (i, issue) in issues.iter().enumerate() {
+            if let (deep_canvas_motion::arrange::UNSATISFIED, Value::Object(found)) =
+                (issue.code, &issue.actual)
+            {
+                if let Some(out) = list[i].as_object_mut() {
+                    for (k, v) in found {
+                        out.entry(k.clone()).or_insert_with(|| v.clone());
+                    }
+                }
+            }
+        }
         if self.scenario.planted == Some(Planted::IssuesWithoutActual) {
             for i in list.iter_mut().filter_map(Value::as_object_mut) {
                 i.remove("actual");
