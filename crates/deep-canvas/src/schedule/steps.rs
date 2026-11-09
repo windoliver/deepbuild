@@ -181,10 +181,9 @@ impl Session {
                 if time % step != 0 {
                     continue;
                 }
-                let current = self.steps.values.clone();
                 let ctx = StepCtx {
                     time,
-                    current: &current,
+                    current: &self.steps.values,
                     earlier: &earlier,
                 };
                 let (out, err, noted, tails) = self.call(s, *n, Some(ctx), report);

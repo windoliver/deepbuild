@@ -1506,18 +1506,23 @@ impl Set {
                 .buffer
                 .as_ref()
                 .expect("a set with members has a buffer");
-            for (i, (new, old)) in self
-                .next
-                .chunks_exact(stride)
-                .zip(self.records.chunks_exact(stride))
-                .enumerate()
-            {
-                if new != old {
-                    deep_gpu::alloc::outside(|| {
-                        device.queue.write_buffer(buffer, (i * stride) as u64, new)
-                    });
+            // Each run of adjacent changed records goes in one write: a write per record made
+            // a staging buffer per record, and a set that moves moves whole.
+            let n = (self.next.len() / stride).min(self.records.len() / stride);
+            let mut run: Option<usize> = None;
+            for i in 0..=n {
+                let at = i * stride..(i + 1) * stride;
+                if i < n && self.next[at.clone()] != self.records[at] {
                     *written += 1;
                     self.revision += 1;
+                    run.get_or_insert(i);
+                } else if let Some(first) = run.take() {
+                    let bytes = &self.next[first * stride..i * stride];
+                    deep_gpu::alloc::outside(|| {
+                        device
+                            .queue
+                            .write_buffer(buffer, (first * stride) as u64, bytes)
+                    });
                 }
             }
         }
@@ -5716,10 +5721,13 @@ impl Renderer {
             set.subsurface |= spreads(s);
             slot.1 = set.count as u32;
             if slot.0 .3 != 0 {
-                set.bounds = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
-                    let b = m.bounds();
-                    [b[0].map(f64::from), b[1].map(f64::from)]
-                });
+                // One box per set: its elements share the set's shape, so its mesh's bounds.
+                if set.count == 0 {
+                    set.bounds = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
+                        let b = m.bounds();
+                        [b[0].map(f64::from), b[1].map(f64::from)]
+                    });
+                }
                 set.elements.push(s.row);
                 if self.cpu_cull {
                     set.models.push(s.model);

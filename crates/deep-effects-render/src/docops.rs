@@ -1436,7 +1436,8 @@ impl DocOps {
                 }
             } else if drew == Drew::Operator {
                 let runner = runner.expect("built");
-                let c = runner.compiled.checked.clone();
+                // Lent from this frame's own handle on the runner: the checked graph is only read.
+                let c = &runner.compiled.checked;
                 let mut f = *frame;
                 f.seed = item_seed(self.doc_seed, &item);
                 let mut own_params = params.clone();
@@ -1449,7 +1450,7 @@ impl DocOps {
                 } else {
                     own_params.extend(self.params.get(&item).into_iter().flatten().map(|(k, v)| (k.clone(), v.clone())));
                 }
-                let values = interp::inputs(&c, &own_params, roles);
+                let values = interp::inputs(c, &own_params, roles);
                 let storage: Option<Vec<wgpu::Buffer>> = c
                     .storage_inputs
                     .iter()
@@ -1458,7 +1459,7 @@ impl DocOps {
                 let mut parts = Vec::new();
                 match (kind, storage) {
                     (_, None) => drew = Drew::Fallback,
-                    (Kind::Compute, Some(_)) if structural => match self.plan_of(device, &item, &c) {
+                    (Kind::Compute, Some(_)) if structural => match self.plan_of(device, &item, c) {
                         Some((pre, plan)) => {
                             parts.push(Part::Clears(plan.clone()));
                             if let Some(pre) = pre {
