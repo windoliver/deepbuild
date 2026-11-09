@@ -1,12 +1,36 @@
 // The devices you paired (#34): an answer that saves a decision or changes what a check demands counts when one of
 // them signs it, or, from the CLI, once the OS confirms you (confirm.ts); never on the control token or the peer
 // check alone. A device is paired once the OS confirms you, so the token can't pair a key of its own.
-import { createPublicKey, verify } from 'node:crypto';
+//
+// One verifier for the app, phones and channels (#1579): a signature names the method, the hub, the time and a
+// once-only ID beside the hash of the params, so one captured on one call counts for no other method, on no other hub,
+// after 10 minutes or a second time. A spent ID stays in a table with a time index until its 10 minutes are over.
+import { createHash, createPublicKey, verify } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import Database from 'better-sqlite3';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
 import { Refused, refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
+
+/** How long a signature counts, either side of the hub's clock. */
+const SIGNED_WITHIN_MS = 10 * 60_000;
+/** What every signature covers, in the order a refusal checks them. */
+const SIGNED_FIELDS = ['device', 'method', 'hub', 'at', 'once', 'params'] as const;
+const ONCE = /^[A-Za-z0-9_-]{16,128}$/;
+/** Why a signature doesn't count, naming the field. */
+interface Unsigned { field: string; reason: string }
+/** What a call expects its signature to cover. */
+interface Expect { method: string; hub: string; params: Obj; now: number }
+/** The planted wrong programs a verifier can be: #65's, which keeps an unpaired key, and #1579's, which skips the time. */
+interface Lapses { unpairedToo?: boolean; skipsTime?: boolean }
+
+/** The lower-case hex SHA-256 of the params' RFC 8785 bytes, with `signature` left out: what `signed.params` holds. */
+function paramsHash(params: Obj): string {
+  const { signature: _signature, ...body } = params;
+  return createHash('sha256').update(canonicalize(body as JsonValue)).digest('hex');
+}
 /**
  * A paired device: its ID, its name and its Ed25519 public key, the raw 32 bytes in base64url. The one `enclave` device
  * is deep-confirm's Secure Enclave key (#880): P-256, its X9.63 point in base64url, with the code requirement its
@@ -22,6 +46,7 @@ export function checkKey(key: unknown): string {
 }
 
 export class Devices {
+  private db: Database.Database | undefined;
   constructor(private readonly file: string) {}
 
   private all(): Device[] {
@@ -68,19 +93,54 @@ export class Devices {
   }
 
   /**
-   * Whether `params` carry a paired device's valid signature: Ed25519 over the RFC 8785 bytes of the params with
-   * `device` in them and `signature` left out. A key never paired, or a signature over other params, is none.
+   * The one verifier (#1579): undefined once `signature`, `{signed: {device, method, hub, at, once, params}, sig}`, is a
+   * paired device's Ed25519 signature over the RFC 8785 bytes of `signed`, for this method, this hub and these params,
+   * within 10 minutes of the hub's clock, with a once-only ID never spent; `more` checks what else the caller needs
+   * before the ID is spent. Otherwise why not, naming the field.
    */
-  signed(params: Obj): boolean {
-    const { signature, ...body } = params;
-    if (typeof signature !== 'string' || typeof body.device !== 'string') return false;
-    const device = this.all().find((d) => d.device === body.device && d.kind === undefined && d.unpaired === undefined);
-    if (!device) return false;
-    try {
-      const key = createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: device.public_key }, format: 'jwk' });
-      return verify(null, canonicalize(body as JsonValue), key, Buffer.from(signature, 'base64url'));
-    } catch {
-      return false;
-    }
+  verify(signature: unknown, expect: Expect, lapses: Lapses = {}, more?: () => Unsigned | undefined): Unsigned | undefined {
+    const s = (typeof signature === 'object' && signature !== null ? signature : {}) as { signed?: unknown; sig?: unknown };
+    const signed = (typeof s.signed === 'object' && s.signed !== null ? s.signed : {}) as Obj;
+    for (const field of SIGNED_FIELDS) if (signed[field] === undefined) return { field, reason: `the signature leaves out ${field}, so it covers too little to count` };
+    // What it is for comes first, as channels named the hub before the device: one sent to another hub is refused
+    // naming hub there, though that hub never paired the device.
+    if (signed.method !== expect.method) return { field: 'method', reason: `it was signed for ${String(signed.method)}, not ${expect.method}` };
+    if (signed.hub !== expect.hub) return { field: 'hub', reason: `it was signed for the hub ${String(signed.hub)}, not this one (${expect.hub})` };
+    const device = String(signed.device);
+    const key = this.keyOf(device, lapses.unpairedToo);
+    if (!key) return { field: 'device', reason: `${device} is no device you paired, or you unpaired it, so what it signs counts for nothing` };
+    if (!verifies(key, canonicalize(signed as JsonValue), s.sig)) return { field: 'signature', reason: `the signature doesn't verify against ${device}'s paired key` };
+    if (typeof signed.at !== 'number' || (!lapses.skipsTime && Math.abs(expect.now - signed.at) > SIGNED_WITHIN_MS)) return { field: 'at', reason: `it was signed at ${String(signed.at)}, more than 10 minutes from now` };
+    if (typeof signed.once !== 'string' || !ONCE.test(signed.once)) return { field: 'once', reason: 'its once-only ID is not 16 to 128 base64url characters' };
+    if (signed.params !== paramsHash(expect.params)) return { field: 'params', reason: 'it signs other params than the ones sent' };
+    const why = more?.();
+    if (why) return why;
+    if (!this.spend(device, signed.once, signed.at, expect.now)) return { field: 'once', reason: `its once-only ID ${signed.once} was spent already, so it counts once` };
+    return undefined;
+  }
+
+  /** Spends a once-only ID: false when it was spent already. IDs past their 10 minutes go, as none of them can count. */
+  private spend(device: string, once: string, at: number, now: number): boolean {
+    this.db ??= open(join(dirname(this.file), 'spent.db'));
+    this.db.prepare('DELETE FROM spent WHERE at < ?').run(now - SIGNED_WITHIN_MS);
+    return this.db.prepare('INSERT INTO spent (device, once, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING').run(device, once, at).changes === 1;
+  }
+}
+
+/** The spent once-only IDs: a table keyed by device and ID, with a time index for the IDs that lapse. */
+function open(file: string): Database.Database {
+  const db = new Database(file);
+  db.pragma('journal_mode = WAL');
+  db.exec('CREATE TABLE IF NOT EXISTS spent (device TEXT NOT NULL, once TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (device, once)) STRICT; CREATE INDEX IF NOT EXISTS spent_at ON spent (at)');
+  return db;
+}
+
+/** Ed25519 over `bytes` by the raw key `key` (base64url), the signature base64url. */
+function verifies(key: string, bytes: Uint8Array, sig: unknown): boolean {
+  if (typeof sig !== 'string') return false;
+  try {
+    return verify(null, bytes, createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: key }, format: 'jwk' }), Buffer.from(sig, 'base64url'));
+  } catch {
+    return false;
   }
 }
