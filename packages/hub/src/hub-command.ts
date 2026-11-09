@@ -1,8 +1,9 @@
-// `deep hub run | start | status | stop | use` (#16, #19), an entry of its own (`@deepbuild/hub/hub`), so the
+// `deep hub run | start | status | stop | use | promote` (#16, #19, #1334), an entry of its own (`@deepbuild/hub/hub`), so the
 // long-running hub loads the server's modules and none of the other commands'.
 import { resolve } from 'node:path';
 import { confirmed, useCommand } from './authority.js';
 import { installedRoot } from './paths.js';
+import { promoteCommand } from './promote.js';
 import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 
@@ -10,11 +11,13 @@ const USAGE = `Usage: deep hub run [--root <folder>] [--safe]
        deep hub start [--root <folder>]
        deep hub status [--root <folder>]
        deep hub stop [--root <folder>]
-       deep hub use --root <folder>`;
+       deep hub use --root <folder>
+       deep hub promote <build folder>`;
 
 /** `deep hub <command>`: `cli` is the path of the deep command's own script, which the login service runs. */
 export async function hubCommand(args: readonly string[], cli: string): Promise<number> {
   const [command, ...given] = args;
+  if (command === 'promote') return promoteCommand(given);
   // Safe mode, only for `run`: the hub starts with no extension loaded.
   const safe = command === 'run' && given.includes('--safe');
   const rest = given.filter((a) => !(safe && a === '--safe'));
