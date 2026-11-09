@@ -72,6 +72,8 @@ export type Plant =
   | 'rule-without-reason' | 'copies-no-standing-rules'
   // #668's: a status that leaves out a session's commits, a doctor that trusts setup's record, and a `deep on` that keeps the gates off.
   | 'status-omits-commit' | 'doctor-misses-hooks' | 'on-stays-off'
+  // #1455's: a doctor that prints a fix under a healthy item.
+  | 'doctor-healthy-fix'
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
   // the text, a stop rule that reads every stop with tool calls as a claim, and a claim whose checks run the file on disk.
   | 'first-prompt-always-task' | 'midturn-always-task' | 'hash-ids-only' | 'hash-check-paths' | 'role-from-text' | 'claim-on-tool-calls'
@@ -212,6 +214,7 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
+  'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
   'writes-before-parsing', 'replaces-from-first-plan', 'copies-original-each-write', 'no-folder-flush', 'skips-entry-check', 'restarts-without-answer',

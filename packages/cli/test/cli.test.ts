@@ -13,7 +13,7 @@ describe('deep checkout command', () => {
     const result = run('--help');
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Usage: deep [--help | --version]');
-    expect(result.stdout).toContain('Repository skeleton');
+    expect(result.stdout).not.toContain('Repository skeleton');
   });
 
   it('opens its help with a one-line banner, plain text with no escape when stdout is not a terminal', () => {

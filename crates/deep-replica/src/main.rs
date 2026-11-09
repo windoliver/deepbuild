@@ -98,7 +98,7 @@ mod replica {
             deep_app::views::set_state(deep_replica::load_state());
         }
         if let Some(path) = &bound {
-            if let Err(why) = deep_replica::load_bound(path) {
+            if let Err(why) = deep_app::bound::load(path) {
                 eprintln!("deep-replica: {why}");
                 return 2;
             }
