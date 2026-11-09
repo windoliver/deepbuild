@@ -61,6 +61,12 @@ test-mesh-item = ["dep:deep-canvas-test-modules"]
 test-prog-registry = ["dep:deep-canvas-test-modules"]
 test-sandbox-needs-logic = []
 test-sandbox-alt = []
+# Issue #533: the logic module's test builds (the #533 acceptance README: Test features of
+# deep-show): a patch release of the shipped logic implementation in its place; the full set
+# without physics; and a planted logic module that requires physics.
+test-logic-patch = []
+test-leave-out-physics = []
+test-logic-needs-physics = []
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
 # operator reads the look's accent role from a static, which the canvas lint keeps out of every
 # deep-canvas* crate, so it lives in this binary.
@@ -226,6 +232,8 @@ deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
 # Issue #453: the loop canvas module (geometry.shading), in the full build set.
 deep-canvas-loop = { path = "../deep-canvas-loop" }
 deep-sandbox-wasmtime = { path = "../deep-sandbox-wasmtime" }
+# Issue #533: the logic module, in the full build set.
+deep-logic = { path = "../deep-logic" }
 # Issue #140: the platform seams and their conformance suites.
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 # Issue #498: the decode worker and the encode tool, which this binary's copies run as.

@@ -1,0 +1,24 @@
+The canvas kit over the logic module, before the scheduler restarted the steps on a new revision
+(crates/deep-canvas/src/schedule/steps.rs), with the step operator already declaring its `refs` read.
+
+Call: deep-show run, {"call":"kit","modules":["logic","core"]} on the default (full) build.
+
+  core PASS [] []
+  logic FAIL [{'code': 'failed_case', 'module': 'logic', 'part': 'clean_rebuild', 'case': 'seq:7594845565698596'}]
+        [('clean_rebuild', 'FAIL')]
+
+clean_rebuild cases (excerpt of the part's record):
+  {"case": "seq:7594845565698596", "twin": {"verdict": "FAIL"},
+   "failure": {"code": "mismatch", "module": "logic", "part": "clean_rebuild", "what": "array",
+               "name": "logic.step", "seed": 7594845565698596}, "verdict": "FAIL"}
+  {"case": "seq:7415145291549095", ... "what": "array", "name": "logic.step" ... "verdict": "FAIL"}
+  {"case": "seq:2038838020158168", ... "what": "array", "name": "logic.step" ... "verdict": "FAIL"}
+  {"case": "seq:7796990042466134", ... "what": "array", "name": "logic.step" ... "verdict": "FAIL"}
+  (10000 sequences declared and run; the others PASS)
+
+Why: a live session kept the steps' carried state across a patch, so after an edit of a logic item
+its `logic.state` at t=0 was the old revision's, while the clean rebuild (the shadow) stepped the new
+one from step 0. The expected reason: the design's Saves section restarts a run at step 0 under a new
+revision unless it carries on by the save rules, which this build has none of.
+
+After the fix (same call): core PASS, logic PASS, every part PASS (kit-pass in evidence/kit.json).

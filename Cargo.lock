@@ -2416,6 +2416,7 @@ dependencies = [
  "deep-codecs",
  "deep-effects-render",
  "deep-gpu",
+ "deep-logic",
  "deep-marks-vello",
  "deep-relay",
  "deep-replica",

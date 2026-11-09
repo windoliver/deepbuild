@@ -178,6 +178,45 @@
         "state": "canonical"
       }
     },
+    "logic@1": {
+      "digest": "660e0b333c820632c534db8cbe6f5874a863b3c2afbb7506383d7967cf9b3441",
+      "reference": "logic",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "logic",
+      "implementation": {
+        "name": "logic",
+        "version": "1.0.0",
+        "pins": {
+          "wasmtime": {
+            "version": "=49.0.2",
+            "features": [
+              "addr2line",
+              "cranelift",
+              "runtime",
+              "std"
+            ]
+          }
+        },
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
     "look@1": {
       "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
       "reference": "look",
@@ -536,6 +575,21 @@
           "motion.program"
         ],
         "per": "document"
+      }
+    ],
+    "simulate": [
+      {
+        "operator": "logic.step",
+        "module": "logic",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "logic.state"
+        ],
+        "per": "document",
+        "step": 11760000
       }
     ],
     "items": [

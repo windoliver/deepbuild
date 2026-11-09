@@ -290,7 +290,17 @@ impl<'a> Hub<'a> {
                     let v = evaluated.array(&self.sched, name);
                     let n = v.as_ref().and_then(|v| v.as_typed::<i64>()).map(|n| json!(*n));
                     let x = v.as_ref().and_then(|v| v.as_typed::<f64>()).map(|x| json!(*x));
-                    (name.clone(), n.or(x).unwrap_or(Value::Null))
+                    // #533: a logic item's array `<logic ID>.<name>` of count 1, as the logic
+                    // module's last step at or before the frame left it.
+                    let logic = || {
+                        let state = evaluated.array(&self.sched, deep_logic::module::STATE)?;
+                        let state = state.as_typed::<deep_logic::module::State>()?;
+                        match state.arrays.get(name)?.as_slice() {
+                            [one] => Some(one.clone()),
+                            _ => None,
+                        }
+                    };
+                    (name.clone(), n.or(x).or_else(logic).unwrap_or(Value::Null))
                 })
                 .collect();
             reply["arrays"] = Value::Object(read);

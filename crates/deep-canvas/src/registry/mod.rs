@@ -157,6 +157,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("vector", "vector"),
     // #494: a graph is the graph module's, so a match morph pairs its nodes by key.
     ("graph", "graph"),
+    // #533: the logic item keeps the logic module's name, as the cell grid does.
+    ("logic", "logic"),
     // R1's mark sets, scales and axes are the data module's, which marks2d draws.
     ("marks", "data"),
     ("axis", "data"),
@@ -1117,6 +1119,9 @@ pub enum Fault {
     /// Hashes each implementation's pins into its interface's digest, so another patch of a
     /// pinned crate changes it (#238).
     DigestCoversPins,
+    /// Hashes each implementation's version into its interface's digest, so a patch release of
+    /// a bit, canonical implementation changes it (#533).
+    DigestCoversVersion,
     /// Opens `ease@1` with its entries renumbered, so a key's content key changes (#490).
     EaseRenumbered,
     /// Declares `ease@1` in the motion module instead of the core (#490): the core declares
@@ -3007,33 +3012,43 @@ impl Registry {
         ns: &mut u64,
     ) -> Result<(String, Option<SealedInterface>), Box<SealError>> {
         let bad = |e: CanonError| SealError::new("bad_shape", &[name], &[], e.to_string());
-        // The planted digest that also covers the implementation's pins (#238).
+        // The planted digests that also cover the implementation's pins (#238) or its version
+        // (#533): the field each covers.
+        let covered = match self.fault {
+            Some(Fault::DigestCoversPins) => Some("pins"),
+            Some(Fault::DigestCoversVersion) => Some("version"),
+            _ => None,
+        };
         let pinned = |digest: String, m: &Manifest| -> Result<String, CanonError> {
-            if self.fault != Some(Fault::DigestCoversPins) {
+            let Some(field) = covered else {
                 return Ok(digest);
-            }
-            d1(&json!({"shapes": digest, "pins": m.implementation.to_json()["pins"]}))
+            };
+            d1(&json!({"shapes": digest, field: m.implementation.to_json()[field]}))
         };
         let (digest, mut listed) = module_shapes(shapes, lists, private).map_err(bad)?;
         let digest = pinned(digest, m).map_err(bad)?;
-        let covers = self.fault == Some(Fault::DigestCoversPins);
-        if covers {
-            listed.insert("pins".into(), d1(&m.implementation.to_json()["pins"]).map_err(bad)?);
+        if let Some(field) = covered {
+            listed.insert(field.into(), d1(&m.implementation.to_json()[field]).map_err(bad)?);
         }
         let started = self.clock.map(|c| c());
         let declared = self.interfaces.get(&m.implements);
         let reference = declared.map_or(&m.implementation.name, |i| {
             &i.reference.manifest.implementation.name
         });
-        if let Some(i) = declared.filter(|_| *reference != m.implementation.name) {
+        // Another implementation, or another release of the reference, hashes to its digest.
+        let other = |i: &&Interface| {
+            let r = &i.reference.manifest.implementation;
+            (&r.name, r.version) != (&m.implementation.name, m.implementation.version)
+        };
+        if let Some(i) = declared.filter(other) {
             let mut r = Registrar::default();
             (i.reference.register)(&mut r);
             let own = own_lists(&r);
             let (want, mut want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
             let want = pinned(want, &i.reference.manifest).map_err(bad)?;
-            if covers {
-                let pins = d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
-                want_listed.insert("pins".into(), pins);
+            if let Some(field) = covered {
+                let theirs = d1(&i.reference.manifest.implementation.to_json()[field]).map_err(bad)?;
+                want_listed.insert(field.into(), theirs);
             }
             if want != digest {
                 let differs = want_listed

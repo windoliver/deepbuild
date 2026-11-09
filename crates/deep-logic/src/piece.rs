@@ -117,6 +117,12 @@ pub struct Region {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Read {
     Control,
+    /// A reading (Logic: readings): with `each`, every value recorded since the step before, at
+    /// most `max` a step, any more waiting; else the last value recorded.
+    Reading {
+        each: bool,
+        max: u32,
+    },
     /// Another item's array: its index in the piece, and the bytes of its write region it is.
     Array {
         item: usize,
@@ -237,6 +243,8 @@ impl Item {
 pub struct Piece {
     pub seed: i64,
     pub controls: BTreeSet<String>,
+    /// The sources its items' readings come from, each `reading:<source>`.
+    pub sources: BTreeMap<String, Read>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
 }
@@ -520,6 +528,15 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         .and_then(Value::as_object)
         .map(|c| c.keys().cloned().collect())
         .unwrap_or_default();
+    let mut sources = BTreeMap::new();
+    for (name, src) in piece
+        .get("sources")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        sources.insert(format!("reading:{name}"), source(name, src)?);
+    }
     let assets = piece
         .get("assets")
         .and_then(Value::as_object)
@@ -611,6 +628,11 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         for r in &d.reads {
             let (size, ty, read) = if controls.contains(r) {
                 (SLOT, "control".to_string(), Read::Control)
+            } else if let Some(read) = sources.get(r) {
+                let Read::Reading { max, .. } = read else {
+                    unreachable!()
+                };
+                (8 + max * 16, "reading".to_string(), read.clone())
             } else if let Some((other, name)) = r.split_once('.') {
                 match decls.iter().position(|(o, _)| o == other) {
                     Some(i) if i == idx => {
@@ -796,9 +818,39 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
     Ok(Piece {
         seed,
         controls,
+        sources,
         tour: piece.get("tour").cloned(),
         items,
     })
+}
+
+/// A source as the piece declares it (Logic: readings): scalar values, delivered `latest` (a
+/// step reads the last one) or `each` (every one since the step before, at most `max_per_step`).
+fn source(name: &str, src: &Value) -> Result<Read, Refused> {
+    let refused = |what: String| {
+        Refused(json!({"ok": false, "code": "bad_input", "what": what, "source": name}))
+    };
+    if src.get("shape").map_or(Some("scalar"), Value::as_str) != Some("scalar") {
+        return Err(refused(format!(
+            "{name}: only scalar sources are built yet"
+        )));
+    }
+    let max = src
+        .get("max_per_step")
+        .map_or(Some(PER_STEP as u64), Value::as_u64)
+        .filter(|n| (1..=PER_STEP as u64).contains(n))
+        .ok_or_else(|| refused(format!("{name}: max_per_step is 1 to {PER_STEP}")))?;
+    match src.get("delivery").map_or(Some("latest"), Value::as_str) {
+        Some("latest") => Ok(Read::Reading {
+            each: false,
+            max: 1,
+        }),
+        Some("each") => Ok(Read::Reading {
+            each: true,
+            max: max as u32,
+        }),
+        _ => Err(refused(format!("{name}: delivery is latest or each"))),
+    }
 }
 
 /// Each active data segment's bytes in memory, `[start, end)`.

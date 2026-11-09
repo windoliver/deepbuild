@@ -1,0 +1,7 @@
+{"call":"open","piece":{"seed":53301,"sources":{"feed":{"shape":"scalar","delivery":"each","max_per_step":16}},"items":{"listen":{"kind":"logic@1","params":{"program":"5fb460e2d4e4a8d120da7784559c4a4131e235ba791062d77c487895e71d8746","writes":{"count":{"type":"i32"},"values":{"type":"f64","count":4},"as_of":{"type":"f64","count":4}},"reads":["reading:feed"]}}},"assets":{"5fb460e2d4e4a8d120da7784559c4a4131e235ba791062d77c487895e71d8746":"AGFzbQEAAAABBQFgAX4AAwMCAAAFBAEBAQEGDAJ/AEEAC38AQYAgCwcvBQZtZW1vcnkCAAhyZWFkc19hdAMACXdyaXRlc19hdAMBBGluaXQAAARzdGVwAAEKjAECAgALhgEBAn9BACgCACEBQYAgIAE2AgADQCACIAFJBEBBiCAgAkEDdGpBCCACQQR0aisDADkDAEGoICACQQN0akEQIAJBBHRqKQMAuTkDAAVBiCAgAkEDdGpEAAAAAAAAAAA5AwBBqCAgAkEDdGpEAAAAAAAAAAA5AwALIAJBAWohAiACQQRJDQALCwA1BG5hbWUBDQIABGluaXQBBHN0ZXACFAIAAQAEc2VlZAEDAAFrAQFuAgFqAwkBAQEABGVhY2g="}},"track":[]}
+{"call":"append","session":"s1","entry":{"reading":"reading:feed","value":7,"as_of":1000}}
+{"call":"step","session":"s1","to":2}
+{"call":"append","session":"s1","entry":{"reading":"reading:feed","value":7,"as_of":2000}}
+{"call":"append","session":"s1","entry":{"reading":"reading:feed","value":7,"as_of":2000}}
+{"call":"step","session":"s1","to":4}
+{"call":"append","session":"s1","entry":{"reading":"reading:nope","value":1,"as_of":0}}

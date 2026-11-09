@@ -67,6 +67,7 @@ fn frame_ns(base: &Item, n: usize, frames: i64) -> f64 {
     let p = Rc::new(Piece {
         seed: 0,
         controls: Default::default(),
+        sources: Default::default(),
         tour: None,
         items,
     });
@@ -107,6 +108,7 @@ pub fn app() -> &'static Host {
         let p = Rc::new(Piece {
             seed: 0,
             controls: Default::default(),
+            sources: Default::default(),
             tour: None,
             items: vec![burn.clone()],
         });
