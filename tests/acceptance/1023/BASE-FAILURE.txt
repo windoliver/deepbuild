@@ -1,0 +1,123 @@
+Base commit: 6042ef5a (main). Built first: npm ci; npm run build --workspaces; cargo build -p deep-hook
+Command: NO_COLOR=1 npx vitest run tests/acceptance/1023 --testTimeout=600000
+Date: 2026-11-09 01:19  Machine: this job's Linux box (the Spark), 1-minute load about 20
+Node v24.22.0
+
+Result: 4 failed, 1 passed; live.test.ts skipped when run alone.
+  AC1  fails: runs 1 and 3 are closed by the hub's session.gone, but no session.reading says the end was read from
+       the process; run 2's one session.end {reason: "other"} passes its part.
+  AC2  closed: fails: deep hub status prints hub.health and names neither session within 60 s (27 polls).
+  AC2  by its task: fails: the answer is taken (exit 0) but records no delivery.outcome at all.
+  AC3  fabricated open record: passes (every check fails, naming the session).
+  AC3  planted hub: fails BLOCKED: DEEP_HUB_PLANT=codex-exit-leaves-session-open names no planted program.
+
+The run's output follows.
+
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ tests/acceptance/1023/plant.test.ts (2 tests | 1 failed) 220ms
+   ❯ a hub that leaves the session open fails, naming it (2)
+     × AC3 #1023.88d3d827 a planted hub (DEEP_HUB_PLANT=codex-exit-leaves-session-open) that leaves run 1's session open fails, naming it 2ms
+ ❯ tests/acceptance/1023/ends.test.ts (3 tests | 3 failed) 87394ms
+   ❯ three Ctrl-C ends of a Codex CLI session (3)
+     × AC1 #1023.f4fb4c83 each of the three ends is read as its session's end: run 2 by its SessionEnd's reason, runs 1 and 3 by the hub from the process's exit, with a reading saying so 5ms
+     × AC2 #1023.6b9c173d a session ended with no SessionEnd shows closed in deep hub status within a minute of its process ending 2ms
+     × AC2 #1023.6b9c173d the answer waiting for a session ended with no SessionEnd goes by its task, not by a resume 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1023/ends.test.ts > three Ctrl-C ends of a Codex CLI session > AC1 #1023.f4fb4c83 each of the three ends is read as its session's end: run 2 by its SessionEnd's reason, runs 1 and 3 by the hub from the process's exit, with a reading saying so
+AssertionError: run 1: session b0fc0755-a032-4008-8e74-53eb7c8c6f23 was closed by the hub (session.gone) with no reading saying it was read from its process's end; the record holds for session b0fc0755-a032-4008-8e74-53eb7c8c6f23: mcp.tools_listed, tool.before, session.state, tool.after, tool.before, tool.after, turn.usage, session.reading "Codex billing: your business plan, from the session's logs", agent.stop, claim.made, session.state, session.gone
+run 3: session bdaa3912-6bae-449e-97fc-e4f715efca98 was closed by the hub (session.gone) with no reading saying it was read from its process's end; the record holds for session bdaa3912-6bae-449e-97fc-e4f715efca98: session.state, session.reading "deep-hook let PreToolUse 01M6ZSNXVNVRA1H3CD8PBAJ9GK through as late, after the hub's answer missed its deadline; it matched no guard entry", tool.after, tool.before, tool.after, tool.before, tool.after, tool.before, ask.created, session.state, session.gone, session.state: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run 1: session b0fc0755-a032-4008-8e74-53eb7c8c6f23 was closed by the hub (session.gone) with no reading saying it was read from its process's end; the record holds for session b0fc0755-a032-4008-8e74-53eb7c8c6f23: mcp.tools_listed, tool.before, session.state, tool.after, tool.before, tool.after, turn.usage, session.reading \"Codex billing: your business plan, from the session's logs\", agent.stop, claim.made, session.state, session.gone",
++   "run 3: session bdaa3912-6bae-449e-97fc-e4f715efca98 was closed by the hub (session.gone) with no reading saying it was read from its process's end; the record holds for session bdaa3912-6bae-449e-97fc-e4f715efca98: session.state, session.reading \"deep-hook let PreToolUse 01M6ZSNXVNVRA1H3CD8PBAJ9GK through as late, after the hub's answer missed its deadline; it matched no guard entry\", tool.after, tool.before, tool.after, tool.before, tool.after, tool.before, ask.created, session.state, session.gone, session.state",
++ ]
+
+ ❯ tests/acceptance/1023/ends.test.ts:16:37
+     14|   it(`${AC[1]} each of the three ends is read as its session's end: ru…
+     15|     const fails = world.runs.map((r) => endRead(world.events, r)).filt…
+     16|     expect(fails, fails.join('\n')).toEqual([]);
+       |                                     ^
+     17|   });
+     18|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1023/ends.test.ts > three Ctrl-C ends of a Codex CLI session > AC2 #1023.6b9c173d a session ended with no SessionEnd shows closed in deep hub status within a minute of its process ending
+AssertionError: run 1: session b0fc0755-a032-4008-8e74-53eb7c8c6f23 isn't shown closed in deep hub status within 60 s of its process ending; its last output (27 polls) names it nowhere: {"pid":3582846,"start":"01M6ZSNVMG2PVMDFGGZSTQPWAM","off":false,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[{"name":"stop hold","holds":true,"reading":"stop hold holds: the 60 s hold ends at least 5 s before the Stop hook entry's 600 s timeout"},{"name":"waiter","holds":true,"reading":"waiter holds: the waiter e
+run 3: session bdaa3912-6bae-449e-97fc-e4f715efca98 isn't shown closed in deep hub status within 60 s of its process ending; its last output (27 polls) names it nowhere: {"pid":3582846,"start":"01M6ZSNVMG2PVMDFGGZSTQPWAM","off":false,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[{"name":"stop hold","holds":true,"reading":"stop hold holds: the 60 s hold ends at least 5 s before the Stop hook entry's 600 s timeout"},{"name":"waiter","holds":true,"reading":"waiter holds: the waiter e: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run 1: session b0fc0755-a032-4008-8e74-53eb7c8c6f23 isn't shown closed in deep hub status within 60 s of its process ending; its last output (27 polls) names it nowhere: {\"pid\":3582846,\"start\":\"01M6ZSNVMG2PVMDFGGZSTQPWAM\",\"off\":false,\"gates\":{\"watch_only\":false,\"reason\":null},\"notifications\":null,\"secrets\":\"reachable\",\"network\":\"reachable\",\"claude\":{\"relations\":[{\"name\":\"stop hold\",\"holds\":true,\"reading\":\"stop hold holds: the 60 s hold ends at least 5 s before the Stop hook entry's 600 s timeout\"},{\"name\":\"waiter\",\"holds\":true,\"reading\":\"waiter holds: the waiter e",
++   "run 3: session bdaa3912-6bae-449e-97fc-e4f715efca98 isn't shown closed in deep hub status within 60 s of its process ending; its last output (27 polls) names it nowhere: {\"pid\":3582846,\"start\":\"01M6ZSNVMG2PVMDFGGZSTQPWAM\",\"off\":false,\"gates\":{\"watch_only\":false,\"reason\":null},\"notifications\":null,\"secrets\":\"reachable\",\"network\":\"reachable\",\"claude\":{\"relations\":[{\"name\":\"stop hold\",\"holds\":true,\"reading\":\"stop hold holds: the 60 s hold ends at least 5 s before the Stop hook entry's 600 s timeout\"},{\"name\":\"waiter\",\"holds\":true,\"reading\":\"waiter holds: the waiter e",
++ ]
+
+ ❯ tests/acceptance/1023/ends.test.ts:21:37
+     19|   it(`${AC[2]} a session ended with no SessionEnd shows closed in deep…
+     20|     const fails = [run(1), run(3)].map(closedInTime).filter(Boolean);
+     21|     expect(fails, fails.join('\n')).toEqual([]);
+       |                                     ^
+     22|   });
+     23|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1023/ends.test.ts > three Ctrl-C ends of a Codex CLI session > AC2 #1023.6b9c173d the answer waiting for a session ended with no SessionEnd goes by its task, not by a resume
+AssertionError: run 3: the answer to ask:01M6ZSNYNDC8DZWM89TJ7ET87T for session bdaa3912-6bae-449e-97fc-e4f715efca98, whose process ended with no SessionEnd, doesn't go by its task: its delivery outcomes are []: expected 'run 3: the answer to ask:01M6ZSNYNDC8…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"run 3: the answer to ask:01M6ZSNYNDC8DZWM89TJ7ET87T for session bdaa3912-6bae-449e-97fc-e4f715efca98, whose process ended with no SessionEnd, doesn't go by its task: its delivery outcomes are []"
+
+ ❯ tests/acceptance/1023/ends.test.ts:26:24
+     24|   it(`${AC[2]} the answer waiting for a session ended with no SessionE…
+     25|     const fail = byTask(world.events, run(3));
+     26|     expect(fail, fail).toBeUndefined();
+       |                        ^
+     27|   });
+     28| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1023/plant.test.ts > a hub that leaves the session open fails, naming it > AC3 #1023.88d3d827 a planted hub (DEEP_HUB_PLANT=codex-exit-leaves-session-open) that leaves run 1's session open fails, naming it
+Error: BLOCKED: the planted hub didn't run (an implementation registers codex-exit-leaves-session-open; README: AC3): BLOCKED: the hub didn't start: file://<worktree>/packages/hub/dist/plant.js:94
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=codex-exit-leaves-session-open names no planted program
+    at plantOf (file://<worktree>/packages/hub/dist/plant.js:94:15)
+    at runHub (file://<worktree>/packages/hub/dist/server.js:1563:19)
+    at hubCommand (file://<worktree>/packages/hub/dist/hub-command.js:27:28)
+    at file://<worktree>/packages/cli/dist/main.js:301:30
+
+Node.js v24.22.0
+
+ ❯ tests/acceptance/1023/plant.test.ts:27:41
+     25|
+     26|   it(`${AC[3]} a planted hub (DEEP_HUB_PLANT=${PLANT}) that leaves run…
+     27|     if (planted instanceof Error) throw Error(`BLOCKED: the planted hu…
+       |                                         ^
+     28|     const r = planted.runs[0]!;
+     29|     const fails = leftOpen(planted, r);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 1 passed (5)
+   Start at  01:19:23
+   Duration  87.64s (tests 100%)
+

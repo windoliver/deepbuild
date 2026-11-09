@@ -51,10 +51,13 @@ export class Answers {
     return this.o.append({ delivery: `ask:${ask}`, via, outcome }, outcome === 'waiting' ? 2 : 1).catch(() => undefined);
   }
 
-  /** An ended Codex session's answer waits on its task; only the same thread's resume hears it (#39). */
+  /**
+   * An ended Codex session's answer waits on its task; only the same thread's resume hears it (#39). Ended by its
+   * SessionEnd, or by its process's exit with none, as Ctrl-C often leaves it (#1023).
+   */
   async waitsOnTask(delivery: Delivery): Promise<void> {
-    const [last] = (await this.o.raw(`SELECT e.kind, s.agent FROM events e JOIN sessions s ON s.id = e.session_id WHERE e.session_id = '${sql(delivery.session)}' AND e.kind IN ('session.start', 'session.end') ORDER BY e.log_pos DESC LIMIT 1`)) as { kind: string; agent: string }[];
-    if (last?.kind === 'session.end' && last.agent === 'codex') await this.outcome(delivery.ask.replace(/^ask:/, ''), 'on_task', 'waiting');
+    const [last] = (await this.o.raw(`SELECT e.kind, s.agent FROM events e JOIN sessions s ON s.id = e.session_id WHERE e.session_id = '${sql(delivery.session)}' AND e.kind IN ('session.start', 'session.end', 'session.gone') ORDER BY e.log_pos DESC LIMIT 1`)) as { kind: string; agent: string }[];
+    if (last && last.kind !== 'session.start' && last.agent === 'codex') await this.outcome(delivery.ask.replace(/^ask:/, ''), 'on_task', 'waiting');
   }
 }
 

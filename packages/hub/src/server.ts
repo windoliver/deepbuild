@@ -1310,7 +1310,7 @@ class Hub {
       case 'health':
         // The process readings after the core's: its own checks start short-lived children (the secret store's) that
         // would count as the hub's.
-        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj), process: await processHealth() })));
+        return void reply(this.core.request({ op: 'health', role: conn.name }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         conn.subs.add(sub);

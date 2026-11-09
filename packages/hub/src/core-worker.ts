@@ -9,7 +9,7 @@ import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMe
 export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
   | { op: 'mcp-hello'; parent: { pid: number; start: string } | undefined; paseo?: string }
-  | { op: 'health' }
+  | { op: 'health'; role: string }
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
   | { op: 'tool-gate'; meta: HookMeta; call: Gated }
@@ -43,7 +43,7 @@ export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): P
   switch (request.op) {
     case 'call': return core.call(request.method, request.params, request.context);
     case 'mcp-hello': return core.mcpHello(request.parent, request.paseo);
-    case 'health': return core.health();
+    case 'health': return core.health(request.role);
     case 'extension-hook': return core.extensionHook(request.data);
     case 'hook-reply': return core.hookReply(request.meta, request.until);
     case 'tool-gate': return core.toolGate(request.meta, request.call);

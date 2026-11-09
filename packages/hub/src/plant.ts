@@ -161,6 +161,8 @@ export type Plant =
   // #992's: a reading that checks waiting before gone, an adapter that opens an ask from a Notification hook, and an
   // app that reads a session waiting on you as working.
   | 'waiting-first' | 'ask-from-notification' | 'waiting-as-working'
+  // #1023's: a hub that leaves a Codex session open once its process ended with no SessionEnd.
+  | 'codex-exit-leaves-session-open'
   // #997's: loop facts read as the merge base did, with no monitor's watch.
   | 'monitor-unread'
   // #322's: criteria read from the GitHub API alone, a comment author's role from the comment's text, every author a
@@ -251,7 +253,7 @@ const PLANTS: readonly string[] = [
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only', 'monitor-unread',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
-  'waiting-first', 'ask-from-notification', 'waiting-as-working',
+  'waiting-first', 'ask-from-notification', 'waiting-as-working', 'codex-exit-leaves-session-open',
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',

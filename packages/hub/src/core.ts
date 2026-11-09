@@ -2673,10 +2673,18 @@ export class Core {
   /**
    * Every session whose agent's process the hub watched end with no SessionEnd (its terminal closed, it was killed):
    * its session.gone, lease or not (#992). Only a process two of its hooks named is watched. A process is checked each tick, and its start time, which tells a reused
-   * ID apart, every half minute; a ps that fails proves nothing.
+   * ID apart, every half minute; a ps that fails proves nothing. Its reading says the end was read from the process's
+   * exit, as a Codex TUI ended with Ctrl-C often fires no SessionEnd (#1023).
    */
   private async goneSessions(): Promise<void> {
     const now = Date.now();
+    // The planted wrong program: a Codex process's exit leaves its session open.
+    const kept = (agent: string) => this.options.plant === 'codex-exit-leaves-session-open' && agent === 'codex';
+    const gone = async (id: string, agent: string, pid: number, start: string) => {
+      const ts = this.now();
+      const recorded = await this.append(this.connection('core', { session: id, agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(id)}`, data: { pid, start } }).then(() => true, () => false);
+      if (recorded) await this.appendReading(id, agent, `Its agent's process (pid ${pid}${start ? `, started ${start}` : ''}) ended with no SessionEnd, so the hub closed the session from its exit.`).catch(() => undefined);
+    };
     // An agent the last hub watched, whose session no hook has brought to this one yet.
     for (const [id, cursor] of [...this.cursors]) {
       const watch = cursor.watch;
@@ -2687,12 +2695,11 @@ export class Core {
         const start = await this.startOf(watch.pid, true);
         alive = start === undefined || start === watch.start;
       }
-      if (alive || this.sessions.has(id) || this.cursors.get(id) !== cursor) continue;
+      if (alive || this.sessions.has(id) || this.cursors.get(id) !== cursor || kept(watch.agent)) continue;
       this.cursors.set(id, { ...cursor, watch: undefined });
       this.startChecked.delete(id);
       this.saveCursors();
-      const ts = this.now();
-      await this.append(this.connection('core', { session: id, agent: watch.agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(id)}`, data: { pid: watch.pid, start: watch.start } }).catch(() => undefined);
+      await gone(id, watch.agent, watch.pid, watch.start);
     }
     for (const session of [...this.sessions.values()]) {
       if (session.ended || !session.pid || !session.watched) continue;
@@ -2702,7 +2709,7 @@ export class Core {
         const start = await this.startOf(session.pid, true);
         alive = start === undefined || start === session.start;
       }
-      if (alive || session.ended) continue;
+      if (alive || session.ended || kept(session.agent)) continue;
       session.ended = true;
       this.startChecked.delete(session.id);
       // The process is gone, so its ID may start another: no session is bound to the start time cached for it.
@@ -2710,8 +2717,7 @@ export class Core {
       session.interrupted = true;
       if (this.options.plant === 'reap-on-kill') this.stacks.endFor(session.id);
       this.letGoLive(session.id);
-      const ts = this.now();
-      await this.append(this.connection('core', { session: session.id, agent: session.agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(session.id)}`, data: { pid: session.pid, start: session.start } }).catch(() => undefined);
+      await gone(session.id, session.agent, session.pid, session.start);
       this.endedOrder.delete(session.id);
       this.endedOrder.add(session.id);
       this.forgetEnded();
@@ -5598,7 +5604,7 @@ export class Core {
   private async dispatch(method: string, params: Obj, context: CallContext): Promise<unknown> {
     switch (method) {
       case 'hub.health':
-      case 'health': return this.health();
+      case 'health': return this.health(context.role);
       case 'session.wait': return this.waitAnswer(params, context);
       case 'session.delivered': return this.placed(params, context);
       case 'session.stop_waiting': return this.stopWaiting(context);
@@ -5779,12 +5785,24 @@ export class Core {
     await this.asks.notifications(false);
   }
 
-  async health(): Promise<Obj> {
+  async health(role: string): Promise<Obj> {
     const network = Object.values(networkInterfaces()).flat().some((i) => i && !i.internal) ? 'reachable' : 'unreachable';
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
     const claude = { relations: relations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.settingsReadings] };
     const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...modified(this.root.dir), ...trustProblems(this.root.dir).map((p) => `Codex's hook list reports ${p}`)], trust: readTrust(this.root.dir) ?? null };
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])), sessions: await this.sessionsSeen(role).catch(() => null) };
+  }
+  /**
+   * Each session seen in the last day, open or closed since its latest start (#1023): by its SessionEnd or its process's
+   * exit with none, so a Codex TUI ended with Ctrl-C reads closed once its process is gone. An Archive ends nothing.
+   * A person sees only the sessions they may see (#1338). A record that can't be read leaves the rest of health standing.
+   */
+  private async sessionsSeen(role: string): Promise<Obj[]> {
+    const seen = role.startsWith('person:') ? this.seenBy(role) : '';
+    const visible = seen ? ` AND s.id IN (SELECT DISTINCT session_id FROM events WHERE session_id IS NOT NULL${seen})` : '';
+    // Each session's events through the session index, never the kind index, which would walk every session's ends.
+    const rows = (await this.record.raw(`SELECT s.id, s.agent, EXISTS (SELECT 1 FROM events e INDEXED BY events_session WHERE e.session_id = s.id AND e.kind IN ('session.end', 'session.gone') AND e.log_pos > coalesce((SELECT MAX(t.log_pos) FROM events t INDEXED BY events_session WHERE t.session_id = s.id AND t.kind = 'session.start'), 0)) AS closed FROM sessions s WHERE s.last_seen >= ?${visible} ORDER BY s.last_seen DESC`, [this.now() - DAY])) as { id: string; agent: string | null; closed: number }[];
+    return rows.map((r) => ({ id: r.id, agent: r.agent, state: r.closed ? 'closed' : 'open' }));
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {
