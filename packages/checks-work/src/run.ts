@@ -11,7 +11,7 @@ const PROBE = fileURLToPath(new URL('../runtime/probe.mjs', import.meta.url));
 const KEPT = 4000;
 
 /** The file a kind's failures point at. */
-export const subject = (spec: WorkSpec): string =>
+const subject = (spec: WorkSpec): string =>
   spec.kind === 'service' ? spec.url : spec.kind === 'data' ? spec.database : spec.kind === 'document' ? spec.document : spec.mailbox;
 
 /** One run of the `kind` check on `spec`. */

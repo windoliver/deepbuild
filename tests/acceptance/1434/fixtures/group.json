@@ -1,0 +1,17 @@
+{
+  "format": "chrome@1",
+  "window": [400, 280],
+  "scale": 1,
+  "background": [255, 255, 255],
+  "nodes": [
+    {
+      "id": "group",
+      "rect": [40, 40, 320, 200],
+      "layer": { "opacity": 0.5, "radii": [0, 0, 0, 0], "edge": 0 },
+      "children": [
+        { "id": "red", "rect": [60, 60, 180, 140], "fill": [255, 0, 0, 255] },
+        { "id": "blue", "rect": [160, 100, 180, 120], "fill": [0, 0, 255, 255] }
+      ]
+    }
+  ]
+}

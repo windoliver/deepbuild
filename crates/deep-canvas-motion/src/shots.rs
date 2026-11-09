@@ -432,7 +432,7 @@ fn vec3(v: &Value, path: &str) -> Result<Vec3, Refused> {
     }
 }
 
-fn ease_named(v: Option<&Value>, path: &str) -> Result<Ease, Refused> {
+pub(crate) fn ease_named(v: Option<&Value>, path: &str) -> Result<Ease, Refused> {
     match v {
         None => Ok(Ease::InOutCubic),
         Some(Value::String(name)) => Ease::NAMES

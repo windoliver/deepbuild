@@ -16,10 +16,10 @@ import { refusal, Refused, type Plant } from './wire.js';
 type Obj = Record<string, unknown>;
 type Rows = (query: string, params?: readonly (string | number | bigint | null)[]) => Promise<unknown[]>;
 /** Where a refusal points for the caller's surface, and what starts a stack there. */
-export interface At { path: string; remedy: string }
+interface At { path: string; remedy: string }
 
 /** The runtime stack lifecycle supplied by the composition root; stack policy never selects a concrete provider. */
-export interface StackEnvironment {
+interface StackEnvironment {
   newRun(at: number): string;
   up(options: Parameters<typeof upStack>[1]): Promise<Up>;
   down(run: string): Promise<void>;
@@ -31,7 +31,7 @@ export interface StackEnvironment {
   keys(folder: string): Promise<Keys>;
 }
 
-export interface StacksOptions {
+interface StacksOptions {
   raw: Rows;
   now: () => number;
   plant: Plant | undefined;
@@ -63,7 +63,8 @@ const median = (list: number[]): number => [...list].sort((a, b) => a - b)[Math.
 const owned = (holder: string): string => (holder === 'core' ? 'your own terminal\'s deep env up' : `session ${holder.slice('mcp:'.length)}`);
 /** The PIDs that listen on the TCP port, as lsof shows them; a failed lsof rejects, since it proves nothing. */
 const listening = (port: number): Promise<number[]> => new Promise((done, fail) => {
-  execFile('/usr/sbin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
+  // Where the system keeps it: Debian and Ubuntu have no /usr/sbin/lsof.
+  execFile(process.platform === 'darwin' ? '/usr/sbin/lsof' : '/usr/bin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
     // lsof exits 1 with no output when nothing listens.
     if (error && !((error as { code?: unknown }).code === 1 && stdout.trim() === '' && stderr.trim() === '')) return fail(Error(`lsof can't list port ${port}'s listeners: ${stderr.trim() || error.message}`));
     done([...new Set(String(stdout ?? '').split('\n').filter((l) => l.startsWith('p')).map((l) => Number(l.slice(1))))]);

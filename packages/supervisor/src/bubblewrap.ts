@@ -17,9 +17,9 @@ const LANDLOCK_ABI = 4;
 const OWN = new Set(['dev', 'proc', 'run', 'sys']);
 
 /** A path the supervisor keeps from every run's writes, with the folders under it left to the run's grant. */
-export interface Guard { path: string; except: string[] }
+interface Guard { path: string; except: string[] }
 /** What a planted backend adds to the real one (suite.ts): bwrap arguments, and helper flags that widen the grant. */
-export interface Widening { bwrap?: string[]; helper?: string[] }
+interface Widening { bwrap?: string[]; helper?: string[] }
 
 /** "127.0.0.1:4100" → 4100: the filter lets a process connect to, or listen on, a port on this machine only. */
 function port(host: string): string {
@@ -74,7 +74,7 @@ function bwrapArgs(run: string, cwd: string, grant: Grant, guards: readonly Guar
     if (!existsSync(g.path)) continue;
     mounts.push('--ro-bind', real(g.path), real(g.path));
     flags.push('--guard', real(g.path));
-    for (const e of g.except) {
+    for (const e of [...g.except, ...(grant.own ?? []).filter((o) => real(o).startsWith(`${real(g.path)}/`))]) {
       if (!existsSync(e)) continue;
       mounts.push('--bind', real(e), real(e));
       flags.push('--except', real(e));

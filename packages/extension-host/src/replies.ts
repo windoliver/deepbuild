@@ -12,8 +12,8 @@ export interface Template {
   text: string;
   fields: Record<string, { type: 'handle' | 'number' | 'name' } | { type: 'one_of'; values: string[] }>;
 }
-export interface Replier { id: string; firstParty: boolean; templates: readonly Template[] }
-export type Checked = { ok: true; context: string[]; deny?: { reason: string } } | { ok: false; reason: string };
+interface Replier { id: string; firstParty: boolean; templates: readonly Template[] }
+type Checked = { ok: true; context: string[]; deny?: { reason: string } } | { ok: false; reason: string };
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 /** A handle's id that carries no words: a record's ULID or a definition's SHA-256. */

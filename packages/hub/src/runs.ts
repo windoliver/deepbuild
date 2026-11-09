@@ -24,7 +24,7 @@ import { refusal, Refused, ulid, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
-export interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; /** A claim's check that needs the app: it runs on the worktree's warm stack (#580). */ stack?: StackWant; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
+interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; /** A claim's check that needs the app: it runs on the worktree's warm stack (#580). */ stack?: StackWant; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
   /** A claim's check (#30): the command line the command check kind runs in `cwd`, hermetically through host@1; `argv` is what it would be as a shell line. */
   command?: string;
   /** A check your repo's spec runs outside the sandbox (#33). */
@@ -36,7 +36,9 @@ export interface Run { run: string; check: string; claim: string; commit: string
   /** Recovered runs with withheld environment values cannot run again unchanged (#996). */
   withheld?: string[];
   /** A claim's check of a kind other than command (#1537): check@1's spec, run through the kinds the hub holds. */
-  spec?: Obj }
+  spec?: Obj;
+  /** It outlives the hub (#70): a hub's stop leaves it running, and the next hub adopts it rather than running it again. */
+  keep?: boolean }
 /**
  * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
  * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
@@ -55,7 +57,7 @@ const isUnder = (path: string, dir: string) => {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 };
 
-export interface RunsOptions {
+interface RunsOptions {
   /** The journal file: each run started and not yet durably finished. */
   journalFile: string;
   point(): void;
@@ -139,11 +141,11 @@ export class Runs {
   async ended(run: string): Promise<void> { await this.live.get(run)?.done.catch(() => undefined); }
   /** Asks every run in flight to stop. */
   stopAll(): void {
-    for (const { stop } of this.live.values()) stop();
+    for (const { run, stop } of this.live.values()) if (!run.keep) stop();
   }
-  /** Waits up to five seconds for every run in flight to record its finish. */
+  /** Waits up to five seconds for every run in flight but the kept ones to record its finish. */
   async settled(): Promise<void> {
-    await Promise.race([Promise.allSettled([...this.live.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
+    await Promise.race([Promise.allSettled([...this.live.values()].filter((r) => !r.run.keep).map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
   }
 
   /**
@@ -201,7 +203,7 @@ export class Runs {
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and whether it's a held-out variant's (#1018); a claim's check that needs the app with its stack (#580). */
   async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut = false, stack?: StackWant): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec, outside } = params;
+    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec, outside, keep = false } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
@@ -219,11 +221,13 @@ export class Runs {
       }
     }
     if (grant.run_as_you !== undefined && typeof grant.run_as_you !== 'boolean') throw new Refused(refusal('type', '/params/grant/run_as_you', 'Give run_as_you as true or false.', grant.run_as_you));
+    if (typeof keep !== 'boolean') throw new Refused(refusal('type', '/params/keep', 'Give keep as true when the run should outlive the hub.', keep));
     if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
     const handle = id ?? `run:${ulid(this.o.now())}`;
     if (heldOut) this.heldOut.add(handle);
     const run = await this.launch({
       run: handle, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment || stack ? { environment: true } : {}), ...(stack ? { stack } : {}),
+      ...(keep ? { keep } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
@@ -347,7 +351,7 @@ export class Runs {
         const hosts = ports.map(([, port]) => `127.0.0.1:${port}`);
         return this.o.host().start({
           run: run.run, argv: run.argv, cwd: run.cwd, env: { ...env, ...Object.fromEntries(ports.map(([name, port]) => [name, String(port)])) },
-          grant: hosts.length ? { ...run.grant, hosts: [...(run.grant.hosts ?? []), ...hosts] } : run.grant, output,
+          grant: hosts.length ? { ...run.grant, hosts: [...(run.grant.hosts ?? []), ...hosts] } : run.grant, output, ...(run.keep ? { keep: true } : {}),
         });
       });
       ended = started.then(async (s) => {
@@ -419,12 +423,33 @@ export class Runs {
     await this.o.sync();
     this.writeJournal((runs) => { delete runs[run.run]; });
   }
+  /** A kept run this hub found running: looked at until it's gone. */
+  private adopt(run: Run): void {
+    const look = setInterval(() => void this.o.supervisor().lives(run.run).then(async (lives) => {
+      if (lives) return;
+      clearInterval(look);
+      await this.keptEnded(run);
+    }), 1000);
+    look.unref();
+  }
+  /** No hub read a kept run's exit, so it finishes unjudged, as stopped: never passed on an exit nobody saw. */
+  private async keptEnded(run: Run): Promise<void> {
+    await this.o.supervisor().cleanup(run.run).catch(() => undefined);
+    await this.finish(run, 'stopped', ['it ended with no hub to read its exit'], []);
+    this.writeJournal((runs) => { delete runs[run.run]; });
+  }
   /** After a start with runs still in the journal: each was in flight when the hub stopped without a clean stop. */
   async recover(): Promise<void> {
     const recorded = async (kind: string, run: string) => (await this.o.raw(`SELECT 1 FROM events WHERE kind = ? AND json_extract(data, '$.run') = ? LIMIT 1`, [kind, run.replace(/'/g, "''")])).length > 0;
     for (const run of Object.values({ ...this.journal })) {
       if (await recorded('run.finished', run.run)) {
         this.writeJournal((runs) => { delete runs[run.run]; });
+        continue;
+      }
+      // A kept run is never run again: it runs on, or it ended between the hubs.
+      if (run.keep) {
+        if (await this.o.supervisor().lives(run.run)) this.adopt(run);
+        else await this.keptEnded(run);
         continue;
       }
       // Its processes were reaped when the supervisor opened.

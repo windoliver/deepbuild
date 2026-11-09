@@ -310,6 +310,13 @@ pub enum Validity {
     IgnorePlacements,
 }
 
+/// Which channels and placements a frame's `valid_until` counts, by index: `None` counts all.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Counts<'a> {
+    pub channels: Option<&'a [bool]>,
+    pub placements: Option<&'a [bool]>,
+}
+
 /// The item's `at` as an object, whatever the item wrote.
 fn at_object(item: &mut Map<String, Value>) -> &mut Map<String, Value> {
     let at = item
@@ -394,13 +401,23 @@ fn through_op(op: &mut Value) -> &mut Value {
     inner
 }
 
-/// The frame's `valid_until`: the earliest `t` at which anything it shows changes next.
-pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validity) -> Option<i64> {
+/// The frame's `valid_until`: the earliest `t` at which anything it shows changes next, over the
+/// channels and placements `counts` keeps (#1487: those a view shows; every one otherwise).
+pub(crate) fn valid_until(
+    motion: &Motion,
+    t: i64,
+    doc_t: i64,
+    validity: Validity,
+    counts: Counts<'_>,
+) -> Option<i64> {
     // A document remap moves every read off the timeline's own clock.
     if motion.remaps.iter().any(|r| r.target == DOCUMENT) {
         return Some(t + 1);
     }
-    let channels = motion.channels.iter().filter_map(|c| {
+    let kept = |list: Option<&[bool]>, i: usize| list.is_none_or(|l| l[i]);
+    let channels = motion.channels.iter().enumerate();
+    let channels = channels.filter(|(i, _)| kept(counts.channels, *i));
+    let channels = channels.filter_map(|(_, c)| {
         // A modified channel may change at every flick, and so may a remapped one, whose
         // child time runs other than the timeline.
         if c.modifiers.is_empty() && !motion.remapped(&c.target.owner) {
@@ -412,9 +429,13 @@ pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validit
     let placements = motion
         .placements
         .iter()
-        .filter(|_| validity == Validity::Full)
-        .filter_map(|p| p.next_change(motion, doc_t));
+        .enumerate()
+        .filter(|(i, _)| validity == Validity::Full && kept(counts.placements, *i))
+        .filter_map(|(_, p)| p.next_change(motion, doc_t));
     let next = channels.chain(placements).min();
+    // Whether anything counted moves at all: a wrap changes only what moved.
+    let none_counted = (0..motion.channels.len()).all(|i| !kept(counts.channels, i))
+        && (0..motion.placements.len()).all(|i| !kept(counts.placements, i));
     let tr = motion.transport;
     match tr.span {
         Some(span) if tr.wrap => {
@@ -425,7 +446,7 @@ pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validit
             match next {
                 Some(n) if n < wrap_at => Some(n + offset),
                 Some(_) => Some(wrap_at + offset),
-                None if motion.channels.is_empty() && motion.placements.is_empty() => None,
+                None if none_counted => None,
                 None => Some(wrap_at + offset),
             }
         }
@@ -494,6 +515,26 @@ pub(crate) fn evaluated(
         let run = &state.slots[field.slot..field.slot + field.width];
         let value = match run {
             [one] if field.boolean => json!(*one >= 0.5),
+            run if field.shape.is_some() => {
+                let shape = crate::morph::unflat(run, field.shape.as_ref().expect("a shape"));
+                // An item's own `path` is what it draws: a vector import's outline, or a path's
+                // `d`, in place of its columns.
+                if field.path == ["path"] {
+                    if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
+                        let d = json!(crate::morph::d_of(&shape));
+                        if let Some(outline) = params.get_mut("outline").and_then(Value::as_object_mut) {
+                            outline.insert("d".into(), d);
+                            outline.remove("svg");
+                        } else {
+                            params.remove("verbs");
+                            params.remove("pts");
+                            params.insert("d".into(), d);
+                        }
+                    }
+                    continue;
+                }
+                crate::morph::value_of(&shape)
+            }
             [one] if field.enumerated => json!(program.label(*one)),
             [one] => json!(one),
             many => json!(many),

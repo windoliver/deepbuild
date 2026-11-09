@@ -8,7 +8,7 @@ import type { Action, DriverLocator, Expect, Journey } from './journey.js';
 
 const js = (v: unknown): string => JSON.stringify(v);
 /** A locator as Playwright code, within its container first. */
-export function locatorCode(l: DriverLocator, scope = 'page'): string {
+function locatorCode(l: DriverLocator, scope = 'page'): string {
   const base = l.container ? locatorCode(l.container, scope) : scope;
   if (l.testId) return `${base}.getByTestId(${js(l.testId)})`;
   if (l.label) return `${base}.getByLabel(${js(l.label)})`;

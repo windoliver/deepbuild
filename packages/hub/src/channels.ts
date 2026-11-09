@@ -31,7 +31,7 @@ interface Settings { channels: Record<string, Obj>; routes: Route[]; quiet: { fr
 /** An ask as the channels render it: its kind, words and options, and where it is in its life. */
 export interface ChannelAsk { handle: string; kind: string; question: string; options: { id: string; label: string }[]; status: string; outcome: string; answer: string | null }
 /** What the hub gives the channels: its clock and root, the loaded channels, the asks, the record and the answer path. */
-export interface ChannelDeps {
+interface ChannelDeps {
   root: string;
   now(): number;
   plant?: string | undefined;
@@ -47,7 +47,7 @@ export interface ChannelDeps {
 }
 
 /** The words a card that can't be answered here carries. */
-export const WHERE = 'answer in the app or on your paired phone';
+const WHERE = 'answer in the app or on your paired phone';
 const TRUSTED = 'an answer with authority, or one saved as a decision, counts only on the trusted path: the DeepBuild app, deep inbox answer once the OS confirms you, or your paired phone, which signs it';
 const TICK_MS = 250;
 const RECEIVE_MS = 1000;
