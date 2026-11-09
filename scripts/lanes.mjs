@@ -222,6 +222,8 @@ timed.push('tests/acceptance/33/budget.test.ts');
 
 // #1348's suite runs the plain words lane, which builds and draws its fixture run in the replica: one file at a time.
 alone.push('tests/acceptance/1348/');
+// #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
+alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests/acceptance/531-redraft-ac12/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
