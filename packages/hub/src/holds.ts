@@ -28,7 +28,7 @@ type Obj = Record<string, unknown>;
 const key = (v: unknown) => sha256Hex(canonicalize(v as JsonValue));
 
 
-export interface HoldOptions {
+interface HoldOptions {
   /** The session ran a held call again on your yes to this ask: it has your answer. */
   heard?(ask: string): Promise<void>;
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;

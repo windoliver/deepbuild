@@ -28,8 +28,8 @@ const HELD_MS = 30 * 86_400_000;
 const LONGEST_CALL_MS = 6 * 3600_000;
 
 export type GitHubPlant = 'posts-on-head' | 'unguarded-marks-every-push' | 'unguarded-marks-none';
-export interface GitHubSession { id: string; agent: string; cwd: string }
-export interface GitHubOptions {
+interface GitHubSession { id: string; agent: string; cwd: string }
+interface GitHubOptions {
   /** The REST root. */
   api: string;
   /** The token reads go with; none, and nothing is read. */

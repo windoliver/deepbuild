@@ -8,7 +8,7 @@ import { claudeSettings, installed } from './claude-settings.js';
 import { recordedEntries, recordedHome } from './codex-settings.js';
 
 /** The entries of one agent's settings that run one program that can't run: missing, or not executable. */
-export interface Unrunnable { agent: 'claude-code' | 'codex'; file: string; events: string[]; path: string; why: 'gone' | 'not executable' }
+interface Unrunnable { agent: 'claude-code' | 'codex'; file: string; events: string[]; path: string; why: 'gone' | 'not executable' }
 
 /** The program a command runs: its first word past an `exec`, unquoted as setup quotes it (`'…'`, with `'\''` for a quote). */
 export function programOf(command: string): string {

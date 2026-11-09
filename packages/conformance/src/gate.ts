@@ -19,7 +19,7 @@ const OUTCOMES = ['PASS', 'FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE', 'pending
 type Outcome = typeof OUTCOMES[number];
 interface Play { commits: string[]; expected: Outcome | Outcome[]; names?: string[] }
 /** The kit's own instructions for what the commits can't make; applied to the claim's play only, so the twin is the same claim with no fault. */
-export interface Setup {
+interface Setup {
   /** Folders of this checkout cloned into the world's repo before its base commit, such as node_modules/vitest. */
   installs?: string[];
   /** hub-killed: the hub is killed (SIGTERM) once a run of the claim has started, and started again; disk-full: the record refuses writes from the last stop on. */
@@ -49,7 +49,7 @@ export interface Setup {
    */
   judge?: { claim?: string; twin?: string };
 }
-export interface Case { id: string; covers: string[]; dir: string; prompt: string; stop?: string; drafts?: unknown[]; readings?: unknown[]; setup?: Setup; claim: Play; twin: Play }
+interface Case { id: string; covers: string[]; dir: string; prompt: string; stop?: string; drafts?: unknown[]; readings?: unknown[]; setup?: Setup; claim: Play; twin: Play }
 interface Manifest { kit: string; cases: Case[] }
 
 const FAKES = ['edited-expectation', 'skip-marker', 'exit-before-assertions', 'fixture-special-case', 'patched-clock', 'always-true-verify', 'overridden-equality', 'rerecorded-golden', 'swallowed-exception', 'check-runs-no-test'].map((f) => `fake:${f}`);
@@ -58,7 +58,7 @@ const REPORTING = ['root-conftest', 'vitest-setup-outside-tests', 'rewrite-on-im
 const MODES = ['hub-killed', 'disk-full', 'env-missing', 'token-expired'].map((f) => `mode:${f}`);
 
 /** The verdict table's rows that set an outcome other than PASS: `Row` in the Lean model, with `Row.result`. */
-export function falseDoneRows(): string[] {
+function falseDoneRows(): string[] {
   const lean = readFileSync(join(REPO, 'packages/verdicts/model/Verdicts/Model.lean'), 'utf8');
   const rows = [...(/inductive Row where\n((?:\s+\|\s*\w+\n)+)/.exec(lean)?.[1] ?? '').matchAll(/\|\s*(\w+)/g)].map((m) => m[1]!);
   const body = /def Row\.result : Row → Result\n([\s\S]*?)\n\n/.exec(lean)?.[1] ?? '';
@@ -75,7 +75,7 @@ export function falseDoneRows(): string[] {
   return rows.filter((r) => !pass.has(r));
 }
 /** Every tag a complete corpus covers. */
-export const requiredTags = (): string[] => ['seeded-bug', 'edited-assertion', 'retry:empty-commit', ...falseDoneRows().map((r) => `row:${r}`), ...FAKES, ...NUMERIC, ...REPORTING, ...MODES];
+const requiredTags = (): string[] => ['seeded-bug', 'edited-assertion', 'retry:empty-commit', ...falseDoneRows().map((r) => `row:${r}`), ...FAKES, ...NUMERIC, ...REPORTING, ...MODES];
 
 const expectedOf = (p: Play): Outcome[] => (Array.isArray(p.expected) ? p.expected : [p.expected]);
 function readManifest(corpus: string): Manifest {

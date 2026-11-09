@@ -20,6 +20,9 @@ pub mod canvas;
 pub mod card;
 pub mod cells;
 pub mod chrome;
+pub mod chrome_fx;
+#[cfg(feature = "chrome-fixture")]
+pub mod chrome_fixture;
 pub mod commands;
 pub mod confirm;
 pub mod device;
@@ -129,7 +132,7 @@ pub static REBUILDS: AtomicU64 = AtomicU64::new(0);
 pub fn deepbuild_module() -> HostModule {
     let module = HostModule::new("deepbuild")
         .function("needs_you", |_| needs_you())
-        .function("sessions", |_| sessions());
+        .function("sessions", |_| sidebar_sessions());
     #[cfg(feature = "spike")]
     let module = module.function("quotes", |_| {
         let interval: serde_json::Value = serde_json::from_str(QUOTES).expect("valid JSON");
@@ -232,7 +235,7 @@ fn needs_you() -> Result<HostValue, HostError> {
 /// The sessions as the sidebar lists them, in its order, for a view replacing its rows (`session.row@1`): each one's
 /// ID, which keys its row as `session:<id>`, its title, and its state's words and status-map entry, from the one record
 /// reader (#1459).
-fn sessions() -> Result<HostValue, HostError> {
+fn sidebar_sessions() -> Result<HostValue, HostError> {
     record::with_view(|view| {
         let table = view.table();
         HostValue::Array(

@@ -29,7 +29,7 @@ const LOCATOR = object({
 });
 
 /** Each tool's input schema, by name, in the order deep mcp lists them. */
-export const SCHEMAS: Readonly<Record<string, Schema>> = {
+const SCHEMAS: Readonly<Record<string, Schema>> = {
   deep_ask: object({
     kind: { type: 'string', enum: ['taste', 'choice', 'unblock'], description: 'taste or choice for a question; unblock for a task only a person can do.' },
     question: str('The one question, or the task, in a sentence.'),
@@ -176,7 +176,7 @@ export function actionToolList(): { name: string; description: string; inputSche
 
 let described: Record<string, string> | undefined;
 /** Each tool's description, as scripts/skill.mjs generated it from the Building blocks table. */
-export function descriptions(): Record<string, string> {
+function descriptions(): Record<string, string> {
   return (described ??= JSON.parse(readFileSync(new URL('../tools.json', import.meta.url), 'utf8')) as Record<string, string>);
 }
 
