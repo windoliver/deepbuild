@@ -2042,7 +2042,7 @@ impl Registry {
                 .chain(r.tables.iter().map(|t| &t.name))
                 .find(|n| {
                     !n.starts_with(&own)
-                        || !well_named(n)
+                        || !id_named(n)
                         || known
                             .iter()
                             .any(|k| k.len() > name.len() && n.starts_with(&format!("{k}.")))
@@ -2052,7 +2052,7 @@ impl Registry {
                     "not_own_name",
                     &[name],
                     &[misnamed],
-                    format!("`{name}` registers `{misnamed}`; an array or table of `{name}` is named `{name}.<x>` in [a-z0-9]+ segments, with no other module's name between"),
+                    format!("`{name}` registers `{misnamed}`; an array or table of `{name}` is named `{name}.<x>` in ID segments ([a-z0-9][a-z0-9_-]*), with no other module's name between"),
                 ));
             }
         }
@@ -3109,6 +3109,18 @@ pub(crate) fn well_named(name: &str) -> bool {
         && name
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.')
+}
+
+/// An array's or table's name: segments joined by `.`, each as the ID grammar's
+/// (`[a-z0-9][a-z0-9_-]{0,47}`; canvas primitives: Value types, `ID`).
+pub(crate) fn id_named(name: &str) -> bool {
+    name.split('.').all(|seg| {
+        let b = seg.as_bytes();
+        !b.is_empty()
+            && b.len() <= 48
+            && (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
+            && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
+    })
 }
 
 /// True when `name`'s manifest names `dep` in `depends_on`; every module reads the core's own.

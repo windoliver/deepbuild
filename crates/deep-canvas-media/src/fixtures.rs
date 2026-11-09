@@ -9,11 +9,11 @@ pub fn reverb_board() -> Value {
         "format": 1, "profile": "board", "title": "A room",
         "description": "A click train played into a bus whose reverb keeps ringing, for the media module's carried state.",
         "size": [320, 200],
-        "requires": {"modules": {"media": "^1"}},
+        "requires": {"modules": {"scene3d": "^1", "media": "^1"}},
         "transport": {"span": "3s"},
         "items": {
-            "room": {"id": "room", "kind": "rect@1", "name": "Room", "order": "a0",
-                     "params": {"box": [20, 20, 280, 160], "paint": {"fill": {"role": "muted"}}}}
+            "room": {"id": "room", "kind": "mark.box@1", "name": "Room", "order": "a0",
+                     "params": {"size": [0.3, 0.3, 0.3], "paint": {"fill": {"role": "muted"}}}}
         },
         "strips": {"clicks": {"track": 0, "src": {"synth": "clicks"}, "start": 0, "in": 0, "out": 2_116_800_000_i64, "bus": "room"}},
         "buses": {"room": {"processors": ["verb"], "out": "master", "layout": "stereo"}},

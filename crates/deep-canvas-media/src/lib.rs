@@ -18,7 +18,8 @@ pub const FLICKS: i64 = 705_600_000;
 
 /// The wrong program a proof surface plants in this module's own check (#499 AC10): the
 /// av_unlinked check comparing only `start`.
-pub const PLANTED: [&str; 1] = ["av_link_compares_start_only"];
+/// The redraft of AC10's test names it `av_link_start_only`.
+pub const PLANTED: [&str; 2] = ["av_link_compares_start_only", "av_link_start_only"];
 
 static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
 
