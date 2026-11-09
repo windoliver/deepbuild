@@ -2027,6 +2027,8 @@ impl Render for Shell {
             .bg(chrome.ground)
             .text_color(chrome.ink_primary)
             .text_sm()
+            // Issue #1434: the frame's guards go first, so every chrome effect after them is checked.
+            .child(crate::chrome_fx::guards())
             .children(self.title_bar.then(|| title_bar(window)))
             .child(div().flex_1().min_h_0().w_full().child(self.dock.clone()))
             .children(self.commands.clone())
