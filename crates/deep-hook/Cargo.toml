@@ -7,6 +7,9 @@ publish = false
 
 [dependencies]
 deep-contracts = { path = "../deep-contracts" }
+# A joined project's hub over TLS 1.3 (#1338): already in the lockfile for deep-relay, ring as the one provider.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+ring = "0.17"
 
 [features]
 # A planted feature for #16's AC23: this build lists f_test among its features, sends it only when the hub
@@ -36,3 +39,6 @@ plant-matcher-panic = []
 # when its program is the inline text (AC4), and one that counts every run fed from a pipe as unread (AC5).
 plant-any-pipe-unread = []
 plant-every-pipe-unread = []
+# The planted wrong program for #1676: a reader that counts every command after an earlier one on the line as running a
+# script the line wrote.
+plant-later-command-unread = []

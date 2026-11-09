@@ -1,7 +1,8 @@
-import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -60,6 +61,94 @@ describe('deep checkout command', () => {
       rmSync(home, { recursive: true, force: true });
     }
   }, 70_000);
+});
+
+// #1359: help never acts. An agent asks a command for help before it uses it, so `-h`, `--help` or `help` anywhere in
+// the arguments prints that command's usage and runs nothing: no setup in a fresh home, no call to a running hub.
+describe('deep <command> --help', () => {
+  /** A home nobody set up, whose service managers only fail, so a wrong program that sets up reaches nothing real. */
+  const fresh = () => {
+    const home = realpathSync(mkdtempSync('/tmp/deep-cli-help-'));
+    mkdirSync(join(home, 'bin'));
+    for (const name of ['launchctl', 'systemctl']) { writeFileSync(join(home, 'bin', name), '#!/bin/sh\nexit 1\n'); chmodSync(join(home, 'bin', name), 0o755); }
+    const env: NodeJS.ProcessEnv = { HOME: home, PATH: `${join(home, 'bin')}:${dirname(process.execPath)}:/usr/bin:/bin`, DEEP_HUB_LAUNCHER: join(home, 'bin', 'launchctl'), XDG_CONFIG_HOME: join(home, '.config') };
+    return { home, env };
+  };
+  /** Every path under `dir` with its mode and its bytes or link target. */
+  const snapshot = (dir: string): Map<string, string> => {
+    const out = new Map<string, string>();
+    const walk = (at: string) => {
+      for (const name of readdirSync(at).sort()) {
+        const path = join(at, name);
+        const stat = lstatSync(path);
+        out.set(path, `${stat.mode} ${stat.isSymbolicLink() ? readlinkSync(path) : stat.isDirectory() ? '' : readFileSync(path).toString('base64')}`);
+        if (stat.isDirectory()) walk(path);
+      }
+    };
+    walk(dir);
+    return out;
+  };
+
+  it.each([['status', '--help'], ['inbox', '-h'], ['memory', 'help']])('deep %s %s in a fresh home prints its usage and leaves the home byte-identical', (command, word) => {
+    const { home, env } = fresh();
+    try {
+      const before = snapshot(home);
+      const result = spawnSync(process.execPath, [cli, command, word], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
+      const after = snapshot(home);
+      const written = [...after].find(([path, state]) => before.get(path) !== state)?.[0];
+      expect(written, `deep ${command} ${word} wrote ${written} (${result.stderr.trim().slice(0, 300)})`).toBeUndefined();
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`deep ${command}`);
+      expect(result.stdout).not.toContain('deep doctor');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 70_000);
+
+  it.each(['--help', '-h'])('deep backup %s with a hub running writes no folder and calls no hub', async (word) => {
+    const { home, env } = fresh();
+    const root = join(home, '.deepbuild');
+    mkdirSync(root);
+    writeFileSync(join(root, 'setup-finished.json'), '{}\n');
+    writeFileSync(join(root, 'control.token'), 'token\n');
+    let calls = 0;
+    const hub = createServer((socket) => { calls += 1; socket.destroy(); });
+    await new Promise<void>((done) => hub.listen(join(root, 'hub.sock'), done));
+    try {
+      const result = await new Promise<{ status: number | null; stdout: string }>((done) => {
+        const child = spawn(process.execPath, [cli, 'backup', word], { env, cwd: home });
+        let stdout = '';
+        child.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
+        child.on('close', (status) => done({ status, stdout }));
+      });
+      expect(calls, 'deep backup called the hub').toBe(0);
+      expect(existsSync(join(home, word)), `deep backup made ${join(home, word)}`).toBe(false);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('deep backup <folder>');
+    } finally {
+      hub.close();
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 70_000);
+});
+
+// #1359: an unknown command names the nearest real one, by the canvas's close names' distance and reach (#412).
+describe('an unknown command', () => {
+  it('names the command a typo meant, on one stderr line', () => {
+    const result = run('stauts');
+    expect(result.status).toBe(2);
+    expect(result.stdout).toBe('');
+    expect(result.stderr.trim().split('\n')).toHaveLength(1);
+    expect(result.stderr).toContain('deep status');
+  });
+
+  it('names deep --help and no command when nothing is within reach', () => {
+    const result = run('xyzzy');
+    expect(result.status).toBe(2);
+    expect(result.stderr.trim().split('\n')).toHaveLength(1);
+    expect(result.stderr).toContain('deep --help');
+    expect(result.stderr.replace('deep --help', '')).not.toMatch(/deep [a-z]/);
+  });
 });
 
 describe('deep on a Node older than its engines field', () => {

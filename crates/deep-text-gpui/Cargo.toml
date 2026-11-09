@@ -11,4 +11,6 @@ rust-version = "1.95"
 # tinted mask sprite. Named deep-text* so scripts/text-lint.mjs reads every call here.
 [dependencies]
 deep-text = { path = "../deep-text" }
+# #1479: glyph outlines flatten and bucket by zoom as any path does.
+deep-canvas-marks = { path = "../deep-canvas-marks" }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1" }

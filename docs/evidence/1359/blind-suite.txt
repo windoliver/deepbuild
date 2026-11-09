@@ -1,0 +1,13 @@
+Tree: dd83ac2f + this change (uncommitted), built with npm run build --workspaces and cargo build --locked -p deep-hook
+Command: DEEP1359_OLD_NODE=<Playwright's Node 20.11.0> NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1359 --no-file-parallelism
+Node 24.22.0, 2026-11-08, Mac17,10
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-1359-ee77ac/tests/acceptance/1359
+
+
+ Test Files  11 passed (11)
+      Tests  35 passed (35)
+   Start at  17:21:49
+   Duration  101.22s (tests 98%, import 1%)
+

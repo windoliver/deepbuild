@@ -20,9 +20,13 @@ pub mod canvas;
 pub mod card;
 pub mod cells;
 pub mod chrome;
+#[cfg(feature = "chrome-fixture")]
+pub mod chrome_fixture;
+pub mod chrome_fx;
 pub mod commands;
 pub mod confirm;
 pub mod device;
+#[cfg(feature = "fixtures")]
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
@@ -47,6 +51,7 @@ pub mod single;
 #[cfg(feature = "spike")]
 pub mod spike;
 pub mod states;
+pub mod table;
 pub mod text;
 pub mod views;
 
@@ -173,6 +178,15 @@ pub fn deepbuild_module() -> HostModule {
 
 /// The inbox projection's list for Needs you, as the fixture panels read it: the rows oldest
 /// first, which of them are folded or in Later, and the asks that left the list.
+/// The shipped app has no fixture record, so a panel asking for one is told so.
+#[cfg(not(feature = "fixtures"))]
+fn needs_you() -> Result<HostValue, HostError> {
+    Err(HostError::new(
+        "no fixture record is loaded; the host sets one before a panel draws",
+    ))
+}
+
+#[cfg(feature = "fixtures")]
 fn needs_you() -> Result<HostValue, HostError> {
     let state = views::current_state().ok_or_else(|| {
         HostError::new("no fixture record is loaded; the host sets one before a panel draws")
@@ -267,7 +281,7 @@ fn admit(dir: &Path) -> anyhow::Result<()> {
         anyhow::bail!("{}", fetch_refusal(&dependency));
     }
     // #1425's planted loader skips the module check, as the merge base's did.
-    if !panel_module::planted("panel-load-unchecked") {
+    if !plain::planted("panel-load-unchecked") {
         panel_module::check(dir).map_err(anyhow::Error::msg)?;
     }
     Ok(panel_module::serve(dir)?)

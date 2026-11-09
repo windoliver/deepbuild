@@ -1,0 +1,463 @@
+The #505 acceptance suite run at base commit dd83ac2f (main, before any implementation), on macOS arm64 with
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/505 --no-file-parallelism`
+(the checkout's path redacted to `<checkout>`): all 21 tests in 8 files fail, every one on an assertion, none in the
+harness. Both builds compile. The kinds of failure: the base check refuses the new fields of a path fn (`bad_doc` at
+`params/fn/y` or `params/fn/over`: no vars, scales, implicit `zero` or expression ends) and of a computed mark set
+(`bad_column`, and `out_of_range` for `n` as a var, which also fails the 4,096 twin of the 4,097 refusal); `geometry`
+answers `bad_input` to the planted names `stops_at_midpoint` and `drops_cells_by_corner_signs`; where the base draws,
+the new answers are missing (no `area`, no `color_at`, no estimate notice for sin(1/x), points in the function's units
+instead of through the scales, so the sine's line doesn't reach x = 0.25 in u) or wrong (the secant's readout shows
+`0.0000`, y = 2x + 0.1 raises no `fn.derivative`); the hub's `see` names the formula's node by its item name
+"Pythagorean identity", not its source text (AC1's write-on half passes first, as #398 already writes terms on); and the
+taste test stops at the parabola's raster, refused `bad_doc`, before any picture is written.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/505
+
+ ❯ formula.test.ts (1 test | 1 failed) 5292ms
+   ❯ AC1 #505.968d0296 a formula from the agent's SVG writes on term by term, and a screen reader reads its source text (1)
+     × AC1 #505.968d0296 the terms come in one by one in reading order, and the formula's accessible name is its source text 2939ms
+ ❯ calculus.test.ts (4 tests | 4 failed) 3061ms
+   ❯ AC6 #505.80c4ff9d calculus on a function path (4)
+     × AC6 #505.80c4ff9d y = x² filled to the axis over [0, 1] reads #area.value 0.33333333 within 1e-8, its edge within 0.5 px, and a slider on the upper end updates both in that frame 1375ms
+     × AC6 #505.80c4ff9d probes at 1.5 and 2.5 on y = x²/4 give a secant whose slope readout is 1.0000, and a path attached between their anchors ends on both within 0.5 px 274ms
+     × AC6 #505.80c4ff9d y = 2x marked derivative_of y = x² passes and y = 2x + 0.1 fails fn.derivative, naming the first x 236ms
+     × AC6 #505.80c4ff9d a curve whose over end follows a channel draws exactly to that x at 100 sampled times 127ms
+ ❯ taste.test.ts (1 test | 1 failed) 3617ms
+   ❯ AC8 #505.c8aaffce the screenshots, the recordings and the one taste call on them (1)
+     × AC8 #505.c8aaffce the run writes the pictures from the canvas's own frames, no other test reads them, and the recorded call on exactly those says they look right 2328ms
+ ❯ sampler.test.ts (4 tests | 4 failed) 2728ms
+   ❯ AC3 #505.5e6d3319 a curve bounded by interval arithmetic, not by its samples (4)
+     × AC3 #505.5e6d3319 sin(2πx) draws its peak at x = 0.25 within 0.5 px of y = 1, and 10,000 checked x find no point more than 0.5 px off 1153ms
+     × AC3 #505.5e6d3319 a planted sampler that stops once a segment's midpoint lies on the curve draws a flat line and fails 114ms
+     × AC3 #505.5e6d3319 sin(1/x) over [0.0001, 1] draws with a notice naming the stretch near 0, which the check report lists as an estimate, never a bound 243ms
+     × AC3 #505.5e6d3319 a check that needs the curve's bound over that stretch is refused, naming the item and the range 129ms
+ ❯ columns.test.ts (3 tests | 3 failed) 2470ms
+   ❯ AC5 #505.91640dd4 mark-set columns computed from a formula over the row index (3)
+     × AC5 #505.91640dd4 n = 4 gives the four heights within 1e-12 and the counter 0.328125, then 0.333325 with n driven to 100 1099ms
+     × AC5 #505.91640dd4 a role column y < 0 ? 1 : 0 colors bars below the axis with the set's second role and the rest with its first 124ms
+     × AC5 #505.91640dd4 n declared with max 4,097 is refused at check, naming the set 226ms
+ ❯ implicit.test.ts (5 tests | 5 failed) 2577ms
+   ❯ AC4 #505.00692b98 implicit curves traced on an interval quadtree (5)
+     × AC4 #505.00692b98 x² + y² − 1 = 0 over [−2, 2]² draws one closed sub-path within 0.5 px of the unit circle at 1,000 seeded points 1029ms
+     × AC4 #505.00692b98 y² − x³ + 2x − 1 = 0 over [−3, 3]² draws exactly two sub-paths, the oval and the branch 121ms
+     × AC4 #505.00692b98 over [−2, 2]² a circle of radius 0.02 at (1.5, 0), smaller than a level-5 cell, is found 111ms
+     × AC4 #505.00692b98 a planted tracer that drops cells by corner signs misses the small circle and fails 108ms
+     × AC4 #505.00692b98 sin(1 ÷ (x·y)) = 0 near the origin hits the 16,384-cell cap and draws as an estimate with a notice naming its box 105ms
+ ❯ color.test.ts (1 test | 1 failed) 2017ms
+   ❯ AC7 #505.6af13a53 a stroke colored by value through an OKLab ramp (1)
+     × AC7 #505.6af13a53 y = x colored by y through [a, b] draws its stroke at x = 0.5 at a and b's OKLab midpoint within 0.001 ΔEOK 1088ms
+ ❯ parabola.test.ts (2 tests | 2 failed) 2488ms
+   ❯ AC2 #505.32c898a2 y = a·x² bound to a slider (2)
+     × AC2 #505.32c898a2 draws within 0.5 px of the true parabola at 1,000 checked x, and redraws in the frame the slider moves from 0.5 to 2 939ms
+     × AC2 #505.32c898a2 with a = 2 its probe at x = 1.5 reads y = 4.5 and slope 6 within 1e-6 139ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  calculus.test.ts > AC6 #505.80c4ff9d calculus on a function path > AC6 #505.80c4ff9d y = x² filled to the axis over [0, 1] reads #area.value 0.33333333 within 1e-8, its edge within 0.5 px, and a slider on the upper end updates both in that frame
+AssertionError: the curve answers #area: {"ok":true,"subpaths":[{"closed":false,"verbs":["M","L","L","L"],"points":[[0,0],[0.5,0.25],[0.75,0.5625],[1,1]]}]}: expected null not to be null
+ ❯ calculus.test.ts:64:101
+     62|     passes(bin, doc, 'the area under x²', { input });
+     63|     const [whole, half] = fnAt(bin, doc, 'area', [{ t: T - 1, input },…
+     64|     expect(whole!.area, `the curve answers #area: ${JSON.stringify(who…
+       |                                                                                                     ^
+     65|     near(whole!.area!.value, 0.33333333, 1e-8, '#area.value over [0, 1…
+     66|     expect(whole!.area!.lo <= 1 / 3 && 1 / 3 <= whole!.area!.hi, `its …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  calculus.test.ts > AC6 #505.80c4ff9d calculus on a function path > AC6 #505.80c4ff9d probes at 1.5 and 2.5 on y = x²/4 give a secant whose slope readout is 1.0000, and a path attached between their anchors ends on both within 0.5 px
+AssertionError: the secant's slope readout: expected '0.0000' to be '1.0000' // Object.is equality
+
+Expected: "1.0000"
+Received: "0.0000"
+
+ ❯ calculus.test.ts:80:92
+     78|     passes(bin, doc, 'the secant');
+     79|     const answer = rasterAt(bin, doc, [{}], temp(), 'secant')[0]!.answ…
+     80|     expect(shownText(answer, 'slope', 'the slope readout'), 'the secan…
+       |                                                                                            ^
+     81|     const p1: Pt = [secantU.x(1.5), secantU.y(1.5 ** 2 / 4)];
+     82|     const p2: Pt = [secantU.x(2.5), secantU.y(2.5 ** 2 / 4)];
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  calculus.test.ts > AC6 #505.80c4ff9d calculus on a function path > AC6 #505.80c4ff9d y = 2x marked derivative_of y = x² passes and y = 2x + 0.1 fails fn.derivative, naming the first x
+AssertionError: y = 2x + 0.1 fails fn.derivative: []: expected 0 to be greater than 0
+ ❯ calculus.test.ts:101:84
+     99|     const off = check(bin, derivativeDoc('2 * x + 0.1'), 'y = 2x + 0.1…
+    100|     const failed = off.issues.filter((i) => i.code === 'fn.derivative'…
+    101|     expect(failed.length, `y = 2x + 0.1 fails fn.derivative: ${shownIs…
+       |                                                                                    ^
+    102|     expect(failed[0]!.severity, 'the failure is an error').toBe('error…
+    103|     expect(failed[0]!.ids, 'it names the curve marked derivative_of').…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+
+ FAIL  calculus.test.ts > AC6 #505.80c4ff9d calculus on a function path > AC6 #505.80c4ff9d a curve whose over end follows a channel draws exactly to that x at 100 sampled times
+AssertionError: the growing curve passes the check: [{"code":"bad_doc","severity":"error","ids":["grow"],"path":"items/grow/params/fn/over"}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "bad_doc [grow] items/grow/params/fn/over",
++ ]
+
+ ❯ passes helpers.ts:192:122
+    190| export function passes(bin: string, doc: JsonObject, what: string, ext…
+    191|   const c = check(bin, doc, what, extra);
+    192|   expect(c.errors.map((e) => `${e.code} [${e.ids.join(',')}] ${e.path}…
+       |                                                                                                                          ^
+    193|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    194|   return c;
+ ❯ calculus.test.ts:114:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/21]⎯
+
+ FAIL  color.test.ts > AC7 #505.6af13a53 a stroke colored by value through an OKLab ramp > AC7 #505.6af13a53 y = x colored by y through [a, b] draws its stroke at x = 0.5 at a and b's OKLab midpoint within 0.001 ΔEOK
+AssertionError: one color per x asked: {"ok":true,"subpaths":[{"closed":false,"verbs":["M","L","L"],"points":[[0,0],[0.5,0.5],[1,1]]}]}: expected +0 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 0
+
+ ❯ color.test.ts:31:97
+     29|     passes(bin, doc, 'the colored line');
+     30|     const [g] = fnAt(bin, doc, 'line', [{ color_at: [0, 0.5, 1] }], 't…
+     31|     expect(g!.colorAt.length, `one color per x asked: ${JSON.stringify…
+       |                                                                                                 ^
+     32|     expect(deltaEok(g!.colorAt[1]!, mid), `the stroke at x = 0.5, ${JS…
+     33|     expect(deltaEok(g!.colorAt[0]!, a), 'the stroke at x = 0 is a').to…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/21]⎯
+
+ FAIL  columns.test.ts > AC5 #505.91640dd4 mark-set columns computed from a formula over the row index > AC5 #505.91640dd4 n = 4 gives the four heights within 1e-12 and the counter 0.328125, then 0.333325 with n driven to 100
+AssertionError: the Riemann bars passes the check: [{"code":"out_of_range","severity":"error","ids":["bars"],"path":"items/bars/params/n"},{"code":"out_of_range","severity":"error","ids":["bars"],"path":"items/bars/params/n"}]: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "out_of_range [bars] items/bars/params/n",
++   "out_of_range [bars] items/bars/params/n",
++ ]
+
+ ❯ passes helpers.ts:192:122
+    190| export function passes(bin: string, doc: JsonObject, what: string, ext…
+    191|   const c = check(bin, doc, what, extra);
+    192|   expect(c.errors.map((e) => `${e.code} [${e.ids.join(',')}] ${e.path}…
+       |                                                                                                                          ^
+    193|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    194|   return c;
+ ❯ columns.test.ts:43:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/21]⎯
+
+ FAIL  columns.test.ts > AC5 #505.91640dd4 mark-set columns computed from a formula over the row index > AC5 #505.91640dd4 a role column y < 0 ? 1 : 0 colors bars below the axis with the set's second role and the rest with its first
+AssertionError: the sine bars passes the check: [{"code":"bad_column","severity":"error","ids":["waves"],"path":"items/waves/params/columns/x/len"},{"code":"bad_column","severity":"error","ids":["waves"],"path":"items/waves/params/columns/x/len"}]: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "bad_column [waves] items/waves/params/columns/x/len",
++   "bad_column [waves] items/waves/params/columns/x/len",
++ ]
+
+ ❯ passes helpers.ts:192:122
+    190| export function passes(bin: string, doc: JsonObject, what: string, ext…
+    191|   const c = check(bin, doc, what, extra);
+    192|   expect(c.errors.map((e) => `${e.code} [${e.ids.join(',')}] ${e.path}…
+       |                                                                                                                          ^
+    193|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    194|   return c;
+ ❯ columns.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/21]⎯
+
+ FAIL  columns.test.ts > AC5 #505.91640dd4 mark-set columns computed from a formula over the row index > AC5 #505.91640dd4 n declared with max 4,097 is refused at check, naming the set
+AssertionError: n up to 4,096 passes the check: [{"code":"out_of_range","severity":"error","ids":["bars"],"path":"items/bars/params/n"},{"code":"out_of_range","severity":"error","ids":["bars"],"path":"items/bars/params/n"}]: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "out_of_range [bars] items/bars/params/n",
++   "out_of_range [bars] items/bars/params/n",
++ ]
+
+ ❯ passes helpers.ts:192:122
+    190| export function passes(bin: string, doc: JsonObject, what: string, ext…
+    191|   const c = check(bin, doc, what, extra);
+    192|   expect(c.errors.map((e) => `${e.code} [${e.ids.join(',')}] ${e.path}…
+       |                                                                                                                          ^
+    193|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    194|   return c;
+ ❯ columns.test.ts:86:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/21]⎯
+
+ FAIL  formula.test.ts > AC1 #505.968d0296 a formula from the agent's SVG writes on term by term, and a screen reader reads its source text > AC1 #505.968d0296 the terms come in one by one in reading order, and the formula's accessible name is its source text
+AssertionError: see at 0.5 s, while it writes on: the screen reader reads the formula's source text: expected 'Pythagorean identity' to be 'a^2 + b^2 = c^2' // Object.is equality
+
+Expected: "a^2 + b^2 = c^2"
+Received: "Pythagorean identity"
+
+ ❯ formula.test.ts:79:137
+     77|         const nodes = tree.filter((n) => n['id'] === 'formula');
+     78|         expect(nodes.length, `see at ${when}: the tree has one node fo…
+     79|         expect(str(nodes[0]!['name'], 'the formula node\'s name'), `se…
+       |                                                                                                                                         ^
+     80|       }
+     81|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/21]⎯
+
+ FAIL  implicit.test.ts > AC4 #505.00692b98 implicit curves traced on an interval quadtree > AC4 #505.00692b98 x² + y² − 1 = 0 over [−2, 2]² draws one closed sub-path within 0.5 px of the unit circle at 1,000 seeded points
+AssertionError: x^2 + y^2 - 1 passes the check: [{"code":"bad_doc","severity":"error","ids":["curve"],"path":"items/curve/params/fn/y"}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "bad_doc [curve] items/curve/params/fn/y",
++ ]
+
+ ❯ passes helpers.ts:192:122
+    190| export function passes(bin: string, doc: JsonObject, what: string, ext…
+    191|   const c = check(bin, doc, what, extra);
+    192|   expect(c.errors.map((e) => `${e.code} [${e.ids.join(',')}] ${e.path}…
+       |                                                                                                                          ^
+    193|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    194|   return c;
+ ❯ implicit.test.ts:59:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/21]⎯
+
+ FAIL  implicit.test.ts > AC4 #505.00692b98 implicit curves traced on an interval quadtree > AC4 #505.00692b98 y² − x³ + 2x − 1 = 0 over [−3, 3]² draws exactly two sub-paths, the oval and the branch
+AssertionError: y^2 - x^3 + 2 * x - 1 passes the check: [{"code":"bad_doc","severity":"error","ids":["curve"],"path":"items/curve/params/fn/y"}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "bad_doc [curve] items/curve/params/fn/y",
++ ]
+
+ ❯ passes helpers.ts:192:122
+    190| export function passes(bin: string, doc: JsonObject, what: string, ext…
+    191|   const c = check(bin, doc, what, extra);
+    192|   expect(c.errors.map((e) => `${e.code} [${e.ids.join(',')}] ${e.path}…
+       |                                                                                                                          ^
+    193|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    194|   return c;
+ ❯ implicit.test.ts:74:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/21]⎯
+
+ FAIL  implicit.test.ts > AC4 #505.00692b98 implicit curves traced on an interval quadtree > AC4 #505.00692b98 over [−2, 2]² a circle of radius 0.02 at (1.5, 0), smaller than a level-5 cell, is found
+AssertionError: (x - 1.5)^2 + y^2 - 0.0004 passes the check: [{"code":"bad_doc","severity":"error","ids":["curve"],"path":"items/curve/params/fn/y"}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "bad_doc [curve] items/curve/params/fn/y",
++ ]
+
+ ❯ passes helpers.ts:192:122
+    190| export function passes(bin: string, doc: JsonObject, what: string, ext…
+    191|   const c = check(bin, doc, what, extra);
+    192|   expect(c.errors.map((e) => `${e.code} [${e.ids.join(',')}] ${e.path}…
+       |                                                                                                                          ^
+    193|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    194|   return c;
+ ❯ implicit.test.ts:111:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/21]⎯
+
+ FAIL  implicit.test.ts > AC4 #505.00692b98 implicit curves traced on an interval quadtree > AC4 #505.00692b98 a planted tracer that drops cells by corner signs misses the small circle and fails
+AssertionError: (x - 1.5)^2 + y^2 - 0.0004, the planted tracer (0): geometry answers: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ fnGeometry helpers.ts:224:70
+    222| }
+    223| export function fnGeometry(answer: JsonObject, what: string): FnGeomet…
+    224|   expect(answer['ok'], `${what}: geometry answers: ${show(answer)}`).t…
+       |                                                                      ^
+    225|   const anchors: Record<string, Anchor> = {};
+    226|   if (answer['anchors'] !== undefined) {
+ ❯ helpers.ts:255:54
+ ❯ fnAt helpers.ts:255:40
+ ❯ implicit.test.ts:118:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/21]⎯
+
+ FAIL  implicit.test.ts > AC4 #505.00692b98 implicit curves traced on an interval quadtree > AC4 #505.00692b98 sin(1 ÷ (x·y)) = 0 near the origin hits the 16,384-cell cap and draws as an estimate with a notice naming its box
+AssertionError: sin(1 / (x * y)) passes the check: [{"code":"bad_doc","severity":"error","ids":["curve"],"path":"items/curve/params/fn/y"}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "bad_doc [curve] items/curve/params/fn/y",
++ ]
+
+ ❯ passes helpers.ts:192:122
+    190| export function passes(bin: string, doc: JsonObject, what: string, ext…
+    191|   const c = check(bin, doc, what, extra);
+    192|   expect(c.errors.map((e) => `${e.code} [${e.ids.join(',')}] ${e.path}…
+       |                                                                                                                          ^
+    193|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    194|   return c;
+ ❯ implicit.test.ts:125:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/21]⎯
+
+ FAIL  parabola.test.ts > AC2 #505.32c898a2 y = a·x² bound to a slider > AC2 #505.32c898a2 draws within 0.5 px of the true parabola at 1,000 checked x, and redraws in the frame the slider moves from 0.5 to 2
+AssertionError: the parabola with its slider passes the check: [{"code":"bad_doc","severity":"error","ids":["curve"],"path":"items/curve/params/fn/y"}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "bad_doc [curve] items/curve/params/fn/y",
++ ]
+
+ ❯ passes helpers.ts:192:122
+    190| export function passes(bin: string, doc: JsonObject, what: string, ext…
+    191|   const c = check(bin, doc, what, extra);
+    192|   expect(c.errors.map((e) => `${e.code} [${e.ids.join(',')}] ${e.path}…
+       |                                                                                                                          ^
+    193|   expect(c.ok, `${what}: the check answers ok`).toBe(true);
+    194|   return c;
+ ❯ parabola.test.ts:45:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/21]⎯
+
+ FAIL  parabola.test.ts > AC2 #505.32c898a2 y = a·x² bound to a slider > AC2 #505.32c898a2 with a = 2 its probe at x = 1.5 reads y = 4.5 and slope 6 within 1e-6
+AssertionError: the parabola (0): geometry answers: {"ok":false,"code":"bad_doc","issues":[{"check":"document.validate","code":"bad_doc","severity":"error","ids":["curve"],"path":"items/curve/params/fn/y","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ fnGeometry helpers.ts:224:70
+    222| }
+    223| export function fnGeometry(answer: JsonObject, what: string): FnGeomet…
+    224|   expect(answer['ok'], `${what}: geometry answers: ${show(answer)}`).t…
+       |                                                                      ^
+    225|   const anchors: Record<string, Anchor> = {};
+    226|   if (answer['anchors'] !== undefined) {
+ ❯ helpers.ts:255:54
+ ❯ fnAt helpers.ts:255:40
+ ❯ parabola.test.ts:54:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/21]⎯
+
+ FAIL  sampler.test.ts > AC3 #505.5e6d3319 a curve bounded by interval arithmetic, not by its samples > AC3 #505.5e6d3319 sin(2πx) draws its peak at x = 0.25 within 0.5 px of y = 1, and 10,000 checked x find no point more than 0.5 px off
+AssertionError: the drawn line spans x = 0.25: expected null not to be null
+ ❯ sampler.test.ts:60:55
+     58|     for (const x of [0, 0.5, 1]) near(Math.sin(2 * Math.PI * x), 0, 1e…
+     59|     const peak = drawnYAt(sineU.x(0.25), g!.subpaths);
+     60|     expect(peak, 'the drawn line spans x = 0.25').not.toBeNull();
+       |                                                       ^
+     61|     near(peak!, sineU.y(1), 0.5, 'the drawn line at x = 0.25 (u), agai…
+     62|     const trough = drawnYAt(sineU.x(0.75), g!.subpaths);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/21]⎯
+
+ FAIL  sampler.test.ts > AC3 #505.5e6d3319 a curve bounded by interval arithmetic, not by its samples > AC3 #505.5e6d3319 a planted sampler that stops once a segment's midpoint lies on the curve draws a flat line and fails
+AssertionError: sin(2πx), the planted sampler (0): geometry answers: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ fnGeometry helpers.ts:224:70
+    222| }
+    223| export function fnGeometry(answer: JsonObject, what: string): FnGeomet…
+    224|   expect(answer['ok'], `${what}: geometry answers: ${show(answer)}`).t…
+       |                                                                      ^
+    225|   const anchors: Record<string, Anchor> = {};
+    226|   if (answer['anchors'] !== undefined) {
+ ❯ helpers.ts:255:54
+ ❯ fnAt helpers.ts:255:40
+ ❯ sampler.test.ts:71:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/21]⎯
+
+ FAIL  sampler.test.ts > AC3 #505.5e6d3319 a curve bounded by interval arithmetic, not by its samples > AC3 #505.5e6d3319 sin(1/x) over [0.0001, 1] draws with a notice naming the stretch near 0, which the check report lists as an estimate, never a bound
+AssertionError: the drawing raises an estimate notice naming the curve: []: expected 0 to be greater than 0
+ ❯ sampler.test.ts:88:136
+     86|     expect(g!.subpaths.length, 'it draws').toBeGreaterThan(0);
+     87|     const drawnNotices = estimates(g!.notices, 'curve');
+     88|     expect(drawnNotices.length, `the drawing raises an estimate notice…
+       |                                                                                                                                        ^
+     89|     const stretches = drawnNotices.map((n, i) => xRangeOf(n, `the draw…
+     90|     for (const [a, b] of stretches) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/21]⎯
+
+ FAIL  sampler.test.ts > AC3 #505.5e6d3319 a curve bounded by interval arithmetic, not by its samples > AC3 #505.5e6d3319 a check that needs the curve's bound over that stretch is refused, naming the item and the range
+AssertionError: the drawing names the stretch near 0: expected undefined to be defined
+ ❯ sampler.test.ts:124:61
+    122|     const [g] = fnAt(bin, wildDoc(), 'curve', [{}], 'sin(1/x)');
+    123|     const stretch = estimates(g!.notices, 'curve').map((n, i) => xRang…
+    124|     expect(stretch, 'the drawing names the stretch near 0').toBeDefine…
+       |                                                             ^
+    125|     const refused = check(bin, wildDoc([0.0001, 1]), 'the area under s…
+    126|     const naming = refused.errors.filter((e) => e.ids.includes('curve'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/21]⎯
+
+ FAIL  taste.test.ts > AC8 #505.c8aaffce the screenshots, the recordings and the one taste call on them > AC8 #505.c8aaffce the run writes the pictures from the canvas's own frames, no other test reads them, and the recorded call on exactly those says they look right
+AssertionError: raster slider (0) draws: {"ok":false,"code":"bad_doc","issues":[{"check":"document.validate","code":"bad_doc","severity":"error","ids":["curve"],"path":"items/curve/params/fn/y","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ helpers.ts:285:74
+    283|   const answers = lines(bin, 'raster', requests.map((r, i) => ({ out: …
+    284|   return answers.map((answer, i) => {
+    285|     expect(answer['ok'], `raster ${name} (${i}) draws: ${show(answer)}…
+       |                                                                          ^
+    286|     return { out: outs[i]!, answer };
+    287|   });
+ ❯ rasterAt helpers.ts:284:18
+ ❯ pngs taste.test.ts:46:87
+ ❯ taste.test.ts:50:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/21]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  21 failed (21)
+   Start at  16:41:26
+   Duration  25.16s (tests 99%)
+
+exit 1

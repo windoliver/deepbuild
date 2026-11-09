@@ -1,0 +1,15 @@
+{
+  "format": "chrome@1",
+  "window": [760, 520],
+  "scale": 2,
+  "background": [250, 250, 252],
+  "nodes": [
+    { "id": "page", "rect": [0, 0, 760, 520], "fill": { "gradient": [[250, 210, 120], [90, 120, 220]] } },
+    { "id": "words", "rect": [100, 200, 560, 60], "text": { "content": "What the backdrop reads", "size": 40, "color": [16, 16, 24] } },
+    {
+      "id": "measured", "rect": [80, 60, 600, 400],
+      "backdrop": { "scale": 1 },
+      "effect": { "operator": "frost@1", "params": { "sigma": 0, "tint": [16, 16, 16, 16] }, "place": "over" }
+    }
+  ]
+}
