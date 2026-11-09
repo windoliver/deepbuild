@@ -1,0 +1,74 @@
+#1459 at the base: commit dd83ac2f with this folder added, nothing else, on a Mac at load 20 to 115, Node 24.22.0 (fnm),
+outside the Bash tool's sandbox. probe access printed {"screen":true,"ax":true}: this run had Accessibility and Screen Recording,
+so the real-window tests reached the real app.
+
+  caffeinate -di node node_modules/vitest/vitest.mjs run --root tests/acceptance/1459 --no-file-parallelism --reporter=verbose
+
+15 failed, 15 passed (30 tests, 10 files), 1448 s, most of it cargo builds (#1172's world builds deep-app, deep-show, deep-hook).
+Every failure is for the expected reason; none was BLOCKED.
+
+Failed for the expected reason (15):
+- AC1 ids: "the row for ask:01KB1459AK0000000000000001 ("Which header colour on the login page?") carries no id", the same for the
+  other three ask rows and the four session rows. The base's snapshot node has no `id`, the issue's complaint.
+- AC1 wrong program: "crates/deep-app/Cargo.toml has no feature plant-row-index-ids (README, Pinned 9)". The plant is missing, named.
+- AC2: "{handle: "ask:01KB1459AK0000000000000001"} found no row: locate.none", for each of the four asks. The issue's "`{handle}`
+  now finds nothing", seen on the real deep-drive.
+- AC3 stored journey: "ask:01KB1459AK0000000000000001's row carries an id: … expected false to be true". It stopped there, before
+  playing the journey. The rewording itself reached the screen (the asserts before it passed).
+- AC3 the journey's words and the lint: "deep-replica: unknown argument --journey-lint". The pinned lint is missing. The no-visible-word
+  half before it passed: the base draws no handle.
+- AC3 wrong programs: "unknown argument --journey-lint", for by-word.json first. The lint is missing, so neither planted journey has
+  been seen failing it.
+- AC4 good view and AC4 wrong program: "deep-replica: unknown argument --view-kit". The pinned kit run is missing; neither view has run
+  through needs-you@1.
+- AC5: the real app's window, read off its pixels, says "Panel got no asks: Error: 'deepbuild.needs_you': no fixture record is
+  loaded; the host sets one before a panel draws", beside "3 asks need you" in the sidebar. The issue's own failure, on the real app.
+- AC6 known failures: scripts/known-failures.json still holds "cargo -p deep-replica --test headless › replica_equals_live_tree".
+- AC6 replica beside live: "needs-you: 54 of 54 nodes in the replica carry no id key", the same in the fresh live capture and the
+  stored live tree, for sidebar (14) and session (16) too, and each Needs you row's id "undefined, not its ask's handle". No
+  "differ" line: the fresh replica and the fresh deep-live capture were equal on every other field, on all three pages.
+- AC7: "the replica's row for ask:… ("Which header colour on the login page?") carries an id: expected false to be true". It stopped
+  at the snapshot's missing id, before launching the real app, so the real app's AXIdentifier was not read at the base.
+- AC8: "the chart's readout "3" (session-readout) is drawn but no node where it's drawn names or values it". The caption half passed
+  at the base (only the hand-written label names it).
+- AC8 wrong program and AC9 wrong program: "crates/deep-app/Cargo.toml has no feature plant-chart-label-beside" and "… plant-row-title-only".
+
+Passed at the base, on purpose (15):
+- judges.test.ts, 11 tests: made-up snapshots and readings, no app and no criterion tag.
+- AC9 replica half: the base reads each sidebar row as fixtures/voiceover-before.json says, since that file is the base's own reading.
+- AC9 real app: on #1172's world the real window's AXButtons read "<glyph> Cart totals · needs you" and "… Release notes · needs you";
+  the base passes a no-regression criterion. This also shows probe.swift's tree read and RealApp work on the real app.
+- AC6 cargo run: "test replica_equals_live_tree ... ok" at dd83ac2f on this Mac (also run alone before the suite, same result). The
+  known failure, added on 772f5482, no longer fails here; the criterion's second half is what fails.
+- AC2 wrong program: #1172's plant-handle-rows exists at the base, and the judge names ask:01KB1459AK0000000000000001 on it.
+
+Not seen at the base, so drafted, not tried:
+- the lint's and the view kit's pass sides and fail sides (no surface at the base);
+- the three new plants;
+- the real app's AXIdentifier read (AC7 stopped before it) and the panel showing the hub's asks (AC5's pass side);
+- the stored journey played to its close (AC3 stopped at the missing id).
+
+tsc -p tests/acceptance/1459/tsconfig.json: clean.
+
+Raw results, one line each:
+
+ ✓ judges     11 tests
+ × journey    AC3 the stored journey passes on the fixture and … reworded …                  row carries an id: expected false to be true
+ × journey    AC3 the stored journey's locators hold no word … and the lint passes it        unknown argument --journey-lint
+ × journey    AC3 wrong programs: … each fail the lint, naming the word                      unknown argument --journey-lint
+ ✓ parity     AC6 cargo's replica_equals_live_tree runs and passes
+ × parity     AC6 scripts/known-failures.json names replica_equals_live_tree nowhere         one entry still names it
+ × parity     AC6 each shipped page … equals the live capture … ids …                        no node carries an id key
+ ✓ voiceover  AC9 in the replica's tree, each sidebar row still reads … as before
+ × voiceover  AC9 wrong program: plant-row-title-only                                        no feature plant-row-title-only
+ ✓ voiceover  AC9 in the real app, what VoiceOver reads … as before                           (1142 s, with the builds)
+ × handle     AC2 each open ask's {handle} finds exactly its row …                           locate.none for each ask
+ ✓ handle     AC2 wrong program: plant-handle-rows fails, naming the ask
+ × identifier AC7 each Needs you row's accessibilityIdentifier … equals … id                 the snapshot's row carries no id
+ × kit        AC4 a view keying each row by its ask … passes needs-you@1                      unknown argument --view-kit
+ × kit        AC4 wrong program: … hiding the oldest open ask fails …                        unknown argument --view-kit
+ × panel      AC5 in the real app, the panel reads the hub's three open asks …               no fixture record is loaded
+ × ids        AC1 every row carries an id … keeps its id                                     8 rows carry no id
+ × ids        AC1 wrong program: plant-row-index-ids                                         no feature plant-row-index-ids
+ × chart      AC8 … readout is named where it's drawn and its caption is named once         readout "3" in no node
+ × chart      AC8 wrong program: plant-chart-label-beside                                    no feature plant-chart-label-beside

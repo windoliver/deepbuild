@@ -1,0 +1,7 @@
+[
+  { "call": "launch", "launch": { "from": "fixture", "fixture": "$FIXTURE", "center": "deepbuild/needs-you" } },
+  { "call": "expect", "locator": { "id": "ask:01KB1459AK0000000000000002" }, "expect": { "name": "row 2 shows", "assert": "visible" } },
+  { "call": "act", "locator": { "id": "ask:01KB1459AK0000000000000002" }, "act": { "kind": "click" } },
+  { "call": "expect", "locator": { "id": "ask:01KB1459AK0000000000000003" }, "expect": { "name": "row 3 is one row", "assert": "count", "count": 1 } },
+  { "call": "close" }
+]
