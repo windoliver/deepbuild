@@ -244,6 +244,9 @@ alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests
 alone.push('tests/acceptance/532/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
+// #190's files build deep-logic here, at the merge base and for Linux x86_64 in Docker, start headless Chrome, and read
+// CPU and wall times.
+alone.push('tests/acceptance/190/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
