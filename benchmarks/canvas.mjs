@@ -668,18 +668,49 @@ workloads['scene-read'] = async () => {
     tokenizer: { adapter: 'codex', name: pinned.name, version: pinned.version }, runs: measured }));
 };
 
-// Idle: a still board held in a window for 60 s of the real clock, its frames, wakeups and CPU read from the process
-// that draws it. The warm-up run holds it 5 s.
+// Idle (#854, #1551): the still board held in the app's real, shown window (`deep-show live`) for 60 s of the real
+// clock from the moment it settles: the frames it presented, the request-frame callbacks its display link ran, the
+// process's wakeups and CPU over that minute, and whether the window was shown throughout. The warm-up run holds it
+// 5 s. `--planted arms_each_vsync` passes deep-show's clock that arms a frame each vsync once settled.
+const stillAsAgent = (doc) => {
+  const sent = structuredClone(doc);
+  delete sent.id;
+  delete sent.layers;
+  for (const item of Object.values(sent.items)) delete item.layer;
+  return sent;
+};
 workloads.idle = () => {
-  const fingerprint = release('deep-marks-render', 'deep-canvas-render');
+  const fingerprint = release('deep-show', 'deep-show');
   const fixture = join('benchmarks', 'canvas', 'still.json');
-  const doc = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
-  const look = { light: { ground: [250, 250, 248], ink: [28, 28, 30], muted: [120, 120, 128], accent: [40, 90, 200] } };
+  const document = stillAsAgent(JSON.parse(readFileSync(join(root, fixture), 'utf8')));
+  const [w, h] = document.size;
   const measured = runs((warm) => {
-    const answer = once('deep-canvas-render', ['idle'], { doc, look, view: { zoom: 1, theme: 'light' }, seconds: warm ? 5 : 60, ...(planted() ? { planted: planted() } : {}) });
-    if (answer.ok !== true) throw Error(`deep-canvas-render idle answered ${JSON.stringify(answer).slice(0, 1500)}`);
-    const { ok: _, ...run } = answer;
-    return run;
+    const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+    try {
+      const answer = once('deep-show', ['live'], {
+        evidence, sessions: { s1: { thread: 'thread-a', name: 'agent-a', process: { pid: 4100, start: 1000 } } },
+        processes: [{ pid: 1, ppid: 0, start: 0 }, { pid: 4100, ppid: 1, start: 1000 }],
+        panels: { main: { rect: [0, 0, w, h] } }, docs: { still: { panel: 'main' } }, window: [w, h + 40],
+        clock: { refresh_hz: 60, lead: 0, check: 0 }, calls: [{ call: 'deep_show', session: 's1', doc: 'still', document, at: 0 }],
+        live: { watch_from: 'settled', watch_ms: (warm ? 5 : 60) * 1000 }, ...(planted() ? { planted: planted() } : {}),
+      });
+      const spent = (p) => ({ seconds: p.seconds, wakeups: p.wakeups, interrupt_wakeups: p.interrupt_wakeups, cpu_ms: p.cpu_ms,
+        cpu_fraction: p.cpu_ms / (p.seconds * 1000), energy: p.energy });
+      // A window AppKit never showed (covered, hidden, a sleeping display or a locked screen) is read as that: what it
+      // and the process did while deep-show waited for a first frame, with no frame drawn.
+      if (answer.code === 'no_display' && answer.window && answer.process) {
+        return { opened_frames: 0, frames: 0, drawn: [], ...spent(answer.process), request_frames: answer.request_frames, window: answer.window };
+      }
+      if (answer.ok !== true || !answer.live?.process) throw Error(`deep-show live answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const { frames, process: p, request_frames, window } = answer.live;
+      return {
+        opened_frames: 1, frames: frames.length,
+        drawn: frames.map((f) => ({ frame: f.frame_seq, at_ms: Math.max(0, (f.presented_ns - p.from_ns) / 1e6) })),
+        ...spent(p), request_frames, window,
+      };
+    } finally {
+      rmSync(evidence, { recursive: true, force: true });
+    }
   });
   console.log(JSON.stringify({ task: 'canvas-idle', fingerprint, fixture, seconds: 60, runs: measured }));
 };
@@ -894,6 +925,14 @@ const named = {
   },
 };
 
+/** The window each canvas-idle run held (#1551): PASS only when all five runs say it was shown throughout. */
+function shownWindow(runs) {
+  const states = runs.map((r) => r.window?.state ?? 'headless');
+  const off = states.map((state, i) => `run ${i + 1}: ${state}`).filter((_, i) => states[i] !== 'shown');
+  if (states.length !== RUNS) off.push(`${states.length} runs, not ${RUNS}`);
+  return off.length ? { status: 'INCONCLUSIVE', runs: states, reason: off.join(', ') } : { status: 'PASS', runs: states };
+}
+
 function judgeEfficiency(current) {
   const task = current.task;
   const profile = current.fingerprint?.build?.profile ?? null;
@@ -930,9 +969,15 @@ function judgeEfficiency(current) {
     }
     judged[name] = verdict;
   }
-  const statuses = Object.values(judged).map((v) => v.status);
-  const status = ['FAIL', 'BLOCKED', 'INCONCLUSIVE'].find((s) => statuses.includes(s)) ?? 'PASS';
-  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(task === 'canvas-idle' ? { energy: energyReading(current.runs ?? []) } : {}),
+  // #1551: canvas-idle holds a shown window; a run hidden, covered, on a sleeping display or headless can't pass.
+  const window = task === 'canvas-idle' ? shownWindow(current.runs ?? []) : null;
+  if (window?.reason) reasons.push(`window: ${window.reason}`);
+  const statuses = [...Object.values(judged), ...(window ? [window] : [])].map((v) => v.status);
+  let status = ['FAIL', 'BLOCKED', 'INCONCLUSIVE'].find((s) => statuses.includes(s)) ?? 'PASS';
+  // A window that wasn't shown leaves its run's readings saying nothing of a shown window: short of a FAIL, that is
+  // INCONCLUSIVE, never PASS and never BLOCKED by the readings it couldn't make.
+  if (window && window.status !== 'PASS' && status !== 'FAIL') status = 'INCONCLUSIVE';
+  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(window ? { window } : {}), ...(task === 'canvas-idle' ? { energy: energyReading(current.runs ?? []) } : {}),
     ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
 }
 
