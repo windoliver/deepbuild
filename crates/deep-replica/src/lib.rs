@@ -102,6 +102,8 @@ pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
                 }) = Some(n);
             }
             "--view" => view = args.next(),
+            // #1546: deep-live's watch of the real window on your hub, which it reads itself.
+            "--watch" if !replica => {}
             // #1002: the app's first screen as a launch shows it for this HOME, over its own record, not the fixture.
             "--first-screen" => view = Some(FIRST_SCREEN.to_owned()),
             "--out" => path = args.next().map(PathBuf::from),

@@ -7,8 +7,8 @@ The replica (#338): a headless copy of the app on GPUI's virtual clock that chec
 ## Where new code goes
 
 - `src/replica.rs`: the app headless as paired devices (#326) and the question card (#327). `src/shell.rs`, `src/snapshot.rs` and `src/kit.rs`: opening the shell, the text snapshot and the Needs you and notifier kits.
-- `src/drive/`: deep_drive's locators and hit test, drawn-glyph reading, planted guards, the UI check (`check.rs`), and the motion recording and check (`motion.rs`, #1427), which reads each element's painted bounds and opacity through the vendored GPUI patch `window/painted.rs`.
-- One binary root per `[[bin]]` in `Cargo.toml`: `src/main.rs`, `src/live.rs`, `src/deep_drive.rs`, `src/canvas.rs`.
+- `src/drive/`: deep_drive's locators and hit test, drawn-glyph reading, planted guards, the UI check (`check.rs`), and the motion recording and check (`motion.rs`, #1427), which reads each element's painted bounds and opacity through the vendored GPUI patch `window/painted.rs`, and the replica that draws only the frames a real window would (`frames.rs`, #1546: `launch.frames: "dirty"`, `feed`, `resize`), through the GPUI patch `headless_app_context/request_frame.rs`.
+- One binary root per `[[bin]]` in `Cargo.toml`: `src/main.rs`, `src/live.rs` (with `--watch`, #1546: the real window on your hub, a line per frame it draws), `src/deep_drive.rs`, `src/canvas.rs`.
 - Tests: `headless.rs` and `card_size.rs` at the crate root; `tests/drive.rs` drives `deep-drive`; blind acceptance suites stay in tests/acceptance/326 and 327.
 - App views and state belong in deep-app; the replica only drives and reads them.
 - A view draws the same tree here as in the app (#1454): a fixture supplies the record and the virtual clock, and nothing else. `deep-replica --window <w>x<h>` opens another size, such as the app's `960x640`, and `--panel-kit <dir>` runs `panel@1` for `deep install`.

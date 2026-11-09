@@ -220,6 +220,11 @@ timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 
+// #1546's files build deep-drive and start replicas; its live file opens the real window on a real hub, by hand.
+alone.push('tests/acceptance/1546/');
+byHand.push('tests/acceptance/1546/ac4-needs-you.live.test.ts');
+timed.push('tests/acceptance/1546/ac4-needs-you.live.test.ts');
+
 // #1348's suite runs the plain words lane, which builds and draws its fixture run in the replica: one file at a time.
 alone.push('tests/acceptance/1348/');
 
