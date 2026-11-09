@@ -112,6 +112,7 @@ export function filmDoc(asset: string): JsonObject {
   return {
     format: 1, profile: 'film', title: 'Recording with its sound',
     description: "A screen recording shown as an image that plays its frames, its sound a strip of the same asset on the same start, in and rate.",
+    requires: { modules: { media: '^1' } },
     size: [640, 360], transport: { frame_rate: [30, 1], span: '10s' },
     assets: { 'rec.mp4': { sha256: asset, license: 'CC0-1.0' } },
     layers: { main: { writer: `agent:${THREAD}`, title: 'Claude Code: recording edit', order: 'a0' } },
