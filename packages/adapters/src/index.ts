@@ -83,7 +83,7 @@ export function registry(): AdapterRegistry {
       if (name === 'deep') throw refuse('enum', '/name', name, "deep is the hub's own writer; register the adapter under its agent's name.");
       if (adapters.has(name)) throw refuse('enum', '/name', name, 'One adapter fills a name once; register the second under another name.');
       if (!isObject(adapter) || !('facts' in adapter)) throw refuse('required', '/facts', undefined, 'Give the adapter its adapter.facts@1 data.');
-      const failed = held(isObject(adapter.facts) && (adapter.facts.schema === 'adapter.facts@2' || adapter.facts.schema === 'adapter.facts@3' || adapter.facts.schema === 'adapter.facts@4') ? adapter.facts.schema : 'adapter.facts@1', adapter.facts, '/facts') ?? held('adapter.caps@1', adapter.caps, '/caps') ?? held('adapter.unsupported@1', adapter.unsupported, '/unsupported');
+      const failed = held(isObject(adapter.facts) && (adapter.facts.schema === 'adapter.facts@2' || adapter.facts.schema === 'adapter.facts@3' || adapter.facts.schema === 'adapter.facts@4' || adapter.facts.schema === 'adapter.facts@5') ? adapter.facts.schema : 'adapter.facts@1', adapter.facts, '/facts') ?? held('adapter.caps@1', adapter.caps, '/caps') ?? held('adapter.unsupported@1', adapter.unsupported, '/unsupported');
       if (failed) throw failed;
       if (typeof adapter.doctor !== 'function') throw refuse('required', '/doctor', undefined, 'Give the adapter a doctor() that lists its checks, each ok, warn, fail or skip.');
       if (typeof adapter.mapHook !== 'function') throw refuse('required', '/mapHook', undefined, 'Give the adapter a mapHook(); factsAdapter() builds one from its facts.');
@@ -111,8 +111,15 @@ export function registry(): AdapterRegistry {
   };
 }
 
-const ROOT = new URL('../../../', import.meta.url);
-const readFacts = (file: string): JsonValue => JSON.parse(readFileSync(new URL(`adapters/${file}`, ROOT), 'utf8')) as JsonValue;
+const FACTS = new URL('../../../adapters/', import.meta.url);
+/**
+ * A shipped facts file by its name in the repo's adapters/ folder, such as `codex.facts.json` or `loops.facts.json`.
+ * Every package reads the agents' facts through here, so one place decides where they live (tests/facts-entry.test.mjs).
+ */
+export function readFacts<T = JsonValue>(file: string): T {
+  if (!/^[a-z][a-z0-9-]*(?:\.facts)?\.json$/.test(file)) throw Error(`${JSON.stringify(file)} is not a facts file in adapters/`);
+  return JSON.parse(readFileSync(new URL(file, FACTS), 'utf8')) as T;
+}
 
 /** The shipped adapters, each its facts file plus the parts that aren't data, named by the facts' agent field. */
 export function shipped(): AdapterRegistry {

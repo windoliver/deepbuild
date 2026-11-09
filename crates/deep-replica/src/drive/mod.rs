@@ -15,6 +15,7 @@
 mod check;
 pub mod glyphs;
 mod locate;
+mod motion;
 mod plant;
 
 use std::{
@@ -118,6 +119,7 @@ impl Drive {
                 })
             }
             ("ui_check", None) => check::run(self, &call["ui_check"]),
+            ("motion_check", None) => motion::run(self, &call["motion_check"]),
             (_, None) => Err(fail("refused", "no replica runs here: launch one first")),
             (_, Some(replica)) if call["replica"].as_str().is_some_and(|r| r != replica.id) => {
                 Err(fail(
@@ -195,6 +197,11 @@ struct Replica {
     evidence: Vec<Value>,
     trace: Vec<Value>,
     notified: Vec<Value>,
+    /// Issue #1427: the motion recording while one runs, the launch's reduced motion, and the panel's script view,
+    /// whose declared transitions and springs a recording lists.
+    motion: Option<motion::Recorder>,
+    reduced: bool,
+    script: Option<Entity<gpui_shell::ScriptView>>,
 }
 
 impl Replica {
@@ -411,8 +418,8 @@ impl Replica {
                     .map(|r| renderer_glyphs.renderer(r)))
             },
         );
-        let mounted: Rc<RefCell<Result<Option<Rc<gpui_shell::ShellRuntime>>, String>>> =
-            Rc::new(RefCell::new(Ok(None)));
+        type Mounted = Option<(Rc<gpui_shell::ShellRuntime>, Entity<gpui_shell::ScriptView>)>;
+        let mounted: Rc<RefCell<Result<Mounted, String>>> = Rc::new(RefCell::new(Ok(None)));
         let reduced = args["reduced_motion"].as_bool().unwrap_or(false);
         let window = cx.update(|cx| {
             gpui_kit::init(cx);
@@ -469,8 +476,8 @@ impl Replica {
                             runtime.map_err(|e| e.to_string()).and_then(|runtime| {
                                 let view = deep_app::mount_panel(&runtime, &dir, window, cx)
                                     .map_err(|e| e.to_string())?;
-                                deep_app::views::place_extension(view.into());
-                                Ok(Some(runtime))
+                                deep_app::views::place_extension(view.clone().into());
+                                Ok(Some((runtime, view)))
                             });
                     }
                     None => deep_app::views::place_extension(deep_app::views::shipped(
@@ -494,10 +501,11 @@ impl Replica {
             }
             window
         });
-        let runtime = mounted
+        let (runtime, script) = mounted
             .borrow_mut()
             .clone()
-            .map_err(|e| fail("refused", format!("the panel didn't load: {e}")))?;
+            .map_err(|e| fail("refused", format!("the panel didn't load: {e}")))?
+            .unzip();
         // GPUI's test window reports 2x; the window itself lays out and paints at the scale it's set to, and the
         // renderer sizes its images to match.
         glyphs.draw_at(scale);
@@ -535,6 +543,9 @@ impl Replica {
             evidence: Vec::new(),
             trace: Vec::new(),
             notified: Vec::new(),
+            motion: None,
+            reduced,
+            script,
         };
         replica.draw();
         replica.draw();
@@ -561,11 +572,12 @@ impl Replica {
             "probe" => self.probe(call),
             "screenshot" => self.screenshot(&call["screenshot"]),
             "record" => self.record(&call["record"]),
+            "motion" => self.motion(&call["motion"]),
             "expect" => self.expect(call, index),
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, expect, close and ui_check"),
+                format!("{other:?} is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, motion, expect, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();
@@ -594,9 +606,14 @@ impl Replica {
 
     fn draw(&mut self) {
         let glyphs = self.glyphs.clone();
+        let recording = self.motion.is_some();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
             // A frame redraws every view, so the canvas items it lists are this frame's alone.
             deep_app::canvas::clear_items();
+            // While motion is recorded every view paints each step, cached or not, so each is sampled.
+            if recording {
+                window.refresh();
+            }
             window.render_frame(cx);
             glyphs.keep_scene(window);
         });
@@ -611,6 +628,7 @@ impl Replica {
                 *wall = Instant::now();
                 took
             }
+            None if self.motion.is_some() => motion::STEP,
             None => FRAME,
         };
         let before = nanos(self.clock.t);
@@ -618,7 +636,11 @@ impl Replica {
         self.cx
             .advance_clock(Duration::from_nanos(nanos(self.clock.t) - before));
         self.cx.run_until_parked();
-        self.draw();
+        if self.motion.is_some() {
+            self.sample();
+        } else {
+            self.draw();
+        }
         self.notify();
         self.take_frames();
     }
@@ -752,6 +774,7 @@ impl Replica {
             }
         }
         let when = self.clock.t;
+        self.input_at(when);
         match kind.as_str() {
             "click" | "double_click" => {
                 let count = if kind == "click" { 1 } else { 2 };

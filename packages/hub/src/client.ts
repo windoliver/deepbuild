@@ -1,15 +1,37 @@
 // The deep commands' side of the hub's socket: one call as the cli role, presenting the control token and, for a
 // call the peer check judges, naming this process as the peer, so the hub can tell whether an agent's process tree
 // runs the command.
+import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import net from 'node:net';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { checkCompat, type Hello } from './compat.js';
+import { refusedGeneration, StaleHub } from './generations.js';
 import { CONTRACT, startOf, type Refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
 /** The hub's answer to one call: its result, or its refusal. */
 export type Reply = { result: Obj } | { error: Refusal };
+
+/**
+ * polkit prompts the process it's asked about (confirm.ts), so on Linux, at a terminal, this process holds an agent of
+ * its own while `work` runs, and the password prompt comes here. With no terminal there is no agent: polkit refuses,
+ * and what needed you doesn't count.
+ */
+export async function withPrompt<T>(work: () => Promise<T>): Promise<T> {
+  if (process.platform !== 'linux' || !process.stdin.isTTY) return work();
+  const agent = spawn('/usr/bin/pkttyagent', ['--process', String(process.pid), '--notify-fd', '3', '--fallback'], { stdio: ['inherit', 'inherit', 'inherit', 'pipe'] });
+  // It closes its fourth descriptor once registered, and the descriptor goes with it if it can't register.
+  await new Promise<void>((ready) => {
+    agent.once('error', () => ready());
+    (agent.stdio[3] as NodeJS.ReadableStream | undefined)?.on('error', () => undefined).once('close', () => ready()).resume();
+  });
+  try {
+    return await work();
+  } finally {
+    agent.kill();
+  }
+}
 
 /** One call on the hub's socket with the cli role; rejects only when the hub can't be reached or doesn't answer. */
 export async function call(socket: string, token: string, method: string, params: Obj, peer?: { pid: number; start: string }): Promise<Reply> {
@@ -40,6 +62,12 @@ export async function call(socket: string, token: string, method: string, params
             sock.destroy();
             return reject(Error(compat.screen));
           }
+          // A hub older than one this client has seen is a copy left behind (#1338): nothing is sent to it.
+          const stale = refusedGeneration(typeof reply.hub === 'string' ? reply.hub : `unix:${socket}`, reply.generation);
+          if (stale) {
+            sock.destroy();
+            return reject(new StaleHub(stale));
+          }
           sock.write(`${JSON.stringify({ v: 1, hello: 'cli', token, ...(peer ? { peer } : {}) })}\n`);
         } else if (reply.role !== undefined) {
           sock.write(`${JSON.stringify({ v: 1, id: 1, method, params })}\n`);
@@ -64,7 +92,8 @@ export async function callAsYou(method: string, params: Obj, nothing: string): P
   let reply: Reply;
   try {
     const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    reply = await call(hubAddress().path, token, method, params, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+    const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
+    reply = await withPrompt(() => call(hubAddress().path, token, method, params, peer));
   } catch (error) {
     process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}; ${nothing}\n`);
     return 3;
