@@ -1,0 +1,21 @@
+# 1. Bake 20 steps with a saves folder: the game asks for slot 1 at the ends of steps 9 and 19; the process then exits.
+$ echo '{"call":"bake","piece":"…","track":[],"steps":20,"saves_dir":"<work>/saves"}' | deep-logic
+saves: [{"slot":1,"step":10,"hash":"a376b741d2fae5a0cf35eae9defb6dea19be054b9c8b1d2af0a60bd6d650d362","deep_hash":{"game":"ac7519fc3301ba12"},"write_ns":136354193},{"slot":1,"step":20,"hash":"a2cc9c3c0672b2f69574ca3547c8b55a6a5ac971845216fb7fc569f5a5de24f7","deep_hash":{"game":"dd75c7dcb7523a5c"},"write_ns":308854684}]
+checkpoints: {"game":[{"step":0,"deep_hash":"c5743dc9f5dc0c90"},{"step":5,"deep_hash":"f57aa07c49a020da"},{"step":10,"deep_hash":"ac7519fc3301ba12"},{"step":15,"deep_hash":"5397404fa357f5f8"},{"step":20,"deep_hash":"dd75c7dcb7523a5c"}]}
+$ ls saves  →  a2cc9c3c0672b2f69574ca3547c8b55a6a5ac971845216fb7fc569f5a5de24f7.save a376b741d2fae5a0cf35eae9defb6dea19be054b9c8b1d2af0a60bd6d650d362.save
+$ head -1 saves/a2cc9c3c0672b2f69574ca3547c8b55a6a5ac971845216fb7fc569f5a5de24f7.save  →  {"slot":1,"layout":"2e2a5e3d5b8e1ed868cbea5d9e6e72f840bfb78f6cde2d1b5bf50e53f472d0ea","content":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","modules":"c019da91ede103d8f55a69117e67b5fcdd4a17b69b7da11f13effdde66e52723","runtime":"277f639a96ca008fd18cbb94db1956722911edd748b90957decfdd73cd9d9d0f","document":"006d185e9f0a939108ad6ebc5574e1653ce94c276846af500a0aafa5cdac2e10","program":"13cead221340c6aac80e70f0105eaef5834a0bb35570379875fdcea9daa4a941","step":20,"input_at":{"game":{}},"track":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","ended":false,"fingerprint":null,"segments":[],"seq":2}
+# The never-quit run, 30 steps:
+$ echo '{"call":"bake","piece":"…","track":[],"steps":30}' | deep-logic
+checkpoints: {"game":[{"step":0,"deep_hash":"c5743dc9f5dc0c90"},{"step":5,"deep_hash":"f57aa07c49a020da"},{"step":10,"deep_hash":"ac7519fc3301ba12"},{"step":15,"deep_hash":"5397404fa357f5f8"},{"step":20,"deep_hash":"dd75c7dcb7523a5c"},{"step":25,"deep_hash":"2bb75d6106586610"},{"step":30,"deep_hash":"b918262bcb0a339e"}]}
+# 2. A new process opens slot 1 and plays on to step 30: its checkpoints should equal the never-quit run's from 20.
+$ echo '{"call":"open_save","piece":"…","saves_dir":"<work>/saves","slot":1,"track":[],"steps":30}' | deep-logic
+{"ok":true,"opened":{"hash":"a2cc9c3c0672b2f69574ca3547c8b55a6a5ac971845216fb7fc569f5a5de24f7","step":20,"via":"straight"},"damaged":[],"deep_hash":{"game":"dd75c7dcb7523a5c"},"checkpoints":{"game":[{"step":20,"deep_hash":"dd75c7dcb7523a5c"},{"step":25,"deep_hash":"2bb75d6106586610"},{"step":30,"deep_hash":"b918262bcb0a339e"}]},"traps":[],"saves":[],"frames":[]}
+opened run's checkpoints equal the never-quit run's from step 20: true
+# 3. Cut the newest save short by one byte and open the slot again: it should be named damaged, and the save at step 10 opens.
+$ echo '{"call":"open_save","piece":"…","saves_dir":"<work>/saves","slot":1,"track":[],"steps":15}' | deep-logic
+{"ok":true,"opened":{"hash":"a376b741d2fae5a0cf35eae9defb6dea19be054b9c8b1d2af0a60bd6d650d362","step":10,"via":"straight"},"damaged":[{"hash":"a2cc9c3c0672b2f69574ca3547c8b55a6a5ac971845216fb7fc569f5a5de24f7"}],"deep_hash":{"game":"ac7519fc3301ba12"},"checkpoints":{"game":[{"step":10,"deep_hash":"ac7519fc3301ba12"},{"step":15,"deep_hash":"5397404fa357f5f8"}]},"traps":[],"saves":[],"frames":[]}
+opened at the deep hash recorded at step 10: true
+# 4. Change the program (one nop) and open with no migration: refused, naming both program hashes.
+$ echo '{"call":"open_save","piece":"…","saves_dir":"<work>/saves","slot":1,"track":[],"steps":15}' | deep-logic
+{"ok":false,"code":"save_refused","save":"a376b741d2fae5a0cf35eae9defb6dea19be054b9c8b1d2af0a60bd6d650d362","damaged":[{"hash":"a2cc9c3c0672b2f69574ca3547c8b55a6a5ac971845216fb7fc569f5a5de24f7"}],"differs":[{"what":"layout","save":"2e2a5e3d5b8e1ed868cbea5d9e6e72f840bfb78f6cde2d1b5bf50e53f472d0ea","piece":"b34d274a31426a0df0185956b0f73f06bfb4125102780fa6b449b750e4643ea9"}]}
+old program 2e2a5e3d5b8e1ed868cbea5d9e6e72f840bfb78f6cde2d1b5bf50e53f472d0ea, new program b34d274a31426a0df0185956b0f73f06bfb4125102780fa6b449b750e4643ea9

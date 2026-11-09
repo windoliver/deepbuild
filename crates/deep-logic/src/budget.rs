@@ -69,6 +69,7 @@ fn frame_ns(base: &Item, n: usize, frames: i64) -> f64 {
         controls: Default::default(),
         tour: None,
         items,
+        document: String::new(),
     });
     let mut rec = Record::default();
     let mut w = World::new(
@@ -109,6 +110,7 @@ pub fn app() -> &'static Host {
             controls: Default::default(),
             tour: None,
             items: vec![burn.clone()],
+            document: String::new(),
         });
         World::new(
             p,
