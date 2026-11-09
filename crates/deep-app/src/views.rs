@@ -10,7 +10,7 @@
 //! accessibility tree a screen reader sees and the observed elements a replica reads back are
 //! the same set of nodes.
 
-use std::{cell::Cell, cell::RefCell, rc::Rc, sync::mpsc::TryRecvError, sync::Arc, time::Duration};
+use std::{cell::Cell, cell::RefCell, sync::mpsc::TryRecvError, sync::Arc, time::Duration};
 
 use gpui_kit::base::dock::{
     register_panel, DockArea, DockAreaState, DockPlacement, DockState, Panel, PanelEvent,
@@ -23,8 +23,7 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 use serde_json::json;
 
 use crate::{
-    bound, brand, canvas, cells, chrome, events::Inbox, show::CanvasPanel, states,
-    states::READINGS, text,
+    bound, brand, canvas, cells, chrome, show::CanvasPanel, states, states::READINGS, text,
 };
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
@@ -69,32 +68,36 @@ const DIFF_WIDTH: f32 = 1060.;
 /// The most lines a sidebar row's problem draws under it (#1348): its one plain line, or a planted trace's.
 const PROBLEM_LINES: usize = 16;
 
-/// What a replica's fixture panels read through `deepbuild.needs_you`, and its virtual clock: the inbox projection at
+/// In no shipped build (#1457). What a replica's fixture panels read through `deepbuild.needs_you`, and its virtual clock: the inbox projection at
 /// a log position. The replica, the live capture and the registry checks set it before opening the shell. No view
 /// reads it: every view draws the record through the one reader, with the same tree in the app and in a replica
 /// (#1454). `held` stays here alone because the hub records no event for a hold yet.
 #[derive(Clone, Debug)]
+#[cfg(feature = "fixtures")]
 pub struct AppState {
-    pub inbox: Inbox,
+    pub inbox: crate::events::Inbox,
     pub now: u64,
     pub sessions: Vec<String>,
     pub held: Option<String>,
 }
 
+#[cfg(feature = "fixtures")]
 thread_local! {
-    static STATE: RefCell<Option<Rc<AppState>>> = const { RefCell::new(None) };
+    static STATE: RefCell<Option<std::rc::Rc<AppState>>> = const { RefCell::new(None) };
     /// The virtual clock, where one runs (a replica).
     static CLOCK: Cell<Option<u64>> = const { Cell::new(None) };
 }
 
 /// A replica's state and clock. Its record stands for a machine that's set up, whatever this HOME holds.
+#[cfg(feature = "fixtures")]
 pub fn set_state(state: AppState) {
     CLOCK.with(|clock| clock.set(Some(state.now)));
     crate::setup::assume_finished();
-    STATE.with(|cell| *cell.borrow_mut() = Some(Rc::new(state)));
+    STATE.with(|cell| *cell.borrow_mut() = Some(std::rc::Rc::new(state)));
 }
 
-pub fn current_state() -> Option<Rc<AppState>> {
+#[cfg(feature = "fixtures")]
+pub fn current_state() -> Option<std::rc::Rc<AppState>> {
     STATE.with(|cell| cell.borrow().clone())
 }
 
@@ -377,11 +380,12 @@ impl Shipped {
         self.setting_up = Some(cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(SET_UP_TICK).await;
             let said = match heard.try_recv() {
-                Ok(said) => said.map_or_else(|error| error, str::to_owned),
+                Ok(said) => said.unwrap_or_else(|error| error),
                 Err(TryRecvError::Empty) => continue,
                 Err(TryRecvError::Disconnected) => "deep setup stopped without a word".to_owned(),
             };
             let _ = this.update(cx, |this, cx| {
+                crate::setup::refresh();
                 this.set_up = Some(said);
                 this.setting_up = None;
                 cx.notify();
@@ -496,10 +500,15 @@ pub fn count_line() -> String {
     if crate::setup::count().is_some() || !(reach.hub_down || crate::record::connected()) {
         return crate::menu_bar_line();
     }
-    reach.count(match count() {
+    reach.count(asks_need_you(count()))
+}
+
+/// The one count sentence, which Home, the list and the menu bar say (#1455).
+pub fn asks_need_you(count: usize) -> String {
+    match count {
         1 => "1 ask needs you".to_owned(),
         count => format!("{count} asks need you"),
-    })
+    }
 }
 
 /// Teaches the panel registry every shipped view, so a layout can name them.
@@ -692,10 +701,11 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
         .filter(|row| row["status"] != "closed")
         .map(|row| {
             let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
+            // The row draws the question as the card does, its controls and direction marks shown (#1510).
             (
                 text("ask"),
                 text("session"),
-                text("question"),
+                crate::question::visible(&text("question")),
                 text("status"),
             )
         })
@@ -798,18 +808,22 @@ fn first(record: &Record) -> (String, String, states::State) {
     record.sessions[0].clone()
 }
 
-/// Moves the virtual clock a replica's views draw by to `now`, ms since the epoch (#1546).
+/// Moves the virtual clock a replica's views draw by to `now`, ms since the epoch (#1546). A replica's door, in no
+/// shipped build (#1457).
+#[cfg(feature = "fixtures")]
 pub fn set_clock(now: u64) {
     CLOCK.with(|clock| clock.set(Some(now)));
 }
 
 /// The virtual clock's time where one runs (the replica), else the system's.
 pub fn now() -> u64 {
-    CLOCK.with(Cell::get).unwrap_or_else(|| {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |since| since.as_millis() as u64)
-    })
+    #[cfg(feature = "fixtures")]
+    if let Some(virtual_now) = CLOCK.with(Cell::get) {
+        return virtual_now;
+    }
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_millis() as u64)
 }
 
 /// A session's status mark and words, one accessibility node named by what it shows: the mark's core, a square of
@@ -861,11 +875,12 @@ fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElemen
 }
 
 /// The bound values on `surface`, one accessibility node each named by its surface, its ID and
-/// what it shows: its ID, the value, and where it comes from, muted. A missing value shows the
-/// dash and says it wasn't reported.
+/// what it shows: its ID, the value, and where it comes from, muted, unless `titled` says the
+/// surface's title already names it (#1455). A missing value shows the dash and says it wasn't reported.
 fn bound_values(
     surface: bound::Surface,
     chrome: &chrome::Chrome,
+    titled: bool,
 ) -> Vec<ObservedElement<Stateful<Div>>> {
     bound::on(surface)
         .into_iter()
@@ -901,14 +916,20 @@ fn bound_values(
                     chrome.ink_primary,
                     None,
                 ))
-                .child(div().text_color(chrome.ink_secondary).child(b.from))
+                .children((!titled).then(|| div().text_color(chrome.ink_secondary).child(b.from)))
         })
         .collect()
 }
 
-/// A panel in the window holding the bound values bound to it, when any are.
+/// A panel in the window holding the bound values bound to it, when any are, titled by the one assertion they bind;
+/// values from more than one have no title (#1455).
 fn bound_panel(chrome: &chrome::Chrome) -> Option<Stateful<Div>> {
-    let values = bound_values(bound::Surface::Panel, chrome);
+    let bound = bound::on(bound::Surface::Panel);
+    let named = bound
+        .first()
+        .map(|b| b.from.clone())
+        .filter(|from| bound.iter().all(|b| &b.from == from));
+    let values = bound_values(bound::Surface::Panel, chrome, named.is_some());
     (!values.is_empty()).then(|| {
         div()
             .id("bound-panel")
@@ -919,7 +940,10 @@ fn bound_panel(chrome: &chrome::Chrome) -> Option<Stateful<Div>> {
             .border_color(chrome.divider)
             .flex()
             .flex_col()
-            .child(label("bound-panel-title", "Cart total").font_weight(FontWeight::SEMIBOLD))
+            .children(
+                named
+                    .map(|from| label("bound-panel-title", from).font_weight(FontWeight::SEMIBOLD)),
+            )
             .children(values)
     })
 }
@@ -988,6 +1012,13 @@ impl Render for Shipped {
                             .rounded_sm()
                             .hover(|style| style.bg(chrome.hover))
                             .on_click(|_, window, cx| show(NEEDS_YOU, window, cx)),
+                    )
+                    // Notifications off is its own row, never part of the count (#1455).
+                    .children(
+                        (crate::setup::count().is_none() && !reach.hub_down)
+                            .then(|| reach.notice())
+                            .flatten()
+                            .map(|notice| label("sidebar-notice", notice).h_auto().py_1()),
                     )
                     // Each agent's MCP servers and skills (#148).
                     .child(
@@ -1125,7 +1156,11 @@ impl Render for Shipped {
                     .child(title("home-title", "Home"))
                     .child(label(
                         "home-needs-you",
-                        reach.count(format!("{open} asks need you")),
+                        reach.count(if crate::plain::planted("count-one-asks") {
+                            format!("{open} asks need you")
+                        } else {
+                            asks_need_you(open)
+                        }),
                     ))
                     .children(placed("home").into_iter().map(placed_box)),
             },
@@ -1197,17 +1232,32 @@ impl Render for Shipped {
                     .iter()
                     .map(|deadline| (*deadline as f64 - minute as f64) / 3_600_000.0)
                     .collect();
-                let points = hours.len();
-                if points > 0 {
+                if !hours.is_empty() {
                     states::changes_after(minute + 60_000 - now);
                 }
                 // The line's caption and its readout are the canvas's text (#390): the readout
-                // is a bound number, tabular and never cut, holding its widest value's room.
-                let caption = text::Label::new("Hours to each deadline");
+                // is a bound number, tabular and never cut, holding its widest value's room. It
+                // counts what its caption names (#1455).
+                let planted = crate::plain::planted("readout-counts-asks");
+                let (caption, counted) = if planted {
+                    ("Hours to each deadline", mine)
+                } else {
+                    ("Asks with a deadline", hours.len())
+                };
+                let caption = text::Label::new(caption);
                 let readout = text::Label {
                     bound: true,
-                    ..text::Label::new(mine.to_string())
+                    ..text::Label::new(counted.to_string())
                 };
+                // The line's name, from what it draws.
+                let line_name = format!(
+                    "Hours to each deadline: {}",
+                    hours
+                        .iter()
+                        .map(|h| format!("{h:.0} h"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
                 let terminal = self.terminal.as_ref().filter(|tab| tab.session == session);
                 let tab = (!session.is_empty()).then(|| {
                     let session = session.clone();
@@ -1230,14 +1280,30 @@ impl Render for Shipped {
                 if let Some(panel) = &figure {
                     panel.update(cx, |panel, _| panel.show_session(&session));
                 }
-                let chart = terminal.is_none() && figure.is_none();
+                let chart = terminal.is_none() && figure.is_none() && !hours.is_empty();
                 // What the page shows by its real names, and the newest failure whole (#1348).
                 let details = record
                     .details
                     .iter()
                     .enumerate()
                     .map(|(n, line)| label(("session-detail", n), line.clone()).h_auto());
-                page.child(title("session-title", task.clone()))
+                // The page reads as its task's title, and to a screen reader as `Session <title>`. An untitled
+                // session's short name, `Session <ID>`, is only its accessible name: the title draws no ID (#1455).
+                let short = &session[..session.len().min(8)];
+                let untitled = task == format!("Session {short}");
+                let named = if untitled {
+                    task.clone()
+                } else {
+                    format!("Session {task}")
+                };
+                let shown = if crate::plain::planted("title-draws-id") {
+                    short.to_owned()
+                } else if untitled {
+                    "Untitled task".to_owned()
+                } else {
+                    task.clone()
+                };
+                page.child(title("session-title", shown.clone()).aria_label(named))
                     .children(details)
                     // The return card: what came back from the session's last stop, with the
                     // values bound to its runs' assertions (#629).
@@ -1248,9 +1314,9 @@ impl Render for Shipped {
                             .child(status(
                                 "return-card",
                                 &state,
-                                format!("{task} returned · {}", state.text(now)),
+                                format!("{shown} · {}", state.text(now)),
                             ))
-                            .children(bound_values(bound::Surface::Card, chrome)),
+                            .children(bound_values(bound::Surface::Card, chrome, false)),
                     )
                     .children(tab)
                     .children(grid)
@@ -1284,15 +1350,23 @@ impl Render for Shipped {
                                         )),
                                 )
                                 .child(
-                                    canvas::line("session-line", hours, chrome.session_line)
+                                    div()
+                                        .id("session-line-figure")
+                                        .test_support()
+                                        .role(Role::Image)
+                                        .aria_label(line_name)
                                         .flex_1()
-                                        .w_full(),
+                                        .w_full()
+                                        .child(
+                                            canvas::line(
+                                                "session-line",
+                                                hours,
+                                                chrome.session_line,
+                                            )
+                                            .size_full(),
+                                        ),
                                 ),
                         )
-                        .child(label(
-                            "session-line-label",
-                            format!("Hours to each deadline: {points} points"),
-                        ))
                     })
                     .children(bound_panel(chrome))
             }
@@ -1334,7 +1408,6 @@ impl Render for Shipped {
                                 .h(px(brand::WELCOME_LOCKUP_HEIGHT_PX))
                                 .text_color(ink),
                         )
-                        .child(div().child("Where your agents show, not tell."))
                         .children(button)
                         .children(working.then(|| {
                             div()
@@ -2135,5 +2208,18 @@ mod tests {
     #[should_panic(expected = "is not a shipped view")]
     fn a_name_that_is_not_a_shipped_view_is_refused() {
         Layout::shipped("needs_you");
+    }
+
+    #[std::prelude::v1::test]
+    fn a_needs_you_row_shows_a_direction_mark_as_the_card_does() {
+        // #1510: an override in the question would read the rest of the row backwards.
+        let mut view = crate::record::View::default();
+        view.apply(
+            serde_json::json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
+            "question": "Open invoice\u{202e}txt.exe?", "default": "no", "deadline": 1_000,
+            "options": [{"id": "no", "label": "No"}]}}),
+        );
+        let open = read(&view, Kind::NeedsYou).open;
+        assert_eq!(open[0].2, "Open invoice\\u{202e}txt.exe?");
     }
 }

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 100" width="500" height="100">
+  <!-- a² + b² = c², as an agent's own renderer writes it: one id per term from the term's source, glyphs as
+       outlines, fill currentColor. Written for the #505 acceptance tests; the shapes stand in for glyphs. -->
+  <g fill="currentColor">
+    <path id="t-a2" d="M10 20 H90 V80 H10 Z"/>
+    <path id="t-plus" d="M110 44 H170 V56 H110 Z M134 20 H146 V80 H134 Z"/>
+    <path id="t-b2" d="M190 20 H270 V80 H190 Z"/>
+    <path id="t-eq" d="M290 28 H350 V44 H290 Z M290 56 H350 V72 H290 Z"/>
+    <path id="t-c2" d="M370 20 H450 V80 H370 Z"/>
+  </g>
+</svg>

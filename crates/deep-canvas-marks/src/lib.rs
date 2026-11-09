@@ -22,6 +22,8 @@ pub mod finish;
 pub mod fields;
 pub mod fx;
 pub mod function;
+pub mod functions;
+pub mod implicit;
 pub mod key;
 pub mod layout;
 pub mod look;

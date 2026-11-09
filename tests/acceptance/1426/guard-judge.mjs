@@ -1,8 +1,9 @@
 // #1426 AC9, the guard's half: `node <guard> guard` run in a scratch repository whose main holds the carried-patch
-// table, as #1113's and #1115's suites drive the real scripts/proof.mjs. A throwaway SSH key stands for the maintainer.
+// table, as #1113's and #1115's suites drive the real scripts/proof.mjs. A throwaway security key, on the repo's approvers list, stands for the maintainer.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { APPROVERS, people, tag } from '../../fixtures/approver.mjs';
 import { carriedText, cleanEnv, clip, linesOf, README, remove, TABLE_ROWS, tempRoot } from './common.mjs';
 
 const ISSUE = 9426;
@@ -21,6 +22,9 @@ function scratch() {
   git('init', '-q', '-b', 'main');
   write('scripts/proof-guard.mjs', '// the guard\n');
   write(README, text(RAISED));
+  // The maintainer's security key is on the merge base's approvers list (#1326); the stranger's isn't.
+  const keys = people();
+  write(APPROVERS, keys.list);
   git('add', '-A');
   git('commit', '-qm', 'base');
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
@@ -28,11 +32,6 @@ function scratch() {
   const issues = join(dir, 'issues');
   mkdirSync(issues);
   writeFileSync(join(issues, `${ISSUE}.md`), 'Planted for #1426.\n\n### Acceptance criteria\n- [ ] Nothing real\n');
-  const keys = join(dir, 'keys');
-  mkdirSync(keys);
-  for (const name of ['maintainer', 'stranger']) execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', `${name}@example.invalid`, '-f', join(keys, name)], { stdio: ['ignore', 'pipe', 'pipe'] });
-  const approvers = join(keys, 'approvers');
-  writeFileSync(approvers, `maintainer@example.invalid namespaces="git" ${readFileSync(join(keys, 'maintainer.pub'), 'utf8').trim()}\n`);
   let tags = 0;
   return {
     dir,
@@ -43,10 +42,10 @@ function scratch() {
       return git('rev-parse', 'HEAD').trim();
     },
     approve(commit, item, signer) {
-      git('-c', 'gpg.format=ssh', '-c', `user.signingkey=${join(keys, signer)}`, 'tag', '-s', '-m', `Approves: ${item}`, `deep/approved/${tags += 1}`, commit);
+      tag(cwd, `deep/approved/${tags += 1}`, commit, [item], keys[signer]);
     },
     guard(script) {
-      const run = spawnSync(process.execPath, [script, 'guard'], { cwd, encoding: 'utf8', timeout: 120_000, env: cleanEnv({ HOME: dir, DEEP_PROOF_ISSUES: issues, DEEP_APPROVERS: approvers }) });
+      const run = spawnSync(process.execPath, [script, 'guard'], { cwd, encoding: 'utf8', timeout: 120_000, env: cleanEnv({ HOME: dir, DEEP_PROOF_ISSUES: issues }) });
       return { status: run.status, output: `${run.stdout ?? ''}${run.stderr ?? ''}` };
     },
   };
