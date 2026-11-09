@@ -1,0 +1,175 @@
+The redraft of #1550's C1 and C3 on the base, commit 54e690e9 (base dd83ac2f plus the original suite f19d53a9 plus
+DISPUTE.md), November 8, 2026, macOS 26.7.1 on arm64 (Apple silicon), on a shared, loaded machine.
+
+The surface the tests read exists at the base: GPUI's TextSystem::line_wrapper / LineWrapper::wrap_line through
+../probe.rs, and WindowTextSystem::shape_text's WrappedLine::runs() and wrap_boundaries() through probe.rs here. Only
+their wiring doesn't: for these runs the two [[example]] blocks (../README.md's acceptance_1550_probe and REDRAFT.md's
+acceptance_1550_redraft_probe) were added to crates/deep-replica/Cargo.toml and taken out again afterwards; nothing else
+outside redraft/ was changed, and Cargo.lock didn't change. Both examples were built with CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0 `cargo build --locked -p deep-replica --features env-plants --example acceptance_1550_probe
+--example acceptance_1550_redraft_probe` (5 min 11 s, on a target holding other builds); the tests' own builds then found
+them fresh.
+
+Commands:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1550/redraft --no-file-parallelism --testTimeout=600000
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1550/redraft --no-file-parallelism --testTimeout=600000 -t "wrong program" --silent=false --reporter=verbose
+
+The second only shows the plant's printed message, which the first run's reporter hides for a passing test; the plant
+passed in both.
+
+Per test, at the base:
+
+  C1 #1550.1699487d  FAIL on its assertion: 642 problems. wrap_line as before ("κόσμ|ε," at 91 px, "بال|عالم،",
+                     "עו|לם,", "द|ुनिया,"). shape_text, read as rows: Greek breaks inside words as before ("κόσμ|ε,");
+                     Arabic and Hebrew draw their rows in visual order, the sentence's last words on row 1 ("row 1
+                     holds 116–122, … row 19 holds 0–2"), and break inside words ("ה|שינוי", "دم|ج"); Devanagari splits
+                     the cluster र्क of "पार्क" across two rows (row 6 holds 55–66, 69; row 7 holds 67–68, 70–81: the
+                     reph's glyph, drawn after क, starts row 7), and breaks inside words ("मौस|म").
+  C3 #1550.8fc59257  FAIL on its assertion: 14,185 problems, each naming its LineBreakTest.txt line, on both routes:
+                     wrap_line's starts the file forbids (first LineBreakTest.txt:15209), shape_text's rows out of text
+                     order on right-to-left cases (first LineBreakTest.txt:132, × 2757 × 0020 ÷ 05BE ÷: "row 1 holds
+                     1–2, row 2 holds 0") and their starts at offset 0.
+  C3 plant           PASS: the planted allow-list path, read as rows through the same judge, fails it with 2,276
+                     problems, first "LineBreakTest.txt:15209: the planted allow-list path at 20 px starts a line
+                     between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷"; each of the first 50
+                     names the file line holding the case it judged.
+
+======================================================================== the whole file
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1550/redraft
+
+ ❯ wrap.test.ts (3 tests | 2 failed) 15180ms
+   × #1550.1699487d (C1) Greek, Arabic, Hebrew and Devanagari sentences wrapped at every width from the longest word up never break inside a word 1572ms
+   × #1550.8fc59257 (C3) every boundary chrome picks over LineBreakTest.txt at narrow widths is a break the file allows 5542ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  wrap.test.ts > #1550.1699487d (C1) Greek, Arabic, Hebrew and Devanagari sentences wrapped at every width from the longest word up never break inside a word
+AssertionError: 642 problem(s), the first 30:
+greek, wrap_line: breaks inside "κόσμ|ε," (first at 91 px)
+greek, shape_text: breaks inside "κόσμ|ε," (first at 91 px)
+arabic, wrap_line: breaks inside "بال|عالم،" (first at 57 px)
+arabic, shape_text: draws rows that aren't the sentence cut in text order (first at 57 px: row 1 holds 125–137, row 2 holds 115–124, row 3 holds 103–114, row 4 holds 91–102, row 5 holds 81–90, row 6 holds 69–80, row 7 holds 59–68, row 8 holds 48–58, row 9 holds 38–47, row 10 holds 26–37, row 11 holds 18–26, row 12 holds 6–18, row 13 holds 0–6)
+hebrew, wrap_line: breaks inside "עו|לם," (first at 41 px)
+hebrew, shape_text: draws rows that aren't the sentence cut in text order (first at 41 px: row 1 holds 116–122, row 2 holds 108–115, row 3 holds 102–107, row 4 holds 96–101, row 5 holds 88–95, row 6 holds 80–87, row 7 holds 75–79, row 8 holds 70–74, row 9 holds 64–69, row 10 holds 58–63, row 11 holds 52–57, row 12 holds 46–51, row 13 holds 39–45, row 14 holds 32–38, row 15 holds 25–31, row 16 holds 17–24, row 17 holds 10–16, row 18 holds 3–9, row 19 holds 0–2)
+devanagari, wrap_line: breaks inside "द|ुनिया," (first at 61 px)
+devanagari, shape_text: draws rows that aren't the sentence cut in text order (first at 61 px: row 1 holds 0–11, row 2 holds 12–20, row 3 holds 21–32, row 4 holds 33–42, row 5 holds 43–54, row 6 holds 55–66, 69, row 7 holds 67–68, 70–81, row 8 holds 82–94, row 9 holds 95–105, row 10 holds 106–118, row 11 holds 119–127, row 12 holds 128–138, row 13 holds 139–152, row 14 holds 153–164, row 15 holds 165–171)
+greek, wrap_line: breaks inside "και|ρός" (first at 91 px)
+greek, shape_text: breaks inside "και|ρός" (first at 91 px)
+arabic, wrap_line: breaks inside "الط|قس" (first at 57 px)
+arabic, shape_text: breaks inside "ا|لرئيسي" (first at 57 px)
+hebrew, wrap_line: breaks inside "מז|ג" (first at 41 px)
+hebrew, shape_text: breaks inside "הז|ה" (first at 41 px)
+devanagari, wrap_line: breaks inside "मौस|म" (first at 61 px)
+devanagari, shape_text: breaks inside "दुनिय|ा," (first at 61 px)
+greek, wrap_line: breaks inside "υπέρο|χος" (first at 91 px)
+greek, shape_text: breaks inside "υπέρο|χος" (first at 91 px)
+arabic, wrap_line: breaks inside "جمي|ل" (first at 57 px)
+arabic, shape_text: breaks inside "التغيي|ر" (first at 57 px)
+hebrew, wrap_line: breaks inside "האווי|ר" (first at 41 px)
+hebrew, shape_text: breaks inside "ה|שינוי" (first at 41 px)
+devanagari, wrap_line: breaks inside "सु|हावना" (first at 61 px)
+devanagari, shape_text: breaks inside "मौस|म" (first at 61 px)
+greek, wrap_line: breaks inside "πάμ|ε" (first at 91 px)
+greek, shape_text: breaks inside "πάμ|ε" (first at 91 px)
+arabic, wrap_line: breaks inside "اليو|م" (first at 57 px)
+arabic, shape_text: breaks inside "دم|ج" (first at 57 px)
+hebrew, wrap_line: breaks inside "מ|אוד" (first at 41 px)
+hebrew, shape_text: breaks inside "לא|שר" (first at 41 px): expected 642 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 642
+
+ ❯ wrap.test.ts:59:45
+     57|   }
+     58|   const problems = interleave(groups);
+     59|   expect(problems.length, listed(problems)).toBe(0);
+       |                                             ^
+     60| }, 30 * MINUTES);
+     61|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  wrap.test.ts > #1550.8fc59257 (C3) every boundary chrome picks over LineBreakTest.txt at narrow widths is a break the file allows
+AssertionError: 14185 problem(s), the first 30:
+LineBreakTest.txt:15209: wrap_line at 20 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:132: shape_text at 22 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15209: wrap_line at 21 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:132: shape_text at 22 px draws rows that aren't the case cut in text order (row 1 holds 1–2, row 2 holds 0): × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15209: wrap_line at 22 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:132: shape_text at 23 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15213: wrap_line at 11 px starts a line between U+0308 and U+00A7, where the file has ×: × 0020 ÷ 0308 × 00A7 ÷
+LineBreakTest.txt:132: shape_text at 23 px draws rows that aren't the case cut in text order (row 1 holds 1–2, row 2 holds 0): × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15213: wrap_line at 12 px starts a line between U+0308 and U+00A7, where the file has ×: × 0020 ÷ 0308 × 00A7 ÷
+LineBreakTest.txt:132: shape_text at 24 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15221: wrap_line at 14 px starts a line between U+0308 and U+2630, where the file has ×: × 0020 ÷ 0308 × 2630 ÷
+LineBreakTest.txt:132: shape_text at 24 px draws rows that aren't the case cut in text order (row 1 holds 1–2, row 2 holds 0): × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15221: wrap_line at 15 px starts a line between U+0308 and U+2630, where the file has ×: × 0020 ÷ 0308 × 2630 ÷
+LineBreakTest.txt:132: shape_text at 25 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15225: wrap_line at 10 px starts a line between U+0308 and U+25CC, where the file has ×: × 0020 ÷ 0308 × 25CC ÷
+LineBreakTest.txt:132: shape_text at 25 px draws rows that aren't the case cut in text order (row 1 holds 1–2, row 2 holds 0): × 2757 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15225: wrap_line at 11 px starts a line between U+0308 and U+25CC, where the file has ×: × 0020 ÷ 0308 × 25CC ÷
+LineBreakTest.txt:134: shape_text at 24 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0308 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15226: wrap_line at 8 px starts a line between U+0308 and U+0020, where the file has ×: × 0020 ÷ 0308 × 0020 ÷ 25CC ÷
+LineBreakTest.txt:134: shape_text at 24 px draws rows that aren't the case cut in text order (row 1 holds 1–3, row 2 holds 0): × 2757 × 0308 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15229: wrap_line at 11 px starts a line between U+0308 and U+0023, where the file has ×: × 0020 ÷ 0308 × 0023 ÷
+LineBreakTest.txt:134: shape_text at 25 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0308 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15229: wrap_line at 12 px starts a line between U+0308 and U+0023, where the file has ×: × 0020 ÷ 0308 × 0023 ÷
+LineBreakTest.txt:134: shape_text at 25 px draws rows that aren't the case cut in text order (row 1 holds 1–3, row 2 holds 0): × 2757 × 0308 × 0020 ÷ 05BE ÷
+LineBreakTest.txt:15234: wrap_line at 8 px starts a line between U+0308 and U+0020, where the file has ×: × 0020 ÷ 0308 × 0020 ÷ 11003 ÷
+LineBreakTest.txt:136: shape_text at 22 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05D0 ÷
+LineBreakTest.txt:15238: wrap_line at 7 px starts a line between U+0308 and U+0020, where the file has ×: × 0020 ÷ 0308 × 0020 ÷ 1B50 ÷
+LineBreakTest.txt:136: shape_text at 22 px draws rows that aren't the case cut in text order (row 1 holds 1–2, row 2 holds 0): × 2757 × 0020 ÷ 05D0 ÷
+LineBreakTest.txt:15238: wrap_line at 8 px starts a line between U+0308 and U+0020, where the file has ×: × 0020 ÷ 0308 × 0020 ÷ 1B50 ÷
+LineBreakTest.txt:136: shape_text at 23 px starts a line at offset 0, which isn't between two code points of the case: × 2757 × 0020 ÷ 05D0 ÷: expected 14185 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 14185
+
+ ❯ wrap.test.ts:93:45
+     91|     read: (cs, ws) => readAll(route, cs.map((c, i) => ({ text: c.text,…
+     92|   })));
+     93|   expect(problems.length, listed(problems)).toBe(0);
+       |                                             ^
+     94| }, 60 * MINUTES);
+     95|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  20:53:09
+   Duration  15.41s (tests 99%, transform 1%)
+
+
+======================================================================== the plant, its message shown
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1550/redraft
+
+stdout | wrap.test.ts > #1550.8fc59257 (C3) wrong program: a planted allow-list path fails, naming the line
+#1550.8fc59257: the planted allow-list path fails:
+2276 problem(s), the first 5:
+LineBreakTest.txt:15209: the planted allow-list path at 20 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:15209: the planted allow-list path at 21 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:15209: the planted allow-list path at 22 px starts a line between U+0308 and U+2757, where the file has ×: × 0020 ÷ 0308 × 2757 ÷
+LineBreakTest.txt:15213: the planted allow-list path at 11 px starts a line between U+0308 and U+00A7, where the file has ×: × 0020 ÷ 0308 × 00A7 ÷
+LineBreakTest.txt:15213: the planted allow-list path at 12 px starts a line between U+0308 and U+00A7, where the file has ×: × 0020 ÷ 0308 × 00A7 ÷
+
+ ↓ wrap.test.ts > #1550.1699487d (C1) Greek, Arabic, Hebrew and Devanagari sentences wrapped at every width from the longest word up never break inside a word
+ ↓ wrap.test.ts > #1550.8fc59257 (C3) every boundary chrome picks over LineBreakTest.txt at narrow widths is a break the file allows
+ ✓ wrap.test.ts > #1550.8fc59257 (C3) wrong program: a planted allow-list path fails, naming the line 6843ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 2 skipped (3)
+   Start at  20:53:41
+   Duration  10.69s (tests 100%)
+

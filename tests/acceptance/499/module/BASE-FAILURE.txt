@@ -1,0 +1,25 @@
+Base commit: f1e8736e ("Merge pull request #1742 from windoliver/worktree-github-issue-1359-ee77ac")
+Not run. The machine's disk was nearly full (about 14 GiB free, shared with other sessions), so no cargo build or vitest
+run was made. This note reads the base's code instead; the type-check passed:
+  node node_modules/typescript/bin/tsc -p tests/acceptance/499/module/tsconfig.json   -> exit 0
+
+Every one of the 6 tests fails at the base, each for a surface the base lacks:
+
+- seal.test.ts (2): the features test-leave-out-media, test-probe and test-probe-via-media aren't in
+  crates/deep-show/Cargo.toml, so cargo refuses both builds ("none of the selected packages contains this feature")
+  and each test fails at "the binary builds".
+- kit.test.ts, planted (1): the feature test-media-checkpoint-without-tail doesn't exist; cargo refuses the build, and
+  the test fails at "the binary builds" before any kit run or release build.
+- kit.test.ts, shipped (1): the full build exists and holds the module media (crates/deep-canvas-scene3d/src/emitters.rs,
+  implementing media@1), but its one fixture, bell, holds no processor (no reverb), and the module declares no
+  checkpoints or tail. Expected failure: "the media module has a fixture of its own whose document holds a reverb
+  processor" (and, past it, carried_state running no case on media).
+- av-link.test.ts, real (1): the full build exists, but the base has no av_unlinked check, image@1 has no frames
+  field, and a patch's `set` reaches only items (crates/deep-canvas/src/document/apply.rs), so the strip op can't
+  apply. Expected failures in the test's list: no av_unlinked on the rate-only patch, and the patch of both not
+  applied. With no ffmpeg on the machine it fails BLOCKED: instead.
+- av-link.test.ts, planted (1): the scenario's planted value av_link_compares_start_only is unknown, so deep-show run
+  answers {"ok": false, "code": "bad_input"} and the test fails at "deep-show run refused the scenario".
+
+That is the missing behaviour, not a test mistake. Run the command in README.md once disk allows, and replace this
+note with the run's output (home paths redacted).

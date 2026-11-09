@@ -374,9 +374,14 @@ fn video_plan(
     timescale: u32,
     edits: bool,
     want: Option<usize>,
+    pick: Option<&[usize]>,
 ) -> (Vec<(usize, i64)>, Vec<usize>) {
     let shown = t.presented(timescale, edits);
-    let chosen: Vec<(usize, i64)> = shown.into_iter().take(want.unwrap_or(usize::MAX)).collect();
+    let chosen: Vec<(usize, i64)> = match pick {
+        // #499: the frames named by their index in presentation order.
+        Some(pick) => pick.iter().filter_map(|k| shown.get(*k).copied()).collect(),
+        None => shown.into_iter().take(want.unwrap_or(usize::MAX)).collect(),
+    };
     let (Some(lo), Some(hi)) = (
         chosen.iter().map(|c| c.0).min(),
         chosen.iter().map(|c| c.0).max(),
@@ -409,6 +414,13 @@ fn decode(
         .get("video_frames")
         .and_then(Value::as_u64)
         .map(|n| n as usize);
+    // #499: `frames: [k]` decodes only those frames (in presentation order), each from the sync
+    // sample before it, and names each frame's planes by their SHA-256.
+    let pick: Option<Vec<usize>> = job.v.get("frames").and_then(Value::as_array).map(|a| {
+        a.iter()
+            .filter_map(|k| k.as_u64().map(|k| k as usize))
+            .collect()
+    });
     let write =
         |name: &str, bytes: &[u8]| std::fs::write(out.join(name), bytes).map_err(|e| e.to_string());
     let mut streams = Vec::new();
@@ -451,7 +463,8 @@ fn decode(
                             .and_then(|s| s.iter().find(|s| s["index"] == i))
                             .map(|s| s["color"].clone())
                             .unwrap_or_default();
-                        let (chosen, feed) = video_plan(t, m.timescale, edits, want);
+                        let (chosen, feed) =
+                            video_plan(t, m.timescale, edits, want, pick.as_deref());
                         let mut frames = Vec::new();
                         let mut size = [t.entry.width as usize, t.entry.height as usize];
                         if !chosen.is_empty() {
@@ -474,9 +487,12 @@ fn decode(
                                     false => p.planes.clone(),
                                 };
                                 write(&name, &bytes)?;
-                                frames.push(
-                                    json!({"pts": time(*pts, t.timescale, planted), "file": name}),
-                                );
+                                let mut frame =
+                                    json!({"pts": time(*pts, t.timescale, planted), "file": name});
+                                if pick.is_some() {
+                                    frame["planes"] = json!(sha256(&p.planes));
+                                }
+                                frames.push(frame);
                             }
                         }
                         streams.push(
@@ -601,7 +617,7 @@ fn proxy(f: &Format, data: &[u8], job: &Job) -> Result<Value, String> {
         .unwrap_or(1.0)
         .clamp(0.01, 1.0);
     let gop = job.v.get("gop").and_then(Value::as_u64).unwrap_or(1);
-    let (chosen, feed) = video_plan(t, m.timescale, true, None);
+    let (chosen, feed) = video_plan(t, m.timescale, true, None, None);
     let pictures = video_frames(t, data, &feed)?;
     let mut body = Vec::new();
     let mut size = [0usize; 2];
@@ -672,7 +688,10 @@ fn encode(job: &Job) -> Result<Value, String> {
     let out = job.s("out").ok_or("an encode names its out file")?;
     #[cfg(target_os = "macos")]
     {
-        let (coded, avcc, hardware) = apple::encode_h264(&frames, w, h, &pts, timescale as i32)?;
+        // #499: a proxy's encode names its GOP.
+        let gop = job.v.get("gop").and_then(Value::as_u64).map(|g| g as u32);
+        let (coded, avcc, hardware) =
+            apple::encode_h264(&frames, w, h, &pts, timescale as i32, gop)?;
         let bytes = mux_h264(&coded, &avcc, w, h, &pts, timescale);
         std::fs::write(out, &bytes).map_err(|e| e.to_string())?;
         Ok(
@@ -993,6 +1012,131 @@ pub fn serve(role: &str, args: &[String]) -> i32 {
         };
         let _ = writeln!(stdout, "{}", json!({"reply": reply, "file": sha}));
         let _ = stdout.flush();
+    }
+    0
+}
+
+/// The live decode worker's header magic (#499).
+pub const LIVE_MAGIC: &[u8; 4] = b"DVL1";
+
+/// #499: the live view's decode worker for one video: sandboxed, it opens `path` and decodes the
+/// frames the view asks for, one session kept open so playing forward decodes each frame once, as
+/// NV12 at `out_w × out_h` (0 for the source's size) in the range the stream is tagged with.
+///
+/// On start it writes `DVL1`, then u32 LE source width, height, output width, height, matrix
+/// (0 BT.709, 1 BT.601, 2 BT.2020), full range (0 or 1), i64 timescale, u32 frame count and
+/// each frame's presentation time (i64 ticks, presentation order). Each request is a u32 frame
+/// index (u32::MAX ends it); each answer is u32 index, u32 ok, then the Y plane and the CbCr
+/// plane, rows top-down without padding.
+pub fn serve_live(args: &[String]) -> i32 {
+    let arg = |i: usize| args.get(i).cloned().unwrap_or_default();
+    let (path, out_w, out_h) = (
+        arg(0),
+        arg(1).parse().unwrap_or(0usize),
+        arg(2).parse().unwrap_or(0usize),
+    );
+    #[cfg(target_os = "macos")]
+    if let Err(e) = apple::sandbox() {
+        eprintln!("decode worker: {e}");
+        return 1;
+    }
+    let Ok(data) = std::fs::read(&path) else {
+        return 1;
+    };
+    let Some(m) = mp4::parse(&data) else { return 1 };
+    let Some(t) = m.tracks.iter().find(|t| t.kind == mp4::Kind::Video) else {
+        return 1;
+    };
+    let shown = t.presented(m.timescale, true);
+    let color = track_color(t, &Planted::default());
+    let matrix: u32 = match color["matrix"].as_str() {
+        Some(m) if m.contains("601") || m.contains("470") || m.contains("smpte170") => 1,
+        Some(m) if m.contains("2020") => 2,
+        _ => 0,
+    };
+    let full = color["range"] == "full";
+    let (sw, sh) = (t.entry.width as usize, t.entry.height as usize);
+    let (ow, oh) = if out_w == 0 || out_h == 0 {
+        (sw, sh)
+    } else {
+        (out_w & !1, out_h & !1)
+    };
+    let mut out = std::io::stdout().lock();
+    let mut head = LIVE_MAGIC.to_vec();
+    for v in [
+        sw as u32,
+        sh as u32,
+        ow as u32,
+        oh as u32,
+        matrix,
+        u32::from(full),
+    ] {
+        head.extend(v.to_le_bytes());
+    }
+    head.extend(i64::from(t.timescale).to_le_bytes());
+    head.extend((shown.len() as u32).to_le_bytes());
+    for (_, p) in &shown {
+        head.extend(p.to_le_bytes());
+    }
+    if out.write_all(&head).and_then(|()| out.flush()).is_err() {
+        return 1;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let Some(config) = t.entry.config.as_ref() else {
+            return 1;
+        };
+        let Ok(mut dec) = apple::LiveDecoder::new(
+            t.entry.fourcc,
+            config,
+            (t.entry.width, t.entry.height),
+            (ow, oh),
+            full,
+        ) else {
+            return 1;
+        };
+        let size = ow * oh * 3 / 2;
+        let blank = vec![0u8; size];
+        let mut last: Option<usize> = None;
+        let mut stdin = std::io::stdin().lock();
+        let mut req = [0u8; 4];
+        while stdin.read_exact(&mut req).is_ok() {
+            let k = u32::from_le_bytes(req);
+            if k == u32::MAX {
+                break;
+            }
+            let picture = (|| {
+                let s = shown.get(k as usize)?.0;
+                let from = match last {
+                    Some(l) if l < s => l + 1,
+                    _ => (0..=s).rev().find(|i| t.samples[*i].key).unwrap_or(0),
+                };
+                let mut got = None;
+                for i in from..=s {
+                    let smp = &t.samples[i];
+                    let bytes =
+                        data.get(smp.offset as usize..smp.offset as usize + smp.size as usize)?;
+                    for p in dec.decode(i, bytes).ok()? {
+                        if p.sample == s {
+                            got = Some(p.planes);
+                        }
+                    }
+                    last = Some(i);
+                }
+                got.filter(|p| p.len() == size)
+            })();
+            let ok = picture.is_some();
+            let mut reply = k.to_le_bytes().to_vec();
+            reply.extend(u32::from(ok).to_le_bytes());
+            if out
+                .write_all(&reply)
+                .and_then(|()| out.write_all(picture.as_deref().unwrap_or(&blank)))
+                .and_then(|()| out.flush())
+                .is_err()
+            {
+                break;
+            }
+        }
     }
     0
 }

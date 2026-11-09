@@ -164,3 +164,20 @@ fragment float4 chrome_downsample_fragment(float4 position [[position]],
   }
   return sum / float(step * step);
 }
+
+// DeepBuild patch (windoliver/deepbuild#499): a video frame's NV12 planes, Y and CbCr, converted
+// to R'G'B' by the transform the pixel buffer's own tags give (its matrix and its range), not the
+// stock fragment's full-range BT.601. The code values go out as they are, with no transfer step.
+fragment float4 surface_ycbcr_fragment(SurfaceFragmentInput input [[stage_in]],
+                                       texture2d<float> y_texture
+                                       [[texture(SurfaceInputIndex_YTexture)]],
+                                       texture2d<float> cb_cr_texture
+                                       [[texture(SurfaceInputIndex_CbCrTexture)]],
+                                       constant float4x4 *transform [[buffer(0)]]) {
+  constexpr sampler texture_sampler(mag_filter::linear, min_filter::linear);
+  float4 ycbcr = float4(
+      y_texture.sample(texture_sampler, input.texture_position).r,
+      cb_cr_texture.sample(texture_sampler, input.texture_position).rg, 1.0);
+  float4 rgb = *transform * ycbcr;
+  return float4(clamp(rgb.rgb, 0.0, 1.0), 1.0);
+}

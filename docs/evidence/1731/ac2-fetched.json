@@ -1,0 +1,50 @@
+{
+  "reply": {
+    "status": "fetched",
+    "asset": {
+      "sha256": "2beb0c371a2478b08b32ebd9603ea2c649472db7d4275cd3aee32dc1b25886e5",
+      "library": "ext.shelf.library",
+      "id": "oak-chair",
+      "license": {
+        "id": "CC-BY-4.0",
+        "terms": "https://creativecommons.org/licenses/by/4.0/",
+        "shareable": true,
+        "credit": "Ana Ruiz, Shelf"
+      },
+      "upstream": {
+        "url": "https://shelf.example/a/oak-chair",
+        "version": "3",
+        "modified": "2026-09-14T10:00:00Z"
+      },
+      "files": [
+        {
+          "path": "/files/oak-chair.gltf",
+          "bytes": 1124,
+          "sha256": "2beb0c371a2478b08b32ebd9603ea2c649472db7d4275cd3aee32dc1b25886e5"
+        },
+        {
+          "path": "/files/oak-chair.bin",
+          "bytes": 168,
+          "sha256": "7dfd6016cfb182e3caea34fb1ad98625e2f9d24c7e7f97ca13af90d965485194"
+        }
+      ]
+    }
+  },
+  "requests": [
+    {
+      "at": 1794216775382,
+      "method": "GET",
+      "path": "/api/assets/oak-chair"
+    },
+    {
+      "at": 1794216775758,
+      "method": "GET",
+      "path": "/files/oak-chair.gltf"
+    },
+    {
+      "at": 1794216775762,
+      "method": "GET",
+      "path": "/files/oak-chair.bin"
+    }
+  ]
+}

@@ -66,6 +66,8 @@ pub struct Request {
     pub snaps_weight: bool,
     /// #1646: the look's CRT afterglow, flicks.
     pub afterglow: Option<i64>,
+    /// #505: the input track the document's controls read, and a formula's planted program.
+    pub formulas: crate::formulas::Ctx,
 }
 
 /// What a text's per-glyph layout reads at a frame (#496): the document, its evaluated items,
@@ -831,10 +833,9 @@ fn items_at(
     t: i64,
     vectors: &crate::Vectors,
     write: deep_canvas_vector::Write,
-    router: deep_canvas_graph::view::Router,
+    (router, ctx): (deep_canvas_graph::view::Router, &crate::formulas::Ctx),
 ) -> Result<(Map<String, Value>, crate::graphs::Graphs), Value> {
-    let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
-    let items = crate::place::evaluated(doc, &program, t, vectors)?;
+    let (items, _) = crate::formulas::evaluated(doc, t, vectors, ctx)?;
     let items = deep_canvas_vector::lower_items(&items, vectors, write);
     crate::graphs::lower(doc, &items, vectors, router)
 }
@@ -851,7 +852,7 @@ pub fn label_board(
         t,
         vectors,
         deep_canvas_vector::Write::Honest,
-        Default::default(),
+        (Default::default(), &Default::default()),
     )?;
     let mut bare = items.clone();
     bare.retain(|_, i| i["kind"] != "label@1");
@@ -938,7 +939,7 @@ pub(crate) fn preshape(req: &Request) {
             k * frame,
             &req.vectors,
             req.write,
-            Default::default(),
+            (Default::default(), &req.formulas),
         ) else {
             return;
         };
@@ -974,8 +975,13 @@ pub fn answer(req: Request) -> Value {
 }
 
 fn draw(req: &Request) -> Result<Value, Value> {
-    let (mut items, graphs) =
-        items_at(&req.doc, req.t, &req.vectors, req.write, Default::default())?;
+    let (mut items, graphs) = items_at(
+        &req.doc,
+        req.t,
+        &req.vectors,
+        req.write,
+        (Default::default(), &req.formulas),
+    )?;
     let palette = palette_of(&req.look, req.view.theme);
     let record = Record {
         pinned: req.t,
@@ -1275,12 +1281,20 @@ fn composite<'s>(
 fn fit_paint(frame: &scene::Frame, texts: &mut Map<String, Value>) -> Result<(), Value> {
     let union = |a: [f64; 4], b: [f64; 4]| {
         let (x0, y0) = (a[0].min(b[0]), a[1].min(b[1]));
-        let (x1, y1) = ((a[0] + a[2]).max(b[0] + b[2]), (a[1] + a[3]).max(b[1] + b[3]));
+        let (x1, y1) = (
+            (a[0] + a[2]).max(b[0] + b[2]),
+            (a[1] + a[3]).max(b[1] + b[3]),
+        );
         [x0, y0, x1 - x0, y1 - y0]
     };
     let four = |v: &Value| -> Option<[f64; 4]> {
         let l = v.as_array()?;
-        Some([l.first()?.as_f64()?, l.get(1)?.as_f64()?, l.get(2)?.as_f64()?, l.get(3)?.as_f64()?])
+        Some([
+            l.first()?.as_f64()?,
+            l.get(1)?.as_f64()?,
+            l.get(2)?.as_f64()?,
+            l.get(3)?.as_f64()?,
+        ])
     };
     let marks: Vec<&Drawn> = frame.layers.iter().flat_map(|l| l.marks.iter().map(|m| &**m)).collect();
     for drawn in &marks {
@@ -1462,10 +1476,10 @@ pub fn geometry(
     vectors: &crate::Vectors,
     router: deep_canvas_graph::view::Router,
     (look, timing): (Option<&Look>, bool),
+    (ctx, color_at): (&crate::formulas::Ctx, Option<&[f64]>),
 ) -> Value {
     let run = || -> Result<Value, Value> {
-        let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
-        let placed = crate::place::evaluated(doc, &program, t, vectors)?;
+        let (placed, formulas) = crate::formulas::evaluated(doc, t, vectors, ctx)?;
         let items =
             deep_canvas_vector::lower_items(&placed, vectors, deep_canvas_vector::Write::Honest);
         // #399: graphs drawn as marks2d's items; labels draw only in a view.
@@ -1517,6 +1531,61 @@ pub fn geometry(
             }
         }
         let mut answer = json!({"ok": true, "subpaths": subpaths});
+        // #505: a path function's notices, anchors, area, fill, colors and cells.
+        if let Some(plot) = formulas.as_ref().and_then(|f| f.plots.get(item)) {
+            let f = formulas.as_ref().expect("formulas");
+            answer["notices"] = json!(f
+                .notices
+                .iter()
+                .filter(|n| n["ids"]
+                    .as_array()
+                    .is_some_and(|ids| ids.iter().any(|i| i == item)))
+                .collect::<Vec<_>>());
+            answer["anchors"] = Value::Object(
+                plot.probes
+                    .iter()
+                    .map(|(k, p)| (k.clone(), json!({"x": p.x, "y": p.y, "slope": p.slope, "at": p.at, "foot": p.foot})))
+                    .collect(),
+            );
+            if let Some((value, bound)) = plot.area {
+                answer["area"] = json!({"value": value, "lo": bound.lo, "hi": bound.hi});
+                answer["fill"] = json!(plot
+                    .fill
+                    .iter()
+                    .map(|s| {
+                        let verbs: Vec<Verb> = s
+                            .iter()
+                            .enumerate()
+                            .map(|(i, p)| {
+                                if i == 0 {
+                                    Verb::Move(*p)
+                                } else {
+                                    Verb::Line(*p)
+                                }
+                            })
+                            .chain(std::iter::once(Verb::Close))
+                            .collect();
+                        subpaths_of(&verbs, [0.0, 0.0])
+                    })
+                    .collect::<Vec<_>>()
+                    .concat());
+            }
+            if let Some(cells) = plot.drawn.cells {
+                answer["cells"] = json!(cells);
+            }
+            if let Some(xs) = color_at {
+                let lab = |r: &str| {
+                    palette
+                        .get(r)
+                        .map(|c| deep_canvas_marks::paint::oklab_mix(*c, *c, 0.0))
+                };
+                let colors: Option<Vec<Value>> = xs
+                    .iter()
+                    .map(|x| plot.color_at(*x, &lab).map(|c| json!([c.l, c.a, c.b])))
+                    .collect();
+                answer["color_at"] = colors.map_or(Value::Null, Value::Array);
+            }
+        }
         // A data item at t (#167): a mark set's rows, a scale's domain, an axis's ticks.
         let story = |r: scene::Refused| refused(r.code, &r.path);
         if let Some(found) = items.get(item) {

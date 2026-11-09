@@ -12,7 +12,7 @@ Test canvas modules named by the #305 and #488 acceptance READMEs, each one mani
 
 ## What it may import
 
-A canvas module crate. It reaches the core only through the `deep-canvas` crate and uses third-party crates listed in `lint/canvas/crates.json`, under `scripts/canvas-lint.mjs`. It never imports another module crate, a GPU crate or the app, and nothing but a test feature may depend on it.
+A test canvas module crate. It reaches the core through `deep-canvas` and the sandbox's admission check through `deep-canvas-sandbox`, by crate name, and uses third-party crates listed in `lint/canvas/crates.json`, under `scripts/canvas-lint.mjs`. It never imports a GPU crate or the app, and nothing but a test feature may depend on it.
 
 ## Deviations
 

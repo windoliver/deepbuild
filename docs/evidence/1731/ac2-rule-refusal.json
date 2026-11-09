@@ -1,0 +1,14 @@
+{
+  "reply": {
+    "status": "refused",
+    "reason": "oak-chair from ext.shelf.library is under CC-BY-4.0, which your standing rule for ext.shelf.library doesn't allow (it allows CC0-1.0); nothing was fetched"
+  },
+  "text": "{\"status\":\"refused\",\"reason\":\"oak-chair from ext.shelf.library is under CC-BY-4.0, which your standing rule for ext.shelf.library doesn't allow (it allows CC0-1.0); nothing was fetched\"}",
+  "requests": [
+    {
+      "at": 1794216780501,
+      "method": "GET",
+      "path": "/api/assets/oak-chair"
+    }
+  ]
+}
