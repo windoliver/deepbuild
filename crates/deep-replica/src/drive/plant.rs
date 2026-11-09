@@ -30,6 +30,8 @@ pub enum Plant {
     RowLabelPastFrame,
     /// The session row draws its text cut off and names only what it drew (#124 criterion 7).
     RowBranchCutOff,
+    /// A menu takes every release as a pick or a close, drag or not (#1470 criterion 2).
+    MenuReleaseAlways,
 }
 
 impl Plant {
@@ -44,6 +46,7 @@ impl Plant {
             "no-hit-test" => Some(Plant::NoHitTest),
             "row-label-past-frame" => Some(Plant::RowLabelPastFrame),
             "row-branch-cut-off" => Some(Plant::RowBranchCutOff),
+            "menu-release-always" => Some(Plant::MenuReleaseAlways),
             _ => None,
         }
     }

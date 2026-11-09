@@ -460,6 +460,10 @@ impl Replica {
                 Some(Plant::RowBranchCutOff) => Some(deep_app::views::RowPlant::CutOff),
                 _ => None,
             });
+            // #1470's planted menu is served by the panel module, which reads the plant from its environment.
+            if plant == Some(Plant::MenuReleaseAlways) {
+                std::env::set_var("DEEP_HUB_PLANT", "menu-release-always");
+            }
             let into = mounted.clone();
             let (window, shell) =
                 open_shell_with(options, &layout, cx, move |window, cx| match panel {
