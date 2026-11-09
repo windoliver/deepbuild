@@ -275,6 +275,7 @@ impl Hub<'_> {
             .ok_or_else(|| refused("no_revision"))?;
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
+        self.inline_programs(&mut doc);
         Ok(doc)
     }
 

@@ -29,34 +29,59 @@ pub struct Entry {
     pub value: f64,
     pub writer: String,
     pub player: u32,
+    /// A reading's as-of time, in microseconds: then `control` is the reading, `reading:<source>`
+    /// (Logic: readings).
+    pub as_of: Option<i64>,
+    /// Its place in the order entries reached the track, which no read follows but a planted one.
+    pub arrived: u64,
 }
 
 impl Entry {
     pub fn parse(v: &Value) -> Option<Entry> {
+        let reading = v.get("reading").and_then(Value::as_str);
         Some(Entry {
             t: v.get("t")?.as_i64()?,
             seq: v.get("seq").map_or(Some(0), Value::as_u64)? as u32,
-            control: v.get("control")?.as_str()?.to_string(),
+            control: reading
+                .or(v.get("control").and_then(Value::as_str))?
+                .to_string(),
             value: v.get("value")?.as_f64()?,
             writer: v
                 .get("writer")
                 .map_or(Some("you"), Value::as_str)?
                 .to_string(),
             player: v.get("player").map_or(Some(1), Value::as_u64)? as u32,
+            as_of: match reading {
+                Some(_) => Some(v.get("as_of")?.as_i64()?),
+                None => None,
+            },
+            arrived: 0,
         })
     }
     pub fn to_json(&self) -> Value {
-        json!({"t": self.t, "seq": self.seq, "control": self.control, "value": self.value, "writer": self.writer, "player": self.player})
+        match self.as_of {
+            None => {
+                json!({"t": self.t, "seq": self.seq, "control": self.control, "value": self.value, "writer": self.writer, "player": self.player})
+            }
+            Some(as_of) => {
+                json!({"t": self.t, "seq": self.seq, "reading": self.control, "value": self.value, "as_of": as_of, "writer": self.writer, "player": self.player})
+            }
+        }
     }
 }
 
-/// The input track by control, each in the track's order: by time, player and seq.
+/// The input track by control or reading, each in the track's order: by time, player and seq.
 pub type Track = BTreeMap<String, Vec<Entry>>;
 
+/// The track of `entries`, each arriving in the order given.
 pub fn track_of(entries: &[Entry]) -> Track {
     let mut out: Track = BTreeMap::new();
-    for e in entries {
-        out.entry(e.control.clone()).or_default().push(e.clone());
+    for (n, e) in entries.iter().enumerate() {
+        let e = Entry {
+            arrived: n as u64,
+            ..e.clone()
+        };
+        out.entry(e.control.clone()).or_default().push(e);
     }
     for list in out.values_mut() {
         list.sort_by_key(|e| (e.t, e.player, e.seq));
@@ -512,9 +537,23 @@ impl World {
     /// each reading the others' arrays as earlier steps left them. `before(k)` runs whenever every
     /// item is about to run step k, after its checkpoints.
     pub fn run(&mut self, until: i64, rec: &mut Record, before: &mut dyn FnMut(&mut World, i64)) {
+        self.run_while(&|next, _| next < until, rec, before);
+    }
+
+    /// Runs every item's steps at or before time `t`, as `run` does.
+    pub fn run_through(&mut self, t: i64, rec: &mut Record) {
+        self.run_while(&|next, step| next * step <= t, rec, &mut |_, _| {});
+    }
+
+    fn run_while(
+        &mut self,
+        due: &dyn Fn(i64, i64) -> bool,
+        rec: &mut Record,
+        before: &mut dyn FnMut(&mut World, i64),
+    ) {
         loop {
             let t = (0..self.lives.len())
-                .filter(|&i| self.lives[i].next < until)
+                .filter(|&i| due(self.lives[i].next, self.piece.items[i].step))
                 .map(|i| self.lives[i].next * self.piece.items[i].step)
                 .min();
             for i in 0..self.lives.len() {
@@ -528,7 +567,8 @@ impl World {
             let Some(t) = t else { break };
             let group: Vec<usize> = (0..self.lives.len())
                 .filter(|&i| {
-                    self.lives[i].next < until && self.lives[i].next * self.piece.items[i].step == t
+                    due(self.lives[i].next, self.piece.items[i].step)
+                        && self.lives[i].next * self.piece.items[i].step == t
                 })
                 .collect();
             let snapshot = self.published.clone();
@@ -544,24 +584,43 @@ impl World {
         let item = &piece.items[i];
         let k = self.lives[i].next;
         let t = k * item.step;
-        // Each read control's entries stamped by now, at most PER_STEP a step.
+        // Each read control's entries stamped by now, at most PER_STEP a step, the step's own by
+        // player and seq, never by arrival (Input track); each reading's values as recorded.
         let mut taken: BTreeMap<&str, Vec<Entry>> = BTreeMap::new();
         {
             let l = &mut self.lives[i];
-            for r in item
-                .layout
-                .entries
-                .iter()
-                .filter(|e| e.read == Read::Control)
-            {
+            for r in &item.layout.entries {
+                let (most, each) = match r.read {
+                    Read::Control => (PER_STEP, true),
+                    Read::Reading { each, max } => (max as usize, each),
+                    _ => continue,
+                };
                 let list = self.track.get(&r.name).map_or(&[][..], Vec::as_slice);
                 let c = l.cursor.entry(r.name.clone()).or_insert(0);
                 let q = l.pending.entry(r.name.clone()).or_default();
+                let mut fresh: Vec<Entry> = Vec::new();
                 while *c < list.len() && list[*c].t <= t {
-                    q.push_back(list[*c].clone());
+                    fresh.push(list[*c].clone());
                     *c += 1;
                 }
-                let n = q.len().min(PER_STEP);
+                if r.read == Read::Control {
+                    if self.planted.read_region_orders_by_arrival {
+                        fresh.sort_by_key(|e| e.arrived);
+                    } else {
+                        fresh.sort_by_key(|e| (e.player, e.seq, e.arrived));
+                    }
+                }
+                if !each {
+                    // `latest`: the last value recorded at or before this step, kept until the next.
+                    if let Some(last) = fresh.pop() {
+                        q.clear();
+                        q.push_back(last);
+                    }
+                    taken.insert(&r.name, q.iter().cloned().collect());
+                    continue;
+                }
+                q.extend(fresh);
+                let n = q.len().min(most);
                 taken.insert(&r.name, q.drain(..n).collect());
             }
         }
@@ -583,8 +642,23 @@ impl World {
                     region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
                     for (j, x) in list.iter().enumerate() {
                         let o = at + 8 + 16 * j;
-                        region[o..o + 4].copy_from_slice(&x.player.to_le_bytes());
+                        let player = if self.planted.read_region_drops_player {
+                            0
+                        } else {
+                            x.player
+                        };
+                        region[o..o + 4].copy_from_slice(&player.to_le_bytes());
                         region[o + 8..o + 16].copy_from_slice(&x.value.to_le_bytes());
+                    }
+                }
+                // Each value as an f64, then its as-of time as an i64 of microseconds.
+                Read::Reading { .. } => {
+                    let list = &taken[e.name.as_str()];
+                    region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
+                    for (j, x) in list.iter().enumerate() {
+                        let o = at + 8 + 16 * j;
+                        region[o..o + 8].copy_from_slice(&x.value.to_le_bytes());
+                        region[o + 8..o + 16].copy_from_slice(&x.as_of.unwrap_or(0).to_le_bytes());
                     }
                 }
                 Read::Array { item: from, offset } => {
@@ -686,6 +760,154 @@ impl World {
         }
         self.published = back.published;
         Ok(())
+    }
+
+    /// The input track, in the track's order.
+    pub fn entries(&self) -> Vec<Entry> {
+        let mut out: Vec<Entry> = self.track.values().flatten().cloned().collect();
+        out.sort_by_key(|e| (e.t, e.player, e.seq, e.arrived));
+        out
+    }
+
+    /// An entry joining the track as it arrives: a writer's as stamped, and a reading's value at
+    /// the first step not yet run of the items that read it (Logic: readings). An entry a step
+    /// already read would rewrite the past, which only a fork or the net module's rollback does.
+    pub fn append(&mut self, mut e: Entry) -> Result<Entry, Failed> {
+        let steps = self.piece.items.iter().zip(&self.lives);
+        if e.as_of.is_some() {
+            if !self.piece.sources.contains_key(&e.control) {
+                return Err(
+                    json!({"ok": false, "code": "bad_input", "what": format!("the piece declares no source {}", e.control)}),
+                );
+            }
+            // The first step not yet run of its readers, or of every item when none reads it.
+            let next = |only: bool| {
+                steps
+                    .clone()
+                    .filter(|(i, _)| !only || i.reads.contains(&e.control))
+                    .map(|(i, l)| l.next * i.step)
+                    .min()
+            };
+            e.t = next(true).or_else(|| next(false)).unwrap_or(0);
+            e.seq = self.track.get(&e.control).map_or(0, Vec::len) as u32;
+        }
+        let read = steps
+            .map(|(i, l)| (l.next - 1) * i.step)
+            .max()
+            .unwrap_or(-1);
+        if e.t <= read {
+            return Err(
+                json!({"ok": false, "code": "bad_input", "what": format!("an entry at {} is before the first step not yet run", e.t)}),
+            );
+        }
+        e.arrived = self.track.values().map(Vec::len).sum::<usize>() as u64;
+        let list = self.track.entry(e.control.clone()).or_default();
+        let at = list.partition_point(|x| (x.t, x.player, x.seq) <= (e.t, e.player, e.seq));
+        list.insert(at, e.clone());
+        Ok(e)
+    }
+
+    /// Every item's whole state as plain data: what a canvas module carries between steps
+    /// (`module`). Entries still waiting stay with it; its place on the track doesn't, since the
+    /// world that loads it reads a track of its own.
+    pub fn saved(&mut self) -> Value {
+        let items: Vec<Value> = self
+            .lives
+            .iter_mut()
+            .map(|l| {
+                let globals: Vec<Value> = l
+                    .globals()
+                    .iter()
+                    .map(|v| match v {
+                        Val::I32(x) => json!(["i32", x]),
+                        Val::I64(x) => json!(["i64", x]),
+                        Val::F32(x) => json!(["f32", x]),
+                        Val::F64(x) => json!(["f64", x]),
+                        _ => Value::Null,
+                    })
+                    .collect();
+                let pending: Map<String, Value> = l
+                    .pending
+                    .iter()
+                    .map(|(k, q)| (k.clone(), q.iter().map(Entry::to_json).collect()))
+                    .collect();
+                json!({"next": l.next, "failed": l.failed, "memory": hex(l.memory()), "globals": globals,
+                       "arrays": hex(&l.arrays), "pending": pending})
+            })
+            .collect();
+        Value::Array(items)
+    }
+
+    /// A world on `track` holding the state `saved` gave, each item in a fresh instance; the start
+    /// function and `init` never run again.
+    pub fn from_saved(
+        piece: Rc<Piece>,
+        track: Track,
+        saved: &Value,
+        planted: Planted,
+    ) -> Result<World, Failed> {
+        let bad =
+            || json!({"ok": false, "code": "bad_input", "what": "a saved state of another piece"});
+        let unhex = |v: &Value| -> Option<Vec<u8>> {
+            let s = v.as_str()?;
+            (0..s.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(s.get(i..i + 2)?, 16).ok())
+                .collect()
+        };
+        let mut lives = Vec::new();
+        for (item, s) in piece.items.iter().zip(saved.as_array().ok_or_else(bad)?) {
+            let globals: Vec<Val> = s["globals"]
+                .as_array()
+                .ok_or_else(bad)?
+                .iter()
+                .map(|g| match (g[0].as_str(), &g[1]) {
+                    (Some("i32"), x) => x.as_i64().map(|x| Val::I32(x as i32)),
+                    (Some("i64"), x) => x.as_i64().map(Val::I64),
+                    (Some("f32"), x) => x.as_u64().map(|x| Val::F32(x as u32)),
+                    (Some("f64"), x) => x.as_u64().map(Val::F64),
+                    _ => None,
+                })
+                .collect::<Option<_>>()
+                .ok_or_else(bad)?;
+            let memory = unhex(&s["memory"]).ok_or_else(bad)?;
+            let mut live = World::load(&item.bytes, item, &memory, &globals)?;
+            live.next = s["next"].as_i64().ok_or_else(bad)?;
+            live.failed = s["failed"].as_bool().ok_or_else(bad)?;
+            live.arrays = unhex(&s["arrays"]).ok_or_else(bad)?;
+            for (k, q) in s["pending"].as_object().into_iter().flatten() {
+                let q: VecDeque<Entry> = q
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Entry::parse)
+                    .collect();
+                live.pending.insert(k.clone(), q);
+            }
+            lives.push(live);
+        }
+        if lives.len() != piece.items.len() {
+            return Err(bad());
+        }
+        let published = lives.iter().map(|l| l.arrays.clone()).collect();
+        Ok(World {
+            piece,
+            track,
+            lives,
+            published,
+            store: false,
+            planted,
+        })
+    }
+
+    /// Item `i`'s array `name` as its last step left it, element by element.
+    pub fn array(&self, i: usize, name: &str) -> Option<Vec<Value>> {
+        let item = &self.piece.items[i];
+        let w = item.writes.iter().find(|w| w.name == name)?;
+        let at = item.write(name)?.offset as usize;
+        let n = w.ty.size() as usize;
+        let bytes = self.published[i].get(at..at + n * w.count as usize)?;
+        Some(bytes.chunks(n).map(|b| w.ty.value(b)).collect())
     }
 
     /// Forks the input track at step `k`: entries stamped after step k's time are dropped,

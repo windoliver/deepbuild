@@ -11,6 +11,7 @@ pub mod budget;
 pub mod checks;
 pub mod lines;
 pub mod live;
+pub mod module;
 pub mod piece;
 pub mod world;
 
@@ -42,6 +43,8 @@ pub struct Planted {
     pub restore_keeps_regions_only: bool,
     pub restore_copies_assets: bool,
     pub simulate_runs_all_steps: bool,
+    pub read_region_orders_by_arrival: bool,
+    pub read_region_drops_player: bool,
 }
 
 impl Planted {
@@ -50,6 +53,8 @@ impl Planted {
         let p = &mut self;
         match name {
             "check_compares_step_hashes" => p.check_step_hashes_only = true,
+            "read_region_orders_by_arrival" => p.read_region_orders_by_arrival = true,
+            "read_region_drops_player" => p.read_region_drops_player = true,
             "budget_sums_fuel_only" => p.budget_sums_only_fuel = true,
             "checkpoint_drops_globals" => p.checkpoint_drops_globals = true,
             "restore_keeps_regions_only" => p.restore_keeps_regions_only = true,
@@ -199,6 +204,8 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
                             value: *value,
                             writer: "tour".into(),
                             player: 1,
+                            as_of: None,
+                            arrived: 0,
                         });
                         seq += 1;
                     }
@@ -418,6 +425,7 @@ impl Logic {
             Some("frame") => self.frame(line).unwrap_or_else(|e| e),
             Some("open") => self.open(line).unwrap_or_else(|e| e),
             Some("step") => self.step(line).unwrap_or_else(|e| e),
+            Some("append") => self.append(line).unwrap_or_else(|e| e),
             _ => json!({"ok": false, "code": "bad_input"}),
         }
     }
@@ -734,6 +742,10 @@ impl Logic {
             .filter(|n| *n >= 0)
             .ok_or_else(|| bad("steps"))?;
         let entries = track(&piece, line, steps).ok_or_else(|| bad("track"))?;
+        // The web runner fills no reading's slot yet: a plan it would run short is refused.
+        if !piece.sources.is_empty() {
+            return Err(bad("the web player doesn't read readings yet"));
+        }
         let items: Vec<Value> = piece
             .items
             .iter()
@@ -746,6 +758,7 @@ impl Logic {
                     .map(|e| {
                         let (kind, from, offset) = match &e.read {
                             piece::Read::Control => ("control", Value::Null, 0),
+                            piece::Read::Reading { .. } => unreachable!("refused above"),
                             piece::Read::Array { item, offset } => ("array", json!(item), *offset),
                             piece::Read::Seed => ("seed", Value::Null, 0),
                             piece::Read::None => ("write", Value::Null, 0),
@@ -863,6 +876,25 @@ impl Logic {
         let w = self.sessions.get_mut(s).ok_or_else(|| bad("session"))?;
         let mut rec = Record::default();
         w.run(to + 1, &mut rec, &mut |_, _| {});
-        Ok(json!({"ok": true, "step": to, "failed": w.failed()}))
+        let track: Vec<Value> = w.entries().iter().map(Entry::to_json).collect();
+        Ok(json!({"ok": true, "step": to, "failed": w.failed(), "steps": rec.steps_json(&w.piece), "track": track}))
+    }
+
+    /// An entry joining a session's track as it arrives: a test writer's control entry as
+    /// stamped, or a value a reading's source delivers, `{reading, value, as_of}`, which the
+    /// logic module stamps (Logic: readings).
+    fn append(&mut self, line: &Value) -> Result<Value, Value> {
+        let s = line
+            .get("session")
+            .and_then(Value::as_str)
+            .ok_or_else(|| bad("session"))?;
+        let w = self.sessions.get_mut(s).ok_or_else(|| bad("session"))?;
+        let mut e = line.get("entry").cloned().ok_or_else(|| bad("entry"))?;
+        if e.get("reading").is_some() {
+            e["t"] = json!(0);
+            e["writer"] = json!("plugin");
+        }
+        let e = Entry::parse(&e).ok_or_else(|| bad("entry"))?;
+        Ok(json!({"ok": true, "entry": w.append(e)?.to_json()}))
     }
 }

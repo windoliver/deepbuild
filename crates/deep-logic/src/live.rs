@@ -124,6 +124,8 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
                 value,
                 writer: "you".into(),
                 player: 1,
+                as_of: None,
+                arrived: 0,
             };
             stamped = e.to_json();
             world.fork_track(k, &[e]);

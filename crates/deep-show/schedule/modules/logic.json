@@ -1,0 +1,21 @@
+{
+  "module": "logic",
+  "phases": {
+    "simulate": [
+      {
+        "operator": "logic.step",
+        "module": "logic",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "logic.state"
+        ],
+        "per": "document",
+        "step": 11760000
+      }
+    ]
+  },
+  "contributions": {}
+}

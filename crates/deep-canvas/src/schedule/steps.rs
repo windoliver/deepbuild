@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 
 use super::view::StepCtx;
-use super::{Mode, Report, Run, Scheduler, Session, StepLog, Val};
+use super::{Bound, Key, Mode, OpError, Report, Run, Scheduler, Session, StepLog, Val};
 use crate::registry::Sealed;
 use crate::time::CHECKPOINT_EVERY;
 
@@ -31,6 +31,10 @@ pub(super) struct Steps {
     checkpoints: BTreeMap<i64, BTreeMap<String, Val>>,
     /// The last checkpoint flick taken, so the next frame takes the ones after it.
     checkpointed: Option<i64>,
+    /// The revision the steps ran on: its document's key and the keys of the tables they read.
+    inputs: Vec<Key>,
+    /// Each stepping node's error in this frame's steps, which its node reports.
+    failed: BTreeMap<usize, OpError>,
 }
 
 impl Steps {
@@ -99,7 +103,8 @@ impl Session {
             if run == Run::Ran {
                 report.ran += 1;
             }
-            self.settle(s, n, key, out, None, run, frame, report);
+            let err = self.steps.failed.get(&n).cloned();
+            self.settle(s, n, key, out, err, run, frame, report);
         }
     }
 
@@ -107,6 +112,7 @@ impl Session {
     fn run_steps(&mut self, s: &mut Scheduler<'_>, report: &mut Report) {
         let sealed: &Sealed = s.sealed;
         let to = self.t;
+        self.steps.failed.clear();
         // The stepping nodes in the plan's order, which is the order at one time.
         let mut steppers: Vec<(usize, i64, String)> = Vec::new();
         if let Some(l) = &self.loaded {
@@ -133,11 +139,28 @@ impl Session {
                 .find(|m| &m.name == module)
                 .is_some_and(|m| m.shapes.carried.iter().any(|c| c.kind == "checkpoint"))
         });
-        if self.mode == Mode::Clean {
-            // A clean evaluation steps from the start; the frame stays, since it is the guard
-            // that runs the steps once a frame for every stepping operator.
+        // The revision the steps run on: its document and each table a stepper reads. Never a
+        // view or another array, which change from frame to frame without a new revision.
+        let mut inputs: Vec<Key> = Vec::new();
+        if let Some(l) = &self.loaded {
+            inputs.push(l.doc_key);
+            for (n, _, _) in &steppers {
+                self.tables_of(s, *n);
+                for b in &l.nodes[*n].reads {
+                    if let Bound::Table(name) = b {
+                        inputs.push(s.tables.get(name).map(|(_, k)| *k).unwrap_or_default());
+                    }
+                }
+            }
+        }
+        if self.mode == Mode::Clean || self.steps.inputs != inputs {
+            // A clean evaluation steps from the start, and so does a revision whose steps read
+            // something else (design: Saves; anything not carried on restarts at step 0). The
+            // frame stays, since it is the guard that runs the steps once a frame for every
+            // stepping operator.
             self.steps = Steps {
                 frame: self.steps.frame,
+                inputs,
                 ..Steps::default()
             };
         } else if self.steps.at.is_some_and(|at| at > to) {
@@ -187,7 +210,8 @@ impl Session {
                     earlier: &earlier,
                 };
                 let (out, err, noted, tails) = self.call(s, *n, Some(ctx), report);
-                if err.is_some() {
+                if let Some(e) = err {
+                    self.steps.failed.insert(*n, e);
                     continue;
                 }
                 self.tails.extend(tails);
