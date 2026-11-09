@@ -41,8 +41,10 @@ signed request over the hub's socket as the app does. Each request (sig cut shor
     - `tests/acceptance/1097/warn.test.ts` failed on deep-hook's 50 ms sync at load 21, and passes twice on the branch and twice
       at the base at load 12.
     - `env-resources`, `1556/twins` and `39/replies` (no codex) fail at the base too.
-  - **Left, and caused by this change:** five tests in `tests/acceptance/34/answers.test.ts`. #34's `signed()` helper signs in the
-    retired format (`device` in the params, a string `signature`), and #1579 refuses that format by design. The same helper makes
-    `tests/acceptance/327/answers-redraft/ac2.test.ts` fail earlier than it does at the base, where it fails anyway.
+  - **Caused by this change, then fixed with the owner's approval:** five tests in `tests/acceptance/34/answers.test.ts`
+    failed because #34's `signed()` helper signed in the retired format. The helper now signs in #1579's format, with the hub
+    ID that `pair()` reads from the hello, and suite 65's own pairing sets it too; no assertion changed. Afterwards
+    `answers.test.ts` passes 7/7. `tests/acceptance/327/answers-redraft/ac2.test.ts` fails as it does at the base (the ask
+    "was already answered").
 - `tests/acceptance/65` (channels): 27/30 fail at the base and on the branch alike on Linux, because `deep install` refuses the
   channel packages' envelope digest here. The channel half of the one verifier still needs a run on the Mac.
