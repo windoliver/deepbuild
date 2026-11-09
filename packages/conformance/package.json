@@ -11,10 +11,10 @@
       "development": "./src/index.ts",
       "default": "./dist/index.js"
     },
-    "./result": {
-      "types": "./src/result.ts",
-      "development": "./src/result.ts",
-      "default": "./dist/result.js"
+    "./probe": {
+      "types": "./src/probe.ts",
+      "development": "./src/probe.ts",
+      "default": "./dist/probe.js"
     },
     "./slot-types": {
       "types": "./src/slot-types.ts",

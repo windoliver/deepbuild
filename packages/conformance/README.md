@@ -7,9 +7,10 @@ The one conformance runner and its kits (#313, #314, #349): the adapter kit with
 ## Where new code goes
 
 - `src/index.ts`: the public entry; export only what callers need.
-- `src/result.ts` and `src/slot-types.ts` are entries of their own (`@deepbuild/conformance/result`, `/slot-types`): the run result's shape check, and a kit's shapes with the `Finding` a judge ends a case with. A check kind the hub loads takes its values from these, so the hub starts without the kits, the fake agent and the generator; neither may import a kit.
+- `src/probe.ts` and `src/slot-types.ts` are entries of their own (`@deepbuild/conformance/probe`, `/slot-types`): the probe run, and a kit's shapes with the `Finding` a judge ends a case with. A check kind the hub loads takes its values from these, so the hub starts without the kits, the fake agent and the generator; neither may import a kit.
 - `src/slots/<slot>.ts`: a new hub slot's kit, listed in `src/slots/kits.ts`. Shared kit helpers go in `src/slots/shared.ts`.
 - `src/kit.ts`, `src/runner.ts`, `src/fake-agent.ts`, `src/shipped.ts`: the adapter kit (adapter@1).
+- `src/result.ts`, `src/probe.ts`: the check.kind@1 wire result's shape check, and the one run of a check kind's probe under its deadline that `checks-numbers` and `checks-work` share.
 - `runtime/<kit>/`: scripts a kit loads into or starts as other processes; `fixtures/<kit>/`: a kit's fixed cases.
 - `src/gate.ts`, `src/gate-play.ts`: the kit gate@1 (#33), `deep-conformance gate check|run`: its corpus in `fixtures/gate/`, played through `runtime/gate/agent.mjs` on the hub and deep-hook this checkout builds, started as processes, never imported.
 - Tests: `*.test.ts` beside the source they test, under `src/`; this package has no `test/` folder.
