@@ -521,6 +521,9 @@ interface Ext {
   kinds: string[];
   /** Environments it registered (#331); at its conformance run, every one it tried. */
   environments: string[];
+  /** Starts and handles owned by this exact load; removal drains them before dropping its handlers. */
+  environmentStarts: Set<Promise<unknown>>;
+  environmentStops: Set<() => Promise<void>>;
   subscribed: Set<string>;
   routes: Set<string>;
   /** The adapter names it registered. */
@@ -788,20 +791,6 @@ const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult
   outcome, testsRun: 0, evidence: [], read: [], mask: null,
   failures: failure ? [{ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: failure }] : [],
 });
-/** check.kind@1's outcomes. */
-const OUTCOMES: readonly string[] = ['passed', 'failed', 'ran_nothing', 'missing', 'overran', 'stopped', 'uncounted'];
-const strings = (v: unknown): boolean => Array.isArray(v) && v.every((s) => typeof s === 'string');
-const isFailure = (f: unknown): boolean => {
-  const x = f as Record<string, unknown> | null;
-  return typeof x === 'object' && x !== null && typeof x.test === 'string' && typeof x.file === 'string' && Number.isInteger(x.line)
-    && (x.stack === null || typeof x.stack === 'string') && typeof x.assertion === 'boolean' && typeof x.message === 'string';
-};
-/** A check result as check.kind@1 defines one, every field; anything else from a package is no result. */
-const isResult = (r: unknown): r is CheckResult => {
-  const x = r as Record<string, unknown> | null;
-  return typeof x === 'object' && x !== null && OUTCOMES.includes(x.outcome as string) && Number.isInteger(x.testsRun) && (x.testsRun as number) >= 0
-    && Array.isArray(x.failures) && x.failures.every(isFailure) && strings(x.evidence) && strings(x.read) && (x.mask === null || typeof x.mask === 'string');
-};
 /** The one permission a piece that hosts shells asks for: run any command you could (#104). */
 const RUN_AS_YOU = 'run_as_you';
 /** Whether the manifest asks for the grant: an access word, or `notices` for a declared notice kind. */
@@ -1924,6 +1913,7 @@ class Host implements ExtensionHost {
       entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
       adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
+      environmentStarts: new Set(), environmentStops: new Set(),
     };
   }
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts (or the planted twin's rule). */
@@ -2207,8 +2197,12 @@ class Host implements ExtensionHost {
   }
   /** Its handlers stop: nothing more is asked of it, and a sandboxed one's process ends. */
   private async stopHandlers(ext: Ext): Promise<void> {
+    await Promise.allSettled([...ext.environmentStarts]);
+    const stopped = await Promise.allSettled([...ext.environmentStops].map((down) => down()));
     delete ext.ask;
     await ext.stop?.();
+    const failed = stopped.flatMap((r) => r.status === 'rejected' ? [r.reason] : []);
+    if (failed.length) throw new AggregateError(failed, `${ext.entry.id}'s environments did not all stop`);
   }
 
   /**
@@ -3452,21 +3446,41 @@ class Host implements ExtensionHost {
         const bad = badDeadline('deadline', deadline);
         if (bad) throw Error(`an environment start's ${bad}`);
         await current();
-        const value = await this.ask(ext!, deadline, `environment ${name}`, 'env.up', { name, spec, lease, checkout });
-        // An old load's late start is never presented as its replacement's handle.
-        await current();
-        if (!isPlain(value) || typeof value.id !== 'string' || !value.id || value.port !== lease.port || !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0) {
-          throw Error(`environment ${name} returned an invalid handle or a port outside its lease`);
+        // Capture the owning generation's handler: cleanup must work even after it is unpublished.
+        const owner = ext!;
+        const ask = owner.ask!;
+        let cancelled = false;
+        const started = ask('env.up', { name, spec, lease, checkout }).then(async (value): Promise<RunningEnvironment> => {
+          if (!isPlain(value) || typeof value.id !== 'string' || !value.id || value.port !== lease.port || !Number.isSafeInteger(value.pid) || Number(value.pid) <= 0) {
+            throw Error(`environment ${name} returned an invalid handle or a port outside its lease`);
+          }
+          const handle = Object.freeze({ id: value.id, port: lease.port, pid: Number(value.pid) });
+          let stopped: Promise<void> | undefined;
+          const down = (): Promise<void> => stopped ??= within(CALL_MS, `environment ${name} down`, ask('env.down', { name, handle }))
+            .then(() => { owner.environmentStops.delete(down); });
+          owner.environmentStops.add(down);
+          if (cancelled || !owner.live || this.exts.get(owner.entry.id) !== owner) {
+            await down();
+            throw Error(`no loaded extension registered the environment ${name}; its start was cancelled or its load removed`);
+          }
+          return { handle, down };
+        });
+        // Even a start returning after its deadline is observed and cleaned by its own handler.
+        const bounded = within(deadline, `environment ${name}`, started);
+        owner.environmentStarts.add(bounded);
+        try {
+          const running = await bounded;
+          owner.environmentStarts.delete(bounded);
+          await current();
+          return running;
+        } catch (error) {
+          cancelled = true;
+          owner.environmentStarts.delete(bounded);
+          if (error instanceof Overran) await this.unload(owner);
+          throw error;
+        } finally {
+          owner.environmentStarts.delete(bounded);
         }
-        const handle = Object.freeze({ id: value.id, port: lease.port, pid: Number(value.pid) });
-        let down: Promise<void> | undefined;
-        return {
-          handle,
-          down: () => down ??= (async () => {
-            await current();
-            await this.ask(ext!, CALL_MS, `environment ${name} down`, 'env.down', { name, handle });
-          })(),
-        };
       },
     };
   }
@@ -3499,7 +3513,8 @@ class Host implements ExtensionHost {
       this.canvasKeys.set(ext, []);
       const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: this.checkContext(ext, ctx) });
       const read = this.canvasKeys.get(ext) ?? [];
-      if (!isResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
+      const { isCheckResult } = await import('@deepbuild/conformance');
+      if (!isCheckResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
       // A passed run rests on the tests it counted: passed with none counted ran nothing it can vouch for.
       if (result.outcome === 'passed' && result.testsRun === 0) return nothing('ran_nothing', `${ext.entry.id}'s ${kind} reported passed without its results: it counted no test`);
       // A pass built on canvas reads holds only with their content keys as its evidence (Check input: plug-in reads).
