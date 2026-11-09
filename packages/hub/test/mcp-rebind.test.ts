@@ -176,4 +176,34 @@ describe('a deep mcp whose session /clear rotated', () => {
       }
     });
   }, 60_000);
+
+  it('binds a call after /clear by the stamp of its tool as Claude Code names it from the server deep setup registers, deepbuild', async () => {
+    await withHub(async (root, home) => {
+      const work = join(home, 'work');
+      const projects = join(home, '.claude', 'projects', work.replace(/[^a-zA-Z0-9]/g, '-'));
+      mkdirSync(work, { recursive: true });
+      mkdirSync(projects, { recursive: true });
+      const hook = (session: string, event: string, extra: Record<string, unknown> = {}) => {
+        const transcript = join(projects, `${session}.jsonl`);
+        writeFileSync(transcript, '', { flag: 'a' });
+        return send(join(root, 'hub.sock'), hookLine(ulid(Date.now()), event, { session_id: session, transcript_path: transcript, cwd: work, hook_event_name: event, ...extra }, { ppid: process.pid }));
+      };
+      const [a, b] = ['1632eeee-0000-4000-8000-000000000001', '1632eeee-0000-4000-8000-000000000002'];
+      await hook(a, 'SessionStart', { source: 'startup' });
+      const client = mcp(home, work, false);
+      try {
+        await client.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } });
+        expect((await client.call('deep_status', {})).value?.session, 'the deep mcp binds to A at its hello').toBe(a);
+        await hook(a, 'SessionEnd', { reason: 'clear' });
+        await hook(b, 'SessionStart', { source: 'clear' });
+        const claim = { task_ref: 'task:01K74G0A1B2C3D4E5F6G7H8J3K', attempt: 1, commit: '0'.repeat(40), scope: 'session', predictions: null };
+        await hook(b, 'PreToolUse', { tool_name: 'mcp__deepbuild__deep_claim', tool_input: claim, tool_use_id: 'toolu_3' });
+        const stamped = await client.call('deep_claim', claim);
+        expect(stamped.isError, JSON.stringify(stamped.value)).toBe(false);
+        expect(stamped.value?.session, 'the claim is B\'s').toBe(b);
+      } finally {
+        client.close();
+      }
+    });
+  }, 60_000);
 });

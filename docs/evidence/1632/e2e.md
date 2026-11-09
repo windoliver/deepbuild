@@ -1,21 +1,52 @@
 # #1632 by hand: a real Claude Code process, its deep mcp and a real `/clear`
 
-Run 2026-11-08 on the Linux dev box, with real Claude Code 2.1.317 (`claude --allowedTools mcp__deepbuild --model haiku`
+Runs 1–3 on 2026-11-08 and 4–5 on 2026-11-09, on the Linux dev box, with real Claude Code 2.1.317 (`claude --allowedTools mcp__deepbuild --model haiku`
 in tmux) and a real `deep hub run` from this branch's build, both in a throwaway home (`/tmp/e2e1632-uA59/home`, set up
 by this branch's `deep setup`: its hooks in that home's `~/.claude/settings.json`, its `deep mcp` in `~/.claude.json`).
 The project was an empty git repo at `/tmp/e2e1632-uA59/proj`. Nothing stands in for the hub, deep-hook, `deep mcp` or
 Claude Code. Session IDs are Claude Code's own random ones. The record excerpts below come from the hub's
 `ledger.db` (`events`: log position, kind, session, writer, unverified flag, the data fields shown).
 
-## What was not run
+## Model turns (runs 4 and 5, 2026-11-09)
 
-**No model turn ran**, so no `deep_ask` or `deep_claim` reached the hub through Claude Code. The account had hit its
-weekly limit, which resets Nov 10, 12am PT. Every prompt, Haiku included, was answered "You've hit your weekly limit",
-and switching to usage credits asked for a new sign-in that couldn't be finished from this box. The owner chose to skip
-the model-turn run. A retry at 21:54 PT with fresh credentials got the same answer, and the switch again asked for a new
-login. The calls after `/clear` are proven by the fixture suites
-instead (`tests/acceptance/1632/`, `packages/hub/test/mcp-rebind.test.ts`), which run the real deep-hook, hub and
-`deep mcp` on Claude Code's payloads.
+After the owner's usage-credits login on 2026-11-09 (the code pasted by the owner; nothing typed for them), real Haiku
+turns ran. The hub ran with the widened facts of run 2 below. Each run: turn A calls `deep_status`, `deep_ask`,
+`deep_claim`; then `/clear`; then turn B calls the same three and `deep_wait` on A's ask. About six credit turns were
+used in all, three of them in run 4.
+
+**Run 4, the branch as reviewed (e74660c3): after `/clear`, every session-bound call was refused.** Turn A worked
+(bound by the deep mcp's hello). In turn B, `deep_status` said `"session":null`, and `deep_ask`, `deep_claim` and
+`deep_wait` were each refused `unbound`, "no PreToolUse stamped for it is unspent"
+([screens/run4-turn-b-before-fix.txt](screens/run4-turn-b-before-fix.txt)). The hub recorded B's PreToolUse hooks
+verified, but kept no stamp: `deep setup` registers Claude Code's server as `deepbuild`, so Claude Code names the tools
+`mcp__deepbuild__deep_*`, while the hook map has stamped only `mcp__deep__*` (the name Codex and pi use) since #16. The
+fixture suites all send `mcp__deep__*`, which is why they passed. Fixed in `packages/hub/src/hookmap.ts`. Regression test:
+`mcp-rebind.test.ts`, "binds a call after /clear by the stamp of its tool as Claude Code names it from the server deep
+setup registers, deepbuild", which failed before the fix with the same refusal.
+
+**Run 5, with the fix: the new session's calls act for it, and nothing goes to the old ID.** The `deep mcp` process
+(started with Claude Code at 01:03:06) outlived `/clear`. Turn A: [screens/run5-turn-a.png](screens/run5-turn-a.png)
+([text](screens/run5-turn-a.txt)). Turn B: [screens/run5-turn-b.png](screens/run5-turn-b.png)
+([text](screens/run5-turn-b.txt)). B's `deep_status`, `deep_ask` and `deep_claim` act for B. B's `deep_wait` on A's ask
+is refused `not_found` ("Wait on an ask this session raised"), so A's answer never reaches B. The record:
+
+```text
+9   session.start  a861b175…  hook  unverified=0  {"thread": "a861b175…"}
+24  tool.before    a861b175…  hook  unverified=0  {"tool": "deep_ask", "kind": "mcp"}
+25  ask.created    a861b175…  mcp:a861b175…  unverified=0  {"question": "E2E1632 run 5 turn A: which header color?"}
+29  claim.made     a861b175…  mcp:a861b175…  unverified=0  {"task_ref": "task:01K74G0A1B2C3D4E5F6G7H8J11"}
+36  session.end    a861b175…  hook  unverified=0  {"reason": "clear"}
+38  session.start  ca074ffe…  hook  unverified=0  {"thread": "a861b175…"}
+48  tool.before    ca074ffe…  hook  unverified=0  {"tool": "deep_ask", "kind": "mcp"}
+49  ask.created    ca074ffe…  mcp:ca074ffe…  unverified=0  {"question": "E2E1632 run 5 turn B: which footer color?"}
+52  tool.before    ca074ffe…  hook  unverified=0  {"tool": "deep_claim", "kind": "mcp"}
+53  claim.made     ca074ffe…  mcp:ca074ffe…  unverified=0  {"task_ref": "task:01K74G0A1B2C3D4E5F6G7H8J12"}
+55  tool.before    ca074ffe…  hook  unverified=0  {"tool": "deep_wait", "kind": "mcp"}
+```
+
+Not covered by this run: Claude Code 2.1.317 as shipped is past the facts (run 1), so without the widened facts its
+PreToolUse is unverified, no stamp is kept, and the calls after `/clear` are refused rather than misfiled. That waits on the
+live smoke test widening the facts.
 
 ## Run 1: Claude Code 2.1.317 as shipped (past the adapter's facts)
 
