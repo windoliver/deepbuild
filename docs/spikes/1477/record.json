@@ -10,30 +10,30 @@
         700
       ],
       "seconds": 8,
-      "elapsed_s": 8.005669083,
-      "frames": 953,
+      "elapsed_s": 8.00732,
+      "frames": 933,
       "scroll_px_per_frame": 64.0,
       "raw": {
-        "p50_ms": 0.085375,
-        "p95_ms": 0.096,
-        "p99_ms": 0.13366699999999998,
-        "allocations_per_frame": 73.01364113326338,
-        "cpu_ms_per_frame": 0.55599370409234,
-        "working_set_bytes": 208618456,
+        "p50_ms": 0.10008299999999999,
+        "p95_ms": 0.121584,
+        "p99_ms": 0.13954200000000003,
+        "allocations_per_frame": 73.0139335476956,
+        "cpu_ms_per_frame": 0.6698628081457663,
+        "working_set_bytes": 208143344,
         "data_bytes": 0
       },
       "fingerprint": {
         "model": "Mac15,7",
         "chip": "Apple M3 Pro",
         "memoryBytes": 38654705664,
-        "power": "ac",
+        "power": "battery",
         "lowPowerMode": false,
         "thermalState": "nominal",
         "macosBuild": "25G241"
       },
       "load": {
-        "start": 36.65673828125,
-        "end": 34.1435546875
+        "start": 31.10986328125,
+        "end": 29.94091796875
       }
     },
     "kit": {
@@ -44,16 +44,16 @@
         700
       ],
       "seconds": 8,
-      "elapsed_s": 8.000025541,
-      "frames": 960,
+      "elapsed_s": 8.008276083,
+      "frames": 957,
       "scroll_px_per_frame": 64.0,
       "raw": {
-        "p50_ms": 2.25025,
-        "p95_ms": 2.348833,
-        "p99_ms": 2.4034590000000002,
-        "allocations_per_frame": 5668.055208333333,
-        "cpu_ms_per_frame": 3.070702083333333,
-        "working_set_bytes": 232293336,
+        "p50_ms": 2.259209,
+        "p95_ms": 2.3981250000000003,
+        "p99_ms": 2.450583,
+        "allocations_per_frame": 5668.051201671891,
+        "cpu_ms_per_frame": 3.1557774294670846,
+        "working_set_bytes": 232440816,
         "data_bytes": 39911120
       },
       "rows": 100000,
@@ -62,31 +62,42 @@
         "model": "Mac15,7",
         "chip": "Apple M3 Pro",
         "memoryBytes": 38654705664,
-        "power": "ac",
+        "power": "battery",
         "lowPowerMode": false,
         "thermalState": "nominal",
         "macosBuild": "25G241"
       },
       "load": {
-        "start": 34.1435546875,
-        "end": 31.5009765625
+        "start": 29.94091796875,
+        "end": 30.2470703125
       },
       "net": {
-        "p50_ms": 2.164875,
-        "p95_ms": 2.252833,
-        "p99_ms": 2.2697920000000003,
-        "allocations_per_frame": 5595.04156720007,
-        "cpu_ms_per_frame": 2.514708379240993,
-        "working_set_above_data_bytes": -16236240.0
+        "p50_ms": 2.1591259999999997,
+        "p95_ms": 2.2765410000000004,
+        "p99_ms": 2.311041,
+        "allocations_per_frame": 5595.037268124196,
+        "cpu_ms_per_frame": 2.485914621321318,
+        "working_set_above_data_bytes": -15613648.0
       }
     },
     "panel": {
       "arm": "panel",
-      "status": "INCONCLUSIVE",
+      "status": "missed",
       "reason": "the panel's table drew no rows: gpui-shell refuses its 100,000 rows of 8 columns (it caps a component's data at 10,000 array items, 4,096 nodes and 1,024 object keys, so a panel's DataTable holds at most 127 such rows) and shows the error instead",
+      "rows": 100000,
+      "columns": 8,
+      "fingerprint": {
+        "model": "Mac15,7",
+        "chip": "Apple M3 Pro",
+        "memoryBytes": 38654705664,
+        "power": "battery",
+        "lowPowerMode": false,
+        "thermalState": "nominal",
+        "macosBuild": "25G241"
+      },
       "load": {
-        "start": 31.5009765625,
-        "end": 31.5009765625
+        "start": 30.2470703125,
+        "end": 30.2470703125
       }
     },
     "list-10k": {
@@ -97,16 +108,16 @@
         700
       ],
       "seconds": 8,
-      "elapsed_s": 8.008439083,
+      "elapsed_s": 8.008032083,
       "frames": 961,
       "scroll_px_per_frame": 64.0,
       "raw": {
-        "p50_ms": 0.518333,
-        "p95_ms": 0.61,
-        "p99_ms": 0.8969590000000001,
-        "allocations_per_frame": 119.34547346514047,
-        "cpu_ms_per_frame": 1.1325275754422475,
-        "working_set_bytes": 236504072,
+        "p50_ms": 0.547583,
+        "p95_ms": 0.648959,
+        "p99_ms": 1.112709,
+        "allocations_per_frame": 119.34755463059314,
+        "cpu_ms_per_frame": 1.2501508844953173,
+        "working_set_bytes": 236356616,
         "data_bytes": 1746670
       },
       "rows": 10000,
@@ -127,22 +138,22 @@
         "model": "Mac15,7",
         "chip": "Apple M3 Pro",
         "memoryBytes": 38654705664,
-        "power": "ac",
+        "power": "battery",
         "lowPowerMode": false,
         "thermalState": "nominal",
         "macosBuild": "25G241"
       },
       "load": {
-        "start": 31.5009765625,
-        "end": 28.22119140625
+        "start": 30.2470703125,
+        "end": 28.94482421875
       },
       "net": {
-        "p50_ms": 0.43295800000000007,
-        "p95_ms": 0.514,
-        "p99_ms": 0.7632920000000001,
-        "allocations_per_frame": 46.331832331877095,
-        "cpu_ms_per_frame": 0.5765338713499075,
-        "working_set_above_data_bytes": 26138946.0
+        "p50_ms": 0.44750000000000006,
+        "p95_ms": 0.5273749999999999,
+        "p99_ms": 0.9731669999999999,
+        "allocations_per_frame": 46.33362108289754,
+        "cpu_ms_per_frame": 0.580288076349551,
+        "working_set_above_data_bytes": 26466602.0
       }
     },
     "list-100k": {
@@ -153,16 +164,16 @@
         700
       ],
       "seconds": 8,
-      "elapsed_s": 8.000092416,
+      "elapsed_s": 8.005286417,
       "frames": 960,
       "scroll_px_per_frame": 64.0,
       "raw": {
-        "p50_ms": 0.47766699999999995,
-        "p95_ms": 0.598792,
-        "p99_ms": 0.695708,
+        "p50_ms": 0.509625,
+        "p95_ms": 0.592458,
+        "p99_ms": 0.641208,
         "allocations_per_frame": 119.35104166666666,
-        "cpu_ms_per_frame": 0.9590854166666667,
-        "working_set_bytes": 263914528,
+        "cpu_ms_per_frame": 1.1862770833333334,
+        "working_set_bytes": 259589200,
         "data_bytes": 17766670
       },
       "rows": 100000,
@@ -183,22 +194,22 @@
         "model": "Mac15,7",
         "chip": "Apple M3 Pro",
         "memoryBytes": 38654705664,
-        "power": "ac",
+        "power": "battery",
         "lowPowerMode": false,
         "thermalState": "nominal",
         "macosBuild": "25G241"
       },
       "load": {
-        "start": 28.22119140625,
-        "end": 25.70751953125
+        "start": 28.94482421875,
+        "end": 33.4677734375
       },
       "net": {
-        "p50_ms": 0.392292,
-        "p95_ms": 0.502792,
-        "p99_ms": 0.562041,
-        "allocations_per_frame": 46.33740053340328,
-        "cpu_ms_per_frame": 0.40309171257432674,
-        "working_set_above_data_bytes": 37529402.0
+        "p50_ms": 0.409542,
+        "p95_ms": 0.470874,
+        "p99_ms": 0.501666,
+        "allocations_per_frame": 46.33710811897106,
+        "cpu_ms_per_frame": 0.5164142751875671,
+        "working_set_above_data_bytes": 33679186.0
       }
     },
     "ours": {
@@ -209,16 +220,16 @@
         700
       ],
       "seconds": 8,
-      "elapsed_s": 8.000948333,
+      "elapsed_s": 8.000035208,
       "frames": 960,
       "scroll_px_per_frame": 64.0,
       "raw": {
-        "p50_ms": 0.9003340000000001,
-        "p95_ms": 1.1509580000000001,
-        "p99_ms": 1.749708,
-        "allocations_per_frame": 194.13333333333333,
-        "cpu_ms_per_frame": 1.515021875,
-        "working_set_bytes": 352846928,
+        "p50_ms": 0.949875,
+        "p95_ms": 0.999541,
+        "p99_ms": 1.8951669999999998,
+        "allocations_per_frame": 194.12916666666666,
+        "cpu_ms_per_frame": 1.7299520833333333,
+        "working_set_bytes": 356992128,
         "data_bytes": 27111120
       },
       "rows": 100000,
@@ -234,22 +245,22 @@
         "model": "Mac15,7",
         "chip": "Apple M3 Pro",
         "memoryBytes": 38654705664,
-        "power": "ac",
+        "power": "battery",
         "lowPowerMode": false,
         "thermalState": "nominal",
         "macosBuild": "25G241"
       },
       "load": {
-        "start": 25.70751953125,
-        "end": 26.443359375
+        "start": 33.4677734375,
+        "end": 39.94775390625
       },
       "net": {
-        "p50_ms": 0.8149590000000001,
-        "p95_ms": 1.054958,
-        "p99_ms": 1.616041,
-        "allocations_per_frame": 121.11969220006995,
-        "cpu_ms_per_frame": 0.95902817090766,
-        "working_set_above_data_bytes": 117117352.0
+        "p50_ms": 0.849792,
+        "p95_ms": 0.877957,
+        "p99_ms": 1.7556249999999998,
+        "allocations_per_frame": 121.11523311897106,
+        "cpu_ms_per_frame": 1.060089275187567,
+        "working_set_above_data_bytes": 121737664.0
       }
     }
   },
@@ -259,5 +270,5 @@
     "at": null,
     "reading": null
   },
-  "decision": "INCONCLUSIVE: panel unrun, so the table arms can't decide; ours p99 1.616 ms, 121 allocations a frame net; #1433's gpui-fast list reading: none yet (docs/spikes/1433/record.json doesn't exist)"
+  "decision": "build: kit p99 2.311 ms net of the blank arm; panel missed (the panel's table drew no rows: gpui-shell refuses its 100,000 rows of 8 columns (it caps a component's data at 10,000 array items, 4,096 nodes and 1,024 object keys, so a panel's DataTable holds at most 127 such rows) and shows the error instead); against 4 ms; ours p99 1.756 ms, 121 allocations a frame net; #1433's gpui-fast list reading: none yet (docs/spikes/1433/record.json doesn't exist)"
 }
