@@ -3,6 +3,10 @@
 //! GPUI and Vello CPU paths (tests/acceptance/140/view/README.md, "deep-gpu: the live-headless
 //! calls").
 
+/// #499: every heap allocation the process makes is counted, so `idle` reports each frame's.
+#[global_allocator]
+static ALLOCATOR: deep_marks_render::Counting = deep_marks_render::Counting;
+
 fn main() {
     deep_marks_render::main();
 }

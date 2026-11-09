@@ -9,6 +9,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { APPROVERS, people, tag } from '../../fixtures/approver.mjs';
 
 export const CHECKOUT = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
 export const THROTTLE = join(CHECKOUT, 'scripts/throttle.mjs');
@@ -266,22 +267,11 @@ export function recordOf(box, lane, run) {
 
 const ISSUE = 9115;
 
-/** The maintainer's throwaway SSH key, in an approvers file, and a stranger's that isn't; DEEP_APPROVERS names the file. */
-function keys(box) {
-  const folder = join(box.dir, 'keys');
-  mkdirSync(folder);
-  for (const name of ['maintainer', 'stranger']) execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', `${name}@example.invalid`, '-f', join(folder, name)], { stdio: ['ignore', 'pipe', 'pipe'] });
-  const approvers = join(folder, 'approvers');
-  writeFileSync(approvers, `maintainer@example.invalid namespaces="git" ${readFileSync(join(folder, 'maintainer.pub'), 'utf8').trim()}\n`);
-  return { approvers, key: (name) => join(folder, name) };
-}
-
-/** The issue file and the environment the guard reads, for a planted issue and the throwaway approvers file. */
+/** The issue file and the environment the guard reads, for a planted issue. */
 function guardEnv(box) {
   const issues = join(box.dir, 'issues');
   write(issues, { [`${ISSUE}.md`]: 'Planted for #1115.\n\n### Acceptance criteria\n- [ ] Nothing real\n' });
-  const approvers = keys(box);
-  return { approvers, env: { DEEP_PROOF_ISSUES: issues, DEEP_APPROVERS: approvers.approvers } };
+  return { DEEP_PROOF_ISSUES: issues };
 }
 
 /**
@@ -295,12 +285,14 @@ export function guardRepo(box, base) {
   mkdirSync(cwd);
   const git = gitIn(cwd);
   git('init', '-q', '-b', 'main');
-  write(cwd, { 'scripts/proof-guard.mjs': '// the guard\n', ...base });
+  // The maintainer's security key is on the merge base's approvers list; the stranger's isn't.
+  const keys = people();
+  write(cwd, { 'scripts/proof-guard.mjs': '// the guard\n', [APPROVERS]: keys.list, ...base });
   git('add', '-A');
   git('commit', '-qm', 'base');
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
   git('checkout', '-q', '-b', 'change');
-  const { approvers, env } = guardEnv(box);
+  const env = guardEnv(box);
   let tags = 0;
   return {
     cwd, git,
@@ -311,10 +303,7 @@ export function guardRepo(box, base) {
       return git('rev-parse', 'HEAD').trim();
     },
     approve(commit, items, signer = 'maintainer') {
-      const name = `deep/approved/${++tags}`;
-      const message = items.map((item) => `Approves: ${item}`).join('\n');
-      if (signer) git('-c', 'gpg.format=ssh', '-c', `user.signingkey=${approvers.key(signer)}`, 'tag', '-s', '-m', message, name, commit);
-      else git('tag', '-a', '-m', message, name, commit);
+      tag(cwd, `deep/approved/${++tags}`, commit, items, signer && keys[signer]);
     },
     guard: () => launch(box, [process.execPath, join(CHECKOUT, 'scripts/proof.mjs'), 'guard'], { cwd, env }).done,
   };

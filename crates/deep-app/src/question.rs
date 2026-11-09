@@ -367,7 +367,12 @@ impl Controller {
 
     fn unmarked_rows(&self) -> Vec<Row> {
         let mut rows = vec![
-            Row::Text(self.model.kind.name().to_owned()),
+            // Its plain word; the planted card shows the kind's name, as before #1455.
+            Row::Text(if crate::plain::planted("card-shows-kind-name") {
+                self.model.kind.name().to_owned()
+            } else {
+                self.model.kind.plain()
+            }),
             Row::Text(self.model.question.clone()),
         ];
         // #1348's planted card line, in a test build only.

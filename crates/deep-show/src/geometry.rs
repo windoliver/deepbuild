@@ -278,7 +278,7 @@ impl Hub<'_> {
                     .and_then(|b| b.mesh.clone());
                 let (Some(mesh), Some(kind)) = (
                     mesh,
-                    EdgeKind::named(edges.get("kind").and_then(Value::as_str).unwrap_or("quads")),
+                    EdgeKind::read(edges).ok(),
                 ) else {
                     return json!({"code": "ref_unresolved", "path": format!("items/{id}/params/edges/of")});
                 };

@@ -27,7 +27,7 @@ import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { alive as running, openSupervisor, openUnder, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
-import { predictionContradictions, recordVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
+import { predictionContradictions, recordVerdict, verdict as claimVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, HOLD_MARGIN_MS, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { Confirmer } from './confirm.js';
@@ -88,7 +88,7 @@ import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
-import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
+import { plantedReload, plantedSessionEnd, plantedStop, type Plant } from './plant.js';
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts, type AssetKind } from './libraries.js';
@@ -181,6 +181,8 @@ const reusedPids = (): number[] => {
   try { const list = JSON.parse(readFileSync(file, 'utf8')) as unknown; return Array.isArray(list) ? list.filter((n): n is number => Number.isSafeInteger(n)) : []; } catch { return []; }
 };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** A verdict as the hub records and returns it: the gate's, or its opposite in #1334's planted misjudging build. */
+const misjudged = <V extends { outcome: string }>(v: V, plant: Plant | undefined): V => (plant === 'judges-claims-wrongly' ? { ...v, outcome: v.outcome === 'PASS' ? 'FAIL' : 'PASS' } : v);
 const isUnder = (path: string, dir: string) => {
   const rel = relative(dir, path);
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
@@ -590,6 +592,8 @@ export class Core {
    */
   private readonly jobs = new Map<string, { failures: number; since: number; at: number; error: string } | null>();
   private stopping = false;
+  /** A promotion's drain (#1334): no session starts until the hub restarts on the new build. */
+  private draining = false;
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
   private dropped = false;
@@ -1140,7 +1144,7 @@ export class Core {
     await extensions.ready().catch((error: unknown) => process.stderr.write(`deep hub: ${error instanceof Error ? error.message : String(error)}\n`));
     // Your channels (#65): the asks reach you where you said, and each answer a channel returns is checked here.
     this.channels = new Channels({
-      root: this.root.dir, now: this.now, plant: this.options.plant, devices: this.devices,
+      root: this.root.dir, hub: this.hubId(), now: this.now, plant: this.options.plant, devices: this.devices,
       loaded: () => extensions.channels(),
       call: (name, op, item, ctx) => (op === 'deliver' ? extensions.channel(name, op, item!, ctx) : extensions.channel(name, op, null, ctx)),
       asks: () => this.channelAsks(),
@@ -1951,7 +1955,7 @@ export class Core {
     const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
     const rules = readJson(join(this.root.dir, 'rules.json'));
     const entries = isObj(rules) && isObj(rules.entries) ? rules.entries : {};
-    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
+    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|unrestorable-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
     return blocks.length ? { guard: blocks.join(', ').slice(0, 2000), label: callOf(d, effectEntries(this.root.dir)).label.slice(0, 2000) } : undefined;
   }
 
@@ -4071,7 +4075,7 @@ export class Core {
     if (typeof handle !== 'string' || !/^offer:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/offer', 'Name the offer by its handle, offer:<id>, as deep inbox lists it.', handle));
     const offer = this.offers.get(handle);
     if (!offer) throw new Refused(refusal('not_found', '/params/offer', `No offer ${handle}; save one deep inbox lists.`, handle));
-    await this.trusted(params, context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle, offer.scope);
+    await this.trusted('offer.save', params, context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle, offer.scope);
     return this.saveOffer(handle, this.connection(context.role === 'app' ? 'app' : 'cli'));
   }
   /** The offer saved: its permission raised as an authority ask and answered yes on the trusted path, which saves it for the repo. */
@@ -5665,7 +5669,18 @@ export class Core {
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);
       case 'start.approve': return this.sessionStarts.approve(params, context);
-      case 'start.session': return this.sessionStarts.startSession(params, context);
+      case 'start.session':
+        if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
+        return this.sessionStarts.startSession(params, context);
+      // A promotion (#1334): the run pauses and its running turns are counted until none is left; the fixture claim
+      // judged by this build's own verdict engine; and, on the build that came back, the rollback's one notice.
+      case 'hub.drain':
+        this.draining = params.on !== false;
+        // A turn runs while its session reads working, or waits on a permission prompt, as session.state records it.
+        await this.statesSettled();
+        return { turns: [...this.states.values()].filter((s) => s.startsWith('working/') || s === 'needs you/waiting').length };
+      case 'hub.check': return this.healthClaim();
+      case 'build.rolled_back': return this.rolledBack(params);
       case 'test.load': return this.testLoad(params);
       case 'record.backup': return this.backup(params);
       case 'lease.wait': return this.heavy.wait(params, context.peer, () => this.agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
@@ -5915,15 +5930,24 @@ export class Core {
 
   // ---- Answers on the trusted path (#24, #34).
 
+  private hub: string | undefined;
+  /** The hub's ID, as its hello names it (#1338): what an invite and a device's signature name (#1579). */
+  private hubId(): string {
+    return (this.hub ??= identityAt(join(this.options.root, 'hub.key'), 'deep-hub').id);
+  }
+
   /**
-   * Whether an answer may count: a paired device's valid signature, from any role; otherwise, from the CLI alone,
-   * the OS confirming you with a prompt that names what you answer. The control token and the peer check alone
-   * never make one count, and a deep command run inside an agent's process tree acts as that agent's session.
+   * Whether an answer may count: a paired device's valid signature for this method, this hub and these params (#1579),
+   * from any role; otherwise, from the CLI alone, the OS confirming you with a prompt that names what you answer. The
+   * control token and the peer check alone never make one count, and a deep command run inside an agent's process
+   * tree acts as that agent's session.
    */
-  private async trusted(params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void> {
-    if (params.signature !== undefined || params.device !== undefined) {
-      if (this.devices.signed(params)) return;
-      throw new Refused(refusal('credential', '/params/signature', 'Sign the answer with a device you paired, over exactly the params it sends.', params.device));
+  private async trusted(method: string, params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void> {
+    if (params.signature !== undefined) {
+      const why = this.devices.verify(params.signature, { method, hub: this.hubId(), params, now: this.now() }, { skipsTime: this.options.plant === 'signature-skips-time' });
+      if (!why) return;
+      const signed = (params.signature as { signed?: Obj }).signed;
+      throw new Refused(refusal('credential', why.field === 'signature' ? '/params/signature/sig' : `/params/signature/signed/${why.field}`, `${handle} stays open: the signature's ${why.field} doesn't hold (${why.reason}). Sign it again with a device you paired, for ${method} on this hub, over exactly the params it sends.`, signed?.[why.field] ?? why.field));
     }
     if (context.role !== 'cli') throw new Refused(refusal('unconfirmed', '/params/signature', `${handle} stays open: an answer from the app counts only when a device you paired signs it.`, handle));
     const agent = await this.agentAbove(context.peer);
@@ -6026,7 +6050,7 @@ export class Core {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
     // A channel's answer was checked by the channels (#65): a paired device's signature over the card it showed, or an account link.
-    if (!channel) await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
+    if (!channel) await this.trusted('ask.answer', params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
     // A paired phone's yes binds the plan its card stood for, and its own token, as the app's click does.
     if (channel?.proof === 'device' && chosen?.decision === 'allow') {
       input.token = `${channel.channel}:${ulid(this.now())}`;
@@ -6143,7 +6167,7 @@ export class Core {
     // A definition that locked on the default stands: a different answer now would change nothing but the record of it.
     const locked = await this.tasks.lockedOn(handle);
     if (locked) throw new Refused(refusal('locked', '/params/ask', `${handle} took its default and the definition of ${locked} locked on it; a change to that definition goes through a dispute, not an undo.`, handle));
-    await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle, await this.revisionOf(handle, { pinned_to: row.pinned_to ? JSON.parse(row.pinned_to) as { ref?: string } : undefined }));
+    await this.trusted('ask.undo', params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle, await this.revisionOf(handle, { pinned_to: row.pinned_to ? JSON.parse(row.pinned_to) as { ref?: string } : undefined }));
     await this.asks.undo(this.connection(context.role === 'app' ? 'app' : 'cli'), handle).catch((error: unknown) => { throw asRefused(error); });
     const [open] = (await this.record.raw(`SELECT deadline FROM asks WHERE id = ?`, [handle.slice(4)])) as { deadline: number }[];
     return { ask: handle, deadline: open?.deadline ?? null };
@@ -6155,7 +6179,7 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT key, answer, state FROM decisions WHERE id = ?`, [id.slice(9)])) as { key: string; answer: string; state: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
     if (row.state === 'revoked') return { overruled: id };
-    await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id, row.state);
+    await this.trusted('decision.overrule', params, context, `overrule the saved decision ${row.answer}`, id, row.state);
     // First: a retry finds a revoked decision done, so a guard left behind would never go.
     dropKept(this.root.dir, row.key);
     await this.appendCore('decision.overruled', { decision: id }, { subject: id });
@@ -6172,7 +6196,7 @@ export class Core {
     const { extension, name, value } = params;
     if (typeof extension !== 'string' || typeof name !== 'string' || typeof value !== 'string' || !value) throw new Refused(refusal('required', '/params', 'Name the package and the secret, and give its value.', null));
     if (!this.extensions) throw new Refused(refusal('unavailable', '/params/extension', `${extension} isn't loaded, so nothing can name ${name}.`, extension));
-    await this.trusted(params, context, `add the secret ${name} for ${extension}`, `secret:${extension}/${name}`, name);
+    await this.trusted('secret.enter', params, context, `add the secret ${name} for ${extension}`, `secret:${extension}/${name}`, name);
     const { saved, test } = await this.extensions.enterSecret(this.connection('cli'), extension, name, value);
     return { saved, test };
   }
@@ -6218,8 +6242,7 @@ export class Core {
     const device = params.device;
     if (typeof device !== 'string' || !/^device:[0-9A-Za-z]+$/.test(device)) throw new Refused(refusal('pattern', '/params/device', 'Name the device as device:<id>, as device.pair returned it.', device));
     if (!this.devices.keyOf(device)) throw new Refused(refusal('not_found', '/params/device', `No paired device ${device}.`, device));
-    const { device: _unpaired, ...rest } = params;
-    await this.trusted(rest, context, `unpair ${device}, so what it signs counts for nothing`, device, 'unpair');
+    await this.trusted('device.unpair', params, context, `unpair ${device}, so what it signs counts for nothing`, device, 'unpair');
     this.devices.unpair(device, this.now());
     this.channels?.unpaired(device);
     return { unpaired: device };
@@ -6274,8 +6297,7 @@ export class Core {
     await this.asYou(context, 'person.invite', `invite ${person} to ${forge}`, `invite:${person}`, forge);
     try {
       const secret = this.people.invite(person, forge);
-      const hub = identityAt(join(this.options.root, 'hub.key'), 'deep-hub').id;
-      return { invite: inviteText({ v: 1, address, hub, secret, project: forge, person }), person, project: projectIdOf(forge) };
+      return { invite: inviteText({ v: 1, address, hub: this.hubId(), secret, project: forge, person }), person, project: projectIdOf(forge) };
     } catch (error) {
       throw new Refused(refusal('pattern', '/params/person', `Nobody was invited: ${error instanceof Error ? error.message : String(error)}.`, person));
     }
@@ -6322,8 +6344,8 @@ export class Core {
    */
   private async enrollAgain(params: Obj, context: CallContext): Promise<Obj> {
     if (context.role !== 'app') throw new Refused(refusal('role', '/method', "deep-confirm's key is set up again from the app, on the trusted path.", 'confirm.enroll'));
-    await this.trusted(params, context, "set up deep-confirm's key again", 'device:deep-confirm', 'enroll');
-    const why = await this.confirmer.enroll(this.now(), { words: "set up DeepBuild's confirmation key again on this Mac", subject: { handle: 'device:deep-confirm', revision: String(params.device) } });
+    await this.trusted('confirm.enroll', params, context, "set up deep-confirm's key again", 'device:deep-confirm', 'enroll');
+    const why = await this.confirmer.enroll(this.now(), { words: "set up DeepBuild's confirmation key again on this Mac", subject: { handle: 'device:deep-confirm', revision: String((params.signature as { signed?: Obj }).signed?.device) } });
     if (why) throw new Refused(refusal('unconfirmed', '', `deep-confirm's key stays as it was: ${why}.`, 'confirm.enroll', true));
     return { device: this.devices.enclave()!.device };
   }
@@ -7427,6 +7449,27 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT outcome FROM runs WHERE id = ?`, [run.slice(4)])) as { outcome: string | null }[];
     return row?.outcome ?? 'stopped';
   }
+  /**
+   * A promotion's health check (#1334): one fixture claim, a requirement its one check covers and a passing run of
+   * it, judged by this build's verdict engine and returned as judged() records a claim's. A good build reads it PASS.
+   */
+  private healthClaim(): Obj {
+    const commit = '0'.repeat(40), req = 'req:HEALTH#R1', check = 'health', digest = `d1:${'0'.repeat(64)}`, claim = 'claim:HEALTH';
+    const v = misjudged(claimVerdict({
+      claim, agent: 'session:HEALTH', repo: 'health', task: 'task:HEALTH', commit, now: this.now(), changes: [], waivers: [],
+      requirements: [{ req, depth: 'unit', oracle: 'code', on_base: 'passes' }],
+      checks: [{ check, digest, source: 'definition', depth: 'unit', proof: 'test_run', covers: [req], environment: {}, tools: {} }],
+      runs: [{ run: 'run:HEALTH', check, claim, commit, digest, environment: {}, tools: {}, outcome: 'passed', ended: 1, tests_run: 1, reads: [], failures: [], evidence: [], kept: true }],
+    }), this.options.plant);
+    return { claim, outcome: v.outcome, reasons: v.reasons };
+  }
+  /** The rollback's one notice (#1334), recorded by the build that came back: the promoted commit, the restored one and why. */
+  private async rolledBack(p: Obj): Promise<Obj> {
+    const hex = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{40}$/.test(v);
+    if (!hex(p.commit) || typeof p.restored !== 'string' || !p.restored) throw refuse('pattern', '/params/commit', 'Name the promoted commit as 40 hex digits, and the build that came back.', p.commit);
+    await this.appendCore('build.rolled_back', { commit: p.commit, restored: p.restored, why: String(p.why ?? '').slice(0, 8192) });
+    return { recorded: true };
+  }
   /** Each claim's verdict on its way to the record after its lane (#82): what reads the record waits for it. */
   private readonly verdictWrites = new Map<string, Promise<void>>();
   /** Each claim's last recorded verdict, by its hash: a verdict that didn't change isn't recorded again. */
@@ -7476,6 +7519,7 @@ export class Core {
       const ran = await this.overridesFor(claim);
       if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000)] };
     }
+    v = misjudged(v, this.options.plant);
     const hash = verdictHash(v);
     if (this.verdictsMade.get(claim) === hash) return;
     try {

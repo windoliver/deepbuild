@@ -47,6 +47,8 @@ const STALL_MS = 100;
 type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
+  // A promotion (#1334): the drain, the health check's fixture claim and the rollback's one notice.
+  ['hub.drain', ['cli']], ['hub.check', ['cli']], ['build.rolled_back', ['cli']],
   ['hub.health', ['app', 'cli', 'person']], ['health', ['app', 'cli', 'person']], ['events.read', ['app', 'cli', 'person']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['ask.confirm', ['app']], ['views.installed', ['app']], ['command.run', ['app']],
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['ask.card', ['app', 'cli']], ['sessions.read', ['app', 'cli', 'person']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
@@ -119,11 +121,12 @@ const PASEO_PERMISSION_HOLD_MS = 24 * 3600_000;
 const PERMISSION_TIMEOUT_MS = 60_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
 const DECIDED_MATCH = /^effect:(dependency|cloud-resource)$/;
-/** The guard entries whose calls the hub stages before they run with the hub up, or asks about (#347, #1294). */
+/** The guard entries whose calls the hub stages before they run with the hub up, or asks about (#347, #1294, #1507). */
 const STAGED_MATCH = 'effect:unknown-reach-delete';
+const PAST_MATCH = 'effect:unrestorable-delete';
 const DISCARD_MATCH = 'effect:discard-edits';
 const STASH_MATCH = 'effect:drop-stash';
-const STAGED_MATCHES: unknown[] = [STAGED_MATCH, DISCARD_MATCH, STASH_MATCH];
+const STAGED_MATCHES: unknown[] = [STAGED_MATCH, PAST_MATCH, DISCARD_MATCH, STASH_MATCH];
 /** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
 const DENYING_MODES = new Set(['dontAsk', 'plan']);
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
@@ -456,7 +459,9 @@ class Hub {
     // The record's writer generation (#572), read before the core opens the ledger so every hello carries it from the
     // first; read-only, so this thread never checkpoints or syncs the ledger, and one that can't be read stops the start.
     this.identity = identityAt(join(this.root.dir, 'hub.key'), 'deep-hub');
-    this.helloLine = line({ hello: 'deep-hub', start: this.start, contract: CONTRACT, features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
+    // The planted hub of #1334 speaks a contract one major ahead, so this checkout's deep-hook is the older side.
+    const contract = this.plant === 'contract-major-ahead' ? `${Number(CONTRACT.split('.')[0]) + 1}.0` : CONTRACT;
+    this.helloLine = line({ hello: 'deep-hub', start: this.start, contract, features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
     this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub) : coreWorker(options, frame, fatal, asking, acking, scrub);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant) : parserPool(held, this.plant);
     this.server.on('connection', (sock) => this.accept(sock));
@@ -829,9 +834,9 @@ class Hub {
       const n = meta.matched.find((m) => entries[m]?.match === match);
       return n === undefined ? undefined : meta.stage?.[n] ?? null;
     };
-    const [folders, edits, stash] = [reach(STAGED_MATCH), this.plant === 'stages-untracked-only' ? undefined : reach(DISCARD_MATCH), reach(STASH_MATCH)];
-    const stage: StageReach | undefined = folders !== undefined || edits !== undefined || stash !== undefined
-      ? { ...(folders !== undefined ? { folders } : {}), ...(edits !== undefined ? { edits } : {}), ...(stash !== undefined ? { stash } : {}) }
+    const [folders, past, edits, stash] = [reach(STAGED_MATCH), reach(PAST_MATCH), this.plant === 'stages-untracked-only' ? undefined : reach(DISCARD_MATCH), reach(STASH_MATCH)];
+    const stage: StageReach | undefined = folders !== undefined || past !== undefined || edits !== undefined || stash !== undefined
+      ? { ...(folders !== undefined ? { folders } : {}), ...(past !== undefined ? { past } : {}), ...(edits !== undefined ? { edits } : {}), ...(stash !== undefined ? { stash } : {}) }
       : this.plant === 'stages-unpredicted-writes' && data.kind === 'shell' && typeof data.command === 'string' ? { folders: [meta.cwd] } : undefined;
     // A computer-use or Chrome step is checked against the screens and windows its session leases (#332).
     const screen = SCREEN_TOOLS.some((prefix) => meta.call?.tool.startsWith(prefix));
@@ -1103,7 +1108,7 @@ class Hub {
     const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
     // With the hub up, a dependency or a cloud resource the plan doesn't name is a decision: answered by your
     // standing rule or asked at the gate (#23), after every other guard.
-    // A destructive command is staged or asked about at the gate (#347, #1294), never blocked outright.
+    // A destructive command is staged or asked about at the gate (#347, #1294, #1507), never blocked outright.
     const decided = (n: string) => !watching && (n in NAMED_RULES || DECIDED_MATCH.test(String(entries[n]?.match ?? '')) || (STAGED_MATCHES.includes(entries[n]?.match) && !meta.stamp));
     const blocks = matched.filter((n) => mode(n) === 'block' && !decided(n) && (!watching || floor(n)));
     if (blocks.length) {
