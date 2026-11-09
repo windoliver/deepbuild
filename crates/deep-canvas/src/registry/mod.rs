@@ -165,6 +165,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),
     ("effect", "scene3d"),
+    // #1732: placement by relation in 3D is the motion module's.
+    ("arrange", "motion"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status

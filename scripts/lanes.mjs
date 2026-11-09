@@ -224,6 +224,11 @@ alone.push('tests/acceptance/1550/');
 alone.push('tests/acceptance/1434/');
 byHand.push('tests/acceptance/1434/ac6-idle.live.test.ts', 'tests/acceptance/1434/ac7-budgets.live.test.ts', 'tests/acceptance/1434/ac8-snapshots.live.test.ts');
 timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
+// #1436's files build deep-replica and drive the GPU; its live window files (reduced motion's frames, the budgets) open the
+// app's window on this Mac's screen, and its budgets are a timed file.
+alone.push('tests/acceptance/1436/');
+byHand.push('tests/acceptance/1436/ac2-still.live.test.ts', 'tests/acceptance/1436/ac9-budgets.live.test.ts');
+timed.push('tests/acceptance/1436/ac9-budgets.live.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 
@@ -250,6 +255,8 @@ timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/v
 alone.push('tests/acceptance/532/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
+// #1732's files each build deep-show: one file at a time.
+alone.push('tests/acceptance/1732/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');

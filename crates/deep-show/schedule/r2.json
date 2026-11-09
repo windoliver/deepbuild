@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "6385d2bd28c704fcfd60b16cd0ad335c1e6ca15c9d78904ef30e4648095f1bc7",
+  "set_digest": "0c2173b1c21ba688feeebf9306f0986854076761dec83a47cee89bbbc23f40c2",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -179,7 +179,7 @@
       }
     },
     "motion@1": {
-      "digest": "def0784a75255943cbe31d9b104fc00297447171a92b0b229cb139b5949d3663",
+      "digest": "b345fa202abce017f322143ebab888c21c57e764cbe7eb61752f944e60f603cb",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -370,6 +370,18 @@
     ],
     "plan": [
       {
+        "operator": "motion.arrange",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "motion.arranged"
+        ],
+        "per": "document"
+      },
+      {
         "operator": "motion.compile",
         "module": "motion",
         "version": "1.0.0",
@@ -459,6 +471,20 @@
         "per": "item"
       },
       {
+        "operator": "motion.arrangelive",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.arrangelive"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.channels",
         "module": "motion",
         "version": "1.0.0",
@@ -471,19 +497,6 @@
         "writes": [
           "motion.at",
           "motion.fields"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "core.world",
-        "module": "core",
-        "version": "0.0.0",
-        "reads": [
-          "core.transform",
-          "parent"
-        ],
-        "writes": [
-          "core.world"
         ],
         "per": "item"
       },
@@ -535,6 +548,31 @@
           "motion.next"
         ],
         "per": "document"
+      },
+      {
+        "operator": "motion.placed",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.arranged"
+        ],
+        "writes": [
+          "motion.placed"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
+        ],
+        "per": "item"
       },
       {
         "operator": "record.salience",
@@ -795,7 +833,8 @@
       "look.status"
     ],
     "core.transform": [
-      "motion.at"
+      "motion.at",
+      "motion.placed"
     ]
   }
 }

@@ -1117,6 +1117,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             deep_canvas_scene3d::PLANTED.contains(p)
                 || deep_canvas_loop::PLANTED.contains(p)
                 || deep_canvas_media::PLANTED.contains(p)
+                // #1732's wrong programs live in the motion module's arrangement solve.
+                || deep_canvas_motion::arrange::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
