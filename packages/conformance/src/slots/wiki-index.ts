@@ -9,11 +9,11 @@ import { fail } from '../slot-types.js';
 import type { Fixture, PlantedFill, SlotCase, SlotFill, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { canonical, list, object, same, text, word } from './shared.js';
 
-export const INDEX = 'index@1';
+const INDEX = 'index@1';
 
-export interface Claim { id: string; page: string; source: string; text: string }
-export interface Hit { claim: string; page: string; quote: string; source: string }
-export interface IndexFill extends SlotFill {
+interface Claim { id: string; page: string; source: string; text: string }
+interface Hit { claim: string; page: string; quote: string; source: string }
+interface IndexFill extends SlotFill {
   slot: 'index@1';
   /** Replaces the whole index. */
   rebuild(claims: Claim[]): void;

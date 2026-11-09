@@ -23,8 +23,8 @@ interface CodexFacts {
 const facts = (): CodexFacts => readFacts<{ agents: { codex: CodexFacts } }>('loops.facts.json').agents.codex;
 
 /** The loop a stop reads: looping, with its next prompt's due time when one is known, or a loop with none left. */
-export type Loop = { state: 'looping'; due: number | null } | { state: 'none_left' };
-export interface CodexReadings { version?: string; readings: string[]; loop?: Loop; limits?: Obj; account?: string }
+type Loop = { state: 'looping'; due: number | null } | { state: 'none_left' };
+interface CodexReadings { version?: string; readings: string[]; loop?: Loop; limits?: Obj; account?: string }
 
 /** Codex's home for a session: the folder its rollout sits under, since the shared daemon may not share this process's environment. */
 function homeOf(transcript: string): string {

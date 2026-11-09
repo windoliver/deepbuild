@@ -49,7 +49,7 @@ export interface RunEvent {
   resumed?: boolean; verdict?: Exclude<Verdict, 'uncounted'>; noop?: boolean; cause?: string | null; stopped?: boolean; changes?: string[];
 }
 /** What the scheduler needs of the host. */
-export interface RunHost {
+interface RunHost {
   now(): number;
   newRun(): string;
   append(event: RunEvent): Promise<void>;

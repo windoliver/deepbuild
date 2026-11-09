@@ -14,7 +14,7 @@ import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-export interface Counted { counts: 'read' | 'change' | 'send' | 'destructive'; effect?: string }
+interface Counted { counts: 'read' | 'change' | 'send' | 'destructive'; effect?: string }
 
 let facts: Obj | undefined;
 const servers = (): Obj => {
@@ -42,7 +42,7 @@ function json(file: string): Obj | undefined {
 }
 
 /** The config Claude Code loads `server` from in `cwd`, and its scope; undefined when no config names it. */
-export function sourceOf(server: string, cwd: string): { scope: 'local' | 'project' | 'user'; config: Obj } | undefined {
+function sourceOf(server: string, cwd: string): { scope: 'local' | 'project' | 'user'; config: Obj } | undefined {
   const user = json(join(homedir(), '.claude.json'));
   const project = user && isObj(user.projects) && isObj(user.projects[cwd]) ? user.projects[cwd] : {};
   const local = isObj(project.mcpServers) ? project.mcpServers[server] : undefined;
