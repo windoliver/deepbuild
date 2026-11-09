@@ -1,4 +1,4 @@
-// AC2 #1338.0bb77d41: "A hook on a second machine stays within its declared overhead on a link with 100 ms of delay,
+// AC2 #1338.5dc7055b: "A hook on a second machine stays within its declared overhead on a link with 100 ms of delay,
 // and a guard's verdict is unchanged with the link cut."
 //
 // bob's machine joins acme/shop and its agent's hooks run the real deep-hook in his clone, reaching maya's hub over a
@@ -29,8 +29,8 @@ function declared(): { overhead: number; failOpen: unknown } {
   return { overhead, failOpen: route?.[SURFACE.facts.failOpen] };
 }
 
-describe('AC2 #1338.0bb77d41 a second machine\'s hook stays within its declared overhead on a 100 ms link, and a guard\'s verdict holds with the link cut', () => {
-  it('AC2 #1338.0bb77d41 hooks on bob\'s machine over a 100 ms link: within the network route\'s declared overhead, all recorded; no-kill-by-name decides the same up and cut', async (ctx) => {
+describe('AC2 #1338.5dc7055b a second machine\'s hook stays within its declared overhead on a 100 ms link, and a guard\'s verdict holds with the link cut', () => {
+  it('AC2 #1338.5dc7055b hooks on bob\'s machine over a 100 ms link: within the network route\'s declared overhead, all recorded; no-kill-by-name decides the same up and cut', async (ctx) => {
     needDeepHook();
     const w = await world();
     const bob = await joined(w, 'bob');

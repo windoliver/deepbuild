@@ -4,16 +4,16 @@ Written first, blind, by a job that never saw an implementation of #1338; none e
 edit these files (AGENTS.md, Proof); a dispute goes to a blind redraft of this job (design: Dogfooding).
 
 The issue has five checkbox criteria, AC1 to AC5 in the body's order. Each test's name carries its criterion's ID
-(`#1338.` and the first 8 hex digits of SHA-256 of the checkbox's text, `AC<n>: ` included, white space collapsed, as
+(`#1338.` and the first 8 hex digits of SHA-256 of the checkbox's text after `- [ ] `, trimmed, white space collapsed, as
 `scripts/proof-change.mjs` reads it):
 
 | AC | ID | File | What it checks |
 |---|---|---|---|
-| AC1 | `#1338.177002b6` | `revoke.test.ts` | bob reads the project over the network; a client presenting nothing gets none of it; 5 s after maya revokes bob, his read is refused |
-| AC2 | `#1338.0bb77d41` | `hook.test.ts` | deep-hook on bob's machine over a 100 ms link stays within the network route's declared overhead, every hook recorded; a fail_closed fast rule decides the same with the link up and cut |
-| AC3 | `#1338.3bfe844f` | `generation.test.ts` | the CLI and deep-hook, having seen generation 3, refuse the hub left behind at generation 2, naming both |
-| AC4 | `#1338.6ce12ef3` | `port.test.ts` | a hub with no members, told where to listen, opens no TCP port (and opens one once it has a member); the planted hub that listens fails, naming the port |
-| AC5 | `#1338.3ec909b1` | `proof.test.ts` | bob's credential copied to a machine without his key is refused there, naming the proof |
+| AC1 | `#1338.0fcd9247` | `revoke.test.ts` | bob reads the project over the network; a client presenting nothing gets none of it; 5 s after maya revokes bob, his read is refused |
+| AC2 | `#1338.5dc7055b` | `hook.test.ts` | deep-hook on bob's machine over a 100 ms link stays within the network route's declared overhead, every hook recorded; a fail_closed fast rule decides the same with the link up and cut |
+| AC3 | `#1338.33efbf60` | `generation.test.ts` | the CLI and deep-hook, having seen generation 3, refuse the hub left behind at generation 2, naming both |
+| AC4 | `#1338.b9228a01` | `port.test.ts` | a hub with no members, told where to listen, opens no TCP port (and opens one once it has a member); the planted hub that listens fails, naming the port |
+| AC5 | `#1338.4e201b52` | `proof.test.ts` | bob's credential copied to a machine without his key is refused there, naming the proof |
 
 ## What was read
 

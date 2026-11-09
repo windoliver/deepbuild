@@ -1,4 +1,4 @@
-// AC1 #1338.177002b6: "A client with a revoked credential is refused within 5 s of revocation, and a client with no
+// AC1 #1338.0fcd9247: "A client with a revoked credential is refused within 5 s of revocation, and a client with no
 // credential gets no data."
 //
 // bob's machine (a home of its own) joins acme/shop by the repo link and maya's invite, and reads the project's
@@ -10,8 +10,8 @@ import { cleanup, hubPort, joined, mayaWorks, noCredential, readOn, revoke, show
 
 afterAll(cleanup, 60_000);
 
-describe('AC1 #1338.177002b6 a revoked credential is refused within 5 s, and no credential gets no data', () => {
-  it('AC1 #1338.177002b6 bob reads the project until maya revokes him, then is refused 5 s on; a client with no credential reads nothing', async () => {
+describe('AC1 #1338.0fcd9247 a revoked credential is refused within 5 s, and no credential gets no data', () => {
+  it('AC1 #1338.0fcd9247 bob reads the project until maya revokes him, then is refused 5 s on; a client with no credential reads nothing', async () => {
     const w = await world();
     const bob = await joined(w, 'bob');
     const { session, ids } = await mayaWorks(w);

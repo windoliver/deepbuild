@@ -1,4 +1,4 @@
-// AC5 #1338.3ec909b1: "A credential copied to a machine without its key is refused, naming the proof."
+// AC5 #1338.4e201b52: "A credential copied to a machine without its key is refused, naming the proof."
 //
 // bob's machine and carol's both join acme/shop, each with a key of its own under ~/.deepbuild/keys/. bob reads the
 // project (the control). Then carol's machine is given everything bob's ~/.deepbuild holds except his keys, and
@@ -9,8 +9,8 @@ import { cleanup, copyWithoutKeys, joined, mayaWorks, readOn, shown, SURFACE, wo
 
 afterAll(cleanup, 60_000);
 
-describe('AC5 #1338.3ec909b1 a credential copied to a machine without its key is refused, naming the proof', () => {
-  it('AC5 #1338.3ec909b1 bob\'s credential copied to carol\'s machine, without bob\'s key, is refused there, naming the proof', async () => {
+describe('AC5 #1338.4e201b52 a credential copied to a machine without its key is refused, naming the proof', () => {
+  it('AC5 #1338.4e201b52 bob\'s credential copied to carol\'s machine, without bob\'s key, is refused there, naming the proof', async () => {
     const w = await world();
     const bob = await joined(w, 'bob');
     const carol = await joined(w, 'carol');
