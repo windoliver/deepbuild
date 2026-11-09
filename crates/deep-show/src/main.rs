@@ -60,6 +60,7 @@ mod time;
 ))]
 mod twins;
 mod verdict;
+mod video;
 mod workers;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
@@ -1233,6 +1234,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "probe_rounds_to_flicks" => Planted::ProbeRoundsToFlicks,
                 "probe_stores_normalized" => Planted::ProbeStoresNormalized,
                 "assumes_bt601" => Planted::AssumesBt601,
+                "lookup_floors_frame_rate" => Planted::LookupFloorsFrameRate,
+                "seek_reads_proxy" => Planted::SeekReadsProxy,
                 "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,
                 "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,
