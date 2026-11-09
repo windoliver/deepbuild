@@ -9,12 +9,16 @@
 // file git lists under what it reaches, or each file of the stash entries it drops, is copied with its digest under
 // <root>/staged/<id>/files, and undo puts each back by that digest. With nothing edited there's nothing to stage or ask.
 //
+// A delete whose reach is known but lies past the session's worktree, or holds it (`rm -rf ../sibling`, `~`, `/`), and a
+// `git clean` that deletes untracked or ignored files (#1507) are staged the same way, by the paths deep-hook read; past
+// a ceiling, the ask says what they reach instead of calling it unknown.
+//
 // Settings: `staging` in <root>/config.json, `{ files, seconds, keep }`; `seconds` is held below the hold.
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync } from 'node:fs';
-import { lstat, mkdir, open, readdir, readlink, rm, stat, symlink } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { lstat, mkdir, open, readdir, readlink, realpath, rm, stat, symlink } from 'node:fs/promises';
+import { dirname, join, sep } from 'node:path';
 import { gitEnv } from '@deepbuild/gate';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import type { Holds } from './holds.js';
@@ -79,8 +83,8 @@ export class Staging {
    */
   async gate(meta: HookMeta, call: Gated, ask: boolean): Promise<{ held?: string; deny?: string }> {
     const command = call.command ?? call.label;
-    const { folders, edits, stash } = call.stage ?? {};
-    const k = this.o.holds.keyOf({ source: 'command.unstageable', session: meta.session, command, folders: folders ?? null, ...(edits !== undefined ? { edits } : {}), ...(stash !== undefined ? { stash } : {}) });
+    const { folders, past, edits, stash } = call.stage ?? {};
+    const k = this.o.holds.keyOf({ source: 'command.unstageable', session: meta.session, command, folders: folders ?? null, ...(past !== undefined ? { past } : {}), ...(edits !== undefined ? { edits } : {}), ...(stash !== undefined ? { stash } : {}) });
     if (ask) {
       // Once you said yes, the same call runs unstaged; while the ask waits, or after a no, it is held by it.
       const prior = await this.o.holds.prior(k);
@@ -90,14 +94,19 @@ export class Staging {
     const why = await this.reach(meta, command, call.stage ?? {});
     if (why === undefined) return {};
     if (!ask) return { deny: `DeepBuild blocked this: what \`${command}\` deletes can't be staged first (${why}), and this session can't be asked.` };
-    const question = `Run \`${command}\` unstaged? Its reach is unknown: ${why}, so no copy-on-write copy can be kept to undo it from. Your yes runs it as it is.`;
-    return { held: await this.o.holds.holdUnstaged(meta, k, command, question) };
+    // A known reach is said as it is (#1507); an unknown one is said to be unknown (#347).
+    const known = folders === undefined && edits === undefined && stash === undefined && past;
+    const question = known
+      ? `Run \`${command}\` unstaged? It reaches past this session's worktree, to ${known.join(', ')}, which git can't restore, and ${why}, so no copy-on-write copy can be kept to undo it from. Your yes runs it as it is.`
+      : `Run \`${command}\` unstaged? Its reach is unknown: ${why}, so no copy-on-write copy can be kept to undo it from. Your yes runs it as it is.`;
+    return { held: await this.o.holds.holdUnstaged(meta, k, command, question, known ? `past its worktree, to ${known.join(', ')}` : undefined) };
   }
 
   /** Stages what the call reaches: undefined once its copies are made and recorded, or why they can't be. */
-  private async reach(meta: HookMeta, command: string, { folders, edits, stash }: StageReach): Promise<string | undefined> {
-    if (folders === null || edits === null || stash === null) return 'it names a folder through a value the line can\'t know';
-    const why = folders ? await this.stage(meta, command, folders) : undefined;
+  private async reach(meta: HookMeta, command: string, { folders, past, edits, stash }: StageReach): Promise<string | undefined> {
+    if (folders === null || past === null || edits === null || stash === null) return 'it names a folder through a value the line can\'t know';
+    const named = folders || past ? [...new Set([...(folders ?? []), ...(past ?? [])])] : undefined;
+    const why = named ? await this.stage(meta, command, named) : undefined;
     return why ?? (edits || stash ? await this.stageFiles(meta, command, edits ?? [], stash) : undefined);
   }
 
@@ -158,6 +167,12 @@ export class Staging {
     const existing: string[] = [];
     for (const f of folders) if (await there(f)) existing.push(f);
     if (!existing.length) return undefined;
+    // A folder that holds DeepBuild's own, such as the home folder, would take its copy with it (#1507).
+    const own = await realpath(this.o.root).catch(() => this.o.root);
+    for (const f of existing) {
+      const real = await realpath(f).catch(() => f);
+      if (own === real || own.startsWith(real.endsWith(sep) ? real : real + sep)) return `${f} holds DeepBuild's own folder ${this.o.root}, where its copy would be kept, so the run would delete the copy too`;
+    }
     // Counted first, so a copy that would pass the files ceiling is never made.
     let count = 0;
     const walk = async (path: string): Promise<boolean> => {

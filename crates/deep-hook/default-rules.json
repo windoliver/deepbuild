@@ -161,6 +161,14 @@
       "next_step": "Delete the paths by name, or ask the person to run it, or retry once the hub is up.",
       "fail_closed": true
     },
+    "no-delete-past-worktree": {
+      "match": "effect:unrestorable-delete",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "This delete reaches past the session's worktree, or is a git clean, so it removes files git can't restore, and with the hub down nothing can stage them first or ask you.",
+      "next_step": "Delete only paths inside the worktree, or ask the person to run it, or retry once the hub is up.",
+      "fail_closed": true
+    },
     "no-discarding-edits": {
       "match": "effect:discard-edits",
       "scope": "all_repos",
@@ -589,6 +597,22 @@
         "tool_input": {
           "command": "rm -rf build"
         }
+      }
+    },
+    "no-delete-past-worktree": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "rm -rf ~/"
+        },
+        "cwd": "{repo}"
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "rm -rf build"
+        },
+        "cwd": "{repo}"
       }
     },
     "no-discarding-edits": {
