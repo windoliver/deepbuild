@@ -50,8 +50,8 @@ export async function setupCommand(cli: string, args: readonly string[] = []): P
   return install(cli);
 }
 
-/** What the Set up click and the first `deep` command say they did (#326), in one line. */
-const SET_UP_LINE = 'DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo\'s checks, and started the hub at login; deep setup --undo removes it all.';
+/** What `deep setup`, the first `deep` command and the app's Set up click say they did (#326), in one line: its one definition (#1455). */
+export const SET_UP_LINE = 'DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo\'s checks, and started the hub at login; deep setup --undo removes it all.';
 
 /**
  * The first `deep` command (#326): in a home where setup hasn't finished (#1002), `deep setup`'s steps run without asking,
@@ -144,7 +144,7 @@ async function install(cli: string, quiet = false): Promise<number> {
     process.stderr.write(`deep setup: ${why}\n`);
     return stopped(root, 1, why, 'Set up again once that is fixed.');
   }
-  if (!quiet) console.log(`DeepBuild added its hooks and status line forwarder to ${settingsFile}, beside yours; its MCP server to ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}. Its gates are watch-only until you approve a repo's checks. deep setup --undo removes it all.`);
+  if (!quiet) console.log(`Its hooks and status line forwarder are in ${settingsFile}, beside yours; its MCP server in ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}.`);
   // Only a relation that doesn't hold needs you; deep doctor lists them all.
   if (!quiet) for (const r of relations(root)) if (!r.holds) console.log(`BROKEN ${r.text}`);
   const started = await startHub({ cli });
@@ -155,6 +155,8 @@ async function install(cli: string, quiet = false): Promise<number> {
   const code = await readHistory(quiet);
   writeFileSync(finishedFile(root), `${JSON.stringify({ version: deepbuild, at: new Date().toISOString() })}\n`, { mode: 0o600 });
   rmSync(stoppedFile(root), { force: true });
+  // Its last line, which the app's Set up shows as it is (#1455).
+  if (!quiet) console.log(SET_UP_LINE);
   return code;
 }
 /** What setup says when building deep-hook failed: with no cargo at all, how to get one. */
