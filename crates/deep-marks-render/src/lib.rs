@@ -7,7 +7,10 @@
 //! frame captures, and #882's: `look` answers each theme's roles; and #373's: `raster` and `geometry` (on every platform), R2's 2D marks drawn by
 //! Vello CPU, and `check` with a look adding the marks2d module's own check; and #381's: `raster`
 //! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`;
-//! and #398's: `check`, `raster` and `geometry` import
+//! and #854's: `idle`, a document held on screen on the real clock for `seconds`, its frames,
+//! wakeups and CPU read from this process, and #1487's: `idle`'s `view.rect`, the region the
+//! window shows, whose frame clock counts only items that meet it (planted
+//! `valid_until_ignores_view`); and #398's: `check`, `raster` and `geometry` import
 //! each `vector@1` item's SVG from the line's `store` and draw it as marks2d's items, `geometry`
 //! answers a vector's `parts`, and the planted `write_fades_fills_from_start` and
 //! `import_skips_clip_path`; and #1175's: `check` answers a `verdict` that stays INCONCLUSIVE
@@ -18,7 +21,10 @@
 //! each theme's roles in OKLab, `check` and `raster` hold the status distance only where the
 //! document binds status (and take the planted `status_distance_0_03`), set text in the look's
 //! fonts with its fallback list and `lang`, and refuse a grapheme no face draws with
-//! `text.glyph_missing`; a session's step may switch the look.
+//! `text.glyph_missing`; a session's step may switch the look; and #1479's: `view.zoom` up to 16,
+//! `render` answers `rasterized` (the glyphs the atlas rasterized for the line) and
+//! `from_largest` (glyphs drawn from its largest raster for want of an outline), and takes the
+//! planted `drops_glyph`.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
@@ -125,6 +131,19 @@ enum Request {
         /// #417 AC2's wrong program: a look switch that empties every node cache.
         switch_rebuilds: bool,
     },
+    /// #854: the document held on screen on the real clock.
+    Idle {
+        doc: Map<String, Value>,
+        look: Look,
+        view: View,
+        record: Record,
+        seconds: u64,
+        /// The wrong program: a frame clock that arms a frame each vsync.
+        arms_each_vsync: bool,
+        /// #1487: the region of the document the window shows, `[x, y, w, h]`, and whether the
+        /// planted clock counts every item wherever the view is (the merge base's rule).
+        region: Option<([f64; 4], bool)>,
+    },
     Render {
         out: String,
         doc: Map<String, Value>,
@@ -134,6 +153,8 @@ enum Request {
         record: Record,
         /// The AC6 wrong build: gradients through GPUI's own OKLab option.
         gpui_oklab: bool,
+        /// #1479 AC1's wrong program: each text's second grapheme left out, silently.
+        drops_glyph: bool,
         store: Option<PathBuf>,
     },
 }
@@ -256,7 +277,7 @@ fn view(value: Option<&Value>) -> Option<View> {
         None => 1.0,
         Some(z) => z
             .as_f64()
-            .filter(|z| z.is_finite() && *z > 0.0 && *z <= 8.0)?,
+            .filter(|z| z.is_finite() && *z > 0.0 && *z <= 16.0)?,
     };
     let theme = match map.get("theme").and_then(Value::as_str) {
         None | Some("light") => Theme::Light,
@@ -881,6 +902,39 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 arms_only_on_readings,
             }
         }
+        "idle" => Request::Idle {
+            doc: doc(input.get("doc"))?,
+            look,
+            view: view(input.get("view"))?,
+            record: record(input)?,
+            seconds: input
+                .get("seconds")?
+                .as_u64()
+                .filter(|s| (1..=600).contains(s))?,
+            arms_each_vsync: match input.get("planted") {
+                None => false,
+                Some(Value::String(p)) if p == "arms_each_vsync" => true,
+                Some(Value::String(p)) if p == "valid_until_ignores_view" => false,
+                Some(_) => return None,
+            },
+            region: match input.get("view").and_then(|v| v.get("rect")) {
+                None => None,
+                Some(r) => {
+                    let r: Vec<f64> = r
+                        .as_array()?
+                        .iter()
+                        .map(Value::as_f64)
+                        .collect::<Option<_>>()?;
+                    let [x, y, w, h] = r[..] else { return None };
+                    if !(r.iter().all(|n| n.is_finite()) && w > 0.0 && h > 0.0) {
+                        return None;
+                    }
+                    let ignores = input.get("planted").and_then(Value::as_str)
+                        == Some("valid_until_ignores_view");
+                    Some(([x, y, w, h], ignores))
+                }
+            },
+        },
         "session" => {
             let steps = input
                 .get("steps")?
@@ -934,9 +988,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             }
         }
         "render" => {
-            let gpui_oklab = match input.get("planted") {
-                None => false,
-                Some(Value::String(p)) if p == "gpui_oklab_gradient" => true,
+            let (gpui_oklab, drops_glyph) = match input.get("planted") {
+                None => (false, false),
+                Some(Value::String(p)) if p == "gpui_oklab_gradient" => (true, false),
+                Some(Value::String(p)) if p == "drops_glyph" => (false, true),
                 Some(_) => return None,
             };
             Request::Render {
@@ -947,6 +1002,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 t: input.get("t").map_or(Some(0), Value::as_i64)?,
                 record: record(input)?,
                 gpui_oklab,
+                drops_glyph,
                 store: store(input.get("store"))?,
             }
         }
@@ -966,6 +1022,7 @@ pub fn main() {
         "look",
         "raster",
         "geometry",
+        "idle",
         "labels",
         "crosshair",
         "path",

@@ -702,7 +702,7 @@ workloads.idle = () => {
         opened_frames: 1, seconds: p.seconds, frames: frames.length,
         drawn: frames.map((f) => ({ frame: f.frame_seq, at_ms: Math.max(0, (f.presented_ns - p.from_ns) / 1e6) })),
         wakeups: p.wakeups, interrupt_wakeups: p.interrupt_wakeups, cpu_ms: p.cpu_ms, cpu_fraction: p.cpu_ms / (p.seconds * 1000),
-        request_frames, window,
+        energy: p.energy, request_frames, window,
       };
     } finally {
       rmSync(evidence, { recursive: true, force: true });
@@ -973,7 +973,18 @@ function judgeEfficiency(current) {
   // A window that wasn't shown leaves its run's readings saying nothing of a shown window: short of a FAIL, that is
   // INCONCLUSIVE, never PASS and never BLOCKED by the readings it couldn't make.
   if (window && window.status !== 'PASS' && status !== 'FAIL') status = 'INCONCLUSIVE';
-  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(window ? { window } : {}), ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
+  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(window ? { window } : {}), ...(task === 'canvas-idle' ? { energy: energyReading(current.runs ?? []) } : {}),
+    ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
+}
+
+/** The idle task's energy, a reading beside CPU and never a target (#1492): the counter's nanojoules a run, or BLOCKED naming it when a run reads zero. */
+function energyReading(runs) {
+  const counter = runs.find((r) => r.energy?.counter)?.energy.counter ?? 'ri_energy_nj';
+  const nj = runs.map((r) => r.energy?.nj);
+  if (nj.length === 0 || nj.some((v) => !(Number.isFinite(v) && v > 0))) {
+    return { status: 'BLOCKED', counter, reason: `the counter ${counter} read ${JSON.stringify(nj)} nJ over the runs; a reading of zero is not energy` };
+  }
+  return { status: 'READING', counter, runs: nj };
 }
 
 // #417's looks (tests/acceptance/417/README.md, "AC5's reports"): a release `deep-gpu`'s `film2d` plays a 2D film

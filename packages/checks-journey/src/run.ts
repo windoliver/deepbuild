@@ -11,7 +11,7 @@ import { after, type Host } from '@deepbuild/supervisor';
 import type { Box } from './png.js';
 import type { DriverLocator } from './journey.js';
 
-export const DRIVER = fileURLToPath(new URL('../runtime/driver.mjs', import.meta.url));
+const DRIVER = fileURLToPath(new URL('../runtime/driver.mjs', import.meta.url));
 /** The fixed defaults every journey runs with (issue #37, Added Oct 9). */
 export interface Profile { width: number; height: number; locale: string; timezone: string; colorScheme: 'light' | 'dark'; reducedMotion: 'reduce' | 'no-preference' }
 export const PROFILE: Profile = { width: 1280, height: 720, locale: 'en-US', timezone: 'UTC', colorScheme: 'light', reducedMotion: 'reduce' };
@@ -20,10 +20,10 @@ export interface JobStep { id: string; line: number | null; deadlineMs: number; 
 export interface JobEnd { id: string; line: number | null; oracle: string; locator?: DriverLocator; text?: string; visible?: boolean; timeoutMs?: number }
 export interface Job { url: string; profile: Profile; video: boolean; trace: boolean; settle: boolean; settleMs: number; hold: boolean; masks: DriverLocator[]; steps: JobStep[]; endState: JobEnd[] }
 
-export interface Control { role: string; name: string; testId?: string }
-export interface AnimationEntry { target: Control | null; property: string; from: string; to: string; duration: number | null; delay: number; easing: string }
+interface Control { role: string; name: string; testId?: string }
+interface AnimationEntry { target: Control | null; property: string; from: string; to: string; duration: number | null; delay: number; easing: string }
 export interface ScreenElement { role: string; name: string; testId: string | null; label: string | null; explicitRole: string | null; tag: string; box: Box }
-export interface ReportFailure { step: string; line: number | null; assertion: boolean; message: string; selector?: string; screenshot?: string | null; box?: Box | null; action?: string; outside?: boolean; stack?: string | null }
+interface ReportFailure { step: string; line: number | null; assertion: boolean; message: string; selector?: string; screenshot?: string | null; box?: Box | null; action?: string; outside?: boolean; stack?: string | null }
 export interface ReportStep {
   id: string; index: number; startMs: number; endMs: number | null; outcome: 'passed' | 'failed' | 'overran'; failure: ReportFailure | null;
   route: { path: string; query: string; raw: string } | null; controls: { appeared: Control[]; left: Control[]; changed: Control[] } | null;
@@ -43,9 +43,9 @@ export interface Report {
 export interface Artifact { name: string; path: string; sha256: string; size: number; kind: 'png' | 'webm' | 'zip' | 'json' }
 export interface DriverRun { report: Report | null; dir: string; out: string; artifacts: Artifact[]; exit: { code: number | null; cause: 'exit' | 'deadline' | 'stop'; failed: string | null; output: string }; wallMs: number; /** The driver process gone, awaited before its folder is removed. */ settled: Promise<unknown> }
 
-export const sha256 = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
+const sha256 = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
 /** Where Playwright installed its browsers: as told, else the cache under this home, else under the account's own home (a run with HOME moved aside still finds them). */
-export function browsersPath(): string {
+function browsersPath(): string {
   if (process.env.PLAYWRIGHT_BROWSERS_PATH) return process.env.PLAYWRIGHT_BROWSERS_PATH;
   const cache = process.platform === 'darwin' ? 'Library/Caches/ms-playwright' : '.cache/ms-playwright';
   const homes = [homedir(), userInfo().homedir];
@@ -55,13 +55,13 @@ const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 export function playwrightVersion(): string {
   try { return (JSON.parse(readFileSync(join(REPO, 'node_modules/playwright/package.json'), 'utf8')) as { version: string }).version; } catch { return 'unknown'; }
 }
-export const hostOf = (url: string): string => { const u = new URL(url); return `${u.hostname}:${u.port || (u.protocol === 'https:' ? 443 : 80)}`; };
+const hostOf = (url: string): string => { const u = new URL(url); return `${u.hostname}:${u.port || (u.protocol === 'https:' ? 443 : 80)}`; };
 
 /**
  * Starts a process through the host, as you, writing in `dir` and reaching only `hosts`; its exit and output. With
  * `later`, the deadline isn't armed at the start: `later.arm(ms)` arms it, as a prestarted driver's job arrives.
  */
-export async function hosted(host: Host, run: string, argv: string[], cwd: string, env: Record<string, string>, dir: string, hosts: string[], deadline: number, stop?: AbortSignal, later?: { arm?: (ms: number) => void }): Promise<DriverRun['exit']> {
+async function hosted(host: Host, run: string, argv: string[], cwd: string, env: Record<string, string>, dir: string, hosts: string[], deadline: number, stop?: AbortSignal, later?: { arm?: (ms: number) => void }): Promise<DriverRun['exit']> {
   const chunks: Buffer[] = [];
   let cause: 'exit' | 'deadline' | 'stop' = 'exit';
   const started = host.start({
@@ -97,7 +97,7 @@ export async function hosted(host: Host, run: string, argv: string[], cwd: strin
   }
 }
 
-export interface PrestartOptions { host: Host; run: string; hosts: string[]; dir?: string; secrets?: Record<string, string>; stop?: AbortSignal }
+interface PrestartOptions { host: Host; run: string; hosts: string[]; dir?: string; secrets?: Record<string, string>; stop?: AbortSignal }
 /** A driver process started ahead of its job: it boots while the stack comes up, then waits for the job file. */
 export interface Prestarted { dir: string; out: string; jobFile: string; running: Promise<DriverRun['exit']>; exited: () => boolean; /** Arms the run's deadline, from when its job is written. */ arm: (ms: number) => void; used: boolean }
 export function prestart(o: PrestartOptions): Prestarted {
@@ -123,7 +123,7 @@ export async function cancel(p: Prestarted): Promise<void> {
   discard(p);
 }
 
-export interface DriveOptions { host: Host; run: string; job: Job; dir?: string; deadline: number; secrets?: Record<string, string>; stop?: AbortSignal; /** The driver already started for this run, waiting for its job. */ pre?: Prestarted; /** Runs beside the driver, with the run's folder, a reader of its report so far and whether the driver has exited: a planted environment's hook. */ between?: (out: string, report: () => Report | null, exited: () => boolean) => Promise<void> }
+interface DriveOptions { host: Host; run: string; job: Job; dir?: string; deadline: number; secrets?: Record<string, string>; stop?: AbortSignal; /** The driver already started for this run, waiting for its job. */ pre?: Prestarted; /** Runs beside the driver, with the run's folder, a reader of its report so far and whether the driver has exited: a planted environment's hook. */ between?: (out: string, report: () => Report | null, exited: () => boolean) => Promise<void> }
 /** Runs the driver once: the report read back, and every file it wrote kept by digest. */
 export async function drive(o: DriveOptions): Promise<DriverRun> {
   const p = o.pre ?? prestart({ host: o.host, run: o.run, hosts: [hostOf(o.job.url)], ...(o.dir ? { dir: o.dir } : {}), ...(o.secrets ? { secrets: o.secrets } : {}), ...(o.stop ? { stop: o.stop } : {}) });

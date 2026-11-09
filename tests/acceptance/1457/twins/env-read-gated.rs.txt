@@ -1,0 +1,2 @@
+        #[cfg(feature = "plant-twin")]
+        let _plant = std::env::var("DEEP_HUB_PLANT");

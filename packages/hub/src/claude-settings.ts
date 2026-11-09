@@ -22,13 +22,13 @@ const DEFAULT_TIMEOUT = 60;
  * the SessionStart reply names in `watchPaths`. Notification, Elicitation and ElicitationResult say only whether the
  * session waits on you (#992).
  */
-export const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SessionEnd', 'FileChanged', 'Notification', 'Elicitation', 'ElicitationResult'];
+const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SessionEnd', 'FileChanged', 'Notification', 'Elicitation', 'ElicitationResult'];
 const TOOL_HOOKS = new Set(['PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure']);
 
 export const claudeSettings = (): string => join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'settings.json');
 const installedFile = (root: string): string => join(root, 'claude-hooks.json');
 
-export interface Installed { hooks: Record<string, Obj[]> }
+interface Installed { hooks: Record<string, Obj[]> }
 type Group = { matcher?: string; hooks: Obj[] };
 
 export function readJson(file: string): Obj | undefined {
@@ -115,7 +115,7 @@ export function withoutOurs(root: string, settings: Obj, yours: string | undefin
 }
 /** The installed record's file, which undo removes so no hub start puts our entries back. */
 export const installedRecord = installedFile;
-export function merged(settings: Obj, record: Installed, ours: Set<string>): Obj {
+function merged(settings: Obj, record: Installed, ours: Set<string>): Obj {
   const hooks: Obj = isObj(settings.hooks) ? { ...settings.hooks } : {};
   for (const [event, groups] of Object.entries(hooks)) {
     const kept = without(groups, ours);

@@ -10,7 +10,7 @@ rust-version = "1.95"
 # the live capture that reads the real app's accessibility tree. Both are tools beside the app,
 # so the app binary carries no test support.
 [dependencies]
-deep-app = { path = "../deep-app" }
+deep-app = { path = "../deep-app", features = ["fixtures"] }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
 gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
 serde_json = "1"
@@ -23,6 +23,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # so a workspace build of the app carries no plant.
 [features]
 env-plants = ["deep-app/env-plants", "deep-app/plant-row"]
+# Issue #1434: `deep-replica --chrome`, the chrome@1 fixture drawn headless, and its plants, in no shipped build.
+chrome-fixture = ["deep-app/chrome-fixture"]
 
 # The live capture asks AppKit for the window's accessibility children and their frames.
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -51,7 +51,7 @@ export async function setupCommand(cli: string, args: readonly string[] = []): P
 }
 
 /** What the Set up click and the first `deep` command say they did (#326), in one line. */
-export const SET_UP_LINE = 'DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo\'s checks, and started the hub at login; deep setup --undo removes it all.';
+const SET_UP_LINE = 'DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks until you approve a repo\'s checks, and started the hub at login; deep setup --undo removes it all.';
 
 /**
  * The first `deep` command (#326): in a home where setup hasn't finished (#1002), `deep setup`'s steps run without asking,

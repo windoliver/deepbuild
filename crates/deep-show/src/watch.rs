@@ -348,6 +348,7 @@ impl State {
             live["process"] = json!({
                 "from_ns": t0, "seconds": (t1 - t0) as f64 / 1e9, "wakeups": u1.wakeups - u0.wakeups,
                 "interrupt_wakeups": u1.interrupts - u0.interrupts, "cpu_ms": cpu_ms,
+                "energy": { "counter": idle::ENERGY_COUNTER, "nj": u1.energy_nj.saturating_sub(u0.energy_nj) },
             });
         }
         if let Some(track) = &self.track {

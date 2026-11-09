@@ -92,7 +92,7 @@ function since(ms: number, now: number): string {
  * What a status answer reads beside the claim: the session's row and your inbox. `state` is the session's own when
  * no claim stands for its turn: working, waiting, stuck, finished, failed or unknown.
  */
-export interface StatusFacts { session: string; agent: string; worktree: string; needsYou: number; now: number; lastStop: number | null; state?: string | undefined }
+interface StatusFacts { session: string; agent: string; worktree: string; needsYou: number; now: number; lastStop: number | null; state?: string | undefined }
 /**
  * The answer to a status question, from the record alone: the state (the claim's line, or the session's own, with
  * the next step on you when it waits, is stuck or has finished with nothing claimed), how long it has been in it, the next step and the Needs-you

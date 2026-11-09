@@ -248,7 +248,7 @@ export const openBrowser = (url: string): Promise<void> => new Promise((done, fa
 
 type Outcome = HttpAnswer | { error: string };
 /** What the record keeps of a source's calls and readings, appended as the core. */
-export type Append = (kind: 'source.called' | 'reading.recorded', data: Record<string, unknown>) => Promise<void>;
+type Append = (kind: 'source.called' | 'reading.recorded', data: Record<string, unknown>) => Promise<void>;
 
 /** The hub's side of every source: its calls, cache, quotas, back-off, recording and the secret values it holds to scrub. */
 export class Sources {
