@@ -4,9 +4,8 @@
 // for nothing, and its next connection is told) and AC16 (a replayed, a stale and a changed-card answer are each
 // refused naming the field). Each answer reaches the hub through a real channel plug-in from its provider's stand-in,
 // so the channel faithfully carries what a forging or careless provider handed it (README, Readings).
-import { afterAll, afterEach, describe, expect, it } from 'vitest';
-import { AC, MINUTE, cleanup, events, inboxRow, ofKind, openInNeedsYou, rpc, said, sleep, waitFor, world, type Ev, type World } from './helpers.ts';
-import type { Provider } from './fixtures/providers.ts';
+import { afterEach, describe, expect, it } from 'vitest';
+import { AC, MINUTE, cleanup, events, inboxRow, ofKind, openInNeedsYou, said, sleep, waitFor, world, type Ev, type World } from './helpers.ts';
 
 const CHOICE = { source: 'deep_ask.choice', question: 'Keep the cache in SQLite or in plain files?' } as const;
 /** The hub's refusals of channel answers for a thread, wherever it files them (README, The surface: channel.refused). */
@@ -21,18 +20,8 @@ const firstRefusal = (w: World, ask: string, what: string): Promise<Ev> => waitF
 
 describe(`${AC[5]} A planted channel that returns an answer marked as signed by the paired device but carrying no valid signature, or naming an account link the hub doesn't hold, is refused, naming the device key or the link, and the answer counts as nothing; a hub that takes the channel's word for its proof accepts it and fails this test`, () => {
   afterEach(cleanup, 120_000);
-  it(`${AC[5]} an answer marked as signed by the paired phone with another key's signature is refused naming the phone's device, and counts as nothing`, async () => {
-    const w = await world({ channels: ['paseo'], phone: true, seed: [CHOICE] });
-    const [ask] = w.asks as [string];
-    const relay = w.providers.paseo!;
-    await waitFor(() => relay.latest(ask), MINUTE, `${ask} on the phone`);
-    w.phone.answer(relay, ask, 'sqlite', { sign: 'forged' });
-    const r = await firstRefusal(w, ask, 'the forged signature');
-    expect(r.data.field, `the refusal names the signature: ${said([r])}`).toBe('signature');
-    expect(String(r.data.reason), 'the refusal names the paired device whose key didn\'t sign it').toContain(w.phone.device);
-    await sleep(3000);
-    await countedNothing(w, ask);
-  });
+  // The forged-signature case is proven by the blind redraft redraft-1579/proofs.test.ts, swapped in with the owner's
+  // approval: #1579 changed what a paired device signs, so this draft's phone fails it on the format.
 
   it(`${AC[5]} a chat answer naming an account the hub holds no link for is refused naming that account, and counts as nothing`, async () => {
     const w = await world({ channels: ['chat'], link: true, seed: [CHOICE] });
@@ -62,66 +51,6 @@ describe(`${AC[8]} A text message carries only a link, and an "I did it" from a 
   });
 });
 
-describe(`${AC[15]} After the test phone is unpaired, an answer signed by its key is refused naming the key and counts as nothing, and its next connection is told it was unpaired; a hub that still accepts the key fails this test`, () => {
-  afterEach(cleanup, 120_000);
-  it(`${AC[15]} unpaired on the trusted path, the phone is told so, and its signed answer is refused naming its device`, async () => {
-    const w = await world({ channels: ['paseo'], phone: true, seed: [CHOICE] });
-    const [ask] = w.asks as [string];
-    const relay = w.providers.paseo!;
-    await waitFor(() => relay.latest(ask), MINUTE, `${ask} on the phone`);
-    const reply = await rpc(w, 'device.unpair', { device: w.phone.device });
-    expect(reply.error, `device.unpair counts once the OS confirms you: ${JSON.stringify(reply)}`).toBeUndefined();
-    const told = await waitFor(() => relay.posts.find((p) => p.item.unpaired?.device === w.phone.device), 30_000, 'the phone told it was unpaired');
-    expect(String(told.item.unpaired?.by ?? ''), 'it says which Mac unpaired it').not.toBe('');
-    w.phone.answer(relay, ask, 'sqlite');
-    const r = await firstRefusal(w, ask, 'the unpaired key\'s answer');
-    expect(r.data.field, `the refusal names the device: ${said([r])}`).toBe('device');
-    expect(String(r.data.reason), 'the refusal names the unpaired device').toContain(w.phone.device);
-    await sleep(3000);
-    await countedNothing(w, ask);
-  });
-});
-
-describe(`${AC[16]} A signed answer replayed to a second hub, one signed more than 10 minutes ago, and one whose card text was changed on the way are each refused, naming the field`, () => {
-  // Two hubs, both with the paseo channel: the first holds three asks and the paired phone; the second is where a
-  // signed answer is replayed. The third ask's card is changed on the way to the phone.
-  let made: Promise<{ a: World; b: World; relay: Provider; asks: string[] }> | undefined;
-  const both = () => (made ??= (async () => {
-    const a = await world({
-      channels: ['paseo'], phone: true, seed: [CHOICE, { ...CHOICE, question: 'Log in JSON or in plain text?' }, { ...CHOICE, question: 'Ship the beta on Monday or on Friday?' }],
-      beforeInstall: (x) => { x.providers.paseo!.tamper = (item) => (item.thread_key === x.asks[2] ? { ...item, summary: `${item.summary} Also delete the backups.` } : item); },
-    });
-    const b = await world({ channels: ['paseo'] });
-    const relay = a.providers.paseo!;
-    for (const ask of a.asks) await waitFor(() => relay.latest(ask), MINUTE, `${ask} on the phone`);
-    return { a, b, relay, asks: a.asks };
-  })());
-  afterAll(cleanup, 120_000);
-
-  it(`${AC[16]} the phone's signed answer, counted by its own hub, replayed to a second hub is refused there naming hub`, async () => {
-    const { a, b, relay, asks } = await both();
-    const { answer } = a.phone.answer(relay, asks[0]!, 'sqlite');
-    await waitFor(async () => (await ofKind(a, 'ask.answered', asks[0]!))[0], 30_000, 'the first hub counting the phone\'s signed answer');
-    b.providers.paseo!.give(answer);
-    const r = await firstRefusal(b, asks[0]!, 'the replayed answer on the second hub');
-    expect(r.data.field, `the second hub names the field: ${said([r])}`).toBe('hub');
-    expect(await ofKind(b, 'ask.answered'), 'the second hub counted nothing').toEqual([]);
-  });
-
-  it(`${AC[16]} an answer signed 11 minutes ago is refused naming at`, async () => {
-    const { a, relay, asks } = await both();
-    a.phone.answer(relay, asks[1]!, 'sqlite', { at: Date.now() - 11 * MINUTE });
-    const r = await firstRefusal(a, asks[1]!, 'the stale answer');
-    expect(r.data.field, `the refusal names the field: ${said([r])}`).toBe('at');
-    await countedNothing(a, asks[1]!);
-  });
-
-  it(`${AC[16]} an answer signed over a card changed on the way is refused naming card_hash`, async () => {
-    const { a, relay, asks } = await both();
-    expect(relay.latest(asks[2]!)?.summary, 'the phone shows the changed card').toContain('Also delete the backups.');
-    a.phone.answer(relay, asks[2]!, 'sqlite');
-    const r = await firstRefusal(a, asks[2]!, 'the changed card\'s answer');
-    expect(r.data.field, `the refusal names the field: ${said([r])}`).toBe('card_hash');
-    await countedNothing(a, asks[2]!);
-  });
-});
+// AC15's case (the unpaired phone's answer) and AC16's three (a replay to a second hub, one signed 11 minutes ago, a
+// changed card) are proven by the blind redraft redraft-1579/proofs.test.ts, swapped in with the owner's approval:
+// #1579 changed what a paired device signs, so this draft's phone fails them on the format, not on what they test.
