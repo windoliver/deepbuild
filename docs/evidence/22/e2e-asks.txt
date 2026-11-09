@@ -1,0 +1,115 @@
+World: home /tmp/dh27-qmbLwi/h, repo /tmp/dh27-qmbLwi/repof550. deep setup: exit 0.
+Your asks settings after setup (config.json): {"deadline":{"taste":"7m","authority":"1d","unblock":"2d","exception":"2d","choice":"2d","definition":"4h"},"default":{"taste":"recommended","authority":"no","unblock":"stay-blocked","exception":"no-change","choice":"recommended","definition":"leave-out"},"notice":{"taste":"1m","authority":"1h","unblock":"1h","exception":"1h","choice":"1h","definition":"1h"},"fallback":["change-owner"],"fold":5,"batch":{"every":"2m","cap":2}}
+
+1. Three taste calls from sessions A, B and C at 09:40:02Z, raised by each session's deep_ask (kind taste). The next batch is at 09:42:00Z.
+   A ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX, B ask:01M6ZTVPW739XF4Z3A674B39ZT, C ask:01M6ZTVRE8XXMQ5NG1R82J4CN0
+
+$ deep inbox    # all three wait for the batch, at 09:40:06Z
+ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX  taste  2ef515c9-2110-46e2-b12b-3efad5ee3690  3s  queued  A: which header colour for screen 1?  [blue | green]
+ask:01M6ZTVPW739XF4Z3A674B39ZT  taste  f4e06b28-04d4-4e5a-9d6f-2c9ae1dceabf  2s  queued  B: which header colour for screen 1?  [blue | green]
+ask:01M6ZTVRE8XXMQ5NG1R82J4CN0  taste  8fbaa59c-ed99-4f51-8274-b36e5f698fc0  0s  queued  C: which header colour for screen 1?  [blue | green]
+   statuses: {"ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX":"queued/unanswered","ask:01M6ZTVPW739XF4Z3A674B39ZT":"queued/unanswered","ask:01M6ZTVRE8XXMQ5NG1R82J4CN0":"queued/unanswered"}
+
+2. The 09:42:00Z batch shows two (the day's cap is 2); the third waits.
+
+$ deep inbox    # after the batch, at 09:42:05Z
+ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX  taste  2ef515c9-2110-46e2-b12b-3efad5ee3690  2m  shown  A: which header colour for screen 1?  [blue | green]
+ask:01M6ZTVPW739XF4Z3A674B39ZT  taste  f4e06b28-04d4-4e5a-9d6f-2c9ae1dceabf  2m  shown  B: which header colour for screen 1?  [blue | green]
+ask:01M6ZTVRE8XXMQ5NG1R82J4CN0  taste  8fbaa59c-ed99-4f51-8274-b36e5f698fc0  1m  queued  C: which header colour for screen 1?  [blue | green]
+   statuses: {"ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX":"shown/unanswered","ask:01M6ZTVPW739XF4Z3A674B39ZT":"shown/unanswered","ask:01M6ZTVRE8XXMQ5NG1R82J4CN0":"queued/unanswered"}
+
+3. You answer ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX with blue from your terminal (the OS confirmation is the test stand-in, DEEP_HUB_TEST_CONFIRM).
+$ deep inbox answer ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX blue
+ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX answered blue, saved as a decision for repo:repof550564d8e66  (exit 0)
+   The agent's deep_ask had returned, before you answered: {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX\",\"status\":\"provisional\",\"answer\":\"green\",\"note\":\"Go on with Green header: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX","status":"provisional","answer":"green","note":"Go on with Green header: it is provisional and can be undone, and
+   The agent's deep_wait returns your answer: {"jsonrpc":"2.0","id":"tools/call#3","result":{"content":[{"type":"text","text":"{\"ask\":\"ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX\",\"status\":\"answered\",\"answer\":\"blue\"}"}],"isError":false,"structuredContent":{"ask":"ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX","status":"answered","answer":"blue"}}}
+
+4. Session D asks six taste calls; past five open, the sixth folds into one "this session keeps asking" exception, which waits for a batch like any ask.
+   D's asks: ask:01M6ZTZEVK4N5ABD8F0PWCQ5MB, ask:01M6ZTZF48HP8MVFEA6JXHH8ZS, ask:01M6ZTZFASZ8AWN16NMPH3N639, ask:01M6ZTZFHQ0A1CJ40D7BJ32NHF, ask:01M6ZTZFSQ6AM8A1WAW27CQ4RF, ask:01M6ZTZFZCHCMZR5EJ4Z9QD8HE
+
+$ deep inbox    # D's six asks, the sixth folded, at 09:42:10Z
+ask:01M6ZTVPW739XF4Z3A674B39ZT  taste  f4e06b28-04d4-4e5a-9d6f-2c9ae1dceabf  2m  shown  B: which header colour for screen 1?  [blue | green]
+ask:01M6ZTVRE8XXMQ5NG1R82J4CN0  taste  8fbaa59c-ed99-4f51-8274-b36e5f698fc0  2m  queued  C: which header colour for screen 1?  [blue | green]
+ask:01M6ZTZEVK4N5ABD8F0PWCQ5MB  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  3s  queued  D: which header colour for screen 1?  [blue | green]
+ask:01M6ZTZF48HP8MVFEA6JXHH8ZS  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  2s  queued  D: which header colour for screen 2?  [blue | green]
+ask:01M6ZTZFASZ8AWN16NMPH3N639  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  2s  queued  D: which header colour for screen 3?  [blue | green]
+ask:01M6ZTZFHQ0A1CJ40D7BJ32NHF  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  2s  queued  D: which header colour for screen 4?  [blue | green]
+ask:01M6ZTZFSQ6AM8A1WAW27CQ4RF  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  2s  queued  D: which header colour for screen 5?  [blue | green]
+ask:01M6ZTZFZDCCQ312QQ0YVGV4GC  exception  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  1s  queued  This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  [together | pause | defaults]
+ask:01M6ZTZFZCHCMZR5EJ4Z9QD8HE  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  1s  folded  D: which header colour for screen 6?  [blue | green]
+   the exception: {"ask":"ask:01M6ZTZFZDCCQ312QQ0YVGV4GC","kind":"exception","session":"8a43d62a-aa24-4b7d-8b51-761cd3cefb80","status":"queued","outcome":"unanswered","owner":"you","age":1994,"request":null,"decision":null,"missing":null,"words":[],"question":"This session keeps asking: answer its asks together, pause it, or leave them to their defaults?","options":["together","pause","defaults"],"plan":null}
+
+5. C's deadline is 09:47:06Z. With the cap reached it waits until the last batch before its deadline, where it must show at once, and only then takes its default.
+   09:42:10Z C is queued/unanswered
+   09:46:01Z C is shown/unanswered
+   09:47:07Z C is closed/defaulted
+
+$ deep inbox    # C defaulted at its deadline, announced and undoable, at 09:47:07Z
+ask:01M6ZTZEVK4N5ABD8F0PWCQ5MB  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  queued  D: which header colour for screen 1?  [blue | green]
+ask:01M6ZTZF48HP8MVFEA6JXHH8ZS  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  queued  D: which header colour for screen 2?  [blue | green]
+ask:01M6ZTZFASZ8AWN16NMPH3N639  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  queued  D: which header colour for screen 3?  [blue | green]
+ask:01M6ZTZFHQ0A1CJ40D7BJ32NHF  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  queued  D: which header colour for screen 4?  [blue | green]
+ask:01M6ZTZFSQ6AM8A1WAW27CQ4RF  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  queued  D: which header colour for screen 5?  [blue | green]
+ask:01M6ZTZFZDCCQ312QQ0YVGV4GC  exception  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  queued  This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  [together | pause | defaults]
+ask:01M6ZTZFZCHCMZR5EJ4Z9QD8HE  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  folded  D: which header colour for screen 6?  [blue | green]
+
+6. You undo C's default.
+$ deep inbox undo ask:01M6ZTVRE8XXMQ5NG1R82J4CN0
+ask:01M6ZTVRE8XXMQ5NG1R82J4CN0 is open again, its default undone; it waits until 2026-11-09T09:54:07.688Z  (exit 0)
+
+$ deep inbox    # C open again, at 09:47:07Z
+ask:01M6ZTVRE8XXMQ5NG1R82J4CN0  taste  8fbaa59c-ed99-4f51-8274-b36e5f698fc0  7m  shown  C: which header colour for screen 1?  [blue | green]
+ask:01M6ZTZEVK4N5ABD8F0PWCQ5MB  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  5m  queued  D: which header colour for screen 1?  [blue | green]
+ask:01M6ZTZF48HP8MVFEA6JXHH8ZS  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  5m  queued  D: which header colour for screen 2?  [blue | green]
+ask:01M6ZTZFASZ8AWN16NMPH3N639  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  queued  D: which header colour for screen 3?  [blue | green]
+ask:01M6ZTZFHQ0A1CJ40D7BJ32NHF  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  queued  D: which header colour for screen 4?  [blue | green]
+ask:01M6ZTZFSQ6AM8A1WAW27CQ4RF  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  queued  D: which header colour for screen 5?  [blue | green]
+ask:01M6ZTZFZDCCQ312QQ0YVGV4GC  exception  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  queued  This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  [together | pause | defaults]
+ask:01M6ZTZFZCHCMZR5EJ4Z9QD8HE  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  4m  folded  D: which header colour for screen 6?  [blue | green]
+
+7. 09:48:01Z the exception ask:01M6ZTZFZDCCQ312QQ0YVGV4GC is shown/unanswered: it showed at the last batch before the earliest deadline it holds.
+
+$ deep inbox    # the exception in Needs you, its six asks folded in it, at 09:48:01Z
+ask:01M6ZTVRE8XXMQ5NG1R82J4CN0  taste  8fbaa59c-ed99-4f51-8274-b36e5f698fc0  7m  shown  C: which header colour for screen 1?  [blue | green]
+ask:01M6ZTZEVK4N5ABD8F0PWCQ5MB  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  5m  shown  D: which header colour for screen 1?  [blue | green]
+ask:01M6ZTZF48HP8MVFEA6JXHH8ZS  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  5m  shown  D: which header colour for screen 2?  [blue | green]
+ask:01M6ZTZFASZ8AWN16NMPH3N639  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  5m  shown  D: which header colour for screen 3?  [blue | green]
+ask:01M6ZTZFHQ0A1CJ40D7BJ32NHF  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  5m  shown  D: which header colour for screen 4?  [blue | green]
+ask:01M6ZTZFSQ6AM8A1WAW27CQ4RF  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  5m  shown  D: which header colour for screen 5?  [blue | green]
+ask:01M6ZTZFZDCCQ312QQ0YVGV4GC  exception  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  5m  shown  This session keeps asking: answer its asks together, pause it, or leave them to their defaults?  [together | pause | defaults]
+ask:01M6ZTZFZCHCMZR5EJ4Z9QD8HE  taste  8a43d62a-aa24-4b7d-8b51-761cd3cefb80  5m  folded  D: which header colour for screen 6?  [blue | green]
+
+8. You answer the exception in bulk.
+$ deep inbox answer ask:01M6ZTZFZDCCQ312QQ0YVGV4GC together
+ask:01M6ZTZFZDCCQ312QQ0YVGV4GC answered together; no decision saved  (exit 0)
+   D's six after: {"ask:01M6ZTZEVK4N5ABD8F0PWCQ5MB":"closed/answered","ask:01M6ZTZF48HP8MVFEA6JXHH8ZS":"closed/answered","ask:01M6ZTZFASZ8AWN16NMPH3N639":"closed/answered","ask:01M6ZTZFHQ0A1CJ40D7BJ32NHF":"closed/answered","ask:01M6ZTZFSQ6AM8A1WAW27CQ4RF":"closed/answered","ask:01M6ZTZFZCHCMZR5EJ4Z9QD8HE":"closed/answered"}; the exception: closed/answered
+
+$ deep inbox    # after the bulk answer, at 09:48:03Z
+ask:01M6ZTVRE8XXMQ5NG1R82J4CN0  taste  8fbaa59c-ed99-4f51-8274-b36e5f698fc0  7m  shown  C: which header colour for screen 1?  [blue | green]
+
+9. The record: every ask event, in order.
+  09:40:03Z ask.created ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX {"kind":"taste","question":"A: which header colour for screen 1?","deadline":"09:47:03","default":"green"}
+  09:40:04Z ask.created ask:01M6ZTVPW739XF4Z3A674B39ZT {"kind":"taste","question":"B: which header colour for screen 1?","deadline":"09:47:04","default":"green"}
+  09:40:06Z ask.created ask:01M6ZTVRE8XXMQ5NG1R82J4CN0 {"kind":"taste","question":"C: which header colour for screen 1?","deadline":"09:47:06","default":"green"}
+  09:42:00Z ask.batched ask:01M6ZTZ88WWQ1VNJS75VNQT46G {"batch":"batch:2026-11-09T09:42:00.000Z","asks":["ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX","ask:01M6ZTVPW739XF4Z3A674B39ZT"]}
+  09:42:06Z ask.answered ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX {"answer":"blue","plan_hash":null,"decision":"none","via":"inbox","verified":true,"on":{"kind":"commit","ref":"558ca4e8d73732b888c8bafc7fad6f904b253af7"},"token":null,"words":null,"image":null}
+  09:42:06Z decision.created ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX {"key":"d27367d6ff8ae63e8df06b163b70dbf912f898a884993e350d3087e927854e33","scope":"repo:repof550564d8e66","answer":"blue","ask":"ask:01M6ZTVNFQVTQ7TWF9Y9MXBPRX"}
+  09:42:07Z ask.created ask:01M6ZTZEVK4N5ABD8F0PWCQ5MB {"kind":"taste","question":"D: which header colour for screen 1?","deadline":"09:49:07","default":"green"}
+  09:42:07Z ask.created ask:01M6ZTZF48HP8MVFEA6JXHH8ZS {"kind":"taste","question":"D: which header colour for screen 2?","deadline":"09:49:07","default":"green"}
+  09:42:07Z ask.created ask:01M6ZTZFASZ8AWN16NMPH3N639 {"kind":"taste","question":"D: which header colour for screen 3?","deadline":"09:49:07","default":"green"}
+  09:42:08Z ask.created ask:01M6ZTZFHQ0A1CJ40D7BJ32NHF {"kind":"taste","question":"D: which header colour for screen 4?","deadline":"09:49:08","default":"green"}
+  09:42:08Z ask.created ask:01M6ZTZFSQ6AM8A1WAW27CQ4RF {"kind":"taste","question":"D: which header colour for screen 5?","deadline":"09:49:08","default":"green"}
+  09:42:08Z ask.created ask:01M6ZTZFZDCCQ312QQ0YVGV4GC {"kind":"exception","question":"This session keeps asking: answer its asks together, pause it, or leave them to their defaults?","deadline":"09:49:08","default":"defaults"}
+  09:42:08Z ask.created ask:01M6ZTZFZCHCMZR5EJ4Z9QD8HE {"kind":"taste","question":"D: which header colour for screen 6?","deadline":"09:49:08","default":"green"}
+  09:46:00Z ask.batched ask:01M6ZV6JQFSXGNE26P5F3C8R8Z {"batch":"now:2026-11-09T09:46:00.815Z","asks":["ask:01M6ZTVRE8XXMQ5NG1R82J4CN0"]}
+  09:47:04Z ask.defaulted ask:01M6ZTVPW739XF4Z3A674B39ZT {"answer":"green","plan_hash":null,"decision":"none"}
+  09:47:06Z ask.defaulted ask:01M6ZTVRE8XXMQ5NG1R82J4CN0 {"answer":"green","plan_hash":null,"decision":"none"}
+  09:48:00Z ask.batched ask:01M6ZVA7YM5J9ZAAZRA4DTNB1R {"batch":"now:2026-11-09T09:48:00.852Z","asks":["ask:01M6ZTZEVK4N5ABD8F0PWCQ5MB","ask:01M6ZTZF48HP8MVFEA6JXHH8ZS","ask:01M6ZTZFASZ8AWN16NMPH3N639","ask:01M6ZTZFHQ0A1CJ40D7BJ32NHF","ask:01M6ZTZFSQ6AM8A1WAW27CQ4RF","ask:01M6ZTZFZDCCQ312QQ0YVGV4GC"]}
+  09:48:00Z ask.batched ask:01M6ZVA7Z817RQE2ZE5JAQBS97 {"batch":"now:2026-11-09T09:48:00.872Z","asks":["ask:01M6ZTZFZCHCMZR5EJ4Z9QD8HE"]}
+  09:48:02Z ask.answered ask:01M6ZTZEVK4N5ABD8F0PWCQ5MB {"answer":"green","plan_hash":null,"decision":"none","via":"inbox","verified":true,"on":{"kind":"commit","ref":"558ca4e8d73732b888c8bafc7fad6f904b253af7"},"token":null,"words":null,"image":null}
+  09:48:02Z ask.answered ask:01M6ZTZF48HP8MVFEA6JXHH8ZS {"answer":"green","plan_hash":null,"decision":"none","via":"inbox","verified":true,"on":{"kind":"commit","ref":"558ca4e8d73732b888c8bafc7fad6f904b253af7"},"token":null,"words":null,"image":null}
+  09:48:02Z ask.answered ask:01M6ZTZFASZ8AWN16NMPH3N639 {"answer":"green","plan_hash":null,"decision":"none","via":"inbox","verified":true,"on":{"kind":"commit","ref":"558ca4e8d73732b888c8bafc7fad6f904b253af7"},"token":null,"words":null,"image":null}
+  09:48:02Z ask.answered ask:01M6ZTZFHQ0A1CJ40D7BJ32NHF {"answer":"green","plan_hash":null,"decision":"none","via":"inbox","verified":true,"on":{"kind":"commit","ref":"558ca4e8d73732b888c8bafc7fad6f904b253af7"},"token":null,"words":null,"image":null}
+  09:48:02Z ask.answered ask:01M6ZTZFSQ6AM8A1WAW27CQ4RF {"answer":"green","plan_hash":null,"decision":"none","via":"inbox","verified":true,"on":{"kind":"commit","ref":"558ca4e8d73732b888c8bafc7fad6f904b253af7"},"token":null,"words":null,"image":null}
+  09:48:02Z ask.answered ask:01M6ZTZFZCHCMZR5EJ4Z9QD8HE {"answer":"green","plan_hash":null,"decision":"none","via":"inbox","verified":true,"on":{"kind":"commit","ref":"558ca4e8d73732b888c8bafc7fad6f904b253af7"},"token":null,"words":null,"image":null}
+  09:48:02Z ask.answered ask:01M6ZTZFZDCCQ312QQ0YVGV4GC {"answer":"together","plan_hash":null,"decision":"none","via":"inbox","verified":true,"on":{"kind":"evidence","ref":"35f16833a167d90fa5d802ed6d7acc3515d0c5949d3f40153e760eac808008f4"},"token":null,"words":null,"image":null}

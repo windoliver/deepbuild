@@ -254,6 +254,8 @@ export interface Asks {
    * and the time before you saw it, or before they were back on, moves its deadline later as `away` does.
    */
   notifications(off: boolean): Promise<void>;
+  /** Your next batch time after now, or null with no batches declared: the hub's beat ticks then, with nothing else due. */
+  nextBatch(): number | null;
   card(ask: string): Promise<Card>;
   needsYou(): Promise<Card[]>;
   holds(session: string, step: Step): Promise<string[]>;
@@ -906,6 +908,11 @@ class AsksCore implements Asks {
       await this.sync();
       await this.settle();
     });
+  }
+
+  nextBatch(): number | null {
+    const batches = this.batches();
+    return batches ? (Math.floor(this.options.now() / batches.every) + 1) * batches.every : null;
   }
 
   card(handle: string): Promise<Card> {
@@ -2537,7 +2544,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
   await core.tick();
   // Plain functions, so a caller can wrap one method and keep the rest.
   return {
-    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), card: core.card.bind(core),
+    raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), nextBatch: core.nextBatch.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
     later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),

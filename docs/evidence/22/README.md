@@ -1,0 +1,88 @@
+# #22 by hand: asks through a live hub, `deep` and MCP, and the re-judge
+
+#22 closes when its four parts close (its body's Parts). Re-judged at its merged commit a23eecaa once this repo was
+gated (#33 AC8), it read INCONCLUSIVE, naming `#22.1f14a778`, the line for part #319 (ask timing and the inbox).
+
+## Why #319 read INCONCLUSIVE
+
+`scripts/spine.mjs judge` on this Linux box, run from a local copy that reopens nothing (`reopen` removed, `cp -a` for
+the macOS-only `cp -c`, the commit taken from `AT`):
+
+| Commit | #318 `#22.48b6696b` | #319 `#22.1f14a778` | #320 `#22.f57a814c` | #321 `#22.3d85284a` |
+|---|---|---|---|---|
+| main 6042ef5a | PASS | INCONCLUSIVE | PASS | PASS |
+| this change 12ea8c63 | PASS | INCONCLUSIVE | PASS | INCONCLUSIVE |
+
+#319's only criterion that can't pass here is AC10 `#319.43d13eb3`, the budgets: `tests/acceptance/319/budgets.test.ts`
+counts a timing only on a reference Mac (Mac15,7 or Mac15,12) on mains power, and skips as INCONCLUSIVE anywhere else.
+Its proof is the Mac run below.
+
+#321 read INCONCLUSIVE at this change because its AC5 `#321.e6090cff` (`deadline.test.ts`, a push held with nobody
+answering) failed once under load, with deep-hook's own message that its sync "didn't finish within the hook's 50 ms",
+so the push went through. It does the same at the merge base 2a69a293: run alternately on this box, head failed 1 of 4
+and base 1 of 3, the same message each time (`ac5-321-base-vs-head.txt`). It is a load flake on main, not this change;
+that deep-hook lets a call through when its sync times out is a finding of its own, outside #22.
+
+## What the run by hand found: a running hub never showed a batch
+
+Run against a real `deep hub run` (`e2e-asks.test.ts`), three taste calls raised at 09:20 with batches every 2 minutes
+were all still `queued` at 09:22:04. The hub's one-second beat ran the asks core only when a stop or verdict had landed,
+a deadline had passed or an unblock was open (#85's gate, which came after a23eecaa), so a batch time passing called
+nothing: on a live hub every batched ask waited until its deadline, then showed at once. #319's suite drives the asks
+core on a virtual clock and calls `tick()` itself, so it never saw this.
+
+The fix: the asks core says when your next batch is (`nextBatch()`), and the hub's beat ticks at that time.
+
+- Failing first: `packages/hub/test/asleep.test.ts`, "a hub that stays up shows an ask waiting for its batch at the
+  batch time", on main's hub: `failing-first.txt` (`expected [] to deeply equal [ 'batch:…' ]`).
+- With the fix: `passing-after.txt` (both tests in the file pass, the #908 sleep test beside it unchanged).
+
+## The runs by hand, after the fix
+
+Both run the real hub, `deep setup`, the real `target/debug/deep-hook` and `deep mcp` through the Claude Code
+stand-ins of tests/acceptance/27 and 321 (no model, no network; HOME is a temp folder; the OS confirmation is the
+test stand-in `DEEP_HUB_TEST_CONFIRM`). Scripts and full transcripts are in this folder.
+
+**`e2e-asks.txt`** (`e2e-asks.test.ts`): batches every 2 minutes, cap 2 a day, taste deadline 7 minutes with 1
+minute's notice, everything else as `deep setup` drafts it (the transcript prints the drafted settings: taste 3d →
+your 7m, authority 1d, unblock, exception and choice 2d, definition 4h; fold 5).
+
+1. Sessions A, B and C each raise a taste call through `deep_ask`; `deep inbox` lists all three `queued`.
+2. The next batch shows two (`ask.batched batch:…`), the cap is spent, the third stays `queued`.
+3. `deep_ask` had returned the provisional answer at once ("Go on with Green header: it is provisional and can be
+   undone"); you answer `blue` with `deep inbox answer`, and the agent's `deep_wait` returns `blue`.
+4. Session D raises six; the sixth folds into "This session keeps asking: answer its asks together, pause it, or leave
+   them to their defaults?" and shows as `folded` in the inbox.
+5. C waits past later batches (cap spent) and shows at once (`now:`) at the last batch before its deadline, then takes
+   its default `green` at its deadline, after it showed. `deep inbox undo` opens it again.
+6. The exception shows at the last batch before the earliest deadline it holds; `deep inbox answer <exception>
+   together` closes all six of D's asks, each `answered`.
+
+Answering the exception while it was still queued (an earlier run) closed only the exception: "together" answers only
+asks you have seen (`packages/asks/src/index.ts`, the fold's comment), which is the design, not a defect.
+
+**`e2e-authority.txt`** (`e2e-authority.test.ts`, part #321): an MCP server you added (`tracker`, local scope) gains
+`delete_repo` between two session starts. Its call is held at PreToolUse by an authority ask ("has new or changed tools
+that can change or destroy: delete_repo"), default `decline`, deadline one day out; `git push origin main`, which no
+typed request names, is held the same way. Five seconds on neither has run. `deep inbox` shows both with their plans;
+your `approve` lets `delete_repo` run (the server receives one call), your `decline` leaves the push denied (deep-hook
+exits 2: "DeepBuild denied this (guard push-needs-ask)…").
+
+## `node scripts/affected.mjs`
+
+At this change it selected nearly the whole repo (the asks and hub packages reach most suites) and read FAIL: 487 new,
+16 already failing on main, 484 inconclusive or blocked, 21 listed skips, 2526 passed, in 15733 s at load 16. Its
+INCONCLUSIVE lines: **67 timed files were not run** (`--timed`; `tests/acceptance/319/budgets.test.ts` among them, the
+Mac run below) and **36 slow files were not run** (`--slow`). No WIDE line.
+
+The 487 are not this change's. The same files at the merge base 2a69a293 (a built worktree, same box) gave 478 new
+failures; of the 31 failing only at head, a rerun at load 2 put each on this box or load: the macOS-only `cp -c`
+(shards, #33's kit), an `lstat` of linux-vdso, the deep-replica build, leases' pid timing, and #342's environment
+BLOCKED. The ones that touch asks, #26 `ask`/`binding`, #39 `session` and #120 `start`, give the same result at base and
+head, test by test. The lint lane's NEW FAIL lines (slots' kits, drift, the app's record reader) are main's.
+
+## The Mac
+
+Pending: the owner's Mac runner (Mac15,12, a reference Mac) runs `tests/acceptance/319/budgets.test.ts` and the rest of
+the #319 folder at this change, and `e2e-app.test.ts`, which raises the same asks with the real deep-app window up and
+takes its screenshots.
