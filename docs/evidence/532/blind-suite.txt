@@ -1,0 +1,20 @@
+# #532 blind suite (tests/acceptance/532, commit 318becb9 = blind 10e55b1a), run on this Mac (macOS arm64, load average 220-270), Nov 8-9 2026
+## ac01
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Duration  1861.31s (tests 100%)
+## ac02
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Duration  460.12s (tests 100%)
+## ac03
+      Tests  3 passed (3)   (the summary line as printed; this run's full log wasn't kept)
+## ac04
+      Tests  4 passed (4)   (the summary line as printed; this run's full log wasn't kept)
+## ac05
+      Tests  3 passed (3)   (the summary line as printed; this run's full log wasn't kept)
+## ac06
+      Tests  2 passed (2)   (the summary line as printed; this run's full log wasn't kept)
+
+Total: 17 of 17 pass. Criterion 2 includes deep-logic built for Linux x86_64 in Docker (rust:1.99.1-slim-bookworm, linux/amd64) and the web runner in headless Chrome.
+Base run: tests/acceptance/532/BASE-FAILURE.txt (17 of 17 fail).

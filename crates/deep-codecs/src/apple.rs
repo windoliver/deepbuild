@@ -81,6 +81,7 @@ extern "C" {
     static kCFTypeDictionaryKeyCallBacks: c_void;
     static kCFTypeDictionaryValueCallBacks: c_void;
     static kCFBooleanFalse: CFTypeRef;
+    static kCFBooleanTrue: CFTypeRef;
     fn CFRelease(cf: CFTypeRef);
     fn CFDataCreate(a: CFTypeRef, bytes: *const u8, len: isize) -> CFTypeRef;
     fn CFDataGetLength(d: CFTypeRef) -> isize;
@@ -157,6 +158,8 @@ extern "C" {
 #[link(name = "CoreVideo", kind = "framework")]
 extern "C" {
     static kCVPixelBufferPixelFormatTypeKey: CFTypeRef;
+    static kCVPixelBufferWidthKey: CFTypeRef;
+    static kCVPixelBufferHeightKey: CFTypeRef;
     fn CVPixelBufferLockBaseAddress(p: CFTypeRef, flags: u64) -> i32;
     fn CVPixelBufferUnlockBaseAddress(p: CFTypeRef, flags: u64) -> i32;
     fn CVPixelBufferGetPlaneCount(p: CFTypeRef) -> usize;
@@ -180,6 +183,8 @@ extern "C" {
 extern "C" {
     static kVTCompressionPropertyKey_AllowFrameReordering: CFTypeRef;
     static kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder: CFTypeRef;
+    static kVTCompressionPropertyKey_MaxKeyFrameInterval: CFTypeRef;
+    static kVTEncodeFrameOptionKey_ForceKeyFrame: CFTypeRef;
     fn VTDecompressionSessionCreate(
         a: CFTypeRef,
         fd: CFTypeRef,
@@ -355,10 +360,13 @@ extern "C" fn on_picture(
         CVPixelBufferLockBaseAddress(image, 1);
         let (w, h) = (CVPixelBufferGetWidth(image), CVPixelBufferGetHeight(image));
         let mut planes = Vec::with_capacity(w * h * 3 / 2);
-        for p in 0..CVPixelBufferGetPlaneCount(image) {
+        let count = CVPixelBufferGetPlaneCount(image);
+        for p in 0..count {
             let base = CVPixelBufferGetBaseAddressOfPlane(image, p);
             let stride = CVPixelBufferGetBytesPerRowOfPlane(image, p);
-            let pw = CVPixelBufferGetWidthOfPlane(image, p);
+            // #499: NV12's second plane holds Cb and Cr side by side, two bytes a pixel.
+            let pw =
+                CVPixelBufferGetWidthOfPlane(image, p) * if count == 2 && p == 1 { 2 } else { 1 };
             for row in 0..CVPixelBufferGetHeightOfPlane(image, p) {
                 planes.extend_from_slice(std::slice::from_raw_parts(base.add(row * stride), pw));
             }
@@ -457,6 +465,125 @@ pub fn decode_video(
                 .unwrap_or_else(|| "no picture decoded".into()));
         }
         Ok(std::mem::take(&mut out.pictures))
+    }
+}
+
+/// #499: a live view's decoder: one session kept open, fed a sample at a time, giving each
+/// picture as NV12 at `out` size (`420v` limited range or `420f` full), so playing forward decodes
+/// each frame once.
+pub struct LiveDecoder {
+    session: Cf,
+    fd: Cf,
+    out: Box<Decoded>,
+}
+
+impl LiveDecoder {
+    pub fn new(
+        fourcc_: [u8; 4],
+        config: &([u8; 4], Vec<u8>),
+        size: (u16, u16),
+        out_size: (usize, usize),
+        full_range: bool,
+    ) -> Result<LiveDecoder, String> {
+        let codec = match &fourcc_ {
+            b"avc1" | b"avc3" => fourcc(b"avc1"),
+            b"hvc1" | b"hev1" => fourcc(b"hvc1"),
+            other => return Err(format!("no decoder for {}", String::from_utf8_lossy(other))),
+        };
+        unsafe {
+            let key = cfstr(std::str::from_utf8(&config.0).unwrap_or("avcC"));
+            let data = Cf(CFDataCreate(
+                null(),
+                config.1.as_ptr(),
+                config.1.len() as isize,
+            ));
+            let atoms = dict(&[(key.0, data.0)]);
+            let ext = dict(&[(
+                kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms,
+                atoms.0,
+            )]);
+            let mut fd: CFTypeRef = null();
+            let st = CMVideoFormatDescriptionCreate(
+                null(),
+                codec,
+                size.0 as i32,
+                size.1 as i32,
+                ext.0,
+                &mut fd,
+            );
+            if st != 0 {
+                return Err(format!("CMVideoFormatDescriptionCreate: {st}"));
+            }
+            let fd = Cf(fd);
+            let nv12 = i32_number(fourcc(if full_range { b"420f" } else { b"420v" }) as i32);
+            let (w, h) = (i32_number(out_size.0 as i32), i32_number(out_size.1 as i32));
+            let attrs = dict(&[
+                (kCVPixelBufferPixelFormatTypeKey, nv12.0),
+                (kCVPixelBufferWidthKey, w.0),
+                (kCVPixelBufferHeightKey, h.0),
+            ]);
+            let mut out = Box::new(Decoded {
+                pictures: Vec::new(),
+                error: None,
+            });
+            let cb = DecodeCallback {
+                callback: on_picture,
+                refcon: &mut *out as *mut Decoded as *mut c_void,
+            };
+            let mut session: CFTypeRef = null();
+            let st = VTDecompressionSessionCreate(null(), fd.0, null(), attrs.0, &cb, &mut session);
+            if st != 0 {
+                return Err(format!("VTDecompressionSessionCreate: {st}"));
+            }
+            Ok(LiveDecoder {
+                session: Cf(session),
+                fd,
+                out,
+            })
+        }
+    }
+
+    /// Decodes one sample (index, bytes), in decode order; the pictures it gave.
+    pub fn decode(&mut self, index: usize, bytes: &[u8]) -> Result<Vec<Picture>, String> {
+        unsafe {
+            let b = block(bytes)?;
+            let mut sample: CFTypeRef = null();
+            let size = bytes.len();
+            let st = CMSampleBufferCreateReady(
+                null(),
+                b.0,
+                self.fd.0,
+                1,
+                0,
+                null(),
+                1,
+                &size,
+                &mut sample,
+            );
+            if st != 0 {
+                return Err(format!("CMSampleBufferCreateReady: {st}"));
+            }
+            let sample = Cf(sample);
+            let mut info = 0u32;
+            VTDecompressionSessionDecodeFrame(
+                self.session.0,
+                sample.0,
+                0,
+                index as *mut c_void,
+                &mut info,
+            );
+            VTDecompressionSessionWaitForAsynchronousFrames(self.session.0);
+        }
+        if let Some(e) = self.out.error.take() {
+            return Err(e);
+        }
+        Ok(std::mem::take(&mut self.out.pictures))
+    }
+}
+
+impl Drop for LiveDecoder {
+    fn drop(&mut self) {
+        unsafe { VTDecompressionSessionInvalidate(self.session.0) };
     }
 }
 
@@ -638,6 +765,7 @@ pub fn encode_h264(
     h: usize,
     pts: &[i64],
     timescale: i32,
+    gop: Option<u32>,
 ) -> Result<(Vec<Coded>, Vec<u8>, bool), String> {
     unsafe {
         let mut out = Box::new(Encoded {
@@ -667,6 +795,16 @@ pub fn encode_h264(
             kVTCompressionPropertyKey_AllowFrameReordering,
             kCFBooleanFalse,
         );
+        // #499: a proxy's GOP: a key frame every `gop` frames and none between.
+        let key_every = gop.map(|g| i32_number(g.max(1) as i32));
+        if let Some(n) = &key_every {
+            VTSessionSetProperty(
+                session.0,
+                kVTCompressionPropertyKey_MaxKeyFrameInterval,
+                n.0,
+            );
+        }
+        let force = dict(&[(kVTEncodeFrameOptionKey_ForceKeyFrame, kCFBooleanTrue)]);
         for (i, planes) in frames.iter().enumerate() {
             let mut pb: CFTypeRef = null();
             if CVPixelBufferCreate(null(), w, h, fourcc(b"y420"), null(), &mut pb) != 0 {
@@ -692,12 +830,13 @@ pub fn encode_h264(
                 flags: VALID,
                 epoch: 0,
             };
+            let keyed = gop.is_some_and(|g| i as u32 % g.max(1) == 0);
             let st = VTCompressionSessionEncodeFrame(
                 session.0,
                 pb.0,
                 t,
                 INVALID,
-                null(),
+                if keyed { force.0 } else { null() },
                 null_mut(),
                 null_mut(),
             );

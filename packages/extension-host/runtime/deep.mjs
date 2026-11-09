@@ -236,6 +236,14 @@ export function extensionSide(call, load, imports = (file) => import(file)) {
         const ctx = { fetch: (request) => call('deep.work.fetch', [params.call, request]) };
         return (await source[op](ctx, params.arg)) ?? null;
       }
+      // A library source's search or fetch (#1731): its context's fetch is the hub's call to the library's host, as a work source's is.
+      if (method === 'library') {
+        const source = sources.get(params?.name);
+        const op = params?.op;
+        if (!source || !['search', 'fetch'].includes(op) || typeof source[op] !== 'function') throw Error(`no library ${params?.name} with ${op} is registered here`);
+        const ctx = { fetch: (request) => call('deep.work.fetch', [params.call, request]) };
+        return (await source[op](ctx, params.arg)) ?? null;
+      }
       if (method === 'source.parse' || method === 'source.read') {
         const source = sources.get(params?.name);
         if (!source) throw Error(`no source ${params?.name} is registered here`);

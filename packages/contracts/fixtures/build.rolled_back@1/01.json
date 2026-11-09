@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "build.rolled_back",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "commit": "2222222222222222222222222222222222222222",
+    "restored": "1111111111111111111111111111111111111111",
+    "why": "the promoted build's hub didn't answer within 25 s"
+  }
+}

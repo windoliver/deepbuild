@@ -20,13 +20,14 @@ pub mod canvas;
 pub mod card;
 pub mod cells;
 pub mod chrome;
-pub mod chrome_fx;
-pub mod chrome_gallery;
 #[cfg(feature = "chrome-fixture")]
 pub mod chrome_fixture;
+pub mod chrome_fx;
+pub mod chrome_gallery;
 pub mod commands;
 pub mod confirm;
 pub mod device;
+#[cfg(feature = "fixtures")]
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
@@ -51,6 +52,7 @@ pub mod single;
 #[cfg(feature = "spike")]
 pub mod spike;
 pub mod states;
+pub mod table;
 pub mod text;
 pub mod views;
 
@@ -116,13 +118,14 @@ pub fn stocks() -> Vec<Stock> {
 }
 
 /// What the menu bar shows: while setup hasn't finished, that it didn't, never a number (#1002); then what the app
-/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count.
+/// can't reach (#994); before the hub has answered, that (no count is known, so none is drawn); else the one count
+/// sentence (#1455).
 pub fn menu_bar_line() -> String {
     match setup::count().or_else(|| notify::reach().short()) {
         Some(line) => line.to_owned(),
         None if record::older().is_some() => "Hub is older".to_owned(),
         None if !record::connected() => "No hub".to_owned(),
-        None => views::count().to_string(),
+        None => views::asks_need_you(views::count()),
     }
 }
 
@@ -176,6 +179,15 @@ pub fn deepbuild_module() -> HostModule {
 
 /// The inbox projection's list for Needs you, as the fixture panels read it: the rows oldest
 /// first, which of them are folded or in Later, and the asks that left the list.
+/// The shipped app has no fixture record, so a panel asking for one is told so.
+#[cfg(not(feature = "fixtures"))]
+fn needs_you() -> Result<HostValue, HostError> {
+    Err(HostError::new(
+        "no fixture record is loaded; the host sets one before a panel draws",
+    ))
+}
+
+#[cfg(feature = "fixtures")]
 fn needs_you() -> Result<HostValue, HostError> {
     let state = views::current_state().ok_or_else(|| {
         HostError::new("no fixture record is loaded; the host sets one before a panel draws")
@@ -273,7 +285,7 @@ fn admit(dir: &Path) -> anyhow::Result<()> {
         anyhow::bail!("{}", fetch_refusal(&dependency));
     }
     // #1425's planted loader skips the module check, as the merge base's did.
-    if !panel_module::planted("panel-load-unchecked") {
+    if !plain::planted("panel-load-unchecked") {
         panel_module::check(dir).map_err(anyhow::Error::msg)?;
     }
     Ok(panel_module::serve(dir)?)

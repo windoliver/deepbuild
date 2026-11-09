@@ -784,6 +784,17 @@ fn prop_number(props: &Props, rows: &Rows, prop: &str, i: usize) -> Option<f64> 
 }
 
 /// A bar's or an area's base: its y scale's zero, else 0.
+/// #505: row `i`'s role where the set names its `roles` and has a `role` column: the column's
+/// value as an index into them (Mark set and columns: "a `role` column takes an index into the
+/// set's roles").
+fn set_role<'a>(p: &'a Map<String, Value>, rows: &Rows, i: usize) -> Option<&'a str> {
+    let roles = p.get("roles")?.as_array()?;
+    let k = rows.columns.get("role")?.number(i)?;
+    (k >= 0.0 && k.fract() == 0.0)
+        .then(|| roles.get(k as usize)?.as_str())
+        .flatten()
+}
+
 fn base_of(props: &Props) -> f64 {
     match props.get("y") {
         Some(Encoded::Column {
@@ -845,6 +856,12 @@ pub fn rows_report(
             }
         }
         let mut row = json!({"columns": columns, "opacity": rows.opacity_of(i), "place": place});
+        // #505: a role column's index into the set's roles.
+        if let (None, Some(r)) = (props.get("role"), set_role(p, &rows, i)) {
+            let c = role(palette, r, &format!("{path}/roles"))?;
+            let lab = crate::paint::oklab_mix(c, c, 0.0);
+            row["oklab"] = json!([lab.l, lab.a, lab.b]);
+        }
         if let Some(Encoded::Column {
             column,
             scale: Some(scale),
@@ -1096,6 +1113,9 @@ pub fn mark_set(
     // A row's color: its `role` through a scale whose range is palette roles, or the paint's.
     let color_of = |i: usize| -> Result<[u8; 3], Refused> {
         let rpath = format!("{path}/encode/role");
+        if let (None, Some(r)) = (props.get("role"), set_role(p, &rows, i)) {
+            return role(palette, r, &format!("{path}/roles"));
+        }
         match props.get("role") {
             None => Ok(match &row_steps {
                 Some((stops, at)) => crate::paint::sample_stops(stops, at[i]),

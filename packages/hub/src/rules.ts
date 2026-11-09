@@ -12,7 +12,7 @@ import type { RecordStore } from '@deepbuild/record';
 import { callAsYou } from './client.js';
 
 type Raw = RecordStore['raw'];
-export type Enforcer = { kind: 'guard'; name: string } | { kind: 'text' };
+type Enforcer = { kind: 'guard'; name: string } | { kind: 'text' };
 export interface RuleFile {
   /** Repo-relative, or `~/.codex/AGENTS.md` for a user-level file. */
   file: string;

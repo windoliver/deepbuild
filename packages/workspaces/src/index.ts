@@ -149,7 +149,7 @@ export function sourceOf(touch: Touch, folder: string): Source | undefined {
   if (touch.source === 'document') return documentSource(() => setting('path'), () => setting('versions'));
   if (touch.source !== 'api') return undefined;
   return apiSource(async () => {
-    const answer = await fetch(setting('url'), { signal: AbortSignal.timeout(10_000) });
+    const answer = await fetch(setting('url'), { redirect: 'error', signal: AbortSignal.timeout(10_000) });
     if (!answer.ok) throw Error(`the touch ${touch.id} answered ${answer.status}`);
     return await answer.json() as Items;
   });
