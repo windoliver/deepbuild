@@ -837,6 +837,9 @@ impl MacWindowState {
     }
 
     fn start_display_link(&mut self) {
+        if self.frame_link.holds() {
+            return; // DeepBuild patch (windoliver/deepbuild#1551)
+        }
         self.stop_display_link();
         unsafe {
             if !self

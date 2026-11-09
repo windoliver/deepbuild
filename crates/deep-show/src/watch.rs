@@ -55,6 +55,10 @@ const POLL: Duration = Duration::from_millis(10);
 /// How long after a wake its frame may present and still answer it (README #1551: `wakes`), and
 /// the span before it in which request-frame callbacks mean the window wasn't idle.
 const WAKE_ANSWER: i64 = 500_000_000;
+/// #1551: a window settles once its frame source is quiet too (no request-frame callback for
+/// this long), or this long after the frames settle when a link never stops.
+const LINK_QUIET: i64 = 50_000_000;
+const LINK_GRACE: i64 = 300_000_000;
 /// The presented handler runs after the display shows a drawable: the run waits this long past a
 /// watch's end for the feedback of the frames presented within it.
 const FEEDBACK: Duration = Duration::from_millis(200);
@@ -250,6 +254,8 @@ struct State {
     pending_input: Option<usize>,
     track: Option<Track>,
     watch_usage: [Option<(i64, Usage)>; 2],
+    /// The window's NSWindow, so its state is read without updating (and redrawing) the window.
+    ns_window: *mut AnyObject,
 }
 
 /// Where a window is in showing the document.
@@ -344,12 +350,7 @@ impl State {
             live["request_frames"] = json!(between(from, to));
         }
         if let [Some((t0, u0)), Some((t1, u1))] = self.watch_usage {
-            let cpu_ms = (u1.cpu_ns - u0.cpu_ns) as f64 / 1e6;
-            live["process"] = json!({
-                "from_ns": t0, "seconds": (t1 - t0) as f64 / 1e9, "wakeups": u1.wakeups - u0.wakeups,
-                "interrupt_wakeups": u1.interrupts - u0.interrupts, "cpu_ms": cpu_ms,
-                "energy": { "counter": idle::ENERGY_COUNTER, "nj": u1.energy_nj.saturating_sub(u0.energy_nj) },
-            });
+            live["process"] = idle::spent(t0, u0, t1, u1);
         }
         if let Some(track) = &self.track {
             live["window"] = track.json();
@@ -833,6 +834,7 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
         asked: Vec::new(),
         pending_input: None,
         track: None,
+        ns_window: std::ptr::null_mut(),
         watch_usage: [None, None],
     }));
     let window_size = size(
@@ -864,6 +866,7 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
             |window, cx| {
                 let st = view_state.clone();
                 let tracked = view_state.clone();
+                view_state.borrow_mut().ns_window = ns_window(window);
                 window
                     .observe_window_visibility(move |_, window, _| {
                         if let Some(track) = tracked.borrow_mut().track.as_mut() {
@@ -916,6 +919,7 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
         let state = state.clone();
         cx.spawn(async move |cx| {
             let opened_at = host_ns();
+            let opened_usage = idle::usage();
             // The document's first presented frame, or no display.
             let first = loop {
                 if let Some((_, at)) = state.borrow().shown_frames().first() {
@@ -927,11 +931,19 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                 cx.background_executor().timer(POLL).await;
             };
             let Some(first) = first else {
-                // #1551: what AppKit showed of the window instead, so a lane can say why.
+                // #1551: what AppKit showed of the window instead, so a lane can say why, and
+                // what the window and the process did while it waited.
                 let mut reply = refused("no_display");
-                if let Ok(state) = handle.update(cx, |_, window, _| window_state(window)) {
-                    reply["window"] = json!({"state": state, "shown_ms": 0});
-                }
+                let st = state.borrow();
+                let now = host_ns();
+                let callbacks = st.callbacks.lock().unwrap_or_else(|e| e.into_inner());
+                // SAFETY: null or the window's live NSWindow, on the main thread.
+                let shown = unsafe { idle::window_state(st.ns_window) };
+                reply["window"] = json!({"state": shown, "shown_ms": 0});
+                reply["request_frames"] = json!(callbacks.iter().filter(|t| **t >= opened_at).count());
+                reply["process"] = idle::spent(opened_at, opened_usage, now, idle::usage());
+                drop(callbacks);
+                drop(st);
                 cx.update(|cx| print_and_quit(reply, cx));
                 return;
             };
@@ -943,6 +955,7 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
             if wants_settled {
                 let since = host_ns();
                 let mut last_seen = (0, 0);
+                let mut idle_since = None;
                 while host_ns() - since < SETTLE_DEADLINE.as_nanos() as i64 {
                     let now = {
                         let mut st = state.borrow_mut();
@@ -950,7 +963,14 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         let seen = (st.clock.seq, st.clock.wakeups.len());
                         let idle = seen == last_seen && st.last_reported() == Some(st.clock.seq);
                         last_seen = seen;
-                        idle.then(host_ns)
+                        let now = host_ns();
+                        let since_idle = *idle_since.get_or_insert(now);
+                        if !idle {
+                            idle_since = None;
+                        }
+                        let last = st.callbacks.lock().unwrap_or_else(|e| e.into_inner()).last().copied();
+                        let quiet = last.is_none_or(|t| now - t > LINK_QUIET);
+                        (idle && (quiet || now - since_idle >= LINK_GRACE)).then_some(now)
                     };
                     if let Some(now) = now {
                         settled = Some(now);
@@ -965,14 +985,21 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                     return;
                 }
                 // #1551: the window's state from here on, and the plant that arms each vsync.
-                let _ = handle.update(cx, |_, window, cx| {
+                let arms = {
                     let mut st = state.borrow_mut();
                     st.settled = true;
-                    st.track = Some(Track::new(host_ns(), window_state(window)));
-                    if st.hub.scenario.planted == Some(Planted::ArmsEachVsync) {
-                        cx.notify();
+                    // SAFETY: null or the window's live NSWindow, on the main thread.
+                    let shown = unsafe { idle::window_state(st.ns_window) };
+                    if options.wake.iter().any(|w| w.by == By::Input) {
+                        // SAFETY: as above.
+                        unsafe { idle::accept_posted_moves(st.ns_window) };
                     }
-                });
+                    st.track = Some(Track::new(host_ns(), shown));
+                    st.hub.scenario.planted == Some(Planted::ArmsEachVsync)
+                };
+                if arms {
+                    let _ = handle.update(cx, |_, _, cx| cx.notify());
+                }
             }
             // #1551: what the process spends over the watch, read at its start and its end.
             if let Some((_, ms)) = options.watch {

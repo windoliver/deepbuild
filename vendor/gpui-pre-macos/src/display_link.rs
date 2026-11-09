@@ -333,6 +333,11 @@ impl WindowFrameSource {
         Ok(())
     }
 
+    // DeepBuild patch (windoliver/deepbuild#1551): a restarted link's first frame runs now.
+    pub fn request_frame(&self) {
+        self.frame_requests.merge_data(1);
+    }
+
     pub fn take_signal(&self) -> Option<(Instant, FrameRequestSource)> {
         self.signal.take()
     }
