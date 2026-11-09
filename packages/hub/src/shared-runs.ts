@@ -21,9 +21,9 @@ export interface Source { run: string; claim: string; session: string; withheld:
  */
 export interface KeyFacts { id: string; stem: string; paths: string[]; claim: string; session: string; base: boolean; withheld: boolean; plain: boolean }
 /** One key of one check (`id`): the key itself, its stem, the paths whose contents it holds, and its runs from every claim, oldest first. */
-export interface Group { id: string; key: string; stem: string; paths: string[]; runs: Source[] }
+interface Group { id: string; key: string; stem: string; paths: string[]; runs: Source[] }
 /** Folders of installed dependencies: the environment the key's stem names, never files hashed one by one. */
-export const INSTALLS = ['node_modules', '.venv'];
+const INSTALLS = ['node_modules', '.venv'];
 
 const sha = (text: string | Uint8Array): string => createHash('sha256').update(text).digest('hex');
 /** The digest of an empty output: what a withheld or unkept run shows in place of its own. */

@@ -57,6 +57,7 @@ mod timing;
 mod tone;
 mod validation;
 mod view3d;
+mod warm;
 mod window;
 mod worker;
 
@@ -78,6 +79,12 @@ use crate::worker::Worker;
 /// The wrong programs, each reachable only through `--planted` (README: Planted programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #432's wrong warm-ups (tests/acceptance/432/README.md: Planted programs): only the
+    /// feature sets in use at t = 0; only each variant set's default option's fused chain; only
+    /// the pipelines that draw into the view.
+    WarmsInUseAtT0,
+    FusesDefaultOptions,
+    WarmsViewOnly,
     /// #431's wrong programs (tests/acceptance/431/README.md: Planted programs).
     VelocityFromPreviousFrame,
     EmissionThresholdsColor,
@@ -326,6 +333,9 @@ pub enum Planted {
 impl Planted {
     fn parse(name: &str) -> Option<Planted> {
         Some(match name {
+            "warms_in_use_at_t0" => Planted::WarmsInUseAtT0,
+            "fuses_default_options" => Planted::FusesDefaultOptions,
+            "warms_view_only" => Planted::WarmsViewOnly,
             "velocity_from_previous_frame" => Planted::VelocityFromPreviousFrame,
             "emission_thresholds_color" => Planted::EmissionThresholdsColor,
             "builds_unread_targets" => Planted::BuildsUnreadTargets,

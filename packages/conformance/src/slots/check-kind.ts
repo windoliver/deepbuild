@@ -26,7 +26,7 @@ import { fail, Finding, RUN_OUTCOMES } from '../slot-types.js';
 import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec, Failure, Fixture, PlantedFill, RunOutcome, SlotCase, SlotKitImpl, SlotRule } from '../slot-types.js';
 import { list, object, text, word } from './shared.js';
 
-export const CHECK_KIND = 'check.kind@1';
+const CHECK_KIND = 'check.kind@1';
 /** The kind the reference runner serves: a shell command run in the checkout. */
 const KIND = 'command';
 /** The folder of the tracer (tracer.mjs) and the node:test reporter (reporter.mjs) a command run loads; the command check kind (#30) loads them too. */

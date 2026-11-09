@@ -73,6 +73,8 @@ pub struct Draw {
     pub instances: wgpu::Buffer,
     pub range: std::ops::Range<u32>,
     pub cuts: Option<(wgpu::RenderPipeline, wgpu::BindGroup)>,
+    /// A mask-alpha caster, drawn through the mask caster's pipeline (#432).
+    pub mask: bool,
 }
 
 #[derive(Default)]

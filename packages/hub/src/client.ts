@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import net from 'node:net';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { checkCompat, type Hello } from './compat.js';
+import { refusedGeneration, StaleHub } from './generations.js';
 import { CONTRACT, startOf, type Refusal } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -60,6 +61,12 @@ export async function call(socket: string, token: string, method: string, params
           if (!compat.ok) {
             sock.destroy();
             return reject(Error(compat.screen));
+          }
+          // A hub older than one this client has seen is a copy left behind (#1338): nothing is sent to it.
+          const stale = refusedGeneration(typeof reply.hub === 'string' ? reply.hub : `unix:${socket}`, reply.generation);
+          if (stale) {
+            sock.destroy();
+            return reject(new StaleHub(stale));
           }
           sock.write(`${JSON.stringify({ v: 1, hello: 'cli', token, ...(peer ? { peer } : {}) })}\n`);
         } else if (reply.role !== undefined) {

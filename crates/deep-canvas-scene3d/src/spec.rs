@@ -735,6 +735,9 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!("opaque"),
                 json!("blend"),
             ),
+            // The alpha a mask part draws from (Material: texture maps, `alpha_cutoff`), which the
+            // material already reads; the sweep leaves it unset, since its fixture is opaque.
+            p("alpha_cutoff", "f32", "", json!(0.5), S, Value::Null, Value::Null),
             unit("coat", 0.0, 0.0, 1.0),
             unit("coat_roughness", 0.03, 0.03, 0.2),
             // The extra lobes (#428), each off at its zero.

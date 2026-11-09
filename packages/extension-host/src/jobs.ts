@@ -4,7 +4,7 @@
 import type { JobRecord } from '@deepbuild/runner';
 
 /** What a plug-in asks for: its prompt, its inputs by handle, a budget in USD and a deadline in ms. */
-export interface JobRequest { prompt: string; inputs: string[]; budget: { usd: number }; deadline: number }
+interface JobRequest { prompt: string; inputs: string[]; budget: { usd: number }; deadline: number }
 /** What the plug-in gets: a reading with its own handle, as old as the oldest reading it cites. */
 export interface Answer { handle: string; value: unknown; cites: string[]; as_of: number; stale_at: number | null }
 

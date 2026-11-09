@@ -8,7 +8,7 @@ import { isObject } from './types.js';
 import type { Delivery, Driven, Fill, Flag, Operation } from './types.js';
 
 export const AGENT = 'fake';
-export const VERSION = '1.0.0';
+const VERSION = '1.0.0';
 export const SURFACE = 'app-server';
 
 /** The faults a fake plants; the clean agent has none. Each name is the fake that carries it. */

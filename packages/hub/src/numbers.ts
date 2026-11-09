@@ -31,7 +31,7 @@ const REFRESH_MS = 60_000;
 /** An event's id holds its time; the sample hides it behind a hash. */
 const opaque = (id: string): string => createHash('sha256').update(id).digest('hex').slice(0, 16);
 
-export interface NumbersOptions {
+interface NumbersOptions {
   raw(query: string): Promise<unknown[]>;
   now: () => number;
   append(connection: Connection, input: EventInput): Promise<void>;
