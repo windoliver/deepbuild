@@ -749,6 +749,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             unit("diffuse_roughness", 0.0, 0.0, 1.0),
             unit("retroreflection", 0.0, 0.0, 1.0),
             p("flakes", "{weight, size, tilt, color | base}", "m", Value::Null, S, Value::Null, json!({"weight": 1, "size": 0.001, "tilt": 15})),
+            p("subsurface", "{weight, color | base, radius: [m, m, m], thin}", "m", Value::Null, S, Value::Null, json!({"weight": 1, "radius": [0.0036, 0.0014, 0.0007], "thin": true})),
             // #465: the planar part it mirrors in; the sweep leaves it unset, since the fixture
             // holds no planar part.
             p("mirror", "{strength, blur: px, plane: named part}", "px", Value::Null, S, Value::Null, Value::Null),
