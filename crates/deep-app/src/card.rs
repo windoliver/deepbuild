@@ -312,8 +312,7 @@ impl Card {
             .test_support()
             .role(role)
             .aria_label(label.clone())
-            .flex()
-            .items_center()
+            // A block, not a flex row, so the text takes the card's width and a long question wraps (#1550).
             .text_xs()
             .child(label);
         match target {
