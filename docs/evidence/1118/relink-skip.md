@@ -9,7 +9,8 @@ reading only in PR #1244. It is a scope line, not an acceptance criterion.
 `if (path === '.git' || (bay && (path === 'target' || path === 'node_modules'))) continue;`).
 `tests/bays.test.mjs` › "undoBuild in a bay keeps its target and node_modules …" checks this.
 
-Run on the Spark on 2026-11-08 against a copy of `ede4b367`'s `scripts/` and tests (`git archive`), with
+Run on the Spark (first on 2026-11-08, again for the committed output on 2026-11-09 at load 2.5, in
+[relink-mutant.txt](relink-mutant.txt)) against a copy of `ede4b367`'s `scripts/` and tests (`git archive`), with
 `node_modules` linked to another worktree's so that `typescript` resolves:
 
 ```
