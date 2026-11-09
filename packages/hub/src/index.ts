@@ -21,7 +21,6 @@ import { undoCommand } from './undo.js';
 import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
 export { startCommand };
-export { hubCommand } from './hub-command.js';
 export { gateCommand } from './gate-command.js';
 export { fixCommand, workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, raceCommand, secretCommand, memoryCommand, relationItems, rulesCommand, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { numbersCommand, statusCommand } from './status.js';
