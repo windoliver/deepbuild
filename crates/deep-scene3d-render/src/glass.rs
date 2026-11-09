@@ -41,43 +41,20 @@ pub struct Glass {
     pipeline: wgpu::RenderPipeline,
 }
 
-/// The mips a texture of `size` has, down to 1 × 1.
-pub fn levels(size: [u32; 2]) -> u32 {
-    32 - size[0].max(size[1]).max(1).leading_zeros()
+/// The mip pass's layout and pipeline, made once and kept while the scene has no glass, so a part
+/// that turns transmissive later compiles nothing (#432).
+#[derive(Clone)]
+pub struct Kit {
+    layout: wgpu::BindGroupLayout,
+    pipeline: wgpu::RenderPipeline,
 }
 
-impl Glass {
-    pub fn new(d: &wgpu::Device, size: [u32; 2]) -> Glass {
-        let count = levels(size);
-        let texture = d.create_texture(&wgpu::TextureDescriptor {
-            label: Some(PASS),
-            size: extent(size),
-            mip_level_count: count,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: LINEAR,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let levels: Vec<wgpu::TextureView> = (0..count)
-            .map(|m| {
-                texture.create_view(&wgpu::TextureViewDescriptor {
-                    base_mip_level: m,
-                    mip_level_count: Some(1),
-                    ..Default::default()
-                })
-            })
-            .collect();
+impl Kit {
+    pub fn new(d: &wgpu::Device) -> Kit {
         let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(PASS),
             entries: &[texture_entry()],
         });
-        let binds = levels
-            .iter()
-            .map(|v| bind_group(d, PASS, &layout, [wgpu::BindingResource::TextureView(v)]))
-            .collect();
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(PASS),
             source: wgpu::ShaderSource::Wgsl(SHADER.into()),
@@ -96,6 +73,47 @@ impl Glass {
             Some(("fs", &[target(LINEAR, None)])),
             None,
         );
+        Kit { layout, pipeline }
+    }
+}
+
+/// The mips a texture of `size` has, down to 1 × 1.
+pub fn levels(size: [u32; 2]) -> u32 {
+    32 - size[0].max(size[1]).max(1).leading_zeros()
+}
+
+impl Glass {
+    pub fn new(d: &wgpu::Device, size: [u32; 2], kit: &Kit) -> Glass {
+        let count = levels(size);
+        let texture = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some(PASS),
+            size: extent(size),
+            mip_level_count: count,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: LINEAR,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_DST
+                // Read back with its mips by view3d's `backdrop` target (#431).
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let levels: Vec<wgpu::TextureView> = (0..count)
+            .map(|m| {
+                texture.create_view(&wgpu::TextureViewDescriptor {
+                    base_mip_level: m,
+                    mip_level_count: Some(1),
+                    ..Default::default()
+                })
+            })
+            .collect();
+        let layout = &kit.layout;
+        let binds = levels
+            .iter()
+            .map(|v| bind_group(d, PASS, layout, [wgpu::BindingResource::TextureView(v)]))
+            .collect();
+        let pipeline = kit.pipeline.clone();
         Glass {
             size,
             view: texture.create_view(&Default::default()),

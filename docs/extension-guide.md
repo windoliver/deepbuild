@@ -25,6 +25,33 @@ To build one, copy the folder, write `packageDigest` of it into `deepbuild.json`
 
 Put them in `tests/`, each file named `*.test.ts` or `*.test.mjs`. A file's default export is an object of named tests, each an async function given `t`: `t.call(action, input)` calls one of the package's actions as the app would and returns its output, `t.read(source)` reads one of its polled sources through the hub, and `t.now()` is the hub's clock. A test fails by throwing; `node:assert` works. DeepBuild runs them in the package's sandbox on recorded source calls and a clock it controls, never live.
 
+## A panel's module
+
+A panel imports only `@deepbuild/panel`, DeepBuild's own module, by name: `import { View, div, v_flex } from "@deepbuild/panel"`, as `panel/main.js` does. It never names the toolkit under it, so a change of toolkit breaks no plug-in. A panel that imports the toolkit, or a name off the list below, is refused at install and again at load, naming the file and line, and for a name off the list the closest name on it. The list is checked in at `crates/deep-app/panel-catalog.json`, with every component the toolkit has that isn't offered and why.
+
+- `View`: The class a panel's views extend: init(props, cx), render(cx).
+- `div`: A box element, styled by chained calls such as .p(8), .bg(color) and .child(x).
+- `svg`: An element drawing an SVG path or file, sized and colored like a div.
+- `PathBuilder`: Builds a vector path: move_to, line_to, curve_to, then fill or stroke it.
+- `Background`: A background beyond a plain color, such as a gradient, for .bg(…).
+- `h_flex`: A box laying its children out in a row.
+- `v_flex`: A box laying its children out in a column.
+- `DockArea`: The app's dock: DockArea.register_panel(slot, View) puts a view in a slot.
+- `Canvas`: DeepBuild's canvas: new Canvas(scene, color?) draws a CanvasScene's items.
+- `CanvasScene`: The items a Canvas draws, by ID, kept across renders: scene.set(id, values).
+- `Menu`: DeepBuild's menu, drawn inside the panel: new Menu(id, { label, rows: [{ id, label, disabled?, on_pick: (cx) => ... }] }). Press the trigger, slide to a row and let go, or click a row.
+- `Button`: A button: Button.new(id) with its label as a child and .on_click(handler), styled like a div.
+- `Input`: A text field: Input.new(state) over an InputState.
+- `InputState`: The text an Input holds, kept across renders: InputState.new({ placeholder }).
+- `needs_you`, `quotes`: the data the app serves a panel, as plain values.
+
+Its components, each with its props:
+
+- `Badge`: `count`: number, from .count(n); `max`: number, from .max(n), past which it shows n+; `dot`: from .dot(), a dot instead of a count; `color`: string, from .color("#rrggbb"). For example `Badge.new().count(3)`.
+- `Label`: `text`: string, given to Label.new(text); `secondary`: string, from .secondary(text), muted text after it; `masked`: boolean, from .masked(on); `on_click`: (event, window, cx) => void, called on your click; `disabled`: boolean, from .disabled(on). For example `Label.new("Name")`.
+
+A component whose script runs per frame, such as a table drawing each cell or a list drawing each row through a callback, is never offered: a panel's rows are data.
+
 ## A first plug-in
 
 Most plug-ins need few methods. Start with these 13, in this order.
@@ -54,9 +81,9 @@ A JavaScript panel in the app, in the sidebar, the home screen, a tab or the lin
 
 ### `deep.registerSource`
 
-In R1 · preview · `d1:b91a9a6d1bfbe5bfd0808335a7b1f6780a6b9282d48581ebfa3c5edbb58b9f10` · variants: `stream`, `polled`, `mcp`
+In R1 · preview · `d1:b91a9a6d1bfbe5bfd0808335a7b1f6780a6b9282d48581ebfa3c5edbb58b9f10` · variants: `stream`, `polled`, `mcp`, `library`
 
-A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: 'USD' }`. A list or a record is no reading, unless the source declares `shape: 'series'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can't serve is refused at install. A source's readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point.
+A source of readings, each with its unit, source and as-of time: polled from a host with a secret, a quota and a timeout, a stream read from a cursor, or an MCP tool counted as read. A polled source is one path on its host, query included, and its `parse(answer)` gets `{ status, headers, body }` and returns `{ value, unit }`: one finite number and its unit, such as `{ value: 187.25, unit: 'USD' }`. A list or a record is no reading, unless the source declares `shape: 'series'`: then `parse` returns `{ values, unit }`, up to 10,000 named numbers a call, which the hub keeps as one batch, each bound as `reading:<source>#<name>`. `while_shown: { every }`, at least 10 s, is a cadence the hub runs only while a view that binds the source is shown; one its quota can't serve is refused at install. A source's readings over time are its history, which the hub keeps: a chart draws from them, so a plug-in needs no source per point. A library source (`variant: 'library'`, asset.library@1, #1731) names its one host in the manifest, which the install grants, and gives `search(ctx, {words, kind, size_m, license, limit})` and `fetch(ctx, {id})`: they read the library's API through `ctx.fetch`, the hub's call to that host, and the hub downloads every file a fetch names, so a library's rows and licenses reach `deep_kinds` and the evidence store with no byte through the plug-in.
 
 | Parameter | Type | Required |
 |---|---|---|
@@ -218,6 +245,49 @@ An agent adapter: it maps the agent's hooks, delivers answers by the routes its 
 |---|---|---|
 | `name` | string, `^[a-z][a-z0-9-]*$` | yes |
 | `adapter` | object | yes |
+
+### `deep.registerStateSource`
+
+Arrives in R2 · preview · `d1:c058219725adc036392edfdede34b6f708551a262e0d146b5676bc45a1870025`
+
+State outside a repo that a workspace keeps: read() returns its items, compare(item, expected) the difference from what was expected, and undo(change) a plan to undo a change, or that it cannot.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9-]*$` | yes |
+
+### `deep.registerChannel`
+
+Arrives in R2 · preview · `d1:66787a5f380797186a662ff1c377a2025405af03d301b8e3dd64c66592bb37bb`
+
+A way to reach you, such as your phone, a chat app or email: deliver({ summary, link, thread_key }) says delivered, stalled or timed out, and receive() gives an answer with its proof, which the hub checks and decides what it counts as.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9-]*$` | yes |
+| `channel` | object | yes |
+
+### `deep.channel.fetch`
+
+Arrives in R2 · preview · `d1:2ee78dc93e151a8ca07d3d5623dddd159f5f0dcdee2c3f22083b582632a6675e`
+
+A channel's one call to its own service: a GET or POST to a path on the host the channel was granted, answered through the hub.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `call` | string | yes |
+| `request` | object | yes |
+
+### `deep.work.fetch`
+
+Arrives in R2 · preview · `d1:2ee78dc93e151a8ca07d3d5623dddd159f5f0dcdee2c3f22083b582632a6675e`
+
+A work or library source's one call to its provider, as its context's `fetch`: a GET or POST to a path on the source's host, with its secret and under its quota, answered through the hub.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `call` | string | yes |
+| `request` | object | yes |
 
 ### `deep.registerRoute`
 
@@ -415,9 +485,12 @@ Each kind of thing a package registers fills a slot: its interface with a frozen
 | `deep.registerSource` | `stream` | `source@1` | many | `source@1` | `skips-first-after-resume` | R1 |
 | `deep.registerSource` | `polled` | `reading.source@1` | many | `reading.source@1` | `cache-as-of` | R2 |
 | `deep.registerSource` | `mcp` | `reading.source@1` | many | `reading.source@1` | `stale-mcp-digest` | R2 |
+| `deep.registerSource` | `library` | `asset.library@1` | many | none | none | R6 |
 | `deep.registerEnvironment` | - | `environment@1` | one | `environment@1` | `ready-before-health`, `unleased-port`, `leaves-grandchild`, `starts-in-worktree` | R1 |
 | `deep.registerView` | - | `panel@1` | many | `panel@1` | `reaches-network`, `runs-a-program`, `moves-focus-unasked`, `draws-outside`, `covers-the-card` | R1 |
 | `deep.registerAdapter` | - | `adapter@1` | one per agent | `adapter@1` | `duplicate-event-id`, `event-after-stop`, `answer-to-other-session`, `steer-outlives-interrupt`, `acknowledged-without-sign` | R1 |
 | `deep.registerRoute` | - | `route@1` | many | `route@1` | `no-status`, `answers-any-method`, `get-changes-state` | R1 |
 | `deep.registerIndex` | - | `index@1` | one | `index@1` | `keeps-dropped-source`, `sourceless-hit`, `stale-after-upsert`, `rebuild-is-a-no-op` | R1 |
 | `deep.registerAction` | - | `action@1` | many | `action@1` | `declares-write`, `input-not-a-schema`, `output-not-json` | R2 |
+| `deep.registerChannel` | - | `channel@1` | many | `channel@1` | `delivered-without-ack`, `signed-without-signature` | R2 |
+| `deep.registerStateSource` | - | `state-source@1` | many | `state-source@1` | `undo-fails`, `first-read-kept`, `compare-sees-nothing` | R2 |

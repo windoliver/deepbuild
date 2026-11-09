@@ -1,0 +1,107 @@
+# tests/acceptance/1501 on the merge base 2bba2a50 (scratch worktree of the base, this suite copied in, same box; 1-minute load ~130 from other sessions' runs)
+# base run at 2026-11-07T13:26:42-08:00 load 128.31 head 2bba2a50
+# npx vitest run --root tests/acceptance/1501 --no-file-parallelism
+
+
+ RUN  v5.0.5 <base>/tests/acceptance/1501
+
+ ✓ watch.test.ts (2 tests) 22623ms
+   ✓ AC2 #1501.e184c432 in that session a matched watch entry is recorded and runs, a warn entry adds nothing, and a Stop isn't held; a hub that ends watch-only altogether holds the stop and fails (2)
+     ✓ AC2 a session on Claude Code 9.9.9, hub up: watch recorded and run, warn adds nothing, a non-floor block runs, the stop isn't held 13155ms
+     ✓ AC2 (wrong program) a hub that ends watch-only altogether (facts widened to list 9.9.9) holds the stop and fails 8008ms
+ ❯ agree.test.ts (1 test | 1 failed) 14804ms
+   ❯ AC4 #1501.043ea69b with the hub stopped the same calls are denied as they are today, so hub up and hub down agree on the floor; a test fails naming the entry when they differ (1)
+     × AC4 every shipped fail_closed entry denies its call with the hub up (session on Claude Code 9.9.9) and with the hub stopped, naming the entry 13410ms
+ ❯ floor.test.ts (2 tests | 2 failed) 6528ms
+   ❯ AC1 #1501.840c5fe8 with the hub up, in a session whose transcript names a version the facts don't list, an Edit of .deepbuild/done.yaml, a write of ~/.claude/settings.json, deep off and rm -rf "$X"/* are each denied, naming the guard (2)
+     × AC1 a session on Claude Code 9.9.9, hub up: the hub denies each of the four calls, naming a fail_closed guard with its reason 3493ms
+     × AC1 (scope) the health reading of a session on Claude Code 9.9.9 says the floor still holds 2239ms
+ ✓ listed.test.ts (1 test) 6531ms
+   ✓ AC3 #1501.37078b1d a session on a listed version behaves as it does on the merge base (1)
+     ✓ AC3 a session on the newest listed Claude Code version, hub up: the floor denies, a block denies, a warn warns, a watch records, the stop is held, the staged delete is held for the gate 5790ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  agree.test.ts > AC4 #1501.043ea69b with the hub stopped the same calls are denied as they are today, so hub up and hub down agree on the floor; a test fails naming the entry when they differ > AC4 every shipped fail_closed entry denies its call with the hub up (session on Claude Code 9.9.9) and with the hub stopped, naming the entry
+AssertionError: hub up and hub down agree on every fail_closed entry: expected [ …(23) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "no-kill-by-name: hub up and hub down disagree: with the hub stopped `pkill -f vite` is denied naming no-kill-by-name; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 35 ms, stdout \"\", stderr \"\"",
++   "no-workflow-dispatch: hub up and hub down disagree: with the hub stopped `gh workflow run deploy.yml` is denied naming no-workflow-dispatch; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 21 ms, stdout \"\", stderr \"\"",
++   "no-bare-stash: hub up and hub down disagree: with the hub stopped `git stash` is denied naming no-bare-stash; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 68 ms, stdout \"\", stderr \"\"",
++   "no-git-other-checkout: hub up and hub down disagree: with the hub stopped `git -C /tmp/dh1501-vTiNFu/wt2 status` is denied naming no-git-other-checkout; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 29 ms, stdout \"\", stderr \"\"",
++   "no-agent-config-write: hub up and hub down disagree: with the hub stopped `Write ~/.claude/settings.json` is denied naming no-agent-config-write; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 13 ms, stdout \"\", stderr \"\"",
++   "no-pi-config-write: hub up and hub down disagree: with the hub stopped `Write ~/.pi/agent/settings.json` is denied naming no-pi-config-write; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 13 ms, stdout \"\", stderr \"\"",
++   "no-deepbuild-spec-write: hub up and hub down disagree: with the hub stopped `Edit .deepbuild/done.yaml` is denied naming no-deepbuild-spec-write; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 13 ms, stdout \"\", stderr \"\"",
++   "no-deep-off: hub up and hub down disagree: with the hub stopped `deep off` is denied naming no-deep-off; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 24 ms, stdout \"\", stderr \"\"",
++   "no-deep-on: hub up and hub down disagree: with the hub stopped `deep on` is denied naming no-deep-on; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 16 ms, stdout \"\", stderr \"\"",
++   "no-deep-hub-stop: hub up and hub down disagree: with the hub stopped `deep hub stop` is denied naming no-deep-hub-stop; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 32 ms, stdout \"\", stderr \"\"",
++   "no-deep-hub-use: hub up and hub down disagree: with the hub stopped `deep hub use --root /tmp/dh1501-vTiNFu/dev` is denied naming no-deep-hub-use; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 18 ms, stdout \"\", stderr \"\"",
++   "no-deep-setup-undo: hub up and hub down disagree: with the hub stopped `deep setup --undo` is denied naming no-deep-setup-undo; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 19 ms, stdout \"\", stderr \"\"",
++   "no-deep-restore: hub up and hub down disagree: with the hub stopped `deep restore ~/backup` is denied naming no-deep-restore; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 14 ms, stdout \"\", stderr \"\"",
++   "no-hub-service-stop: hub up and hub down disagree: with the hub stopped `systemctl --user stop deepbuild-hub.service` is denied naming no-hub-service-stop; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 14 ms, stdout \"\", stderr \"\"",
++   "no-hub-service-write: hub up and hub down disagree: with the hub stopped `Write ~/.config/systemd/user/deepbuild-hub.service` is denied naming no-hub-service-write; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 21 ms, stdout \"\", stderr \"\"",
++   "no-deepbuild-home-write: hub up and hub down disagree: with the hub stopped `Write ~/.deepbuild/rules.json` is denied naming no-deepbuild-home-write; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 18 ms, stdout \"\", stderr \"\"",
++   "no-control-token-read: hub up and hub down disagree: with the hub stopped `Read ~/.deepbuild/control.token` is denied naming no-control-token-read; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 27 ms, stdout \"\", stderr \"\"",
++   "no-unnamed-cloud-resource: hub up and hub down disagree: with the hub stopped `aws kms create-key --profile shop-new-account --description 'orders key'` is denied naming no-unnamed-cloud-resource; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 25 ms, stdout \"\", stderr \"\"",
++   "no-unknown-reach-delete: hub up and hub down disagree: with the hub stopped `rm -rf \"$X\"/*` is denied naming no-unknown-reach-delete; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 24 ms, stdout \"\", stderr \"\"",
++   "no-discarding-edits: hub up and hub down disagree: with the hub stopped `git reset --hard` is denied naming no-discarding-edits; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 24 ms, stdout \"\", stderr \"\"",
++   "no-dropping-stash: hub up and hub down disagree: with the hub stopped `git stash drop` is denied naming no-dropping-stash; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 16 ms, stdout \"\", stderr \"\"",
++   "no-unreadable-push: hub up and hub down disagree: with the hub stopped `\"$(printf git)\" push origin main` is denied naming no-unreadable-push; with the hub up, session 6960c12d on Claude Code 9.9.9, it is recorded and runs: exit 0 after 14 ms, stdout \"\", stderr \"\"",
++   "no-hub-kill: with the hub up, session 6960c12d on Claude Code 9.9.9, `kill -9 <the hub's PID>` must be denied naming no-hub-kill, as deep-hook denies it whenever it answers alone: exit 0 after 9 ms, stdout \"\", stderr \"\"",
++ ]
+
+ ❯ agree.test.ts:56:78
+     54|       failures.push(`${kill}: with the hub up, ${who(s)}, \`kill -9 <t…
+     55|     }
+     56|     expect(failures, 'hub up and hub down agree on every fail_closed e…
+       |                                                                              ^
+     57|   }, 900_000);
+     58| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  floor.test.ts > AC1 #1501.840c5fe8 with the hub up, in a session whose transcript names a version the facts don't list, an Edit of .deepbuild/done.yaml, a write of ~/.claude/settings.json, deep off and rm -rf "$X"/* are each denied, naming the guard > AC1 a session on Claude Code 9.9.9, hub up: the hub denies each of the four calls, naming a fail_closed guard with its reason
+AssertionError: every call AC1 names is denied by the hub, naming its guard: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "`Edit .deepbuild/done.yaml` with the hub up, session e4041107 on Claude Code 9.9.9 (a version the facts don't list) must be denied by the floor; the hub let it run: exit 0 after 21 ms, stdout \"\", stderr \"\"",
++   "`Write ~/.claude/settings.json` with the hub up, session e4041107 on Claude Code 9.9.9 (a version the facts don't list) must be denied by the floor; the hub let it run: exit 0 after 21 ms, stdout \"\", stderr \"\"",
++   "`deep off` with the hub up, session e4041107 on Claude Code 9.9.9 (a version the facts don't list) must be denied by the floor; the hub let it run: exit 0 after 20 ms, stdout \"\", stderr \"\"",
++   "`rm -rf \"$X\"/*` with the hub up, session e4041107 on Claude Code 9.9.9 (a version the facts don't list) must be denied by the floor; the hub let it run: exit 0 after 17 ms, stdout \"\", stderr \"\"",
++ ]
+
+ ❯ floor.test.ts:28:85
+     26|       else if (!floorNamed(ran, w.rules).length) failures.push(`${at}:…
+     27|     }
+     28|     expect(failures, 'every call AC1 names is denied by the hub, namin…
+       |                                                                                     ^
+     29|   }, 600_000);
+     30|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  floor.test.ts > AC1 #1501.840c5fe8 with the hub up, in a session whose transcript names a version the facts don't list, an Edit of .deepbuild/done.yaml, a write of ~/.claude/settings.json, deep off and rm -rf "$X"/* are each denied, naming the guard > AC1 (scope) the health reading of a session on Claude Code 9.9.9 says the floor still holds
+AssertionError: the health reading of session 53a9a54e on Claude Code 9.9.9 says the floor (the fail_closed entries) still holds: This session runs claude-code 9.9.9, past the versions its facts cover: it is recorded unverified, and its holds and blocks are watch-only until the live smoke test widens the range to 9.9.9.: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ floor.test.ts:41:209
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed | 2 passed (4)
+      Tests  3 failed | 3 passed (6)
+   Start at  13:26:44
+   Duration  52.63s (tests 98%, transform 1%, import 1%)
+

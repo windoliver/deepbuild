@@ -14,7 +14,7 @@ import { ulid } from '@deepbuild/record';
 import { SERIES_MAX } from './series.js';
 
 /** One outside call the hub makes for a source, as it hands it to its HTTP client. */
-export interface HttpRequest { url: string; method: string; headers: Record<string, string>; body?: string }
+export interface HttpRequest { url: string; method: string; headers: Record<string, string>; body?: string; /** A file's bytes (#1731): the answer's body as base64. */ encoding?: 'base64' }
 /** What came back, as the client got it: header names lower-case, a 3xx as it is, with its Location. */
 export interface HttpAnswer { status: number; headers: Record<string, string>; body: string }
 /** The hub's HTTP client for source calls: it never follows a redirect, rejects when the host can't be reached, and stops when `signal` aborts. */
@@ -55,7 +55,17 @@ export interface Polled {
   /** A cadence the hub runs only while a view that binds the source is shown (#262). */
   whileShown: { every: number } | null;
 }
-export type Declared = Polled | { variant: 'stream'; name: string };
+/**
+ * A work source (#66): a stream source whose reading is work.item@1, read through the hub. Its provider calls go to its
+ * host only, with its secret by handle, under its quota; `delivers` says what a delivery into its threads is.
+ */
+export interface WorkDecl { host: string; secret: string | null; auth: Polled['auth']; quota: { per_minute: number; per_day: number }; delivers: 'comment' | 'chat' | 'email' }
+/**
+ * A library source (#1731), asset.library@1's fill: its search and fetch run in the package, every call they make and
+ * every byte of a picked asset going through the hub to its one host, with its secret by handle, its quota and timeout.
+ */
+export interface LibraryDecl extends Omit<WorkDecl, 'delivers'> { timeout: number }
+export type Declared = Polled | { variant: 'stream'; name: string; work: WorkDecl | null } | { variant: 'library'; name: string; library: LibraryDecl };
 
 /** The handle `deep.secret(name)` gives: it names the secret, never holds its value. */
 export const handleOf = (name: string): string => `secret:${name}`;
@@ -64,6 +74,8 @@ const secretKey = (owner: string, name: string): string => `deepbuild/${owner}/$
 
 /** The largest answer a source call takes. */
 const ANSWER = 1024 * 1024;
+/** The largest file a library fetch downloads in one call (#1731). */
+const FILE = 512 * 1024 * 1024;
 const HOPS = 5;
 const MINUTE = 60_000;
 const DAY = 86_400_000;
@@ -75,6 +87,10 @@ const SIGN_IN_MS = 5 * MINUTE;
 const HEADER = /^[A-Za-z0-9-]+$/;
 /** The shortest while-shown cadence. */
 const SHOWN_MIN_MS = 10_000;
+/** How long a work source's provider call has to answer (#66). */
+const WORK_MS = 20_000;
+/** A work source call that went out with no answer: whether it landed is unknown (#66). */
+export class NoAnswer extends Error {}
 const whole = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) > 0;
 const path = (p: unknown): p is string => typeof p === 'string' && p.startsWith('/') && !p.startsWith('//');
 
@@ -82,14 +98,15 @@ const path = (p: unknown): p is string => typeof p === 'string' && p.startsWith(
  * A `deep.registerSource` call, held to what the package declared and was granted: a name and variant its manifest
  * lists, and for a polled source a host its grant names, a secret by a handle its manifest names, sent one way.
  */
-export function declareSource(name: unknown, declared: unknown, own: { sources: { name: string; variant: string }[]; secrets: { name: string }[]; hosts: string[] }): Declared {
+export function declareSource(name: unknown, declared: unknown, own: { sources: { name: string; variant: string; reading?: string; host?: string }[]; secrets: { name: string }[]; hosts: string[] }): Declared {
   const d = (typeof declared === 'object' && declared !== null ? declared : {}) as Record<string, unknown>;
   const refuse = (why: string): never => { throw Error(`deep.registerSource: ${String(name)} ${why}`); };
-  if (!own.sources.some((s) => s.name === name && s.variant === d.variant)) refuse(`isn't a ${String(d.variant)} source the manifest lists`);
-  if (d.variant === 'stream') return { variant: 'stream', name: name as string };
-  if (d.variant !== 'polled') refuse(`is a ${String(d.variant)} source, which this host doesn't call yet`);
+  const listed = own.sources.find((s) => s.name === name && s.variant === d.variant) ?? refuse(`isn't a ${String(d.variant)} source the manifest lists`);
+  if (d.variant === 'stream' && listed.reading !== 'work.item@1') return { variant: 'stream', name: name as string, work: null };
+  if (d.variant !== 'polled' && d.variant !== 'stream' && d.variant !== 'library') refuse(`is a ${String(d.variant)} source, which this host doesn't call yet`);
   if (typeof d.host !== 'string' || !own.hosts.includes(d.host)) refuse('names a host the grant doesn\'t');
-  if (!path(d.path)) refuse('gives no path on its host');
+  if (d.variant === 'library' && d.host !== listed.host) refuse(`names ${String(d.host)}, not the host ${String(listed.host)} its manifest lists`);
+  if (d.variant === 'polled' && !path(d.path)) refuse('gives no path on its host');
   let secret: string | null = null;
   let auth: Polled['auth'] = null;
   if (d.secret !== undefined) {
@@ -103,6 +120,15 @@ export function declareSource(name: unknown, declared: unknown, own: { sources: 
   }
   const quota = d.quota as { per_minute?: unknown; per_day?: unknown } | undefined;
   if (!whole(quota?.per_minute) || !whole(quota?.per_day)) refuse('gives no quota of calls per minute and per day');
+  // A work source (#66): read item by item through the hub; what a delivery into its threads is decides how it's written.
+  if (d.variant === 'stream') {
+    if (d.delivers !== 'comment' && d.delivers !== 'chat' && d.delivers !== 'email') refuse('says what a delivery to it is: a comment, a chat reply or an email');
+    return { variant: 'stream', name: name as string, work: { host: d.host as string, secret, auth, quota: { per_minute: quota!.per_minute as number, per_day: quota!.per_day as number }, delivers: d.delivers as WorkDecl['delivers'] } };
+  }
+  if (d.variant === 'library') {
+    if (!whole(d.timeout)) refuse('gives no timeout in ms');
+    return { variant: 'library', name: name as string, library: { host: d.host as string, secret, auth, quota: { per_minute: quota!.per_minute as number, per_day: quota!.per_day as number }, timeout: d.timeout as number } };
+  }
   if (!whole(d.timeout) || !whole(d.freshFor)) refuse('gives no timeout or freshness in ms');
   const keyPath = (d.keyTest as { path?: unknown } | undefined)?.path;
   if (d.keyTest !== undefined && (!secret || !path(keyPath))) refuse('declares a key test with no secret or no path');
@@ -137,14 +163,15 @@ export const nodeHttp: HttpClient = async (request, signal) => {
   const res = await fetch(request.url, { method: request.method, headers: request.headers, redirect: 'manual', signal, ...(request.body === undefined ? {} : { body: request.body }) });
   const chunks: Uint8Array[] = [];
   let size = 0;
+  const cap = request.encoding === 'base64' ? FILE : ANSWER;
   for await (const chunk of res.body ?? []) {
     size += chunk.byteLength;
-    if (size > ANSWER) throw Error(`the answer from ${new URL(request.url).host} is over ${ANSWER} bytes`);
+    if (size > cap) throw Error(`the answer from ${new URL(request.url).host} is over ${cap} bytes`);
     chunks.push(chunk);
   }
   const headers: Record<string, string> = {};
   res.headers.forEach((v, k) => { headers[k] = v; });
-  return { status: res.status, headers, body: Buffer.concat(chunks).toString('utf8') };
+  return { status: res.status, headers, body: Buffer.concat(chunks).toString(request.encoding === 'base64' ? 'base64' : 'utf8') };
 };
 /** No OS secret store this host can reach: nothing is held, so what needs a secret is BLOCKED, and none can be entered. */
 const noSecrets: SecretStore = {
@@ -194,8 +221,38 @@ export function keychainStore(keychain?: string): SecretStore {
     },
   };
 }
-/** The OS secret store this platform has: the Keychain on macOS (others arrive with their platforms). */
-export const osSecrets = (): SecretStore => (process.platform === 'darwin' ? keychainStore() : noSecrets);
+const SECRET_TOOL = '/usr/bin/secret-tool';
+/**
+ * The Secret Service on Linux, through secret-tool: a value goes on its standard input and comes back on its standard
+ * output, never on a command line another process could read, under the attributes the Keychain's item names.
+ */
+export function secretServiceStore(): SecretStore {
+  const item = (key: string): string[] => { if (!/^[A-Za-z0-9._/-]+$/.test(key)) throw Error(`${key} isn't a secret's key`); return ['service', SERVICE, 'account', key]; };
+  const run = (args: string[], input?: string): Promise<{ code: number; out: string; err: string }> => new Promise((done) => {
+    const child = execFile(SECRET_TOOL, args, { timeout: 10_000 }, (error, out, err) => done({ code: error ? Number((error as { code?: unknown }).code ?? 1) : 0, out, err }));
+    child.stdin?.on('error', () => undefined);
+    child.stdin?.end(input ?? '');
+  });
+  return {
+    async get(key) {
+      const { code, out, err } = await run(['lookup', ...item(key)]);
+      // Exit 1 with nothing said is an item that isn't there.
+      if (code === 1 && !err.trim()) return undefined;
+      if (code !== 0) throw Error(`the Secret Service didn't read ${key}: ${err.trim().slice(0, 200)}`);
+      return out;
+    },
+    async set(key, value) {
+      const { code, err } = await run(['store', `--label=DeepBuild ${key}`, ...item(key)], value);
+      if (code !== 0) throw Error(`the Secret Service didn't keep ${key}: ${err.trim().slice(0, 200)}`);
+    },
+    async delete(key) {
+      const { code, err } = await run(['clear', ...item(key)]);
+      if (code !== 0 && err.trim()) throw Error(`the Secret Service didn't remove ${key}: ${err.trim().slice(0, 200)}`);
+    },
+  };
+}
+/** The OS secret store this platform has: the Keychain on macOS, the Secret Service on Linux. */
+export const osSecrets = (): SecretStore => (process.platform === 'darwin' ? keychainStore() : process.platform === 'linux' ? secretServiceStore() : noSecrets);
 /** Opens your browser at a sign-in page. */
 export const openBrowser = (url: string): Promise<void> => new Promise((done, fail) => {
   if (process.platform !== 'darwin') return fail(Error('this host opens no browser for a sign-in'));
@@ -204,7 +261,7 @@ export const openBrowser = (url: string): Promise<void> => new Promise((done, fa
 
 type Outcome = HttpAnswer | { error: string };
 /** What the record keeps of a source's calls and readings, appended as the core. */
-export type Append = (kind: 'source.called' | 'reading.recorded', data: Record<string, unknown>) => Promise<void>;
+type Append = (kind: 'source.called' | 'reading.recorded', data: Record<string, unknown>) => Promise<void>;
 
 /** The hub's side of every source: its calls, cache, quotas, back-off, recording and the secret values it holds to scrub. */
 export class Sources {
@@ -395,6 +452,38 @@ export class Sources {
       server.close();
       server.closeAllConnections();
     }
+  }
+
+  /**
+   * One provider call of a work source (#66), made by the hub: to its host only, its secret added by handle, under its
+   * quota (the call is refused, and made no more, once the minute's or the day's calls are spent), recorded and scrubbed
+   * as any source call. `noAnswer` is set when the request went out and no answer came, so whether it landed is unknown.
+   */
+  /** A work source's call (#66), or a library source's (#1731) under its own timeout, a file's bytes as base64. */
+  async workFetch(owner: string, name: string, work: Omit<WorkDecl, 'delivers'>, request: { method: string; path: string; headers?: Record<string, string>; body?: string }, library?: { timeout: number; encoding?: 'base64' }): Promise<HttpAnswer> {
+    if (!['GET', 'POST'].includes(request?.method) || !path(request.path)) throw Error(`${name}'s call names no method and path on ${work.host}`);
+    const now = this.options.now();
+    const key = `${library ? 'library' : 'work'}:${name}`;
+    const times = (this.spent.get(key) ?? []).filter((t) => now - t < DAY);
+    const minute = times.filter((t) => now - t < MINUTE);
+    if (minute.length >= work.quota.per_minute || times.length >= work.quota.per_day) {
+      throw Error(`${name}'s quota of ${work.quota.per_minute} calls a minute and ${work.quota.per_day} a day is spent until ${new Date((minute.length >= work.quota.per_minute ? minute[0]! + MINUTE : times[0]! + DAY)).toISOString()}`);
+    }
+    let value: string | undefined;
+    if (work.secret) {
+      value = await this.options.secrets.get(secretKey(owner, work.secret));
+      if (value === undefined) throw Error(`missing secret ${work.secret}`);
+      this.held.add(value);
+    }
+    this.spent.set(key, [...times, now]);
+    const source: Polled = {
+      variant: 'polled', name, host: work.host, path: request.path, secret: work.secret, auth: work.auth, oauth: null, quota: work.quota,
+      timeout: library?.timeout ?? WORK_MS, freshFor: 1, keyTest: null, shape: 'number', whileShown: null,
+    };
+    const headers = { ...Object.fromEntries(Object.entries(request.headers ?? {}).filter(([k]) => typeof k === 'string' && k.toLowerCase() !== 'host').map(([k, v]) => [k, String(v)])), ...this.headers(source, value) };
+    const answer = await this.call(source, { url: `https://${work.host}${request.path}`, method: request.method, headers, ...(typeof request.body === 'string' ? { body: request.body } : {}), ...(library?.encoding ? { encoding: library.encoding } : {}) });
+    if ('error' in answer) throw new NoAnswer(`${work.host} gave no answer: ${answer.error}`);
+    return answer;
   }
 
   private headers(source: Polled, value: string | undefined): Record<string, string> {

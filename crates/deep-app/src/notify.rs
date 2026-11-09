@@ -93,18 +93,23 @@ pub struct Reach {
 const HUB_DOWN: &str = "The hub isn't answering";
 
 impl Reach {
-    /// The count: `count` with what you should know beside it. With the hub down a number may be old, so it reads none.
+    /// The count: `count`, or with the hub down that it isn't answering, since a number may be old.
     pub fn count(&self, count: String) -> String {
         if self.hub_down {
             return HUB_DOWN.to_owned();
         }
+        count
+    }
+
+    /// What you should know beside the count, a row of its own (#1455): notifications are off, and the fix.
+    pub fn notice(&self) -> Option<&'static str> {
         match self.setting {
-            NotificationSetting::Allowed => count,
-            NotificationSetting::Denied => format!(
-                "{count} · Notifications are off: turn on Allow notifications for DeepBuild in System Settings"
+            NotificationSetting::Allowed => None,
+            NotificationSetting::Denied => Some(
+                "Notifications are off: turn on Allow notifications for DeepBuild in System Settings",
             ),
-            NotificationSetting::AlertsNone => format!(
-                "{count} · Alerts are set to None: pick an Alert style for DeepBuild in System Settings"
+            NotificationSetting::AlertsNone => Some(
+                "Alerts are set to None: pick an Alert style for DeepBuild in System Settings",
             ),
         }
     }
@@ -153,6 +158,9 @@ pub struct Notifier {
     /// Asks that came due with notifications off, `(handle, session)`, and how many of them the log has.
     missed: Vec<(String, String)>,
     logged: usize,
+    /// The work runs whose end was told, by their approval's ask, and the log position last read for one (#1348).
+    told: HashSet<String>,
+    told_at: Option<u64>,
 }
 
 impl Notifier {
@@ -168,6 +176,8 @@ impl Notifier {
             setting: NotificationSetting::Allowed,
             missed: Vec::new(),
             logged: 0,
+            told: HashSet::new(),
+            told_at: None,
         }
     }
 
@@ -206,6 +216,10 @@ impl Notifier {
     pub fn start(&mut self, view: &View, delivered: Vec<Notification>) {
         self.read.extend(view.unseen.iter().filter_map(opening));
         self.delivered = delivered;
+        // A run that had ended already was told, or could have been seen.
+        self.told
+            .extend(view.table().ended_runs().into_iter().map(|(ask, _)| ask));
+        self.told_at = Some(view.log_pos);
     }
 
     /// An event reached the app at `now`.
@@ -259,12 +273,27 @@ impl Notifier {
         let (due, waiting): (Vec<_>, Vec<_>) =
             self.waiting.drain(..).partition(|(_, at)| *at <= now);
         self.waiting = waiting;
+        // A work run that has ended is told once (#1348), read only when the record moved.
+        let ended = if self.told_at == Some(view.log_pos) {
+            Vec::new()
+        } else {
+            self.told_at = Some(view.log_pos);
+            let ended: Vec<_> = view
+                .table()
+                .ended_runs()
+                .into_iter()
+                .filter(|(ask, _)| !self.told.contains(ask))
+                .collect();
+            self.told.extend(ended.iter().map(|(ask, _)| ask.clone()));
+            ended
+        };
         if self
             .delivered
             .iter()
             .all(|notification| notification.ask.is_none())
             && self.notices.is_empty()
             && due.is_empty()
+            && ended.is_empty()
         {
             return Vec::new();
         }
@@ -279,6 +308,18 @@ impl Notifier {
                 .is_none_or(|ask| table.is_open(ask))
         });
         let mut out = Vec::new();
+        for (ask, sessions) in ended {
+            if self.setting.off() {
+                continue;
+            }
+            out.push(Notification {
+                ask: None,
+                title: "DeepBuild".to_owned(),
+                text: end_notice(table, &sessions),
+                session: ask,
+                sound: None,
+            });
+        }
         for session in self.notices.drain(..) {
             if self.setting.off() {
                 continue;
@@ -382,6 +423,34 @@ pub fn notification_text(table: &Table, session: &str, now: u64) -> String {
     }
 }
 
+/// Whether a notification Notification Center still holds carries this ask's question, as the notification shows it:
+/// marked (#1510).
+pub fn carries(text: &str, question: &str) -> bool {
+    !question.is_empty() && text.contains(&crate::question::visible(question))
+}
+
+/// The run's end notice (#1348), in plain words: its tasks have stopped, and how many each state holds, such as
+/// "DeepBuild\nAll 2 tasks have stopped: 1 PASS, 1 needs you."
+pub fn end_notice(table: &Table, sessions: &[String]) -> String {
+    let mut counts: Vec<(&'static str, usize)> = Vec::new();
+    for session in sessions {
+        let word = table.state(session).word();
+        match counts.iter_mut().find(|(known, _)| *known == word) {
+            Some((_, count)) => *count += 1,
+            None => counts.push((word, 1)),
+        }
+    }
+    let tasks = match sessions.len() {
+        1 => "The run's 1 task has stopped".to_owned(),
+        n => format!("All {n} tasks have stopped"),
+    };
+    let counts: Vec<String> = counts
+        .iter()
+        .map(|(word, count)| format!("{count} {word}"))
+        .collect();
+    format!("DeepBuild\n{tasks}: {}.", counts.join(", "))
+}
+
 /// A notification's title: it names DeepBuild and the session's task.
 fn title(table: &Table, session: &str) -> String {
     format!("DeepBuild · {}", table.title(session))
@@ -396,6 +465,11 @@ fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
         .and_then(|options| options.iter().find(|option| option["id"] == default))
         .and_then(|option| option["label"].as_str())
         .unwrap_or(default);
+    // The ask's words as the card draws them, its controls and direction marks shown (#1510).
+    let (question, label) = (
+        crate::question::visible(data["question"].as_str().unwrap_or_default()),
+        crate::question::visible(label),
+    );
     // The undo of its default gives it a new deadline.
     let deadline = table.deadline(ask).unwrap_or(now);
     format!(
@@ -403,7 +477,7 @@ fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
         title(table, ask["session"].as_str().unwrap_or_default()),
         states::glyph(states::State::NeedsYou.entry()),
         states::State::NeedsYou.word(),
-        data["question"].as_str().unwrap_or_default(),
+        question,
         clock_time(deadline, now),
     )
 }
@@ -482,6 +556,30 @@ mod tests {
             text.ends_with(&format!("If you don't answer: No, at {want}.")),
             "{text}"
         );
+    }
+
+    #[test]
+    fn a_notification_shows_a_direction_mark_as_the_card_does() {
+        // #1510: an override in the question or the default's label would read the rest backwards.
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
+            "question": "Open invoice\u{202e}txt.exe?", "default": "no", "deadline": 1_000,
+            "options": [{"id": "no", "label": "No\u{202e}"}]}});
+        let text = notification_text(&view(&[ask]).table(), "s1", 1_000);
+        assert!(text.contains("Open invoice\\u{202e}txt.exe?"), "{text}");
+        assert!(text.contains("If you don't answer: No\\u{202e},"), "{text}");
+        assert!(!text.contains('\u{202e}'), "{text}");
+    }
+
+    #[test]
+    fn a_notification_the_app_finds_after_a_relaunch_still_carries_its_marked_question() {
+        // #1510: the posted text holds the marked question, so a relaunch that looks for the raw one withdraws it.
+        let question = "Deploy?\nThis restarts prod\u{202e}";
+        let ask = json!({"kind": "ask.created", "id": "a1", "session": "s1", "data": {
+            "question": question, "default": "no", "deadline": 1_000,
+            "options": [{"id": "no", "label": "No"}]}});
+        let text = notification_text(&view(&[ask]).table(), "s1", 1_000);
+        assert!(carries(&text, question), "{text}");
+        assert!(!carries(&text, "Push?"), "{text}");
     }
 
     #[test]

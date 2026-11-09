@@ -149,6 +149,34 @@ test('the measured preflight workload has its own frozen time and peak-memory bu
   assert.throws(() => compare(workload, { elapsedMs: 300_000, peakBytes: 1000 }, null, ['elapsedMs', 'peakBytes']), /elapsedMs/);
 });
 
+test('a CPU reading of 0 is a run shorter than time\'s 10 ms resolution, not a missing one (#1421)', () => {
+  const workload = { id: 'preflight', margin: 0.5, limits: {} };
+  const keys = ['cpuMs', 'peakBytes'];
+  // A bare node start reads cpu_s=0.00 0.00 now and then, on either side.
+  for (const [current, base] of [[0, 0], [10, 0], [0, 10], [20, 10]]) {
+    assert.equal(compare(workload, { cpuMs: current, peakBytes: 1 }, { cpuMs: base, peakBytes: 1 }, keys).status, 'PASS', `${current} against ${base}`);
+  }
+  assert.equal(compare(workload, { cpuMs: 0, peakBytes: 1 }, null, keys).status, 'INITIAL');
+  // Past the 20 ms the base's reading can hide, plus the margin, a regression still fails.
+  assert.equal(compare(workload, { cpuMs: 30, peakBytes: 1 }, { cpuMs: 0, peakBytes: 1 }, keys).status, 'PASS');
+  assert.throws(() => compare(workload, { cpuMs: 31, peakBytes: 1 }, { cpuMs: 0, peakBytes: 1 }, keys), /cpuMs 31 regressed beyond base 0 \+ 50%, allowing 20 ms for time's truncation/);
+  // The 20 ms counts toward the base, so the margin scales it.
+  assert.equal(compare({ ...workload, margin: 0 }, { cpuMs: 20, peakBytes: 1 }, { cpuMs: 0, peakBytes: 1 }, keys).status, 'PASS');
+  assert.throws(() => compare({ ...workload, margin: 0 }, { cpuMs: 21, peakBytes: 1 }, { cpuMs: 0, peakBytes: 1 }, keys), /cpuMs 21 regressed/);
+  assert.throws(() => compare(workload, { cpuMs: 1600, peakBytes: 1 }, { cpuMs: 980, peakBytes: 1 }, keys), /cpuMs 1600 regressed/);
+  // No reading is still missing, on either side; 0 is a reading only for CPU time.
+  for (const absent of [undefined, NaN, -10]) {
+    assert.throws(() => compare(workload, { cpuMs: absent, peakBytes: 1 }, { cpuMs: 0, peakBytes: 1 }, keys), /missing cpuMs/);
+    assert.throws(() => compare(workload, { cpuMs: 0, peakBytes: 1 }, { cpuMs: absent, peakBytes: 1 }, keys), /missing base cpuMs/);
+  }
+  assert.throws(() => compare(workload, { cpuMs: 0, peakBytes: 0 }, { cpuMs: 0, peakBytes: 1 }, keys), /missing peakBytes/);
+  assert.throws(() => compare(workload, { cpuMs: 0, peakBytes: 1 }, { cpuMs: 0, peakBytes: 0 }, keys), /missing base peakBytes/);
+  assert.throws(() => compare(workload, { elapsedMs: 0, peakBytes: 1 }, { elapsedMs: 1, peakBytes: 1 }, ['elapsedMs', 'peakBytes']), /missing elapsedMs/);
+  // The 20 ms is CPU time's alone.
+  assert.throws(() => compare({ ...workload, margin: 0 }, { elapsedMs: 21, peakBytes: 21 }, { elapsedMs: 20, peakBytes: 20 }, ['elapsedMs']), /elapsedMs 21 regressed beyond base 20 \+ 0%$/);
+  assert.throws(() => compare({ ...workload, margin: 0 }, { elapsedMs: 1, peakBytes: 21 }, { elapsedMs: 1, peakBytes: 20 }, ['peakBytes']), /peakBytes 21 regressed beyond base 20 \+ 0%$/);
+});
+
 test('an established harness budget cannot disappear or change, so it can never switch its lane off', () => {
   const harness = { limits: { sessionMs: 60_000, wholeMs: 600_000 }, margin: 1, initialReason: 'First harness measurement in issue #48.' };
   const withHarness = { ...config, harness };
@@ -159,26 +187,31 @@ test('an established harness budget cannot disappear or change, so it can never 
     assert.throws(() => validateBudgets({ ...config, harness: { ...harness, ...change } }, withHarness), /harness/);
 });
 
-// The design names two reference Macs (design: The reference Mac). A budget counts on either; anywhere
-// else it is a reading, and the reason names both machines.
-test('a budget counts on either reference Mac and is a reading on any other', () => {
+// The design names three reference Macs (design: The reference Mac). A budget counts on any of them;
+// anywhere else it is a reading, and the reason names every machine.
+test('a budget counts on any reference Mac and is a reading on any other', () => {
   const conditions = { power: 'ac', lowPowerMode: false, thermalState: 'nominal', macosBuild: '23H723' };
   const pro = { model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30, ...conditions };
   const air = { model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30, ...conditions };
+  const max = { model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 64 * 2 ** 30, ...conditions };
   const within = [90, 92, 95, 91, 99], over = [110, 111, 110, 112, 111];
-  for (const machine of [pro, air]) {
-    assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: machine }).status, 'PASS', machine.model);
-    assert.equal(judgeLimit({ limit: 100, runs: over, fingerprint: machine }).status, 'FAIL', machine.model);
+  const loads = within.map(() => ({ start: 0.5, end: 0.5 }));
+  for (const machine of [pro, air, max]) {
+    assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: machine, loads }).status, 'PASS', machine.model);
+    assert.equal(judgeLimit({ limit: 100, runs: over, fingerprint: machine, loads }).status, 'FAIL', machine.model);
   }
   // The Air's chip with the Pro's memory, or the other way round, is neither machine.
-  for (const mixed of [{ ...air, memoryBytes: pro.memoryBytes }, { ...pro, chip: air.chip }, { ...air, model: 'Mac15,13' }]) {
-    const result = judgeLimit({ limit: 100, runs: within, fingerprint: mixed });
+  // So is the M5 Max's model with an M3's chip or memory.
+  for (const mixed of [{ ...air, memoryBytes: pro.memoryBytes }, { ...pro, chip: air.chip }, { ...air, model: 'Mac15,13' },
+    { ...max, chip: pro.chip }, { ...max, memoryBytes: pro.memoryBytes }]) {
+    const result = judgeLimit({ limit: 100, runs: within, fingerprint: mixed, loads });
     assert.equal(result.status, 'INCONCLUSIVE', JSON.stringify(mixed));
     assert.match(result.reason, /Mac15,7/);
     assert.match(result.reason, /Mac15,12/);
+    assert.match(result.reason, /Mac17,10/);
   }
   // Conditions still hold on both.
-  assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: { ...air, power: 'battery' } }).status, 'INCONCLUSIVE');
+  assert.equal(judgeLimit({ limit: 100, runs: within, fingerprint: { ...air, power: 'battery' }, loads }).status, 'INCONCLUSIVE');
 });
 
 // #1404: what the real benches do. Each of these left a parent's child time unaccounted for until it was

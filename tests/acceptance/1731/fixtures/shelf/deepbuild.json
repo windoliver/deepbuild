@@ -1,0 +1,8 @@
+{
+  "id": "test/shelf",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["hosts"] },
+  "sources": [{ "name": "ext.shelf.library", "variant": "library", "host": "127.0.0.1:0" }],
+  "requires": { "preview": ["deep.registerSource"] }
+}

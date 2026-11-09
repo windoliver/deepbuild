@@ -1,0 +1,46 @@
+#1407 blind redraft on the base commit 2bba2a50 (origin/main), November 7, 2026, before any #1407 code.
+Run: CARGO_BUILD_JOBS=4 npx vitest run --root tests/acceptance/1407/redraft --no-file-parallelism --reporter=verbose
+     (Node 24.22.0, vitest 5.0.5, Linux, 20 cores, 1-minute load 105; cargo niced)
+     The suite ran twice on the base: once with the default reporter, which doesn't list passing tests, then this
+     verbose run for the record. Both gave the same result.
+Result: Test Files 1 failed | 1 passed (2); Tests 3 failed | 4 passed (7).
+
+panic.test.ts
+  x #1407.3799f437 plant-matcher-panic, fail_closed t-closed on run:gh pr merge, hub away: `gh pr merge 12` exits 2
+    with a denial in the watchdog's words, not exit 101
+    Error: BLOCKED: deep-hook with the plant plant-matcher-panic did not build: cargo build --locked -q -p deep-hook
+    --features plant-matcher-panic --target-dir <checkout>/target/plant-matcher-panic exited 101: error: the
+    package 'deep-hook' does not contain this feature: plant-matcher-panic
+    (its control passed first: the unplanted base denies gh pr merge 12 with exit 2 in t-closed's words)
+  x #1407.055ae8d4 plant-matcher-panic, no fail_closed entry, hub away: `gh pr merge 12` is allowed with the exit,
+    stdout and stderr the unplanted build gives it
+    Error: BLOCKED: (the same missing feature)
+  x #1407.055ae8d4 ... `echo hello` ... : BLOCKED: (the same missing feature)
+  -> Expected: the plant is the implementer's to add. A plain Error, not an assertion, so the base run alone proves
+     none of these; they prove their criteria on the twin README names (base handling of a panic, plant kept).
+
+unchanged.test.ts
+  v #1407.14eb6bf3 a normal denial (fail_closed t-closed matches): `gh pr merge 12`             112 ms
+  v #1407.14eb6bf3 a normal allow (t-open, not fail_closed, matches; t-closed is installed): `ls -la`   165 ms
+  v #1407.14eb6bf3 a normal allow (nothing matches; t-closed is installed): `echo hello`          99 ms
+  v #1407.14eb6bf3 a normal allow (t-open matches; no fail_closed entry is installed): `gh pr merge 12`  117 ms
+  -> Pass by construction (the base against itself): regression protection, proven on a twin or by mutants.
+
+The planted tests on the base with the plant added by hand (the probe; "on main it exits 101")
+  A copy of 2bba2a50 (git archive into a scratch folder, since removed) with exactly the plant and nothing else:
+    crates/deep-hook/Cargo.toml   + plant-matcher-panic = []
+    crates/deep-hook/src/matcher.rs, at the top of Call::matches:
+                                  + if cfg!(feature = "plant-matcher-panic") {
+                                  +     panic!("planted panic in the matcher for {pattern}");
+                                  + }
+  and this redraft's panic.test.ts run there (vitest --root tests/acceptance/1407/redraft panic.test.ts):
+  Tests 3 failed (3), each an AssertionError from vitest's expect, its innermost frame in panic.test.ts:
+  x #1407.3799f437  AssertionError at panic.test.ts:34 (expect(r.code).toBe(2)): expected 101 to be 2;
+                    planted run: exit 101 after 10 ms, stdout "", stderr
+                    "\nthread 'main' (1200135) panicked at crates/deep-hook/src/matcher.rs:209:13:\nplanted panic in
+                    the matcher for run:gh pr merge\nnote: run with `RUST_BACKTRACE=1` environment variable to display
+                    a backtrace\n" -- no denial.
+  x #1407.055ae8d4  `gh pr merge 12`: AssertionError at panic.test.ts:60 (toEqual): exit 101 and the panic text,
+                    where the unplanted base gives exit 0, stdout "", stderr "" (past its spool line "deep-hook:
+                    spooled 01M6TXDJSQRREZMY3DP5D1GDVF, but its sync didn't finish within the hook's 50 ms").
+  x #1407.055ae8d4  `echo hello`: the same, at panic.test.ts:60.

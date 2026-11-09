@@ -664,7 +664,9 @@ class AsksCore implements Asks {
       const now = this.options.now();
       const given = this.fill(connection.session, raised, now);
       // Every task that reaches you can be answered "the agent can do it" in one tap (#84), whatever raised it.
-      const filled = isObj(given) && given.kind === 'unblock' && Array.isArray(given.options) && !(given.options as Obj[]).some((o) => o.id === 'agent') ? { ...given, options: [...given.options as Obj[], { id: 'agent', label: 'The agent can do it', decision: 'none' }] } : given;
+      const agented = isObj(given) && given.kind === 'unblock' && Array.isArray(given.options) && !(given.options as Obj[]).some((o) => o.id === 'agent') ? { ...given, options: [...given.options as Obj[], { id: 'agent', label: 'The agent can do it', decision: 'none' }] } : given;
+      // An ask for `you` is for the person whose session raised it (#1337): the hub's owner on a one-person hub.
+      const filled = isObj(agented) && agented.owner === 'you' && connection.actor !== 'you' ? { ...agented, owner: connection.actor } : agented;
       const id = ulid(now);
       // An ask that names its subject is keyed from the subject alone: whatever key its raiser gave is replaced.
       const input = isObj(filled) && isObj(filled.subject) && SUBJECT_KINDS.has(String(filled.kind)) ? { ...filled, key: subjectKey(filled, this.threadOf(connection.session)) } : filled;
@@ -1670,14 +1672,14 @@ class AsksCore implements Asks {
     };
   }
 
-  /** What an answer to the ask would be saved as, said in words, and how many other open asks that decision would then answer. */
+  /** What an answer to the ask would be saved as, said as what answering will do (nothing is saved yet, #1455), and how many other open asks that decision would then answer. */
   private savesOf(ask: Ask): Card['saves'] {
     if (ask.fold || ask.theirs || !ask.options.length) return null;
-    if (this.unplaced(ask).length) return { scope: 'Saved for this ask only', also: 0 };
+    if (this.unplaced(ask).length) return { scope: 'Answering saves it for this ask only', also: 0 };
     const scope = this.scopeOf(ask);
     if (scope === null) return null;
     const project = this.sessions.get(ask.session)?.project;
-    const words = scope.startsWith('repo:') && project ? `Saved for this repo (${project})` : 'Saved for this session';
+    const words = scope.startsWith('repo:') && project ? `Answering saves it for this repo (${project})` : 'Answering saves it for this session';
     const also = this.open().filter((a) => a !== ask && !a.theirs && !a.fold && a.data.key === ask.data.key && this.scopeCovers(scope, a)).length;
     return { scope: words, also };
   }

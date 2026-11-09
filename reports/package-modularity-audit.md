@@ -10,6 +10,18 @@ Inventory: 32 npm workspaces, 34 Rust workspace crates, and four independently i
 
 Design anchors: technical-design.md sections Architecture, Building blocks, Composition, Socket roles and contract versions, and How we know version 0 works. Preserve the four invariants, independent checks, public package boundaries and the distinction between trusted modules and plug-ins.
 
+## PR #1775 conflict resolution
+
+Merged `main` at `710048c1` into the draft branch in an isolated worktree. This supersedes the stale-base note above for that revision; the original checkout's uncommitted changes were not used or changed.
+
+- `conformance/src/families.ts`: both sides already contained the two doctor mappings; kept main's identical mapping and ordering.
+- `extension-host/src/host.ts`: retained main's `panels` map alongside this branch's per-load environment starts/stops.
+- `runner/src/runner.ts` and `runner/src/agents.ts`: retained the policy extraction, moving main's facts filenames and acceptance-job writing capability/confinement into `agents.ts`. The lifecycle retains main's `readFacts` API, scoped write grant, input validation and plan-window reading. No duplicate policy table remains.
+
+Proof of resolution: no unmerged index entries or conflict markers in package TypeScript; diff whitespace review against the merged main passed; TypeScript syntax parsed; AST/text comparison showed every extracted policy declaration matches main except export modifiers/comments, and every remaining runner lifecycle statement matches main. These are static checks, not behavioral proof. No acceptance tests, schemas or checks were modified relative to main.
+
+Verification remains **INCONCLUSIVE**: the isolated worktree's dependency install received no build grant within two minutes. Dependencies cloned from the original checkout have the existing versions, but new playwright dependencies are absent. The focused Vitest invocation ran no tests: config loading requires the unbuilt `@deepbuild/config-eval` entry. `node scripts/affected.mjs` was invoked with the four resolution paths and stopped while waiting for its workspace-build grant, with no build or test job completed. Selection emitted **no WIDE line**; **58 timed, 34 slow and 56 by-hand files** are unrun. Only this task's waiting affected process and its own child were stopped. Local logs are under `/tmp/deep-pr-1775/` (`install.log`, `focused.log`, `affected-list.log`, `affected.log`, `affected-status.txt`). Existing draft failures, including the timeout regression, are unchanged and not declared resolved by the merge.
+
 ## Fourth follow-up: environment ownership fixed; verification gaps narrowed
 
 Test capacity became available, so the previously queued cases could finally run. New evidence supersedes the unrun status below for the doctor mappings and disable/start race.

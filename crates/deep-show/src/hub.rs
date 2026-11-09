@@ -10,7 +10,7 @@
 //! Documents several writers share (issue #96) are in [`crate::shared`]: patches, undo, reads,
 //! history, the by-writer lens, the record and the clock's latch.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
@@ -282,6 +282,28 @@ pub enum Planted {
     CullByCenter,
     /// #421: a node's hierarchy bounds union only its direct children's own bounds.
     BoundsChildrenOnly,
+    /// #427: a mode's render-back draws on the live view's surface, asking its clock for a frame.
+    ModeDrawsLiveSurface,
+    /// #427: a mode's visible table is kept per document until its item count changes.
+    ModeIdsByCount,
+    /// #427: bounds reads each item's authored position, not its evaluated one at t.
+    BoundsAuthoredPosition,
+    /// #427: lights and cameras reads a light's local position, ignoring its parent.
+    LightsLocalPosition,
+    /// #427: the UV checker fits 8 × 8 cells to each surface's uv0 extent.
+    CheckerFitsSurface,
+    /// #427: deviation measures only from the reference to the item's surface.
+    DeviationOneWay,
+    /// #427: normals draws each vertex's line along a face normal of a face using it.
+    NormalsFromFaces,
+    /// #854, on #1551's shown window: the frame clock arms a frame each vsync once settled.
+    ArmsEachVsync,
+    /// #1551: the window's display link keeps running while it is still.
+    LinkNeverStops,
+    /// #1551: the link stops when idle, but `schedule_frame` doesn't start it again.
+    WakerIgnoresScheduleFrame,
+    /// #1551: a restarted link sits out a full refresh before its first callback.
+    LinkRestartsARefreshLate,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -477,7 +499,7 @@ pub enum Call {
     /// #411: deep_query, and deep.canvas.read for a check plug-in.
     SceneQuery(Box<crate::query::Query>),
     /// #411: a deep_show or deep show call in a diagnostic mode; #412: from its readings' cursor.
-    Mode(Box<Show>, String, usize),
+    Mode(Box<Show>, Box<crate::modes::ModeArgs>),
     /// #379: the cost model's micro-benchmark.
     Costs,
     /// #140: the network seam's conformance suite.
@@ -755,9 +777,14 @@ pub struct Eval {
     pub clean: bool,
     pub perturb: Option<String>,
     pub pixels: bool,
+    /// #493: the film block, each camera's pose, a reduced-motion cut's dissolve, each parallax
+    /// group's offset and each text's glyphs.
+    pub film: bool,
     pub size: Option<[u16; 2]>,
     /// #855: each node's Debug text digest beside its result, a diagnostic only.
     pub debug_text: bool,
+    /// #497: document arrays to answer as the frame read them.
+    pub arrays: Vec<String>,
 }
 
 pub struct Scenario {
@@ -872,6 +899,12 @@ pub struct Hub<'a> {
     /// The shared documents each writer has written, for its quota.
     pub written: BTreeMap<String, std::collections::BTreeSet<String>>,
     pub look: Look,
+    /// #464: the document's look as defined, for its print fields; and the GPU snapshots this
+    /// run took, each display only, which no check reads.
+    pub look_def: Option<Value>,
+    pub display_only: BTreeSet<String>,
+    /// #427's planted `mode_ids_by_count`: each document's mode visible table, by item count.
+    pub mode_ids: BTreeMap<String, (usize, Vec<(String, [f64; 4])>)>,
     pub renderer: Renderer,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
@@ -1025,6 +1058,9 @@ impl<'a> Hub<'a> {
             applied_at: BTreeMap::new(),
             written: BTreeMap::new(),
             look: shipped_look(),
+            look_def: None,
+            display_only: BTreeSet::new(),
+            mode_ids: BTreeMap::new(),
             renderer: Renderer::new(),
             sched,
             sessions: BTreeMap::new(),
@@ -1223,6 +1259,9 @@ impl<'a> Hub<'a> {
             snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)))
         });
         let palette = self.look.light.clone();
+        // #493: a shot writes the camera's pose the 3D frame is drawn through.
+        let posed = crate::film::posed(doc, t);
+        let doc = posed.as_ref().unwrap_or(doc);
         let gpu = self.gpu3().ok_or(())?;
         gpu.draw(doc, t, &palette, size)
             .map(|(rgba, scene)| (rgba, size, scene.boxes()))
@@ -1270,15 +1309,31 @@ impl<'a> Hub<'a> {
     /// and the record's readings.
     /// The look a document names by asset, resolved over the bundled faces (#1162).
     fn look_of(&self, doc: &Value) -> Option<Look> {
+        let def = self.look_def_of(doc)?;
+        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
+        // The status distance holds wherever status can show: a document with a status binding
+        // (the status-color rule's first case); any other may use any palette (#464).
+        let binds = doc
+            .get("status_bindings")
+            .and_then(Value::as_object)
+            .is_some_and(|b| !b.is_empty());
+        let at = if binds {
+            look::Distance::Everywhere
+        } else {
+            look::Distance::WhereStatusShows
+        };
+        look::resolve_in(&def, &bundled, at).ok()
+    }
+
+    /// The look@1 a document names by asset, as the evidence store holds it.
+    fn look_def_of(&self, doc: &Value) -> Option<Value> {
         let name = doc.pointer("/look/asset")?.as_str()?;
         let id = name.split('@').next()?;
         let sha = doc.pointer(&format!("/assets/{id}/sha256"))?.as_str()?;
         let bytes = (sha.len() == 64)
             .then(|| std::fs::read(self.scenario.evidence.join(&sha[..2]).join(&sha[2..])).ok())
             .flatten()?;
-        let def: Value = serde_json::from_slice(&bytes).ok()?;
-        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
-        look::resolve(&def, &bundled).ok()
+        serde_json::from_slice(&bytes).ok()
     }
 
     /// Mark set columns that read the agent's table, inlined from the evidence store as
@@ -1471,9 +1526,9 @@ impl<'a> Hub<'a> {
         }
         let mut reply = match call {
             Call::Show(show) => self.show_call(show),
-            Call::Mode(show, mode, cursor) => {
+            Call::Mode(show, args) => {
                 self.vias.insert(show.doc.clone(), show.via.clone());
-                self.mode_show(show, mode, *cursor)
+                self.mode_show(show, args)
             }
             Call::Patch(p) => self.patch(p, None, self.now),
             Call::Read { doc, via } => self.read(doc, via.as_ref()),
@@ -1851,6 +1906,7 @@ impl<'a> Hub<'a> {
         if let Ok(doc) = &stamped {
             if let Some(look) = self.look_of(doc) {
                 self.look = look;
+                self.look_def = self.look_def_of(doc);
             }
         }
         let mut notices = Vec::new();
@@ -2196,7 +2252,13 @@ impl<'a> Hub<'a> {
                                 Some(d) => snapshot::visible(d.boxes(), d.scale(size), size),
                                 None => snapshot::visible(boxes3d, 1.0, size),
                             };
-                            reply.insert("snapshots".into(), json!([entry]));
+                            // #464: a 2D print look adds this machine's GPU snapshot, display
+                            // only, beside the Vello CPU one.
+                            let gpu = match drawn.filter(|_| !three) {
+                                Some(d) => self.print_snapshot(show, d, size, &instanced),
+                                None => None,
+                            };
+                            reply.insert("snapshots".into(), json!([entry].into_iter().chain(gpu).collect::<Vec<_>>()));
                             reply.insert("visible".into(), rows);
                             // The instanced batches the 2D draw made: none for a 3D frame, which
                             // scene3d draws and reports on its own (#378).
@@ -2275,6 +2337,71 @@ impl<'a> Hub<'a> {
     /// passes a claim only when the claim's definition names the document among its deliverables,
     /// since a picture explains and never proves; a snapshot it asked for and couldn't take is
     /// BLOCKED.
+    /// #464: a 2D frame under a print look through the look's finish on this machine's GPU (the
+    /// print pass, as the canvas's live frame runs it), kept as evidence and labelled
+    /// `display_only`: an agent sees the grain and the halftone, and no check reads it.
+    fn print_snapshot(
+        &mut self,
+        show: &Show,
+        drawn: &Drawn,
+        size: [u16; 2],
+        instanced: &BTreeMap<String, (String, String)>,
+    ) -> Option<Value> {
+        let def = self.look_def.clone()?;
+        let print = deep_canvas_marks::print::read(&def, &self.look.light, f64::from(size[0])).ok()?;
+        if print.is_identity() {
+            return None;
+        }
+        let items = show.document.get("items").and_then(Value::as_object)?;
+        let role = |i: &Value| {
+            i.pointer("/params/paint/fill/role")
+                .or_else(|| i.pointer("/params/paint/stroke/role"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        };
+        let inks: Vec<BTreeSet<String>> = print
+            .separations
+            .iter()
+            .map(|s| {
+                items
+                    .iter()
+                    .filter(|(_, i)| role(i).as_deref() == Some(s.role.as_str()))
+                    .map(|(id, _)| id.clone())
+                    .collect()
+            })
+            .collect();
+        let inked: BTreeSet<&String> = inks.iter().flatten().collect();
+        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
+        let base = drawn.only(|i| !inked.iter().any(|k| k.as_str() == i));
+        let (base, _) = self.renderer.raster_batched(&base, size, Some(ground), instanced);
+        let covs: Vec<Vec<u8>> = inks
+            .iter()
+            .map(|set| {
+                let only = drawn.only(|i| set.contains(i));
+                self.renderer.raster_batched(&only, size, None, instanced).0
+            })
+            .collect();
+        let seed = show.document.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
+        let frame = deep_canvas_marks::print::frame(&print, seed, show.t, false);
+        let px = [u32::from(size[0]), u32::from(size[1])];
+        let params = deep_scene3d_render::print::params(
+            &print,
+            &frame,
+            px,
+            deep_scene3d_render::print::Placed {
+                scale: 1.0 / drawn.scale(size),
+                offset: [0.0, 0.0],
+            },
+            ground,
+            false,
+            Default::default(),
+        );
+        let rgba = self.gpu3()?.print(&params, &base, &covs, px)?;
+        let sha = evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).ok()?;
+        self.display_only.insert(sha.clone());
+        Some(json!({"sha256": sha, "w": size[0], "h": size[1], "display_only": true}))
+    }
+
     fn verdict(&self, show: &Show, snapshot_taken: bool) -> &'static str {
         if !snapshot_taken {
             return "BLOCKED";

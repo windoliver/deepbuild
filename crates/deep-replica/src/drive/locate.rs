@@ -4,14 +4,14 @@
 
 use std::collections::BTreeMap;
 
-use gpui_kit::{base::test_support::snapshots, Window};
+use gpui_kit::{base::test_support::snapshots, point, px, ElementId, HitboxBehavior, Window};
 use serde_json::{json, Value};
 
 use super::glyphs::{Glyphs, Run};
 use crate::snapshot::role_name;
 
 /// The roles of a form control, the things `{label}` names.
-const CONTROLS: &[&str] = &[
+pub const CONTROLS: &[&str] = &[
     "text_input",
     "multiline_text_input",
     "search_input",
@@ -43,6 +43,8 @@ pub struct Target {
     pub checked: Option<bool>,
     /// The string it draws, for a drawn string.
     pub text: Option<String>,
+    /// The element's path in GPUI's tree; empty for a drawn string or a canvas item, which are no element of their own.
+    pub path: Vec<ElementId>,
 }
 
 impl Target {
@@ -57,6 +59,7 @@ impl Target {
 }
 
 /// One frame, read for locating.
+#[derive(Clone)]
 pub struct Frame {
     pub elements: Vec<Target>,
     pub runs: Vec<Run>,
@@ -97,6 +100,7 @@ impl Frame {
                     enabled: e.disabled() != Some(true),
                     checked: e.checked(),
                     text: None,
+                    path: e.path().to_vec(),
                 })
             })
             .collect();
@@ -164,11 +168,16 @@ impl Frame {
                     enabled: true,
                     checked: None,
                     text: None,
+                    path: Vec::new(),
                 })
                 .collect(),
         };
         found.sort_by_key(|t| (t.bounds[1], t.bounds[0]));
-        found.dedup();
+        // One thing observed twice, a wrapper and what it wraps, is still one thing.
+        found.dedup_by(|a, b| {
+            (&a.role, &a.name, &a.value, a.bounds, a.text.as_ref())
+                == (&b.role, &b.name, &b.value, b.bounds, b.text.as_ref())
+        });
         Ok(found)
     }
 
@@ -184,16 +193,63 @@ impl Frame {
 
     /// The drawn strings that show, as targets.
     pub fn texts(&self) -> impl Iterator<Item = Target> + '_ {
-        self.runs.iter().filter(|r| r.visible).map(|r| Target {
-            role: "text_run".into(),
-            name: Some(r.text.clone()),
-            value: None,
-            bounds: r.bounds,
-            visible: true,
-            enabled: true,
-            checked: None,
-            text: Some(r.text.clone()),
-        })
+        self.runs.iter().filter(|r| r.visible).map(string)
+    }
+
+    /// The smallest element with a role holding `at`, which is what a string drawn there belongs to.
+    pub fn holder(&self, at: [i64; 2]) -> Option<&Target> {
+        self.elements
+            .iter()
+            .filter(|e| e.visible && contains(e.bounds, [at[0], at[1], 0, 0]))
+            .min_by_key(|e| e.bounds[2] * e.bounds[3])
+    }
+
+    /// What a pointer event at `at` would reach, as the frame's own hit test says: `target`, or the element in front
+    /// of it. Nothing is sent. An element the target is inside lies under it and one inside the target is the target,
+    /// so only another branch of the tree can cover it, and that branch counts when it has an element with a role, or
+    /// blocks the mouse: a hitbox that only watches the pointer takes nothing from what's under it. A drawn string or a
+    /// canvas item stands for the element holding it, the smallest there; an overlay as big as that element, with
+    /// nothing else of its size under it, can't be told from it.
+    pub fn receiver(&self, window: &Window, target: &Target, at: [i64; 2]) -> Target {
+        let center = target.center();
+        let own: &[ElementId] = match target.path.as_slice() {
+            [] => self.holder(center).map_or(&[], |e| e.path.as_slice()),
+            path => path,
+        };
+        let position = point(px(at[0] as f32 / self.scale), px(at[1] as f32 / self.scale));
+        for hit in window.hits_at(position) {
+            let path: &[ElementId] = &hit.element;
+            if path.starts_with(own) {
+                break;
+            }
+            if own.starts_with(path) {
+                continue;
+            }
+            let element = self
+                .elements
+                .iter()
+                .filter(|e| path.starts_with(&e.path) && !own.starts_with(&e.path))
+                .max_by_key(|e| e.path.len());
+            if let Some(element) = element {
+                return element.clone();
+            }
+            if hit.behavior == HitboxBehavior::BlockMouse {
+                let device = |v: gpui_kit::Pixels| (f32::from(v) * self.scale).round() as i64;
+                let b = hit.bounds;
+                return Target {
+                    role: "element".into(),
+                    name: path.last().map(ToString::to_string),
+                    value: None,
+                    bounds: [b.origin.x, b.origin.y, b.size.width, b.size.height].map(device),
+                    visible: true,
+                    enabled: true,
+                    checked: None,
+                    text: None,
+                    path: path.to_vec(),
+                };
+            }
+        }
+        target.clone()
     }
 
     /// The text drawn inside `bounds`, top to bottom and left to right, joined by spaces.
@@ -235,6 +291,21 @@ impl Frame {
                     .map(|c| (*c).clone())
             })
             .collect()
+    }
+}
+
+/// A drawn string as a target.
+pub fn string(run: &Run) -> Target {
+    Target {
+        role: "text_run".into(),
+        name: Some(run.text.clone()),
+        value: None,
+        bounds: run.bounds,
+        visible: true,
+        enabled: true,
+        checked: None,
+        text: Some(run.text.clone()),
+        path: Vec::new(),
     }
 }
 

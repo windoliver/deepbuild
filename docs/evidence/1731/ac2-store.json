@@ -1,0 +1,19 @@
+{
+  "sha256": "2beb0c371a2478b08b32ebd9603ea2c649472db7d4275cd3aee32dc1b25886e5",
+  "size": 1124,
+  "type": "binary",
+  "kind": "asset.library",
+  "source": "https://shelf.example/a/oak-chair",
+  "origin": "deepbuild",
+  "redaction": "complete",
+  "license": {
+    "name": "CC-BY-4.0",
+    "allows": [
+      "export",
+      "report",
+      "post"
+    ]
+  },
+  "derivedFrom": [],
+  "intake": "captured"
+}

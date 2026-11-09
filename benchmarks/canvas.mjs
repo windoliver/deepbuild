@@ -668,18 +668,49 @@ workloads['scene-read'] = async () => {
     tokenizer: { adapter: 'codex', name: pinned.name, version: pinned.version }, runs: measured }));
 };
 
-// Idle: a still board held in a window for 60 s of the real clock, its frames, wakeups and CPU read from the process
-// that draws it. The warm-up run holds it 5 s.
+// Idle (#854, #1551): the still board held in the app's real, shown window (`deep-show live`) for 60 s of the real
+// clock from the moment it settles: the frames it presented, the request-frame callbacks its display link ran, the
+// process's wakeups and CPU over that minute, and whether the window was shown throughout. The warm-up run holds it
+// 5 s. `--planted arms_each_vsync` passes deep-show's clock that arms a frame each vsync once settled.
+const stillAsAgent = (doc) => {
+  const sent = structuredClone(doc);
+  delete sent.id;
+  delete sent.layers;
+  for (const item of Object.values(sent.items)) delete item.layer;
+  return sent;
+};
 workloads.idle = () => {
-  const fingerprint = release('deep-marks-render', 'deep-canvas-render');
+  const fingerprint = release('deep-show', 'deep-show');
   const fixture = join('benchmarks', 'canvas', 'still.json');
-  const doc = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
-  const look = { light: { ground: [250, 250, 248], ink: [28, 28, 30], muted: [120, 120, 128], accent: [40, 90, 200] } };
+  const document = stillAsAgent(JSON.parse(readFileSync(join(root, fixture), 'utf8')));
+  const [w, h] = document.size;
   const measured = runs((warm) => {
-    const answer = once('deep-canvas-render', ['idle'], { doc, look, view: { zoom: 1, theme: 'light' }, seconds: warm ? 5 : 60, ...(planted() ? { planted: planted() } : {}) });
-    if (answer.ok !== true) throw Error(`deep-canvas-render idle answered ${JSON.stringify(answer).slice(0, 1500)}`);
-    const { ok: _, ...run } = answer;
-    return run;
+    const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+    try {
+      const answer = once('deep-show', ['live'], {
+        evidence, sessions: { s1: { thread: 'thread-a', name: 'agent-a', process: { pid: 4100, start: 1000 } } },
+        processes: [{ pid: 1, ppid: 0, start: 0 }, { pid: 4100, ppid: 1, start: 1000 }],
+        panels: { main: { rect: [0, 0, w, h] } }, docs: { still: { panel: 'main' } }, window: [w, h + 40],
+        clock: { refresh_hz: 60, lead: 0, check: 0 }, calls: [{ call: 'deep_show', session: 's1', doc: 'still', document, at: 0 }],
+        live: { watch_from: 'settled', watch_ms: (warm ? 5 : 60) * 1000 }, ...(planted() ? { planted: planted() } : {}),
+      });
+      const spent = (p) => ({ seconds: p.seconds, wakeups: p.wakeups, interrupt_wakeups: p.interrupt_wakeups, cpu_ms: p.cpu_ms,
+        cpu_fraction: p.cpu_ms / (p.seconds * 1000), energy: p.energy });
+      // A window AppKit never showed (covered, hidden, a sleeping display or a locked screen) is read as that: what it
+      // and the process did while deep-show waited for a first frame, with no frame drawn.
+      if (answer.code === 'no_display' && answer.window && answer.process) {
+        return { opened_frames: 0, frames: 0, drawn: [], ...spent(answer.process), request_frames: answer.request_frames, window: answer.window };
+      }
+      if (answer.ok !== true || !answer.live?.process) throw Error(`deep-show live answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const { frames, process: p, request_frames, window } = answer.live;
+      return {
+        opened_frames: 1, frames: frames.length,
+        drawn: frames.map((f) => ({ frame: f.frame_seq, at_ms: Math.max(0, (f.presented_ns - p.from_ns) / 1e6) })),
+        ...spent(p), request_frames, window,
+      };
+    } finally {
+      rmSync(evidence, { recursive: true, force: true });
+    }
   });
   console.log(JSON.stringify({ task: 'canvas-idle', fingerprint, fixture, seconds: 60, runs: measured }));
 };
@@ -700,6 +731,129 @@ workloads['replica-cold-start'] = () => {
       return { ms: cold.since_spawn_ms, pipelines: cold.pipelines };
     });
     console.log(JSON.stringify({ task: 'replica-cold-start', fingerprint, fixture, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #465: the finishes', the flare's and the mirror's GPU cost at 1080p on a release `deep-gpu`, each the difference of
+// two sides' median `gpu_ms` over 300 frames of one stage (a floor plate, twelve boxes, a sun, a point light, an orbiting
+// camera), and the indexed look's target bytes from `film2d`; one warm-up run and five, each a fresh process. The
+// stage and the finishes are tests/acceptance/465/budgets.test.ts's.
+const FLARE_SIZE = [1920, 1080];
+function flareStage({ flare = false, mirror = false } = {}) {
+  const floor = { base_color: [0.05, 0.05, 0.06, 1], metallic: 0, roughness: 0.2 };
+  if (mirror) floor.mirror = { strength: 1, blur: 0, plane: 'floor' };
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'perspective', target: [0, 0.8, 0], orbit: { azimuth: 30, elevation: 15, distance: 9 }, fov: 45, near: 0.1, far: 500 } },
+    sky: { kind: 'sky@1', params: { top: [0.15, 0.3, 0.75, 1], low: [0.45, 0.6, 0.85, 1], ambient_top: [0.25, 0.25, 0.25], ambient_low: [0.1, 0.1, 0.1] } },
+    sun: { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-45, 30, 0] } },
+    'key-light': { kind: 'light.point@1', params: { power: 4.93, radius: 0.05, color: [1, 1, 1], shadow: false }, at: { pos: [0.8, 1.6, -1] } },
+    floor_mat: { kind: 'material@1', params: floor },
+    box_mat: { kind: 'material@1', params: { base_color: [0.7, 0.45, 0.3, 1], roughness: 0.6 } },
+    floor: { kind: 'plate@1', params: { grid: [1, 1], size: [20, 20] }, at: { pos: [0, 0, 0], rot: [0, 0, 0] }, material: 'floor_mat' },
+  };
+  for (let k = 0; k < 12; k++) items[`box${k}`] = { kind: 'mark.box@1', params: { size: [0.7, 0.7 + 0.15 * (k % 4), 0.7] }, at: { pos: [3 * Math.cos((k * Math.PI) / 6), 0.35 + 0.075 * (k % 4), 3 * Math.sin((k * Math.PI) / 6)] }, material: 'box_mat' };
+  if (flare) items.flare = { kind: 'effect@1', params: { kind: 'flare', flare: { from: 'lights', ghosts: 8, halo: 0.05, streak: { count: 6, length: 0.25, anamorphic: false }, starburst: { blades: 6 }, intensity: 1 } } };
+  let order = 0;
+  for (const [id, item] of Object.entries(items)) Object.assign(item, { id, name: id, order: `a${String(order++).padStart(3, '0')}`, layer: 'main' });
+  return { format: 1, id: 'flares-mirrors', profile: 'scene', title: 'Flares and mirrors', size: FLARE_SIZE, camera: 'cam', seed: 465,
+    transport: { span: '10s' }, budget: { class: 'showpiece' }, layers: { main: { writer: 'agent:bench', title: 'main', order: 'a0' } }, items,
+    channels: { spin: { target: 'items/cam/params/orbit/azimuth', type: 'f32', keys: { k0: { t: '0s', value: 30, interp: 'linear' }, k1: { t: '10s', value: 150, interp: 'linear' } } } } };
+}
+const FLARE_FINISH = [
+  { print_wear: { flicker: '5%', weave: 1.5, scratches: { count: [1, 3], width: 2, life: 6 }, dust: { density: 0.3, size: 3 }, hair: 0.2, gate: { corner_radius: 40, softness: 8 }, rate: 24 } },
+  { tone_curve: { black: 0.04, white: 0.96, contrast: 1.15, toe: 0.2, shoulder: 0.2 } },
+  { screen: { kind: 'crt', scanlines: 240, mask: 'aperture', curvature: 0.1 } },
+  { grain: { amount: '4%', size: '1px', tone: 'flat', rate: 24 } },
+  { vignette: { color: 'ink', shape: 'round', inner: 0.45, outer: 1, amount: 0.7, aspect: 'frame' } },
+];
+workloads['flares-mirrors'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const fixtures = join(root, 'tests', 'acceptance', '465', 'fixtures');
+  const look2d = JSON.parse(readFileSync(join(fixtures, 'look.json'), 'utf8'));
+  // A physical look as the suite's FILMIC: its 2D look's palette, roles, fonts and status, a physical basis.
+  const look = { ...look2d, id: 'filmic-465', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const docs = Object.fromEntries(['plain', 'flare', 'mirror'].map((k) => {
+      const path = join(dir, `${k}.json`);
+      writeFileSync(path, JSON.stringify(flareStage({ flare: k === 'flare', mirror: k === 'mirror' })));
+      return [k, path];
+    }));
+    const side = (doc, lk) => ({ call: 'view3d', doc, look: lk, size: FLARE_SIZE, frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const indexed = { ...look2d, basis: { indexed: { size: [320, 180], scale: 6, palette: ['ground'], tables: {}, protected: [], snap: 'integer', light: { max: 255 } } } };
+    const wall = { format: 1, id: 'indexed-465', profile: 'figure', title: 'Indexed', size: FLARE_SIZE, seed: 465, transport: { span: '1s' }, budget: { class: 'showpiece' },
+      layers: { main: { writer: 'agent-a', title: 'Main', order: 'a1' } }, items: {} };
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [side(docs.plain, look), side(docs.plain, { ...look, finish: FLARE_FINISH }), side(docs.flare, look), side(docs.mirror, look),
+        { call: 'film2d', doc: wall, look: indexed, frames: 1, hash: true }] });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [plain, finish, flare, mirror] = answer.replies.slice(0, 4).map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      return { plain_gpu_ms: plain, finish_gpu_ms: Math.max(0, finish - plain), flare_gpu_ms: Math.max(0, flare - plain),
+        mirror_share: Math.max(0, (mirror - plain) / plain), indexed_target_bytes: answer.replies[4].indexed.target_bytes };
+    });
+    console.log(JSON.stringify({ task: 'canvas-flares-mirrors', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #166: the water's GPU cost at 1080p on a release `deep-gpu`, each the difference of two sides' median `gpu_ms` over
+// 300 frames, the water against the same plate as a plain mirror (strength 1, blur 0, roughness 0), so the mirror's own
+// pass is in both: a 400 m lake filling the lower half of the frame (four waves, ripples, rain) seen level from 2 m, and
+// a 10 m plate of 256 × 256 cells seen 300 m away, whose difference bounds its waves' vertex cost. One warm-up run and
+// five, each a fresh process. The stages are tests/acceptance/166/budgets.test.ts's.
+const WATER_WAVES = [
+  { direction: 20, length: 9, amplitude: 0.12, steepness: 0.5 },
+  { direction: 110, length: 6, amplitude: 0.08, steepness: 0.6 },
+  { direction: 235, length: 4.5, amplitude: 0.05, steepness: 0.4 },
+  { direction: 300, length: 3.2, amplitude: 0.03, steepness: 0.7 },
+];
+function waterStage(kind, water) {
+  const plain = { base_color: [0.1, 0.12, 0.12, 1], roughness: 0, mirror: { strength: 1, blur: 0, plane: 'lake' } };
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'perspective', position: kind === 'lake' ? [0, 2, 0] : [0, 40, 300], target: kind === 'lake' ? [0, 2, -100] : [0, 0, 0], fov: 60, near: 0.1, far: 1000 } },
+    sky: { kind: 'sky@1', params: { top: [0.15, 0.3, 0.75, 1], low: [0.6, 0.7, 0.85, 1], ambient_top: [0.25, 0.25, 0.25], ambient_low: [0.1, 0.1, 0.1] } },
+    sun: { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-30, 30, 0] } },
+    'lake-water': { kind: 'material@1', params: water ? { roughness: 0, water } : plain },
+    crate: { kind: 'material@1', params: { base_color: [0.55, 0.38, 0.2, 1], roughness: 0.7 } },
+    lake: { kind: 'plate@1', params: { grid: [256, 256], size: kind === 'lake' ? [400, 400] : [10, 10] }, at: { pos: [0, 0, 0] }, material: 'lake-water' },
+  };
+  if (kind === 'lake') for (let k = 0; k < 12; k++) items[`crate${k}`] = { kind: 'mark.box@1', params: { size: [1.5, 1.5, 1.5] }, at: { pos: [-15 + 2.7 * k, 0.5, -20 - 4 * (k % 3)] }, material: 'crate' };
+  let order = 0;
+  for (const [id, item] of Object.entries(items)) Object.assign(item, { id, name: id, order: `a${String(order++).padStart(3, '0')}`, layer: 'main' });
+  return { format: 1, id: `water-${kind}`, profile: 'scene', title: 'Water', size: FLARE_SIZE, camera: 'cam', seed: 166, transport: { span: '30s' },
+    requires: { modules: { scene3d: '^1' } }, budget: { class: 'showpiece' }, layers: { main: { writer: 'agent:bench', title: 'main', order: 'a0' } }, items };
+}
+workloads.water = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'filmic-166', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const stages = {
+      lake: waterStage('lake', { waves: WATER_WAVES, ripples: { strength: 0.3 }, rain: 50 }), lakeMirror: waterStage('lake', null),
+      pond: waterStage('pond', { waves: WATER_WAVES, ripples: { strength: 0 }, rain: 0 }), pondMirror: waterStage('pond', null),
+    };
+    const docs = Object.fromEntries(Object.entries(stages).map(([k, d]) => {
+      const path = join(dir, `${k}.json`);
+      writeFileSync(path, JSON.stringify(d));
+      return [k, path];
+    }));
+    const side = (doc) => ({ call: 'view3d', doc, look, size: FLARE_SIZE, frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: ['lake', 'lakeMirror', 'pond', 'pondMirror'].map((k) => side(docs[k])) });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [lake, lakeMirror, pond, pondMirror] = answer.replies.map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      const water = answer.replies[0].frames.map((f) => f.passes_ms?.['scene3d.water'] ?? 0);
+      return { lake_gpu_ms: Math.max(0, lake - lakeMirror), waves_vertex_ms: Math.max(0, pond - pondMirror), water_pass_ms: median(water), mirror_gpu_ms: lakeMirror };
+    });
+    console.log(JSON.stringify({ task: 'canvas-water', fingerprint, runs: measured }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -732,8 +886,10 @@ const EFFICIENCY = {
   'canvas-scene-read': { summary_ms: (r) => r.summary.ms, summary_tokens: (r) => r.summary.tokens, page_ms: (r) => r.page.ms, page_rows: (r) => r.page.rows },
   'canvas-idle': { frames: (r) => r.frames, wakeups: (r) => r.wakeups, cpu_fraction: (r) => r.cpu_fraction },
   'replica-cold-start': { first_settled_ms: (r) => r.ms },
+  'canvas-flares-mirrors': { finish_gpu_ms: (r) => r.finish_gpu_ms, flare_gpu_ms: (r) => r.flare_gpu_ms, mirror_share: (r) => r.mirror_share, indexed_target_bytes: (r) => r.indexed_target_bytes },
+  'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes']);
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -768,6 +924,14 @@ const named = {
     return [first.length ? `pipelines compiled on the first frame: ${first.join(', ')}` : 'no pipeline compiled on the first frame'];
   },
 };
+
+/** The window each canvas-idle run held (#1551): PASS only when all five runs say it was shown throughout. */
+function shownWindow(runs) {
+  const states = runs.map((r) => r.window?.state ?? 'headless');
+  const off = states.map((state, i) => `run ${i + 1}: ${state}`).filter((_, i) => states[i] !== 'shown');
+  if (states.length !== RUNS) off.push(`${states.length} runs, not ${RUNS}`);
+  return off.length ? { status: 'INCONCLUSIVE', runs: states, reason: off.join(', ') } : { status: 'PASS', runs: states };
+}
 
 function judgeEfficiency(current) {
   const task = current.task;
@@ -805,9 +969,26 @@ function judgeEfficiency(current) {
     }
     judged[name] = verdict;
   }
-  const statuses = Object.values(judged).map((v) => v.status);
-  const status = ['FAIL', 'BLOCKED', 'INCONCLUSIVE'].find((s) => statuses.includes(s)) ?? 'PASS';
-  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
+  // #1551: canvas-idle holds a shown window; a run hidden, covered, on a sleeping display or headless can't pass.
+  const window = task === 'canvas-idle' ? shownWindow(current.runs ?? []) : null;
+  if (window?.reason) reasons.push(`window: ${window.reason}`);
+  const statuses = [...Object.values(judged), ...(window ? [window] : [])].map((v) => v.status);
+  let status = ['FAIL', 'BLOCKED', 'INCONCLUSIVE'].find((s) => statuses.includes(s)) ?? 'PASS';
+  // A window that wasn't shown leaves its run's readings saying nothing of a shown window: short of a FAIL, that is
+  // INCONCLUSIVE, never PASS and never BLOCKED by the readings it couldn't make.
+  if (window && window.status !== 'PASS' && status !== 'FAIL') status = 'INCONCLUSIVE';
+  console.log(JSON.stringify({ task, status, profile, targets: judged, ...(window ? { window } : {}), ...(task === 'canvas-idle' ? { energy: energyReading(current.runs ?? []) } : {}),
+    ...(reasons.length ? { reason: reasons.join(' | ') } : {}) }));
+}
+
+/** The idle task's energy, a reading beside CPU and never a target (#1492): the counter's nanojoules a run, or BLOCKED naming it when a run reads zero. */
+function energyReading(runs) {
+  const counter = runs.find((r) => r.energy?.counter)?.energy.counter ?? 'ri_energy_nj';
+  const nj = runs.map((r) => r.energy?.nj);
+  if (nj.length === 0 || nj.some((v) => !(Number.isFinite(v) && v > 0))) {
+    return { status: 'BLOCKED', counter, reason: `the counter ${counter} read ${JSON.stringify(nj)} nJ over the runs; a reading of zero is not energy` };
+  }
+  return { status: 'READING', counter, runs: nj };
 }
 
 // #417's looks (tests/acceptance/417/README.md, "AC5's reports"): a release `deep-gpu`'s `film2d` plays a 2D film
@@ -843,6 +1024,66 @@ workloads['look-frames'] = () => {
     }])) };
   });
   console.log(JSON.stringify({ task: 'canvas-look-frames', fingerprint, runs: measured }));
+};
+
+// #149's drawn looks (tests/acceptance/149/README.md, "AC10's reports"): a release `deep-gpu` plays each family's
+// fixture at 1080p, in 2D through `film2d` and in 3D through `view3d`, 30 warm frames then 300 timed, one warm-up run
+// and five, each run a fresh process. `paper-cost` plays the paper family's 2D film with its paper and on a flat ground.
+const DRAWN_149 = join('tests', 'acceptance', '149', 'fixtures');
+const DRAWN_SIZE = [1920, 1080];
+/** Each family fixture, with its look over the suite's base look. */
+function drawnFamilies() {
+  const base = JSON.parse(readFileSync(join(root, DRAWN_149, 'look.json'), 'utf8'));
+  return readdirSync(join(root, DRAWN_149, 'families')).filter((f) => f.endsWith('.json')).sort().map((f) => {
+    const fixture = `tests/acceptance/149/fixtures/families/${f}`;
+    const family = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+    return { name: f.replace('.json', ''), fixture, family, look: { ...base, ...family.look } };
+  });
+}
+
+workloads['drawn-frames'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const families = drawnFamilies();
+  const dir = mkdtempSync(join(tmpdir(), 'deep-drawn-'));
+  try {
+    const paths = families.map(({ name, family }) => {
+      const path = join(dir, `${name}-3d.json`);
+      writeFileSync(path, JSON.stringify(family['3d']));
+      return path;
+    });
+    const frames = WARM_UP + WARM_FRAMES;
+    const timed = (reply) => reply.frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms }));
+    const measured = runs(() => {
+      const flat = films(families.map(({ family, look }) => ({ call: 'film2d', doc: family['2d'], look, fps: 30, frames })));
+      const deep = films(families.map(({ look }, i) => ({ call: 'view3d', doc: paths[i], look, size: DRAWN_SIZE, fps: 30, frames, timings: true })));
+      return { families: Object.fromEntries(families.map(({ name, fixture }, i) => [name, {
+        '2d': { fixture, size: DRAWN_SIZE, frames: timed(flat[i]) },
+        '3d': { fixture, size: DRAWN_SIZE, frames: timed(deep[i]) },
+      }])) };
+    });
+    console.log(JSON.stringify({ task: 'canvas-drawn-frames', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+workloads['paper-cost'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const { family, look, fixture } = drawnFamilies().find((f) => f.name === 'paper');
+  const flatLook = { ...look, ground: { kind: 'flat' } };
+  const doc = family['2d'];
+  const measured = runs(() => {
+    const frames = WARM_UP + WARM_FRAMES;
+    const [paper, flat, paperHash, flatHash] = films([
+      { call: 'film2d', doc, look, fps: 30, frames },
+      { call: 'film2d', doc, look: flatLook, fps: 30, frames },
+      { call: 'film2d', doc, look, fps: 30, frames: 1, hash: true },
+      { call: 'film2d', doc, look: flatLook, fps: 30, frames: 1, hash: true },
+    ]);
+    const timed = (reply) => ({ frames: reply.frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms })) });
+    return { fixture, paper: timed(paper), flat: timed(flat), paper_hash: paperHash.frames[0].pixel_hash, flat_hash: flatHash.frames[0].pixel_hash };
+  });
+  console.log(JSON.stringify({ task: 'canvas-paper-cost', fingerprint, runs: measured }));
 };
 
 /** A walk through every ordered pair of distinct `ids` once, starting and ending at the first (Hierholzer). */

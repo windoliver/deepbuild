@@ -1,8 +1,48 @@
 //! Issue #327: the card's answer, as the `ask.answer` params the shell signs as the device you paired and sends to
 //! the hub. The answer the card sends is the option the shell chose, with the words or image you typed beside it
 //! as its reason, bound to the plan digest the card showed; words with no option are `decision: none`.
+//!
+//! Issue #1454: [`send`] is that path: the app's own device signs the params and the hub takes them. It blocks while the
+//! OS confirms you, so the card runs it off the main thread, on a connection of its own.
 
 use serde_json::{json, Map, Value};
+
+use crate::device::Device;
+use crate::hub::{HubClient, HubError};
+
+/// Signs `params`, the card's `ask.answer` params, and sends them. A device the hub no longer knows, as after a restore,
+/// pairs again, once.
+pub fn send(params: &Value) -> Result<Value, HubError> {
+    let mut client = HubClient::app()?;
+    let params = params.as_object().cloned().unwrap_or_default();
+    let device = Device::paired(&mut client)?;
+    match client.call("ask.answer", device.sign(params.clone())) {
+        Err(HubError::Refused(refusal)) if refusal["code"] == "credential" => {
+            Device::forget();
+            let device = Device::paired(&mut client)?;
+            client.call("ask.answer", device.sign(params))
+        }
+        reply => reply,
+    }
+}
+
+/// The OS confirming you for one press the card can't trust by itself: the hub asks, naming the ask and the option.
+#[cfg(not(feature = "test-confirm"))]
+pub fn confirm(ask: &str, reason: &str) -> Result<(), HubError> {
+    HubClient::app()?
+        .call("ask.confirm", json!({ "ask": ask, "reason": reason }))
+        .map(|_| ())
+}
+
+/// A file stands in for the OS's prompt, read at each ask: holding `confirmed` is you, anything else a cancelled prompt.
+#[cfg(feature = "test-confirm")]
+pub fn confirm(_: &str, _: &str) -> Result<(), HubError> {
+    let said = std::env::var_os("DEEP_APP_TEST_CONFIRM").map(std::fs::read_to_string);
+    match said {
+        Some(Ok(said)) if said.trim() == "confirmed" => Ok(()),
+        _ => Err(HubError::Protocol("the prompt was cancelled".to_owned())),
+    }
+}
 
 /// What the card answers with: the option the shell chose, if any, your words beside it, and the plan digest the
 /// card showed for an authority ask.

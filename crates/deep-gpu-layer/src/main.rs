@@ -19,7 +19,10 @@ mod columns;
 mod compare;
 mod compile;
 mod conformance;
+mod drawn;
 mod effects;
+#[cfg(feature = "test-faults")]
+mod faults;
 mod film;
 mod fixtures;
 mod flat;
@@ -28,6 +31,7 @@ mod golden;
 mod groups;
 mod guard;
 mod host;
+mod indexed;
 mod interp_suite;
 mod levels;
 mod live;
@@ -35,8 +39,10 @@ mod liveview;
 mod lod;
 mod marks2d;
 mod opframe;
+mod paintfx;
 mod parity;
 mod plugin;
+mod print2d;
 mod reference;
 mod scene;
 mod seam;
@@ -51,6 +57,7 @@ mod timing;
 mod tone;
 mod validation;
 mod view3d;
+mod warm;
 mod window;
 mod worker;
 
@@ -72,6 +79,20 @@ use crate::worker::Worker;
 /// The wrong programs, each reachable only through `--planted` (README: Planted programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #432's wrong warm-ups (tests/acceptance/432/README.md: Planted programs): only the
+    /// feature sets in use at t = 0; only each variant set's default option's fused chain; only
+    /// the pipelines that draw into the view.
+    WarmsInUseAtT0,
+    FusesDefaultOptions,
+    WarmsViewOnly,
+    /// #431's wrong programs (tests/acceptance/431/README.md: Planted programs).
+    VelocityFromPreviousFrame,
+    EmissionThresholdsColor,
+    BuildsUnreadTargets,
+    SampleGradImplicit,
+    NoDivergenceRule,
+    BackdropAfterSeeThrough,
+    PeriodFirstOctave,
     /// #430's wrong programs (tests/acceptance/430/README.md: Planted programs).
     GroupPassAtLayerEnd,
     GroupPassReadsEarlier,
@@ -80,6 +101,8 @@ pub enum Planted {
     BackdropReadsLaterItems,
     BackdropPastCoverage,
     BackdropReadsStatus,
+    /// #467 AC5's: a bevel lit from the side opposite its light.
+    BevelLitOpposite,
     VividLightAsLinearLight,
     DissolveReadsPlayback,
     PassLinearIn2d,
@@ -132,6 +155,12 @@ pub enum Planted {
     /// #383's wrong programs (tests/acceptance/383/README.md: Planted programs).
     LoadsEverything,
     SlowGpuFrame,
+    /// #465: each ghost at a fixed place, whatever its light.
+    FlareFixedGhosts,
+    /// #465: the flare built as if nothing covered its light.
+    FlareIgnoresOcclusion,
+    /// #166: the water's foam carried from frame to frame as simulation state.
+    WaterFoamKeepsState,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -158,6 +187,11 @@ pub enum Planted {
     OutlinesBeforeUpscale,
     /// #1174's wrong program: screen-size labels drawn in the geometry pass, before the upscale.
     LabelsBeforeUpscale,
+    /// #1173's wrong programs (tests/acceptance/1173/README.md: Planted programs).
+    SingleSampleTargets,
+    ClaimsMsaaOverSingleSample,
+    PuffBlockCopy,
+    ResolveAccumulatesFrames,
     /// #385's wrong programs (tests/acceptance/385/README.md: Planted programs): the GPU layer's
     /// solid fills two codes redder; GPUI's glyph quads half a device px right; Vello GPU on
     /// whatever its spike record says; each sector of a group composited on its own.
@@ -212,6 +246,8 @@ pub enum Planted {
     /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
     /// environment light alone; metallic premixed into one F0 before shading.
     DrawsBlack,
+    InkFillFlat,
+    RimKeepsFirst,
     DropsClouds,
     /// #424's wrong programs.
     AddWritesDepth,
@@ -265,6 +301,10 @@ pub enum Planted {
     OrenNayarUncompensated,
     RetroreflectionIgnored,
     FlakesByPixel,
+    // #481: the subsurface spread takes every tap, whatever part it lands on; the spread light is
+    // added to the whole diffuse.
+    SubsurfaceAcrossParts,
+    SubsurfaceAddsToDiffuse,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -273,11 +313,36 @@ pub enum Planted {
     MipsLevel0Only,
     MipsKeptUnderOldKey,
     PoolWithoutClear,
+    // #252: stepped carried state's wrong programs.
+    StepsPerFrame,
+    RingKeepsEveryCheckpoint,
+    CarriedClassExact,
+    // #464: print and pixel looks' wrong programs (tests/acceptance/464/README.md).
+    VignettePixels,
+    GrainFromT,
+    PartialCoverage,
+    PuffFullOpacity,
+    LightAfterUpscale,
+    FlickerWallTime,
+    /// #1413's wrong programs (tests/acceptance/1413/README.md: Planted programs).
+    KeepsLatestError,
+    ReopensTightLoop,
+    ResizeLeavesRendering,
 }
 
 impl Planted {
     fn parse(name: &str) -> Option<Planted> {
         Some(match name {
+            "warms_in_use_at_t0" => Planted::WarmsInUseAtT0,
+            "fuses_default_options" => Planted::FusesDefaultOptions,
+            "warms_view_only" => Planted::WarmsViewOnly,
+            "velocity_from_previous_frame" => Planted::VelocityFromPreviousFrame,
+            "emission_thresholds_color" => Planted::EmissionThresholdsColor,
+            "builds_unread_targets" => Planted::BuildsUnreadTargets,
+            "sample_grad_implicit" => Planted::SampleGradImplicit,
+            "no_divergence_rule" => Planted::NoDivergenceRule,
+            "backdrop_after_see_through" => Planted::BackdropAfterSeeThrough,
+            "period_first_octave" => Planted::PeriodFirstOctave,
             "group_pass_at_layer_end" => Planted::GroupPassAtLayerEnd,
             "group_pass_reads_earlier" => Planted::GroupPassReadsEarlier,
             "group_pass_past_grow" => Planted::GroupPassPastGrow,
@@ -285,6 +350,7 @@ impl Planted {
             "backdrop_reads_later_items" => Planted::BackdropReadsLaterItems,
             "backdrop_past_coverage" => Planted::BackdropPastCoverage,
             "backdrop_reads_status" => Planted::BackdropReadsStatus,
+            "bevel_lit_opposite" => Planted::BevelLitOpposite,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,
@@ -331,6 +397,9 @@ impl Planted {
             "guard_to_grey" => Planted::GuardToGrey,
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
+            "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
+            "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
+            "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
@@ -350,6 +419,10 @@ impl Planted {
             "status_without_depth" => Planted::StatusWithoutDepth,
             "outlines_before_upscale" => Planted::OutlinesBeforeUpscale,
             "labels_before_upscale" => Planted::LabelsBeforeUpscale,
+            "single_sample_targets" => Planted::SingleSampleTargets,
+            "claims_msaa_over_single_sample" => Planted::ClaimsMsaaOverSingleSample,
+            "puff_block_copy" => Planted::PuffBlockCopy,
+            "resolve_accumulates_frames" => Planted::ResolveAccumulatesFrames,
             "shifts_fill_two_codes" => Planted::ShiftsFillTwoCodes,
             "shifts_glyph_quads" => Planted::ShiftsGlyphQuads,
             "ignores_spike" => Planted::IgnoresSpike,
@@ -384,6 +457,8 @@ impl Planted {
             "anisotropy_one" => Planted::AnisotropyOne,
             "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
+            "ink_fill_flat" => Planted::InkFillFlat,
+            "rim_keeps_first" => Planted::RimKeepsFirst,
             "drops_clouds" => Planted::DropsClouds,
             "add_writes_depth" => Planted::AddWritesDepth,
             "add_skips_depth_test" => Planted::AddWithoutDepthTest,
@@ -430,6 +505,8 @@ impl Planted {
             "oren_nayar_uncompensated" => Planted::OrenNayarUncompensated,
             "retroreflection_ignored" => Planted::RetroreflectionIgnored,
             "flakes_by_pixel" => Planted::FlakesByPixel,
+            "subsurface_across_parts" => Planted::SubsurfaceAcrossParts,
+            "subsurface_adds_to_diffuse" => Planted::SubsurfaceAddsToDiffuse,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,
@@ -437,6 +514,18 @@ impl Planted {
             "mips_level0_only" => Planted::MipsLevel0Only,
             "mips_kept_under_old_key" => Planted::MipsKeptUnderOldKey,
             "pool_without_clear" => Planted::PoolWithoutClear,
+            "steps_per_frame" => Planted::StepsPerFrame,
+            "ring_keeps_every_checkpoint" => Planted::RingKeepsEveryCheckpoint,
+            "carried_class_exact" => Planted::CarriedClassExact,
+            "vignette_pixels" => Planted::VignettePixels,
+            "grain_from_t" => Planted::GrainFromT,
+            "partial_coverage" => Planted::PartialCoverage,
+            "puff_full_opacity" => Planted::PuffFullOpacity,
+            "light_after_upscale" => Planted::LightAfterUpscale,
+            "flicker_wall_time" => Planted::FlickerWallTime,
+            "keeps_latest_error" => Planted::KeepsLatestError,
+            "reopens_tight_loop" => Planted::ReopensTightLoop,
+            "resize_leaves_rendering" => Planted::ResizeLeavesRendering,
             _ => return None,
         })
     }
@@ -530,7 +619,35 @@ impl App {
                 "slots": slots,
                 "msaa": "transient",
                 "fps_cap": fps_cap,
+                "rebuilds": s.view.rebuilds(),
             })
+        })
+    }
+
+    /// `raise_errors` (#1413, test-faults): `count` identical validation errors on the app's
+    /// device, through its uncaptured-error callback, as fast as it can.
+    #[cfg(feature = "test-faults")]
+    fn raise_errors(&mut self, call: &Value) -> Value {
+        let count = call["count"].as_u64().unwrap_or(0);
+        self.worker.call(move |state| {
+            let device = match state.gpu.recover() {
+                Ok(d) => d,
+                Err(e) => return refused("no_device", e),
+            };
+            let before = deep_gpu::device::raised_total();
+            let start = std::time::Instant::now();
+            for _ in 0..count {
+                // A buffer both read- and write-mapped: invalid, the same error each time.
+                drop(device.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("raise_errors"),
+                    size: 4,
+                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::MAP_WRITE,
+                    mapped_at_creation: false,
+                }));
+            }
+            let ms = start.elapsed().as_secs_f64() * 1e3;
+            device.take_raised();
+            json!({"raised": deep_gpu::device::raised_total() - before, "ms": ms, "burst": deep_gpu::device::BURST})
         })
     }
 
@@ -645,7 +762,7 @@ impl App {
             Some("calibrate") => calibrate::calibrate(self),
             Some("reference") => effects::reference(self, out, call),
             Some("check_operator") if opframe::wants(call) => opframe::call(self, out, call),
-            Some("check_operator") => effects::check_operator(self, call),
+            Some("check_operator") => effects::check_operator(self, out, call),
             Some("op") => effects::op(self, call),
             Some("columns") => columns::call(self, call),
             Some("exact") => effects::exact(self, out),
@@ -656,13 +773,15 @@ impl App {
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
             Some("live") => live::call(self, out, call),
+            #[cfg(feature = "test-faults")]
+            Some("raise_errors") => self.raise_errors(call),
             Some("live_frame") => parity::live_frame(self, out, call),
             Some("layers") => marks2d::layers(self, out, call),
             Some("window2d") => marks2d::window2d(self, out, call),
             Some("vello_gpu") => marks2d::vello_gpu(self),
             Some("spike2d") => marks2d::spike2d(self, out, call),
-            Some("film2d") => film::film2d(self, call),
-            Some("canonical") => live::canonical(self, call),
+            Some("film2d") => film::film2d(self, out, call),
+            Some("canonical") => live::canonical(self, out, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
             #[cfg(feature = "test-meter")]
@@ -719,12 +838,20 @@ fn main() {
         let rest: Vec<String> = args.collect();
         std::process::exit(deep_codecs::serve(deep_codecs::DECODE_WORKER, &rest));
     }
+    // #149: a copy of this binary started as a film's encode tool.
+    if first.as_deref() == Some("encode-tool") {
+        let rest: Vec<String> = args.collect();
+        std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &rest));
+    }
     if first.as_deref() != Some("run") {
         bad_input();
     }
     let (mut backend, mut planted) = (Backend::Gpu, None);
     let (mut startup, mut validation) = (Startup::default(), false);
     let mut headless = false;
+    // The planted reopen (#1413, test-faults): the first n reopens fail, or every one.
+    #[allow(unused_mut)]
+    let mut fail_reopen: Option<Option<u64>> = None;
     // The shipped record, or in test-spike builds the one `--spike-record` names.
     #[allow(unused_mut)]
     let mut spike = marks2d::SPIKE.to_string();
@@ -755,6 +882,15 @@ fn main() {
                 None => bad_input(),
             },
             "--validation" => validation = true,
+            #[cfg(feature = "test-faults")]
+            "--fail-reopen" => match args.next().as_deref() {
+                Some("always") => fail_reopen = Some(None),
+                Some(n) => match n.parse() {
+                    Ok(n) => fail_reopen = Some(Some(n)),
+                    Err(_) => bad_input(),
+                },
+                None => bad_input(),
+            },
             #[cfg(feature = "test-seam")]
             "--adapters" => match args.next().as_deref().and_then(seam::test_adapters) {
                 Some(a) => startup.adapters = Some(a),
@@ -814,6 +950,9 @@ fn main() {
             std::process::exit(1);
         }
     };
+    if let Some(n) = fail_reopen {
+        worker.call(move |state| state.gpu.fail_reopens(n));
+    }
     if headless {
         // The headless canvas worker opens no window and holds no app: no GPUI context, the GPU
         // layer drawn into its offscreen slots (#140).
@@ -871,6 +1010,7 @@ fn serve(mut call: impl FnMut(&str, &Value) -> Value) {
                     .iter()
                     .map(|c| call(&out, c))
                     .collect();
+                deep_gpu::device::flush_suppressed();
                 json!({"ok": true, "replies": replies})
             }
             _ => json!({"ok": false, "code": "bad_input"}),

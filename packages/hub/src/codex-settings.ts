@@ -15,14 +15,14 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Codex's Stop hook timeout, set once at setup: its default is 600 s, with no ceiling. */
-export const STOP_TIMEOUT_S = 45 * 60;
+const STOP_TIMEOUT_S = 45 * 60;
 /** What Codex gives an MCP server's tool call unless `tool_timeout_sec` says otherwise. */
 const TOOL_TIMEOUT_S = 60;
 /** The slow lane's expected time unless `lanes.slow.expected_ms` in config.json says otherwise. */
 const SLOW_LANE_MS = 20 * 60_000;
 /** The MCP server's name in config.toml: its tools reach PreToolUse as `mcp__deep__<tool>`. */
 const MCP_SERVER = 'deep';
-export const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PreCompact', 'PostCompact', 'SubagentStart', 'SubagentStop', 'Stop', 'Interrupt', 'SessionEnd'];
+const HOOKS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PreCompact', 'PostCompact', 'SubagentStart', 'SubagentStop', 'Stop', 'Interrupt', 'SessionEnd'];
 
 const home = (): string => process.env.CODEX_HOME || join(homedir(), '.codex');
 /** Whether Codex has a home here: setup leaves a machine without one alone. */
@@ -76,7 +76,7 @@ export function withEntries(text: string, hook: string): string {
   return changed ? `${JSON.stringify({ ...parsed.value, hooks }, null, 2)}\n` : text;
 }
 /** Keeps what setup wrote, and in which home: the hub and doctor read this home whatever their own environment says. */
-export function recordEntries(root: string, hook: string, server: { node: string; cli: string }): void {
+export function recordEntries(root: string, hook: string, server: Server): void {
   writeThrough(recordFile(root), `${JSON.stringify({ hooks: ourGroups(hook), home: home(), server }, null, 2)}\n`);
 }
 /** What setup kept for Codex, gone at undo. */
@@ -115,7 +115,7 @@ export const recordedEntries = (root: string): { event: string; command: string 
 
 // ---- config.toml: read as far as DeepBuild needs it, by table; what TOML itself refuses refuses the file.
 
-export type Tables = Map<string, Map<string, string>>;
+type Tables = Map<string, Map<string, string>>;
 /** Where the string starting at `i` ends, one past its closing quote; -1 if it never closes. */
 function stringEnd(s: string, i: number): number {
   const quote = s[i]!;
@@ -258,28 +258,37 @@ const configTables = (file = codexConfig()): Tables | undefined => {
   } catch { return undefined; }
 };
 /** `text` with our MCP server added at its end, or the same bytes once a server of that name is there. */
-export function withServer(text: string, node: string, cli: string): string {
+/** DeepBuild's MCP server as setup writes it into Codex's config.toml: the program and its arguments. */
+interface Server { command: string; args: string[] }
+/** A server given as Node and the CLI's script, as setup wrote it before installed versions, or as its program and arguments. */
+const serverOf = (server: Server | string, cli?: string): Server => (typeof server === 'string' ? { command: server, args: [cli ?? '', 'mcp'] } : server);
+export function withServer(text: string, given: Server | string, cli?: string): string {
+  const server = serverOf(given, cli);
   const read = tomlTables(text);
   if ('refused' in read) throw Error(`${codexConfig()} ${read.refused}`);
   if (read.tables.has(`mcp_servers.${MCP_SERVER}`)) return text;
   const lead = text && !text.endsWith('\n') ? '\n' : '';
-  return `${text}${lead}${text ? '\n' : ''}[mcp_servers.${MCP_SERVER}]\ncommand = ${JSON.stringify(node)}\nargs = ${JSON.stringify([cli, 'mcp'])}\ndefault_tools_approval_mode = "approve"\n`;
+  return `${text}${lead}${text ? '\n' : ''}[mcp_servers.${MCP_SERVER}]\ncommand = ${JSON.stringify(server.command)}\nargs = ${JSON.stringify(server.args)}\ndefault_tools_approval_mode = "approve"\n`;
 }
 /** `text` with the server's table taken out, from its header to the next not under it, your additions too, when its command and args are what setup wrote. */
-export function withoutServer(text: string, node: string, cli: string): string {
+export function withoutServer(text: string, given: Server | string, cli?: string): string {
+  const server = serverOf(given, cli);
   const header = `[mcp_servers.${MCP_SERVER}]\n`;
   const start = text.startsWith(header) ? 0 : text.indexOf(`\n${header}`) + 1;
   if (start === 0 && !text.startsWith(header)) return text;
   const after = start + header.length;
   const rest = new RegExp(`^[ \\t]*\\[(?!mcp_servers\\.${MCP_SERVER}\\.)`, 'm').exec(text.slice(after));
   const table = text.slice(after, rest ? after + rest.index : undefined).split('\n');
-  if (!table.includes(`command = ${JSON.stringify(node)}`) || !table.includes(`args = ${JSON.stringify([cli, 'mcp'])}`)) return text;
+  if (!table.includes(`command = ${JSON.stringify(server.command)}`) || !table.includes(`args = ${JSON.stringify(server.args)}`)) return text;
   return text.slice(0, start) + (rest ? text.slice(after + rest.index) : '');
 }
 /** The server setup recorded, for undo; undefined where it recorded none. */
-export function recordedServer(root: string): { node: string; cli: string } | undefined {
+export function recordedServer(root: string): Server | undefined {
   const set = readJson(recordFile(root))?.server;
-  return isObj(set) && typeof set.node === 'string' && typeof set.cli === 'string' ? { node: set.node, cli: set.cli } : undefined;
+  if (!isObj(set)) return undefined;
+  if (typeof set.command === 'string' && Array.isArray(set.args) && set.args.every((a) => typeof a === 'string')) return { command: set.command, args: set.args as string[] };
+  // What setup recorded before installed versions (#41): Node and the CLI's script.
+  return typeof set.node === 'string' && typeof set.cli === 'string' ? { command: set.node, args: [set.cli, 'mcp'] } : undefined;
 }
 /** Your `hooks = false` under [features], which setup never flips. */
 export const hooksDisabled = (root: string): boolean => configTables(join(recordedHome(root), 'config.toml'))?.get('features')?.get('hooks') === 'false';
@@ -331,7 +340,7 @@ const slowLaneMs = (root: string): number => {
 /** Whether a stop can be held for a check whose deadline is `deadlineMs`: it must end at least 5 s before the timeout. */
 export const holdsFor = (deadlineMs: number, timeoutS: number): boolean => deadlineMs + HOLD_MARGIN_MS <= timeoutS * 1000;
 
-export interface CodexRelation { name: 'slow lane' | 'deep_ask'; holds: boolean; text: string; waitMs: number }
+interface CodexRelation { name: 'slow lane' | 'deep_ask'; holds: boolean; text: string; waitMs: number }
 export function codexRelations(root: string): CodexRelation[] {
   if (!installedCodex(root)) return [];
   const out: CodexRelation[] = [];
@@ -352,7 +361,7 @@ export function codexRelations(root: string): CodexRelation[] {
   return out;
 }
 
-export interface Listed { command: string; eventName: string; trustStatus: string; enabled: boolean }
+interface Listed { command: string; eventName: string; trustStatus: string; enabled: boolean }
 /** Where the hub keeps DeepBuild's entries as Codex's hook list last reported them. */
 const trustFile = (root: string): string => join(root, 'codex-trust.json');
 /** Reads Codex's hook list and keeps DeepBuild's entries of it, for health and doctor; a list it can't get changes nothing. */

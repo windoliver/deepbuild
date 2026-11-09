@@ -88,10 +88,9 @@ impl State {
                 expected_ms: Some(ms),
             } => format!("says done · checks take {}", span(*ms)),
             State::Quiet { last_seen } => {
-                format!(
-                    "quiet · last seen {} ago",
-                    span(now.saturating_sub(*last_seen))
-                )
+                let age = now.saturating_sub(*last_seen);
+                changes_after(changes_in(age));
+                format!("quiet · last seen {} ago", span(age))
             }
             other => other.word().to_owned(),
         }
@@ -110,6 +109,35 @@ pub fn span_until(deadline: u64, now: u64) -> String {
     } else {
         span(left)
     }
+}
+
+thread_local! {
+    /// In ms from the `now` it was written at, when the soonest age a state's text showed since [`ages_written`]
+    /// next reads differently (#1546).
+    static AGE_CHANGES: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+/// When the soonest age written since the last call next reads differently, in ms from the `now` it was written at;
+/// `None` when no text written since showed an age. A view draws its texts, then takes this to set its next tick.
+pub fn ages_written() -> Option<u64> {
+    AGE_CHANGES.with(std::cell::Cell::take)
+}
+
+/// Notes that something just written from the clock reads differently `wait` ms from now.
+pub fn changes_after(wait: u64) {
+    AGE_CHANGES.with(|soonest| {
+        soonest.set(Some(soonest.get().map_or(wait, |was: u64| was.min(wait))));
+    });
+}
+
+/// How long until [`span`] of an age `ms` reads differently: at the next whole second, minute or hour it shows.
+pub fn changes_in(ms: u64) -> u64 {
+    let unit = match ms / 1000 {
+        s if s >= 3600 => 3_600_000,
+        s if s >= 60 => 60_000,
+        _ => 1000,
+    };
+    unit - ms % unit
 }
 
 /// A span of time as a person reads it: "4 min", "2 h", "12 s".
@@ -294,6 +322,20 @@ pub struct Table {
     asks: Vec<Value>,
     /// Each reading's newest value and the time it is as of, in ms (#1172).
     values: HashMap<String, (f64, u64)>,
+    /// Each start's facts from its `start.started` (#1348): the run's approval ask, the issue, the branch and
+    /// the repo, by start; and the session each start became, from its `start.session`.
+    starts: HashMap<String, Start>,
+    started: HashMap<String, String>,
+}
+
+/// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
+/// names a session's page shows.
+#[derive(Clone, Debug, Default)]
+struct Start {
+    ask: String,
+    issue: Option<u64>,
+    branch: String,
+    repo: String,
 }
 
 /// What a session's state is read from: of its own events, only the newest of each kind it reads, and each claim's
@@ -331,6 +373,8 @@ struct Session {
     readings: Vec<String>,
     /// How long each check's clean runs took, shortest first.
     took: HashMap<String, Vec<u64>>,
+    /// Its newest run's failure when that run failed (#1348): what it gave, its trace included, else its assertion.
+    failure: Option<String>,
 }
 
 impl Table {
@@ -357,6 +401,25 @@ impl Table {
             {
                 let as_of = data["as_of"].as_u64().unwrap_or(0);
                 self.values.insert(reading.to_owned(), (value, as_of));
+            }
+        }
+        if kind == "start.started" {
+            let data = &event["data"];
+            let text = |key: &str| data[key].as_str().unwrap_or_default().to_owned();
+            self.starts.insert(
+                text("run"),
+                Start {
+                    ask: text("ask"),
+                    issue: data["issue"].as_u64(),
+                    branch: text("branch"),
+                    repo: text("repo"),
+                },
+            );
+        }
+        if kind == "start.session" {
+            let data = &event["data"];
+            if let (Some(run), Some(session)) = (data["run"].as_str(), data["session"].as_str()) {
+                self.started.insert(session.to_owned(), run.to_owned());
             }
         }
         if kind == "task.created" {
@@ -388,13 +451,16 @@ impl Table {
         &self.order
     }
 
-    /// The title of the session's task.
+    /// The title of the session's task, as every surface draws it. The agent chooses it, so its controls and
+    /// direction marks show as the question card shows them (#1738); the record keeps the bytes.
     pub fn title(&self, session: &str) -> String {
-        self.titles
+        let title = self
+            .titles
             .get(session)
             .cloned()
             .flatten()
-            .unwrap_or_else(|| untitled(session))
+            .unwrap_or_else(|| untitled(session));
+        crate::question::visible(&title)
     }
 
     /// A session's state.
@@ -422,8 +488,8 @@ impl Table {
         else {
             return (shown.text(now), shown.entry());
         };
-        // The planted app reads a session waiting on you as working.
-        let planted = std::env::var("DEEP_HUB_PLANT").as_deref() == Ok("waiting-as-working");
+        // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
+        let planted = crate::plain::planted("waiting-as-working");
         let (word, entry) = match listed.as_str() {
             _ if planted && cause == "waiting" => ("working".to_owned(), "running"),
             "needs you" => ("needs you".to_owned(), "needs_you"),
@@ -486,6 +552,59 @@ impl Table {
             .get(&handle(ask))
             .and_then(|reading| reading.deadline)
             .or_else(|| ask["data"]["deadline"].as_u64())
+    }
+
+    /// The failure of the session's newest run, when it failed (#1348).
+    pub fn failure(&self, session: &str) -> Option<&str> {
+        self.sessions.get(session)?.failure.as_deref()
+    }
+
+    /// The real names a session's page shows of a session a work run started (#1348): the session, and its start's
+    /// issue, branch and repo. None for a session no start names.
+    pub fn names(&self, session: &str) -> Vec<String> {
+        let Some(start) = self
+            .started
+            .get(session)
+            .and_then(|run| self.starts.get(run))
+        else {
+            return Vec::new();
+        };
+        let mut names = vec![format!("Session {session}")];
+        names.extend(start.issue.map(|issue| format!("Issue #{issue}")));
+        names.extend((!start.branch.is_empty()).then(|| format!("Branch {}", start.branch)));
+        names.extend((!start.repo.is_empty()).then(|| format!("Repo {}", start.repo)));
+        names
+    }
+
+    /// Each work run whose every session has stopped (#1348): none queued, working, waiting on its checks or sent
+    /// back to try again. A run is its approval's ask, with its sessions in the order they started.
+    pub fn ended_runs(&self) -> Vec<(String, Vec<String>)> {
+        let mut runs: Vec<(String, Vec<String>)> = Vec::new();
+        for session in &self.order {
+            let Some(start) = self
+                .started
+                .get(session)
+                .and_then(|run| self.starts.get(run))
+            else {
+                continue;
+            };
+            match runs.iter_mut().find(|(ask, _)| *ask == start.ask) {
+                Some((_, sessions)) => sessions.push(session.clone()),
+                None => runs.push((start.ask.clone(), vec![session.clone()])),
+            }
+        }
+        runs.retain(|(_, sessions)| {
+            sessions.iter().all(|session| {
+                !matches!(
+                    self.state(session),
+                    State::Queued
+                        | State::Working
+                        | State::SaysDone { .. }
+                        | State::SentBack { .. }
+                )
+            })
+        });
+        runs
     }
 }
 
@@ -571,7 +690,13 @@ impl Session {
                     took(&mut self.took, &check, at, *finished);
                 }
             }
+            "run.finished" if data["outcome"] == "failed" => {
+                self.failure = ["actual", "assertion", "check"]
+                    .iter()
+                    .find_map(|key| text(&data[*key]).filter(|text| !text.is_empty()));
+            }
             "run.finished" if data["outcome"] == "passed" => {
+                self.failure = None;
                 let run = data["run"].to_string();
                 let at = event["ts"].as_u64();
                 self.passed.entry(run.clone()).or_default().push(at);
@@ -688,6 +813,28 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.
+    #[test]
+    fn an_age_changes_exactly_when_its_span_next_reads_differently() {
+        let ages = (0..200_000)
+            .step_by(997)
+            .chain([59_999, 60_000, 90_000, 3_599_999, 3_600_000, 7_300_123]);
+        for age in ages {
+            let wait = changes_in(age);
+            assert!(wait > 0, "{age}");
+            assert_eq!(
+                span(age + wait - 1),
+                span(age),
+                "{age} reads the same until {wait} ms on"
+            );
+            assert_ne!(
+                span(age + wait),
+                span(age),
+                "{age} reads differently {wait} ms on"
+            );
+        }
+    }
+
     fn table(events: &[Value]) -> Table {
         let mut table = Table::default();
         for event in events {
@@ -698,6 +845,21 @@ mod tests {
 
     fn ask(id: &str) -> Value {
         json!({"v": 4, "id": id, "kind": "ask.created", "session": "s1", "data": {"question": "Push?"}})
+    }
+
+    #[test]
+    fn the_menu_bar_shows_a_titles_controls_and_direction_marks() {
+        // #1738: the menu bar lists every session by its task's title, which the agent chose.
+        let events = vec![
+            json!({"kind": "task.created", "writer": "core", "log_pos": 1, "ts": 1,
+                   "data": {"thread": "s1", "title": "Fix\u{202e}txt\x1b[2K\rok\nship"}}),
+            json!({"kind": "session.start", "writer": "hook", "session": "s1", "log_pos": 2, "ts": 1, "data": {}}),
+        ];
+        let menu = menu(&table(&events), 1);
+        assert!(
+            menu[0].starts_with("Fix\\u{202e}txt\\x1b[2K\\rok\\nship · "),
+            "{menu:?}"
+        );
     }
 
     #[test]

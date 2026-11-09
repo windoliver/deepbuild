@@ -12,6 +12,7 @@ import { chmodSync, createReadStream, existsSync, lstatSync, mkdirSync, mkdtempS
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
+import { readFacts } from '@deepbuild/adapters';
 import type { Outcome } from '@deepbuild/budget';
 import type { JsonValue } from '@deepbuild/contracts';
 import { readSince, ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
@@ -38,7 +39,20 @@ const NO_READING_PER_DAY = 10;
 const POLL_MS = 100;
 /** A result's own subtype that names its stop. */
 const RESULT_CAUSES: Record<string, StopCause> = { error_max_turns: 'max_turns' };
-const KINDS = new Set(['draft', 'review', 'read', 'smoke']);
+const KINDS = new Set(['draft', 'review', 'read', 'smoke', 'acceptance']);
+/** All a blind job may read (#1328): nothing of a branch, a transcript or a session has a handle here. */
+const INPUTS = new Set(['issue', 'design', 'base', 'criterion']);
+/** What refuses a kind's spec before anything of it is recorded: only an acceptance job writes, and only its issue's folder. */
+function badWrites(spec: JobSpec): string | undefined {
+  if (spec.kind !== 'acceptance') return spec.writes === undefined && spec.inputs === undefined ? undefined : `${spec.kind} job is read-only and names no inputs`;
+  if (!spec.checkout) return 'acceptance job runs on a checkout of its base';
+  if (!/^tests\/acceptance\/\d+$/.test(spec.writes ?? '')) return `acceptance job writes only tests/acceptance/<issue>, not ${String(spec.writes)}`;
+  if (!spec.inputs?.length) return 'acceptance job lists its inputs';
+  const other = spec.inputs.find((i) => !INPUTS.has(i.kind));
+  if (other) return `acceptance job reads only the issue, the design and the base, not ${String(other.kind)} ${other.ref}`;
+  const base = spec.inputs.find((i) => i.kind === 'base')?.ref;
+  return base === spec.checkout.commit ? undefined : `acceptance job's checkout is its base, ${String(base)}, not ${spec.checkout.commit}`;
+}
 /** What a job's environment may carry from the hub's: never the variables that mark a nested session. */
 // A job's way out is the runner's forwarder, never a proxy of yours: the forwarder takes your HTTPS_PROXY instead.
 const ALLOWED_ENV = ['HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TERM'];
@@ -247,8 +261,10 @@ class LocalRunner implements Runner {
 
   async submit(spec: JobSpec): Promise<JobRecord> {
     if (this.closed) throw Error('the runner is closed');
-    if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read or smoke, not ${String(isObj(spec) ? spec.kind : spec)}`);
+    if (!isObj(spec) || !KINDS.has(spec.kind)) throw Error(`a job's kind is draft, review, read, smoke or acceptance, not ${String(isObj(spec) ? spec.kind : spec)}`);
     if (typeof spec.prompt !== 'string') throw Error('a job has a prompt');
+    const bad = badWrites(spec);
+    if (bad) throw Error(`an ${bad}`);
     for (const field of ['deadline_ms', 'output_timeout_ms'] as const) {
       const bad = spec[field] !== undefined ? badDeadline(field, spec[field]) : null;
       if (bad) throw Error(`a job's ${bad}`);
@@ -261,15 +277,17 @@ class LocalRunner implements Runner {
     const parts = AGENTS[spec.agent];
     const home = this.o.env.HOME ?? '';
     const account = spec.account ?? (parts && home ? parts.account(home, this.o.env) : null);
-    const rec: JobRecord = { job: id, kind: spec.kind, agent: spec.agent, account, state: 'waiting', folder };
+    const rec: JobRecord = { job: id, kind: spec.kind, agent: spec.agent, account, state: 'waiting', folder, ...(spec.inputs ? { inputs: spec.inputs } : {}) };
     const job = this.make(rec, spec);
     if (spec.checkout) job.preparing = true;
     this.jobs.set(id, job);
     // Recorded before anything of it starts.
     await this.append('job.recorded', {
       job: id, kind: spec.kind, agent: spec.agent, account, folder, prompt: sha256(spec.prompt), waiting: [spec.task, spec.claim].filter((x): x is string => typeof x === 'string'),
+      ...(spec.inputs ? { inputs: spec.inputs as unknown as JsonValue } : {}),
     }, id);
     if (!parts) return this.refuse(job, `no agent ${String(spec.agent)}`);
+    if (spec.writes && !parts.writing) return this.refuse(job, `${spec.agent} has no job that writes yet`);
     if (spec.checkout) {
       const failed = await this.checkout(folder, spec.checkout).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
       job.preparing = false;
@@ -420,7 +438,7 @@ class LocalRunner implements Runner {
   private readonly factsCache = new Map<Agent, Facts>();
   private facts(agent: Agent): Facts {
     let facts = this.factsCache.get(agent);
-    if (!facts) this.factsCache.set(agent, (facts = JSON.parse(readFileSync(AGENTS[agent]!.facts, 'utf8')) as Facts));
+    if (!facts) this.factsCache.set(agent, (facts = readFacts<Facts>(AGENTS[agent]!.facts)));
     return facts;
   }
   private covers(facts: Facts, version: string): boolean {
@@ -705,13 +723,16 @@ class LocalRunner implements Runner {
     const billsKey = facts.billing.apiKeyVariables.some((name) => typeof this.o.env[name] === 'string' && this.o.env[name]);
     const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain).catch(() => undefined);
     const env = { ...this.env(job.spec.agent), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, home, env: this.o.env, ...(token ? { token } : {}) }) };
+    // An acceptance job's one folder, there before the sandbox names it.
+    const writes = job.spec.writes ? join(job.rec.folder, job.spec.writes) : undefined;
+    if (writes) mkdirSync(writes, { recursive: true });
     const grant: Grant = {
-      read: [...this.programs(binary.real, parts), ...(home ? parts.signIn(home, this.o.env) : []), ...(job.spec.grant?.read ?? [])], write: [temp], hosts: [`127.0.0.1:${port}`],
+      read: [...this.programs(binary.real, parts), ...(home ? parts.signIn(home, this.o.env) : []), ...(job.spec.grant?.read ?? [])], write: [temp, ...(writes ? [writes] : [])], hosts: [`127.0.0.1:${port}`],
       ...(job.spec.grant?.sockets?.length ? { sockets: job.spec.grant.sockets } : {}),
     };
     // A launch that ends in `-`, the prompt on stdin, keeps it last.
     const stdin = args.at(-1) === '-' ? args.splice(-1) : [];
-    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}), ...stdin];
+    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}, job.spec.writes), ...stdin];
     // The bytes it verified, or none: a file changed since is refused here and checked again next time.
     if (!this.unchanged(binary)) {
       this.verified.delete(job.spec.agent);
@@ -1011,6 +1032,14 @@ class LocalRunner implements Runner {
    * newest window readings against `plan.reserve_pct`. An agent with no plan account, or one with no reading yet,
    * keeps nothing waiting here.
    */
+  windowUsed(agent: Agent, home: string): number | undefined {
+    const account = AGENTS[agent]?.account(home, this.o.env);
+    const reading = account ? this.accounts.get(account) : undefined;
+    if (!reading) return undefined;
+    const now = this.o.now();
+    const live = [...reading.windows.values()].filter((w) => w.resets === null || w.resets > now).map((w) => w.used);
+    return live.length ? Math.max(...live) : undefined;
+  }
   atReserve(agent: Agent, home: string): string | undefined {
     const parts = AGENTS[agent];
     if (!parts) return undefined;

@@ -9,7 +9,7 @@
 // "failed" is the call throwing or there being no entry point; "returned" is the call giving something back;
 // "probe:done" is the script running to its end. Its plug-in's other try, the request on its writer
 // connection to open a device, is in documents.json.
-import { View, div } from "gpui-kit";
+import { View, div } from "@deepbuild/panel";
 
 function tryDevice() {
   const name = "navigator.gpu.requestAdapter";

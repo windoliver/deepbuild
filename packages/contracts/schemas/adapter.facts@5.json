@@ -1,0 +1,1928 @@
+{
+  "title": "adapter.facts@5",
+  "description": "An agent's facts as data: the versions it covers, and per section what the core reads, each naming the core rule that reads it and its conformance case. No core rule branches on the agent's name; a new agent fills a file. @4 is @1 with the agent's own sandbox in a session DeepBuild starts, per version (`sandbox`), and how such a session launches (`launch.started`) (#1330); @2's install and @3's providers stay theirs. @5 is @4 with each route to a hub, its hook overhead and fail-open time as measured (`routes`) (#1338).",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "adapter.facts@5"
+    },
+    "versions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/version"
+      },
+      "minItems": 1,
+      "description": "The agent versions the facts cover; a session on another version is recorded unverified."
+    },
+    "agent": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "The adapter's registry name."
+    },
+    "hookTimeouts": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "defaultMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "How long the agent lets a hook run by default; null when its facts don't say."
+        },
+        "perHook": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z]*$"
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "description": "Hooks the agent times differently from the default, each with its own limit in ms."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance"
+      ],
+      "additionalProperties": false
+    },
+    "routes": {
+      "type": "object",
+      "description": "Each route deep-hook reaches a hub by, beyond the local socket the design's budgets cover, with what was measured on it: never assumed from the local budgets.",
+      "properties": {
+        "network": {
+          "type": "object",
+          "description": "A joined project's hub over its TLS connection (#1338).",
+          "properties": {
+            "readBy": {
+              "$ref": "#/$defs/text"
+            },
+            "measured": {
+              "$ref": "#/$defs/text"
+            },
+            "hookOverheadMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "description": "The hook's wall time, spawn to exit, at p95, that this route keeps to on the link `measured` names."
+            },
+            "failOpenMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "description": "From the hook's start, how long deep-hook waits for the hub's acknowledgement on this route before it decides as with the hub away."
+            }
+          },
+          "required": [
+            "readBy",
+            "measured",
+            "hookOverheadMs",
+            "failOpenMs"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "network"
+      ],
+      "additionalProperties": false
+    },
+    "continuation": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "cap": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "How many times a stop hold may continue one turn."
+        },
+        "field": {
+          "$ref": "#/$defs/text",
+          "description": "The payload field that says a stop hook already continued this turn."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance"
+      ],
+      "additionalProperties": false
+    },
+    "launch": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "session": {
+          "type": "object",
+          "properties": {
+            "readBy": {
+              "$ref": "#/$defs/text"
+            },
+            "args": {
+              "$ref": "#/$defs/texts"
+            }
+          },
+          "required": [
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        "readOnlyJob": {
+          "type": "object",
+          "properties": {
+            "readBy": {
+              "$ref": "#/$defs/text"
+            },
+            "args": {
+              "$ref": "#/$defs/texts"
+            },
+            "prompt": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "args",
+            "prompt"
+          ],
+          "additionalProperties": false
+        },
+        "started": {
+          "type": "object",
+          "description": "How DeepBuild starts a session under your approval (#1330): args with {mode}, {settings}, {sandbox}, {worktree} and {prompt} filled; the mode that asks before acting; each mode a start may name and what fills {mode}; the modes that skip permission prompts; the variables that mark a nested session; the variable that names the account's home, and its default.",
+          "properties": {
+            "readBy": {
+              "$ref": "#/$defs/text"
+            },
+            "args": {
+              "$ref": "#/$defs/texts"
+            },
+            "asks": {
+              "$ref": "#/$defs/text"
+            },
+            "modes": {
+              "$ref": "#/$defs/textMap"
+            },
+            "skipping": {
+              "$ref": "#/$defs/texts"
+            },
+            "nested": {
+              "$ref": "#/$defs/texts"
+            },
+            "home": {
+              "$ref": "#/$defs/text"
+            },
+            "defaultHome": {
+              "$ref": "#/$defs/text"
+            },
+            "trust": {
+              "type": "object",
+              "description": "Where the agent keeps folder trust as JSON, so the worktree a start made starts trusted: `file` with the default home, `homeFile` inside a home its variable names, and the dotted key `set` to true, {worktree} one key of it.",
+              "properties": {
+                "readBy": {
+                  "$ref": "#/$defs/text"
+                },
+                "file": {
+                  "$ref": "#/$defs/text"
+                },
+                "homeFile": {
+                  "$ref": "#/$defs/text"
+                },
+                "set": {
+                  "$ref": "#/$defs/text"
+                }
+              },
+              "required": [
+                "file",
+                "homeFile",
+                "set"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "args",
+            "asks",
+            "modes",
+            "skipping",
+            "nested",
+            "home",
+            "defaultHome"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance"
+      ],
+      "additionalProperties": false
+    },
+    "sandbox": {
+      "type": "object",
+      "description": "The agent's own sandbox in a session DeepBuild starts (#1330), per version: the settings or config overrides that turn it on, the approval policy each mode takes under it, the walls it holds (writes, credentials, network; one not named is not held) and how its way out is turned off. A version not listed has none.",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "settings": {
+                "$ref": "#/$defs/text",
+                "description": "JSON merged into the settings the agent launches with; its \"{credentials}\", \"{hosts}\" and \"{sockets}\" strings are filled as lists."
+              },
+              "args": {
+                "$ref": "#/$defs/texts"
+              },
+              "modes": {
+                "$ref": "#/$defs/textMap"
+              },
+              "walls": {
+                "type": "object",
+                "properties": {
+                  "writes": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "credentials": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "network": {
+                    "$ref": "#/$defs/text"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "wayOut": {
+                "type": "object",
+                "properties": {
+                  "call": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "setting": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "off": {
+                    "type": "boolean",
+                    "description": "The value of the setting that turns the way out off."
+                  }
+                },
+                "required": [
+                  "call",
+                  "setting",
+                  "off"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "walls",
+              "wayOut"
+            ],
+            "additionalProperties": false
+          },
+          "propertyNames": {
+            "pattern": "^[0-9][0-9A-Za-z.+-]*$"
+          }
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "versions"
+      ],
+      "additionalProperties": false
+    },
+    "modelFamily": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "families": {
+          "$ref": "#/$defs/textMap",
+          "description": "Model name to the family whose rate card and context window it takes."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "families"
+      ],
+      "additionalProperties": false
+    },
+    "billing": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "apiKeyVariables": {
+          "$ref": "#/$defs/texts",
+          "description": "The environment variables that make a session bill an API account instead of a plan."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "apiKeyVariables"
+      ],
+      "additionalProperties": false
+    },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "cost": {
+          "type": "string",
+          "enum": [
+            "reported",
+            "estimated",
+            "unpriced"
+          ],
+          "description": "The basis a cost reading can have at best.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "costFrom": {
+          "$ref": "#/$defs/text"
+        },
+        "tokens": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "cost",
+        "costFrom",
+        "tokens"
+      ],
+      "additionalProperties": false
+    },
+    "questionTools": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "tools": {
+          "$ref": "#/$defs/texts",
+          "description": "The tool calls that are questions to the person."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "tools"
+      ],
+      "additionalProperties": false
+    },
+    "transcripts": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "home": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text"
+          },
+          "minItems": 1,
+          "description": "The variable that moves the agent's home, then its default."
+        },
+        "path": {
+          "$ref": "#/$defs/text"
+        },
+        "archived": {
+          "$ref": "#/$defs/text",
+          "description": "Where the agent moves a transcript it archives, as `path` names one."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "home",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "appLinks": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "open": {
+          "$ref": "#/$defs/text",
+          "description": "The link that opens a session in the agent's own app, with {session} in it."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "open"
+      ],
+      "additionalProperties": false
+    },
+    "errorTexts": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "causes": {
+          "$ref": "#/$defs/causeMap",
+          "description": "The agent's error texts, each to the stop cause it names."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "causes"
+      ],
+      "additionalProperties": false
+    },
+    "events": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "versions": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/payload"
+            }
+          },
+          "description": "Per covered version, each hook's strict payload schema."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "versions"
+      ],
+      "additionalProperties": false
+    },
+    "mapping": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "common": {
+          "$ref": "#/$defs/dataTemplate",
+          "description": "The data every event carries: a value names a payload field, or =text a constant."
+        },
+        "SessionStart": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "UserPromptSubmit": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "PreToolUse": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "PermissionRequest": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "PostToolUse": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "PostToolUseFailure": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "Stop": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "StopFailure": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "SessionEnd": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "SubagentStart": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "SubagentStop": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "TaskCreated": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "TaskCompleted": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "Notification": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "Elicitation": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "ElicitationResult": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "TeammateIdle": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "WorktreeCreate": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "WorktreeRemove": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "PreCompact": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "PostCompact": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "Interrupt": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "sessionStart": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "sessionEnd": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "preToolUse": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "postToolUse": {
+          "$ref": "#/$defs/hookRule"
+        },
+        "stop": {
+          "$ref": "#/$defs/hookRule"
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "common"
+      ],
+      "additionalProperties": false,
+      "description": "Each hook the design's agent table names, to the event it maps to; a hook the table gains is a member added in a minor."
+    },
+    "toolKinds": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "tools": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/toolKind"
+          }
+        },
+        "prefixes": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/toolKind"
+          }
+        },
+        "otherwise": {
+          "$ref": "#/$defs/toolKind"
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "tools",
+        "otherwise"
+      ],
+      "additionalProperties": false
+    },
+    "toolDetail": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "command": {
+          "$ref": "#/$defs/textMap",
+          "description": "Per kind, the payload field that holds the command."
+        },
+        "paths": {
+          "$ref": "#/$defs/textMap",
+          "description": "Per tool, the payload field that holds the path, resolved against the payload's cwd."
+        },
+        "mcp": {
+          "type": "object",
+          "properties": {
+            "tool": {
+              "$ref": "#/$defs/text",
+              "description": "The data field that records an MCP tool's own name; name when absent."
+            }
+          },
+          "required": [
+            "tool"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance"
+      ],
+      "additionalProperties": false
+    },
+    "patch": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "tools": {
+          "$ref": "#/$defs/texts"
+        },
+        "command": {
+          "$ref": "#/$defs/text"
+        },
+        "shell": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "tools",
+        "command",
+        "shell"
+      ],
+      "additionalProperties": false
+    },
+    "turnWithoutPrompt": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "payloadField": {
+          "$ref": "#/$defs/text"
+        },
+        "startedBy": {
+          "$ref": "#/$defs/texts"
+        },
+        "turnEntry": {
+          "$ref": "#/$defs/text"
+        },
+        "turnField": {
+          "$ref": "#/$defs/text"
+        },
+        "messageRole": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/text"
+            },
+            "value": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "path",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        "messageText": {
+          "$ref": "#/$defs/text"
+        },
+        "values": {
+          "$ref": "#/$defs/markerMap"
+        },
+        "otherwise": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "payloadField",
+        "startedBy",
+        "turnEntry",
+        "turnField",
+        "messageRole",
+        "messageText",
+        "values",
+        "otherwise"
+      ],
+      "additionalProperties": false
+    },
+    "signIn": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "args": {
+          "$ref": "#/$defs/texts"
+        },
+        "signedIn": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "args",
+        "signedIn"
+      ],
+      "additionalProperties": false
+    },
+    "stop": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "turn": {
+          "type": "object",
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/text",
+              "description": "The payload field that names the turn."
+            },
+            "transcript": {
+              "$ref": "#/$defs/text",
+              "description": "The transcript entry path that carries the same value."
+            },
+            "elsewhere": {
+              "$ref": "#/$defs/text",
+              "description": "A payload field whose presence says the turn ran in another transcript."
+            }
+          },
+          "required": [
+            "payload",
+            "transcript"
+          ],
+          "additionalProperties": false
+        },
+        "cause": {
+          "type": "object",
+          "properties": {
+            "readBy": {
+              "$ref": "#/$defs/text"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "$ref": "#/$defs/text"
+                },
+                "values": {
+                  "$ref": "#/$defs/causeMap"
+                }
+              },
+              "required": [
+                "field",
+                "values"
+              ],
+              "additionalProperties": false,
+              "description": "The hook payload's error field and the causes its values name."
+            },
+            "errors": {
+              "type": "object",
+              "properties": {
+                "match": {
+                  "$ref": "#/$defs/match"
+                },
+                "field": {
+                  "$ref": "#/$defs/text"
+                },
+                "values": {
+                  "$ref": "#/$defs/causeMap"
+                }
+              },
+              "required": [
+                "match",
+                "field",
+                "values"
+              ],
+              "additionalProperties": false,
+              "description": "The turn's error records, matched by their fields, and the causes their error field names."
+            },
+            "rateLimits": {
+              "type": "object",
+              "properties": {
+                "match": {
+                  "$ref": "#/$defs/match"
+                },
+                "reached": {
+                  "$ref": "#/$defs/text"
+                },
+                "windows": {
+                  "$ref": "#/$defs/texts"
+                },
+                "used": {
+                  "$ref": "#/$defs/text"
+                },
+                "resetsAt": {
+                  "$ref": "#/$defs/text"
+                },
+                "toMs": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "spent": {
+                  "$ref": "#/$defs/stopCause"
+                },
+                "withoutReset": {
+                  "$ref": "#/$defs/stopCause"
+                }
+              },
+              "required": [
+                "match",
+                "reached",
+                "windows",
+                "used",
+                "resetsAt",
+                "toMs",
+                "spent",
+                "withoutReset"
+              ],
+              "additionalProperties": false,
+              "description": "The turn's last rate-limit record: a reached limit whose spent window names a reset is plan_window_spent, otherwise rate_limited."
+            },
+            "otherwise": {
+              "$ref": "#/$defs/stopCause"
+            }
+          },
+          "required": [
+            "otherwise"
+          ],
+          "additionalProperties": false
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "readBy": {
+              "$ref": "#/$defs/text"
+            },
+            "covers": {
+              "type": "string",
+              "enum": [
+                "turn",
+                "session"
+              ],
+              "x-closure": {
+                "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
+            },
+            "records": {
+              "type": "object",
+              "properties": {
+                "match": {
+                  "$ref": "#/$defs/match"
+                },
+                "has": {
+                  "$ref": "#/$defs/text"
+                },
+                "skip": {
+                  "$ref": "#/$defs/match"
+                },
+                "once": {
+                  "$ref": "#/$defs/text"
+                }
+              },
+              "required": [
+                "match",
+                "has"
+              ],
+              "additionalProperties": false,
+              "description": "Which transcript entries count: those matching, that carry the `has` path, not matching `skip`, once per `once` value."
+            },
+            "take": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "last"
+              ],
+              "x-closure": {
+                "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
+            },
+            "counts": {
+              "type": "object",
+              "properties": {
+                "input": {
+                  "$ref": "#/$defs/texts"
+                },
+                "cached": {
+                  "$ref": "#/$defs/texts"
+                },
+                "output": {
+                  "$ref": "#/$defs/texts"
+                }
+              },
+              "required": [
+                "input",
+                "cached",
+                "output"
+              ],
+              "additionalProperties": false,
+              "description": "The record paths each count sums; a path with a leading - is taken away."
+            },
+            "exact": {
+              "type": "boolean"
+            },
+            "model": {
+              "type": "object",
+              "properties": {
+                "record": {
+                  "$ref": "#/$defs/text"
+                },
+                "payload": {
+                  "$ref": "#/$defs/text"
+                }
+              },
+              "additionalProperties": false,
+              "description": "Where the model that answered is read: the last record's path, or a payload field."
+            },
+            "contextFill": {
+              "type": "object",
+              "properties": {
+                "used": {
+                  "$ref": "#/$defs/texts"
+                },
+                "window": {
+                  "$ref": "#/$defs/text"
+                }
+              },
+              "required": [
+                "used",
+                "window"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "covers",
+            "records",
+            "take",
+            "counts",
+            "exact",
+            "model"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "turn",
+        "cause",
+        "usage"
+      ],
+      "additionalProperties": false,
+      "description": "How each agent.stop names its cause and carries its usage (#603): the turn's span in the transcript, the cause tables in order, and the counting rules."
+    },
+    "readUsage": {
+      "$ref": "#/$defs/operation"
+    },
+    "taskList": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "tool": {
+          "$ref": "#/$defs/text",
+          "description": "The tool call that writes the agent's own task list, whole each time."
+        },
+        "items": {
+          "$ref": "#/$defs/text",
+          "description": "The call's input field that holds the list."
+        },
+        "text": {
+          "$ref": "#/$defs/text",
+          "description": "Each item's field that holds its words."
+        },
+        "status": {
+          "$ref": "#/$defs/text",
+          "description": "Each item's field that holds its state."
+        },
+        "open": {
+          "$ref": "#/$defs/texts",
+          "description": "The states an item left at a stop is still open in."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "tool",
+        "items",
+        "text",
+        "status",
+        "open"
+      ],
+      "additionalProperties": false,
+      "description": "The agent's own task list (#323): at a stop, each item its newest list leaves in an open state is an open item; one it marked completed closes nothing, since that is its word."
+    },
+    "tokenizer": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "name": {
+          "$ref": "#/$defs/text",
+          "description": "The encoding a reply to the agent is counted in."
+        },
+        "package": {
+          "$ref": "#/$defs/text",
+          "description": "The npm package that implements it."
+        },
+        "version": {
+          "$ref": "#/$defs/version",
+          "description": "The package version, exact: a count is only comparable under one."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "name",
+        "package",
+        "version"
+      ],
+      "additionalProperties": false,
+      "description": "The tokenizer the agent counts its context in, pinned (#854): what a scene read costs an agent is measured in its tokens."
+    },
+    "mods": {
+      "type": "object",
+      "description": "Mods: plugins whose functions run inside the agent and answer its events (Claude Code 2.1.287 and later).",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "since": {
+          "type": "object",
+          "description": "The first version that loads mods, per surface.",
+          "properties": {
+            "terminal": {
+              "$ref": "#/$defs/version",
+              "description": "The first terminal version that loads mods."
+            },
+            "desktop": {
+              "$ref": "#/$defs/version",
+              "description": "The first desktop app version that loads mods."
+            }
+          },
+          "required": [
+            "terminal",
+            "desktop"
+          ],
+          "additionalProperties": false
+        },
+        "validate": {
+          "type": "object",
+          "description": "How a plugin's mod is read without loading it.",
+          "properties": {
+            "args": {
+              "$ref": "#/$defs/texts",
+              "description": "The agent's command that prints a plugin's handlers without running its code."
+            },
+            "hooks": {
+              "$ref": "#/$defs/text",
+              "description": "The prefix of the line naming the events it handles."
+            },
+            "calls": {
+              "$ref": "#/$defs/text",
+              "description": "The prefix of the line naming the calls it makes."
+            }
+          },
+          "required": [
+            "args",
+            "hooks",
+            "calls"
+          ],
+          "additionalProperties": false
+        },
+        "overrides": {
+          "type": "object",
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/text",
+              "description": "The mod event that answers after the hooks."
+            },
+            "past": {
+              "$ref": "#/$defs/text",
+              "description": "The hook whose deny it can override."
+            }
+          },
+          "required": [
+            "event",
+            "past"
+          ],
+          "additionalProperties": false
+        },
+        "promptCalls": {
+          "$ref": "#/$defs/texts",
+          "description": "The calls through which a mod submits a prompt."
+        },
+        "holdsWhen": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "case": {
+                "type": "string",
+                "enum": [
+                  "managed",
+                  "login",
+                  "plan",
+                  "interactive"
+                ],
+                "description": "Which case: managed settings on the machine, the session's login, the session's permission mode, or the tool called.",
+                "x-closure": {
+                  "closed": "each value is a condition the core reads from what it can observe, and a value outside the list has no reader",
+                  "reopens": "a new major of this schema",
+                  "mark": "exhaustive"
+                }
+              },
+              "text": {
+                "$ref": "#/$defs/text",
+                "description": "The case in words, as the docs give it."
+              },
+              "subscriptionTypes": {
+                "$ref": "#/$defs/texts",
+                "description": "login: the subscription types `claude auth status` reports for such a login."
+              },
+              "mode": {
+                "$ref": "#/$defs/text",
+                "description": "plan: the permission mode a PreToolUse payload names."
+              },
+              "since": {
+                "$ref": "#/$defs/version",
+                "description": "interactive: the first version where the deny holds for such a tool."
+              },
+              "tools": {
+                "$ref": "#/$defs/texts",
+                "description": "interactive: the tools that need your interaction."
+              }
+            },
+            "required": [
+              "case",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "description": "The cases where a hook's deny holds whatever a mod answers."
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "since",
+        "validate",
+        "overrides",
+        "promptCalls",
+        "holdsWhen"
+      ],
+      "additionalProperties": false
+    },
+    "classifyStop": {
+      "$ref": "#/$defs/operation"
+    },
+    "skills": {
+      "$ref": "#/$defs/operation"
+    },
+    "entries": {
+      "type": "object",
+      "description": "Where the agent keeps its MCP servers and skills, and its rules for each entry (#148): the file and format it reads servers from, the fields and transports it accepts, the fields it refuses by transport, and the folders it reads skills from. A sync checks every entry against these before its plan shows.",
+      "properties": {
+        "readBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "home": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "mcp": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "format": {
+              "enum": [
+                "json",
+                "toml"
+              ],
+              "type": "string",
+              "x-closure": {
+                "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "perProject": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "transports": {
+              "type": "object",
+              "properties": {
+                "stdio": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 8192
+                      },
+                      "maxItems": 64
+                    },
+                    "names": {
+                      "type": "object",
+                      "propertyNames": {
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "maxLength": 8192
+                      }
+                    },
+                    "commandArray": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "fields"
+                  ],
+                  "additionalProperties": false
+                },
+                "http": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "fields": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 8192
+                      },
+                      "maxItems": 64
+                    },
+                    "names": {
+                      "type": "object",
+                      "propertyNames": {
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "maxLength": 8192
+                      }
+                    },
+                    "commandArray": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "fields"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "refused": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "transport": {
+                    "enum": [
+                      "stdio",
+                      "http"
+                    ],
+                    "type": "string",
+                    "x-closure": {
+                      "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                      "reopens": "a new major of this schema",
+                      "mark": "exhaustive"
+                    }
+                  },
+                  "field": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "transport",
+                  "field"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "maxItems": 64
+            }
+          },
+          "required": [
+            "file",
+            "format",
+            "key",
+            "transports",
+            "refused"
+          ],
+          "additionalProperties": false
+        },
+        "skills": {
+          "type": "object",
+          "properties": {
+            "write": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "readFrom": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "maxItems": 64
+            }
+          },
+          "required": [
+            "write",
+            "readFrom"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "daemon": {
+      "type": "object",
+      "description": "A daemon shared by sessions (#148), as Codex's app server: its own restart command (the arguments after the agent's command), and per covered version whether a running daemon picks up a changed hooks file and MCP servers.",
+      "properties": {
+        "readBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "restart": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "maxItems": 64
+        },
+        "picksUp": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "hooks.json": {
+                "type": "boolean"
+              },
+              "mcp_servers": {
+                "type": "boolean"
+              },
+              "readBy": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "required": [
+              "hooks.json",
+              "mcp_servers"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "restart",
+        "picksUp"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema",
+    "versions",
+    "agent",
+    "hookTimeouts",
+    "continuation",
+    "launch",
+    "modelFamily",
+    "billing",
+    "usage",
+    "questionTools",
+    "transcripts",
+    "appLinks",
+    "errorTexts",
+    "events",
+    "mapping",
+    "toolKinds"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "match": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+      },
+      "additionalProperties": {
+        "x-opaque": "the value a transcript entry carries at that path"
+      },
+      "description": "Entry paths and the values each must carry."
+    },
+    "texts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/text"
+      }
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]*$"
+    },
+    "textMap": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_<][^\\s]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/text"
+      }
+    },
+    "dataTemplate": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/text"
+      }
+    },
+    "fieldTypes": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(string|number|boolean|object|array|null|any)(\\|(string|number|boolean|object|array|null|any))*$"
+      },
+      "description": "Payload field to its type, or types joined by |; any takes every type."
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "required": {
+          "$ref": "#/$defs/fieldTypes"
+        },
+        "optional": {
+          "$ref": "#/$defs/fieldTypes"
+        },
+        "tools": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/fieldTypes"
+          },
+          "description": "Per tool, the fields a call of that tool must carry."
+        }
+      },
+      "required": [
+        "required",
+        "optional"
+      ],
+      "additionalProperties": false
+    },
+    "toolKind": {
+      "type": "string",
+      "enum": [
+        "shell",
+        "read",
+        "edit",
+        "write",
+        "search",
+        "fetch",
+        "mcp",
+        "unknown"
+      ],
+      "x-closure": {
+        "closed": "the values come from agents and tools that add new ones; a reader at an earlier minor reads a value it does not know as unknown",
+        "reopens": "a minor that adds a member; a reader at the earlier minor takes it for unknown",
+        "mark": "extensible"
+      }
+    },
+    "stopCause": {
+      "type": "string",
+      "enum": [
+        "sign_in_required",
+        "token_refresh_failed",
+        "plan_window_spent",
+        "rate_limited",
+        "refusal",
+        "max_turns",
+        "context_overflow",
+        "tool_schema_rejected",
+        "agent_crashed",
+        "timed_out",
+        "unknown"
+      ],
+      "x-closure": {
+        "closed": "the values come from agents and tools that add new ones; a reader at an earlier minor reads a value it does not know as unknown",
+        "reopens": "a minor that adds a member; a reader at the earlier minor takes it for unknown",
+        "mark": "extensible"
+      }
+    },
+    "causeMap": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[^\\n]+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/stopCause"
+      }
+    },
+    "originRule": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "$ref": "#/$defs/text",
+          "description": "The prompt text the agent's own app writes opens with this."
+        },
+        "match": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+          },
+          "additionalProperties": {
+            "x-opaque": "the value the joined transcript entry carries at that path"
+          },
+          "description": "Fields the joined transcript entry must carry with these values."
+        },
+        "from": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "from"
+      ],
+      "additionalProperties": false
+    },
+    "hookRule": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z_]*\\.[a-z][a-z_]*$",
+          "description": "The event kind the hook maps to."
+        },
+        "data": {
+          "$ref": "#/$defs/dataTemplate"
+        },
+        "origin": {
+          "type": "object",
+          "properties": {
+            "join": {
+              "type": "object",
+              "properties": {
+                "payload": {
+                  "$ref": "#/$defs/text"
+                },
+                "transcript": {
+                  "$ref": "#/$defs/text"
+                }
+              },
+              "required": [
+                "payload",
+                "transcript"
+              ],
+              "additionalProperties": false
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/originRule"
+              }
+            },
+            "otherwise": {
+              "$ref": "#/$defs/text"
+            }
+          },
+          "required": [
+            "rules",
+            "otherwise"
+          ],
+          "additionalProperties": false
+        },
+        "call": {
+          "type": "string",
+          "enum": [
+            "kind",
+            "detail"
+          ],
+          "description": "The event carries the tool call's kind and detail, or its detail alone.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "stop": {
+          "type": "boolean",
+          "description": "The event is a stop: it names its cause and carries its usage by the facts' stop section."
+        },
+        "cause": {
+          "type": "object",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/text"
+            },
+            "values": {
+              "$ref": "#/$defs/causeMap"
+            },
+            "otherwise": {
+              "$ref": "#/$defs/stopCause"
+            }
+          },
+          "required": [
+            "field",
+            "values",
+            "otherwise"
+          ],
+          "additionalProperties": false
+        },
+        "state": {
+          "type": "object",
+          "description": "The event is the session's attention state, read from one payload field; a value not listed maps to no event.",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/text"
+            },
+            "values": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[^\\n]+$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "working",
+                  "waiting",
+                  "finished"
+                ],
+                "x-closure": {
+                  "closed": "the attention states a hook can say of its session: at work, waiting on you, or its turn over",
+                  "reopens": "a minor that adds a state session.attention defines",
+                  "mark": "exhaustive"
+                }
+              }
+            }
+          },
+          "required": [
+            "field",
+            "values"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "operation": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance"
+      ],
+      "additionalProperties": false,
+      "description": "An optional operation ships only with its conformance case."
+    },
+    "markerMap": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[^\\n]+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/text"
+      },
+      "description": "A marker text, as the transcript carries it, to what it names."
+    }
+  },
+  "x-rules": [
+    {
+      "id": "who-is-calling",
+      "rule": "Who is calling: a subagent's stop or permission request is not its parent's, and another tool running the agent's hooks is not the agent; a session is owned by the adapter that bound its ID first."
+    },
+    {
+      "id": "order-by-seq",
+      "rule": "Order by seq with ties by ID: a session's events sort by the seq deep-hook stamped, two with one seq by their IDs, and no two events share an ID."
+    },
+    {
+      "id": "clock-stepped-back",
+      "rule": "A clock stepped back never moves an event before its turn started: the event keeps its arrival place, stamped no earlier than the turn's first event."
+    },
+    {
+      "id": "late-event-in-stopped-turn",
+      "rule": "A late event in a stopped turn is recorded in that turn and reopens nothing: a PostToolUse after its turn's Stop changes nothing about how the turn ended."
+    },
+    {
+      "id": "unknown-not-finished",
+      "rule": "When hooks go quiet the session reads unknown rather than finished; a wait is a lease, never a finish."
+    },
+    {
+      "id": "threads-across-rotated-ids",
+      "rule": "The session map threads across rotated IDs: a start after /clear, /compact or a fork names the thread it continues."
+    },
+    {
+      "id": "one-owner-per-session",
+      "rule": "One owner per session: an answer reaches the session it was asked for and no other; another adapter only relays."
+    },
+    {
+      "id": "allow-only-from-decision",
+      "rule": "A permission answer takes allow only from decision, never from a suggestion or the text beside it."
+    },
+    {
+      "id": "unparsed-stop-reads-unknown",
+      "rule": "A stop that can't be parsed read as unknown: a cause the facts don't list is unknown, never a listed cause and never a success."
+    },
+    {
+      "id": "delivery-confirmed-from-transcript",
+      "rule": "Delivery confirmed from the transcript: an acknowledgement counts only with the transcript's sign of it."
+    }
+  ]
+}

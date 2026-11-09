@@ -1,0 +1,14 @@
+{
+ "race_check_errors": [],
+ "numbers_from_table": 240,
+ "frames": 151,
+ "seek_equals_play": true,
+ "distinct_frames": 151,
+ "first_last": [
+  "08e2cec08ffef075ce8adce5c846ca6f0222deba89146f278709884f27104e69",
+  "3e109e387f027a8486d1d0d62487e58401a4a9a5426341bd6038a9d976a27208"
+ ],
+ "stage_rows_exact": true,
+ "stage_frames_held": true,
+ "table_source": "url, fetched by the hub from a local server"
+}

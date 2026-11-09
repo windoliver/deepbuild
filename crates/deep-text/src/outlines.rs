@@ -7,7 +7,7 @@ use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::MetadataProvider;
 
-use crate::shape::Shaped;
+use crate::shape::{Glyph, Shaped};
 
 /// One path command of a glyph outline, in the run's logical pixels with y down.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -64,6 +64,32 @@ impl OutlinePen for Pen {
     }
 }
 
+/// #496: one glyph's outline in its own frame (pen origin on the baseline, y down), in logical
+/// pixels, at the variation coordinates it was shaped at; empty for a blank glyph (a space), and
+/// `None` (#1479) for one its face holds no outline for, which only the atlas can draw.
+pub fn outline_of(g: &Glyph) -> Option<Vec<Cmd>> {
+    let face = skrifa::FontRef::from_index(g.font.data.data(), g.font.index).ok()?;
+    let upm = f64::from(
+        face.metrics(Size::unscaled(), LocationRef::default())
+            .units_per_em
+            .max(1),
+    );
+    let glyph = face.outline_glyphs().get(skrifa::GlyphId::new(g.id))?;
+    let mut pen = Pen {
+        at: [0.0, 0.0],
+        k: f64::from(g.size) / upm,
+        cmds: Vec::new(),
+    };
+    let coords: Vec<skrifa::instance::NormalizedCoord> = g
+        .coords
+        .iter()
+        .map(|&c| skrifa::instance::NormalizedCoord::from_bits(c))
+        .collect();
+    let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::new(&coords));
+    glyph.draw(settings, &mut pen).ok()?;
+    Some(pen.cmds)
+}
+
 /// Every glyph of `run` with its outline, in logical pixels with y down from the first baseline;
 /// a glyph with no outline (a space) is left out.
 pub fn glyph_outlines(run: &Shaped) -> Vec<GlyphOutline> {
@@ -75,29 +101,26 @@ pub fn glyph_outlines(run: &Shaped) -> Vec<GlyphOutline> {
     };
     let mut out = Vec::new();
     for g in &run.glyphs {
-        let Ok(face) = skrifa::FontRef::from_index(g.font.data.data(), g.font.index) else {
-            continue;
-        };
-        let upm = f64::from(
-            face.metrics(Size::unscaled(), LocationRef::default())
-                .units_per_em
-                .max(1),
-        );
-        let Some(glyph) = face.outline_glyphs().get(skrifa::GlyphId::new(g.id)) else {
-            continue;
-        };
         let origin = [f64::from(g.x), f64::from(g.y)];
-        let mut pen = Pen {
-            at: origin,
-            k: f64::from(g.size) / upm,
-            cmds: Vec::new(),
-        };
-        let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
-        if glyph.draw(settings, &mut pen).is_ok() && !pen.cmds.is_empty() {
+        let cmds: Vec<Cmd> = outline_of(g)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|c| {
+                let m = |p: [f64; 2]| [p[0] + origin[0], p[1] + origin[1]];
+                match c {
+                    Cmd::Move(p) => Cmd::Move(m(p)),
+                    Cmd::Line(p) => Cmd::Line(m(p)),
+                    Cmd::Quad(a, p) => Cmd::Quad(m(a), m(p)),
+                    Cmd::Cubic(a, b, p) => Cmd::Cubic(m(a), m(b), m(p)),
+                    Cmd::Close => Cmd::Close,
+                }
+            })
+            .collect();
+        if !cmds.is_empty() {
             out.push(GlyphOutline {
                 grapheme: grapheme(g.grapheme),
                 origin,
-                cmds: pen.cmds,
+                cmds,
             });
         }
     }

@@ -23,6 +23,9 @@ use serde_json::{json, Value};
 use crate::hub::{HubClient, HubError};
 use crate::states::{closes, handle, Table};
 
+/// Once a session holds this many open asks, its further asks fold into one exception.
+pub const FOLD_AFTER: usize = 5;
+
 /// The kinds that close an ask, and the outcome the inbox shows for each, as the asks core names them.
 const CLOSING: [(&str, &str); 7] = [
     ("decision.applied", "decided_for_you"),
@@ -155,11 +158,29 @@ impl View {
         if kind == "ask.created" {
             let ask = format!("ask:{}", event["id"].as_str().unwrap_or_default());
             if !self.inbox.iter().any(|row| row["ask"] == ask.as_str()) {
+                // Past a session's fifth open ask, it folds, as in the core.
+                let mine = self
+                    .inbox
+                    .iter()
+                    .filter(|row| row["session"] == event["session"] && row["status"] != "closed");
+                let status = if mine.count() < FOLD_AFTER {
+                    "shown"
+                } else {
+                    "folded"
+                };
                 self.inbox.push(json!({
                     "ask": ask, "kind": event["data"]["kind"], "session": event["session"],
-                    "status": "shown", "outcome": "unanswered", "owner": event["data"]["owner"],
+                    "status": status, "outcome": "unanswered", "owner": event["data"]["owner"],
                     "question": event["data"]["question"],
                 }));
+            }
+        } else if kind == "ask.later" {
+            for row in self
+                .inbox
+                .iter_mut()
+                .filter(|row| row["ask"] == event["subject"] && row["status"] != "closed")
+            {
+                row["status"] = json!("later");
             }
         } else if let Some((_, outcome)) = CLOSING.iter().find(|(k, _)| *k == kind) {
             // The close rule the rest of the app reads, and the first close to append decides, as in the core.
@@ -205,6 +226,8 @@ pub struct RecordReader {
     setting: Option<&'static str>,
     /// Whether each new read also folds the record before it, for the window's views.
     folds: bool,
+    /// Whether it checks the hub's hello covers the app before any call (#41), as the window's reader does.
+    checks: bool,
 }
 
 impl RecordReader {
@@ -217,14 +240,17 @@ impl RecordReader {
             view: View::default(),
             setting: None,
             folds: false,
+            checks: false,
         }
     }
 
     /// Issue #1172: as [`RecordReader::unopened`], for the window: its sidebar and session pages read the folded
-    /// record, so each new read also folds what the record held before the app or the hub started.
+    /// record, so each new read also folds what the record held before the app or the hub started. Issue #41: it
+    /// calls nothing on a hub whose hello doesn't cover what the app calls.
     pub fn unopened_folded(socket: &Path, token_file: &Path) -> RecordReader {
         RecordReader {
             folds: true,
+            checks: true,
             ..RecordReader::unopened(socket, token_file)
         }
     }
@@ -258,6 +284,11 @@ impl RecordReader {
                 eprintln!("deep-app: the notification setting didn't reach the hub: {error:?}");
             }
         }
+    }
+
+    /// `deep-app --hub-check` (#41): connects as the window does, once, making the calls it makes on connect.
+    pub fn check(&mut self) -> Result<(), HubError> {
+        self.connect()
     }
 
     pub fn view(&self) -> View {
@@ -305,6 +336,16 @@ impl RecordReader {
     fn connect(&mut self) -> Result<(), HubError> {
         let token = std::fs::read_to_string(&self.token_file)?;
         let mut client = HubClient::connect(&self.socket)?;
+        if self.checks {
+            let covered = client.covers_app();
+            OLDER.with(|older| {
+                *older.borrow_mut() = match &covered {
+                    Err(HubError::Older(screen)) => Some(screen.clone()),
+                    _ => None,
+                }
+            });
+            covered?;
+        }
         client.hello_app(token.trim())?;
         let start = client.hello["start"]
             .as_str()
@@ -420,7 +461,85 @@ pub enum LocalHub {
     Refuses,
 }
 
+/// How often the app's one reader reads the hub: the reader's tick (#1546).
+pub const TICK: Duration = Duration::from_millis(250);
+
+/// Issue #1546: the record and the bound values as the views observe them. The reader and [`crate::bound`] hold what
+/// they draw; this entity holds where those stand, so a change the reader applied, or a bound value set, notifies
+/// every view that observes it, and marks its window dirty with no input.
+pub struct Shown {
+    at: (String, u64, u64),
+}
+
+struct Live(gpui_kit::Entity<Shown>);
+
+impl gpui_kit::Global for Live {}
+
+/// The app's start ID, `log_pos` and bound values' revision, as the reader holds them now.
+fn standing() -> (String, u64, u64) {
+    let (start, log_pos) = with_view(|view| (view.start.clone(), view.log_pos)).unwrap_or_default();
+    (start, log_pos, crate::bound::revision())
+}
+
+fn live(cx: &mut gpui_kit::App) -> gpui_kit::Entity<Shown> {
+    use gpui_kit::AppContext as _;
+    if let Some(live) = cx.try_global::<Live>() {
+        return live.0.clone();
+    }
+    let live = cx.new(|_| Shown { at: standing() });
+    cx.set_global(Live(live.clone()));
+    live
+}
+
+/// #1546's planted views read the record in render and observe nothing, as the merge base's did.
+fn unobserved() -> bool {
+    crate::plain::planted("record-in-thread-local")
+}
+
+/// A view observes the record: it draws again whenever [`sync`] finds the record or the bound values moved.
+pub fn observe<V: 'static>(cx: &mut gpui_kit::Context<V>) {
+    if unobserved() {
+        return;
+    }
+    let live = live(cx);
+    cx.observe(&live, |_, _, cx| cx.notify()).detach();
+}
+
+/// Tells the views where the record and the bound values stand: those that observe them draw again if either moved.
+pub fn sync(cx: &mut gpui_kit::App) {
+    if unobserved() {
+        return;
+    }
+    let at = standing();
+    live(cx).update(cx, |shown, cx| {
+        if shown.at != at {
+            shown.at = at;
+            cx.notify();
+        }
+    });
+}
+
+/// Tells the views something they draw beside the record moved, such as what the app can reach (#994).
+pub fn notify_views(cx: &mut gpui_kit::App) {
+    if !unobserved() {
+        live(cx).update(cx, |_, cx| cx.notify());
+    }
+}
+
+/// Delivers one event to a record held in memory, as the hub's stream would, and tells the views (a replica's feed).
+pub fn deliver(event: Value, cx: &mut gpui_kit::App) {
+    feed(event);
+    sync(cx);
+}
+
+/// The one screen the window shows while the hub it reached is older than the app (#41): which side is older, and
+/// the one step that fixes it. `None` once a hub covers the app, or before any hub answered.
+pub fn older() -> Option<String> {
+    OLDER.with(|older| older.borrow().clone())
+}
+
 thread_local! {
+    static OLDER: RefCell<Option<String>> = const { RefCell::new(None) };
     static READER: RefCell<Option<Source>> = const { RefCell::new(None) };
 }
 

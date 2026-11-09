@@ -1,0 +1,31 @@
+# The #531 acceptance suite's Rust logic program (criteria 10 and 11): a logic item's program as an
+# agent builds it, for wasm32-unknown-unknown with debug info. `src/rules.rs` holds the lines the
+# criteria name: loops at rules.rs:10, 20 and 30 and a division at rules.rs:42. Test tooling only,
+# outside the workspace (the empty [workspace] table), no dependencies, sharing nothing with the code
+# under test. Built by helpers.ts with
+#   cargo build --locked --release --target wasm32-unknown-unknown --manifest-path tests/acceptance/531/rules/Cargo.toml
+# into target/acceptance-531-rules/.
+[package]
+name = "acceptance-531-rules"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = 1
+debug = 2
+debug-assertions = false
+overflow-checks = false
+panic = "abort"
+strip = false
+lto = false
+codegen-units = 1
+incremental = false
+
+[workspace]

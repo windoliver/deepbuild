@@ -1,5 +1,5 @@
-//! The wrong programs criterion 2's fixture must catch (`DEEP_DRIVE_PLANT`): each lifts one of the guards that keep a
-//! replica's input inside it, and lets that one thing reach your Mac or your record.
+//! The wrong programs the suites must catch (`DEEP_DRIVE_PLANT`): each lifts one of the guards that keep a replica's
+//! input inside it and lets that one thing reach your Mac or your record, or draws the wrong the UI check must name.
 
 use std::{
     io::{BufRead, BufReader, Write},
@@ -24,6 +24,19 @@ pub enum Plant {
     PageDropsParam,
     /// ⌘K ranks by the live app's recency file, which a replica never reads (#366 criterion 6).
     RanksByLiveRecency,
+    /// Pointer actions go straight to their target's box centre, whatever would get them (#124 criterion 6).
+    NoHitTest,
+    /// The session row draws its label past its frame (#124 criterion 7).
+    RowLabelPastFrame,
+    /// The session row draws its text cut off and names only what it drew (#124 criterion 7).
+    RowBranchCutOff,
+    /// After each action the whole tree draws 30% of the window to the right for one step (#1427 criterion 7).
+    JumpsOnAct,
+    /// Before every frame it asks GPUI for, the replica notifies the window's root, so every frame draws (#1546
+    /// criterion 3).
+    NotifiesEveryStep,
+    /// A menu takes every release as a pick or a close, drag or not (#1470 criterion 2).
+    MenuReleaseAlways,
 }
 
 impl Plant {
@@ -35,6 +48,12 @@ impl Plant {
             "starts-sound" => Some(Plant::StartsSound),
             "page-drops-param" => Some(Plant::PageDropsParam),
             "ranks-by-live-recency" => Some(Plant::RanksByLiveRecency),
+            "no-hit-test" => Some(Plant::NoHitTest),
+            "row-label-past-frame" => Some(Plant::RowLabelPastFrame),
+            "row-branch-cut-off" => Some(Plant::RowBranchCutOff),
+            "jumps-on-act" => Some(Plant::JumpsOnAct),
+            "notifies-every-step" => Some(Plant::NotifiesEveryStep),
+            "menu-release-always" => Some(Plant::MenuReleaseAlways),
             _ => None,
         }
     }

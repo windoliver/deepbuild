@@ -9,6 +9,7 @@ import { basename, isAbsolute, relative } from 'node:path';
 import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
 import { sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText, type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
+import type { CheckResult } from '@deepbuild/conformance';
 import type { ExtensionHost } from '@deepbuild/extension-host';
 import { slot } from '@deepbuild/gate';
 import type { LeaseTable } from '@deepbuild/leases';
@@ -23,15 +24,21 @@ import { refusal, Refused, ulid, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
-export interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; /** A claim's check that needs the app: it runs on the worktree's warm stack (#580). */ stack?: StackWant; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
+interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean; /** A claim's check that needs the app: it runs on the worktree's warm stack (#580). */ stack?: StackWant; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline?: number;
   /** A claim's check (#30): the command line the command check kind runs in `cwd`, hermetically through host@1; `argv` is what it would be as a shell line. */
   command?: string;
+  /** A check your repo's spec runs outside the sandbox (#33). */
+  outside?: boolean;
   /** Named command stand-ins in base runs (#874). */
   stand_ins?: string[];
   /** What its key is made of (#1018): a gate run's, kept with its finish so any claim with an equal key reads it. */
   key?: RunKey;
   /** Recovered runs with withheld environment values cannot run again unchanged (#996). */
-  withheld?: string[] }
+  withheld?: string[];
+  /** A claim's check of a kind other than command (#1537): check@1's spec, run through the kinds the hub holds. */
+  spec?: Obj;
+  /** It outlives the hub (#70): a hub's stop leaves it running, and the next hub adopts it rather than running it again. */
+  keep?: boolean }
 /**
  * How long a claim's check runs when its definition names no deadline: a day, so a run no tool ends is still stopped and
  * recorded overran. Spec-draft sets a check's own deadline from the time it took when drafted (#30); until it does, this stands.
@@ -50,7 +57,7 @@ const isUnder = (path: string, dir: string) => {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 };
 
-export interface RunsOptions {
+interface RunsOptions {
   /** The journal file: each run started and not yet durably finished. */
   journalFile: string;
   point(): void;
@@ -76,6 +83,8 @@ export interface RunsOptions {
   supervisor: () => Supervisor;
   leases: () => LeaseTable;
   extensions: () => ExtensionHost | undefined;
+  /** One run of a held kind's check (#1537): its result as check.kind@1's, for the run's claim, ended by `stop`. */
+  kind(run: Run, checkout: string, deadline: number, stop: AbortSignal): Promise<CheckResult>;
 }
 
 /**
@@ -132,11 +141,11 @@ export class Runs {
   async ended(run: string): Promise<void> { await this.live.get(run)?.done.catch(() => undefined); }
   /** Asks every run in flight to stop. */
   stopAll(): void {
-    for (const { stop } of this.live.values()) stop();
+    for (const { run, stop } of this.live.values()) if (!run.keep) stop();
   }
-  /** Waits up to five seconds for every run in flight to record its finish. */
+  /** Waits up to five seconds for every run in flight but the kept ones to record its finish. */
   async settled(): Promise<void> {
-    await Promise.race([Promise.allSettled([...this.live.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
+    await Promise.race([Promise.allSettled([...this.live.values()].filter((r) => !r.run.keep).map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
   }
 
   /**
@@ -194,7 +203,7 @@ export class Runs {
 
   /** run.start, and deep_run's runs with the deadline their spec gives, in ms; a gate run's with its key, and whether it's a held-out variant's (#1018); a claim's check that needs the app with its stack (#580). */
   async start(params: Obj, deadline?: number, id?: string, key?: RunKey, heldOut = false, stack?: StackWant): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins } = params;
+    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false, lane, expected_ms, deadline_ms, command, stand_ins, spec, outside, keep = false } = params;
     const limit = deadline ?? (typeof deadline_ms === 'number' ? deadline_ms : undefined);
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
@@ -212,15 +221,17 @@ export class Runs {
       }
     }
     if (grant.run_as_you !== undefined && typeof grant.run_as_you !== 'boolean') throw new Refused(refusal('type', '/params/grant/run_as_you', 'Give run_as_you as true or false.', grant.run_as_you));
+    if (typeof keep !== 'boolean') throw new Refused(refusal('type', '/params/keep', 'Give keep as true when the run should outlive the hub.', keep));
     if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
     const handle = id ?? `run:${ulid(this.o.now())}`;
     if (heldOut) this.heldOut.add(handle);
     const run = await this.launch({
       run: handle, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment || stack ? { environment: true } : {}), ...(stack ? { stack } : {}),
+      ...(keep ? { keep } : {}),
       ...(lane === 'fast' || lane === 'slow' ? { lane } : {}), ...(typeof expected_ms === 'number' ? { expected_ms } : {}),
       ...(limit ? { deadline: limit } : {}), ...(typeof command === 'string' ? { command } : {}),
       ...(Array.isArray(stand_ins) && stand_ins.every((n) => typeof n === 'string') ? { stand_ins: stand_ins as string[] } : {}),
-      ...(key ? { key } : {}),
+      ...(key ? { key } : {}), ...(isObj(spec) && typeof command === 'string' ? { spec } : {}), ...(outside === true ? { outside: true } : {}),
     }).catch((error: unknown) => { this.heldOut.delete(handle); throw error; });
     return { run };
   }
@@ -278,18 +289,30 @@ export class Runs {
       stop = () => controller.abort();
       const empty = { stdout: '', stderr: '', sha256: { stdout: sha256Hex(new Uint8Array()), stderr: sha256Hex(new Uint8Array()) } };
       const replaced = async (): Promise<boolean> => (await this.o.extensions()?.checks().catch(() => []) ?? []).some((c) => c.kind === 'command');
-      ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
+      // A check of another kind runs through the table of kinds the hub holds (#1537), within its deadline: its result
+      // is check.kind@1's, with no exit, output, attempts or stand-ins, as a replacing package's is.
+      if (run.spec) {
+        ended = this.o.kind(run, run.cwd, deadline, controller.signal)
+          .then((result) => ({ code: null, record: { run: run.run, ...result, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun }))
+          .catch((error: Error) => ({ code: null, failed: error.message }));
+      } else ended = replaced().then(async (byPackage): Promise<{ code: number | null; record: CommandRun } | { code: null; missing: string }> => {
         if (!byPackage) {
           // #669's planted runner judges the run by its exit code alone, whatever masks it.
-          const exitOnly = this.o.plant === 'runner-passes-masked-exit' ? { plant: 'exit-code-only' as const } : {};
+          // #33's planted gate reads every command check's result from its exit status alone.
+          const exitOnly = this.o.plant === 'runner-passes-masked-exit' || this.o.plant === 'verdict-from-exit-status' ? { plant: 'exit-code-only' as const } : {};
           // A check that needs the app runs on its stack, started from its checkout once the run may start (#580). What
           // it served is read while it lasts, so a run on another tree, or on an environment that broke its rules, is uncounted.
           const serving = run.stack ? await this.o.stacks.serve({ ...run.stack, run: run.run, claim: run.claim, check: run.check, folder: run.cwd, expected_ms: run.expected_ms ?? null }) : undefined;
-          if (serving && 'cause' in serving) return { code: null, missing: serving.cause };
+          // A stack that never came up is a missing run the gate reads, naming why, so the check is BLOCKED (#33), never left
+          // with no run; one the hub's stop cut short is stopped.
+          if (serving && 'cause' in serving) {
+            const failures = [{ test: '(stack)', file: '.', line: 1, stack: null, assertion: false, message: `its stack never came up: ${serving.cause}` }];
+            return { code: null, record: { run: run.run, outcome: this.o.stopping() ? 'stopped' : 'missing', testsRun: 0, failures, evidence: [], read: [], mask: null, exit: null, output: empty, env: [], attempts: [], retries: null, seeded: [], contract: null, timing: null, clock: 0 } as CommandRun };
+          }
           const hosts = [...(run.grant.hosts ?? []), ...(serving?.hosts ?? [])];
           let record: CommandRun;
           try {
-            record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly });
+            record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly, ...(run.outside ? { outside: true } : {}) });
           } catch (error) {
             await this.o.stacks.finish(run.run);
             throw error;
@@ -328,7 +351,7 @@ export class Runs {
         const hosts = ports.map(([, port]) => `127.0.0.1:${port}`);
         return this.o.host().start({
           run: run.run, argv: run.argv, cwd: run.cwd, env: { ...env, ...Object.fromEntries(ports.map(([name, port]) => [name, String(port)])) },
-          grant: hosts.length ? { ...run.grant, hosts: [...(run.grant.hosts ?? []), ...hosts] } : run.grant, output,
+          grant: hosts.length ? { ...run.grant, hosts: [...(run.grant.hosts ?? []), ...hosts] } : run.grant, output, ...(run.keep ? { keep: true } : {}),
         });
       });
       ended = started.then(async (s) => {
@@ -400,12 +423,33 @@ export class Runs {
     await this.o.sync();
     this.writeJournal((runs) => { delete runs[run.run]; });
   }
+  /** A kept run this hub found running: looked at until it's gone. */
+  private adopt(run: Run): void {
+    const look = setInterval(() => void this.o.supervisor().lives(run.run).then(async (lives) => {
+      if (lives) return;
+      clearInterval(look);
+      await this.keptEnded(run);
+    }), 1000);
+    look.unref();
+  }
+  /** No hub read a kept run's exit, so it finishes unjudged, as stopped: never passed on an exit nobody saw. */
+  private async keptEnded(run: Run): Promise<void> {
+    await this.o.supervisor().cleanup(run.run).catch(() => undefined);
+    await this.finish(run, 'stopped', ['it ended with no hub to read its exit'], []);
+    this.writeJournal((runs) => { delete runs[run.run]; });
+  }
   /** After a start with runs still in the journal: each was in flight when the hub stopped without a clean stop. */
   async recover(): Promise<void> {
     const recorded = async (kind: string, run: string) => (await this.o.raw(`SELECT 1 FROM events WHERE kind = ? AND json_extract(data, '$.run') = ? LIMIT 1`, [kind, run.replace(/'/g, "''")])).length > 0;
     for (const run of Object.values({ ...this.journal })) {
       if (await recorded('run.finished', run.run)) {
         this.writeJournal((runs) => { delete runs[run.run]; });
+        continue;
+      }
+      // A kept run is never run again: it runs on, or it ended between the hubs.
+      if (run.keep) {
+        if (await this.o.supervisor().lives(run.run)) this.adopt(run);
+        else await this.keptEnded(run);
         continue;
       }
       // Its processes were reaped when the supervisor opened.

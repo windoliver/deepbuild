@@ -90,6 +90,64 @@ and both runs and the CPU the change's own tests account for are reported. A bud
 frozen once it reaches main, and a new one records `INITIAL` with its reason. A
 clone made with `--single-branch` needs `git fetch origin main` first.
 
+## Verdicts on GitHub
+
+DeepBuild can post each verdict as a commit status with the context `deepbuild/verdict`, on the commit it covers. A PASS is `success`; INCONCLUSIVE and BLOCKED are `pending`; FAIL and INVALID are `failure` and `error`. A verdict on uncommitted work waits for a pushed commit with the same files. A head that holds a commit neither a session made nor an account of yours pushed stays `pending`, with `untrusted head` in the description.
+
+Nothing posts until the repo has a delivery rule, and every repo starts with it off. Turn it on in `~/.deepbuild/config.json`, naming the accounts that push for you.
+
+Only the gate should turn a commit green, so make two GitHub Apps and install both on the repo:
+
+- **The gate's app** posts every status. It needs "Commit statuses: write". Its key is used only by the hub.
+- **The agents' app** gives each session DeepBuild starts its own short-lived token for that repo. It needs "Contents: write", "Pull requests: write" and "Issues: write". The token can push branches, open PRs and comment. It can't post a status, and the hub revokes it when its session ends, even if the hub restarted in between. Each push it makes is recorded with its session and the person who approved the session's run, never the commit's author. Your own `GH_TOKEN` stays with the hub and never reaches a session.
+
+Put each app's private key in your login Keychain, then name both apps in your settings:
+
+```bash
+security add-generic-password -s deepbuild.github.gate -a deepbuild -w "$(cat gate.private-key.pem)"
+```
+
+```json
+{ "github": { "delivery": { "owner/name": "on" }, "yours": ["your-account"],
+    "gate": { "app_id": 1234, "key": "deepbuild.github.gate" },
+    "agents": { "app_id": 5678, "key": "deepbuild.github.agents" } } }
+```
+
+Until `github.gate` is set, the hub posts with the `GH_TOKEN` or `GITHUB_TOKEN` in its own environment, which the rules below don't count.
+
+DeepBuild never changes branch protection or the repo's rules itself. `deep gate rules` prints the two rulesets the repo needs:
+
+- The default branch requires `deepbuild/verdict` from the gate's app. Only an admin, through the forge's bypass, updates or deletes the branch, so no agent's token merges or pushes it.
+- Only an admin makes, moves or deletes a `deep/approved/` tag.
+
+Put each one on as the repo's admin:
+
+```bash
+deep gate rules --json | jq -c '.rulesets[]' | while read -r r; do echo "$r" | gh api -X POST repos/OWNER/NAME/rulesets --input -; done
+```
+
+A push you make yourself through the bypass is recorded as unguarded, and never reads PASS.
+
+## Approve an edit to a check
+
+An edit that could weaken a check, such as a skipped or loosened test, passes the local guard only with a person's signed tag under `deep/approved/` on its commit. Signers come from one list in the repo, `.deepbuild/approvers`, an SSH allowed-signers file. The guard reads it from the merge base, never from your working tree, your home folder or a variable, so every checkout gets the same verdict. Any one person on it approves a commit, whoever's agent wrote it.
+
+The list takes only keys that need a touch or a biometric for every signature, `sk-ssh-ed25519@openssh.com` and `sk-ecdsa-sha2-nistp256@openssh.com`, so no agent running as you can sign. A key in a plain file is refused on the list, and a signature made without a touch approves nothing. Make one on a security key:
+
+```bash
+ssh-keygen -t ed25519-sk -f ~/.ssh/deepbuild_approver
+echo "you@example.com namespaces=\"git\" $(cat ~/.ssh/deepbuild_approver.pub)" >> .deepbuild/approvers
+```
+
+Adding or removing a key needs a signature from a key already on the list. The first list lands on the default branch by your own push. To approve a commit:
+
+```bash
+git -c gpg.format=ssh -c user.signingkey=~/.ssh/deepbuild_approver tag -s deep/approved/<name> -m 'Approves: <path>' <commit>
+git push origin refs/tags/deep/approved/<name>
+```
+
+An agent's call that signs or pushes such a tag is refused by the `no-approval-tag-sign` and `no-approval-tag-push` guards, and the forge refuses its push.
+
 ## Documentation
 
 | Goal | Start here |

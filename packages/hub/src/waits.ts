@@ -92,7 +92,7 @@ export function excerpt(text: string, max = EXCERPT): string {
 }
 
 /** The lines. Each names what it is about, so one is readable alone in the chat. */
-export const lines = {
+const lines = {
   announce: (what: string, expected: number) => `DeepBuild: waiting on \`${what}\` · about ${span(expected)} expected`,
   inCall: (what: string, ran: number, expected: number) => `DeepBuild: still waiting on \`${what}\` · ${span(ran)} so far, about ${span(expected)} was expected`,
   overrun: (what: string, ran: number, expected: number) => `DeepBuild: \`${what}\` ran ${span(ran)}, about ${span(expected)} was expected`,
@@ -135,7 +135,7 @@ export interface Overran { call: OpenCall; ran: number }
 /** What a hook's reply carries of the waits: a chat line, context for the agent, a rewritten input with the deadline. */
 export interface Reply { message?: string; context?: string; updatedInput?: Record<string, unknown>; overran?: Overran }
 /** What the event loop does at a due time: show a line while a call runs, and record its overrun. */
-export type Due =
+type Due =
   | { kind: 'overrun'; session: string; agent: string; cwd: string; call: OpenCall; ran: number; line: string }
   | { kind: 'progress'; session: string; agent: string; cwd: string; line: string };
 
@@ -146,7 +146,7 @@ export interface HookSeen {
   /** A prompt's text. */
   prompt?: string;
 }
-export interface WaitsOptions {
+interface WaitsOptions {
   /** Whether a call's input can be rewritten for this agent (the adapter's rewrite flag). */
   rewrites: (agent: string) => boolean;
   /** The planted wrong program: lines wait for the turn's stop. */

@@ -5,73 +5,31 @@
 // and `deep setup`, `deep waiter` and the doctor's timing relations for Claude Code's hooks (#18); `deep setup --undo`,
 // `deep off`, `deep on`, `deep hub stop` and `deep hub use`, each once the OS confirms you, and `deep status` (#19);
 // `deep backup` and `deep restore`, the record copied through the hub and put back with it stopped (#572).
-import { confirmed, gatesCommand, useCommand } from './authority.js';
+import { gatesCommand } from './authority.js';
 import { backupCommand, restoreCommand } from './backup.js';
 import { envCommand } from './env.js';
 import { guardCommand } from './guards.js';
-import { inboxCommand } from './inbox.js';
+import { inboxCommand, raceCommand } from './inbox.js';
+import { startCommand } from './start-command.js';
+import { secretCommand } from './secret-command.js';
 import { workspaceCommand } from './workspace-command.js';
+import { fixCommand } from './fix-command.js';
 import { installCommand } from './install.js';
 import { memoryCommand } from './memory.js';
+import { rulesCommand } from './rules.js';
 import { undoCommand } from './undo.js';
-import { resolve } from 'node:path';
-import { installedRoot } from './paths.js';
-import { runHub } from './server.js';
-import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
-export { workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, memoryCommand, relationItems, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
+export { startCommand };
+export { hubCommand } from './hub-command.js';
+export { gateCommand } from './gate-command.js';
+export { fixCommand, workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, raceCommand, secretCommand, memoryCommand, relationItems, rulesCommand, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
 export { numbersCommand, statusCommand } from './status.js';
+export { joinCommand } from './remote.js';
 export { showCommand } from './show.js';
-export { kindsCommand } from './canvas.js';
+export { exportCommand, kindsCommand } from './canvas.js';
 export { doctorCommand, doctorItems } from './doctor.js';
 export { activePlant } from './plant.js';
 export { contractAdapter, type DeprecatedNotice, type RpcEntry } from './contracts.js';
 export { rootOf } from './paths.js';
 export { openWikiBuild } from './wiki-build.js';
-
-const USAGE = `Usage: deep hub run [--root <folder>] [--safe]
-       deep hub start [--root <folder>]
-       deep hub status [--root <folder>]
-       deep hub stop [--root <folder>]
-       deep hub use --root <folder>`;
-
-/** `deep hub <command>`: `cli` is the path of the deep command's own script, which the login service runs. */
-export async function hubCommand(args: readonly string[], cli: string): Promise<number> {
-  const [command, ...given] = args;
-  // Safe mode, only for `run`: the hub starts with no extension loaded.
-  const safe = command === 'run' && given.includes('--safe');
-  const rest = given.filter((a) => !(safe && a === '--safe'));
-  let root: string | undefined;
-  if (rest.length === 2 && rest[0] === '--root' && rest[1]) root = rest[1];
-  else if (rest.length) {
-    process.stderr.write(`${USAGE}\n`);
-    return 2;
-  }
-  switch (command) {
-    case 'run': return runHub({ ...(root ? { root } : {}), safe });
-    case 'start': return startHub({ cli, ...(root ? { root } : {}) });
-    case 'status': return hubStatus(root ? { root } : {});
-    case 'stop':
-      // A dev hub stops when asked; the installed one only once the OS confirms you.
-      if (root && resolve(root) !== installedRoot()) return stopHub({ root });
-      return stopInstalled();
-    case 'use':
-      if (root) return useCommand(root);
-      break;
-  }
-  process.stderr.write(`${USAGE}\n`);
-  return 2;
-}
-
-/** `deep hub stop` of the installed hub, once the OS confirms you. */
-async function stopInstalled(): Promise<number> {
-  const why = await confirmed('deep hub stop');
-  if (why) {
-    process.stderr.write(`${why}\n`);
-    return 3;
-  }
-  await stopIfRunning(installedRoot());
-  process.stdout.write('The hub stopped. It starts again at your next login, or with deep hub start.\n');
-  return 0;
-}

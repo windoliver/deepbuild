@@ -1,0 +1,16 @@
+{
+  "issue": 427,
+  "criterion": "#427.78a8171b",
+  "verdict": "looks_right",
+  "who": "the owner, by delegation (\"validate for me\"), on Claude's view-by-view check",
+  "when": "2026-11-08T19:25:03Z",
+  "screenshots": {
+    "lighting_only.png": "d16325fd6d237032624a434e25284b9182ec99af37cac1e127d75f1e06e8fa31",
+    "overdraw.png": "9acbde902e70c5e6b945d193490d327d074482ebb15257ce2f3460ac4cce5573",
+    "cascade_splits.png": "dfa1831eff5682ff52c894a8eb6f64aaf35d53da6525584e6d4771928929cf25",
+    "bounds.png": "fd795241d9d5a22fca56d9de4490d83f4df570b89ba21db71b545490b95477c8",
+    "lights_cameras.png": "8a37858c8df4ff91e926880d191f7b63d5a0251a855bcb626d346b6380c8ae02",
+    "uv_checker.png": "45243ab3f2e5eb76f8f26d623cbd28cb18e8b325a7f9e327b96a0c14e7103215"
+  },
+  "note": "The owner asked Claude to validate the six screenshots in their place. Claude checked each against the issue and the renderer code: lighting_only, overdraw, cascade_splits, bounds and uv_checker were right as drawn; lights_cameras lacked point-light centre marks and drew the sun as a stub on the spot axis, fixed in 94a9ec05 and re-rendered."
+}

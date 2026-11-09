@@ -7,7 +7,12 @@ export { ulidTime } from '@deepbuild/record/ids';
 
 export const VERSION = 1;
 /** The features the hub lists in its hello; a client turns off any of its own the hub doesn't list. */
-export const FEATURES: readonly string[] = [];
+export const FEATURES: readonly string[] = [
+  // Every method the app calls (#41): crates/deep-app/src/hub.rs NEEDS checks this hello against them.
+  'inbox.read', 'stream.subscribe', 'events.read', 'notifications.report', 'views.shown', 'views.hidden', 'canvas.drawn', 'canvas.user',
+];
+/** The hub's contract version, "major.minor": a client needing a newer one shows the hub as older (compat.ts). */
+export const CONTRACT = '1.0';
 
 /** error@3: one refusal. */
 export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }
@@ -82,6 +87,10 @@ export interface HookMeta {
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
   payloadWriter?: string;
+  /** The person whose credential the hook's connection presented (#1337), set by the event loop alone; none for the owner. */
+  person?: string;
+  /** Only the actor-from-payload plant reads it. */
+  payloadActor?: string;
   /** Why the adapter can't read this patch's paths, so its PreToolUse is denied before it runs (#39). */
   denied?: string;
   /** Set by the server on a PreToolUse its guard entries blocked: the entries, by name, for a PostToolUse that shows it ran anyway (#1033). */
@@ -92,11 +101,16 @@ export interface HookMeta {
   caller?: string;
   /** Set by the server on a hook whose agent's hook program the last check found can't run (#993): its gates watch-only. */
   cantRun?: boolean;
+  /**
+   * Set by the server on a PreToolUse (#344): the scoped rules its reply carried as notices, by handle, and an edited
+   * rule file's rules before the call ran, for the core to record and to compare after the call.
+   */
+  rules?: { notices: string[]; before?: { file: string; scope: string; rules: string[] }[] };
   /** A shell call's command line; only the matches-text plant reads it. */
   command?: string;
   /** The agent version the session's transcript names; unset until it holds an entry. */
   version?: string;
-  /** Set for a session on a version its facts don't cover: recorded unverified, its holds and blocks watch-only. */
+  /** Set for a session on a version its facts don't cover: recorded unverified, its holds and every block but the floor watch-only (#1501). */
   watchOnly?: boolean;
   /**
    * A line from paseo's plugin (#55): the agent's provider and paseo's own agent ID, the token its DeepBuild MCP server
@@ -114,8 +128,17 @@ export interface HookMeta {
    * mode, the tool, its input, and the options the agent offers in its own permission dialog.
    */
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
+  /**
+   * The hunks an edit's PostToolUse reports (#352): one per run of changed lines, its context and its common head and
+   * tail taken off, in order down the file. Numbers only: no line's text leaves the parser.
+   */
+  hunks?: Hunk[];
   /** The pull request a `gh pr create` call opened, from its PostToolUse's response (#83). */
   pr?: string;
+  /** A shell call that ran, with what it printed, read against the repo's outside resources (#342). */
+  ran?: { command: string; stdout: string };
+  /** All a shell call printed, its stdout, stderr and error, failed or not: what a started session's sandbox refused (#1330). */
+  printed?: string;
   /**
    * A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, a background subagent or
    * command (#907) started, by its call, or a monitor's watch armed or stopped, by its ID (#997).
@@ -123,6 +146,8 @@ export interface HookMeta {
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: 'subagent' | 'command'; call: string; what: string }
     | { monitor: string; what: string; command: string; timeout: number | null } | { stopped: string };
 }
+/** One run of an edit's changed lines (#352): where it starts once the runs above it are applied, the lines it removes and adds there, and the new lines it changed. */
+export interface Hunk { oldStart: number; oldLines: number; newLines: number; changed: number[] }
 /** The effect classes no "proceed" covers (#321). */
 export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']);
 /** What the event loop hands the core of a PreToolUse it holds for the gate: the call as a person reads it, its effect classes and MCP tool. */
@@ -138,6 +163,8 @@ export const SCREEN_TOOLS = ['mcp__computer-use__', 'mcp__remote-devices__comput
 export interface StageReach {
   /** The folders a delete whose reach can't be worked out names (#347). */
   folders?: string[] | null;
+  /** What a delete whose reach is known reaches past its worktree, or the folder a `git clean` that deletes works in (#1507). */
+  past?: string[] | null;
   /** The paths under which a command discards tracked edits (#1294). */
   edits?: string[] | null;
   /** The stash a drop names: the folder it works in, then the entry, or no entry for all of them (#1294). */
@@ -147,7 +174,7 @@ export interface Gated {
   label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string;
   /** The push, PR and merge defaults this call meets (#84), each with what it does; `merge` is what a merge names. */
   named?: { rule: string; effect: 'push' | 'pr' | 'merge' }[];
-  merge?: { head?: string; pr?: string; auto?: boolean; disable?: boolean };
+  merge?: { head?: string; pr?: string; auto?: boolean; disable?: boolean; blind?: boolean };
   /** A question card's questions (#84), sorted as a stop's question is. */
   card?: Record<string, unknown>[];
   /** A computer-use step: allowed only on what its session leases (#332). */
@@ -195,7 +222,7 @@ export const EXTENSION_HOOK_MS = 500;
 export const EXTENSION_HOLD_MS = EXTENSION_HOOK_MS + 500;
 
 /** The test VFS's settings, from DEEP_HUB_TEST_VFS. */
-export interface VfsSettings { points?: string; cutAfter?: number; syncDelayMs?: number; refuse?: string }
+export interface VfsSettings { points?: string; cutAfter?: number; syncDelayMs?: number; refuse?: string; /** Cut right after the nth point of one kind (#148). */ cutAt?: { kind: string; nth: number } }
 
 /** What the core is started with, in its worker or inline. */
 export interface CoreOptions {
@@ -214,6 +241,8 @@ export interface CoreOptions {
   crash?: 'start-recorded' | 'spawned';
   /** The file that stands for the OS confirming you, from DEEP_HUB_TEST_CONFIRM; only tests set it. */
   confirm?: string;
+  /** The program run in pkcheck's place, from DEEP_HUB_TEST_POLKIT; only tests set it. */
+  polkit?: string;
   /** A module whose default export returns the index@1 fill deep_search reads the wiki through, from DEEP_HUB_TEST_INDEX; only tests set it. */
   index?: string;
   /** The forge's REST API the archive copies CI runs from, from DEEP_HUB_TEST_FORGE; only tests set it. */

@@ -1,0 +1,9 @@
+{
+  "kind": "document",
+  "runner": "markdown",
+  "document": "report.md",
+  "inputs": ["report.md", "sources/q3.json"],
+  "depth": "unit",
+  "oracle": "code",
+  "contract": null
+}

@@ -1,0 +1,34 @@
+#1477 redraft at the base, dd83ac2f ("Merge pull request #1692 …").
+
+Run on a `git archive dd83ac2f` export with tests/acceptance/1477 (first draft and this redraft) copied in, on macOS:
+
+$ npx vitest run --root tests/acceptance/1477/redraft --no-file-parallelism --testTimeout=600000
+ FAIL  record.test.ts > #1477.e66d9bdb … > #1477.e66d9bdb an arm left out reads INCONCLUSIVE …
+AssertionError: the bench builds: cargo test --release --locked -p deep-app --test lists_1477 --no-run: expected
+'cargo test --release --locked -p deep…' to be ''
++ cargo test --release --locked -p deep-app --test lists_1477 --no-run --message-format=json-render-diagnostics failed:
++ error: no test target named `lists_1477` in `deep-app` package
++ help: available test targets:
++     acceptance_1141
++     acceptance_1141_memory
++     acceptance_34
++     acceptance_995
++     chrome
++     headless
++     hub_client
++     screens
++     spike_402
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  1.50s
+
+Past the build, the base has no `measure` call, no `missed` arm status and no docs/spikes/1477/record.json.
+
+Type-check on the same export: `node node_modules/typescript/bin/tsc -p tests/acceptance/1477/redraft/tsconfig.json`
+prints nothing (exit 0).
+
+The decision rule itself was checked against synthetic records in a scratch test, not kept: the redraft's judgeRecord
+passes a record with a missed panel deciding build, and flags the same record deciding stop or INCONCLUSIVE, a missed
+arm without a reason, without a fingerprint, at 127 rows or carrying a net reading, a missed list arm, a build with kit
+unrun, and a build with no ours arm; the first draft's judgeRecord flags the good missed-panel record ("neither
+measured nor INCONCLUSIVE"), which is why it is replaced.

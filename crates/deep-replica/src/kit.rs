@@ -169,7 +169,8 @@ const OVERLAYS: [(&str, &str); 12] = [
 const SLOT: (f32, f32) = (260., 862.);
 
 /// `panel@1`, the checks every panel passes at install (#326). A panel is refused when its manifest lists a Git
-/// dependency (nothing is fetched); when it calls the network or runs a program; when it uses a component that
+/// dependency (nothing is fetched); when it imports the toolkit, a name off the panel catalog or a component whose
+/// script runs per frame (#1425); when it calls the network or runs a program; when it uses a component that
 /// draws outside its parent, which could cover the question card; and, run headless in its slot for half a
 /// second, when it moves focus with no gesture from you or paints outside its slot. Each refusal says why in
 /// its own words.
@@ -196,6 +197,10 @@ pub fn panel(dir: &std::path::Path) -> Verdict {
         return refuse(format!(
             "it uses {name}, a {what}, which gpui-shell draws outside its parent, where it could cover the question card"
         ));
+    }
+    // #1425: a toolkit import, a name off the panel catalog, a component whose script runs per frame.
+    if let Err(why) = deep_app::panel_module::check(dir) {
+        return refuse(why);
     }
     match watch(dir) {
         Ok(None) => Verdict {
@@ -397,5 +402,24 @@ mod tests {
         let verdict = needs_you(&handles(&["A", "A", "B", "C"]), &want);
         assert!(!verdict.pass);
         assert_eq!(verdict.names.as_deref(), Some("ask:B"));
+    }
+}
+
+/// The look's 16 terminal colors as the app's cell grid draws them, on the terminal's background (#1003).
+pub struct TerminalColors {
+    pub dark: bool,
+}
+
+impl gpui_kit::Render for TerminalColors {
+    fn render(
+        &mut self,
+        _: &mut gpui_kit::Window,
+        _: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
+        use gpui_kit::{div, InteractiveElement as _, ParentElement as _, Styled as _};
+        div()
+            .id("terminal-colors")
+            .size_full()
+            .child(deep_app::cells::look_colors_page(self.dark))
     }
 }

@@ -1,0 +1,40 @@
+#1408 acceptance suite on the base commit 2bba2a50 (origin/main), November 7, 2026, before any #1408 code.
+Linux aarch64, 20 cores, Node v24.22.0, cargo 1.99.1; 1-minute load about 43-65 while it ran.
+Run (deep-hook part only): npx vitest run --root tests/acceptance/1408 --no-file-parallelism -t deep-hook
+Result: Test Files 2 failed (2); Tests 4 failed | 2 passed | 7 skipped (13). Home paths redacted to ~.
+
+Not run here: the 7 skipped tests, the deep-app and deep-replica release builds (AC1: deep-app, deep-replica,
+deep-replica-canvas, deep-drive, deep-live) and their refused builds (AC2: -p deep-app, -p deep-replica). They are gpui
+builds of tens of minutes each and the machine was at load ~90; they are expected to fail at the base the same way
+(AC1 on deep-app and on deep-replica's bins wherever the string is linked in; AC2 on cargo's "does not contain this
+feature"), but that is not shown here.
+
+Before the run, a byte search of the base release deep-hook (cargo build --locked --release -p deep-hook):
+  DEEP_HUB_PLANT   1 occurrence
+  DEEP_DRIVE_PLANT 0
+And base debug deep-hook as a Claude Code PreToolUse hook, no hub, `cargo test -p x`, spool line:
+  no plant                          "matched":[]   (no heavy field)
+  DEEP_HUB_PLANT=leases-every-cargo "matched":[],"heavy":{"name":"cargo","kinds":[],"form":"deep lease -- cargo test -p x"}
+
+release.test.ts (AC1 #1408.fc1e2a9c, AC2 #1408.028b0245)
+  x AC1 the release binary deep-hook (cargo build --locked --release -p deep-hook) holds neither string
+    Error: the release binary deep-hook holds DEEP_HUB_PLANT (byte search of
+    ~/deepbuild/.claude/worktrees/<worktree>/target/acceptance-1408/release/release/deep-hook, 1532944 bytes)
+  v AC1 (wrong program) the merge base's release deep-hook, which reads DEEP_HUB_PLANT, fails the byte search naming it
+    (passes: on the base the merge base is this checkout)
+  x AC2 cargo build --locked --release --features env-plants -p deep-hook fails on a compile error naming env-plants
+    Error: the release build of deep-hook with --features env-plants failed only because cargo found no such feature,
+    not on a compile error naming it: error: the package 'deep-hook' does not contain this feature: env-plants
+  v AC2 (wrong program) the merge base's deep-hook, which has no env-plants feature, fails this test: cargo's own
+    feature error is no refusal   (passes)
+
+planted.test.ts (AC3 #1408.894e1c69)
+  x AC3 deep-hook built with --features env-plants and DEEP_HUB_PLANT=leases-every-cargo leases a focused cargo call,
+    as #1015's wrong program does
+    Error: BLOCKED: deep-hook with --features env-plants did not build (exit 101): error: the package 'deep-hook' does
+    not contain this feature: env-plants
+  x AC3 (wrong program) the release deep-hook, a build with no plant, fails this test
+    AssertionError: the release deep-hook selected DEEP_HUB_PLANT=leases-every-cargo from the environment: it passed
+    the planted judge: expected null not to be null
+
+The planted suites of README's Criterion 3 table were not run (they need the feature to exist, and most need macOS).

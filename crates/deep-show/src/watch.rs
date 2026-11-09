@@ -27,12 +27,14 @@ use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
 use gpui_apple::metal_renderer::presentation;
 use gpui_kit::*;
+use gpui_macos::frame_link;
 use objc2::runtime::AnyObject;
 use objc2::{msg_send, sel};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use serde_json::{json, Map, Value};
 
-use crate::hub::{Call, Hub, Scenario, Startup};
+use crate::hub::{Call, Hub, Planted, Scenario, Startup};
+use crate::idle::{self, Asked, By, Track, Usage};
 use crate::live::{nodes, AxNode, Node, STRIP};
 use crate::shared::FLICKS;
 use crate::window::bounds;
@@ -50,6 +52,13 @@ const SETTLE_DEADLINE: Duration = Duration::from_secs(10);
 /// The run's own poll while it waits for a presented frame or for the clock to settle; it stops
 /// before any watch begins and is never the frame clock's.
 const POLL: Duration = Duration::from_millis(10);
+/// How long after a wake its frame may present and still answer it (README #1551: `wakes`), and
+/// the span before it in which request-frame callbacks mean the window wasn't idle.
+const WAKE_ANSWER: i64 = 500_000_000;
+/// #1551: a window settles once its frame source is quiet too (no request-frame callback for
+/// this long), or this long after the frames settle when a link never stops.
+const LINK_QUIET: i64 = 50_000_000;
+const LINK_GRACE: i64 = 300_000_000;
 /// The presented handler runs after the display shows a drawable: the run waits this long past a
 /// watch's end for the feedback of the frames presented within it.
 const FEEDBACK: Duration = Duration::from_millis(200);
@@ -73,6 +82,8 @@ pub struct Options {
     tree: bool,
     after: Vec<After>,
     hold_ms: u64,
+    /// #1551: requests that wake the window once it has settled.
+    wake: Vec<idle::Wake>,
 }
 
 /// Reads the `live` object; `None` for one the README doesn't allow.
@@ -85,6 +96,7 @@ pub fn parse(live: &Value, call: impl Fn(&Map<String, Value>) -> Option<Call>) -
         "tree",
         "after",
         "hold_ms",
+        "wake",
     ];
     if o.keys().any(|k| !known.contains(&k.as_str())) {
         return None;
@@ -131,12 +143,17 @@ pub fn parse(live: &Value, call: impl Fn(&Map<String, Value>) -> Option<Call>) -
         None => 0,
         Some(h) => h.as_u64()?,
     };
+    let wake = match o.get("wake") {
+        None => Vec::new(),
+        Some(list) => idle::parse(list, &call)?,
+    };
     Some(Options {
         pace_hz,
         watch,
         tree,
         after,
         hold_ms,
+        wake,
     })
 }
 
@@ -224,6 +241,21 @@ struct State {
     stage: Stage,
     picture: Option<Arc<RenderImage>>,
     view: Option<EntityId>,
+    /// #427: the live view's meter ladder, charged by each document frame it draws, and its
+    /// class's frame limits.
+    ladder: deep_gpu::meter::Ladder,
+    limits: deep_canvas::budget::Limits,
+    /// #1551: when each request-frame callback ran, from the vendored frame link's hook.
+    callbacks: Arc<Mutex<Vec<i64>>>,
+    /// Whether the window has settled; the wakes asked of it since; the one an arriving pointer
+    /// move answers; the window's state since it settled; the process's use over the watch.
+    settled: bool,
+    asked: Vec<Asked>,
+    pending_input: Option<usize>,
+    track: Option<Track>,
+    watch_usage: [Option<(i64, Usage)>; 2],
+    /// The window's NSWindow, so its state is read without updating (and redrawing) the window.
+    ns_window: *mut AnyObject,
 }
 
 /// Where a window is in showing the document.
@@ -306,6 +338,53 @@ impl State {
             .ok()?;
         let rgba = self.hub.renderer.raster(&drawn, px_size, Some(ground));
         picture(rgba, px_size)
+    }
+
+    /// #1551's readings of the run (README: `request_frames`, `window`, `wakes`, and what the
+    /// process spent over the watch), added to the answer's `live`.
+    fn idle_readings(&self, live: &mut Value, watch: Option<(i64, i64)>) {
+        let callbacks = self.callbacks.lock().unwrap_or_else(|e| e.into_inner());
+        let between =
+            |from: i64, to: i64| callbacks.iter().filter(|t| **t >= from && **t < to).count();
+        if let Some((from, to)) = watch {
+            live["request_frames"] = json!(between(from, to));
+        }
+        if let [Some((t0, u0)), Some((t1, u1))] = self.watch_usage {
+            live["process"] = idle::spent(t0, u0, t1, u1);
+        }
+        if let Some(track) = &self.track {
+            live["window"] = track.json();
+        }
+        let presented = self.presented();
+        let wakes: Vec<Value> = self
+            .asked
+            .iter()
+            .map(|a| {
+                let req = a.requested_ns;
+                let seq = a.frame_seq.or_else(|| {
+                    self.clock
+                        .latched
+                        .iter()
+                        .find(|f| f.document && f.latch > req)
+                        .map(|f| f.seq)
+                });
+                let answer = seq.and_then(|seq| {
+                    presented
+                        .iter()
+                        .find(|(s, at)| *s == seq && *at <= req + WAKE_ANSWER)
+                        .map(|(_, at)| (seq, *at))
+                });
+                json!({
+                    "after_ms": a.after_ms, "by": a.by.name(), "requested_ns": req,
+                    "request_frames_before": between(req - WAKE_ANSWER, req),
+                    "frame_seq": answer.map(|a| a.0), "presented_ns": answer.map(|a| a.1),
+                    "refresh_ns": self.clock.refresh_ns,
+                })
+            })
+            .collect();
+        if !self.asked.is_empty() {
+            live["wakes"] = json!(wakes);
+        }
     }
 
     /// Whether the document drawn at `t` changes after it (its `valid_until`).
@@ -419,13 +498,21 @@ impl Render for View {
             if document {
                 let t0 = *st.clock.t0.get_or_insert(predicted);
                 let t = ((predicted - t0) as i128 * i128::from(FLICKS) / 1_000_000_000) as i64;
+                let began = host_ns();
                 if let Some(picture) = st.draw(t) {
                     if let Some(old) = st.picture.replace(picture) {
                         let _ = window.drop_image(old);
                     }
                 }
-                if st.moves_after(t) {
-                    let per_frame = st.clock.per_frame;
+                // #427: the frame's CPU time charges the live view's meter; the window draws
+                // on the CPU, so no GPU time is charged.
+                let cpu_ms = (host_ns() - began) as f64 / 1e6;
+                let limits = st.limits;
+                let _ = st.ladder.frame(0.0, cpu_ms, &limits, false, false);
+                let each_vsync =
+                    st.settled && st.hub.scenario.planted == Some(Planted::ArmsEachVsync);
+                if st.moves_after(t) || each_vsync {
+                    let per_frame = if each_vsync { 1 } else { st.clock.per_frame };
                     arm(window, state.clone(), seq + 1, per_frame);
                 }
             } else {
@@ -468,6 +555,15 @@ impl Render for View {
             .size_full()
             .relative()
             .bg(self.ground)
+            // #1551: a pointer move a `wake` posted arrives here, through GPUI's `on_input`.
+            .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, _, cx| {
+                let mut st = this.state.borrow_mut();
+                if let Some(i) = st.pending_input.take() {
+                    st.asked[i].requested_ns = host_ns();
+                    drop(st);
+                    cx.notify();
+                }
+            }))
             .child(painted)
             .children(nodes)
     }
@@ -480,6 +576,21 @@ fn ns_view(window: &Window) -> Option<*mut AnyObject> {
         return None;
     };
     Some(handle.ns_view.as_ptr().cast())
+}
+
+/// The window's NSWindow, through GPUI's AppKit handle; null without one.
+fn ns_window(window: &Window) -> *mut AnyObject {
+    match ns_view(window) {
+        // SAFETY: GPUI's AppKit handle wraps its NSView, alive while the GPUI window is.
+        Some(view) => unsafe { msg_send![&*view, window] },
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// What AppKit shows of the window now (README #1551: `live.window`).
+fn window_state(window: &Window) -> &'static str {
+    // SAFETY: null or the window's live NSWindow, on the main thread.
+    unsafe { idle::window_state(ns_window(window)) }
 }
 
 /// Whether AppKit presents the window: `NSWindow.occlusionState` holds `Visible`.
@@ -587,6 +698,7 @@ fn read_tree(window: &Window) -> Vec<Value> {
 
 fn print_and_quit(reply: Value, cx: &mut App) {
     presentation::set_hook(None);
+    frame_link::set_hook(None);
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{reply}");
     let _ = out.flush();
@@ -670,6 +782,32 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
             f.push((label, (at.max(0.) * 1e9).round() as i64));
         }
     })));
+    // #1551: every request-frame callback, stamped as it runs, and the planted frame links.
+    frame_link::plant(match scenario.planted {
+        Some(Planted::LinkNeverStops) => frame_link::Planted::NeverStops,
+        Some(Planted::WakerIgnoresScheduleFrame) => frame_link::Planted::IgnoresScheduleFrame,
+        Some(Planted::LinkRestartsARefreshLate) => frame_link::Planted::RestartsAfterRefresh,
+        _ => frame_link::Planted::None,
+    });
+    let callbacks: Arc<Mutex<Vec<i64>>> = Arc::default();
+    let heard = callbacks.clone();
+    frame_link::set_hook(Some(Arc::new(move || {
+        heard
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(host_ns());
+    })));
+    let limits = hub
+        .current(&doc)
+        .and_then(|r| {
+            r.doc
+                .pointer("/budget/class")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .and_then(|c| deep_canvas::budget::Class::parse(&c))
+        .unwrap_or(deep_canvas::budget::Class::WorkProduct)
+        .limits();
     let state = Rc::new(RefCell::new(State {
         hub,
         doc: doc.clone(),
@@ -687,8 +825,17 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
         },
         feedback,
         stage: Stage::OrderingIn,
+        ladder: deep_gpu::meter::Ladder::new(Default::default()).0,
+        limits,
         picture: None,
         view: None,
+        callbacks,
+        settled: false,
+        asked: Vec::new(),
+        pending_input: None,
+        track: None,
+        ns_window: std::ptr::null_mut(),
+        watch_usage: [None, None],
     }));
     let window_size = size(
         px((panel[0] + panel[2]) as f32),
@@ -718,6 +865,15 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
             },
             |window, cx| {
                 let st = view_state.clone();
+                let tracked = view_state.clone();
+                view_state.borrow_mut().ns_window = ns_window(window);
+                window
+                    .observe_window_visibility(move |_, window, _| {
+                        if let Some(track) = tracked.borrow_mut().track.as_mut() {
+                            track.note(host_ns(), window_state(window));
+                        }
+                    })
+                    .detach();
                 wait_visible(window, st, SHOW_FRAMES);
                 cx.new(|_| View {
                     state: view_state,
@@ -763,6 +919,7 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
         let state = state.clone();
         cx.spawn(async move |cx| {
             let opened_at = host_ns();
+            let opened_usage = idle::usage();
             // The document's first presented frame, or no display.
             let first = loop {
                 if let Some((_, at)) = state.borrow().shown_frames().first() {
@@ -774,16 +931,31 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                 cx.background_executor().timer(POLL).await;
             };
             let Some(first) = first else {
-                cx.update(|cx| print_and_quit(refused("no_display"), cx));
+                // #1551: what AppKit showed of the window instead, so a lane can say why, and
+                // what the window and the process did while it waited.
+                let mut reply = refused("no_display");
+                let st = state.borrow();
+                let now = host_ns();
+                let callbacks = st.callbacks.lock().unwrap_or_else(|e| e.into_inner());
+                // SAFETY: null or the window's live NSWindow, on the main thread.
+                let shown = unsafe { idle::window_state(st.ns_window) };
+                reply["window"] = json!({"state": shown, "shown_ms": 0});
+                reply["request_frames"] = json!(callbacks.iter().filter(|t| **t >= opened_at).count());
+                reply["process"] = idle::spent(opened_at, opened_usage, now, idle::usage());
+                drop(callbacks);
+                drop(st);
+                cx.update(|cx| print_and_quit(reply, cx));
                 return;
             };
             // Settled: every latched frame presented (or discarded) and nothing armed after it.
-            let wants_settled =
-                options.tree || options.watch.is_some_and(|(f, _)| f == WatchFrom::Settled);
+            let wants_settled = options.tree
+                || !options.wake.is_empty()
+                || options.watch.is_some_and(|(f, _)| f == WatchFrom::Settled);
             let mut settled = None;
             if wants_settled {
                 let since = host_ns();
                 let mut last_seen = (0, 0);
+                let mut idle_since = None;
                 while host_ns() - since < SETTLE_DEADLINE.as_nanos() as i64 {
                     let now = {
                         let mut st = state.borrow_mut();
@@ -791,7 +963,14 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         let seen = (st.clock.seq, st.clock.wakeups.len());
                         let idle = seen == last_seen && st.last_reported() == Some(st.clock.seq);
                         last_seen = seen;
-                        idle.then(host_ns)
+                        let now = host_ns();
+                        let since_idle = *idle_since.get_or_insert(now);
+                        if !idle {
+                            idle_since = None;
+                        }
+                        let last = st.callbacks.lock().unwrap_or_else(|e| e.into_inner()).last().copied();
+                        let quiet = last.is_none_or(|t| now - t > LINK_QUIET);
+                        (idle && (quiet || now - since_idle >= LINK_GRACE)).then_some(now)
                     };
                     if let Some(now) = now {
                         settled = Some(now);
@@ -805,6 +984,37 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                     cx.update(|cx| print_and_quit(refused("not_settled"), cx));
                     return;
                 }
+                // #1551: the window's state from here on, and the plant that arms each vsync.
+                let arms = {
+                    let mut st = state.borrow_mut();
+                    st.settled = true;
+                    // SAFETY: null or the window's live NSWindow, on the main thread.
+                    let shown = unsafe { idle::window_state(st.ns_window) };
+                    if options.wake.iter().any(|w| w.by == By::Input) {
+                        // SAFETY: as above.
+                        unsafe { idle::accept_posted_moves(st.ns_window) };
+                    }
+                    st.track = Some(Track::new(host_ns(), shown));
+                    st.hub.scenario.planted == Some(Planted::ArmsEachVsync)
+                };
+                if arms {
+                    let _ = handle.update(cx, |_, _, cx| cx.notify());
+                }
+            }
+            // #1551: what the process spends over the watch, read at its start and its end.
+            if let Some((_, ms)) = options.watch {
+                let start = host_ns();
+                state.borrow_mut().watch_usage[0] = Some((start, idle::usage()));
+                let state = state.clone();
+                let timer = cx.background_executor().clone();
+                cx.spawn(async move |_| {
+                    let wait = start + ms as i64 * 1_000_000 - host_ns();
+                    if wait > 0 {
+                        timer.timer(Duration::from_nanos(wait as u64)).await;
+                    }
+                    state.borrow_mut().watch_usage[1] = Some((host_ns(), idle::usage()));
+                })
+                .detach();
             }
             // The tree: the first read activates AccessKit's adapter, then a frame sends it.
             let mut tree = Vec::new();
@@ -853,9 +1063,25 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         .iter()
                         .filter(|(f, _)| f.rev == rev)
                         .count();
+                    // #427: the frame callbacks the window's clock has asked for or received so
+                    // far, and its meter's rung, before the call runs.
+                    let wakeups = st.clock.wakeups.len();
+                    let rung = st.ladder.rung().name();
                     let doc = st.doc.clone();
                     st.hub.now = st.hub.now.max(a.at);
                     let reply = st.hub.call(&a.call);
+                    // A read or a diagnostic mode touches nothing the window shows, so it asks
+                    // for no frame (the planted mode draws on the live surface instead).
+                    let quiet = matches!(a.call, Call::Mode(..) | Call::Presented(_));
+                    let planted_live = matches!(a.call, Call::Mode(..))
+                        && st.hub.scenario.planted
+                            == Some(crate::hub::Planted::ModeDrawsLiveSurface);
+                    if planted_live {
+                        let seq = st.clock.seq + 1;
+                        let per_frame = st.clock.per_frame;
+                        st.clock.wakeups.push((host_ns(), seq));
+                        arm(window, state.clone(), seq, per_frame);
+                    }
                     // A call that made a new revision current arms a frame showing it.
                     let current = st.hub.current(&doc).map(|r| r.rev);
                     if current.is_some_and(|c| c != rev) {
@@ -867,18 +1093,109 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         }
                     }
                     drop(st);
-                    cx.notify();
-                    window.refresh();
+                    if !quiet || planted_live {
+                        cx.notify();
+                        window.refresh();
+                    }
                     let mut showing = Map::new();
                     showing.insert(doc, json!(rev));
                     json!({
                         "after_ms": a.after_ms,
                         "showing": showing,
                         "presented": presented,
+                        "wakeups": wakeups,
+                        "rung": rung,
                         "reply": reply,
                     })
                 });
                 after_out.push(entry.unwrap_or(Value::Null));
+            }
+            // #1551: the wakes, each `after_ms` after the window settled.
+            let since = settled.unwrap_or(first);
+            let mut wakes = options.wake;
+            wakes.sort_by_key(|w| w.after_ms);
+            let last_wake = wakes.last().map(|w| since + w.after_ms as i64 * 1_000_000);
+            for w in wakes {
+                let wait = since + w.after_ms as i64 * 1_000_000 - host_ns();
+                if wait > 0 {
+                    cx.background_executor()
+                        .timer(Duration::from_nanos(wait as u64))
+                        .await;
+                }
+                let i = {
+                    let mut st = state.borrow_mut();
+                    st.asked.push(Asked {
+                        after_ms: w.after_ms,
+                        by: w.by,
+                        requested_ns: host_ns(),
+                        frame_seq: None,
+                    });
+                    st.asked.len() - 1
+                };
+                match w.by {
+                    By::HubEvent => {
+                        let Some((call, at)) = w.call else { continue };
+                        let _ = handle.update(cx, |_, _, cx| {
+                            let mut st = state.borrow_mut();
+                            let doc = st.doc.clone();
+                            let rev = st.shown.rev;
+                            st.asked[i].requested_ns = host_ns();
+                            st.hub.now = st.hub.now.max(at);
+                            st.hub.call(&call);
+                            if st.hub.current(&doc).is_some_and(|c| c.rev != rev) {
+                                let panel = st.panel;
+                                if let Some(shown) = State::show(&st.hub, &doc, panel) {
+                                    st.shown = shown;
+                                }
+                            }
+                            drop(st);
+                            cx.notify();
+                        });
+                    }
+                    By::ThreadNotify => {
+                        // Stamped on a thread of the executor's pool, just before it hands the
+                        // notify back to the main thread, as any off-main-thread source does.
+                        let at = cx.background_executor().spawn(async { host_ns() }).await;
+                        state.borrow_mut().asked[i].requested_ns = at;
+                        let _ = handle.update(cx, |_, _, cx| cx.notify());
+                    }
+                    By::PresentOnly => {
+                        let _ = handle.update(cx, |_, window, _| {
+                            let mut st = state.borrow_mut();
+                            st.clock.seq += 1;
+                            let seq = st.clock.seq;
+                            presentation::label_next(seq);
+                            st.asked[i].frame_seq = Some(seq);
+                            st.asked[i].requested_ns = host_ns();
+                            drop(st);
+                            window.request_present();
+                        });
+                    }
+                    By::Input => {
+                        let _ = handle.update(cx, |_, window, _| {
+                            let mut st = state.borrow_mut();
+                            st.pending_input = Some(i);
+                            let panel = st.panel;
+                            drop(st);
+                            let height = panel[1] + panel[3] + f64::from(STRIP);
+                            let point = objc2_foundation::NSPoint::new(
+                                panel[0] + panel[2] / 2. + (i % 7) as f64,
+                                height - (panel[1] + panel[3] / 2.),
+                            );
+                            let ns_window = ns_window(window);
+                            if !ns_window.is_null() {
+                                // SAFETY: the window's live NSWindow, on the main thread.
+                                unsafe {
+                                    idle::post_pointer_move(
+                                        ns_window,
+                                        point,
+                                        host_ns() as f64 / 1e9,
+                                    )
+                                };
+                            }
+                        });
+                    }
+                }
             }
             // The watch, then the hold, each timed from its start on the host clock.
             let watch = options.watch.map(|(from, ms)| {
@@ -891,6 +1208,7 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
             let end = [
                 watch.map(|w| w.1),
                 Some(first + options.hold_ms as i64 * 1_000_000),
+                last_wake.map(|w| w + WAKE_ANSWER),
             ]
             .into_iter()
             .flatten()
@@ -902,9 +1220,14 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                     .timer(Duration::from_nanos(wait as u64))
                     .await;
             }
-            if watch.is_some() {
+            if watch.is_some() || last_wake.is_some() {
                 cx.background_executor().timer(FEEDBACK).await;
             }
+            let _ = handle.update(cx, |_, window, _| {
+                if let Some(track) = state.borrow_mut().track.as_mut() {
+                    track.note(host_ns(), window_state(window));
+                }
+            });
             let reply = {
                 let st = state.borrow();
                 let (frames, wakeups) = match watch {
@@ -935,17 +1258,15 @@ pub fn run(scenario: &'static Scenario, startup: &'static Startup, options: Opti
                         (frames, wakeups)
                     }
                 };
-                json!({
-                    "ok": true,
-                    "replies": replies,
-                    "live": {
-                        "display": display_json,
-                        "frames": frames,
-                        "wakeups": wakeups,
-                        "tree": tree,
-                        "after": after_out,
-                    },
-                })
+                let mut live = json!({
+                    "display": display_json,
+                    "frames": frames,
+                    "wakeups": wakeups,
+                    "tree": tree,
+                    "after": after_out,
+                });
+                st.idle_readings(&mut live, watch);
+                json!({ "ok": true, "replies": replies, "live": live })
             };
             cx.update(|cx| print_and_quit(reply, cx));
         })

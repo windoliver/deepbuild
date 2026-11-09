@@ -1,13 +1,32 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, readdirSync, rmSync, symlinkSync, writeFileSync, writeSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import test from 'node:test';
+import test, { after } from 'node:test';
 
 const scripts = new URL('../scripts/', import.meta.url);
+// perf takes the throttle's timed class, so the fixtures share a table of their own, and the suite holds one timed
+// grant in it for every run, as a preflight does for its perf: each run passes through on it instead of waiting.
+const home = realpathSync(mkdtempSync(join(tmpdir(), 'deep-perf-home-')));
+const { acquire, release } = await import(new URL('throttle.mjs', scripts));
+const inHome = (act) => {
+  const previous = process.env.HOME;
+  process.env.HOME = home;
+  try {
+    return act();
+  } finally {
+    process.env.HOME = previous;
+  }
+};
+const grant = inHome(() => acquire('timed', { wait: 60 }));
+assert.ok(grant, 'no timed grant came within 60 min');
+after(() => {
+  inHome(() => release(grant));
+  rmSync(home, { recursive: true, force: true });
+});
 
 // A throwaway repository whose merge base already has budgets, so perf measures a real base.
 function repository(t, checks) {
@@ -17,8 +36,9 @@ function repository(t, checks) {
   const cwd = join(box, 'repo');
   const cache = join(box, 'cache');
   for (const directory of [cwd, cache]) mkdirSync(directory);
-  for (const directory of ['scripts', 'benchmarks']) mkdirSync(join(cwd, directory));
-  for (const file of ['perf.mjs', 'benchmark.mjs', 'lanes.mjs']) copyFileSync(new URL(file, scripts), join(cwd, 'scripts', file));
+  mkdirSync(join(cwd, 'benchmarks'));
+  // perf imports scripts beside it, and nothing from node_modules: a fixture, as other issues' tests make, has none.
+  cpSync(fileURLToPath(scripts), join(cwd, 'scripts'), { recursive: true });
   const files = {
     'scripts/checks.mjs': checks(cwd),
     'package.json': JSON.stringify({ name: 'fixture', private: true, scripts: { build: `node -e "require('node:fs').writeFileSync('warm', '')"` } }),
@@ -32,8 +52,10 @@ function repository(t, checks) {
   git('add', '.');
   git('commit', '-qm', 'base');
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
-  const perf = (observation) => spawnSync(process.execPath, ['scripts/perf.mjs', JSON.stringify(observation)], { cwd, encoding: 'utf8', env: { ...process.env, XDG_CACHE_HOME: cache } });
-  return { cwd, git, perf, cache };
+  const env = { ...process.env, HOME: home, XDG_CACHE_HOME: cache, DEEP_THROTTLE: grant.token };
+  delete env.DEEP_PERF_LOCK;
+  const perf = (observation) => spawnSync(process.execPath, ['scripts/perf.mjs', JSON.stringify(observation)], { cwd, encoding: 'utf8', env });
+  return { cwd, git, perf, cache, env };
 }
 
 test('the merge base is timed warm, so a slower checkout cannot hide behind its cold build', (t) => {
@@ -55,6 +77,20 @@ test('wall time that only machine load stretched is not a regression', (t) => {
   assert.match(result.stdout, /"task":"preflight"[^\n]*"status":"PASS"/);
 });
 
+test('a merge base whose archive is larger than a process buffer is still copied', (t) => {
+  // The Mac's merge base archives to 141 MiB; a copy read through a 128 MiB buffer stopped perf with ENOBUFS.
+  const { cwd, git, perf } = repository(t, () => '');
+  const big = openSync(join(cwd, 'big.bin'), 'w');
+  for (let mib = 0; mib < 140; mib++) writeSync(big, randomBytes(1 << 20));
+  closeSync(big);
+  git('add', 'big.bin');
+  git('commit', '-qm', 'big');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  const result = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^perf: base copy .*: wrote \d+ files/m);
+});
+
 test('a checkout without origin/main is blocked with the fetch that fixes it', (t) => {
   const { git, perf } = repository(t, () => '');
   git('update-ref', '-d', 'refs/remotes/origin/main');
@@ -74,7 +110,8 @@ test('a failed checkout is blocked without building the merge base', (t) => {
 test('the full run with the change\'s own tests is still held to the peak-memory cap', (t) => {
   // The run without the change's tests also regresses against the base, so neither failure may hide the other.
   const { cwd, git, perf } = repository(t, () => `
-    if (process.cwd().includes('without-tests')) { const start = process.cpuUsage(); for (let used; (used = process.cpuUsage(start)).user + used.system < 200_000;); }
+    // 500 ms against one node start, which would have to read over 313 ms to hide it (#1421).
+    if (process.cwd().includes('without-tests')) { const start = process.cpuUsage(); for (let used; (used = process.cpuUsage(start)).user + used.system < 500_000;); }
   `);
   writeFileSync(join(cwd, 'benchmarks/budgets.json'), JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: 300_000, peakBytes: 1e9 }, initialReason: 'Fixture base.' }, tasks: [] }));
   git('commit', '-qam', 'cap');
@@ -145,21 +182,70 @@ test('the merge base builds at one path every run, outside the checkout, from fi
   for (const { mtimeMs } of runs) assert.ok(mtimeMs >= started - 1000, `the merge base kept its commit time ${new Date(mtimeMs).toISOString()}, which Cargo reads as fresh`);
 });
 
-// The directory perf keeps a checkout's copies in, under the fixture's cache directory.
-const keptRoot = (cwd, cache) => join(cache, 'deepbuild-perf', createHash('sha256').update(cwd).digest('hex').slice(0, 16));
+// The directory perf keeps this clone's copies in on this machine, under the fixture's cache directory.
+const keptRoot = (cache, cwd) => join(cache, 'deepbuild-perf', `${hostname().split('.')[0].replace(/[^\w-]/g, '_')}-${createHash('sha256').update(realpathSync(join(cwd, '.git'))).digest('hex').slice(0, 12)}`);
 
 test('kept copies another user could write to are refused, since perf runs what it builds there', (t) => {
   const { cwd, perf, cache } = repository(t, () => '');
-  mkdirSync(keptRoot(cwd, cache), { recursive: true });
-  chmodSync(keptRoot(cwd, cache), 0o777);
+  mkdirSync(keptRoot(cache, cwd), { recursive: true });
+  chmodSync(keptRoot(cache, cwd), 0o777);
   const result = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /BLOCKED perf: .+ is not a directory only this user can use\n\s+Fix: Remove it/);
 });
 
-test('one perf run per checkout at a time: a live run\'s lock blocks, a killed run\'s is taken over and released', (t) => {
+test('another repository on the machine keeps copies and a lock of its own: a fixture\'s perf never blocks or replaces a clone\'s', async (t) => {
+  // Each run's base checks record where they ran; the first run's wait in its checks, holding its lock, until told to go
+  // or until the test's folder is gone.
+  // They burn 50 ms of CPU, which GNU time's 10 ms steps never read as none.
+  const workload = (root) => `
+    import { appendFileSync, existsSync } from 'node:fs';
+    for (const start = process.cpuUsage(); process.cpuUsage(start).user < 50_000;);
+    appendFileSync(${JSON.stringify(join(root, 'base-cwd'))}, process.cwd() + '\\n');
+    while (!existsSync(${JSON.stringify(join(root, 'go'))}) && existsSync(${JSON.stringify(root)})) await new Promise((done) => setTimeout(done, 20));
+  `;
+  const one = repository(t, workload), other = repository(t, workload);
+  writeFileSync(join(other.cwd, 'go'), '');
+  const observation = JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
+  const first = spawn(process.execPath, ['scripts/perf.mjs', observation], { cwd: one.cwd, env: one.env });
+  let output = '';
+  first.stdout.on('data', (chunk) => { output += chunk; });
+  const closed = new Promise((done) => first.on('close', (status) => done(status)));
+  for (const until = Date.now() + 120_000; !existsSync(join(one.cwd, 'base-cwd'));) {
+    assert.ok(Date.now() < until, `the first run's checks didn't start within 120 s\n${output}`);
+    await new Promise((done) => setTimeout(done, 20));
+  }
+  // The same machine and cache, from another repository, while the first run holds its copies.
+  const second = spawnSync(process.execPath, ['scripts/perf.mjs', observation], { cwd: other.cwd, encoding: 'utf8', env: { ...other.env, XDG_CACHE_HOME: one.cache } });
+  writeFileSync(join(one.cwd, 'go'), '');
+  assert.equal(await closed, 0, output);
+  assert.equal(second.status, 0, second.stdout + second.stderr);
+  const [mine] = readFileSync(join(one.cwd, 'base-cwd'), 'utf8').trim().split('\n'), [theirs] = readFileSync(join(other.cwd, 'base-cwd'), 'utf8').trim().split('\n');
+  assert.notEqual(theirs, mine, 'the other repository\'s perf ran its checks in this clone\'s kept copy');
+});
+
+test('a Mac whose name gains a network\'s domain keeps one folder: a run under any of its names uses the same copies', (t) => {
+  const { cwd, cache, env } = repository(t, (root) => `
+    import { appendFileSync } from 'node:fs';
+    for (const start = process.cpuUsage(); process.cpuUsage(start).user < 50_000;);
+    appendFileSync(${JSON.stringify(join(root, 'base-cwd'))}, process.cwd() + '\\n');
+  `);
+  // The machine's name is the OS's to give; the preload gives the one each run names.
+  const named = join(cache, '..', 'hostname.cjs');
+  writeFileSync(named, "const os = require('node:os'); os.hostname = () => process.env.FIXTURE_HOSTNAME; require('node:module').syncBuiltinESMExports();");
+  // macOS adds .local on some networks, and a router's DHCP its own domain, such as .attlocal.net.
+  for (const name of ['fixture-mac.local', 'fixture-mac.attlocal.net', 'fixture-mac']) {
+    const result = spawnSync(process.execPath, ['-r', named, 'scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })], { cwd, encoding: 'utf8', env: { ...env, FIXTURE_HOSTNAME: name } });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  }
+  const copies = readFileSync(join(cwd, 'base-cwd'), 'utf8').trim().split('\n');
+  assert.equal(copies.length, 3, copies.join('\n'));
+  assert.equal(new Set(copies).size, 1, `the copies moved when the machine's name gained or lost a domain: ${copies.join(', ')}`);
+});
+
+test('one perf run per machine at a time: a live run\'s lock blocks, a killed run\'s is taken over and released', (t) => {
   const { cwd, perf, cache } = repository(t, () => '');
-  const kept = keptRoot(cwd, cache);
+  const kept = keptRoot(cache, cwd);
   mkdirSync(kept, { recursive: true, mode: 0o700 });
   writeFileSync(join(kept, 'lock'), String(process.pid));
   const held = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
@@ -223,6 +309,8 @@ test('the copy\'s throwaway repository tracks the merge base\'s files, not the l
 test('the copy without the change\'s own tests keeps links as links and skips a checkout\'s own target link', (t) => {
   const { cwd, git, perf } = repository(t, (root) => `
     import { lstatSync, readFileSync, readlinkSync, appendFileSync } from 'node:fs';
+    // Both sides measure 200 ms of CPU, so one node start's spread can't read as a regression (#1421).
+    { const start = process.cpuUsage(); for (let used; (used = process.cpuUsage(start)).user + used.system < 200_000;); }
     if (process.cwd().includes('without-tests')) appendFileSync(${JSON.stringify(join(root, 'without-links'))}, JSON.stringify({ docs: readlinkSync('docs-link'), target: readlinkSync('target'), outside: lstatSync('outside-link').isFile() && readFileSync('outside-link', 'utf8'), inner: readFileSync('outside-dir-link/inner.txt', 'utf8'), absolute: lstatSync('absolute-link').isSymbolicLink() }));
   `);
   symlinkSync('benchmarks', join(cwd, 'docs-link'));
@@ -254,17 +342,17 @@ test('the copy without the change\'s own tests keeps links as links and skips a 
 });
 
 test('perf runs racing for a killed run\'s lock never check at the same time', async (t) => {
-  const { cwd, cache } = repository(t, (root) => `
+  const { cwd, cache, env } = repository(t, (root) => `
     import { appendFileSync } from 'node:fs';
     const start = Date.now();
     await new Promise((done) => setTimeout(done, 300));
     appendFileSync(${JSON.stringify(join(root, 'base-spans'))}, JSON.stringify([start, Date.now()]) + '\\n');
   `);
-  const kept = keptRoot(cwd, cache);
+  const kept = keptRoot(cache, cwd);
   mkdirSync(kept, { recursive: true, mode: 0o700 });
   writeFileSync(join(kept, 'lock'), String(spawnSync(process.execPath, ['-e', '']).pid));
   const once = () => new Promise((done) => {
-    const child = spawn(process.execPath, ['scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })], { cwd, env: { ...process.env, XDG_CACHE_HOME: cache } });
+    const child = spawn(process.execPath, ['scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })], { cwd, env });
     let output = '';
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.on('close', (status) => done({ status, output }));
@@ -281,24 +369,67 @@ test('perf runs racing for a killed run\'s lock never check at the same time', a
 // chance: A takes the killed run's lock at once; C read the killed pid before that, acts 150 ms later
 // on what is now A's live lock and holds it aside for 500 ms; D acts at 300 ms, in C's gap.
 test('perf runs racing for a killed run\'s lock never check at the same time, however they interleave', async (t) => {
-  const { cwd, cache } = repository(t, (root) => `
+  const { cwd, cache, env } = repository(t, (root) => `
     import { appendFileSync } from 'node:fs';
     const start = Date.now();
     await new Promise((done) => setTimeout(done, 1000));
     appendFileSync(${JSON.stringify(join(root, 'base-spans'))}, JSON.stringify([start, Date.now()]) + '\\n');
   `);
-  const kept = keptRoot(cwd, cache);
+  const kept = keptRoot(cache, cwd);
   mkdirSync(kept, { recursive: true, mode: 0o700 });
   writeFileSync(join(kept, 'lock'), String(spawnSync(process.execPath, ['-e', '']).pid));
   const preload = fileURLToPath(new URL('fixtures/slow-lock.cjs', import.meta.url));
   const held = (readMs, renameMs) => new Promise((done) => {
     const child = spawn(process.execPath, ['-r', preload, 'scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })],
-      { cwd, env: { ...process.env, XDG_CACHE_HOME: cache, SLOW_LOCK_READ_MS: String(readMs), SLOW_LOCK_RENAME_MS: String(renameMs) } });
+      { cwd, env: { ...env, SLOW_LOCK_READ_MS: String(readMs), SLOW_LOCK_RENAME_MS: String(renameMs) } });
     let output = '';
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.on('close', (status) => done({ status, output }));
   });
   const results = await Promise.all([held(0, 0), held(150, 500), held(300, 0)]);
+  for (const { status, output } of results) if (status !== 0) assert.match(output, /BLOCKED perf: (another perf run|could not take)/, output);
+  const spans = readFileSync(join(cwd, 'base-spans'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(spans.length, 1, `${spans.length} runs checked: ${JSON.stringify(spans)}`);
+  assert.equal(existsSync(join(kept, 'lock')), false, 'a run left the lock behind');
+});
+
+// The Mac found two runs checking at once in the test above. A run the machine pauses just after making the
+// takeover mark leaves it there without its number for that pause; a second run that reads it then must not
+// take it for a killed run's. Here the first run's mark stays numberless for 2.5 s, and the second, started
+// once the first holds the mark or the lock, reads the lock slowly so that the first comes back in between.
+test('a run paused while making the takeover mark keeps it: a second run that finds it waits', async (t) => {
+  const { cwd, cache, env } = repository(t, (root) => `
+    import { appendFileSync } from 'node:fs';
+    const start = Date.now();
+    await new Promise((done) => setTimeout(done, 8000));
+    appendFileSync(${JSON.stringify(join(root, 'base-spans'))}, JSON.stringify([start, Date.now()]) + '\\n');
+  `);
+  const kept = keptRoot(cache, cwd);
+  mkdirSync(kept, { recursive: true, mode: 0o700 });
+  writeFileSync(join(kept, 'lock'), String(spawnSync(process.execPath, ['-e', '']).pid));
+  const preload = fileURLToPath(new URL('fixtures/slow-lock.cjs', import.meta.url));
+  const held = (slow) => {
+    const child = spawn(process.execPath, ['-r', preload, 'scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })],
+      { cwd, env: { ...env, ...slow } });
+    let output = '';
+    child.stdout.on('data', (chunk) => { output += chunk; });
+    return { child, done: new Promise((done) => child.on('close', (status) => done({ status, output }))) };
+  };
+  const first = held({ SLOW_MARK_WRITE_MS: '2500' });
+  const holds = () => {
+    if (existsSync(join(kept, 'lock.takeover'))) return true;
+    try {
+      return readFileSync(join(kept, 'lock'), 'utf8') === String(first.child.pid);
+    } catch {
+      return false;
+    }
+  };
+  for (const until = Date.now() + 60_000; !holds();) {
+    assert.ok(Date.now() < until, 'the first run took neither the mark nor the lock within 60 s');
+    await new Promise((done) => setTimeout(done, 5));
+  }
+  const second = held({ SLOW_LOCK_READ_MS: '5000' });
+  const results = await Promise.all([first.done, second.done]);
   for (const { status, output } of results) if (status !== 0) assert.match(output, /BLOCKED perf: (another perf run|could not take)/, output);
   const spans = readFileSync(join(cwd, 'base-spans'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
   assert.equal(spans.length, 1, `${spans.length} runs checked: ${JSON.stringify(spans)}`);

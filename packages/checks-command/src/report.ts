@@ -7,7 +7,7 @@ import type { Failure } from '@deepbuild/conformance';
 import type { Left, Listed, Seen } from './listing.js';
 
 /** A file's lines without its trailers, and why it isn't the run's whole record when it isn't. */
-export interface Evidence { lines: string[]; altered: string | null }
+interface Evidence { lines: string[]; altered: string | null }
 const isTrailer = (line: string): boolean => line.startsWith('{"deep":"end"');
 /**
  * Null when no process wrote the file. Altered when no process closed it with a trailer, a trailer isn't one, or its
@@ -78,7 +78,7 @@ function failure(checkout: string, test: string, testFile: string | null, error:
   return { test, file: at.file, line: at.line, stack: error.stack, assertion: named, message: error.message };
 }
 
-export type Attempt = 'passed' | 'failed';
+type Attempt = 'passed' | 'failed';
 export interface Ran { test: string; file: string | null; attempts: Attempt[]; meta: Record<string, unknown> }
 /** `malformed`: lines the tool's reporter can't have written, which leave the run uncounted. */
 export interface Reported { ran: Ran[]; failures: Failure[]; malformed: number }

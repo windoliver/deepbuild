@@ -15,6 +15,13 @@
 //! the raised ground and hover over either, and every role, an alpha role blended over the ground and
 //! the raised ground, to the status distance.
 //!
+//! Issue #1003: every fill a row is drawn on is a surface the guard checks: the ground, the raised
+//! ground, and hover and selected over either. Each ink tier keeps its floor, each status color 3:1
+//! and the keyboard focus ring, the `focus` role every look with chrome roles gives, 3:1 on all of
+//! them. A look's 16 terminal colors (`term_black` .. `term_bright_white`, by ANSI index) keep 3:1
+//! against the terminal's background, `term_background` or else the ground; a look that gives one
+//! gives all sixteen.
+//!
 //! Issue #417: four looks ship (clean, notebook pencil, chalk and dark math), each one asset with
 //! its lines, fills, ground, fonts and time feel. A role may name one of the look's fonts, so the
 //! `math` role names a math face, or be derived from other roles (`mix`, `lighter`, `darker`,
@@ -42,6 +49,39 @@ const INK_TIERS: [(&str, f64); 4] = [
     ("ink_tertiary", 3.0),
     ("ink_disabled", 0.0),
 ];
+
+/// The chrome roles whose look must give the focus ring (#1003), and the ring's floor.
+const CHROME: [&str; 7] = [
+    "raised",
+    "hover",
+    "selected",
+    "ink_primary",
+    "ink_secondary",
+    "ink_tertiary",
+    "ink_disabled",
+];
+const FOCUS_FLOOR: f64 = 3.0;
+
+/// A look's terminal colors by ANSI index, and how far each keeps from the terminal background (#1003).
+const TERMINAL: [&str; 16] = [
+    "term_black",
+    "term_red",
+    "term_green",
+    "term_yellow",
+    "term_blue",
+    "term_magenta",
+    "term_cyan",
+    "term_white",
+    "term_bright_black",
+    "term_bright_red",
+    "term_bright_green",
+    "term_bright_yellow",
+    "term_bright_blue",
+    "term_bright_magenta",
+    "term_bright_cyan",
+    "term_bright_white",
+];
+const TERMINAL_FLOOR: f64 = 3.0;
 
 /// The states of the status map, in the legend's order (Status binding).
 pub const STATES: [&str; 9] = [
@@ -180,14 +220,28 @@ pub enum Refusal {
     },
     /// A role at an alpha that isn't the one ink's color.
     NotInk { theme: &'static str, role: String },
-    /// An ink tier under its contrast floor on a surface (`ground`, `raised`, `hover over ...`).
+    /// An ink tier under its contrast floor on a surface (`ground`, `raised`, `hover over ...`,
+    /// `selected over ...`).
     InkContrast {
         theme: &'static str,
         role: String,
         on: &'static str,
         ratio: f64,
     },
-    /// A status color under 3:1 against the ground, or with no label color at 4.5:1 on it.
+    /// The focus ring under 3:1 on a surface (#1003).
+    FocusContrast {
+        theme: &'static str,
+        on: &'static str,
+        ratio: f64,
+    },
+    /// A terminal color under 3:1 against the terminal's background (#1003).
+    TerminalContrast {
+        theme: &'static str,
+        role: &'static str,
+        ratio: f64,
+    },
+    /// A status color under 3:1 against a surface (`against` names it), or with no label color at
+    /// 4.5:1 on it (`label`).
     Contrast {
         theme: &'static str,
         state: &'static str,
@@ -224,6 +278,12 @@ impl Refusal {
                 ratio,
             } => json!({
                 "ok": false, "code": "ink_contrast", "theme": theme, "role": role, "on": on, "ratio": ratio,
+            }),
+            Refusal::FocusContrast { theme, on, ratio } => json!({
+                "ok": false, "code": "focus_contrast", "theme": theme, "role": "focus", "on": on, "ratio": ratio,
+            }),
+            Refusal::TerminalContrast { theme, role, ratio } => json!({
+                "ok": false, "code": "terminal_contrast", "theme": theme, "role": role, "ratio": ratio,
             }),
             Refusal::Contrast {
                 theme,
@@ -574,7 +634,7 @@ fn type_of(
 ) -> Result<Type, Refusal> {
     let mut ty = Type {
         fonts: fonts.clone(),
-        fallback: Vec::new(),
+        ..Type::default()
     };
     for (role, font) in font_roles {
         ty.fonts.insert(role.clone(), fonts[font]);
@@ -694,6 +754,12 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
     if def.get("legend").is_some_and(|l| l != "auto") {
         return Err(Refusal::Bad("legend".into()));
     }
+    // #149: a look's drawn fields, at any frame: the frame only gives their `fw` and `fh` a size.
+    let mut drawn = Value::Object(def.clone());
+    deep_canvas::grammar::lower_frame_literals(&mut drawn, (1920, 1080));
+    if let Value::Object(drawn) = &drawn {
+        deep_canvas_drawn::spec::check(drawn).map_err(|r| Refusal::Bad(r.path))?;
+    }
     let status = status_map(def)?;
     let fonts = fonts(def, bundled)?;
     let attention = object(def.get("attention_treatment"), "attention_treatment")?;
@@ -702,7 +768,10 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
         .and_then(Value::as_str);
     let (light, light_alpha, light_oklab, light_fonts) = theme(def, "light")?;
     let (dark, dark_alpha, dark_oklab, dark_fonts) = theme(def, "dark")?;
-    for (name, palette) in [("light", &light), ("dark", &dark)] {
+    for (name, palette, alpha) in [
+        ("light", &light, &light_alpha),
+        ("dark", &dark, &dark_alpha),
+    ] {
         let named = |role: &str, path: &str| {
             palette
                 .get(role)
@@ -724,15 +793,24 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
                 return Err(Refusal::Bad("attention_treatment/glyph".into()));
             }
         }
-        // A status mark keeps 3:1 against what's behind it, by its own color or its outline's,
-        // and its glyph or word 4.5:1 in the theme's ink or ground (The status-color rule).
+        // A status mark keeps 3:1 against every fill it's drawn on, by its own color or its
+        // outline's, and its glyph or word 4.5:1 in the theme's ink or ground (The status-color
+        // rule; #1003).
         let (g, i) = (luminance(ground), luminance(ink));
+        // The chrome's fills hold status only where status can show; a film played on its own is
+        // drawn on its ground alone (the status-color rule; #464).
+        let mut surfaces = surfaces(palette, alpha);
+        if at == Distance::WhereStatusShows {
+            surfaces.retain(|(on, _)| *on == "ground");
+        }
         for (state, color) in &status.colors {
             let c = luminance(*color);
-            let held = ratio(c, g) >= 3.0
-                || ring.is_some_and(|r| contrast(r, ground) >= 3.0 && contrast(r, *color) >= 3.0);
-            let against = if !held {
-                "ground"
+            let held = |s: Rgb| {
+                contrast(*color, s) >= 3.0
+                    || ring.is_some_and(|r| contrast(r, s) >= 3.0 && contrast(r, *color) >= 3.0)
+            };
+            let against = if let Some((on, _)) = surfaces.iter().find(|(_, s)| !held(*s)) {
+                on
             } else if ratio(i, c).max(ratio(g, c)) < 4.5 {
                 "label"
             } else {
@@ -786,6 +864,7 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
         ("dark", &look.dark, &look.dark_alpha),
     ] {
         chrome(name, palette, alpha, everywhere)?;
+        terminal(name, palette, alpha)?;
     }
     Ok(look)
 }
@@ -830,7 +909,7 @@ pub fn clash_of(look: &Look, min: Option<f64>) -> Option<Refusal> {
 /// The chrome's half of the guard for one theme (#882): a role at an alpha is the one ink's color,
 /// and keeps the status distance (`status`, where it holds) over the ground and the raised ground; each ink tier keeps its
 /// contrast floor on the ground, the raised ground and hover over either. A look without chrome
-/// roles has nothing here to hold.
+/// roles or a focus ring has nothing here to hold.
 fn chrome(
     theme: &'static str,
     palette: &Palette,
@@ -841,12 +920,7 @@ fn chrome(
         return Ok(());
     };
     let raised = palette.get("raised").copied().unwrap_or(ground);
-    let color = |role: &str| {
-        alpha
-            .get(role)
-            .copied()
-            .or_else(|| palette.get(role).map(|c| [c[0], c[1], c[2], 255]))
-    };
+    let color = |role: &str| role_color(palette, alpha, role);
     for (role, c) in alpha {
         if c[..3] != ink {
             return Err(Refusal::NotInk {
@@ -865,11 +939,7 @@ fn chrome(
             }
         }
     }
-    let mut surfaces = vec![("ground", ground), ("raised", raised)];
-    if let Some(hover) = color("hover") {
-        surfaces.push(("hover over ground", over(hover, ground)));
-        surfaces.push(("hover over raised", over(hover, raised)));
-    }
+    let surfaces = surfaces(palette, alpha);
     for (role, floor) in INK_TIERS {
         let Some(tier) = color(role) else { continue };
         for (on, surface) in &surfaces {
@@ -882,6 +952,97 @@ fn chrome(
                     ratio,
                 });
             }
+        }
+    }
+    // The focus ring reads on every fill, so a focused row shows beside a selected one (#1003):
+    // the app's chrome, which a look holds wherever it's shown, not a film played on its own (#464).
+    let shown_in_chrome = status.is_some();
+    if shown_in_chrome && (CHROME.iter().any(|r| color(r).is_some()) || color("focus").is_some()) {
+        let focus = color("focus").ok_or_else(|| Refusal::Bad(format!("roles/focus ({theme})")))?;
+        for (on, surface) in &surfaces {
+            let ratio = contrast(over(focus, *surface), *surface);
+            if ratio < FOCUS_FLOOR {
+                return Err(Refusal::FocusContrast { theme, on, ratio });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A role's color, opaque or at an alpha.
+fn role_color(palette: &Palette, alpha: &BTreeMap<String, Rgba>, role: &str) -> Option<Rgba> {
+    alpha
+        .get(role)
+        .copied()
+        .or_else(|| palette.get(role).map(|c| [c[0], c[1], c[2], 255]))
+}
+
+/// Every fill a row is drawn on, in the order the guard names them (#1003): the ground, the raised
+/// ground (the ground where a look has none), and hover and selected over either, where the look
+/// gives them.
+fn surfaces(palette: &Palette, alpha: &BTreeMap<String, Rgba>) -> Vec<(&'static str, Rgb)> {
+    let Some(&ground) = palette.get("ground") else {
+        return Vec::new();
+    };
+    let raised = palette.get("raised").copied().unwrap_or(ground);
+    let mut out = vec![("ground", ground), ("raised", raised)];
+    for (role, on_ground, on_raised) in [
+        ("hover", "hover over ground", "hover over raised"),
+        ("selected", "selected over ground", "selected over raised"),
+    ] {
+        if let Some(fill) = role_color(palette, alpha, role) {
+            out.push((on_ground, over(fill, ground)));
+            out.push((on_raised, over(fill, raised)));
+        }
+    }
+    out
+}
+
+/// A theme's terminal colors as a terminal draws them (#1003): the 16 by ANSI index, the background
+/// they keep 3:1 against (`term_background`, or else the ground), and the default text, the ink.
+/// `None` for a look that gives no terminal colors.
+pub fn terminal_colors(palette: &Palette) -> Option<([Rgb; 16], Rgb, Rgb)> {
+    let mut ansi = [[0; 3]; 16];
+    for (slot, role) in ansi.iter_mut().zip(TERMINAL) {
+        *slot = *palette.get(role)?;
+    }
+    let ground = *palette.get("ground")?;
+    let background = palette.get("term_background").copied().unwrap_or(ground);
+    Some((ansi, background, *palette.get("ink")?))
+}
+
+/// A theme's terminal colors (#1003): none, or all sixteen, each opaque and 3:1 against the
+/// terminal background, `term_background` or else the ground. A program's own colors, true color
+/// or a palette it sets, are drawn as it sent them; only the look's are held here.
+fn terminal(
+    theme: &'static str,
+    palette: &Palette,
+    alpha: &BTreeMap<String, Rgba>,
+) -> Result<(), Refusal> {
+    if let Some(role) = TERMINAL
+        .iter()
+        .chain(&["term_background"])
+        .find(|r| alpha.contains_key(**r))
+    {
+        return Err(Refusal::Bad(format!("roles/{role} ({theme})")));
+    }
+    if !TERMINAL.iter().any(|r| palette.contains_key(*r)) {
+        return Ok(());
+    }
+    let named = |role: &str| {
+        palette
+            .get(role)
+            .copied()
+            .ok_or_else(|| Refusal::Bad(format!("roles/{role} ({theme})")))
+    };
+    let background = match palette.get("term_background") {
+        Some(c) => *c,
+        None => named("ground")?,
+    };
+    for role in TERMINAL {
+        let ratio = contrast(named(role)?, background);
+        if ratio < TERMINAL_FLOOR {
+            return Err(Refusal::TerminalContrast { theme, role, ratio });
         }
     }
     Ok(())
@@ -974,6 +1135,20 @@ mod tests {
             resolve(&def),
             Err(Refusal::Bad("attention_treatment/line".into()))
         );
+    }
+
+    #[test]
+    fn a_focus_ring_is_held_in_a_look_without_other_chrome_roles() {
+        let mut def = shipped("chalk").unwrap();
+        def["roles"]["focus"] = def["roles"]["ground"].clone();
+        assert!(matches!(
+            resolve(&def),
+            Err(Refusal::FocusContrast {
+                theme: "light",
+                on: "ground",
+                ..
+            })
+        ));
     }
 
     #[test]
