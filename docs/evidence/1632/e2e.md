@@ -11,7 +11,8 @@ Claude Code. Session IDs are Claude Code's own random ones. The record excerpts 
 
 **No model turn ran**, so no `deep_ask` or `deep_claim` reached the hub through Claude Code. The account had hit its
 weekly limit, which resets Nov 10, 12am PT. Every prompt, Haiku included, was answered "You've hit your weekly limit",
-and switching to usage credits asked for a new sign-in. The calls after `/clear` are proven by the fixture suites
+and switching to usage credits asked for a new sign-in that couldn't be finished from this box. The owner chose to skip
+the model-turn run. The calls after `/clear` are proven by the fixture suites
 instead (`tests/acceptance/1632/`, `packages/hub/test/mcp-rebind.test.ts`), which run the real deep-hook, hub and
 `deep mcp` on Claude Code's payloads.
 
