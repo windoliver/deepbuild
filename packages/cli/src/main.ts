@@ -317,7 +317,7 @@ if (help) {
   process.exitCode = await envCommand(args.slice(1));
 } else if (args[0] === 'gate') {
   const { gateCommand } = await import('@deepbuild/hub');
-  process.exitCode = gateCommand(args.slice(1));
+  process.exitCode = await gateCommand(args.slice(1));
 } else if (args[0] === 'start') {
   const { startCommand } = await import('@deepbuild/hub');
   process.exitCode = await startCommand(args.slice(1));
