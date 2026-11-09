@@ -1,0 +1,18 @@
+{
+  "format": "chrome@1",
+  "window": [760, 520],
+  "scale": 2,
+  "background": [250, 250, 252],
+  "nodes": [
+    {
+      "id": "measured", "rect": [80, 60, 600, 400],
+      "layer": { "opacity": 0.8, "radii": [12, 12, 12, 12], "edge": 0 },
+      "children": [
+        { "id": "fill", "rect": [80, 60, 600, 400], "fill": { "gradient": [[250, 210, 120], [90, 120, 220]] } },
+        { "id": "quad-a", "rect": [120, 100, 300, 200], "fill": [230, 40, 40, 255], "radius": 8 },
+        { "id": "quad-b", "rect": [300, 200, 340, 220], "fill": [40, 60, 230, 200], "radius": 8 },
+        { "id": "words", "rect": [120, 380, 520, 50], "text": { "content": "A 960,000 px layer", "size": 36, "color": [16, 16, 24] } }
+      ]
+    }
+  ]
+}

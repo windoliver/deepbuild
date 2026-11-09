@@ -120,9 +120,11 @@ impl Plants {
 pub fn sealed() -> &'static Sealed {
     static SEALED: OnceLock<Sealed> = OnceLock::new();
     SEALED.get_or_init(|| {
-        // Effects is in the set for its operator items (#429), which the live path draws.
+        // Effects is in the set for its operator items (#429), which the live path draws; input
+        // for the controls a live document plays through (#432).
         let registry = crate::plugin::shipped_modules()
             .into_iter()
+            .chain([deep_canvas_input::module::module()])
             .fold(Registry::new(BuildSet::Full), Registry::with);
         #[cfg(feature = "test-meter")]
         let registry = registry.with(deep_canvas_test_modules::test_gpu());
@@ -180,6 +182,8 @@ enum Event {
     Open(Open),
     Close(String),
     Revise(String, PathBuf),
+    /// An entry on a session's input track for a control, with its value (#432).
+    Input(String, String, Value),
     /// #420's fault fixture: the session's frame is encoded as usual and handed to the queue
     /// only once frame `until` is presented, so it is in flight across the frames between.
     Hold(String, u64),
@@ -251,6 +255,8 @@ struct Args {
     out: String,
     /// #429's test hook: the operator items whose pipelines the device rejects.
     fail_pipelines: Vec<String>,
+    /// A calibration run: every operator in its own pass, nothing fused (#432).
+    calibration: bool,
 }
 
 fn pair(v: &Value) -> Option<[u32; 2]> {
@@ -365,6 +371,11 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
                 return Err(bad("revise is {session, doc}"));
             };
             Event::Revise(s.to_string(), PathBuf::from(d))
+        } else if let Some(i) = e.get("input") {
+            let (Some(s), Some(c)) = (i["session"].as_str(), i["control"].as_str()) else {
+                return Err(bad("input is {session, control, value}"));
+            };
+            Event::Input(s.to_string(), c.to_string(), i["value"].clone())
         } else if let Some(h) = e.get("hold") {
             let (Some(s), Some(until)) = (h["session"].as_str(), h["until"].as_u64()) else {
                 return Err(bad("hold is {session, until}"));
@@ -419,7 +430,7 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
             Event::GpuChange
         } else {
             return Err(bad(
-                "an event is open, close, revise, hold, camera, rung, canonical or window_state",
+                "an event is open, close, revise, input, hold, camera, rung, canonical or window_state",
             ));
         };
         events.push((frame, ev));
@@ -485,6 +496,7 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
     }
     Ok(Args {
         fail_pipelines,
+        calibration: call["calibration"] == true,
         named: call.get("windows").is_some(),
         windows,
         look,
@@ -560,6 +572,11 @@ struct Rev {
     id: u64,
     number: u64,
     doc: Value,
+    /// A control's switch on the input track, not a writer's revision: nothing it compiles is
+    /// the warm-up's (#432).
+    input: bool,
+    /// What the warm-up compiles at check: each scene and each state's document it can reach.
+    warm: Warm,
     /// Its compiled frames, until it latches and its view takes them.
     frames: Option<Content>,
     class: Option<Class>,
@@ -579,9 +596,21 @@ struct Pending {
     decided: u64,
 }
 
+/// What a revision's warm-up compiles at check (#432): the scenes it can reach over its span and
+/// its controls, each state's document, and the operators that run apart.
+#[derive(Default)]
+struct Warm {
+    scenes: Vec<deep_canvas_scene3d::scene::Scene>,
+    docs: Vec<Value>,
+    apart: BTreeSet<String>,
+}
+
 struct Session {
     id: String,
     writer: String,
+    /// The writer's last payload and each control's value on the input track (#432).
+    payload: Value,
+    choices: crate::warm::Choices,
     doc_id: String,
     size: Option<[u32; 2]>,
     window: usize,
@@ -655,24 +684,87 @@ struct Admitted {
     size: [u32; 2],
     /// The climb rungs that don't fit its memory cap (#425).
     skips: Vec<Rung>,
+    warm: Warm,
 }
 
 /// A writer's payload checked as its session's next revision, before it shows: stamped by the
 /// core, checked in the build's sealed set, compiled for its frames and fitted to the window's
 /// GPU memory.
+fn read_payload(path: &PathBuf) -> Result<Value, Vec<Value>> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| vec![issue("out_of_range", "doc", json!(path), &e.to_string())])?;
+    serde_json::from_str(&text)
+        .map_err(|e| vec![issue("out_of_range", "doc", Value::Null, &e.to_string())])
+}
+
+/// The warm-up a writer's revision runs at check (#432): every state its controls reach, each
+/// evaluated at t = 0, at each channel key and at its span's end; refused past the look's 32
+/// reachable feature sets. Under the planted warms_in_use_at_t0 it holds nothing past what the
+/// view's first scene compiles.
+#[allow(clippy::too_many_arguments)]
+fn warm_up(
+    raw: &Value,
+    w: &Writer,
+    writer: &str,
+    doc_id: &str,
+    size: [u32; 2],
+    look: &Look3,
+    labels: &mut Labels,
+    plants: &Plants,
+) -> Result<Warm, Vec<Value>> {
+    let mut all = BTreeMap::new();
+    let mut first = BTreeMap::new();
+    let mut warm = Warm::default();
+    for (k, choices) in crate::warm::reachable(raw).iter().enumerate() {
+        let Ok(mut doc) = stamp(crate::warm::applied(raw, choices), doc_id, w, writer) else {
+            continue;
+        };
+        if let Some(d) = doc.as_object_mut() {
+            d.insert("size".into(), json!(size));
+        }
+        if crate::flat::is_flat(&doc) {
+            continue;
+        }
+        let Ok(mut frames) = Frames::compile(&doc).and_then(|p| Frames::with_program(&doc, p, look, labels)) else {
+            continue;
+        };
+        for (j, t) in crate::warm::times(&doc).into_iter().enumerate() {
+            let Ok(scene) = frames.at(t, size, &Offsets::default(), labels) else {
+                continue;
+            };
+            crate::warm::feature_sets(scene, &mut all);
+            if k == 0 && j == 0 {
+                crate::warm::feature_sets(scene, &mut first);
+            }
+            if plants.planted != Some(Planted::WarmsInUseAtT0) {
+                warm.scenes.push(scene.clone());
+            }
+        }
+        warm.docs.push(doc);
+    }
+    if let Some(i) = crate::warm::cap_issue(&all, &first) {
+        return Err(vec![i]);
+    }
+    warm.apart = crate::warm::apart(&warm.docs);
+    match plants.planted {
+        Some(Planted::WarmsInUseAtT0) => warm.docs.truncate(0),
+        Some(Planted::FusesDefaultOptions) => warm.docs.truncate(1),
+        _ => {}
+    }
+    Ok(warm)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn admit(
-    path: &PathBuf,
+    payload: Value,
     writer: &str,
     doc_id: &str,
     size: Option<[u32; 2]>,
     look: &Look3,
     history: u32,
     labels: &mut Labels,
+    warm: Option<(&Value, &Plants)>,
 ) -> Result<Admitted, Vec<Value>> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| vec![issue("out_of_range", "doc", json!(path), &e.to_string())])?;
-    let payload: Value = serde_json::from_str(&text)
-        .map_err(|e| vec![issue("out_of_range", "doc", Value::Null, &e.to_string())])?;
     let w = writer_of(writer).ok_or_else(|| {
         vec![issue(
             "out_of_range",
@@ -742,6 +834,10 @@ fn admit(
     // The cascades' four layers at twice their size add three times their bytes.
     let side = u64::from(deep_scene3d_render::shadow::SIZE);
     let skips = meter::climb_skips(&shape, &fit, limits.gpu_bytes, 3 * side * side * 4 * 4);
+    let warm = match warm {
+        Some((raw, plants)) => warm_up(raw, &w, writer, doc_id, size, look, labels, plants)?,
+        None => Warm::default(),
+    };
     Ok(Admitted {
         doc,
         frames,
@@ -750,6 +846,7 @@ fn admit(
         fit,
         size,
         skips,
+        warm,
     })
 }
 
@@ -824,6 +921,9 @@ struct ViewRow {
     settled: bool,
     /// Each composed operator: its item, resolution and what it drew.
     ops: Vec<(String, f64, &'static str)>,
+    /// Each pipeline made while drawing it, and the operator pipelines its session holds (#432).
+    created: Vec<deep_scene3d_render::created::Created>,
+    operator_pipelines: usize,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -932,6 +1032,8 @@ struct Live {
     frames: Vec<FrameRow>,
     views: Vec<ViewRow>,
     passes: Vec<PassRow>,
+    /// Each operator pass's pipeline key and members with their shares, by its row (#432).
+    pass_ops: BTreeMap<usize, (u128, Vec<(String, f64)>)>,
     changes: Vec<ChangeRow>,
     app: AppMeter,
     canonicals: Vec<Value>,
@@ -986,6 +1088,7 @@ impl Live {
             frames: Vec::with_capacity(frames),
             views: Vec::with_capacity(frames * most),
             passes: Vec::with_capacity(frames * most * 10),
+            pass_ops: BTreeMap::new(),
             changes: Vec::new(),
             app: AppMeter::new(plants.ladder),
             canonicals: Vec::new(),
@@ -1107,6 +1210,8 @@ impl Live {
         self.sessions.push(Session {
             id: o.session.clone(),
             writer: o.writer.clone(),
+            payload: Value::Null,
+            choices: crate::warm::Choices::new(),
             doc_id: format!("01jb379000000000000{n:07}"),
             size: o.size,
             window: o.window,
@@ -1158,22 +1263,49 @@ impl Live {
         self.changes[c].effective = Some(frame);
     }
 
-    /// A revision arrives: checked before it shows; it supersedes any revision still pending.
+    /// A writer's revision arrives: checked before it shows, with the warm-up of every state its
+    /// controls reach; it supersedes any revision still pending.
     fn revise(&mut self, s: usize, doc: &PathBuf) {
+        match read_payload(doc) {
+            Ok(payload) => {
+                self.sessions[s].payload = payload;
+                self.revise_value(s, false);
+            }
+            Err(issues) => {
+                let ses = &mut self.sessions[s];
+                let number = ses.revisions.len() as u64 + 1;
+                ses.revisions.push((number, "refused", issues));
+            }
+        }
+    }
+
+    /// An entry on a session's input track (#432): the control's value, and the state it gives
+    /// drawn from this frame on.
+    fn input(&mut self, s: usize, control: &str, value: Value) {
+        self.sessions[s].choices.insert(control.to_string(), value);
+        self.revise_value(s, true);
+    }
+
+    /// The session's payload under its controls' values, admitted as its next revision; a
+    /// writer's (`input` false) runs the warm-up.
+    fn revise_value(&mut self, s: usize, input: bool) {
         let number = self.sessions[s].revisions.len() as u64 + 1;
         let (writer, doc_id, size) = {
             let ses = &self.sessions[s];
             (ses.writer.clone(), ses.doc_id.clone(), ses.size)
         };
         let received = Instant::now();
+        let raw = self.sessions[s].payload.clone();
+        let payload = crate::warm::applied(&raw, &self.sessions[s].choices);
         let admitted = admit(
-            doc,
+            payload,
             &writer,
             &doc_id,
             size,
             &self.args.look,
             self.args.history,
             &mut self.labels,
+            (!input).then_some((&raw, &self.plants)),
         );
         let ses = &mut self.sessions[s];
         ses.checks
@@ -1188,6 +1320,7 @@ impl Live {
                 fit,
                 size,
                 skips,
+                warm,
             }) => {
                 #[cfg(feature = "test-meter")]
                 let (placed, loops) = match crate::testgpu::items(&doc) {
@@ -1217,6 +1350,8 @@ impl Live {
                     id: self.next_rev,
                     number,
                     doc,
+                    input,
+                    warm,
                     frames: Some(frames),
                     class,
                     limits,
@@ -1325,6 +1460,7 @@ impl Live {
                     &self.args.look,
                     &mut self.labels,
                     crate::session3::msaa_planted(self.plants.planted),
+                    self.plants.planted != Some(Planted::WarmsViewOnly),
                 ) {
                     Ok(mut v) => {
                         v.plant(self.plants.upscale);
@@ -1362,13 +1498,43 @@ impl Live {
         // checked on the device; one the device rejects raises operator_compile to its writer.
         if let Some(v) = ses.view.as_mut() {
             let (options, planted) = self.plants.ops;
-            v.ops = DocOps::new(
+            // A writer's revision is checked with its warm-up (#432): every scene its controls
+            // and its span reach, and every state's operators, fused as they will run.
+            let checking = !rev.input;
+            if checking {
+                v.warm(&self.device, &self.args.look, &rev.warm.scenes);
+                v.fusing = docops::Fusing {
+                    off: self.args.calibration,
+                    apart: std::mem::take(&mut rev.warm.apart),
+                };
+                v.pool.log.warming = true;
+                for doc in &rev.warm.docs {
+                    let _ = DocOps::pooled(
+                        &self.device,
+                        doc,
+                        options,
+                        planted,
+                        &self.args.fail_pipelines,
+                        docops::Hooks::default(),
+                        BTreeMap::new(),
+                        &mut v.pool,
+                        &v.fusing,
+                    );
+                }
+            }
+            v.ops = DocOps::pooled(
                 &self.device,
                 &rev.doc,
                 options,
                 planted,
                 &self.args.fail_pipelines,
+                docops::Hooks::default(),
+                BTreeMap::new(),
+                &mut v.pool,
+                &v.fusing,
             );
+            v.pool.log.warming = false;
+            rev.warm = Warm::default();
             v.canonical_draws_live_only = self.plants.render_back_live_only;
             v.want_targets(&rev.doc, self.plants.builds_unread_targets);
             for i in v.ops.issues() {
@@ -1724,6 +1890,11 @@ impl Live {
             let scopes = deep_gpu::device::scopes_pushed();
             let epoch = self.device.epoch;
             canonical_queue.clear();
+            for ses in &mut self.sessions {
+                if let Some(v) = ses.view.as_mut() {
+                    v.begin_frame();
+                }
+            }
             self.take_effect(frame);
             self.release_retired();
             while next_event < events.len() && events[next_event].0 == frame {
@@ -1740,6 +1911,14 @@ impl Live {
                             .filter(|s| self.sessions[*s].state == State::Live)
                         {
                             self.revise(s, doc);
+                        }
+                    }
+                    Event::Input(id, control, value) => {
+                        if let Some(s) = self
+                            .find(id)
+                            .filter(|s| self.sessions[*s].state == State::Live)
+                        {
+                            self.input(s, control, value.clone());
                         }
                     }
                     Event::Hold(id, until) => {
@@ -1935,6 +2114,10 @@ impl Live {
                     || !ops
                         .iter()
                         .any(|o| o.2 == Drew::Fallback.name() && self.failed(s, &o.0));
+                let (created, operator_pipelines) = self.sessions[s]
+                    .view
+                    .as_ref()
+                    .map_or((Vec::new(), 0), |v| (v.created(), v.operator_pipelines()));
                 self.views.push(ViewRow {
                     session: s,
                     binds,
@@ -1948,6 +2131,8 @@ impl Live {
                     history,
                     settled,
                     ops,
+                    created,
+                    operator_pipelines,
                 });
             }
             timer.resolve(&mut encoder);
@@ -2059,6 +2244,15 @@ impl Live {
                     };
                     let (a, b) = (a - origin, b - origin);
                     intervals[n] = [a / 1e6, b / 1e6];
+                    // An operator pass's key and members with their shares (#432).
+                    if let Some((key, members)) = self
+                        .sessions
+                        .get(m.session)
+                        .and_then(|ses| ses.view.as_ref())
+                        .and_then(|v| v.ops.pass_of(m.name))
+                    {
+                        self.pass_ops.insert(self.passes.len(), (key, members.to_vec()));
+                    }
                     self.passes.push(PassRow {
                         name: m.name,
                         session: Some(m.session),
@@ -2444,6 +2638,11 @@ impl Live {
                             "internal_scale": v.scale, "upscale": v.upscale, "history_frames": v.history,
                             "settled": v.settled,
                             "operators": v.ops.iter().map(|(item, res, drew)| json!({"operator": item, "item": item, "resolution": res, "drew": drew})).collect::<Vec<_>>(),
+                            "created": v.created.iter().map(|c| json!({
+                                "key": deep_scene3d_render::created::hex(c.key), "items": c.items,
+                                "feature_set": c.feature_set, "target": c.target,
+                            })).collect::<Vec<_>>(),
+                            "operator_pipelines": v.operator_pipelines,
                         });
                         if let Some(h) = f.extra.get("hashes") {
                             o["pixel_hash"] = h.get(v.session.to_string()).cloned().unwrap_or(Value::Null);
@@ -2465,7 +2664,8 @@ impl Live {
                 if self.args.reports.passes {
                     let passes: Vec<Value> = self.passes[f.passes.0..f.passes.1]
                         .iter()
-                        .map(|p| {
+                        .enumerate()
+                        .map(|(j, p)| {
                             let mut name = p.name.to_string();
                             let mut shares = Value::Null;
                             if let Some((k, i)) = p.stub {
@@ -2482,6 +2682,11 @@ impl Live {
                             });
                             if !shares.is_null() {
                                 o["shares"] = shares;
+                            }
+                            if let Some((key, members)) = self.pass_ops.get(&(f.passes.0 + j)) {
+                                let span = (p.end_ns - p.start_ns) / 1e6;
+                                o["key"] = json!(deep_scene3d_render::created::hex(*key));
+                                o["operators"] = json!(members.iter().map(|(m, share)| json!({"operator": m, "share": share, "ms": share * span})).collect::<Vec<_>>());
                             }
                             o
                         })
@@ -2658,6 +2863,7 @@ fn render_canonical(
         look,
         labels,
         planted3,
+        true,
     ) {
         Ok(v) => v,
         Err(e) => return refused("no_view", e),
@@ -2817,15 +3023,18 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
             Err(e) => return refused("no_device", e),
         };
         let mut labels = Labels::new();
-        let admitted = admit(
-            &doc,
-            &writer,
-            "01jb3790000000000000000000",
-            Some(size),
-            &look,
-            0,
-            &mut labels,
-        );
+        let admitted = read_payload(&doc).and_then(|payload| {
+            admit(
+                payload,
+                &writer,
+                "01jb3790000000000000000000",
+                Some(size),
+                &look,
+                0,
+                &mut labels,
+                None,
+            )
+        });
         let doc = match admitted {
             Ok(a) => a.doc,
             Err(issues) => return json!({"code": "refused", "issues": issues}),

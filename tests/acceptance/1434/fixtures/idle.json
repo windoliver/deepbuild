@@ -1,0 +1,25 @@
+{
+  "format": "chrome@1",
+  "window": [960, 640],
+  "scale": 2,
+  "background": [24, 26, 32],
+  "nodes": [
+    { "id": "gradient", "rect": [0, 0, 960, 640], "fill": { "gradient": [[40, 60, 120], [200, 120, 60]] } },
+    { "id": "title", "rect": [40, 30, 880, 60], "text": { "content": "Five settled effects", "size": 40, "color": [250, 250, 250] } },
+    { "id": "fx-1", "rect": [40, 120, 260, 200], "radius": 12, "backdrop": { "scale": 1 }, "effect": { "operator": "frost@1", "params": { "sigma": 4, "tint": [30, 30, 30, 30] }, "place": "over" } },
+    { "id": "fx-2", "rect": [340, 120, 260, 200], "radius": 12, "backdrop": { "scale": 0.5 }, "effect": { "operator": "frost@1", "params": { "sigma": 8, "tint": [20, 20, 40, 40] }, "place": "over" } },
+    { "id": "fx-3", "rect": [640, 120, 280, 200], "radius": 12, "backdrop": { "scale": 0.25 }, "effect": { "operator": "frost@1", "params": { "sigma": 12, "tint": [0, 0, 0, 60] }, "place": "over" } },
+    {
+      "id": "fx-4", "rect": [40, 360, 420, 240], "radius": 16, "backdrop": { "scale": 0.5 },
+      "effect": { "operator": "frost@1", "params": { "sigma": 6, "tint": [40, 40, 40, 40] }, "place": "under" },
+      "text": { "content": "Under its own words", "size": 28, "color": [250, 250, 250] }
+    },
+    {
+      "id": "panel", "rect": [500, 360, 420, 240], "layer": { "opacity": 0.85, "radii": [16, 16, 16, 16], "edge": 4 },
+      "children": [
+        { "id": "panel-fill", "rect": [500, 360, 420, 240], "fill": [240, 240, 244, 255] },
+        { "id": "fx-5", "rect": [520, 380, 380, 200], "radius": 10, "backdrop": { "scale": 1 }, "effect": { "operator": "frost@1", "params": { "sigma": 3, "tint": [0, 30, 60, 60] }, "place": "over" } }
+      ]
+    }
+  ]
+}

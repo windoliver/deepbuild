@@ -25,6 +25,8 @@ pub(super) struct BgraSurfaces {
     premultiplied: metal::RenderPipelineState,
     /// The planted twin that divides alpha out.
     divided: metal::RenderPipelineState,
+    /// DeepBuild patch (windoliver/deepbuild#1434): the chrome layers' pipelines and targets, built with these.
+    pub(super) chrome: super::chrome_layers::Chrome,
 }
 
 impl BgraSurfaces {
@@ -47,6 +49,7 @@ impl BgraSurfaces {
                 "surface_bgra_divided_fragment",
                 MTLPixelFormat::BGRA8Unorm,
             ),
+            chrome: super::chrome_layers::Chrome::new(device, library), // DeepBuild patch (windoliver/deepbuild#1434)
         }
     }
 }
