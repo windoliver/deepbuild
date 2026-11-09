@@ -984,7 +984,7 @@ An agent drives a headless copy of the app, sees it and records it
 **Fields**
 
 - `launch: {from: fixture handle | record_copy | empty = fixture, size: [px, px] = the reference window, scale: 1 | 2 = 2, theme: light | dark, reduced_motion: bool = false, locale, clock: virtual | real = virtual, packs: [name@version]}` (a record copy is read-only and redacted)
-- `locate: {role, name} | {item: ID[#sub]} | {handle} | {text} | {label}` (strict: exactly one match, or an issue naming the matches)
+- `locate: {role, name} | {item: ID[#sub]} | {id} | {handle} | {text} | {label}` (strict: exactly one match, or an issue naming the matches; `{id}` is a node's `id` in the snapshot, and `{handle}` the row whose `id` is that record handle)
 - `act: click | double_click | type {text} | press {keys} | drag {to: locator | [px, px]} | scroll {dx, dy} | hover | set {control, value}`, each waiting until its target is visible, enabled and stable for two frames
 - `wait_for: {locator, state: visible | hidden | enabled | text | value | settled} | {event: kind} | {t: flick}`; `timeout: ms = 5,000`
 - `see: {scope: window | panel | locator, include: roles | names | values | bounds | items}` → a text tree of roles, names, values and bounds, with canvas items by ID and their evaluated values

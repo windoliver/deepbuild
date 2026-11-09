@@ -1264,6 +1264,8 @@ mod notifications {
                         super::menu_bar::show_title(&line);
                         shown = (line, at);
                         cx.refresh_windows();
+                        // A panel's script reads the record too (#1459).
+                        deep_app::refresh_panels(cx);
                     }
                     deep_app::card::tick(now, cx);
                 });

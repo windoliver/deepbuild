@@ -31,6 +31,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/46/', 'packages/github/test/',
   'tests/acceptance/1172/',
   'tests/acceptance/1454/',
+  'tests/acceptance/1459/',
   'tests/acceptance/1002/first-screen-redraft/',
   'tests/acceptance/994/first-screen-redraft/',
   'tests/acceptance/167/', 'tests/acceptance/1328/',

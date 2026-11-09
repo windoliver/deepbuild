@@ -22,7 +22,8 @@ const LOCATOR = object({
   role: maybe(str('With name, or alone.')),
   name: maybe(str('The accessible name.')),
   item: maybe(str('A canvas item, ID[#sub].')),
-  handle: maybe(str()),
+  id: maybe(str('The element whose id in the snapshot is this; a row\'s id is its record\'s, so it holds when the words change.')),
+  handle: maybe(str('A record object\'s row, such as an ask\'s, by its handle (ask:<id>).')),
   text: maybe(str('The innermost element whose drawn text is exactly this.')),
   label: maybe(str('The form control whose accessible name, or else visible label, is this.')),
 });

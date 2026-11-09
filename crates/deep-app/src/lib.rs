@@ -4,7 +4,7 @@
 //!
 //! Issue #338 adds the app's shell with its shipped views as dock panels ([`views`]), the fixture
 //! record and inbox projection they draw ([`events`]), the canvas as a registered component
-//! ([`canvas`]), and `needs_you` in the `deepbuild` module for the fixture panels.
+//! ([`canvas`]), and `needs_you` in the `deepbuild` module, which reads the one record reader (#1459).
 //!
 //! Issue #1172: the shell is the app's window. #337's spike window is no part of the shipped binary: `spike` is built
 //! only for the suites that keep its proof, behind the feature of that name.
@@ -127,7 +127,9 @@ pub static REBUILDS: AtomicU64 = AtomicU64::new(0);
 
 /// DeepBuild's module for panels: the Needs you inbox, as plain data.
 pub fn deepbuild_module() -> HostModule {
-    let module = HostModule::new("deepbuild").function("needs_you", |_| needs_you());
+    let module = HostModule::new("deepbuild")
+        .function("needs_you", |_| needs_you())
+        .function("sessions", |_| sessions());
     #[cfg(feature = "spike")]
     let module = module.function("quotes", |_| {
         let interval: serde_json::Value = serde_json::from_str(QUOTES).expect("valid JSON");
@@ -170,35 +172,86 @@ pub fn deepbuild_module() -> HostModule {
     module
 }
 
-/// The inbox projection's list for Needs you, as the fixture panels read it: the rows oldest
-/// first, which of them are folded or in Later, and the asks that left the list.
+/// The inbox projection's list for Needs you, as any panel reads it: the rows oldest first, each open ask's handle and
+/// question in that order (so a view keys a row by its ask and draws its question, never the handle, #1459), which of
+/// them are folded or in Later, and the asks that left the list. It reads the one record reader, which holds the hub's
+/// record in the app and the fixture's in a replica, so a panel gets the same answer in both (#1459).
 fn needs_you() -> Result<HostValue, HostError> {
-    let state = views::current_state().ok_or_else(|| {
-        HostError::new("no fixture record is loaded; the host sets one before a panel draws")
-    })?;
-    let handles = |handles: &[String]| {
-        HostValue::Array(handles.iter().cloned().map(HostValue::Str).collect())
+    let (log_pos, inbox) = record::with_view(|view| (view.log_pos, view.inbox.clone()))
+        .ok_or_else(|| HostError::new("the app hasn't read the record from the hub yet"))?;
+    let text =
+        |row: &serde_json::Value, key: &str| row[key].as_str().unwrap_or_default().to_owned();
+    let open: Vec<&serde_json::Value> = inbox
+        .iter()
+        .filter(|row| row["status"] != "closed")
+        .collect();
+    let handles = |keep: &dyn Fn(&serde_json::Value) -> bool| {
+        HostValue::Array(
+            inbox
+                .iter()
+                .filter(|row| keep(row))
+                .map(|row| HostValue::Str(text(row, "ask")))
+                .collect(),
+        )
     };
     Ok(HostValue::Object(vec![
-        ("now".into(), HostValue::Number(state.now as f64)),
+        ("now".into(), HostValue::Number(views::now() as f64)),
+        ("log_pos".into(), HostValue::Number(log_pos as f64)),
+        ("rows".into(), handles(&|row| row["status"] != "closed")),
         (
-            "log_pos".into(),
-            HostValue::Number(state.inbox.log_pos as f64),
+            "asks".into(),
+            HostValue::Array(
+                open.iter()
+                    .map(|row| {
+                        HostValue::Object(vec![
+                            ("handle".into(), HostValue::Str(text(row, "ask"))),
+                            ("question".into(), HostValue::Str(text(row, "question"))),
+                        ])
+                    })
+                    .collect(),
+            ),
         ),
-        ("rows".into(), handles(&state.inbox.rows())),
-        ("folded".into(), handles(&state.inbox.folded)),
-        ("later".into(), handles(&state.inbox.later)),
-        ("superseded".into(), handles(&state.inbox.superseded)),
-        ("moot".into(), handles(&state.inbox.moot)),
+        ("folded".into(), handles(&|row| row["status"] == "folded")),
+        ("later".into(), handles(&|row| row["status"] == "later")),
+        (
+            "superseded".into(),
+            handles(&|row| row["outcome"] == "superseded"),
+        ),
+        ("moot".into(), handles(&|row| row["outcome"] == "moot")),
         (
             "held".into(),
-            state
-                .held
-                .clone()
+            // The hub records no event for a hold yet, so only a replica's fixture names one (#1454).
+            views::current_state()
+                .and_then(|state| state.held.clone())
                 .map(HostValue::Str)
                 .unwrap_or(HostValue::Null),
         ),
     ]))
+}
+
+/// The sessions as the sidebar lists them, in its order, for a view replacing its rows (`session.row@1`): each one's
+/// ID, which keys its row as `session:<id>`, its title, and its state's words and status-map entry, from the one record
+/// reader (#1459).
+fn sessions() -> Result<HostValue, HostError> {
+    record::with_view(|view| {
+        let table = view.table();
+        HostValue::Array(
+            table
+                .every_session()
+                .into_iter()
+                .map(|(id, title, _)| {
+                    let (words, entry) = table.row(&id, views::now());
+                    HostValue::Object(vec![
+                        ("id".into(), HostValue::Str(id)),
+                        ("title".into(), HostValue::Str(title)),
+                        ("words".into(), HostValue::Str(words)),
+                        ("entry".into(), HostValue::Str(entry.to_owned())),
+                    ])
+                })
+                .collect(),
+        )
+    })
+    .ok_or_else(|| HostError::new("the app hasn't read the record from the hub yet"))
 }
 
 #[cfg(feature = "spike")]
@@ -257,7 +310,27 @@ pub fn mount_panel(
 ) -> anyhow::Result<Entity<ScriptView>> {
     admit(dir)?;
     let loaded = runtime.load_application(dir, "main.js")?;
-    runtime.mount_application(&loaded, window, cx)
+    let view = runtime.mount_application(&loaded, window, cx)?;
+    MOUNTED.with(|mounted| mounted.borrow_mut().push(view.downgrade()));
+    Ok(view)
+}
+
+thread_local! {
+    /// The panels mounted in this process, so a new reading of the record reaches the scripts that read it.
+    static MOUNTED: std::cell::RefCell<Vec<WeakEntity<ScriptView>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Tells every mounted panel the record moved: a script reads it through `deepbuild.needs_you`, so its description is
+/// stale and its `render` runs again (gpui-shell's `refresh`, not a bare notify). A panel that went is forgotten.
+pub fn refresh_panels(cx: &mut App) {
+    let mounted: Vec<Entity<ScriptView>> = MOUNTED.with(|mounted| {
+        let mut mounted = mounted.borrow_mut();
+        mounted.retain(|view| view.upgrade().is_some());
+        mounted.iter().filter_map(WeakEntity::upgrade).collect()
+    });
+    for view in mounted {
+        view.update(cx, |view, cx| view.refresh(cx));
+    }
 }
 
 /// The checks a panel passes before gpui-shell reads it, then `@deepbuild/panel` written where gpui-shell resolves it.
