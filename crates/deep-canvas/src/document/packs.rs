@@ -3306,6 +3306,7 @@ mod tests {
             ("!", ""),
             ("abs(", ")"),
             ("i ? 1 : ", ""),
+            ("i ? ", " : 1"),
             ("a[", "]"),
         ];
         for (open, close) in forms {
@@ -3319,6 +3320,10 @@ mod tests {
         // A chain nests no parse but a tree as deep as it is long, which a walk recurses down.
         let chain = |n: usize| format!("{}1", "1+".repeat(n));
         assert!(postfix(&chain(511)).is_ok());
+        // 1,024 tokens read and the 1,025th is refused.
+        assert!(postfix(&format!("-{}", chain(511))).is_ok());
+        let e = postfix(&format!("--{}", chain(511))).unwrap_err();
+        assert!(e.contains("the cap of 1024 tokens"), "{e}");
         let e = postfix(&chain(100_000)).unwrap_err();
         assert!(e.contains("the cap of 1024 tokens"), "{e}");
     }
@@ -3334,6 +3339,48 @@ mod tests {
             let repeat = json!({"repeat": {"count": text, "as": "j", "of": "j"}});
             let e = Template::of(&repeat).eval(&scope()).unwrap_err();
             assert!(e.contains("past the cap of"), "{e}");
+            let over = json!({"repeat": {"over": text, "as": "j", "of": "j"}});
+            let e = Template::of(&over).eval(&scope()).unwrap_err();
+            assert!(e.contains("past the cap of"), "{e}");
+            let lets = json!({"repeat": {"count": 2, "as": "j", "let": {"k": text}, "of": "k"}});
+            let e = Template::of(&lets).eval(&scope()).unwrap_err();
+            assert!(e.contains("past the cap of"), "{e}");
+        }
+        // A repeat whose count no cap stops is still read as it was: a literal.
+        let plain = json!({"repeat": {"count": "a b", "as": "j", "of": "j"}});
+        assert_eq!(Template::of(&plain).eval(&scope()), Ok(plain.clone()));
+    }
+
+    #[test]
+    fn the_flat_check_reads_each_rule_of_the_grammar() {
+        // Short texts, so each case turns on one rule; past a cap the same rules decide.
+        let could = [
+            "1 < 2 && 2 < 3",
+            "i ? 1 < 2 : 2 > 1",
+            "f() + 1",
+            "1 % 2 + (1 <= 2) + (0 || 1)",
+            "max(1, i ? 2 : 3)",
+            "a.b[1] - !c",
+        ];
+        for text in could {
+            assert!(could_be_expression(text), "{text}");
+        }
+        let never = [
+            "(1 ? 2)",
+            "(1]",
+            "f(1 ? 2, 3 : 4)",
+            "(1",
+            "1 + + 2",
+            "()",
+            "f(1,)",
+            "a.+",
+            "1 + )",
+            "1 # 2",
+            "1 : 2",
+            "1 2",
+        ];
+        for text in never {
+            assert!(!could_be_expression(text), "{text}");
         }
     }
 
