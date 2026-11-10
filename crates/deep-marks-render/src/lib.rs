@@ -757,7 +757,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             },
         )));
     }
-    let (look, _) = look?;
+    let (look, look_def) = look?;
+    // #1646: the CRT afterglow a text's reveal draws.
+    let afterglow = match deep_canvas_marks::print::afterglow(&look_def) {
+        Ok(a) => a,
+        Err(r) => return Some(Answer::Now(refused(r.code, &r.path))),
+    };
     // #399: the view's label placement at each stop of a camera path, and a series' crosshair.
     if command == "labels" {
         let placer = match input.get("planted") {
@@ -917,6 +922,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             },
             snaps_weight: input.get("planted").and_then(Value::as_str)
                 == Some("weight_snaps_to_static"),
+            afterglow,
             formulas: ctx,
         };
         let mut request = request;

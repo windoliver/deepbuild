@@ -517,6 +517,17 @@ fn fill_medium(
         let ramp = ramp(d.palette, &noise, &at)?;
         medium.kind = Kind::Noise(noise, ramp);
     }
+    // #1646: a dither fill takes its stops' colors as they are, never mixed.
+    if let Some(Value::Object(n)) = fill.and_then(|f| f.get("dither")) {
+        let at = format!("{path}/fill/dither");
+        let dither = spec::dither(n, &at).map_err(refused)?;
+        let stops = dither
+            .stops
+            .iter()
+            .map(|r| role_color(d.palette, r, &format!("{at}/stops")).map(unit))
+            .collect::<Result<Vec<_>, _>>()?;
+        medium.kind = Kind::Dither(dither, stops);
+    }
     Ok((medium, def))
 }
 
