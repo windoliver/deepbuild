@@ -1178,9 +1178,10 @@ impl Render for Shipped {
             .text_color(chrome.ink_primary)
             // Where the view was laid out, which a replica reads (#1458).
             .child(
+                // Pinned to the view's edges, not its padding, so the bounds are the view's own.
                 canvas(move |bounds, _, _| drew(name, bounds), |_, _, _, _| {})
                     .absolute()
-                    .size_full(),
+                    .inset_0(),
             );
         let drawn = match self.kind {
             Kind::Sidebar => {
