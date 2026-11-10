@@ -1,0 +1,58 @@
+# #545 criterion 5 redraft at HEAD 933d6c9529ce5b1e8c1c2cb405dadfcd877448ba ("Acceptance tests for #545, written blind":
+# base f38d2b398 plus tests/acceptance/545/; nothing else changed but this folder and ../545-redraft-ac3 added).
+# Run 2026-11-10 on macOS arm64, Node v24.22.2, cargo 1.99.1 (rustup).
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/545-redraft-ac5 --testTimeout=600000 --no-file-parallelism
+# Result: 2 of 2 tests fail, both on the missing surface: `frame` takes no `play` at the base, so the playhead stays at
+# 0 s (and its frames have no `draws`). Nothing is BLOCKED. `npx tsc -p tests/acceptance/545-redraft-ac5/tsconfig.json`
+# passes. deep-logic and ../545/wat build. Before the view, test (a)'s bake leg ran at the base and passed: with
+# checkpoint.every 60, the bake of 121 steps takes the mover's checkpoint at step 60, and steps 59 and 60 store
+# [[59, 0, 0]] and [[60, 0, 0]]. A throwaway probe, since deleted, stood in seeks for `play` at the base in the same
+# view: 660 frames of 1/60 s land on i x 11,760,000 flicks; the seek back from 11 s to 6.05 s and the seek on from 0.5 s
+# each landed at 4,268,880,000 flicks in one frame, ran 1 step (want 61, at 61), and showed the full-state hash the
+# frame-by-frame run had at 6.05 s.
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/545-redraft-ac5
+
+ ❯ ac05-seek-blend.test.ts (2 tests | 2 failed) 2012ms
+   ❯ #545.fd1e802b a seek that restores the checkpoint at step 60 blends from step 59 as playing does (2)
+     × #545.fd1e802b with a checkpoint every 60 steps the 10 Hz item seeked to 6.05 s draws x = 59.5 m, the blend of steps 59 and 60, as playing does 867ms
+     × #545.fd1e802b a planted seek that restores only the arrays of the checkpoint at step 60 (seek_restores_arrays_only) draws 60 m and fails, naming the time and both values 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac05-seek-blend.test.ts > #545.fd1e802b a seek that restores the checkpoint at step 60 blends from step 59 as playing does > #545.fd1e802b with a checkpoint every 60 steps the 10 Hz item seeked to 6.05 s draws x = 59.5 m, the blend of steps 59 and 60, as playing does
+AssertionError: played frame 1 (play 1/60 s a frame from 0 s) lands the playhead at 11,760,000 flicks: expected +0 to be 11760000 // Object.is equality
+
+- Expected
++ Received
+
+- 11760000
++ 0
+
+ ❯ land ac05-seek-blend.test.ts:45:71
+ ❯ watch ac05-seek-blend.test.ts:50:15
+ ❯ watched ac05-seek-blend.test.ts:83:12
+ ❯ ac05-seek-blend.test.ts:101:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac05-seek-blend.test.ts > #545.fd1e802b a seek that restores the checkpoint at step 60 blends from step 59 as playing does > #545.fd1e802b a planted seek that restores only the arrays of the checkpoint at step 60 (seek_restores_arrays_only) draws 60 m and fails, naming the time and both values
+AssertionError: played frame 1 (play 1/60 s a frame from 0 s) lands the playhead at 11,760,000 flicks: expected +0 to be 11760000 // Object.is equality
+
+- Expected
++ Received
+
+- 11760000
++ 0
+
+ ❯ land ac05-seek-blend.test.ts:45:71
+ ❯ watch ac05-seek-blend.test.ts:50:15
+ ❯ watched ac05-seek-blend.test.ts:83:12
+ ❯ ac05-seek-blend.test.ts:105:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:16:15
+   Duration  2.23s (tests 95%, transform 3%, import 1%)
