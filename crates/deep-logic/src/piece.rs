@@ -25,8 +25,8 @@ pub const PER_STEP: usize = 16;
 pub const SLOT: u32 = 8 + PER_STEP as u32 * 16;
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 8] = [
-    "fires", "clock", "due", "preview", "pages", "parallel", "services", "mirrors",
+const LATER: [&str; 6] = [
+    "fires", "preview", "pages", "parallel", "services", "mirrors",
 ];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
@@ -103,6 +103,37 @@ impl Ty {
             Ty::Quat => json!([f(0), f(1), f(2), f(3)]),
         }
     }
+    /// An element as a frame draws a linear write (Logic: interpolated writes): `from` blended
+    /// toward `to` by `a`, f64 and vectors by lerp, a quat by nlerp along the shorter arc.
+    pub fn blend(self, from: &[u8], to: &[u8], a: f64) -> Value {
+        let n = (self.size() / 8) as usize;
+        let f = |b: &[u8], i: usize| {
+            f64::from_le_bytes(b[8 * i..8 * i + 8].try_into().expect("8 bytes"))
+        };
+        let (p, mut q): (Vec<f64>, Vec<f64>) = (
+            (0..n).map(|i| f(from, i)).collect(),
+            (0..n).map(|i| f(to, i)).collect(),
+        );
+        if self == Ty::Quat && p.iter().zip(&q).map(|(x, y)| x * y).sum::<f64>() < 0.0 {
+            q.iter_mut().for_each(|y| *y = -*y);
+        }
+        let mut v: Vec<f64> = p.iter().zip(&q).map(|(x, y)| x + a * (y - x)).collect();
+        if self == Ty::Quat {
+            let len = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+            if len > 0.0 {
+                v.iter_mut().for_each(|x| *x /= len);
+            }
+        }
+        if self == Ty::F64 {
+            json!(v[0])
+        } else {
+            json!(v)
+        }
+    }
+    /// Whether a write of this type may blend: f64, vec2, vec3 and quat, never a bool or an i32.
+    pub fn blends(self) -> bool {
+        !matches!(self, Ty::Bool | Ty::I32)
+    }
 }
 
 /// One entry of the region map.
@@ -177,6 +208,8 @@ pub struct Write {
     pub name: String,
     pub ty: Ty,
     pub count: u32,
+    /// `interpolate: linear`: drawing reads it one step late, blended (Logic: interpolated writes).
+    pub linear: bool,
 }
 
 /// A kind of occurrence an item emits (Logic: occurrences): its numeric fields in declaration
@@ -222,6 +255,10 @@ pub struct Item {
     /// The bytes as given, whose code offsets the sidecar's DWARF stands for.
     pub given: Vec<u8>,
     pub step: i64,
+    /// `clock: on_input` (Logic: turn clock): a step runs only when something asks for it.
+    pub turn: bool,
+    /// With `on_input`, the offset in the write region of the i32 `due` names.
+    pub due: Option<u32>,
     pub reads: Vec<String>,
     pub writes: Vec<Write>,
     pub layout: Layout,
@@ -404,6 +441,8 @@ struct Declared {
     program: String,
     debug: Option<String>,
     step: i64,
+    turn: bool,
+    due: Option<String>,
     reads: Vec<String>,
     writes: Vec<Write>,
     fuel: i64,
@@ -478,6 +517,8 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             "program",
             "debug",
             "step_rate",
+            "clock",
+            "due",
             "reads",
             "writes",
             "budget",
@@ -546,10 +587,16 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             .filter(|c| *c >= 1 && *c <= u32::MAX as u64);
         let interpolate = w.get("interpolate").map_or(Some("hold"), Value::as_str);
         match (ty, count, interpolate) {
-            (Some(ty), Some(count), Some("hold" | "linear")) => writes.push(Write {
+            (Some(ty), Some(_), Some("linear")) if !ty.blends() => refused.push(refusal(
+                "write",
+                format!("{name} is a {}, which never blends: interpolate: linear is only for f64, vec2, vec3 and quat arrays", ty.name()),
+                json!({"write": name}),
+            )),
+            (Some(ty), Some(count), Some(i @ ("hold" | "linear"))) => writes.push(Write {
                 name: name.clone(),
                 ty,
                 count: count as u32,
+                linear: i == "linear",
             }),
             _ => refused.push(refusal(
                 "write",
@@ -584,6 +631,27 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
     if !refused.is_empty() {
         return Err(logic_refused(id, refused));
     }
+    let turn = match params.get("clock") {
+        None => false,
+        Some(c) => match c.as_str() {
+            Some("fixed") => false,
+            Some("on_input") => true,
+            _ => return Err(bad("clock", "clock is fixed or on_input".into())),
+        },
+    };
+    let due = match params.get("due") {
+        None => None,
+        Some(v) => {
+            let name = v.as_str().unwrap_or_default();
+            let own = writes
+                .iter()
+                .any(|w| w.name == name && w.ty == Ty::I32 && w.count == 1);
+            if !turn || !own {
+                return Err(bad("due", format!("due names one of the item's own i32 arrays of count 1, with clock: on_input; {v} isn't")));
+            }
+            Some(name.to_string())
+        }
+    };
     fn get<'a>(o: Option<&'a Value>, k: &str) -> Option<&'a Value> {
         o.and_then(|b| b.get(k))
     }
@@ -636,6 +704,8 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         program,
         debug,
         step,
+        turn,
+        due,
         reads,
         writes,
         fuel,
@@ -1007,6 +1077,15 @@ pub fn check_in(
             hash,
             given,
             step: d.step,
+            turn: d.turn,
+            due: d.due.as_ref().map(|n| {
+                layout
+                    .entries
+                    .iter()
+                    .find(|e| e.region == "writes" && &e.name == n)
+                    .expect("due names a write")
+                    .offset
+            }),
             reads: d.reads.clone(),
             writes: d.writes.clone(),
             layout,
@@ -1204,5 +1283,31 @@ mod tests {
             "a": {"writes": {"x": {"type": "f64", "count": 8_388_608}}},
         });
         assert_eq!(refusals(items), json!(["b", "read"]));
+    }
+
+    #[test]
+    fn due_names_its_own_i32_of_count_1_on_a_turn_clock() {
+        let turn = |due: &str, ty: &str, count: u64, clock: &str| {
+            refusals(
+                json!({"g": {"clock": clock, "due": due, "writes": {"due": {"type": ty, "count": count}}}}),
+            )
+        };
+        assert_eq!(turn("due", "i32", 1, "on_input"), json!([]));
+        for (due, ty, count, clock) in [
+            ("due", "f64", 1, "on_input"),
+            ("due", "i32", 2, "on_input"),
+            ("nothing", "i32", 1, "on_input"),
+            ("due", "i32", 1, "fixed"),
+        ] {
+            assert_eq!(
+                turn(due, ty, count, clock),
+                json!(["g", "field"]),
+                "due {due} on a {ty} x {count}, clock {clock}"
+            );
+        }
+        assert_eq!(
+            refusals(json!({"g": {"clock": "sometimes"}})),
+            json!(["g", "field"])
+        );
     }
 }

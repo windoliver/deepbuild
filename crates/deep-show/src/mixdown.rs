@@ -232,7 +232,9 @@ impl Hub<'_> {
             return Err(json!({"code": "bad_rate", "sample_rate": rate}));
         }
         let span = match d.pointer("/transport/span") {
+            // An open span has no end: the mix plays on as with no span (Transport).
             None => None,
+            Some(Value::String(s)) if s == "open" => None,
             v => Some(time(d, v).map_err(bad)?),
         };
         let empty = Map::new();

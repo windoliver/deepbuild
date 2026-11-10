@@ -7,10 +7,10 @@ The logic module, `logic@1` (#531, #532; design: The logic module): a logic item
 ## Where new code goes
 
 - `src/piece.rs`: a piece's logic items and their check; `src/world.rs`: the steps, regions, seeds and traps.
-- `src/checks.rs`: `logic.determinism`; `src/budget.rs`: `logic.budget` and its calibration programs; `src/live.rs`: a live view with no bake.
+- `src/checks.rs`: `logic.determinism`; `src/budget.rs`: `logic.budget` and its calibration programs; `src/judder.rs`: `logic.judder`, an issue at check (#545); `src/live.rs`: a live view with no bake, its open span and what a frame draws.
 - `src/lines.rs`: source lines through a program's debug sidecar.
 - `src/lib.rs`: the JSON calls, bakes and bake keys; `src/main.rs`: the command line and `--planted`.
-- The browser's runtime goes in `web/logic.mjs`. The acceptance tests are in `tests/acceptance/531`, `tests/acceptance/532` and `tests/acceptance/544`.
+- The browser's runtime goes in `web/logic.mjs`; it has no turn clock yet, so `web_plan` refuses `clock: on_input` by name. The acceptance tests are in `tests/acceptance/531`, `532`, `544` and `545`.
 
 ## What it may import
 
