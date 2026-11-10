@@ -186,6 +186,8 @@ const noWake = (agent: string | undefined): boolean => adapterOf(agent)?.caps.wa
 const unseenTools = (agent: string | undefined): boolean => adapterOf(agent)?.caps.nativeTools === false;
 /** An agent whose own package places an answer in its session, steering a running turn or starting one (caps.steer, caps.startTurn). */
 const placesItself = (agent: string | undefined): boolean => { const caps = adapterOf(agent)?.caps; return caps !== undefined && caps.steer && caps.startTurn; };
+/** An agent one of whose processes runs many threads, as its facts' `daemon` says: a process there names no one session. */
+const manyThreads = (agent: string | undefined): boolean => (adapterOf(agent)?.facts as Obj | undefined)?.daemon !== undefined;
 /** The commands that take effect only once the OS confirms you (#19), as `you.confirm` names them. */
 /** The sign-in command each agent's facts name, by the agent's name as a task would say it (#84). */
 function signInCommands(): Record<string, string> {
@@ -1177,6 +1179,7 @@ export class Core {
       keep: async (bytes, source) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
       has: async (sha) => (await this.store.get(sha)) !== undefined,
       read: (sha) => this.store.read(sha),
+      adopt: async (bytes) => { await this.stored(await this.store.connect({ role: 'agent', session: 'unknown' }).put({ bytes, kind: 'file', source: 'unrecorded', redaction: 'unknown', license: { name: 'unknown', allows: [] } }), 'a file of unknown origin'); },
       send: (request, boundary) => this.store.send(request, boundary),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
       row: (job, running) => this.jobShown(job, running),
@@ -2837,6 +2840,18 @@ export class Core {
       if (this.restate) { this.restate = false; this.stateSoon(); }
     });
   }
+  /** Marks the row `id` read, as row.set with `unread: false`, if it's unread; whether it was (#1461). */
+  private async seeRow(id: string): Promise<Obj> {
+    const placed = this.rows.get(id);
+    if (!placed?.row.unread) return { seen: false };
+    const row = { ...placed.row, unread: false };
+    const ts = this.now();
+    const session = row.session;
+    const connection = this.connection('core', { ...(this.projects.get(session) ? { project: this.projects.get(session)! } : {}), ...(this.sessionPeople.get(session) ? { actor: this.sessionPeople.get(session)! } : {}) });
+    await this.append(connection, { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
+    this.rows.set(id, { order: placed.order, row });
+    return { seen: true };
+  }
   /** Once no state pass is under way or due, the passes appends since asked for included. */
   private async statesSettled(): Promise<void> {
     while (this.stating) await this.stating;
@@ -2933,7 +2948,7 @@ export class Core {
    * a clear, its daemon runs many threads, and its payload names no fork's parent: its thread is its own ID.
    */
   private async threadOf(session: Session, source: string | undefined): Promise<string> {
-    if (session.agent === 'codex') return session.id;
+    if (manyThreads(session.agent)) return session.id;
     if (source !== 'clear' && source !== 'compact' && source !== 'fork') return session.id;
     const before = [...this.sessions.values()].filter((s) => s.id !== session.id && s.pid === session.pid && s.start === session.start).at(-1);
     if (before) return before.thread;
@@ -5718,7 +5733,7 @@ export class Core {
       if (!actual || actual !== parent.start) return null;
       const served = [...this.sessions.values()].filter((s) => s.pid === parent.pid && s.start === actual && !s.ended);
       // A Codex process may run another thread at any time: each of its calls binds by its own stamp.
-      return served.length === 1 && (adapterOf(served[0]!.agent)?.facts as Obj | undefined)?.daemon === undefined ? served[0]!.id : null;
+      return served.length === 1 && !manyThreads(served[0]!.agent) ? served[0]!.id : null;
     });
   }
 
@@ -5833,6 +5848,11 @@ export class Core {
       case 'rows.read':
         this.replayLate();
         return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.log.reflecting(() => this.rowsSeen(context.role, params.detail === true)));
+      // A row's page was open a second while you were present (#1461): the row reads as read in every reader.
+      case 'row.read':
+        if (context.role !== 'app') throw refuse('role', '/method', 'Only the app says a row was seen.', method);
+        if (typeof params.id !== 'string') throw refuse('type', '/params/id', 'Name the row by its id.', method);
+        return this.statesSettled().then(() => this.queue(() => this.seeRow(String(params.id))));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);

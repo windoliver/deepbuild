@@ -31,12 +31,16 @@ pub mod chrome_gallery;
 pub mod commands;
 pub mod confirm;
 pub mod device;
+pub mod empties;
 #[cfg(feature = "fixtures")]
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
+/// #1486: chrome thumbnails through the one image service.
+pub mod images;
 pub mod installed;
 pub mod kinds;
+pub mod list;
 pub mod notice;
 pub mod notify;
 pub mod open;
@@ -72,6 +76,7 @@ use gpui_shell::{
 };
 
 pub mod trusted_input;
+pub mod unread;
 
 pub mod capture;
 
@@ -248,13 +253,14 @@ fn needs_you() -> Result<HostValue, HostError> {
     ]))
 }
 
+/// The ask a replica's fixture holds, since the record has no event for a hold yet (#1457): none in a shipped build.
 #[cfg(feature = "fixtures")]
-fn held() -> Option<String> {
+pub(crate) fn held() -> Option<String> {
     views::current_state().and_then(|state| state.held.clone())
 }
 
 #[cfg(not(feature = "fixtures"))]
-fn held() -> Option<String> {
+pub(crate) fn held() -> Option<String> {
     None
 }
 

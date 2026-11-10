@@ -254,6 +254,8 @@ pub fn knows(kind: &str) -> bool {
         || kind == deep_canvas_scene3d::scene::OVERLAY
         // The vector module's kind (#1162): an item the view draws, hears and points at.
         || kind == "vector@1"
+        // A logic item (#544): baked at check into the occurrence lists its readers read; it draws nothing.
+        || kind == "logic@1"
         || !matches!(lookup(&registry(), kind), Lookup::UnknownKind)
 }
 

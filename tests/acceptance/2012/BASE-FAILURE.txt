@@ -1,0 +1,183 @@
+The #2012 suite run once at base commit 903a1c07 (no implementation of #2012; #2009's, #2010's and #1983's merges are
+there), on macOS arm64 (Apple M5 Max, rustup 1.99.1, Node 24.22.2, vitest 5.0.5, Docker 29.5.2 through colima), with
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/2012 --testTimeout=600000 --no-file-parallelism`
+(the checkout's path redacted to `<checkout>`; deep-physics was already built, 41 s cold before the run).
+
+6 of 6 tests fail, each at an assertion because the surface is absent, none in the harness and none BLOCKED:
+- ac1's two tests, ac3's test: this Mac's own replay of its golden (golden_verify) answers no `machines` (and, for the
+  step-for-step judge, no `step_hashes` of its own).
+- ac4's test: the golden's `machine` is {"os","arch","cpu"} with no `target`.
+- ac2's two tests: none of Rapier 0.36.1's four test files is the root of a workspace test target (cargo metadata).
+None reaches its slow leg: no wasm32 build, no container build or run. Checked apart from this run, at the base: every
+world here records a golden and replays it PASS on this Mac; the shifted replay answers FAIL at step 120; the changed
+document answers FAIL with `refused` naming the golden's key; both platforms of the lane's image run with --pull never
+and --network none at the Mac's rustc; Rapier's four files, built outside the checkout with the physics build's
+features and lockfile, pass all 11 named tests here (see the README's "What was read").
+The type-check, `npx tsc -p tests/acceptance/2012/tsconfig.json`, exits 0.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2012
+
+ ❯ ac2-rapier-own-tests.test.ts (2 tests | 2 failed) 302ms
+   ❯ #2012.13d17890 Rapier's own determinism tests at 0.36.1 pass with the pinned features, toolchain and flags on the Mac and on Linux, the portability test reproducing its 488,334-byte golden (2)
+     × #2012.13d17890 on the reference Mac: snapshot_portability (its 488,334-byte golden), simd_backend_determinism, simd_backend_parity and snapshot_roundtrip, upstream's bytes, pass under the physics build's features and rust-toolchain.toml's toolchain; a build with rapier3d/simd8 is caught 204ms
+     × #2012.13d17890 on the Linux machine (the lane's pinned image as linux/amd64): the same files pass under the physics build's features for x86_64-unknown-linux-gnu and the same toolchain, built there and run with no network 95ms
+ ❯ ac1-mac-linux-wasm32.test.ts (2 tests | 2 failed) 2982ms
+   ❯ #2012.4d10a14c a golden recorded on the Mac matches on Linux x86_64 and in wasm32 step for step; a Linux VM's run reads machines: same and stays pending (2)
+     × #2012.4d10a14c a golden of the pile-and-flyer world recorded on this Mac matches on Linux x86_64 and in the wasm32 build at every one of its 241 step hashes, and with both runs it passes cross-machine 765ms
+     × #2012.4d10a14c a run in a Linux VM on this Mac (the lane's image as linux/arm64) reads machines: same and leaves the cross-machine golden pending, never PASS, even as the configured machine of a Linux target 577ms
+ ❯ ac4-key-without-triple.test.ts (1 test | 1 failed) 1301ms
+   ❯ #2012.562a3985 a golden binds the bake key without the target triple, records the triple in its machine, and passes on Linux; a changed document fails there, naming the key (1)
+     × #2012.562a3985 a golden recorded on this Mac names its triple in its machine, its key is the same on Linux x86_64 where it passes, and the same golden replayed with the flyer's x velocity one ulp higher fails there naming that key 467ms
+ ❯ ac3-goldens-on-linux.test.ts (1 test | 1 failed) 4424ms
+   ❯ #2012.53ff430e goldens recorded on macOS match on Linux step for step (1)
+     × #2012.53ff430e the goldens of three worlds recorded on this Mac (pile and flyer, ball and goal, chain, sensor and CCD balls over a pile) match on Linux x86_64 at every step hash 3155ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-mac-linux-wasm32.test.ts > #2012.4d10a14c a golden recorded on the Mac matches on Linux x86_64 and in wasm32 step for step; a Linux VM's run reads machines: same and stays pending > #2012.4d10a14c a golden of the pile-and-flyer world recorded on this Mac matches on Linux x86_64 and in the wasm32 build at every one of its 241 step hashes, and with both runs it passes cross-machine
+AssertionError: this Mac replays its own golden step for step and reads machines: same:
+  this Mac's replay: machines is undefined, not same
+  this Mac's replay: the replay answers no step_hashes of its own (got undefined): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "this Mac's replay: machines is undefined, not same",
++   "this Mac's replay: the replay answers no step_hashes of its own (got undefined)",
++ ]
+
+ ❯ none ../2009/helpers.ts:66:73
+     64| /** No failures; the message lists them. */
+     65| export function none(failures: readonly string[], what: string): void {
+     66|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     67| }
+     68| /** A planted twin is caught: the judge that passes the real program f…
+ ❯ ac1-mac-linux-wasm32.test.ts:31:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  ac1-mac-linux-wasm32.test.ts > #2012.4d10a14c a golden recorded on the Mac matches on Linux x86_64 and in wasm32 step for step; a Linux VM's run reads machines: same and stays pending > #2012.4d10a14c a run in a Linux VM on this Mac (the lane's image as linux/arm64) reads machines: same and leaves the cross-machine golden pending, never PASS, even as the configured machine of a Linux target
+AssertionError: a replay on the recording machine reads machines: same:
+  this Mac's replay: machines is undefined, not same: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "this Mac's replay: machines is undefined, not same",
++ ]
+
+ ❯ none ../2009/helpers.ts:66:73
+     64| /** No failures; the message lists them. */
+     65| export function none(failures: readonly string[], what: string): void {
+     66|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     67| }
+     68| /** A planted twin is caught: the judge that passes the real program f…
+ ❯ ac1-mac-linux-wasm32.test.ts:59:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  ac2-rapier-own-tests.test.ts > #2012.13d17890 Rapier's own determinism tests at 0.36.1 pass with the pinned features, toolchain and flags on the Mac and on Linux, the portability test reproducing its 488,334-byte golden > #2012.13d17890 on the reference Mac: snapshot_portability (its 488,334-byte golden), simd_backend_determinism, simd_backend_parity and snapshot_roundtrip, upstream's bytes, pass under the physics build's features and rust-toolchain.toml's toolchain; a build with rapier3d/simd8 is caught
+AssertionError: Rapier 0.36.1's own tests/snapshot_portability.rs, tests/simd_backend_determinism.rs, tests/simd_backend_parity.rs, tests/snapshot_roundtrip.rs is the root file of no test target of a workspace package (cargo metadata), byte for byte after an optional // header: expected [ 'snapshot_portability', …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "snapshot_portability",
++   "simd_backend_determinism",
++   "simd_backend_parity",
++   "snapshot_roundtrip",
++ ]
+
+ ❯ rapierTargets ac2-rapier-own-tests.test.ts:64:210
+
+ ❯ ac2-rapier-own-tests.test.ts:122:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  ac2-rapier-own-tests.test.ts > #2012.13d17890 Rapier's own determinism tests at 0.36.1 pass with the pinned features, toolchain and flags on the Mac and on Linux, the portability test reproducing its 488,334-byte golden > #2012.13d17890 on the Linux machine (the lane's pinned image as linux/amd64): the same files pass under the physics build's features for x86_64-unknown-linux-gnu and the same toolchain, built there and run with no network
+AssertionError: Rapier 0.36.1's own tests/snapshot_portability.rs, tests/simd_backend_determinism.rs, tests/simd_backend_parity.rs, tests/snapshot_roundtrip.rs is the root file of no test target of a workspace package (cargo metadata), byte for byte after an optional // header: expected [ 'snapshot_portability', …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "snapshot_portability",
++   "simd_backend_determinism",
++   "simd_backend_parity",
++   "snapshot_roundtrip",
++ ]
+
+ ❯ rapierTargets ac2-rapier-own-tests.test.ts:64:210
+
+ ❯ ac2-rapier-own-tests.test.ts:139:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  ac3-goldens-on-linux.test.ts > #2012.53ff430e goldens recorded on macOS match on Linux step for step > #2012.53ff430e the goldens of three worlds recorded on this Mac (pile and flyer, ball and goal, chain, sensor and CCD balls over a pile) match on Linux x86_64 at every step hash
+AssertionError: each golden replays on this Mac step for step, reading machines: same:
+  the pile-and-flyer world, replayed on this Mac: machines is undefined, not same
+  the pile-and-flyer world, replayed on this Mac: the replay answers no step_hashes of its own (got undefined)
+  the ball-and-goal lab, replayed on this Mac: machines is undefined, not same
+  the ball-and-goal lab, replayed on this Mac: the replay answers no step_hashes of its own (got undefined)
+  the chain, sensor and CCD balls over a pile, replayed on this Mac: machines is undefined, not same
+  the chain, sensor and CCD balls over a pile, replayed on this Mac: the replay answers no step_hashes of its own (got undefined): expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the pile-and-flyer world, replayed on this Mac: machines is undefined, not same",
++   "the pile-and-flyer world, replayed on this Mac: the replay answers no step_hashes of its own (got undefined)",
++   "the ball-and-goal lab, replayed on this Mac: machines is undefined, not same",
++   "the ball-and-goal lab, replayed on this Mac: the replay answers no step_hashes of its own (got undefined)",
++   "the chain, sensor and CCD balls over a pile, replayed on this Mac: machines is undefined, not same",
++   "the chain, sensor and CCD balls over a pile, replayed on this Mac: the replay answers no step_hashes of its own (got undefined)",
++ ]
+
+ ❯ none ../2009/helpers.ts:66:73
+     64| /** No failures; the message lists them. */
+     65| export function none(failures: readonly string[], what: string): void {
+     66|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     67| }
+     68| /** A planted twin is caught: the judge that passes the real program f…
+ ❯ ac3-goldens-on-linux.test.ts:31:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  ac4-key-without-triple.test.ts > #2012.562a3985 a golden binds the bake key without the target triple, records the triple in its machine, and passes on Linux; a changed document fails there, naming the key > #2012.562a3985 a golden recorded on this Mac names its triple in its machine, its key is the same on Linux x86_64 where it passes, and the same golden replayed with the flyer's x velocity one ulp higher fails there naming that key
+AssertionError: the golden records the target triple aarch64-apple-darwin in its machine: {"os":"macos","arch":"aarch64","cpu":"Apple M5 Max"}: expected undefined to be 'aarch64-apple-darwin' // Object.is equality
+
+- Expected:
+"aarch64-apple-darwin"
+
++ Received:
+undefined
+
+ ❯ ac4-key-without-triple.test.ts:50:156
+     48|     const golden = recordHere(w, N, [LINUX_X86]);
+     49|     const host = hostTriple();
+     50|     expect(obj(golden['machine'], 'golden: machine')['target'], `the g…
+       |                                                                                                                                                            ^
+     51|     const key = golden['bake_key'] as string;
+     52|     const hereKey = keyOf(ask([bake(w, N, { read: [] })], { where: 'th…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  6 failed (6)
+   Start at  11:26:50
+   Duration  10.15s (tests 95%, transform 4%, import 1%)
+

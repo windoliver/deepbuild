@@ -21,10 +21,12 @@ fn main() {
     println!("cargo:rerun-if-changed={lock}");
     println!("cargo:rerun-if-changed={dir}/../../Cargo.toml");
     println!("cargo:rerun-if-changed={dir}/Cargo.toml");
+    // `--locked`, not `--frozen`: cargo tree loads every git source the lockfile names, which a
+    // build in fresh caches hasn't fetched when it needs none of them (issue #2012).
     let tree = Command::new(var("CARGO"))
         .args([
             "tree",
-            "--frozen",
+            "--locked",
             "-p",
             "deep-physics-rapier",
             "-e",

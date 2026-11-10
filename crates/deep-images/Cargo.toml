@@ -1,0 +1,16 @@
+[package]
+name = "deep-images"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #1486: the one image service every image path draws through (Image `image@1`): reduced
+# levels made once off the UI thread and kept in the content store, a visible-first queue, and one
+# cache bounded in bytes and entries. It sits below deep-marks-render, deep-show and deep-app so all
+# three reach the same levels, order and budget.
+[dependencies]
+# The pinned sRGB transfer the levels average through, in linear light.
+deep-canvas = { path = "../deep-canvas" }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+sha2 = "0.10"

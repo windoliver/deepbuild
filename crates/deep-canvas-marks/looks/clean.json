@@ -245,6 +245,9 @@
   "shell": {
     "sidebar": 260,
     "band": 120,
+    "list_min": 208,
+    "page_min": 640,
+    "lane": 720,
     "placed": 160,
     "window_width": 960,
     "window_height": 640
