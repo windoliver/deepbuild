@@ -1,0 +1,3 @@
+# Issue #2012: this folder holds Rapier 0.36.1's own test files, unchanged below their license header; they keep
+# upstream's formatting, so rustfmt leaves them as they are.
+disable_all_formatting = true
