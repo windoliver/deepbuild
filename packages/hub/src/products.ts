@@ -14,10 +14,11 @@
 // go first to make room.
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statfsSync, symlinkSync, watch, type FSWatcher } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, watch, type FSWatcher } from 'node:fs';
 import { lstat, readdir, rm } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { parse } from 'yaml';
+import { DISK_FLOOR, freeBytes } from './disk.js';
 import { repoOf } from './paths.js';
 import { writeSynced } from './vfs.js';
 
@@ -30,8 +31,6 @@ const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 
 /** A path inside the checkout: relative, with no `..` or empty segment. */
 const inside = (p: string): boolean => !p.startsWith('/') && p.split('/').every((s) => s !== '' && s !== '..' && s !== '.');
 
-/** The one disk floor per machine (#1017): 30 GB of free space, a proposal until the dogfood week measures it. */
-export const DISK_FLOOR = 30e9;
 /** A worktree nobody has worked in for this long, with no command running, gives up its products first. */
 const IDLE_MS = 2 * 3_600_000;
 /** The guard@1 entry that keeps the store read-only to sessions. */
@@ -116,11 +115,6 @@ export function cloneTree(src: string, dst: string): Promise<{ cloned: true } | 
   });
 }
 
-/** Free bytes on the volume holding `path`, as statfs gives them to a program. */
-export function freeBytes(path: string): number {
-  const s = statfsSync(path);
-  return s.bavail * s.bsize;
-}
 /** The bytes a folder's files hold, and their count. */
 async function sizeOf(dir: string): Promise<number> {
   let bytes = 0;

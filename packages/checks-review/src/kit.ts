@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fail, Finding } from '@deepbuild/conformance';
+import { fail, Finding } from '@deepbuild/conformance/findings';
 import type { CheckContext, CheckResult, Fixture, PlantedFill, Random, RunOutcome, SlotCase, SlotKitImpl, SlotRule } from '@deepbuild/conformance';
 import type { ReviewFill, ReviewSpec, Reviewer, ReviewerAnswer } from './types.js';
 
