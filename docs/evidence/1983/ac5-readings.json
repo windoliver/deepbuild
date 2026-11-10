@@ -1,0 +1,163 @@
+{
+  "record": {
+    "lane": "x86_64",
+    "state": "PASS",
+    "host": "<host>",
+    "platform": "darwin-arm64",
+    "tree": "dd4ef18d002612800cb1053838000d192a267137",
+    "tests": [],
+    "recording_machine": {
+      "os": "macos",
+      "arch": "aarch64"
+    },
+    "lane_arch": "x86_64",
+    "host_arch": "arm64",
+    "emulated": true,
+    "image_digest": "sha256:f2c004e3d2d8b547e8cf7ffbc29205385f4e71d23e53e4e383065db5e9f822cd",
+    "network": "none",
+    "bake_key": {
+      "tally": "fd70e61b228375fabe93ce56f7ef326663f51282126376b8592354101e6a4fa1"
+    },
+    "report": null,
+    "ask": null,
+    "readings": [
+      {
+        "name": "step_time",
+        "ns": 10000000000
+      },
+      {
+        "name": "frame_time",
+        "ns": 10000000000
+      },
+      {
+        "name": "budget",
+        "verdict": "FAIL"
+      }
+    ]
+  },
+  "budget_with_tree": {
+    "ok": true,
+    "kind": "logic.budget",
+    "verdict": "PASS",
+    "failures": [],
+    "blocked": [],
+    "report": {
+      "items": {
+        "tally": {
+          "step": 0,
+          "fuel": 25,
+          "share": 0
+        }
+      },
+      "fixed": {
+        "app": {
+          "at": {
+            "1": 13292,
+            "100": 1277500,
+            "1000": 16314083
+          },
+          "per_item_ns": 16314.083,
+          "ns_per_fuel": 0.07699923000769993
+        }
+      },
+      "frame_ns": 4000000
+    },
+    "refusals": [
+      {
+        "reading": "step_time",
+        "as": "timing",
+        "lane": "x86_64",
+        "emulated": true,
+        "why": "a reading taken in the lane, on another machine than the reference Mac and under emulation, is never a timing or a budget"
+      },
+      {
+        "reading": "frame_time",
+        "as": "timing",
+        "lane": "x86_64",
+        "emulated": true,
+        "why": "a reading taken in the lane, on another machine than the reference Mac and under emulation, is never a timing or a budget"
+      },
+      {
+        "reading": "budget",
+        "as": "budget",
+        "lane": "x86_64",
+        "emulated": true,
+        "why": "a reading taken in the lane, on another machine than the reference Mac and under emulation, is never a timing or a budget"
+      }
+    ]
+  },
+  "budget_alone": {
+    "ok": true,
+    "kind": "logic.budget",
+    "verdict": "PASS",
+    "failures": [],
+    "blocked": [],
+    "report": {
+      "items": {
+        "tally": {
+          "step": 0,
+          "fuel": 25,
+          "share": 0
+        }
+      },
+      "fixed": {
+        "app": {
+          "at": {
+            "1": 13292,
+            "100": 1277500,
+            "1000": 16314083
+          },
+          "per_item_ns": 16314.083,
+          "ns_per_fuel": 0.07699923000769993
+        }
+      },
+      "frame_ns": 4000000
+    }
+  },
+  "planted_reader": {
+    "ok": true,
+    "kind": "logic.budget",
+    "verdict": "FAIL",
+    "failures": [
+      {
+        "rule": "frame",
+        "host": "x86_64",
+        "reading": "step_time",
+        "ns": 10000000000
+      },
+      {
+        "rule": "frame",
+        "host": "x86_64",
+        "reading": "frame_time",
+        "ns": 10000000000
+      },
+      {
+        "rule": "budget",
+        "host": "x86_64",
+        "reading": "budget"
+      }
+    ],
+    "blocked": [],
+    "report": {
+      "items": {
+        "tally": {
+          "step": 0,
+          "fuel": 25,
+          "share": 0
+        }
+      },
+      "fixed": {
+        "app": {
+          "at": {
+            "1": 13292,
+            "100": 1575792,
+            "1000": 16182583
+          },
+          "per_item_ns": 16182.583,
+          "ns_per_fuel": 0.07816521834781652
+        }
+      },
+      "frame_ns": 4000000
+    }
+  }
+}
