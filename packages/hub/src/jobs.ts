@@ -16,6 +16,7 @@ import { isAbsolute, join } from 'node:path';
 import type { PlanInput } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { ExtensionHost } from '@deepbuild/extension-host';
+import type { RunningJob } from './rows.js';
 
 type Obj = Record<string, unknown>;
 type Host = Pick<ExtensionHost, 'jobs' | 'jobParams' | 'runJobTool' | 'runCheck'>;
@@ -40,6 +41,8 @@ export interface JobDeps {
   has(sha: string): Promise<boolean>;
   /** Raises the authority ask for one paid call: its handle. */
   raise(ask: Obj, plan: PlanInput): Promise<string>;
+  /** Shows a running job's row as it now reads (#1925), or takes it off the list once its tool's run has ended. */
+  row(job: RunningJob, running: boolean): void;
   plant?: string | undefined;
 }
 interface Cached { outputs: Record<string, string>; build: string }
@@ -124,11 +127,21 @@ export class Jobs {
       if (!this.allowed.delete(key)) return { status: 'held', ask: this.asked.get(key) ?? (await this.ask(kind, tool, usd, key)) };
     }
 
+    // While its tool runs, the job has a row that counts from the tool's own counters (#1925). Nothing here waits on
+    // the caller, so the job runs on when the app or the session that asked for it closes.
+    const job: RunningJob = { key, kind, tool, started: this.d.now() };
+    this.d.row(job, true);
     let wrote: Record<string, Uint8Array>;
     try {
-      wrote = await host.runJobTool(tool, kind, params, bytes);
+      wrote = await host.runJobTool(tool, kind, params, bytes, (counter) => {
+        job.counter = counter;
+        job.at = this.d.now();
+        this.d.row(job, true);
+      });
     } catch (e) {
       return { status: 'failed', reason: `${tool} failed: ${message(e)}; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
+    } finally {
+      this.d.row(job, false);
     }
     const outputs = Object.keys(held.descriptor.outputs);
     const absent = outputs.filter((n) => !wrote[n]);
