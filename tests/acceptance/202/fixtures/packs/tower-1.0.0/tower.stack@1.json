@@ -1,0 +1,40 @@
+{
+  "id": "tower.stack",
+  "version": "1.0",
+  "title": "Stack",
+  "license": "MIT",
+  "author": "the #202 acceptance suite",
+  "description": "levels × levels test.weight@1 items in a row, so its triangles and its CPU grow with levels squared.",
+  "inputs": {
+    "levels": {
+      "type": "integer",
+      "default": 2,
+      "min": 1,
+      "max": 8,
+      "about": "its levels; it makes levels squared items"
+    }
+  },
+  "steps": {
+    "blocks": {
+      "op": "item",
+      "kind": "test.weight@1",
+      "repeat": {
+        "count": "levels * levels",
+        "as": "i"
+      },
+      "params": {},
+      "at": {
+        "pos": [
+          "i * 10",
+          0,
+          0
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "blocks"
+    ]
+  }
+}
