@@ -803,6 +803,18 @@ pub fn list_rows(_: &App) -> Vec<ListRow> {
 
 /// The rows of `items` the keyboard walks: every row, and each project's heading as `project:<project>` (#1462).
 fn keyboard_rows(items: &[crate::list::Item]) -> Vec<ListRow> {
+    // An ask's project is its session's.
+    let ask_projects: HashMap<String, String> = crate::record::with_view(|view| {
+        let table = view.table();
+        view.inbox
+            .iter()
+            .filter_map(|ask| {
+                let session = ask["session"].as_str()?;
+                Some((ask["ask"].as_str()?.to_owned(), table.project(session)))
+            })
+            .collect()
+    })
+    .unwrap_or_default();
     let mut rows = Vec::new();
     let mut project = String::new();
     for item in items {
@@ -821,31 +833,15 @@ fn keyboard_rows(items: &[crate::list::Item]) -> Vec<ListRow> {
                 });
             }
             crate::list::Item::Heading { .. } => {}
-            crate::list::Item::Row(row) => {
-                // An ask's project is its session's.
-                let project = if row.id.starts_with("ask:") {
-                    crate::record::with_view(|view| {
-                        let session = view
-                            .inbox
-                            .iter()
-                            .find(|ask| ask["ask"] == row.id.as_str())?
-                            .get("session")?
-                            .as_str()?
-                            .to_owned();
-                        Some(view.table().project(&session))
-                    })
-                    .flatten()
-                    .unwrap_or_default()
-                } else {
-                    project.clone()
-                };
-                rows.push(ListRow {
-                    id: row.id.clone(),
-                    title: row.title.clone(),
-                    project,
-                    address: row.address.clone(),
-                });
-            }
+            crate::list::Item::Row(row) => rows.push(ListRow {
+                id: row.id.clone(),
+                title: row.title.clone(),
+                project: match ask_projects.get(&row.id) {
+                    Some(project) => project.clone(),
+                    None => project.clone(),
+                },
+                address: row.address.clone(),
+            }),
         }
     }
     rows
@@ -1863,8 +1859,13 @@ impl Render for Shipped {
         let page = div()
             .id(ElementId::Name(format!("view:{name}").into()))
             .when(is_page, |page| {
+                let keys = self.focus_handle.clone();
                 page.track_focus(&self.focus_handle).on_key_down(
-                    |event: &KeyDownEvent, window, cx| {
+                    move |event: &KeyDownEvent, window, cx| {
+                        // Only while the page itself holds the keyboard: the box and the terminal on it keep their keys.
+                        if !keys.is_focused(window) {
+                            return;
+                        }
                         let stroke = &event.keystroke;
                         let m = stroke.modifiers;
                         if m.platform || m.control || m.alt || m.function {
