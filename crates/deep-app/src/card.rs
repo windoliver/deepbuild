@@ -29,6 +29,8 @@ thread_local! {
     /// The controller the next prompt draws from, and the view the builder made for it.
     static NEXT: RefCell<Option<Controller>> = const { RefCell::new(None) };
     static MADE: RefCell<Option<Entity<Card>>> = const { RefCell::new(None) };
+    /// Whether the next card an ask's row opens follows the middle of the page region as the window changes size.
+    static FOLLOWS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// The app's prompt builder: every prompt the window shows is a question card.
@@ -46,8 +48,12 @@ pub fn init(cx: &mut App) {
             .map(|option| option.label().clone())
             .collect();
         let controller = NEXT.with(|next| next.borrow_mut().take());
-        let card =
-            cx.new(|cx| Card::new(question.to_owned().into(), options, bounds, controller, cx));
+        let follows = FOLLOWS.with(|follows| follows.replace(false));
+        let card = cx.new(|cx| {
+            let mut card = Card::new(question.to_owned().into(), options, bounds, controller, cx);
+            card.follows = follows;
+            card
+        });
         MADE.with(|made| *made.borrow_mut() = Some(card.clone()));
         handle.with_view(card, window, cx)
     });
@@ -97,19 +103,9 @@ pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
     leave(cx);
     let viewport = window.viewport_size();
     let (width, height) = (f32::from(viewport.width), f32::from(viewport.height));
-    let left = crate::views::drawn_views()
-        .into_iter()
-        .find(|(name, _)| *name == crate::views::SIDEBAR)
-        .map_or(0, |(_, list)| f32::from(list.right()) as i64);
     let [w, h] = SIZE;
-    // A page region too narrow for the card leaves it in the middle of the window, as before.
-    let left = if width as i64 - left >= w { left } else { 0 };
-    let rect = [
-        left + ((width as i64 - left - w) / 2).max(0),
-        ((height as i64 - h) / 2).max(0),
-        w,
-        h,
-    ];
+    let [x, y] = middle(viewport, w, h);
+    let rect = [x, y, w, h];
     let slot = crate::arming::Slot {
         rect,
         visible: [0, 0, width as i64, height as i64],
@@ -119,8 +115,27 @@ pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
     let Some(controller) = Controller::present(&events, ask, now, slot, Default::default()) else {
         return;
     };
+    FOLLOWS.with(|follows| follows.set(true));
     let shown = present_question(controller, window, cx);
     SHOWN.with(|cell| *cell.borrow_mut() = Some((ask.to_owned(), shown)));
+}
+
+/// Where a `w` by `h` card's corner goes in a window of `viewport`: the middle of the page region, right of the list
+/// where the window shows it (#1458), or of the window when the page region is too narrow for it.
+fn middle(viewport: Size<Pixels>, w: i64, h: i64) -> [i64; 2] {
+    let (width, height) = (
+        f32::from(viewport.width) as i64,
+        f32::from(viewport.height) as i64,
+    );
+    let list = crate::views::drawn_views()
+        .into_iter()
+        .find(|(name, _)| *name == crate::views::SIDEBAR)
+        .map_or(0, |(_, list)| f32::from(list.right()) as i64);
+    let left = if width - list >= w { list } else { 0 };
+    [
+        left + ((width - left - w) / 2).max(0),
+        ((height - h) / 2).max(0),
+    ]
 }
 
 /// Whether the shown card holds the keyboard in `window`.
@@ -167,6 +182,8 @@ pub struct Card {
     down: Option<(Target, u64, bool)>,
     /// Why your answer didn't reach the hub.
     failed: Option<SharedString>,
+    /// An ask's row opened it: it keeps to the middle of the page region as the window changes size (#1458).
+    follows: bool,
 }
 
 /// What a press edge says: its own time and whether the HID system made it.
@@ -205,6 +222,7 @@ impl Card {
             controller,
             down: None,
             failed: None,
+            follows: false,
         }
     }
 
@@ -440,11 +458,19 @@ impl Render for Card {
         .size_full();
         // The prompt fills the window; only the card itself takes a hitbox, so the rest of the window still
         // takes your input. The card's outer edge is what's measured; it draws no border (#1458). A window made
-        // smaller while the card shows keeps the card inside it, never cut at its edge (#1458).
+        // smaller while the card shows keeps the card inside it, never cut at its edge; a card an ask's row opened
+        // keeps to the middle of the page region (#1458).
         let viewport = window.viewport_size();
         let (origin, size) = (self.bounds.origin, self.bounds.size);
-        let left = origin.x.min(viewport.width - size.width).max(px(0.));
-        let top = origin.y.min(viewport.height - size.height).max(px(0.));
+        let (left, top) = if self.follows {
+            let [x, y] = middle(viewport, SIZE[0], SIZE[1]);
+            (px(x as f32), px(y as f32))
+        } else {
+            (
+                origin.x.min(viewport.width - size.width).max(px(0.)),
+                origin.y.min(viewport.height - size.height).max(px(0.)),
+            )
+        };
         div().size_full().child(
             div()
                 .absolute()
@@ -470,6 +496,8 @@ impl Render for Card {
                         .gap(sizes().space(0))
                         .p(sizes().space(3))
                         .rounded(sizes().radius)
+                        // No border (#1453 rule 7): the card stands off the page by its elevation.
+                        .shadow_lg()
                         .bg(chrome.raised)
                         .text_color(chrome.ink_primary)
                         .children(rows),
