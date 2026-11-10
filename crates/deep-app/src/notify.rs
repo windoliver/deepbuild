@@ -453,6 +453,20 @@ pub fn end_notice(table: &Table, sessions: &[String]) -> String {
 
 /// A notification's title: it names DeepBuild and the session's task.
 fn title(table: &Table, session: &str) -> String {
+    // With the list's rows (#1463), the row's project and title: an untitled session reads by its project and agent,
+    // never an ID. The planted app puts the session's ID where its title goes, in a build with env-plants only.
+    if let Some(row) = table.row_of(&format!("session:{session}")) {
+        let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
+        let named = if crate::plain::planted("notification-title-id") {
+            session.to_owned()
+        } else {
+            crate::question::visible(&text("title"))
+        };
+        return match row["project"].as_str() {
+            Some(project) => format!("{} · {named}", crate::question::visible(project)),
+            None => named,
+        };
+    }
     format!("DeepBuild · {}", table.title(session))
 }
 

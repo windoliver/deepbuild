@@ -20,7 +20,7 @@ use gpui_kit::base::ObservedElement;
 use gpui_kit::component::TitleBar;
 use gpui_kit::{prelude::FluentBuilder as _, *};
 
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::{
     bound, brand, canvas, cells, chrome, show::CanvasPanel, states, states::READINGS, text,
@@ -712,6 +712,8 @@ struct Record {
     /// What a session's page shows by its real names (#1348): the session, its issue and branch, and its newest
     /// run's failure whole, its trace included. On a session's page only.
     details: Vec<String>,
+    /// Whether the rows are the list the hub built (#1463), whose ask rows say their state word at the right edge.
+    listed: bool,
 }
 
 /// What the sidebar draws: every session, in the order each first appears, with its task's title and its state.
@@ -731,24 +733,60 @@ fn record(kind: Kind) -> Record {
 
 /// What the view `kind` draws of `view`.
 fn read(view: &crate::record::View, kind: Kind) -> Record {
-    let open: Vec<(String, String, String, String)> = view
-        .inbox
-        .iter()
-        .filter(|row| row["status"] != "closed")
-        .map(|row| {
-            let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
-            // The row draws the question as the card does, its controls and direction marks shown (#1510).
-            (
-                text("ask"),
-                text("session"),
-                crate::question::visible(&text("question")),
-                text("status"),
-            )
-        })
-        .collect();
     let table = view.table();
+    let text = |row: &Value, key: &str| row[key].as_str().unwrap_or_default().to_owned();
+    // A record that holds the list's rows (#1463) is drawn from them: the asks and the sessions the hub built, in the
+    // list's order, with its titles and words, so the window, deep and deep status hold one list.
+    let listed: Vec<&Value> = if table.listed() {
+        table.list()
+    } else {
+        Vec::new()
+    };
+    let is_ask = |row: &Value| text(row, "id").starts_with("ask:");
+    let open: Vec<(String, String, String, String)> = if table.listed() {
+        listed
+            .iter()
+            .filter(|row| is_ask(row))
+            .map(|row| {
+                let id = text(row, "id");
+                // How the ask waits (folded, later, held) is the inbox's.
+                let status = view
+                    .inbox
+                    .iter()
+                    .find(|ask| ask["ask"] == id.as_str())
+                    .and_then(|ask| ask["status"].as_str())
+                    .unwrap_or("open")
+                    .to_owned();
+                let question = crate::question::visible(&text(row, "title"));
+                (id, text(row, "session"), question, status)
+            })
+            .collect()
+    } else {
+        view.inbox
+            .iter()
+            .filter(|row| row["status"] != "closed")
+            .map(|row| {
+                // The row draws the question as the card does, its controls and direction marks shown (#1510).
+                (
+                    text(row, "ask"),
+                    text(row, "session"),
+                    crate::question::visible(&text(row, "question")),
+                    text(row, "status"),
+                )
+            })
+            .collect()
+    };
     // A session's page and its line draw the first session, or the one named "" when the record has none.
     let sessions: Vec<(String, String, states::State)> = match kind {
+        Kind::Sidebar if table.listed() => listed
+            .iter()
+            .filter(|row| !is_ask(row))
+            .map(|row| {
+                let session = text(row, "session");
+                let state = table.state(&session);
+                (session, crate::question::visible(&text(row, "title")), state)
+            })
+            .collect(),
         Kind::Sidebar => table.every_session(),
         Kind::Session | Kind::Line => {
             let opened = OPENED.with(|opened| opened.borrow().clone());
@@ -781,6 +819,19 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
         _ => Vec::new(),
     };
     let rows = match kind {
+        Kind::Sidebar if table.listed() => sessions
+            .iter()
+            .map(|(session, ..)| {
+                let row = table.row_of(&format!("session:{session}"));
+                let word = row.map(|r| text(r, "word")).unwrap_or_default();
+                let entry = states::entry_of(row.and_then(|r| r["entry"].as_str()).unwrap_or_default());
+                // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
+                if crate::plain::planted("waiting-as-working") && word == "needs you" {
+                    return ("working".to_owned(), "running");
+                }
+                (word, entry)
+            })
+            .collect(),
         Kind::Sidebar => sessions
             .iter()
             .map(|(session, ..)| table.row(session, now()))
@@ -836,6 +887,7 @@ fn read(view: &crate::record::View, kind: Kind) -> Record {
         deadlines,
         problems,
         details,
+        listed: table.listed(),
     }
 }
 
@@ -1253,6 +1305,15 @@ impl Render for Shipped {
                                 .hover(|style| style.bg(chrome.hover))
                                 .on_click(move |_, window, cx| {
                                     crate::card::present_ask(&ask, window, cx)
+                                })
+                                // The list's row says its state word at the right edge (#1463), as a session's row
+                                // says it after its title; its name stays the question.
+                                .when(record.listed, |row| {
+                                    row.justify_between().child(
+                                        div()
+                                            .text_color(chrome.ink_secondary)
+                                            .child(states::State::NeedsYou.word()),
+                                    )
                                 })
                                 .when(status == "folded", |row| {
                                     row.pl_4().text_color(chrome.ink_secondary)

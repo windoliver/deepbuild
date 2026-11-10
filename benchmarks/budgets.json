@@ -1295,6 +1295,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #1425 first measurement: at the merge base a panel imports the toolkit itself and loads with no module check. One process loads each of the 12 panels in crates/deep-app/panels through `deep-panel-host run`, which runs the app's loader (the module check, then @deepbuild/panel written where gpui-shell resolves it), and updates each 20 times; p50 includes Node's and the binary's start. The issue's 4 ms per update and 1 ms the check may add to a load stay in tests/acceptance/1425/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-list-700",
+      "command": [
+        "node",
+        "benchmarks/deep-list.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1463 first measurement: at the merge base deep with no arguments prints help. One process seeds 140 sessions in 7 repos, each with five open asks, starts the hub on it and times five deep runs after a warm-up, failing unless each ends on 700 asks need you; p50 includes the seeding and the hub's start. The issue's 100 ms on 700 rows stays in tests/acceptance/1463/budget.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

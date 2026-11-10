@@ -35,6 +35,7 @@ import { keychain, ownHome } from './keychain.js';
 import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
 import { sessionStates, statusRows, WAITING_QUIET_MS, type StatusRow } from './status.js';
+import { buildRows, listRows, settle, type Placed } from './rows.js';
 import { addGuards, blocksCall, provenGuards, writeStanding } from './guards.js';
 import { captureRejected, decisionKey, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -701,6 +702,9 @@ export class Core {
   private restate = false;
   /** The sessions appended to since the last state pass, or all of them: at the start, each minute and after a failed pass. */
   private touched: Set<string> | 'all' = 'all';
+  /** The list's rows as last appended (#1463), by ID; empty until the record's are read at start, which makes the first pass a backfill. */
+  private rows = new Map<string, Placed>();
+  private rowsFirst = true;
   /** When each session's agent process last had its start time read, by the watch for processes gone (#992). */
   private readonly startChecked = new Map<string, number>();
   /** How far test.clock has stepped the hub's clock past the wall clock deep-hook stamps hooks by (#965). */
@@ -906,7 +910,7 @@ export class Core {
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
     this.record = streamed(this.record, ({ kind, subject, data }, connection) => {
       this.log.stream();
-      if (kind !== 'session.state') {
+      if (kind !== 'session.state' && kind !== 'row.set') {
         // The next state pass reads the sessions appended to since the last; an event of no session, every session.
         if (this.touched !== 'all') { if (connection.session) this.touched.add(connection.session); else this.touched = 'all'; }
         this.stateSoon();
@@ -1030,6 +1034,9 @@ export class Core {
     this.every('gone', 1000, () => this.goneSessions());
     // Each session's state as last recorded, then any change since; a session goes quiet after a day with no hook.
     for (const row of (await this.record.raw("SELECT session_id, json_extract(data, '$.state') AS state, json_extract(data, '$.cause') AS cause FROM events WHERE kind = 'session.state' AND session_id IS NOT NULL ORDER BY log_pos")) as { session_id: string; state: string; cause: string }[]) this.states.set(row.session_id, `${row.state}/${row.cause}`);
+    // The list's rows as last appended (#1463): a record with none yet is a backfill.
+    for (const p of await listRows((q) => this.record.raw(q))) this.rows.set(p.row.id, p);
+    this.rowsFirst = this.rows.size === 0;
     this.statesRead = true;
     this.stateSoon();
     // Each minute every session is read again: a state that changes with time alone (quiet) has no append to say so.
@@ -2791,13 +2798,34 @@ export class Core {
     if (only !== 'all' && !only.size) return;
     try {
       // Appended together, so the record commits them in one batch, as it does a first start's state for every session.
-      await Promise.all((await sessionStates((sql) => this.record.raw(sql), this.now(), only === 'all' ? undefined : only)).map(async (r) => {
-        const state = `${r.state}/${r.cause}`;
-        if (this.states.get(r.id) === state) return;
-        const ts = this.now();
-        await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
-        this.states.set(r.id, state);
-      }));
+      const query = (q: string) => this.record.raw(q);
+      const readings = await sessionStates(query, this.now(), only === 'all' ? undefined : only);
+      // The list's rows (#1463): each that changed, and each ask's that left the list, in the same batch.
+      const built = await buildRows(query, readings);
+      const changed = settle(this.rows, built, this.rowsFirst);
+      const open = new Set(built.filter((r) => r.id.startsWith('ask:')).map((r) => r.id));
+      const left = [...this.rows.keys()].filter((id) => id.startsWith('ask:') && !open.has(id));
+      this.rowsFirst = false;
+      const rowOf = (session: string) => this.connection('core', { ...(this.projects.get(session) ? { project: this.projects.get(session)! } : {}), ...(this.sessionPeople.get(session) ? { actor: this.sessionPeople.get(session)! } : {}) });
+      await Promise.all([
+        ...readings.map(async (r) => {
+          const state = `${r.state}/${r.cause}`;
+          if (this.states.get(r.id) === state) return;
+          const ts = this.now();
+          await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
+          this.states.set(r.id, state);
+        }),
+        ...changed.map(async (p) => {
+          const ts = this.now();
+          await this.append(rowOf(p.row.session), { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: p.order, ...p.row } as unknown as JsonValue });
+          this.rows.set(p.row.id, p);
+        }),
+        ...left.map(async (id) => {
+          const ts = this.now();
+          await this.append(rowOf(this.rows.get(id)!.row.session), { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { id, listed: false } });
+          this.rows.delete(id);
+        }),
+      ]);
     } catch (error) {
       this.touched = 'all';
       throw error;
@@ -5147,7 +5175,9 @@ export class Core {
     const claim = unjudged ? undefined : live?.claim ?? (await newestClaim(this.raw, meta.session).then((id) => (id ? `claim:${id}` : undefined)));
     const state = claim ? await this.stateOf(claim) : undefined;
     const [stop] = (await this.record.raw(`SELECT MAX(ts) AS at FROM events WHERE session_id = ? AND kind = 'agent.stop' AND json_extract(data, '$.child') IS NULL`, [meta.session])) as { at: number | null }[];
-    const needsYou = (await this.asks.inbox()).length;
+    // The list's one count (#1463): its ask rows, as deep and the app count them.
+    await this.statesSettled();
+    const needsYou = [...this.rows.keys()].filter((id) => id.startsWith('ask:')).length;
     return statusAnswer(state, { session: meta.session, agent: live?.agent ?? meta.agent, worktree: live?.cwd || meta.cwd, needsYou, now: this.now(), lastStop: stop?.at ?? null, state: claim ? undefined : live?.state });
   }
   /**
@@ -5624,7 +5654,8 @@ export class Core {
       case 'test.verdict': return this.testVerdict(params);
       case 'test.clock': return this.testClock(params);
       case 'events.read': return this.log.read(params, this.seenBy(context.role));
-      case 'inbox.read': return this.log.reflecting(() => this.inbox());
+      // Behind the state pass under way, so the rows it holds are the asks as they stand (#1463).
+      case 'inbox.read': return this.statesSettled().then(() => this.log.reflecting(() => this.inbox()));
       case 'sessions.read': return this.log.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
       case 'person.add': return this.addPerson(params, context);
       case 'library.on': case 'library.off': case 'library.rule': return this.library(method, params, context);
@@ -5678,6 +5709,10 @@ export class Core {
         this.replayLate();
         // The state pass under way lands first (#992): what deep status lists is in the record the app draws from.
         return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.log.reflecting(async () => ({ rows: await this.statusSeen(context.role) })));
+      // The list's rows (#1463), as status.read waits for them: behind every hook received and the state pass under way.
+      case 'rows.read':
+        this.replayLate();
+        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.log.reflecting(() => this.rowsSeen(context.role, params.detail === true)));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);
@@ -5831,6 +5866,20 @@ export class Core {
     return value;
   }
 
+  /**
+   * The list's rows (#1463), a person's only of the sessions they may see (#1338), with each session's detail for deep
+   * status when `detail` asks for it.
+   */
+  private async rowsSeen(role: string, detail: boolean): Promise<Obj> {
+    const query = (q: string) => this.record.raw(q);
+    let rows = (await listRows(query)).map((p) => p.row);
+    const seen = role.startsWith('person:') ? this.seenBy(role) : '';
+    if (seen) {
+      const visible = new Set(((await this.record.raw(`SELECT DISTINCT session_id AS id FROM events WHERE session_id IS NOT NULL${seen}`)) as { id: string }[]).map((r) => r.id));
+      rows = rows.filter((r) => visible.has(r.session));
+    }
+    return { rows, ...(detail ? { detail: Object.fromEntries((await this.statusSeen(role)).map((r) => [`session:${r.id}`, r])) } : {}) } as unknown as Obj;
+  }
   /** deep status's rows, a person's only of the sessions they may see (#1338). */
   private async statusSeen(role: string): Promise<StatusRow[]> {
     const rows = await statusRows((sql) => this.record.raw(sql), this.now());
@@ -5965,6 +6014,8 @@ export class Core {
       }),
       // Permissions you said yes to in the terminal, offered back as decisions to save: never asks (#23).
       offers: await this.openOffers(),
+      // The open asks' rows, as every reader of the list holds them (#1463).
+      rows: (await listRows((q) => this.record.raw(q))).filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[],
     };
   }
 
@@ -6842,6 +6893,8 @@ export class Core {
         contradictions: predictionContradictions(claim.predictions ?? [], checks),
       });
     }
+    // An agent's deep_status is its own session's (#1463): the planted wrong program leaks every session's asks into it.
+    if (this.options.plant === 'status-row-leak') return { session, gates, claims, rows: [...this.rows.values()].filter((p) => p.row.id.startsWith('ask:')).map((p) => p.row) as unknown as Obj[] };
     return { session, gates, claims };
   }
 
@@ -7801,6 +7854,8 @@ export class Core {
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);
     await this.chain;
     await this.stating;
+    // The pass the stop kept from starting, so the rows a stopped hub's database holds are the list as it stood.
+    await this.recordStates().catch(() => undefined);
     this.writeCursors();
     this.canvasCore?.close();
     await this.replicas.close();
