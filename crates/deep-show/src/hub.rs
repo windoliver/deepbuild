@@ -282,6 +282,9 @@ pub enum Planted {
     SpanRoundsStart,
     /// #501: the GPU BLAKE3 joins each parent's two children in the wrong order.
     ChunkTreeWrongOrder,
+    /// #1897: the GPU pixel hash and its CPU twin XOR each pixel's words with no term for where
+    /// it is, so no swap moves it.
+    HashXorsWithoutPosition,
     /// #501: a range's timecode starts at the job's start label, not at its first frame's.
     RangeRestartsTimecode,
     /// #501: the export skips its readiness gate, starts and stops at the missing asset's first
@@ -656,6 +659,8 @@ pub enum Call {
     FrameHash { frames: Vec<([u32; 2], String)>, software: bool },
     /// #501: the cross-machine audio check on two float WAVs.
     CrossMachine([String; 2]),
+    /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
+    PixelHash(Vec<([u32; 2], deep_gpu::pixel_hash::Format, String)>),
     /// A document's session played on a virtual display to `to` (#488).
     Play {
         doc: String,
@@ -1679,6 +1684,7 @@ impl<'a> Hub<'a> {
             Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
             Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
             Call::CrossMachine(wavs) => self.cross_machine(wavs),
+            Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
                 doc,
                 display_hz,
