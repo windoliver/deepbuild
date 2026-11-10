@@ -2,6 +2,7 @@
 // benchmarks/canvas.mjs <task>. Each drives a built binary over JSON lines, as the acceptance tests do: `deep-show run`
 // for patches and the seal, `deep-canvas merge` for a merge, `deep-gpu run` for the deepest level of a 3D city.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1272,6 +1273,30 @@ workloads.occlusion = () => {
     console.log(JSON.stringify({ task: 'canvas-occlusion', fingerprint, runs: measured }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
+// #501: 32 looping voices, each a 2 s stereo tone at 0.02 at its own pitch, played live through the device gate on the
+// default output for 5 s of the real clock by `deep-show run`'s soak; fails unless it played, and prints its stats.
+workloads['media-soak'] = () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const wav = (hz) => {
+      const frames = 96_000, b = Buffer.alloc(44 + frames * 4);
+      b.write('RIFF', 0, 'ascii'); b.writeUInt32LE(36 + frames * 4, 4); b.write('WAVEfmt ', 8, 'ascii'); b.writeUInt32LE(16, 16);
+      b.writeUInt16LE(1, 20); b.writeUInt16LE(2, 22); b.writeUInt32LE(48_000, 24); b.writeUInt32LE(192_000, 28); b.writeUInt16LE(4, 32);
+      b.writeUInt16LE(16, 34); b.write('data', 36, 'ascii'); b.writeUInt32LE(frames * 4, 40);
+      for (let i = 0; i < frames; i++) for (const [c, f] of [[0, hz], [1, hz + 10]]) b.writeInt16LE(Math.round(0.02 * 32767 * Math.sin((2 * Math.PI * f * i) / 48_000)), 44 + 4 * i + 2 * c);
+      const sha = createHash('sha256').update(b).digest('hex');
+      mkdirSync(join(evidence, sha.slice(0, 2)), { recursive: true });
+      writeFileSync(join(evidence, sha.slice(0, 2), sha.slice(2)), b);
+      return sha;
+    };
+    const strips = Object.fromEntries(Array.from({ length: 32 }, (_, v) => [`v${v}`, { track: v + 1, src: { asset: wav(220 + 17 * v) }, start: 0, in: 0, out: 2 * SEC, loop: true, span: 5 * SEC }]));
+    const media = { transport: { sample_rate: 48_000, span: 5 * SEC }, strips };
+    const [answer] = run('deep-show', 'run', [JSON.stringify({ evidence, calls: [{ call: 'soak', media, seconds: 5 }] })]);
+    const reply = answer.replies?.[0];
+    if (reply?.outcome !== 'played') throw Error(`the soak didn't play: ${JSON.stringify(answer).slice(0, 2000)}`);
+    console.log(JSON.stringify({ task: 'media-soak', stats: reply.stats }));
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
   }
 };
 
