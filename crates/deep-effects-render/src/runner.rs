@@ -107,7 +107,7 @@ fn uniform() -> wgpu::BindingType {
 }
 
 impl Runner {
-    pub fn new(device: &wgpu::Device, compiled: Compiled, format: wgpu::TextureFormat) -> Runner {
+    pub fn new(device: &deep_gpu::counted::Wgpu, compiled: Compiled, format: wgpu::TextureFormat) -> Runner {
         let c = &compiled.checked;
         let stage = match compiled.kind() {
             Kind::Compute => wgpu::ShaderStages::COMPUTE,
@@ -245,7 +245,7 @@ impl Runner {
     /// for each texture input and a buffer for each storage input and output, in binding order.
     pub fn bind(
         &self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         frame: &Frame,
         size: [u32; 2],
         values: &BTreeMap<String, Val>,
@@ -259,7 +259,7 @@ impl Runner {
     #[allow(clippy::too_many_arguments)]
     pub fn bind_with(
         &self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         frame: &Frame,
         size: [u32; 2],
         values: &BTreeMap<String, Val>,
@@ -267,7 +267,6 @@ impl Runner {
         storage: &[&wgpu::Buffer],
         outs: &[&wgpu::TextureView],
     ) -> (wgpu::BindGroup, wgpu::BindGroup, [wgpu::Buffer; 2]) {
-        use wgpu::util::DeviceExt as _;
         let fb = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("operator frame"),
             contents: &frame.bytes(size),
@@ -410,7 +409,6 @@ impl Runner {
 /// Runs a checked compute operator on the GPU over `inputs` (one buffer of words each, in its
 /// storage inputs' order) and reads back its first storage output.
 pub fn dispatch(device: &deep_gpu::device::Device, c: &Compiled, inputs: &[Vec<u32>]) -> Vec<u32> {
-    use wgpu::util::DeviceExt as _;
     let d = &device.device;
     let runner = Runner::new(d, c.clone(), LINEAR);
     let ins: Vec<wgpu::Buffer> = inputs

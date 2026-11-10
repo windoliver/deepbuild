@@ -14,20 +14,26 @@ use crate::address::Address;
 use crate::commands::{entries, Entry, Open, Palette, View};
 use crate::views;
 
-/// The pages ⌘K always lists, which View lists too (#1462), and the preferences it opens the box for (#1998).
+/// The pages ⌘K always lists, which View lists too (#1462): Home, Needs you, Agents and Rules, then each view you
+/// installed in the `sidebar` area as a page by its name (#1461); and the preferences it opens the box for (#1998).
 pub fn shipped_pages() -> Vec<Entry> {
-    let pages = [
+    let shipped = [
         ("Home", "home"),
         ("Needs you", "needs-you"),
         ("Agents", "agents"),
         ("Rules", "rules"),
     ]
-    .map(|(name, page)| Entry::Open {
-        name: name.to_owned(),
-        address: Address::page(page),
+    .map(|(name, page)| (name.to_owned(), Address::page(page)));
+    let installed = views::page_names().into_iter().filter_map(|name| {
+        Some((
+            name.clone(),
+            format!("page/{name}").parse::<Address>().ok()?,
+        ))
     });
-    pages
+    shipped
         .into_iter()
+        .chain(installed)
+        .map(|(name, address)| Entry::Open { name, address })
         .chain(crate::words::preference_entries())
         .collect()
 }
@@ -153,6 +159,7 @@ pub fn load(
         match mounted {
             Ok(mounted) => views::place(
                 view["area"].as_str().unwrap_or("tab"),
+                name,
                 mounted.into(),
                 window,
                 cx,

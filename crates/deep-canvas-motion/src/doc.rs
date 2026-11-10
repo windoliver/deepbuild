@@ -2050,6 +2050,10 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
                 Some("wrap") => true,
                 Some(_) => return refuse("bad_doc", "transport/loop"),
             };
+            // An open span has no end to wrap at: its loop must be none (Transport).
+            if wrap && t.get("span").and_then(Value::as_str) == Some("open") {
+                return refuse("bad_doc", "transport/loop");
+            }
             if wrap && span.is_none_or(|s| s <= 0) {
                 return refuse("bad_time", "transport/span");
             }
@@ -2812,11 +2816,16 @@ fn start_on_of(o: &Map<String, Value>, path: &str) -> Result<StartOn, Refused> {
         Some("change") => true,
         Some(_) => return refuse("bad_doc", format!("{path}/each")),
     };
-    let on = match (o.get("control").and_then(Value::as_str), o.get("on")) {
+    let mut on = match (o.get("control").and_then(Value::as_str), o.get("on")) {
         (Some(control), None) => filter_named(&format!("input.{control}")),
         (None, Some(on)) => list_of(on, &format!("{path}/on"))?,
         _ => return refuse("bad_doc", path),
     };
+    // `{on: <logic ID>.occurrences, kinds: [...]}`: the filter's kinds beside the list (#544).
+    if let Some(kinds) = o.get("kinds") {
+        let kinds = kinds.as_array().and_then(|a| a.iter().map(|k| k.as_str().map(str::to_string)).collect());
+        on.kinds = Some(kinds.ok_or_else(|| Refused { code: "bad_doc", path: format!("{path}/kinds"), detail: None })?);
+    }
     Ok(StartOn { on, change, policy })
 }
 

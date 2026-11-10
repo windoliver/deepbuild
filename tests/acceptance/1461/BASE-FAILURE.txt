@@ -1,0 +1,62 @@
+#1461's acceptance tests on the base, d51be2c3 (origin/main), on Mac17,10 under a 1-minute load average of 130 to 240 on
+18 cores, Node 24.22.2, after `npm ci --ignore-scripts`, `npm run build --workspaces` and `cargo build -p deep-hook`.
+
+Each file was run on the base once where it could run quickly. A file whose tests need the replica (`deep-drive`) or the real
+app (`deep-app`) needs a cold Cargo build of the GPUI stack, which isn't quick on this machine at this load; for those the
+surfaces they need are plainly absent at the base, each named below with where the base shows it, and the outcome given is
+the expected one, not a run's. No test was edited after a base run.
+
+## Run on the base
+
+### budget.test.ts, AC9 #1461.6d2351eb, `-t "perf lane"`: FAILS
+
+    × AC9 #1461.6d2351eb: the perf lane has the task app-select-700, a first measurement naming #1461, valid against the
+      merge base's budgets, and it runs
+    AssertionError: benchmarks/budgets.json has a task app-select-700 (README, Pinned 9): expected undefined to be defined
+
+Not run: the 700-row timing, which presses a row at a point (`act {kind: "click", point}`); the base's `deep-drive` refuses a
+click with no locator ("act click needs a locator", crates/deep-replica/src/drive/mod.rs `act`).
+
+### unread.test.ts, AC17 #1461.120f6702, `-t "deep status --json"`: FAILS on row.read alone
+
+The world was made (seeded, a real hub's backfill, then SessionStart and Stop hooks for both sessions), and `deep status
+--json` read both changed rows unread, as #1463's hub already sets it. The hub has no `row.read`:
+
+    × AC17 #1461.120f6702: in deep status --json, a changed row reads unread until the app tells the hub it was read, and
+      one never read stays unread (9211 ms)
+    + "the hub doesn't take row.read from the app (README, Pinned 6): refused: {"code":"unknown_method",...,
+       "remediation":"The hub serves no method row.read.","path":"/method","actual":"row.read"}",
+    + "deep status --json still reads session:106eab64-f104-4f83-a337-261420ff67a8 unread after the app told the hub it
+       was read",
+
+## Not run on the base: the surface is plainly absent
+
+Every replica test reads the window by ids the base doesn't draw: no node `list`, `heading:…`, `lane`, `page-title`, `empty`
+or `<row>:mark|title|word|time` (crates/deep-app/src/views.rs draws `sidebar-title` "Tasks", `sidebar-count`, `sidebar-agents`,
+`needs-you-title` and rows with no slot ids, in a dock with a bottom band); `see`'s runs carry no `weight` (glyphs.rs `Run`:
+text, bounds, visible, drawn, cut, size, face); `close`'s trace holds no `hub` (it writes format, replica, calls,
+notifications); `launch` reads no `setup`, `hub`, `area` or `replaces`; `"hub"` is no call; there is no `act click` at a point
+and no `act menu`, and `see` answers no `menus`. The hub has no `row.read` (above); there is no `crates/deep-app/moves.json`.
+Each test below is expected to FAIL at the base for the reason given.
+
+- shell.test.ts: AC1 (no node identified `list` or `heading:<project>` in the real window), and its plant (no
+  `card-replica-only`). AC2: the base draws "needs you" in each asking session's sidebar row, Needs you's title, each ask row's
+  state word and the line band, more than twice. AC14: the base's title bar, the dock's edges and the band's top draw lines.
+- opens.test.ts: AC3 (the base opens on Needs you, not `project/docs`; no `hub` door). AC20 (no `empty` node, no `hub` launch
+  option). AC21 (no `list`; the box isn't on a page). AC22 (no `setup: "unfinished"` launch: the replica assumes setup finished,
+  views.rs `set_state`).
+- moves.test.ts: AC4 (the window opens on Needs you, not the first ask's address; the card's answer goes to `answer::send` over
+  a hub socket and into no trace). AC13 and AC24 (no `list`, so no rows by id). AC18 and AC25 (no `act click` at a point).
+- unread.test.ts: AC5, AC12 and AC17's clock journey (no `weight` on runs, no `:title` slot). AC12's `deep status --json` half
+  already holds at the base (the hub's backfill reads only a flagged session unread, packages/hub/src/rows.ts `FIRST_UNREAD`).
+- box.test.ts: AC16 and AC23 (the base's card answers through its own options and Send, `answer::send` reaches no trace, and
+  the box's send reads "Send"). AC26 (no `lane`; the base's field is one line tall, words.rs `h(title.line + space(2))`).
+- rows.test.ts: AC10 (no slot ids). AC19 (the base sets folded, later and held apart by indent, ink and italics only, views.rs
+  `Kind::NeedsYou`). AC27 (no `:word` slot; every ask row's state word is `needs you`).
+- page.test.ts: AC11 (no `lane`). AC15 (no `hub` door).
+- tree.test.ts: AC6 (no `list`, no `heading:needs-you`). AC7's fill test (no `replaces`: the panel mounts in the sidebar's
+  slot); AC7's wrong-program test is #1459's merged kit on its `hides-oldest` view and is expected to PASS at the base. AC8 (no
+  `area`: drive/mod.rs puts a launched panel "in the sidebar's slot, as an installed one would"); its contract half holds. AC29
+  (no menus; the panel sits in the sidebar).
+- shown.test.ts: AC28 reads INCONCLUSIVE until TASTE.json holds a recorded call, whatever the app draws; at the base its state
+  checks fail first (no list of identified ask rows, no "Nothing needs you").

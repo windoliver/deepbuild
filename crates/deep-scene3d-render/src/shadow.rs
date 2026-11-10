@@ -173,7 +173,7 @@ fn corners_of(scene: &Scene, casts: impl Fn(&Solid) -> bool) -> Vec<(String, [[f
             continue;
         }
         let [lo, hi] = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
-            let b = m.bounds();
+            let b = m.reach();
             [b[0].map(f64::from), b[1].map(f64::from)]
         });
         let m = s.model;

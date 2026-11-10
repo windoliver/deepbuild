@@ -1,0 +1,111 @@
+# #1976 acceptance suite at the base, 2df533990 (Merge pull request #2185), before any implementation: one run.
+#
+# deep-gpu was built first with the suite's own command and flags (CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0
+# cargo build --locked --bin deep-gpu: Finished in 13m 36s, exit 0), so the run's beforeAll found it built. Then, once:
+#
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1976 \
+#     --no-file-parallelism --testTimeout=600000 hit-path.test.ts
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/1976/tsconfig.json   -> exit 0, no errors
+#
+# Both tests fail for the expected reason, not on the fixture (its checks passed before deep-gpu ran):
+#   test 1: every click is answered {at, pick} with no 'hit'; the picks shown (rays 0-39) name 'plane', as the fixture
+#           expects. The message lists the first 40 of the 200 failures, so the sphere clicks' picks are not shown.
+#   test 2: the fixture check passed (a reader of the clicked pixel's depth is off by more than 1 mm on at least 50
+#           rays); deep-gpu refuses '--planted hit_from_depth' at startup ({"ok":false,"code":"bad_input"}, exit 2).
+#
+ RUN  v5.0.5 <worktree>/tests/acceptance/1976
+
+stdout | hit-path.test.ts > AC1 #1976.aa8721f3 the hit path in 3D > AC1 #1976.aa8721f3 200 seeded rays through the view at 10 m to 400 m from a fixture plane and a fixture sphere: each placed point lies within 1e-5 m of the analytic intersection
+AC1 #1976.aa8721f3: 0 of 200 rays placed a point; the largest distance from one to its analytic intersection: 0.000e+0 m
+
+ ❯ hit-path.test.ts (2 tests | 2 failed) 7736ms
+   ❯ AC1 #1976.aa8721f3 the hit path in 3D (2)
+     × AC1 #1976.aa8721f3 200 seeded rays through the view at 10 m to 400 m from a fixture plane and a fixture sphere: each placed point lies within 1e-5 m of the analytic intersection 5552ms
+     × AC1 #1976.aa8721f3 a planted tool that reconstructs points from the depth buffer fails, naming the first ray off by more than 1 mm 41ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  hit-path.test.ts > AC1 #1976.aa8721f3 the hit path in 3D > AC1 #1976.aa8721f3 200 seeded rays through the view at 10 m to 400 m from a fixture plane and a fixture sphere: each placed point lies within 1e-5 m of the analytic intersection
+AssertionError: each placed point lies within 0.00001 m of the analytic intersection; 200 of 200 rays fail:
+  ray 0 (plane-a, click (227.38671875, 87.6533203125), the plane at 42.487 m): the click's answer places no hit: {"at":[227.38671875,87.6533203125],"pick":"plane"}
+  ray 1 (plane-a, click (247.765625, 81.8115234375), the plane at 50.416 m): the click's answer places no hit: {"at":[247.765625,81.8115234375],"pick":"plane"}
+  ray 2 (plane-a, click (216.8017578125, 50.8798828125), the plane at 348.315 m): the click's answer places no hit: {"at":[216.8017578125,50.8798828125],"pick":"plane"}
+  ray 3 (plane-a, click (197.7255859375, 53.3916015625), the plane at 231.787 m): the click's answer places no hit: {"at":[197.7255859375,53.3916015625],"pick":"plane"}
+  ray 4 (plane-a, click (102.0322265625, 51.419921875), the plane at 315.618 m): the click's answer places no hit: {"at":[102.0322265625,51.419921875],"pick":"plane"}
+  ray 5 (plane-a, click (192.4140625, 168.7802734375), the plane at 14.294 m): the click's answer places no hit: {"at":[192.4140625,168.7802734375],"pick":"plane"}
+  ray 6 (plane-a, click (201.33203125, 71.0732421875), the plane at 69.598 m): the click's answer places no hit: {"at":[201.33203125,71.0732421875],"pick":"plane"}
+  ray 7 (plane-a, click (130.6220703125, 72.2294921875), the plane at 66.172 m): the click's answer places no hit: {"at":[130.6220703125,72.2294921875],"pick":"plane"}
+  ray 8 (plane-a, click (262.10546875, 70.8134765625), the plane at 74.020 m): the click's answer places no hit: {"at":[262.10546875,70.8134765625],"pick":"plane"}
+  ray 9 (plane-a, click (206.2919921875, 51.4921875), the plane at 309.428 m): the click's answer places no hit: {"at":[206.2919921875,51.4921875],"pick":"plane"}
+  ray 10 (plane-a, click (49.9013671875, 96.6689453125), the plane at 36.445 m): the click's answer places no hit: {"at":[49.9013671875,96.6689453125],"pick":"plane"}
+  ray 11 (plane-a, click (132.6201171875, 59.2919921875), the plane at 130.131 m): the click's answer places no hit: {"at":[132.6201171875,59.2919921875],"pick":"plane"}
+  ray 12 (plane-a, click (178.3251953125, 92.6416015625), the plane at 36.921 m): the click's answer places no hit: {"at":[178.3251953125,92.6416015625],"pick":"plane"}
+  ray 13 (plane-a, click (252.4931640625, 85.7060546875), the plane at 45.661 m): the click's answer places no hit: {"at":[252.4931640625,85.7060546875],"pick":"plane"}
+  ray 14 (plane-a, click (259.486328125, 76.1455078125), the plane at 60.713 m): the click's answer places no hit: {"at":[259.486328125,76.1455078125],"pick":"plane"}
+  ray 15 (plane-a, click (110.4365234375, 101.59765625), the plane at 31.345 m): the click's answer places no hit: {"at":[110.4365234375,101.59765625],"pick":"plane"}
+  ray 16 (plane-a, click (61.56640625, 81.38671875), the plane at 51.612 m): the click's answer places no hit: {"at":[61.56640625,81.38671875],"pick":"plane"}
+  ray 17 (plane-a, click (281.310546875, 54.2568359375), the plane at 224.384 m): the click's answer places no hit: {"at":[281.310546875,54.2568359375],"pick":"plane"}
+  ray 18 (plane-a, click (87.5546875, 197.6162109375), the plane at 12.134 m): the click's answer places no hit: {"at":[87.5546875,197.6162109375],"pick":"plane"}
+  ray 19 (plane-a, click (209.5498046875, 169.0703125), the plane at 14.387 m): the click's answer places no hit: {"at":[209.5498046875,169.0703125],"pick":"plane"}
+  ray 20 (plane-a, click (153.3154296875, 53.4716796875), the plane at 227.467 m): the click's answer places no hit: {"at":[153.3154296875,53.4716796875],"pick":"plane"}
+  ray 21 (plane-a, click (124.08984375, 146.0966796875), the plane at 17.363 m): the click's answer places no hit: {"at":[124.08984375,146.0966796875],"pick":"plane"}
+  ray 22 (plane-a, click (90.7080078125, 141.4912109375), the plane at 18.574 m): the click's answer places no hit: {"at":[90.7080078125,141.4912109375],"pick":"plane"}
+  ray 23 (plane-a, click (238.8671875, 106.009765625), the plane at 29.706 m): the click's answer places no hit: {"at":[238.8671875,106.009765625],"pick":"plane"}
+  ray 24 (plane-a, click (93.05078125, 57.4755859375), the plane at 153.795 m): the click's answer places no hit: {"at":[93.05078125,57.4755859375],"pick":"plane"}
+  ray 25 (plane-a, click (201.4873046875, 52.5546875), the plane at 260.674 m): the click's answer places no hit: {"at":[201.4873046875,52.5546875],"pick":"plane"}
+  ray 26 (plane-a, click (194.8076171875, 96.8671875), the plane at 34.016 m): the click's answer places no hit: {"at":[194.8076171875,96.8671875],"pick":"plane"}
+  ray 27 (plane-a, click (265.41796875, 63.322265625), the plane at 106.329 m): the click's answer places no hit: {"at":[265.41796875,63.322265625],"pick":"plane"}
+  ray 28 (plane-a, click (226.5595703125, 50.341796875), the plane at 391.491 m): the click's answer places no hit: {"at":[226.5595703125,50.341796875],"pick":"plane"}
+  ray 29 (plane-a, click (129.3505859375, 68.9208984375), the plane at 75.785 m): the click's answer places no hit: {"at":[129.3505859375,68.9208984375],"pick":"plane"}
+  ray 30 (plane-a, click (97.265625, 92.37109375), the plane at 37.987 m): the click's answer places no hit: {"at":[97.265625,92.37109375],"pick":"plane"}
+  ray 31 (plane-a, click (103.80078125, 52.5810546875), the plane at 261.909 m): the click's answer places no hit: {"at":[103.80078125,52.5810546875],"pick":"plane"}
+  ray 32 (plane-a, click (74.0078125, 52.2626953125), the plane at 281.454 m): the click's answer places no hit: {"at":[74.0078125,52.2626953125],"pick":"plane"}
+  ray 33 (plane-a, click (224.521484375, 155.884765625), the plane at 16.167 m): the click's answer places no hit: {"at":[224.521484375,155.884765625],"pick":"plane"}
+  ray 34 (plane-a, click (247.4365234375, 51.7529296875), the plane at 305.653 m): the click's answer places no hit: {"at":[247.4365234375,51.7529296875],"pick":"plane"}
+  ray 35 (plane-a, click (90.974609375, 72.83984375), the plane at 66.221 m): the click's answer places no hit: {"at":[90.974609375,72.83984375],"pick":"plane"}
+  ray 36 (plane-a, click (68.57421875, 65.6357421875), the plane at 92.432 m): the click's answer places no hit: {"at":[68.57421875,65.6357421875],"pick":"plane"}
+  ray 37 (plane-a, click (157.0166015625, 51.8701171875), the plane at 286.696 m): the click's answer places no hit: {"at":[157.0166015625,51.8701171875],"pick":"plane"}
+  ray 38 (plane-a, click (159.36328125, 155.8642578125), the plane at 15.755 m): the click's answer places no hit: {"at":[159.36328125,155.8642578125],"pick":"plane"}
+  ray 39 (plane-a, click (222.2099609375, 52.251953125), the plane at 276.265 m): the click's answer places no hit: {"at":[222.2099609375,52.251953125],"pick":"plane"}: expected 200 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 200
+
+ ❯ hit-path.test.ts:242:198
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  hit-path.test.ts > AC1 #1976.aa8721f3 the hit path in 3D > AC1 #1976.aa8721f3 a planted tool that reconstructs points from the depth buffer fails, naming the first ray off by more than 1 mm
+AssertionError: deep-gpu run --planted hit_from_depth exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:113:151
+    111|   const stdout = run.stdout ?? '';
+    112|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    113|   expect(run.status, `${name} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    114|   const lines = stdout.split('\n').filter((l) => l !== '').map((l) => …
+    115|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ placed hit-path.test.ts:191:19
+ ❯ hit-path.test.ts:251:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  15:11:01
+   Duration  8.11s (tests 98%, import 1%, transform 1%)
+
+vitest exit 1
+

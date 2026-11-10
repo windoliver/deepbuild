@@ -351,8 +351,8 @@ impl Palette {
         );
     }
 
-    /// What it lists: the entries it was given, the table's actions, each session by its task's title and each open
-    /// ask by its question, in the order Needs you draws them (#1462).
+    /// What it lists: the entries it was given, the table's actions, each session by its task's title, each open ask
+    /// by its question, in the order Needs you draws them (#1462), and each project by its name (#1461).
     fn listed(&self) -> Vec<Entry> {
         let actions = crate::actions::table().iter().map(|action| Entry::Action {
             name: action.name.clone(),
@@ -369,12 +369,26 @@ impl Palette {
                 name: question,
                 address: Address::ask(&handle),
             });
+        let mut projects: Vec<Option<String>> = Vec::new();
+        for session in &crate::list::read_now(crate::views::now()).1 {
+            if !projects.contains(&session.project) {
+                projects.push(session.project.clone());
+            }
+        }
+        let projects = projects.into_iter().map(|project| Entry::Open {
+            name: project
+                .as_deref()
+                .unwrap_or(crate::list::NO_PROJECT)
+                .to_owned(),
+            address: Address::new(Place::Project, &crate::list::project_id(project.as_deref())),
+        });
         self.entries
             .iter()
             .cloned()
             .chain(actions)
             .chain(sessions)
             .chain(asks)
+            .chain(projects)
             .collect()
     }
 

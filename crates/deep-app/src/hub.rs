@@ -47,6 +47,7 @@ pub const NEEDS: &[&str] = &[
     "notifications.report",
     "views.shown",
     "views.hidden",
+    "row.read",
     "canvas.drawn",
     "canvas.user",
 ];

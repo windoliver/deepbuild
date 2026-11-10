@@ -1,0 +1,14 @@
+Not run at the base (75f3eed4f): the surface plainly doesn't exist there. This is the expected failure, stated
+from reading the base, not from a run.
+
+The base's pack check (crates/deep-canvas/src/document/packs.rs) accepts a step's repeat only as {count, as} or
+{along, count | spacing, as} and refuses any other key with "a repeat is `{count, as}`, or `{along, count |
+spacing, as}`; over, on and pack land later" at the step's repeat path. So test/lots@1.0.0, whose step `post`
+repeats over {each: {part: "ground#top", domain: "face"}, as: "e"}, is refused when the scenario installs it, and
+the scene document naming it is refused.
+
+- "AC1 the 3 x 2 plate, and the same instance over it with one more row, …": fails in `admitted` on the 3 x 2
+  plate's revision: an error issue (the document names a pack the store refused), outcome not `presented`.
+- "AC1 the planted each_seeds_by_element_count …" and "AC1 the planted each_face_per_triangle …": fail in
+  `runShow`, since neither planted value exists at the base and `deep-show run` answers an unknown `planted` with
+  bad_input (`ok` false).

@@ -47,7 +47,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
   'tests/acceptance/990/',
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
-  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/'];
+  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/'];
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
  * in the worktrees and affected.mjs's node --test reports held on 2026-11-07. affected.mjs runs them with --slow and for
@@ -234,6 +234,14 @@ timed.push('tests/acceptance/1436/ac9-budgets.live.test.ts');
 // #1485's files build deep-canvas-render and the app, and its AC3 file opens the app's window and times its frames.
 alone.push('tests/acceptance/1485/');
 timed.push('tests/acceptance/1485/panel.test.ts');
+// #1486's files build deep-canvas-render in release; grid.test.ts times the first screen and the UI thread's frames.
+alone.push('tests/acceptance/1486/');
+timed.push('tests/acceptance/1486/grid.test.ts');
+// #1485's first AC2 draft is kept as written, by hand only: it draws its five pictures in 20 u boxes and needs the
+// fifth refused, where image@1's budget now counts the levels a frame draws (#1486); its blind redraft,
+// 1485-redraft-ac2/, draws them at full size and runs in its place.
+alone.push('tests/acceptance/1485-redraft-ac2/');
+byHand.push('tests/acceptance/1485/cap.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 
@@ -264,8 +272,12 @@ timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/v
 alone.push('tests/acceptance/500/', 'tests/acceptance/500-oracle/');
 // #532's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome, and read CPU times per frame and per step.
 alone.push('tests/acceptance/532/');
+// #545's files build deep-logic and drive long-lived views frame by frame; ac04 builds deep-show and exports on the GPU.
+alone.push('tests/acceptance/545/', 'tests/acceptance/545-redraft-ac3/', 'tests/acceptance/545-redraft-ac5/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
+// #1820 starts the same real hub and sandboxed library fixture, plus the pack's HTTPS source.
+alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
 alone.push('tests/acceptance/1732/');
 
@@ -286,6 +298,11 @@ alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
 // #1818's files each build deep-show and mix seconds of audio through the media processors.
 alone.push('tests/acceptance/1818/');
+// #1461's files build deep-drive plain and with env-plants, start real hubs and many replicas; its AC1 and AC14 file and
+// its AC28 file open the real app's window, with Accessibility and Screen Recording, by hand; its AC9 file is timed.
+alone.push('tests/acceptance/1461/');
+byHand.push('tests/acceptance/1461/shell.test.ts', 'tests/acceptance/1461/shown.test.ts');
+timed.push('tests/acceptance/1461/budget.test.ts');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
@@ -319,7 +336,23 @@ alone.push('tests/acceptance/1925/');
 alone.push('tests/acceptance/408/crossing.test.ts', 'tests/acceptance/408/overlap-covered.test.ts', 'tests/acceptance/408/cut.test.ts', 'tests/acceptance/408/module-label.test.ts');
 alone.push('tests/acceptance/408-redraft-ac5/');
 timed.push('tests/acceptance/408-redraft-ac5/machines.test.ts');
+// #1819's files each build deep-show, start a hub and the bakes plug-in's model host on its fixed port 8719, and run
+// pinned open models on CPU: one file at a time.
+alone.push('tests/acceptance/1819/');
 byHand.push('tests/acceptance/408/machines.test.ts');
+// #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
+// that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the
+// original criterion-4 file, whose rendered fixture the base refuses (lit solids with no paint), runs by hand.
+alone.push('tests/acceptance/405/broken-fixture.test.ts', 'tests/acceptance/405/floating-exception.test.ts', 'tests/acceptance/405/lid-sweep.test.ts');
+alone.push('tests/acceptance/405-redraft-ac4/');
+timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
+byHand.push('tests/acceptance/405/budgets.test.ts');
+// #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
+alone.push('tests/acceptance/544/');
+// #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
+alone.push('tests/acceptance/2015/');
+// #1976's file builds deep-gpu and clicks 200 seeded rays through seven views of a plane and a sphere.
+alone.push('tests/acceptance/1976/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

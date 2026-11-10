@@ -351,6 +351,12 @@ export interface ExtensionHost {
   libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }>;
   /** A file a library's fetch named, downloaded through its source by the hub (#1731); `status` null when its host gave no answer. */
   libraryFile(name: string, path: string): Promise<{ status: number; bytes: Uint8Array } | { status: null; why: string }>;
+  /** Pack and library assets use the same resumable Source download, never a package's network client. */
+  assetFile(source: { pack: string; url: string } | { library: string; path: string }, spec: { file: string; sha256: string; size: number; kept: string }): Promise<string>;
+  /** Reachability without requesting any asset byte, before the networked job's authority ask. */
+  assetOnline(pack: string, url: string): Promise<boolean>;
+  /** A pack's license file, read through the Source block after the job is authorized. */
+  assetTerms(pack: string, url: string): Promise<string>;
   /** Every source call this host made, with its secrets stripped. */
   recording(): Recording;
   /** The readings the record holds of a source with an as-of time in the window, both ends in, in as-of order. */
@@ -1130,6 +1136,35 @@ class Host implements ExtensionHost {
       if (e instanceof NoAnswer) return { status: null, why: e.message };
       throw e;
     }
+  }
+  private packSource(pack: string, value: string): { name: string; path: string; source: LibraryDecl } {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw Error(`${pack}: an asset URL must be https with no credentials or fragment`);
+    return { name: `ext.pack_${sha256Hex(new TextEncoder().encode(`${pack}\n${url.host}`))}.assets`, path: `${url.pathname}${url.search}`, source: { host: url.host, secret: null, auth: null, quota: { per_minute: 600, per_day: 100_000 }, timeout: WORK_CALL_MS } };
+  }
+  async assetFile(source: { pack: string; url: string } | { library: string; path: string }, spec: { file: string; sha256: string; size: number; kept: string }): Promise<string> {
+    if ('library' in source) {
+      const { ext, library } = this.libraryOf(source.library);
+      return this.sources.download(ext.entry.id, source.library, library, source.path, spec);
+    }
+    const p = this.packSource(source.pack, source.url);
+    return this.sources.download(source.pack, p.name, p.source, p.path, spec);
+  }
+  async assetOnline(pack: string, value: string): Promise<boolean> {
+    const p = this.packSource(pack, value);
+    try {
+      await this.sources.workFetch(pack, p.name, p.source, { method: 'CONNECT', path: '/' }, { timeout: 2000 });
+      return true;
+    } catch (e) {
+      if (e instanceof NoAnswer) return false;
+      throw e;
+    }
+  }
+  async assetTerms(pack: string, url: string): Promise<string> {
+    const p = this.packSource(pack, url);
+    const answer = await this.sources.workFetch(pack, p.name, p.source, { method: 'GET', path: p.path }, { timeout: p.source.timeout });
+    if (answer.status !== 200) throw Error(`${pack}: license ${url} answered ${answer.status}`);
+    return answer.body;
   }
   /** A work source's run is BLOCKED while its package isn't loaded or the secret it needs isn't held. */
   private async blockedWork(decl: ScheduleDecl): Promise<string | null> {
@@ -2490,20 +2525,18 @@ class Host implements ExtensionHost {
     const dir = mkdtempSync(join(this.options.home, 'ext-'));
     const path = join(dir, 's');
     const server = createServer();
-    const output: string[] = [];
-    const keep = (chunk: Buffer): void => { if (output.length < 64) output.push(chunk.toString('utf8')); };
     try {
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(path, resolve); });
       const connected = new Promise<Socket>((resolve) => server.once('connection', resolve));
       const started = await supervisor.start({
         run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
-        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] }, output: { stdout: keep, stderr: keep },
+        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] },
       });
       if (started.status !== 'started') throw Error(`the sandbox held it: BLOCKED on ${started.kind}`);
       // Stoppable from here on: an unload while it connects, at close or a revoke, ends its process.
       ext.stop = async () => { ext.cleaned = await supervisor.cleanup(run).catch(() => undefined); };
-      // What it printed is the package's own words: only a release package's reach the refusal, and the hub's log.
-      const early = supervisor.wait(run).then((exit) => Promise.reject(Error(`it exited (${exit.code ?? exit.signal}) before it connected${ext.released ? `: ${output.join('').trim()}` : ''}`)));
+      // What it printed is the package's own words, and only a release package's reach a refusal: none loads here as one.
+      const early = supervisor.wait(run).then((exit) => Promise.reject(Error(`it exited (${exit.code ?? exit.signal}) before it connected`)));
       early.catch(() => undefined);
       let socket: Socket;
       try {
