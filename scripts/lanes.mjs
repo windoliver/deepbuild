@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir, hostname, tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -282,6 +282,9 @@ timed.push('tests/acceptance/501/budgets.test.ts');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
+// #1983's files run the x86_64 lane, which builds deep-logic in linux/amd64 and linux/arm64 containers under emulation,
+// and read the container runtime's image list, which another file's container run could change.
+alone.push('tests/acceptance/1983/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -693,6 +696,19 @@ export function exactTree(cwd) {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+/**
+ * A tree's lane records merged as remote lanes merge (parallel-proof §8): the worst state among them stands, so a lane's
+ * FAIL wins over another's pass, and `lanes` names each lane whose own state is that state.
+ */
+export function mergeRecords(tree) {
+  const folder = join(homedir(), '.deepbuild', 'lanes');
+  const records = (existsSync(folder) ? readdirSync(folder) : [])
+    .filter((name) => name.startsWith(`${tree}-`) && name.endsWith('.json'))
+    .map((name) => JSON.parse(readFileSync(join(folder, name), 'utf8')));
+  const state = worst(records.map((r) => r.state)) ?? 'PASS';
+  return { tree, state, lanes: records.filter((r) => r.state === state).map((r) => r.lane) };
 }
 
 /** A lane's evidence record, which T7 and T8 read: its state, where it ran, on what tree, and each test's state. */
