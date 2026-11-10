@@ -1,14 +1,13 @@
-// AC6, AC7, AC8 and AC29: what the shell keeps. The names the merge base's shell draws (fixtures/base-names.json) stay in
-// the tree or are recorded as moved (crates/deep-app/moves.json, README Pinned 7); a replacement Needs you still fills the
-// list's first section; `deep.registerView`'s areas still place a panel, and one registered to `sidebar` opens as a page.
+// AC6, AC8 and AC29: what the shell keeps. The names the merge base's shell draws (fixtures/base-names.json) stay in
+// the tree or are recorded as moved (crates/deep-app/moves.json, README Pinned 7); `deep.registerView`'s areas still place
+// a panel, and one registered to `sidebar` opens as a page. AC7 is in redraft/tree.test.ts.
 // The replica on a copy of a real hub's record, or on no record for the first launch.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { fixtureCopy as fixture1459, openAsks, RECORD_338, viewKit } from '../1459/helpers.ts';
 import {
-  cleanup, FIXTURES, fixtureCopy, flat, headings, ID, listOf, listRows, makeWorld, MIN, pageOf, REPO, Replica, replicaOf, runsIn,
+  cleanup, FIXTURES, fixtureCopy, flat, headings, ID, listOf, listRows, makeWorld, MIN, pageOf, REPO, Replica, replicaOf,
   sessionOf, wordsOf, type SessionSpec, type Snapshot, type World,
 } from './helpers.ts';
 
@@ -21,8 +20,6 @@ const SPECS: SessionSpec[] = [
 let world: World;
 beforeAll(async () => { world = await makeWorld(SPECS); }, 10 * MIN);
 const said = (v: unknown): string => (JSON.stringify(v) ?? String(v)).slice(0, 200);
-/** #1459's replacement Needs you view and its planted twin that hides the oldest ask, used as they are. */
-const SUITE_1459 = join(REPO, 'tests/acceptance/1459/fixtures/views');
 
 describe(`AC6 ${ID.names} the tree keeps the shell's names`, () => {
   it(`AC6 ${ID.names}: the tree holds every name from the merge base's shell or a recorded move, including Tasks, Needs you, Set up, Terminal and Pop out Needs you`, async () => {
@@ -69,41 +66,8 @@ describe(`AC6 ${ID.names} the tree keeps the shell's names`, () => {
   }, 30 * MIN);
 });
 
-describe(`AC7 ${ID.needsYouKit} a replacement Needs you fills the list's first section`, () => {
-  it(`AC7 ${ID.needsYouKit}: a replacement view that passes needs-you@1 still fills the list's first section`, async () => {
-    const kit = await viewKit(join(SUITE_1459, 'needs-you-by-id'));
-    expect(kit.verdict, `deep-replica --view-kit needs-you@1 on the replacement view: ${kit.said}`).toEqual({ result: 'pass' });
-    const r = await replicaOf(world, { panel: fixture1459('views', 'needs-you-by-id'), replaces: 'needs-you' });
-    const out: string[] = [];
-    try {
-      await r.wait(1000);
-      const s = (await r.see()).snapshot;
-      const list = listOf(s);
-      const [first, second] = headings(s);
-      if (!list || !first) out.push('the list has no first section (no list, or no heading in it)');
-      else {
-        if (first.id !== 'heading:needs-you') out.push(`the list's first section is ${String(first.id)}, not Needs you's`);
-        const top = first.bounds[1]! + first.bounds[3]!;
-        const bottom = second ? second.bounds[1]! : list.bounds[1]! + list.bounds[3]!;
-        const section = [list.bounds[0]!, top, list.bounds[2]!, bottom - top];
-        if (!runsIn(s, section).some((x) => x.text.includes('Asks for you'))) out.push('the replacement view isn\'t drawn in the list\'s first section: "Asks for you" isn\'t there');
-        for (const a of world.asks) {
-          const row = flat(list).find((n) => n.id === a.handle);
-          if (!row || row.bounds[1]! < top - 1 || row.bounds[1]! >= bottom) out.push(`the list's first section has no row of the replacement view for ${a.handle}`);
-        }
-      }
-    } finally {
-      await r.stop();
-    }
-    expect(out).toEqual([]);
-  }, 30 * MIN);
-
-  it(`AC7 ${ID.needsYouKit} wrong program: a planted one that hides the oldest ask fails, naming the ask`, async () => {
-    const kit = await viewKit(join(SUITE_1459, 'hides-oldest'));
-    expect(kit.verdict?.result, `deep-replica --view-kit needs-you@1: ${kit.said}`).toBe('fail');
-    expect(kit.verdict?.names, 'the kit names the oldest open ask, the one hidden').toBe(openAsks(RECORD_338)[0]!.handle);
-  }, 30 * MIN);
-});
+// AC7 was swapped for its blind redraft, redraft/tree.test.ts, with the owner's approval: the replica's snapshot holds no
+// node for a plug-in view's elements, only the strings it draws, so a replacement's rows can't be found by id.
 
 describe(`AC8 ${ID.areas} the areas home and the line`, () => {
   it(`AC8 ${ID.areas}: the extension areas home and the line place a test panel without a change to deep.registerView`, async () => {

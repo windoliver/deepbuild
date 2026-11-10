@@ -172,10 +172,10 @@ IDs are `criterionId` in `scripts/proof-change.mjs`.
 | AC4 | `#1461.c3edd46c` | `moves.test.ts`: pressing the first ask's option opens the second ask, every other row in place, the answer in the trace | the base; `list-closes-gap`, naming the row that moved |
 | AC5 | `#1461.2a4294f3` | `unread.test.ts`: a changed row medium, one with only an agent's message regular, the changed one regular a second after its page opened | the base (no `weight`); `unread-on-message`, naming the row |
 | AC6 | `#1461.2829325f` | `tree.test.ts`: the list named `Tasks`, its first heading `Needs you`; the five named names; every base name in the tree or moved | the base (no `list`) |
-| AC7 | `#1461.a07a4336` | `tree.test.ts`: the replacement view passes `needs-you@1` and, installed, draws the list's first section with a row per open ask | the base (no `replaces`); #1459's `hides-oldest`, the kit naming the oldest ask |
+| AC7 | `#1461.a07a4336` | `redraft/tree.test.ts` (swapped in with the owner's approval: the replica's snapshot holds no node for a plug-in view's elements): the replacement view passes `needs-you@1` and, installed, draws its rows' questions in the list's first section, oldest first | the base (no `replaces`); #1459's `hides-oldest`, the kit naming the oldest ask |
 | AC8 | `#1461.f52d256a` | `tree.test.ts`: `deep.registerView`'s contract as at the merge base; the test panel on a project's page from `home` and on a session's page from `line` | the base (no `area`: the panel sits in the sidebar) |
 | AC9 | `#1461.6d2351eb` | `budget.test.ts`: the perf lane's `app-select-700` is valid and runs; with 700 rows, presses on rows select within 100 ms at p95, no spinner, on a fit quiet reference Mac, else INCONCLUSIVE | the base (no task; no press at a point) |
-| AC10 | `#1461.52fe1d2f` | `rows.test.ts`: every row 32 tall, 8 in from the list's edges, its slots in place; headings 32 with 8 above; no gap between rows | the base (no slots); `row-24`, naming the row |
+| AC10 | `#1461.52fe1d2f` | `redraft/rows.test.ts` (swapped in with the owner's approval: this file's world raised an approval without a plan, which the asks core refuses): every row 32 tall, 8 in from the list's edges, its slots in place; headings 32 with 8 above; no gap between rows | the base (no slots); `row-24`, naming the row |
 | AC11 | `#1461.60e6f710` | `page.test.ts`: the session page's lane is `min(720, page − 48)` and centred, and every string under its title is in it | the base (no lane); `page-no-lane`, naming the page |
 | AC12 | `#1461.3783feb3` | `unread.test.ts`: on the hub's backfill of 50 finished sessions, `deep status --json` and the app's weights read only the failed one unread | the base (no `weight`) |
 | AC13 | `#1461.88d0792f` | `moves.test.ts`: an ask answered from the CLI keeps its row's slot 1.5 s and leaves by 2.5 s; a new ask's row is there a frame after it arrives | the base (the row leaves at once) |
@@ -183,16 +183,16 @@ IDs are `criterionId` in `scripts/proof-change.mjs`.
 | AC15 | `#1461.59067fcc` | `page.test.ts`: no "isn't answering" over a 200 ms outage; within 2 s and for 400 ms over a 1 s one, frame by frame | the base (no `hub` door); `down-at-first-miss`, naming the frame |
 | AC16 | `#1461.7b00f436` | `box.test.ts`: one text field on the ask's page; the words sent make one `ask.answer` with those words and no option, close the ask, and nothing else | the base; `card-field-and-box`, naming both fields; `box-starts-work`, naming the call |
 | AC17 | `#1461.120f6702` | `unread.test.ts`: the clock journey's three cases by weight, with `row.read` sent for the two read and not the one drawn; and `deep status --json` unread after a change until `row.read` | the base (no `weight`, no `row.read`); `read-needs-reopen` and `read-when-drawn`, each naming the row |
-| AC18 | `#1461.c16105e5` | `moves.test.ts`: a press 100 ms after a new ask shifted the third session row leaves the window where it was | the base (no press at a point); `press-through-move`, naming both rows |
+| AC18 | `#1461.c16105e5` | `redraft/moves.test.ts` (swapped in with the owner's approval: here the third session row was the first under its heading, so a heading slid under the pointer): a press 100 ms after a new ask shifted the third session row leaves the window where it was | the base (no press at a point); `press-through-move`, naming both rows |
 | AC19 | `#1461.d5aa2f05` | `rows.test.ts`: on #328's record, the folded, later and held rows name their state in value and state word | the base (ink, indent, slant); `wait-by-ink`, naming the row |
 | AC20 | `#1461.ca4ce66c` | `opens.test.ts`: the three pages' empty lines differ pairwise in words and mark, only the first `idle` | the base (no `empty`); `empties-alike`, naming the pair |
 | AC21 | `#1461.140dcfed` | `opens.test.ts`: with no record the page holds the box, focused, and words above it; the list no row | the base; `blank-first-page`, naming the page; `agent-as-row`, naming the row |
 | AC22 | `#1461.4d23f757` | `opens.test.ts`: the first-launch page's one control is the Set up button | the base (no `setup` launch option); `box-on-first-launch`, naming the box |
 | AC23 | `#1461.731bc2c6` | `box.test.ts`: on the push's page the send reads `Say no`, the one `ask.answer` carries the words and no allow, the ask closes, nothing else is sent | the base; `words-read-yes`, naming the call |
 | AC24 | `#1461.fc59e373` | `moves.test.ts`: nothing moves under a resting pointer; with focus in the list the answered row stays, drawn answered, and leaves 2 s after focus and pointer leave | the base; `list-closes-gap`, naming the row |
-| AC25 | `#1461.97cc6522` | `moves.test.ts`: a press 400 ms after the move opens the row now under the pointer | the base (no press at a point); `list-drops-presses` |
+| AC25 | `#1461.97cc6522` | `redraft/moves.test.ts` (swapped in with the owner's approval, as AC18): a press 400 ms after the move opens the row now under the pointer | the base (no press at a point); `list-drops-presses` |
 | AC26 | `#1461.a732cea0` | `box.test.ts`: the box 2 lines tall with 1, a line taller per line, the same at 12 as at 10 with no more than 10 drawn and all 12 kept, the lane's width | the base (no lane, one-line field); `box-grows-past-10`, naming its height |
-| AC27 | `#1461.a024b727` | `rows.test.ts`: the approval's and the choice's state-word slots differ | the base (both `needs you`); `ask-words-alike`, naming the pair |
+| AC27 | `#1461.a024b727` | `redraft/rows.test.ts` (swapped in with the owner's approval, as AC10): the approval's and the choice's state-word slots differ | the base (both `needs you`); `ask-words-alike`, naming the pair |
 | AC28 | `#1461.b6f49051` | `shown.test.ts`: 16 pictures from the real app and `answering.gif`, then `TASTE.json`: INCONCLUSIVE until a recorded call on exactly these files | none: a picture is never judged here |
 | AC29 | `#1461.c706a4a7` | `tree.test.ts`: the sidebar panel leaves the list's rows and headings as without it, and opens as a `page/` address from ⌘K and from the View menu | the base (the panel sits in the sidebar; no menus); `sidebar-panel-in-list`, naming the panel |
 
@@ -241,7 +241,9 @@ the starters' words (#1109); the safety list; the menu bar's other menus.
 - `helpers.ts`: IDs, builds, `makeWorld` and `TEN`, the replica driver and the doors, the events a change feeds, the window's
   readers (list, rows, slots, page, weight, zero counts, clock times), the real app's tree with identifiers. Reuses
   `../16/helpers.ts`, `../26/helpers.ts`, `../1463/helpers.ts`, `../1459/helpers.ts`, `../1454/helpers.ts`, `../1551/helpers.ts`.
-- `shell.test.ts` (AC1, AC2, AC14), `opens.test.ts` (AC3, AC20, AC21, AC22), `moves.test.ts` (AC4, AC13, AC18, AC24, AC25),
-  `unread.test.ts` (AC5, AC12, AC17), `box.test.ts` (AC16, AC23, AC26), `rows.test.ts` (AC10, AC19, AC27), `page.test.ts`
-  (AC11, AC15), `tree.test.ts` (AC6, AC7, AC8, AC29), `budget.test.ts` (AC9), `shown.test.ts` (AC28).
+- `shell.test.ts` (AC1, AC2, AC14), `opens.test.ts` (AC3, AC20, AC21, AC22), `moves.test.ts` (AC4, AC13, AC24),
+  `unread.test.ts` (AC5, AC12, AC17), `box.test.ts` (AC16, AC23, AC26), `rows.test.ts` (AC19), `page.test.ts`
+  (AC11, AC15), `tree.test.ts` (AC6, AC8, AC29), `budget.test.ts` (AC9), `shown.test.ts` (AC28).
+- `redraft/rows.test.ts` (AC10, AC27), `redraft/moves.test.ts` (AC18, AC25) and `redraft/tree.test.ts` (AC7), swapped in
+  with the owner's approval. `redraft/rows.test.ts` also holds a redraft of AC19, which isn't swapped in.
 - `fixtures/panel/main.js`, `fixtures/base-names.json`, `TASTE.json`, `tsconfig.json`, `BASE-FAILURE.txt`.

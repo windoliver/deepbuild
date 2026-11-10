@@ -1,10 +1,10 @@
-// AC4, AC13, AC18, AC24 and AC25: when rows move, one rule. The replica on a copy of a real hub's record (two open
+// AC4, AC13 and AC24: when rows move, one rule (AC18 and AC25 are in redraft/moves.test.ts). The replica on a copy of a real hub's record (two open
 // asks, six sessions in two projects), on its virtual clock. A change made elsewhere is fed as the hub writes it: an
 // answer from `deep` is `ask.answered` (via the CLI) and the ask's row leaving the list; a new ask is `ask.created` and
 // its row (helpers.ts). The card's answer is the app's own, through the card, kept in the replica's trace (Pinned 5).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  askOf, cleanup, feedAnswered, feedAsk, ID, listRows, makeWorld, MIN, Replica, replicaOf, sessionOf, wordsOf,
+  askOf, cleanup, feedAnswered, feedAsk, ID, listRows, makeWorld, MIN, replicaOf, sessionOf, wordsOf,
   type Row, type SessionSpec, type Snapshot, type World,
 } from './helpers.ts';
 
@@ -145,60 +145,5 @@ describe(`AC24 ${ID.focusKeeps} focus in the list keeps an answered row`, () => 
   }, 30 * MIN);
 });
 
-/**
- * The pointer rests on the third session row, a new ask arrives above and shifts it, and a press lands where the pointer
- * is `delay` ms later. What the window shows after, the row the pointer rested on and the row now under it.
- */
-async function pressAfterMove(delay: number, plant?: string): Promise<{ opened: string | null; rested: string; under: string | null; shifted: boolean }> {
-  const r: Replica = await replicaOf(world, {}, plant);
-  try {
-    await r.wait(500);
-    await r.open('project/docs');
-    await r.wait(300);
-    const seen = await r.see();
-    const third = listRows(seen.snapshot).filter((n) => String(n.id).startsWith('session:'))[2] ?? (() => { throw Error('the list has no third session row'); })();
-    const [x, y, w, h] = third.bounds as [number, number, number, number];
-    const point = [Math.round(x + w / 2), Math.round(y + h / 2)];
-    await r.hover({ id: String(third.id) });
-    await r.wait(200);
-    await feedAsk(r, rowOf(seen.rows, `session:${sessionOf(world, 'm3').id}`), 'Ship the cart page today?');
-    const moved = (await r.see()).snapshot;
-    const shifted = JSON.stringify(listRows(moved).find((n) => n.id === third.id)?.bounds) !== JSON.stringify(third.bounds);
-    const under = listRows(moved).find((n) => point[0]! >= n.bounds[0]! && point[0]! < n.bounds[0]! + n.bounds[2]! && point[1]! >= n.bounds[1]! && point[1]! < n.bounds[1]! + n.bounds[3]!);
-    await r.wait(delay);
-    await r.clickAt(point);
-    await r.wait(100);
-    return { opened: (await r.see()).address, rested: String(third.id), under: under ? String(under.id) : null, shifted };
-  } finally {
-    await r.stop();
-  }
-}
-
-describe(`AC18 ${ID.pressDropped} a press on a row that just moved`, () => {
-  const failures = (p: Awaited<ReturnType<typeof pressAfterMove>>): string[] => [
-    ...(p.shifted ? [] : [`the new ask didn't shift the third session row ${p.rested}, so this proves nothing`]),
-    ...(p.opened === 'project/docs' ? [] : [`a press 100 ms after the move opened ${String(p.opened)}: the row now under the pointer (${String(p.under)}), though the pointer rested on ${p.rested}`]),
-  ];
-  it(`AC18 ${ID.pressDropped}: with the pointer resting on the third session row, a new ask arrives and shifts that row; a press 100 ms later opens nothing`, async () => {
-    expect(failures(await pressAfterMove(100))).toEqual([]);
-  }, 30 * MIN);
-
-  it(`AC18 ${ID.pressDropped} wrong program: a planted list that opens the row that slid under the pointer fails, naming both rows`, async () => {
-    expect(failures(await pressAfterMove(100, 'press-through-move')).join('\n')).toMatch(/opened \S+: the row now under the pointer \((ask|session):\S+\), though the pointer rested on session:\S+/);
-  }, 30 * MIN);
-});
-
-describe(`AC25 ${ID.pressLands} a press after the row settled`, () => {
-  const failures = (p: Awaited<ReturnType<typeof pressAfterMove>>): string[] => {
-    if (!p.shifted) return [`the new ask didn't shift the third session row ${p.rested}, so this proves nothing`];
-    if (!p.under) return ['no row is under the pointer after the move'];
-    return p.opened === addressOf(p.under) ? [] : [`a press 400 ms after the move opened ${String(p.opened)}, not ${addressOf(p.under)}, the row now under the pointer`];
-  };
-  it(`AC25 ${ID.pressLands}: a press 400 ms after a row moved opens the row now under the pointer`, async () => {
-    expect(failures(await pressAfterMove(400))).toEqual([]);
-  }, 30 * MIN);
-
-  it(`AC25 ${ID.pressLands} wrong program: a planted list that drops every press fails`, async () => {
-    expect(failures(await pressAfterMove(400, 'list-drops-presses')).join('\n')).toMatch(/a press 400 ms after the move opened project\/docs, not/);
-  }, 30 * MIN);
-});
+// AC18 and AC25 were swapped for their blind redraft, redraft/moves.test.ts, with the owner's approval: the third session
+// row here is the first under its project's heading, so the row a new ask shifts under the pointer is a heading, not a row.
