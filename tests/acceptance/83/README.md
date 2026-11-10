@@ -182,7 +182,7 @@ trimmed, whitespace collapsed>`, as `scripts/proof-change.mjs` computes it.
 | AC8 `#83.89bfa3a4` | the receipt links the PR, the files, the pages | `receipt.test.ts`: `produced.pr` is the PR's URL, `produced.files` holds `total.ts`, `produced.pages` is a list | the base: no `produced` |
 | AC9 `#83.e8038389` | the next unblocked issue in the epic | `receipt.test.ts`: none before a PASS; after it, #42 (depends on #41, passed), not #43 (blocked by #99) nor #99 (another epic); with #42 also depending on #43, none | the base: no `next_issue`; a lowest-open-issue reading (the second test) |
 | AC10 `#83.09932b63` | "not verified" first, before any PASS count | `line.test.ts`: INCONCLUSIVE with R2 never run: the line starts with `not verified`, names R2, any count and outcome word after it; all PASS starts with `PASS 3/3`; a count-first line fails | the base: no line |
-| AC11 `#83.15ee3b42` | goldens fit the width; the long cause shortens first | `redraft-1460/goldens.test.ts` (swapped in with the owner's approval after #1460 made the receipt part the claim's page address; it keeps `goldens/` as its input): each golden's planted state gives its line exactly, ≤ 80 columns; the long-cause line keeps `not verified: R2`, `sent back 2/3`, `total.ts:42`, `next: agent`, `receipt`, cuts the cause from its end with `…` | the base: no line; a line that drops "not verified" or keeps the whole cause |
+| AC11 `#83.15ee3b42` | goldens fit the width; the long cause shortens first | `redraft-669/goldens.test.ts` (swapped in with the owner's approval for #669's test count, #2109, after `redraft-1460/goldens.test.ts`, swapped in for #1460's receipt address; each keeps its own `goldens/`): each golden's planted state gives its line exactly, ≤ 80 columns; the long-cause line keeps `not verified: R2`, `sent back 2/3`, `total.ts:42`, `2 tests`, `next: agent`, cuts the cause from its end with `…` | the base: no line; a line that drops "not verified" or keeps the whole cause |
 | AC12 `#83.b4c17e65` | answered under 100 ms, no model call, vs the merge base, on the reference Mac | `budgets.test.ts`: (1) a lane runs the file one at a time; (2) warm-up, the merge base, five runs of twenty, p95 under 100 ms, no model call, no regression; (3) the instrument: a work prompt shows as a model call | the base: no lane (1); every session unanswered (2) |
 
 ## Open questions (left to the implementer; not asserted beyond what the table says)
@@ -212,5 +212,5 @@ trimmed, whitespace collapsed>`, as `scripts/proof-change.mjs` computes it.
 - `fixtures/claude.mjs` (the Claude Code stand-in), `fixtures/stub-bin.sh` (launchctl, systemctl, claude, codex).
 - `goldens/*.json` (AC11's record states and lines).
 - `line.test.ts` (AC1, AC3, AC5, AC10), `status.test.ts` (AC2, AC4, AC6), `receipt.test.ts` (AC7, AC8, AC9),
-  `redraft-1460/goldens.test.ts` (AC11, swapped in for #1460), `budgets.test.ts` (AC12).
+  `redraft-669/goldens.test.ts` (AC11, swapped in for #669's count after `redraft-1460` for #1460), `budgets.test.ts` (AC12).
 - `BASE-FAILURE.txt`: the run on the base commit and why each test fails there.

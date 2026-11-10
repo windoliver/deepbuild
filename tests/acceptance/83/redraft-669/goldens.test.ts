@@ -1,13 +1,12 @@
-// Blind redraft of #83 AC11 for #1460 (README, The dispute). AC11 #83.15ee3b42: golden lines for says done, sent back,
+// Blind redraft of #83 AC11 for #669 (README, The dispute). AC11 #83.15ee3b42: golden lines for says done, sent back,
 // PASS, BLOCKED and checks running fit the set width; a fixture with a long cause keeps "not verified" and the outcome,
 // and shortens the cause first.
 //
-// The earlier goldens.test.ts (`../goldens.test.ts`), each step and expected value kept, but for the receipt part: the
-// address of the claim's page that `deep open` takes, `session/<the session ID's first 8 characters>/<the claim's ID>`
-// (#1460's suite, README Pinned 9), in place of the bare word `receipt`. Where that address doesn't fit 80 columns
-// with every other part as #83 states it, it gives way, as #83's own order says the receipt does after the cause's floor.
-// Each golden (goldens/<name>.json) is #83's with that one change; `{session8}` and `{claim}` stand for the session's and
-// the claim's IDs, known only once the test made them.
+// The #1460 redraft (`../redraft-1460/goldens.test.ts`), each step and expected value kept, but for the count of tests
+// run that #669 puts on the line: `<n> tests`, the tests the claim's checks ran as their reports counted them (each run
+// `test.verdict` plants reports one), as its own part after the cause and before the next step's owner, left out when
+// no run has finished. Each golden (goldens/<name>.json) is the #1460 redraft's with that change; `{session8}` and
+// `{claim}` stand for the session's and the claim's IDs, known only once the test made them.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,7 +50,9 @@ describe(`${AC11} Golden lines fit the set width (${WIDTH} columns); the long-ca
         for (const keep of g.keeps ?? []) expect(line, `the line keeps ${JSON.stringify(keep)}: ${JSON.stringify(line)}`).toContain(keep);
         expect(line, 'it says "not verified" first').toMatch(/^not verified\b/);
         expect(line, `the cause is shortened, not kept whole: ${JSON.stringify(line)}`).not.toContain(g.shortened!);
-        expect(line, 'the cause is shortened from its start, so its first words stay').toContain(g.shortened!.slice(0, 12));
+        // With `2 tests` on the line, every kept part leaves the cause 7 columns before its `…`: its first word, `receipt`,
+        // read where the cause sits, after the outcome, so the bare word `receipt` can't stand in for it.
+        expect(line, 'the cause is shortened from its start, so its first words stay').toContain(`sent back 2/3: ${g.shortened!.slice(0, 7)}`);
         expect(line, 'a shortened cause is marked as cut').toMatch(/…|\.\.\./);
         expect(line, 'the receipt part, where it is kept, is the claim\'s address, never the bare word').not.toMatch(/ · receipt$/);
       }
@@ -61,9 +62,9 @@ describe(`${AC11} Golden lines fit the set width (${WIDTH} columns); the long-ca
 
   it(`${AC11} (wrong program) a line that drops "not verified" to fit the width, or keeps the whole cause past ${WIDTH} columns, fails`, () => {
     const g = goldens.find((x) => x.name === 'long cause')!;
-    const dropped = `sent back 2/3: ${g.shortened!.slice(0, 40)}… · total.ts:42 · next: agent · ${RECEIPT}`;
+    const dropped = `sent back 2/3: ${g.shortened!.slice(0, 40)}… · total.ts:42 · 2 tests · next: agent · ${RECEIPT}`;
     expect(dropped).not.toMatch(/^not verified\b/);
-    const whole = `not verified: R2 · sent back 2/3: ${g.shortened} · total.ts:42 · next: agent · ${RECEIPT}`;
+    const whole = `not verified: R2 · sent back 2/3: ${g.shortened} · total.ts:42 · 2 tests · next: agent · ${RECEIPT}`;
     expect(widthOf(whole)).toBeGreaterThan(WIDTH);
   });
 });
