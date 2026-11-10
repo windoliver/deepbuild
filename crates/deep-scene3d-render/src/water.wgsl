@@ -43,6 +43,12 @@ struct Params {
     // part IDs `parts` holds.
     pick: vec4<u32>,
     parts: array<vec4<u32>, 2>,
+    // #268: the shore's field. [0]: its origin (x, z), 1 ÷ cell and the outline distance's reach;
+    // [1]: foam's width, strength and breakup, and shade; [2]: calm's near and far, the
+    // footprint's reach, and 1 when the water has a shore.
+    shore: array<vec4<f32>, 3>,
+    // Its cells along x and z, and the planted calm that ignores it.
+    shore_dims: vec4<u32>,
 };
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -56,6 +62,9 @@ struct Params {
 @group(0) @binding(6) var<storage, read_write> kept: array<f32>;
 @group(0) @binding(7) var ids: texture_2d<u32>;
 @group(0) @binding(8) var depth: texture_depth_2d;
+// #268: the shore's field, a cell a texel: the outline's distance in the low 16 bits over its
+// reach, the footprint's signed distance in the high 16, offset by half.
+@group(0) @binding(9) var field: texture_2d<u32>;
 // Each sample's ID and depth, for the pixels on a water edge (water.rs reads them as plain
 // textures at one sample).
 @group(2) @binding(0) var ids_ms: texture_multisampled_2d<u32>;
@@ -71,7 +80,53 @@ struct Waved {
     steep: f32,
 };
 
-fn waves(x: vec2<f32>, t: f32) -> Waved {
+// #268: the shore's field at a point on the water at rest, bilinear over the cells' centres:
+// the distance to the nearest outline where an item meets the water, and the signed distance to
+// the footprint of what stands above it (negative under it).
+struct Shore {
+    d: f32,
+    c: f32,
+};
+
+fn shore_cell(i: vec2<i32>) -> vec2<f32> {
+    let n = vec2<i32>(params.shore_dims.xy) - 1;
+    let v = textureLoad(field, clamp(i, vec2<i32>(0), n), 0).r;
+    return vec2<f32>(
+        f32(v & 0xffffu) / 65535.0 * params.shore[0].w,
+        (f32(v >> 16u) / 65535.0 - 0.5) * 2.0 * params.shore[2].z,
+    );
+}
+
+fn shore_at(x: vec2<f32>) -> Shore {
+    let g = (x - params.shore[0].xy) * params.shore[0].z - 0.5;
+    let i = vec2<i32>(floor(g));
+    let f = g - floor(g);
+    let v = mix(
+        mix(shore_cell(i), shore_cell(i + vec2<i32>(1, 0)), f.x),
+        mix(shore_cell(i + vec2<i32>(0, 1)), shore_cell(i + vec2<i32>(1, 1)), f.x),
+        f.y,
+    );
+    return Shore(v.x, v.y);
+}
+
+// Each wave's amplitude's share at a distance d from the shore: mix(near, 1, smoothstep(0, far,
+// d)), 1 with no shore.
+fn calm(d: f32) -> f32 {
+    if params.shore[2].w < 0.5 || params.shore_dims.z == 1u {
+        return 1.0;
+    }
+    return mix(params.shore[2].x, 1.0, smoothstep(0.0, params.shore[2].y, d));
+}
+
+fn calm_at(x: vec2<f32>) -> f32 {
+    if params.shore[2].w < 0.5 {
+        return 1.0;
+    }
+    return calm(shore_at(x).d);
+}
+
+// The waves at rest point x and t, each amplitude scaled by `scale` (the shore's calm).
+fn waves_scaled(x: vec2<f32>, t: f32, scale: f32) -> Waved {
     var w: Waved;
     w.offset = vec3<f32>(0.0);
     w.tx = vec3<f32>(1.0, 0.0, 0.0);
@@ -82,7 +137,7 @@ fn waves(x: vec2<f32>, t: f32) -> Waved {
         let d = params.dirs[i].xy;
         let k = params.dirs[i].z;
         let omega = params.dirs[i].w;
-        let a = params.amps[i].x;
+        let a = params.amps[i].x * scale;
         let s = params.amps[i].y;
         let th = k * dot(d, x) - omega * t;
         let c = cos(th);
@@ -110,7 +165,7 @@ fn mesh_vs(@location(0) p: vec3<f32>) -> MeshOut {
         dot(params.model[1], vec4<f32>(p, 1.0)),
         dot(params.model[2], vec4<f32>(p, 1.0)),
     );
-    let w = waves(world0.xz, params.eye.w);
+    let w = waves_scaled(world0.xz, params.eye.w, calm_at(world0.xz));
     var o: MeshOut;
     o.pos = params.clip * vec4<f32>(world0 + w.offset, 1.0);
     o.zw = o.pos.zw;
@@ -332,17 +387,21 @@ struct Shaded {
     @location(0) color: vec4<f32>,
     // The mirror's lookup alone, before any mix (view3d's `reflection` target).
     @location(1) reflection: vec4<f32>,
+    // #268: the foam's share mixed in, the steep waves', the wake's and the shore's together
+    // (view3d's `foam` target).
+    @location(2) foam: f32,
 };
 
 struct Lit {
     color: vec3<f32>,
     mirrored: vec3<f32>,
+    foam: f32,
 };
 
 // The rest point under a point x on the surface: the horizontal map inverted by one fixed-point
 // step, off by about s k A times the move (a few cm), which only shifts where it's read.
-fn rest_of(x: vec2<f32>, t: f32) -> vec2<f32> {
-    return x - waves(x, t).offset.xz;
+fn rest_of(x: vec2<f32>, t: f32, scale: f32) -> vec2<f32> {
+    return x - waves_scaled(x, t, scale).offset.xz;
 }
 
 // Whether the points the pixel's centre ray meets at depths a and b lie further apart than one
@@ -396,6 +455,7 @@ fn shade_fs(@builtin(position) at: vec4<f32>) -> Shaded {
     let edge = count < SAMPLES || step;
     let looks = select(1, SAMPLES, edge);
     var sum = vec3<f32>(0.0);
+    var foamed = 0.0;
     var mirrored = vec3<f32>(0.0);
     var looked = false;
     for (var s = 0; s < looks; s++) {
@@ -405,6 +465,7 @@ fn shade_fs(@builtin(position) at: vec4<f32>) -> Shaded {
         }
         let lit = shade(at.xy, select(centre, z[s], edge), size);
         sum += lit.color;
+        foamed += lit.foam;
         // The `reflection` target keeps the lookup of the sample the resolve chose.
         if !looked {
             mirrored = lit.mirrored;
@@ -414,7 +475,7 @@ fn shade_fs(@builtin(position) at: vec4<f32>) -> Shaded {
     let color = sum / f32(looks);
     // The `reflection` target holds a lookup only where the resolved ID is the water's.
     let reflection = select(vec4<f32>(0.0), vec4<f32>(mirrored, 1.0), resolved);
-    return Shaded(vec4<f32>(color, 1.0), reflection);
+    return Shaded(vec4<f32>(color, 1.0), reflection, foamed / f32(looks));
 }
 
 // The water at the point on the pixel's centre ray at depth z: the bed tinted through it, the
@@ -424,8 +485,15 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
     let px = vec2<i32>(xy);
     let p = world_at(xy, z, size);
     let v = normalize(params.eye.xyz - p);
-    let rest = rest_of(p.xz, t);
-    let w = waves(rest, t);
+    // #268: the shore's field here, read once: the calm it scales the waves by, its foam band
+    // and its shade.
+    var shore = Shore(1e30, 1e30);
+    if params.shore[2].w > 0.5 {
+        shore = shore_at(p.xz);
+    }
+    let scale = calm(shore.d);
+    let rest = rest_of(p.xz, t, scale);
+    let w = waves_scaled(rest, t, scale);
     var n = normalize(cross(w.tz, w.tx));
     // Ripples, rain and the wake bend the normal by their slopes.
     var slope = vec2<f32>(0.0);
@@ -472,7 +540,7 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
     if !far {
         let q = world_at(vec2<f32>(bent) + 0.5, zb, size);
         let level = p.y - w.offset.y;
-        if q.y <= level + waves(rest_of(q.xz, t), t).offset.y {
+        if q.y <= level + waves_scaled(rest_of(q.xz, t, scale), t, scale).offset.y {
             d = length(q - p);
         }
     }
@@ -500,6 +568,22 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
         // The wake's foam streaks along its path: its texture stretched that way.
         foam = max(foam, foam_cover(wk.foam, foam_texture(vec2<f32>(wk.back * 0.5, wk.out * 3.0), pixel * 3.0)));
     }
+    if params.shore[2].w > 0.5 && shore.d < params.shore[1].x {
+        // #268: the shore's band, drifting with the ripples: dense to 0.82 of its width, its
+        // outer edge frayed by foam's texture between 0.9 and 1 of the width, its body mottled
+        // by that texture; seeded noise clears about `breakup` of it in soft holes a few
+        // decimetres across, and nothing adds foam past the width.
+        let width = params.shore[1].x;
+        let q = rest - params.drift.xy * t;
+        let tex = foam_texture(q, pixel);
+        var band = (1.0 - smoothstep(0.82 * width, width * (0.9 + 0.1 * tex), shore.d)) * (0.8 + 0.2 * tex);
+        let breakup = params.shore[1].z;
+        if breakup > 0.0 {
+            let n = clamp((0.6 * noise(q * 3.1, 0x73u) + 0.4 * noise(q * 7.9, 0x74u) - 0.5) * 2.6 + 0.5, 0.0, 1.0);
+            band *= smoothstep(breakup - 0.12, breakup + 0.12, n);
+        }
+        foam = max(foam, band * params.shore[1].y);
+    }
     if params.wake.w > 0.5 {
         // The planted foam keeps a running value from frame to frame.
         let k = u32(px.x) % 1024u;
@@ -508,7 +592,13 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>) -> Lit {
     }
     let lit = params.sun.w * max(dot(n, params.sun.xyz), 0.0) + dot(params.ambient.rgb, vec3<f32>(1.0 / 3.0));
     color = mix(color, vec3<f32>(0.88, 0.91, 0.93) * lit, foam);
-    return Lit(color, mirrored);
+    // #268: water an item of the shore covers from above darkens by `shade`, over a pixel's span
+    // inside the footprint's edge and never outside it.
+    if params.shore[2].w > 0.5 && shore.c < 0.0 {
+        let cover = 1.0 - smoothstep(-max(span, 1e-4), 0.0, shore.c);
+        color *= 1.0 - params.shore[1].w * cover;
+    }
+    return Lit(color, mirrored, foam);
 }
 
 // The bed's depth copied out of the depth target inside the water's rectangle, before the water
