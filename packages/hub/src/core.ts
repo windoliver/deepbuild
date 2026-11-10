@@ -48,6 +48,7 @@ import { couldDo, reachOf, struck, type Reach, type ReachTool } from './could-do
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
 import { SLASH_COMMAND, adapterOf, coveredBy, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
+import { continueLine, fit, type Part, type Piece } from './context-fit.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { cachedRuleFiles, creditOf, handleOf as ruleHandle, pageLines, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, setOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
@@ -64,7 +65,7 @@ import { identityAt } from './identity.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
-import { NEWER_SET, OLDER_SET } from './status.js';
+import { NEWER_SET, OLDER_SET, UNREAD_WINDOW } from './status.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
@@ -76,7 +77,7 @@ import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } fro
 import { OpenItems } from './open-items.js';
 import { claimState, isStatusQuestion, newestClaim, statusAnswer, type ClaimState } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackConfig, slackThread, slackThreads } from './reach.js';
-import { blockedCause, blockedReading, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
+import { blockedCause, blockedReading, clockTime, dueReading, ownerOf, promisesIn, setPromise, promiseToken, wakeText, type PromiseState } from './promises.js';
 import { Answers, answerText, type Answer } from './answers.js';
 import { RUN_AS_YOU, Runs } from './runs.js';
 import { Kinds, type ReviewOf } from './kinds.js';
@@ -113,6 +114,9 @@ const DAY = 24 * HOUR;
 const sql = (text: string): string => text.replace(/'/g, "''");
 /** A session ID as a handle holds it: letters and digits only. */
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
+/** A rules block as pieces, one per line under its head: a rule you typed must reach the model inline (#1296). */
+const rulePieces = (head: string, rules: readonly (readonly [string, string])[]): Piece[] =>
+  [{ text: `${head}:`, keep: true }, ...rules.map(([handle, text]) => ({ text: `- ${text}`, ids: [handle], ...(handle.startsWith('rule:typed') ? { keep: true } : {}) }))];
 /** The GitHub CLI's token, only while HOME is your own account's home: the archive reads CI logs with it (#20). */
 const ghToken = (): Promise<string | undefined> => {
   if (!ownHome()) return Promise.resolve(undefined);
@@ -4182,12 +4186,12 @@ export class Core {
     await this.append(this.connection('core', { session }), { v: 1, id: ulid(ts), kind: 'session.rules_delivered', ts, subject: `session:${letters(session)}`, data: { via, pos: Number(row?.pos ?? 0), rules } });
   }
   /** At a session's start: its rules, first; after a compaction or a resume its next prompt carries every rule you typed, and a scoped rule is heard once more. */
-  private async startRules(meta: HookMeta): Promise<string | undefined> {
+  private async startRules(meta: HookMeta): Promise<Piece[] | undefined> {
     const st = this.ruleStateOf(meta.session);
     const set = await this.startSet(meta.session, meta.cwd, meta.agent);
     st.given = new Set(set.handles);
     await this.delivered(meta.session, 'start', set.handles);
-    return set.lines.size ? `${RULES_HEAD}:\n${[...set.lines.values()].map((t) => `- ${t}`).join('\n')}` : undefined;
+    return set.lines.size ? rulePieces(RULES_HEAD, [...set.lines]) : undefined;
   }
   /** A rule you type, `rule: <text>.`, saved at once as yours; resolves with the targets this prompt typed. */
   private async saveTyped(prompt: string): Promise<Set<string>> {
@@ -4209,7 +4213,7 @@ export class Core {
     return out;
   }
   /** At a prompt: a new set (a rule typed anywhere, a slice entry) is carried and recorded; after a compaction or a resume, every rule you typed. */
-  private async promptRules(meta: HookMeta, prompt: string): Promise<string | undefined> {
+  private async promptRules(meta: HookMeta, prompt: string): Promise<Piece[] | undefined> {
     const typedNow = await this.saveTyped(prompt);
     const st = this.ruleStateOf(meta.session);
     const set = await this.startSet(meta.session, meta.cwd, meta.agent);
@@ -4222,7 +4226,7 @@ export class Core {
     st.given = new Set(set.handles);
     st.full = false;
     await this.delivered(meta.session, 'prompt', set.handles);
-    return carried.length ? `${RULES_HEAD}${typed.length ? ', every rule you typed again after the compaction or resume' : ', new since your last prompt'}:\n${carried.map((h) => `- ${set.lines.get(h)}`).join('\n')}` : undefined;
+    return carried.length ? rulePieces(`${RULES_HEAD}${typed.length ? ', every rule you typed again after the compaction or resume' : ', new since your last prompt'}`, carried.map((h) => [h, set.lines.get(h)!])) : undefined;
   }
   /**
    * At a tool call, behind its hook (#344): the scoped rules the server's reply carried, recorded as delivered; an agent's
@@ -4374,13 +4378,30 @@ export class Core {
       this.abandoned.delete(meta.id);
     }
   }
+  /**
+   * A reply's context inside the cap the agent's facts set on injected output (#1296): under it, the parts joined as
+   * ever; past it, the rules you typed and the requirement IDs inline first, the rest kept as evidence and named by its
+   * handle on a line saying where to continue, and the record says which part went how. The planted wrong program
+   * sends the whole block, which the agent cuts to a preview.
+   */
+  /** The extensions' context for a call, fitted as the core's own is (#1296). */
+  fitContext(meta: HookMeta, parts: Part[], join: string): Promise<string> { return this.fitted(meta, parts, join); }
+  private async fitted(meta: HookMeta, parts: Part[], join?: string): Promise<string> {
+    const cap = Number(((adapterOf(meta.agent)?.facts as Obj | undefined)?.contextOutput as Obj | undefined)?.capChars) || Infinity;
+    const out = fit(parts, this.options.plant === 'sends-block-whole' ? Infinity : cap, join);
+    if (!out.rest) return out.inline;
+    const handle = await this.record.keep(this.connection('core'), { bytes: new TextEncoder().encode(out.rest), kind: 'hook.context', source: meta.event });
+    const ts = this.now();
+    await this.append(this.connection('core', { session: meta.session }), { v: 1, id: ulid(ts), kind: 'session.context_fit', ts, subject: `session:${letters(meta.session)}`, data: { event: meta.event, cap, chars: out.inline.length + out.rest.length, inline: out.inlineNames, inline_ids: out.inlineIds, by_handle: out.restNames, handle }, evidence: [handle.slice(3)] });
+    return [out.inline, continueLine(handle, out.restNames, cap)].filter(Boolean).join('\n\n');
+  }
   private async buildReply(meta: HookMeta, until: number): Promise<{ context?: string; block?: string; message?: string }> {
     const own = !FOREIGN.has(meta.agent) && meta.session;
     // A tool call's reply carries a message typed mid-turn and the notices waiting for the session (#340, #352).
     if (own && (meta.event === 'PreToolUse' || meta.event === 'PostToolUse')) {
       return this.queue(async () => {
         const ack = this.acknowledge(meta.session);
-        const context = [ack.context, await this.siblings.deliver(meta, until)].filter(Boolean).join('\n');
+        const context = await this.fitted(meta, [{ name: 'acknowledgement', text: ack.context, keep: true }, { name: 'sibling sessions', text: await this.siblings.deliver(meta, until) }], '\n');
         return { ...ack, ...(context ? { context } : {}) };
       });
     }
@@ -4407,7 +4428,7 @@ export class Core {
       const rules = own ? await this.queue(() => this.startRules(meta)).catch((error: unknown) => { process.stderr.write(`deep hub: no rules for ${meta.session}: ${error instanceof Error ? error.message : String(error)}\n`); return undefined; }) : undefined;
       // Who else is in the repo, and on what (#352).
       const siblings = own ? await this.queue(() => this.siblings.deliver(meta, until)) : undefined;
-      const context = [rules, await placed, brief, open, answers, taste, siblings].filter(Boolean).join('\n\n');
+      const context = await this.fitted(meta, [{ name: 'rules', ...(rules ? { pieces: rules } : {}) }, { name: 'build products', text: await placed }, { name: 'briefing', text: brief }, { name: 'requirement IDs', ...(open ? { pieces: open.text.split('\n').map((text, i) => ({ text, keep: true, ...(i === 0 ? { ids: open.ids } : {}) })) } : {}) }, { name: 'answers', text: answers, keep: true }, { name: 'taste', text: taste }, { name: 'sibling sessions', text: siblings }]);
       return context ? { context } : {};
     }
     if (!own || (meta.event === 'UserPromptSubmit' && childPrompt(meta))) return {};
@@ -4477,7 +4498,8 @@ export class Core {
         // A rule you typed anywhere, or every one after a compaction or a resume (#344).
         const rules = await this.promptRules(meta, prompt).catch((error: unknown) => { process.stderr.write(`deep hub: rules at ${meta.session}'s prompt: ${error instanceof Error ? error.message : String(error)}\n`); return undefined; });
         const siblings = await this.siblings.deliver(meta, until);
-        const context = [rules, answers, promised, notes ? this.noteText(notes) : undefined, ...r.later.splice(0).filter((text) => !prompt.includes(text)), landed && `DeepBuild: ${landed}`, slow, ack.context, taste, siblings].filter(Boolean).join('\n\n');
+        const later = r.later.splice(0).filter((text) => !prompt.includes(text)).map((text) => ({ name: 'continues', text }));
+        const context = await this.fitted(meta, [{ name: 'rules', ...(rules ? { pieces: rules } : {}) }, { name: 'answers', text: answers, keep: true }, { name: 'promised checks', text: promised }, { name: 'notes', text: notes ? this.noteText(notes) : undefined }, ...later, { name: 'verdict', text: landed ? `DeepBuild: ${landed}` : undefined }, { name: 'slow verdicts', text: slow }, { name: 'acknowledgement', text: ack.context, keep: true }, { name: 'taste', text: taste }, { name: 'sibling sessions', text: siblings }]);
         const message = [status, ack.message].filter(Boolean).join('\n');
         return { ...(context ? { context } : {}), ...(message ? { message } : {}) };
       });
@@ -5769,7 +5791,7 @@ export class Core {
         await this.asks.notifications(setting !== 'allowed');
         return { reported: true };
       }
-      case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => { this.tasks.windowChanged(); return { reported: true }; });
+      case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => { this.tasks.windowChanged(); this.sessionWindow(params); return { reported: true }; });
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
   }
@@ -5846,8 +5868,27 @@ export class Core {
   }
 
   /** deep status's rows, a person's only of the sessions they may see (#1338). */
+  /**
+   * A five-hour reading the status line forwarder sent with the session its input names (#1296): kept for that
+   * session's row alone, and only for a session the hub has met through its hooks.
+   */
+  private sessionWindow(params: Obj): void {
+    const five = isObj(params.rate_limits) && isObj(params.rate_limits.five_hour) ? params.rate_limits.five_hour : undefined;
+    if (typeof params.session !== 'string' || !this.sessions.has(params.session) || typeof five?.used_percentage !== 'number') return;
+    this.windowOf.set(params.session, { used: five.used_percentage, resets: typeof five.resets_at === 'number' ? five.resets_at * 1000 : null });
+  }
+  /** Each session's own five-hour reading, as its status line last sent it. */
+  private readonly windowOf = new Map<string, { used: number; resets: number | null }>();
   private async statusSeen(role: string): Promise<StatusRow[]> {
     const rows = await statusRows((sql) => this.record.raw(sql), this.now());
+    for (const row of rows) {
+      const own = this.windowOf.get(row.id);
+      const unread = row.readings?.[0]?.startsWith(UNREAD_WINDOW);
+      // The planted wrong programs: a session with no reading shows 0%, or the newest reading another session sent.
+      const carried = this.options.plant === 'window-carried-from-other-repo' && unread ? [...this.windowOf.values()].at(-1) : undefined;
+      const shown = own ?? carried ?? (this.options.plant === 'window-unknown-as-zero' && unread ? { used: 0, resets: null } : undefined);
+      if (shown) row.readings = [`5 h · ${Math.max(0, 100 - shown.used)}% left${shown.resets ? ` · resets ${clockTime(shown.resets)}` : ''}`, ...(row.readings ?? []).filter((r) => !r.startsWith(UNREAD_WINDOW))];
+    }
     const seen = role.startsWith('person:') ? this.seenBy(role) : '';
     if (!seen) return rows;
     const visible = new Set(((await this.record.raw(`SELECT DISTINCT session_id AS id FROM events WHERE session_id IS NOT NULL${seen}`)) as { id: string }[]).map((r) => r.id));

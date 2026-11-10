@@ -166,6 +166,11 @@ function runCase(c: Case, fill: Fill, headless: boolean): Ran {
       answering();
       try { return reply.call(fill.adapter, answer, request); } catch (error) { throw new Stop('FAIL', `permissionReply threw: ${String(error)}`, ['type']); }
     },
+    context(event, text) {
+      const reply = fill.adapter.contextReply;
+      if (typeof reply !== 'function') throw new Stop('BLOCKED', `the adapter has no contextReply, so the harness can't read how it gives the model a block on ${fill.surface}`, []);
+      try { return reply.call(fill.adapter, event, text); } catch (error) { throw new Stop('FAIL', `contextReply threw: ${String(error)}`, ['type']); }
+    },
     bounds(panel): Rect {
       probes.push('bounds');
       // No harness here renders a panel, so none has geometry to measure; the probe is never faked.

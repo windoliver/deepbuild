@@ -198,10 +198,14 @@ export type Plant =
   // one that judges a claim on the bootstrap's commands alone, so a PR says Closes past an unproven criterion, and an
   // engine that reads a stopped run, a full disk, a missing stack and an expired credential as FAIL.
   | 'drafted-spec-only' | 'bootstrap-commands-only' | 'failures-as-fail'
+  // #1296's: a doctor that reads only your user settings for a status line, a session with no window reading shown
+  // at 0% or with another repo's reading, and a hub that sends a hook's context whole past the cap.
+  | 'statusline-user-settings-only' | 'window-unknown-as-zero' | 'window-carried-from-other-repo' | 'sends-block-whole'
   // #1922's: a job key over the params' text as written, one without the tool's version, and a host whose tool build
   // hashes only the entry file, or adds where the files are, or when they were modified.
   | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes';
 const PLANTS: readonly string[] = [
+  'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
