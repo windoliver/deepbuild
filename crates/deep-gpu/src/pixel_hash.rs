@@ -4,7 +4,6 @@
 //! `pixel_hash.wgsl`.
 
 use deep_canvas::steps::hash1;
-use wgpu::util::DeviceExt as _;
 
 const SOURCE: &str = include_str!("pixel_hash.wgsl");
 /// Invocations a workgroup covers.
@@ -111,7 +110,7 @@ pub struct PixelHash {
 }
 
 impl PixelHash {
-    pub fn new(device: &wgpu::Device, planted: Planted) -> PixelHash {
+    pub fn new(device: &crate::counted::Wgpu, planted: Planted) -> PixelHash {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("pixel hash"),
             source: wgpu::ShaderSource::Wgsl(SOURCE.into()),
@@ -135,8 +134,8 @@ impl PixelHash {
     /// read back.
     pub fn hash(
         &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &crate::counted::Wgpu,
+        queue: &crate::counted::Queue,
         bytes: &[u8],
         size: [u32; 2],
         format: Format,
@@ -148,8 +147,8 @@ impl PixelHash {
     /// a render while checking).
     pub fn sums(
         &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &crate::counted::Wgpu,
+        queue: &crate::counted::Queue,
         bytes: &[u8],
         size: [u32; 2],
         format: Format,
@@ -159,8 +158,8 @@ impl PixelHash {
 
     fn run(
         &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &crate::counted::Wgpu,
+        queue: &crate::counted::Queue,
         bytes: &[u8],
         size: [u32; 2],
         format: Format,

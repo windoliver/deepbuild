@@ -73,6 +73,7 @@ import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
 import { aboutSessions, openIndex, pageClaims, search, type IndexFill } from './search.js';
+import { changeSentence, openItemSentence, verdictSentence } from './sentences.js';
 import { gateTokens, openGitHub, type AppKey, type GitHub, type GitHubPlant } from '@deepbuild/github';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
 import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
@@ -6093,8 +6094,27 @@ export class Core {
         files.length ? `wrote ${files.join(', ')}` : '',
         next_issue ? `next issue #${next_issue.number} ${next_issue.url}` : '',
       ].filter(Boolean).join(' · ');
-      return { change: { claim, runs, verdicts, line, second, checks: state.checks, asks, produced: { pr: url ?? null, files, pages: [] }, next_issue } };
+      // One plain sentence on the change, each verdict and each open item, from the template (#1999).
+      const say = (sentence: string): Promise<string> => this.options.plant === 'sentence-from-model' ? this.planted(sentence) : Promise.resolve(sentence);
+      const [where] = state.session ? (await this.record.raw(`SELECT worktree FROM sessions WHERE id = ?`, [state.session])) as { worktree: string | null }[] : [];
+      const named = files.map((f) => where?.worktree && f.startsWith(`${where.worktree}/`) ? relative(where.worktree, f) : basename(f));
+      const said = this.options.plant === 'sentence-from-agent-text' && state.session ? this.lastMessage.get(state.session) : undefined;
+      const sentence = said ?? await say(changeSentence(named));
+      const rounds = new Map(((await this.record.raw(`SELECT json_extract(data, '$.verdict') AS verdict, json_extract(data, '$.round') AS round FROM events WHERE kind = 'claim.sent_back' AND subject = ?`, [`claim:${id}`])) as { verdict: string; round: number }[]).map((r) => [r.verdict, Number(r.round)]));
+      for (const v of verdicts as Obj[]) {
+        const reqs = (JSON.parse(String(v.requirements ?? '[]')) as Obj[]).map((r) => ({ req: String(r.req), outcome: String(r.outcome), smallest: typeof r.smallest === 'string' ? r.smallest : null, points_to: typeof r.points_to === 'string' ? r.points_to : null }));
+        v.sentence = await say(verdictSentence({ outcome: String(v.outcome), requirements: reqs, smallest: typeof v.smallest === 'string' ? v.smallest : null, stale: Boolean(v.stale), round: rounds.get(String(v.handle)) ?? null }));
+      }
+      const open_items: Obj[] = [];
+      for (const item of (await this.record.raw(`SELECT text FROM open_items WHERE task_ref = ? AND closed IS NULL ORDER BY opened`, [state.task])) as { text: string }[]) {
+        open_items.push(this.options.plant === 'open-item-no-sentence' ? { text: item.text } : { text: item.text, sentence: await say(openItemSentence(item.text)) });
+      }
+      return { change: { claim, sentence, runs, verdicts, open_items, line, second, checks: state.checks, asks, produced: { pr: url ?? null, files, pages: [] }, next_issue } };
     });
+  }
+  /** The planted wrong program `sentence-from-model`: a headless agent call writes the sentence from the template's. */
+  private planted(sentence: string): Promise<string> {
+    return new Promise((done) => execFile('claude', ['-p', `Write one plain sentence saying: ${sentence}`], { timeout: 30_000 }, (error, out) => done(error ? sentence : String(out).trim() || sentence)));
   }
   /** evidence/:sha: what the store holds of one file, never its bytes. */
   private evidence(params: Obj): Promise<Obj> {

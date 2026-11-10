@@ -1,0 +1,54 @@
+Base commit: 579001ddb ("Merge pull request #2168 from windoliver/worktree-github-issue-405-4d9104"), the merge base
+Machine: macOS on Apple silicon, the Metal device (the shared, loaded Mac this job ran on)
+Command: npx vitest run --root tests/acceptance/2186 --no-file-parallelism --testTimeout=600000
+         (run once, through scripts/lease, which ran it unleased: no `deep` on PATH and no built CLI; `npm ci` first,
+         since node_modules was missing; cargo on PATH from the 1.99.1 toolchain)
+Type-check: npx tsc -p tests/acceptance/2186/tsconfig.json passes (exit 0, no output).
+
+Result: Test Files 2 failed (2), Tests 5 failed (5). Each file built `cargo build --locked --bin deep-gpu` (the shipped
+build) without error, every `deep-gpu run` exited 0 with one answer, every call was answered (no refusal), every final
+was written, named by its SHA-256 and 320 × 240, and view3d's subject centre was lit in every test. Each test then
+failed at its criterion's own assertion, the pixel comparison, with the values the issue measured at 579001dd:
+
+canonical.test.ts
+  #2186.540fbb6b AC1 canonical render_back of frame 1 under a shadowed key sun and two shadowed spots …
+    AssertionError: #2186.540fbb6b AC1: canonical's final is within 2 levels of view3d's frame 0 in every 8-bit
+    channel of every pixel; 55040 of 76800 pixels differ by more than 2, the worst by 213 levels (at (105, 88),
+    channel R); at the subject's centre (160, 130) canonical reads [0,0,0,255] and view3d reads [106,106,106,255]:
+    expected 55040 to be +0
+
+  #2186.f9f118b5 AC2 with key's shadow set to false …
+    AssertionError: #2186.f9f118b5 AC2 (key's shadow off): canonical's final is within 2 levels of view3d's frame 0
+    in every 8-bit channel of every pixel; 39835 of 76800 pixels differ by more than 2, the worst by 40 levels (at
+    (105, 90), channel R); at the subject's centre (160, 130) canonical reads [137,137,137,255] and view3d reads
+    [168,168,168,255]: expected 39835 to be +0
+
+  #2186.f9f118b5 AC2 with fill-a's shadow set to false …
+    AssertionError: #2186.f9f118b5 AC2 (fill-a's shadow off): canonical's final is within 2 levels of view3d's frame 0
+    in every 8-bit channel of every pixel; 54808 of 76800 pixels differ by more than 2, the worst by 149 levels (at
+    (0, 223), channel R); at the subject's centre (160, 130) canonical reads [75,75,75,255] and view3d reads
+    [106,106,106,255]: expected 54808 to be +0
+
+  #2186.f9f118b5 AC2 with fill-b's shadow set to false …
+    AssertionError: #2186.f9f118b5 AC2 (fill-b's shadow off): canonical's final is within 2 levels of view3d's frame 0
+    in every 8-bit channel of every pixel; 54809 of 76800 pixels differ by more than 2, the worst by 149 levels (at
+    (319, 223), channel R); at the subject's centre (160, 130) canonical reads [76,76,76,255] and view3d reads
+    [106,106,106,255]: expected 54809 to be +0
+
+live.test.ts
+  #2186.b9ad6749 AC3 a live session on the scene, its frame 1 captured …
+    AssertionError: #2186.b9ad6749 AC3: live frame 1's final is within 2 levels of view3d's frame 0 in every 8-bit
+    channel of every pixel; 55040 of 76800 pixels differ by more than 2, the worst by 213 levels (at (105, 88),
+    channel R); at the subject's centre (160, 130) live frame 1 reads [0,0,0,255] and view3d reads
+    [106,106,106,255]: expected 55040 to be +0
+
+These are the issue's numbers: 55,040 pixels over, up to 213 levels, 0 against 106 at the subject's centre with every
+shadow on; 137 against 168 with the key's shadow off; 75–76 against 106 with either spot's off; and a live session's
+frame 1 reading as the canonical render does. Durations: canonical.test.ts 6.4 s, live.test.ts 3.7 s, 10.4 s in all
+(the build was already current).
+
+The run left Vitest's cache in tests/acceptance/2186/node_modules/.vite; it was deleted.
+
+After the run, helpers.ts lost its `export` on names no test imports and an unused `str` helper; nothing a test runs
+changed, so the suite was not run again. `npx tsc -p tests/acceptance/2186/tsconfig.json` was run again on the final
+files and passes.

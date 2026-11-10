@@ -3309,7 +3309,7 @@ For: the city (one building recipe per lot face of a district plate), the dioram
 - `repeat: {each: {part: named part, domain: face | point | curve}, as}` (beside count, over, on, along and pack)
 - Per element: `i`, `center: vec3, m`, `normal: vec3`, `area: m²`, `size: [m, m]` and the part's attributes
 
-**Semantics:** Expands at check into one derived step per element of a builder's named part, in index order, with element values available to let expressions. The part's element count is computable from its params, so the count is fixed at check. Seeds come from (instance, step, element index), so adding a face never reseeds the others.
+**Semantics:** Expands at check into one derived step per element of a builder's named part, in index order, with element values available to let expressions. `part` is `<input>#<part>`, such as `ground#top`: an `ID` input of the recipe that holds a builder item of the same document, as `along` takes an input that holds a curve, and one of that builder's named parts, and the step reads each element `e` of it under `as` as `e.i`, `e.center`, `e.normal`, `e.area`, `e.size` and `e.<attribute>`. A face is a face of the builder's polygon view, so a grid plate's faces are its cells, x fastest, then z, and a point is a welded point. An input that holds no builder item, or a part the builder lacks, is refused at check, naming the step. The part's element count is computable from its params, so the count is fixed at check. Seeds come from (instance, step, element index), so adding a face never reseeds the others.
 
 **Cost:** O(elements × steps) at check, at most 1,024 per repeat; counts against the item budget at its expanded size. Budget class: any.
 
