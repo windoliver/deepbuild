@@ -20,7 +20,7 @@ use vello_cpu::kurbo::{Affine, BezPath, Circle, Rect, RoundedRect, Shape};
 use vello_cpu::peniko::{ColorStop, Fill as FillRule, Gradient, ImageSampler};
 use vello_cpu::{
     color::{AlphaColor, Srgb},
-    Image, ImageSource, Level, Pixmap, RenderContext, RenderSettings, Resources,
+    Image, ImageSource, Pixmap, RasterizerSettings, RenderContext, RenderSettings, Resources,
 };
 
 use crate::evidence;
@@ -241,6 +241,11 @@ pub struct Renderer {
     /// #499: each video asset's frame at the time being drawn, by asset, set before a frame is
     /// prepared; an image mark of one draws it in place of a decoded picture.
     pub videos: BTreeMap<String, Arc<Pixmap>>,
+    /// What Vello CPU draws with: the scalar level and the f32 pipeline, as deep-marks-vello pins
+    /// them; only #1897's cross-machine record draws at another setting, which its record names.
+    pub raster_2d: (RenderSettings, RasterizerSettings),
+    /// #1485: each image asset the last frame drew, decoded, so the next frame decodes only what's new.
+    kept: BTreeMap<String, Arc<Pixmap>>,
 }
 
 fn color(c: Rgb) -> AlphaColor<Srgb> {
@@ -331,16 +336,38 @@ fn offset_of(template: &[&scene::Drawn], group: &[&scene::Drawn]) -> Option<[f64
         .then_some(d)
 }
 
-/// An asset read from the evidence store by its sha256 and decoded, premultiplied.
-fn decode(evidence: &Path, asset: &str, item: &str) -> Result<Arc<Pixmap>, Unfit> {
+/// A document's decoded-image cap, bytes (Image `image@1`: at most 64 MB decoded per document).
+const CAP: u64 = 64 << 20;
+
+/// An asset read from the evidence store by its sha256 and decoded, premultiplied. Its header is
+/// read first, and one whose pixels pass the `remaining` bytes is refused before it is decoded.
+fn decode(evidence: &Path, asset: &str, item: &str, remaining: u64) -> Result<Arc<Pixmap>, Unfit> {
     let path = format!("items/{item}/params/asset");
     let Some(bytes) = evidence::read(evidence, asset) else {
         return unfit("ref_unresolved", path);
     };
-    let Ok(decoded) = image::load_from_memory(&bytes) else {
+    let reader = || image::ImageReader::new(std::io::Cursor::new(&bytes[..])).with_guessed_format();
+    let Ok((w, h)) = reader()
+        .map_err(image::ImageError::IoError)
+        .and_then(|r| r.into_dimensions())
+    else {
         return unfit("out_of_range", path);
     };
-    let rgba = decoded.to_rgba8();
+    if u64::from(w) * u64::from(h) * 4 > remaining {
+        return unfit("over_budget", path);
+    }
+    let mut limits = image::Limits::default();
+    limits.max_alloc = Some(remaining);
+    let Ok(decoded) = reader()
+        .map_err(image::ImageError::IoError)
+        .and_then(|mut r| {
+            r.limits(limits);
+            r.decode()
+        })
+    else {
+        return unfit("out_of_range", path);
+    };
+    let rgba = decoded.into_rgba8();
     let (w, h) = rgba.dimensions();
     let (Ok(w), Ok(h)) = (u16::try_from(w), u16::try_from(h)) else {
         return unfit("out_of_range", path);
@@ -366,13 +393,16 @@ pub fn pixmap_of(rgba: Vec<u8>, w: u16, h: u16) -> Arc<Pixmap> {
     Arc::new(Pixmap::from_parts(rgba, w, h, meta))
 }
 
-/// Every image `frame` draws, decoded once each.
+/// Every image `frame` draws, decoded once each: one `kept` from the last frame isn't decoded again,
+/// and `kept` then holds this frame's.
 fn decode_all(
     frame: &scene::Frame,
     evidence: &Path,
     videos: &BTreeMap<String, Arc<Pixmap>>,
+    kept: &mut BTreeMap<String, Arc<Pixmap>>,
 ) -> Result<BTreeMap<String, Arc<Pixmap>>, Unfit> {
     let mut images = BTreeMap::new();
+    let mut held = 0;
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
         if let Mark::Image { item, asset, .. } = &drawn.mark {
             if let Some(frame) = videos.get(asset) {
@@ -382,10 +412,19 @@ fn decode_all(
                 // drawing made without one leaves the item empty rather than misread.
                 continue;
             } else if !images.contains_key(asset) {
-                images.insert(asset.clone(), decode(evidence, asset, item)?);
+                let pixmap = match kept.get(asset) {
+                    Some(p) => p.clone(),
+                    None => decode(evidence, asset, item, CAP.saturating_sub(held))?,
+                };
+                held += pixmap.data_as_u8_slice().len() as u64;
+                images.insert(asset.clone(), pixmap);
             }
         }
     }
+    *kept = (images.iter())
+        .filter(|(asset, _)| !videos.contains_key(*asset))
+        .map(|(asset, p)| (asset.clone(), p.clone()))
+        .collect();
     Ok(images)
 }
 
@@ -395,6 +434,8 @@ impl Renderer {
             shaper: Shaper::new(),
             resources: Resources::new(),
             videos: BTreeMap::new(),
+            raster_2d: (deep_marks_vello::settings(), deep_marks_vello::rasterizer()),
+            kept: BTreeMap::new(),
         }
     }
 
@@ -423,7 +464,7 @@ impl Renderer {
             frame.size[1],
             &mut self.shaper,
         ));
-        let images = decode_all(&frame, evidence, &self.videos)?;
+        let images = decode_all(&frame, evidence, &self.videos, &mut self.kept)?;
         // Each text mark's font names a role the shaper bundles.
         for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
             if let Mark::Text { item, spec, .. } = &drawn.mark {
@@ -470,7 +511,7 @@ impl Renderer {
             frame: drawing.frame.clone(),
             boxes: Vec::new(),
             status,
-            images: decode_all(&drawing.frame, evidence, &self.videos)?,
+            images: decode_all(&drawing.frame, evidence, &self.videos, &mut self.kept)?,
             runs: drawing.runs.clone(),
             animated: drawing.animated.clone(),
             view: None,
@@ -495,10 +536,7 @@ impl Renderer {
         ground: Option<Rgb>,
         instanced: &BTreeMap<String, (String, String)>,
     ) -> (Vec<u8>, Vec<Batch>) {
-        let settings = RenderSettings {
-            level: Level::fallback(),
-            num_threads: 0,
-        };
+        let (settings, rasterizer) = self.raster_2d;
         let mut ctx = RenderContext::new_with(size[0], size[1], settings);
         if let Some(g) = ground {
             ctx.set_paint(color(g));
@@ -574,13 +612,9 @@ impl Renderer {
         }
         ctx.flush();
         let mut pixmap = Pixmap::new(size[0], size[1]);
-        // The f32 pipeline, as deep-marks-vello pins it: a build that also enables vello_cpu's
-        // u8 pipeline would otherwise draw on that one, a code or two off (#674).
-        ctx.render_with(
-            &mut pixmap,
-            &mut self.resources,
-            deep_marks_vello::rasterizer(),
-        );
+        // The pipeline named, f32 unless a cross-machine record asks for u8: a build that also
+        // enables vello_cpu's u8 pipeline would otherwise draw on that one, a code or two off (#674).
+        ctx.render_with(&mut pixmap, &mut self.resources, rasterizer);
         (
             pixmap.take_rgba8(vello_cpu::peniko::ImageAlphaType::Alpha),
             batches,

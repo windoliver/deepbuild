@@ -4849,7 +4849,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             drawing.marks
         }
         "axis@1" => {
-            let drawing = data::axis(id, item, ctx.items, ctx.palette, pos)?;
+            let drawing = data::axis(id, item, ctx.items, ctx.palette, pos, ctx.size)?;
             fades = drawing.fades;
             drawing.marks
         }

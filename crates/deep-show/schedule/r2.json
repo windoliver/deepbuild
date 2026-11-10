@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "f3368ca30579c40734fd15b638f5136af4e655f8381456fddf7585f71caff72e",
+  "set_digest": "da7be281fec2eb144f3770f9c1e52b38a4191a971b6fb4b4bfa7324d6c3b2a5a",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -324,7 +324,7 @@
       }
     },
     "vector@1": {
-      "digest": "0158aea41637608890c4b742799200c23bc3e5f1aef98adb9c0e56b1d4b48a40",
+      "digest": "2b0f07530c67f0a57f36cc513e85d204d613ea8ea819a928a9015b078c42f418",
       "reference": "vector",
       "kit": [
         "fixtures",
@@ -755,6 +755,18 @@
         "per": "item"
       },
       {
+        "operator": "vector.glyphs",
+        "module": "vector",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "vector.glyphs"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "vector.paint",
         "module": "vector",
         "version": "1.0.0",
@@ -828,6 +840,9 @@
   "contributions": {
     "core.fields": [
       "motion.fields"
+    ],
+    "core.glyphs": [
+      "vector.glyphs"
     ],
     "core.status": [
       "look.status"

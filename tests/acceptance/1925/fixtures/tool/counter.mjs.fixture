@@ -1,0 +1,4 @@
+// A test.encode tool's second file (#1925 acceptance): the counter it reports is its own, the frames it has written.
+export function counter(written, _total, _elapsedMs) {
+  return written;
+}

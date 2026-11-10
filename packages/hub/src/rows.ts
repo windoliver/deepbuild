@@ -5,10 +5,11 @@
 import { SECTION } from './list.js';
 import { repoOf, type Reading } from './status.js';
 
-/** A row as every reader shows it (row.set@1's data, less `listed` and `order`). */
+/** A row as every reader shows it (row.set's data, less `listed` and `order`): @1 for a session or an ask, @2 for a running job (#1925). */
 export interface Row {
   id: string;
-  address: string;
+  /** Its page; a running job's row has none. */
+  address?: string;
   title: string;
   project: string | null;
   session: string;
@@ -22,17 +23,58 @@ export interface Row {
   unread: boolean;
   default?: string;
   default_at?: number;
+  /** A running job's count from its tool's own counter, and its time left once it has one (#1925). */
+  progress?: string;
 }
 /** A row with its place in the list: every reader sorts by `order`'s bytes. */
 export interface Placed { order: string; row: Row }
 
 /**
- * Where a row sits: the sessions first, by section, then by project, then by state, then by since; then the asks,
- * oldest first, as the app's window draws its sidebar and then Needs you. The one order every reader has.
+ * Where a row sits: the sessions first, by section, then by project, then by state, then by since; then the running
+ * jobs, oldest first; then the asks, oldest first, as the app's window draws its sidebar and then Needs you. The one
+ * order every reader has.
  */
 export function orderOf(row: Row): string {
   const state = row.word as Reading['state'];
+  if (row.id.startsWith('job:')) return `0|4|${pad(row.since)}|${row.id}`;
   return row.id.startsWith('ask:') ? `1|${pad(row.since)}|${row.id}` : `0|${SECTION[row.word] ?? 1}|${row.project ?? '~'}|${RANK[state] ?? 9}|${pad(row.since)}|${row.id}`;
+}
+
+/** A running job (#1925): what runs it, since when, and its tool's newest counter with when it came. */
+export interface RunningJob { key: string; kind: string; tool: string; started: number; counter?: { done: number; total: number } | { percent: number }; at?: number }
+/** How long a job runs before its row says the time left. */
+const TIME_LEFT_AFTER = 30_000;
+
+/** A length of time as every surface writes it (crates/deep-app/src/states.rs: span): "40 s", "12 min", "3 h", "2 d". */
+export function span(ms: number): string {
+  const s = Math.floor(Math.max(0, ms) / 1000);
+  return s >= 86_400 ? `${Math.floor(s / 86_400)} d` : s >= 3600 ? `${Math.floor(s / 3600)} h` : s >= 60 ? `${Math.floor(s / 60)} min` : `${s} s`;
+}
+
+/**
+ * The time a running job has left by the rate its tool's counter measured so far, once its run is 30 s old: none
+ * before, with no counter, or with nothing done yet. Never a guess from elapsed time alone.
+ */
+export function timeLeft(job: RunningJob): number | undefined {
+  if (!job.counter || job.at === undefined || job.at - job.started < TIME_LEFT_AFTER) return undefined;
+  const [done, total] = 'percent' in job.counter ? [job.counter.percent, 100] : [job.counter.done, job.counter.total];
+  return done > 0 ? ((total - done) * (job.at - job.started)) / done : undefined;
+}
+
+/**
+ * A running job's row: its kind, the word running, its count from its tool's own counter ("300 of 600", or a
+ * provider's "42%") with its time left after 30 s, and that it keeps running when the app or the session closes. A
+ * tool with no counter gives a row with no count: a reader shows how long it has run from since.
+ */
+export function jobRow(job: RunningJob): Row {
+  const counter = job.counter;
+  const count = !counter ? undefined : 'percent' in counter ? `${Math.floor(counter.percent)}%` : `${counter.done} of ${counter.total}`;
+  const left = timeLeft(job);
+  return {
+    id: `job:${job.key}`, title: job.kind, project: null, session: '', agent: null, entry: 'running', word: 'running',
+    why: `${job.tool} runs it, and it keeps running when the app or the session closes`, waits_on: null, since: job.started, actions: [], unread: false,
+    ...(count ? { progress: left === undefined ? count : `${count} · ${span(left)} left` } : {}),
+  };
 }
 
 /** Each state of the one reading, with the states table's word and status-map entry (crates/deep-app/src/states.rs: TABLE). */

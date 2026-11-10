@@ -12,6 +12,7 @@
 //! writes those two inputs of each blended group. The painter draws on any [`Canvas`] with
 //! [`Glyphs`], so Vello GPU draws a layer through the same code (`gpu`).
 
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -23,7 +24,8 @@ use deep_canvas_marks::scene::{Blend, Drawn, Scope};
 use deep_canvas_marks::story;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
-    bez, brush, image, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas, Scopes,
+    bez, brush, level_name, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas,
+    Scopes,
 };
 use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::{Affine, RoundedRect, Shape};
@@ -68,6 +70,8 @@ pub struct Request {
     pub afterglow: Option<i64>,
     /// #505: the input track the document's controls read, and a formula's planted program.
     pub formulas: crate::formulas::Ctx,
+    /// #1485's wrong program on the images' decode and cap.
+    pub image_plant: asset::Plant,
 }
 
 /// What a text's per-glyph layout reads at a frame (#496): the document, its evaluated items,
@@ -203,21 +207,6 @@ impl Config {
     }
 }
 
-/// A level by its name: `scalar`, `neon`, or the x86 level detected.
-fn level_name(level: Level) -> String {
-    if matches!(level, Level::Fallback(_)) {
-        "scalar".into()
-    } else if level.as_neon().is_some() {
-        "neon".into()
-    } else {
-        format!("{level:?}")
-            .split('(')
-            .next()
-            .unwrap_or("detected")
-            .to_lowercase()
-    }
-}
-
 /// What a painter draws glyphs on: Vello CPU's context with the drawing's resources, or Vello
 /// GPU's scene with its own.
 pub(crate) trait Glyphs: Canvas {
@@ -324,7 +313,9 @@ pub(crate) struct Painter<'a, C> {
     /// #496: what a text's per-glyph layout reads; `None` where no frame's evaluation is at hand.
     anim: Option<Arc<Anim>>,
     resources: Resources,
-    store: Option<&'a std::path::Path>,
+    pub(crate) store: Option<&'a std::path::Path>,
+    /// The decoded images kept across frames; `None` decodes each image the painter draws.
+    pub(crate) kept: Option<&'a RefCell<asset::Kept>>,
     scopes: Scopes,
     pub(crate) zoom: f64,
     spans_apart: bool,
@@ -388,6 +379,7 @@ impl<C: Glyphs> Painter<'_, C> {
             anim: None,
             resources: Resources::new(),
             store: None,
+            kept: None,
             scopes: Scopes::new(false),
             zoom: 1.0,
             spans_apart: false,
@@ -707,19 +699,17 @@ impl<C: Glyphs> Painter<'_, C> {
                 opacity,
                 adjust,
             } => {
-                let source = asset::decoded(self.store, hash, *crop, item)?;
-                let (w, h) = source.dimensions();
-                let (Ok(pw), Ok(ph)) = (u16::try_from(w), u16::try_from(h)) else {
-                    return Err(refused(
-                        "asset_undecodable",
-                        &format!("items/{item}/params/asset"),
-                    ));
+                let looks = (*opacity, adjust);
+                let (pixmap, [w, h]) = match self.kept {
+                    Some(kept) => kept
+                        .borrow_mut()
+                        .pixmap(self.store, hash, *crop, looks, item)?,
+                    None => asset::Kept::default().pixmap(self.store, hash, *crop, looks, item)?,
                 };
-                let pixmap = image(source.into_raw(), [pw, ph], *opacity, adjust);
                 let to = fit.fitted(*bounds, [w, h]);
                 self.ctx.set_paint(
                     Image {
-                        image: ImageSource::Pixmap(Arc::new(pixmap)),
+                        image: ImageSource::Pixmap(pixmap),
                         sampler: sampler(*sampling),
                     }
                     .into(),
@@ -967,14 +957,24 @@ pub(crate) fn preshape(req: &Request) {
     }
 }
 
-/// Draws a `raster` request and writes its PNG.
-pub fn answer(req: Request) -> Value {
-    match draw(&req) {
-        Ok(v) | Err(v) => v,
-    }
+thread_local! {
+    /// The images this process's `raster` lines decoded, kept from frame to frame.
+    static KEPT: RefCell<asset::Kept> = RefCell::default();
 }
 
-fn draw(req: &Request) -> Result<Value, Value> {
+/// Draws a `raster` request and writes its PNG.
+pub fn answer(req: Request) -> Value {
+    KEPT.with(|kept| {
+        kept.borrow_mut().plant = req.image_plant;
+        let answer = draw(&req, kept);
+        kept.borrow_mut().frame_ended();
+        match answer {
+            Ok(v) | Err(v) => v,
+        }
+    })
+}
+
+fn draw(req: &Request, kept: &RefCell<asset::Kept>) -> Result<Value, Value> {
     let (mut items, graphs) = items_at(
         &req.doc,
         req.t,
@@ -1052,6 +1052,7 @@ fn draw(req: &Request) -> Result<Value, Value> {
         })),
         resources: Resources::new(),
         store: req.store.as_deref(),
+        kept: Some(kept),
         scopes: Scopes::new(req.encoded_luma),
         zoom,
         spans_apart: req.spans_apart,
@@ -1187,6 +1188,7 @@ fn composite<'s>(
     }
     let sub = |p: &Painter<'s, RenderContext>| Painter {
         store: p.store,
+        kept: p.kept,
         zoom: p.zoom,
         spans_apart: p.spans_apart,
         anim: p.anim.clone(),
