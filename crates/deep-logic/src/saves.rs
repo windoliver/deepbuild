@@ -29,6 +29,7 @@ use crate::{Planted, VERSION};
 
 /// One item's carried state, as a save holds it.
 struct State {
+    failed: bool,
     memory: Vec<u8>,
     globals: Vec<u64>,
     arrays: Vec<u8>,
@@ -116,6 +117,7 @@ fn encode(w: &mut World) -> Vec<u8> {
     let mut out = (w.lives.len() as u32).to_le_bytes().to_vec();
     for (item, l) in w.piece.clone().items.iter().zip(w.lives.iter_mut()) {
         put(&mut out, item.id.as_bytes());
+        out.push(u8::from(l.failed));
         let memory = l.memory().to_vec();
         out.extend((memory.len() as u32).to_le_bytes());
         let pages: Vec<(usize, &[u8])> = memory
@@ -158,8 +160,9 @@ fn encode(w: &mut World) -> Vec<u8> {
 /// A save's state: each logic item's by ID, then each same-machine counter's steps seen.
 type Decoded = (Vec<(String, State)>, Vec<(String, u64)>);
 
-/// The state's items by ID, or None when it doesn't decode.
-fn decode(mut b: &[u8]) -> Option<Decoded> {
+/// The state's items by ID, or None when it doesn't decode or holds more than `items` logic
+/// items.
+fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
     fn take<'a>(b: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
         let (head, rest) = (b.get(..n)?, b.get(n..)?);
         *b = rest;
@@ -173,8 +176,13 @@ fn decode(mut b: &[u8]) -> Option<Decoded> {
         take(b, n)
     }
     let mut out = Vec::new();
-    for _ in 0..u32_of(&mut b)? {
+    for _ in 0..Some(u32_of(&mut b)?).filter(|n| *n <= items)? {
         let id = String::from_utf8(sized(&mut b)?.to_vec()).ok()?;
+        let failed = match take(&mut b, 1)? {
+            [0] => false,
+            [1] => true,
+            _ => return None,
+        };
         let mut memory = vec![0; Some(u32_of(&mut b)?).filter(|n| *n as u64 <= MAX_MEMORY)?];
         for _ in 0..u32_of(&mut b)? {
             let at = u32_of(&mut b)? * PAGE as usize;
@@ -194,6 +202,7 @@ fn decode(mut b: &[u8]) -> Option<Decoded> {
         out.push((
             id,
             State {
+                failed,
                 memory,
                 globals,
                 arrays,
@@ -254,10 +263,34 @@ fn listed(dir: &Path, slot: i64) -> Vec<Listed> {
     out
 }
 
+/// The saves in the folder whose header line doesn't decode: cut short or damaged before any
+/// slot can be read from them.
+fn headless(dir: &Path) -> Vec<Value> {
+    fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter_map(|path| {
+            let hash_of = path
+                .file_name()?
+                .to_str()?
+                .strip_suffix(".save")?
+                .to_string();
+            let mut line = String::new();
+            let read = fs::File::open(&path)
+                .ok()
+                .and_then(|f| BufReader::new(f).read_line(&mut line).ok());
+            let fine = read.is_some() && serde_json::from_str::<Value>(&line).is_ok();
+            (!fine).then(|| json!({"hash": hash_of, "file": path}))
+        })
+        .collect()
+}
+
 /// Writes the world's state now, at step `k`, as a save of `slot`: under a temporary name, renamed
 /// once it reads back whole; then the slot keeps it and its last good save before it (only it,
 /// once ended).
-fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathBuf), String> {
+fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathBuf, bool), String> {
     let dir = w.saves_dir.clone().ok_or("no saves folder")?;
     let piece = w.piece.clone();
     let len = piece.items.first().map_or(0, |i| i.step);
@@ -282,7 +315,7 @@ fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathB
             .map(|(c, n)| {
                 (
                     c.clone(),
-                    json!(n - l.pending.get(c).map_or(0, VecDeque::len)),
+                    json!(n.saturating_sub(l.pending.get(c).map_or(0, VecDeque::len))),
                 )
             })
             .collect();
@@ -313,19 +346,28 @@ fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathB
     let mut bytes = header.to_string().into_bytes();
     bytes.push(b'\n');
     bytes.extend(encode(w));
-    let sha = file_hash(&bytes);
-    let tmp = dir.join(format!("{sha}.tmp"));
     let io = |e: std::io::Error| format!("{}: {e}", dir.display());
-    let mut f = fs::File::create(&tmp).map_err(io)?;
-    f.write_all(&bytes)
-        .and_then(|()| f.sync_all())
-        .map_err(io)?;
-    if fs::read(&tmp).map(|b| file_hash(&b)).map_err(io)? != sha {
-        let _ = fs::remove_file(&tmp);
-        return Err(format!("the save of slot {slot} didn't read back whole"));
-    }
-    let path = dir.join(format!("{sha}.save"));
-    fs::rename(&tmp, &path).map_err(io)?;
+    // Hashed, written, synced, read back and renamed on a writer thread, never the caller's.
+    let (sha, path, on_main) = std::thread::scope(|s| {
+        s.spawn(|| {
+            let on_main = std::thread::current().name() == Some("main");
+            let sha = file_hash(&bytes);
+            let tmp = dir.join(format!("{sha}.tmp"));
+            let mut f = fs::File::create(&tmp).map_err(io)?;
+            f.write_all(&bytes)
+                .and_then(|()| f.sync_all())
+                .map_err(io)?;
+            if fs::read(&tmp).map(|b| file_hash(&b)).map_err(io)? != sha {
+                let _ = fs::remove_file(&tmp);
+                return Err(format!("the save of slot {slot} didn't read back whole"));
+            }
+            let path = dir.join(format!("{sha}.save"));
+            fs::rename(&tmp, &path).map_err(io)?;
+            Ok((sha, path, on_main))
+        })
+        .join()
+        .map_err(|_| "the save writer panicked".to_string())?
+    })?;
     let good = if ended {
         None
     } else {
@@ -334,7 +376,7 @@ fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathB
     for (_, old) in ours.iter().enumerate().filter(|(i, _)| Some(*i) != good) {
         fs::remove_file(&old.path).map_err(io)?;
     }
-    Ok((sha, path))
+    Ok((sha, path, on_main))
 }
 
 /// The adapter fingerprint a save that holds same-machine state binds, or null when it holds none.
@@ -348,7 +390,7 @@ fn fingerprint(w: &World) -> Value {
 
 /// The saves the steps before step `k` asked for, written now that every item is at step k. A
 /// slot whose newest save is ended opens only at that end, so it takes no later save.
-pub(crate) fn due(w: &mut World, k: i64) {
+pub(crate) fn due(w: &mut World, k: i64, ended_at: Instant) {
     let asked: Vec<(usize, i32, bool)> = w
         .lives
         .iter_mut()
@@ -363,13 +405,12 @@ pub(crate) fn due(w: &mut World, k: i64) {
         {
             continue;
         }
-        let t = Instant::now();
         let out = match write(w, k, slot, ended) {
-            Ok((hash, file)) => {
-                let write_ns = t.elapsed().as_nanos() as u64;
+            Ok((hash, file, on_main)) => {
+                let write_ns = ended_at.elapsed().as_nanos() as u64;
                 json!({
                     "item": w.piece.items[i].id, "slot": slot, "step": k, "hash": hash, "file": file, "ended": ended,
-                    "deep_hash": w.deep_hashes(), "write_ns": write_ns, "on_ui_thread": false,
+                    "deep_hash": w.deep_hashes(), "write_ns": write_ns, "on_ui_thread": on_main,
                 })
             }
             Err(e) => {
@@ -401,15 +442,23 @@ fn opened(
     states: Vec<State>,
     seen: u64,
 ) -> Result<World, Failed> {
+    // A save's step is one a run reaches: at least 1, and its time fits a flick count.
+    if k < 1 || piece.items.iter().any(|i| k.checked_mul(i.step).is_none()) {
+        return Err(json!({"code": "save_refused", "differs": [{"what": "state"}]}));
+    }
     let track = track_of(track);
     let mut lives = Vec::new();
     for (item, mut s) in piece.items.iter().zip(states) {
         let types = names(&item.bytes).globals;
         let globals_fit =
             s.globals.len() == types.len() || (planted.save_drops_globals && s.globals.is_empty());
+        if !globals_fit {
+            return Err(
+                json!({"code": "save_refused", "differs": [{"what": "globals", "item": item.id, "save": s.globals.len(), "piece": types.len()}]}),
+            );
+        }
         if s.memory.len() as u64 != memory_bytes(&item.bytes)
             || s.arrays.len() != item.layout.size("writes") as usize
-            || !globals_fit
         {
             return Err(
                 json!({"code": "save_refused", "differs": [{"what": "state", "item": item.id}]}),
@@ -426,6 +475,7 @@ fn opened(
             .map(|((_, ty), x)| val(ty, *x))
             .collect();
         let mut live: Live = World::load(&item.bytes, item, &s.memory, &globals)?;
+        live.failed = s.failed;
         live.next = k;
         live.arrays = s.arrays;
         live.pending = s.pending;
@@ -457,7 +507,7 @@ pub fn open(
     frames: Option<&Value>,
 ) -> Result<Value, Value> {
     let all = listed(dir, slot);
-    let mut damaged = Vec::new();
+    let mut damaged = headless(dir);
     let mut chosen = None;
     for s in &all {
         if let Some(bytes) = s.whole() {
@@ -498,7 +548,7 @@ pub fn open(
     let state = bytes
         .iter()
         .position(|b| *b == b'\n')
-        .and_then(|n| decode(&bytes[n + 1..]));
+        .and_then(|n| decode(&bytes[n + 1..], piece.items.len()));
     let mut via = json!({"hash": save.hash, "file": save.path, "step": k, "via": "straight"});
     if let Some(f) = other {
         let mut differs = differs;
@@ -561,7 +611,7 @@ pub fn open(
         let mut w = opened(&piece, track, planted, k, vec![new], seen(&machine)).map_err(fits)?;
         w.saves_dir = Some(dir.to_path_buf());
         w.adapter = adapter.to_string();
-        let (hash, file) = write(&mut w, k, slot as i32, ended)
+        let (hash, file, _) = write(&mut w, k, slot as i32, ended)
             .map_err(|e| refused("save_failed", json!({"what": e})))?;
         via = json!({"hash": hash, "file": file, "step": k, "via": "migration", "from": save.hash});
         w
@@ -622,6 +672,10 @@ fn migrate(
         r.write("memory", remap_at, table).map_err(fail)?;
     }
     let size = memory_bytes(&item.bytes) as usize;
+    let allowed = old.memory.len() as u64 + size as u64 + 4 * 1024 * 1024;
+    if memory_bytes(&m.bytes) > allowed {
+        return Err(fail(format!("the migration {} declares {} bytes of memory; its budget is the new memory plus the old plus 4 MiB, {allowed}", m.by, memory_bytes(&m.bytes))));
+    }
     let fuel = migration_fuel((old.memory.len() + size) as u64);
     let starts = r.exports(START);
     for export in [START, "migrate"]
@@ -661,6 +715,7 @@ fn migrate(
         return Err(fail(format!("the migration's new state holds {n} bytes of memory and {g} globals; the program has {size} and {globals}")));
     };
     Ok(State {
+        failed: old.failed,
         memory: new_memory.to_vec(),
         globals: new_globals
             .chunks(8)

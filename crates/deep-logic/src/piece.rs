@@ -306,10 +306,11 @@ fn saves_of(
             Some(r) => Some(asset(r).ok_or_else(|| missing(r))?),
         };
         // The migration's budget: memory the new memory plus the old plus 4 MiB, stack 256 KiB.
+        // The old memory is a save's, so check admits the largest one; the run holds it to the save's.
         let budget = Budget {
             fuel: migration_fuel(2 * memory),
             stack: 262_144,
-            memory: 2 * memory + 4 * MIB,
+            memory: memory + MAX_MEMORY + 4 * MIB,
         };
         let sandbox = Sandbox {
             planted: deep_sandbox_wasmtime::service::Planted {

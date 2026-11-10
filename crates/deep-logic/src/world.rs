@@ -203,7 +203,7 @@ struct Stored {
 pub(crate) struct Live {
     pub(crate) runner: Runner,
     pub(crate) names: Rc<Names>,
-    failed: bool,
+    pub(crate) failed: bool,
     pub(crate) next: i64,
     pub(crate) arrays: Vec<u8>,
     pub(crate) cursor: BTreeMap<String, usize>,
@@ -563,6 +563,8 @@ impl World {
     /// item is about to run step k, after its checkpoints.
     pub fn run(&mut self, until: i64, rec: &mut Record, before: &mut dyn FnMut(&mut World, i64)) {
         loop {
+            // When the steps before now ended: a save asked for there counts its time from here.
+            let ended_at = std::time::Instant::now();
             let t = (0..self.lives.len())
                 .filter(|&i| self.lives[i].next < until)
                 .map(|i| self.lives[i].next * self.piece.items[i].step)
@@ -574,7 +576,7 @@ impl World {
             }
             if let Some(k) = self.at() {
                 if self.saves_dir.is_some() {
-                    crate::saves::due(self, k);
+                    crate::saves::due(self, k, ended_at);
                 }
                 before(self, k);
             }
