@@ -326,6 +326,9 @@ alone.push('tests/acceptance/1925/');
 alone.push('tests/acceptance/408/crossing.test.ts', 'tests/acceptance/408/overlap-covered.test.ts', 'tests/acceptance/408/cut.test.ts', 'tests/acceptance/408/module-label.test.ts');
 alone.push('tests/acceptance/408-redraft-ac5/');
 timed.push('tests/acceptance/408-redraft-ac5/machines.test.ts');
+// #1819's files each build deep-show, start a hub and the bakes plug-in's model host on its fixed port 8719, and run
+// pinned open models on CPU: one file at a time.
+alone.push('tests/acceptance/1819/');
 byHand.push('tests/acceptance/408/machines.test.ts');
 // #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
 // that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the
