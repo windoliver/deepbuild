@@ -118,11 +118,15 @@ pub fn hash_caster(s: &Solid, h: &mut impl Hasher) {
     }
 }
 
-/// `t` when `s` is a caster whose coverage reads it.
+/// `t` when `s` is a caster whose coverage reads it, or one that sways.
 pub fn hash_time(s: &Solid, planted: Planted, h: &mut impl Hasher) {
     let moves = |o: &&SolidOp| !planted.ignores_t && crate::op::coverage_moves(o, planted.any_t);
     if let Some(o) = s.op.as_ref().filter(moves) {
         o.t.to_bits().hash(h);
+    }
+    // A swaying caster's shape moves with t on the GPU (#2016).
+    if let Some(w) = s.sway {
+        w.t.to_bits().hash(h);
     }
 }
 

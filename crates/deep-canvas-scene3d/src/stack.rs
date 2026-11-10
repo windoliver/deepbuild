@@ -7,14 +7,16 @@
 use std::collections::BTreeMap;
 
 use deep_canvas::ops::{cos, rad, sin};
+use deep_canvas::schedule::Canonical;
 use serde_json::{json, Value};
 
 use crate::builders::{path, Fault};
 use crate::geom::{add, cross, dot, scale, sub, unit, Mesh, V3};
 use crate::poly::{Boundary, Poly, Scheme, UvRule};
 
-/// The modifier kinds: each one's class, whether it is a GPU kind (evaluated here on the CPU
-/// from its per-instance params) and whether it reads time by its nature.
+/// The modifier kinds: each one's class, whether it is a GPU kind (a sway moves on the GPU, #2016;
+/// the others are evaluated here on the CPU from their per-instance params) and whether it reads
+/// time by its nature.
 pub const KINDS: [(&str, &str, bool, bool); 18] = [
     ("mod.array@1", "generate", false, false),
     ("mod.mirror@1", "generate", false, false),
@@ -75,11 +77,56 @@ pub fn timed(kind: &str) -> bool {
     kind_row(kind).is_some_and(|k| k.2)
 }
 
-/// An item whose enabled stack holds a modifier that reads time by its nature.
+/// An item whose enabled stack holds a modifier that reads time by its nature at build: a sway
+/// reads it on the GPU (#2016), so it never rebuilds the mesh.
 pub fn reads_time_by_kind(item: &Value) -> bool {
-    list(item)
-        .iter()
-        .any(|m| enabled(m) && timed(m.get("kind").and_then(Value::as_str).unwrap_or("")))
+    list(item).iter().any(|m| {
+        let kind = m.get("kind").and_then(Value::as_str).unwrap_or("");
+        enabled(m) && timed(kind) && kind != SWAY
+    })
+}
+
+const SWAY: &str = "mod.sway@1";
+/// Where a sway's weights ride through the modifiers after it, as any float point attribute does.
+const SWAY_WEIGHTS: &str = "\u{0}sway";
+
+/// A GPU sway (Modifier: sway; #2016): what the stack keeps for the renderer instead of moving
+/// anything at build. Vertex k moves along the wind, in the world, by amount × weights[k] ×
+/// ((1 − strength) × sin(2π hz t + phase) + strength × gust), with gust in [−1, 1] noise over
+/// the item's place less the wind's velocity × t, so no vertex moves more than amount.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Sway {
+    pub amount: f64,
+    /// Where the wind blows toward, in degrees from +x toward +z.
+    pub direction: f64,
+    /// The wind's speed in m/s and its gusts' scale in m and strength in [0, 1].
+    pub speed: f64,
+    pub scale: f64,
+    pub strength: f64,
+    pub hz: f64,
+    /// The slow sway's phase in radians, from the modifier's seed alone: identical items sway
+    /// together, and a seed per instance sets them apart.
+    pub phase: f64,
+    /// Each vertex's weight in [0, 1]: its height (0 at the lowest point, 1 at the highest) or a
+    /// stored attribute, clamped, where the sway stood; 0 off the part it names.
+    pub weights: Vec<f64>,
+}
+
+impl Canonical for Sway {
+    fn encode(&self, out: &mut Vec<u8>) {
+        let s = self;
+        [
+            s.amount,
+            s.direction,
+            s.speed,
+            s.scale,
+            s.strength,
+            s.hz,
+            s.phase,
+        ]
+        .encode(out);
+        s.weights.encode(out);
+    }
 }
 
 /// One modifier as the `geometry` call lists it.
@@ -487,6 +534,10 @@ pub fn apply(
                 )
             }
             "mod.sway@1" => {
+                // The GPU keeps one sway per instance.
+                if m.attributes.contains_key(SWAY_WEIGHTS) {
+                    return Err(at("kind"));
+                }
                 let amount = num("amount", 0.1)?;
                 let hz = num("hz", 0.4)?;
                 let wind = params.get("wind").cloned().unwrap_or(json!({}));
@@ -510,18 +561,25 @@ pub fn apply(
                         .cloned()
                         .ok_or_else(|| at("params/weight"))?,
                 };
-                let d = [cos(rad(direction)), 0.0, sin(rad(direction))];
-                deform(
-                    &m,
-                    &only,
-                    |p, k| {
-                        let along = p[0] * d[0] + p[2] * d[2];
-                        let gusting = strength * sin(TAU * (t * speed - along) / gscale);
-                        let s = amount * weights[k] * (sin(TAU * hz * t + phase) + gusting);
-                        add(p, scale(d, s))
-                    },
-                    |n| n,
-                )
+                let weights = weights
+                    .iter()
+                    .zip(&only)
+                    .map(|(w, on)| if *on { w.clamp(0.0, 1.0) } else { 0.0 })
+                    .collect();
+                let own = modifier.pointer("/params/seed").and_then(Value::as_u64);
+                let mut out = m;
+                out.attributes.insert(SWAY_WEIGHTS.into(), weights);
+                out.sway = Some(Sway {
+                    amount,
+                    direction,
+                    speed,
+                    scale: gscale,
+                    strength,
+                    hz,
+                    phase: (unit_noise(mix(own.unwrap_or(0)), 1) + 1.0) * core::f64::consts::PI,
+                    weights: Vec::new(),
+                });
+                out
             }
             "mod.bob@1" => {
                 let dy = num("amount", 0.05)? * sin(TAU * num("hz", 0.5)? * t + phase);
@@ -560,6 +618,15 @@ pub fn apply(
             }
             _ => return Err(at("kind")),
         };
+    }
+    if let Some(weights) = m.attributes.remove(SWAY_WEIGHTS) {
+        let k = rows.iter().position(|r| r.kind == SWAY && r.enabled);
+        if weights.len() != m.positions.len() {
+            return Err(format!("modifiers/{}/kind", k.unwrap_or(0)));
+        }
+        if let Some(s) = m.sway.as_mut() {
+            s.weights = weights;
+        }
     }
     Ok((m, rows))
 }
@@ -1397,15 +1464,16 @@ mod tests {
         let at = |t: f64| run(base.clone(), mods.clone(), t);
         let m = at(0.3);
         assert_eq!(m.attributes["wind"].len(), m.positions.len());
-        // The foot doesn't move; the top does, as a closed form in t.
-        for (k, p) in m.positions.iter().enumerate() {
-            if base.positions[k][1] < 1e-9 {
-                assert_eq!(*p, base.positions[k]);
-            }
+        // The sway moves nothing at build (#2016): it keeps the stored field as its weights, the
+        // foot's 0 and the top's 1, for the GPU to move by at each frame, and no t changes it.
+        let sway = m.sway.as_ref().expect("a sway");
+        assert_eq!(m.positions, base.positions);
+        assert_eq!(sway.weights, m.attributes["wind"]);
+        for (k, p) in base.positions.iter().enumerate() {
+            assert_eq!(sway.weights[k], if p[1] < 1e-9 { 0.0 } else { 1.0 });
         }
-        assert_ne!(m.positions, base.positions);
-        assert_eq!(at(0.3).positions, m.positions);
-        assert_ne!(at(0.7).positions, m.positions);
+        assert_eq!((sway.amount, sway.hz), (0.2, 1.0));
+        assert_eq!(at(0.7), m);
         let rows = apply(
             base.clone(),
             &json!({"modifiers": mods}),
