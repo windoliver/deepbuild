@@ -932,7 +932,7 @@ impl Player {
                 self.pre.copy_from_slice(&block);
             }
             let g = if bus.mute { 0.0 } else { amp(bus.gain_db) };
-            for f in block.chunks_exact_mut(2) {
+            for f in block.as_chunks_mut::<2>().0 {
                 let (l, r) = balance(f[0], f[1], bus.pan);
                 f[0] = (l as f64 * g) as f32;
                 f[1] = (r as f64 * g) as f32;

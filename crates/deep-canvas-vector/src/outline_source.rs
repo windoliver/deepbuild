@@ -47,19 +47,15 @@ fn svg_of(id: &str, item: &Value, bytes: &dyn Fn(&str) -> Option<Vec<u8>>) -> Re
         .map_err(|r| refusal("asset_missing", format!("items/{id}/params/src"), r.what()))
 }
 
+/// An SVG's contours, and for each one the fill it belongs to and that fill's rule.
+pub type Contours = (
+    Vec<Vec<[f64; 2]>>,
+    Vec<(usize, deep_canvas::outline::FillRule)>,
+);
+
 /// The contours of `svg`'s filled elements (in `part` alone, when named), each its own fill,
 /// within `tol` viewBox units; or the first stroked element with no fill.
-pub fn contours(
-    svg: &Svg,
-    part: Option<usize>,
-    tol: f64,
-) -> Result<
-    (
-        Vec<Vec<[f64; 2]>>,
-        Vec<(usize, deep_canvas::outline::FillRule)>,
-    ),
-    usize,
-> {
+pub fn contours(svg: &Svg, part: Option<usize>, tol: f64) -> Result<Contours, usize> {
     let mut rings = Vec::new();
     let mut fills = Vec::new();
     let mut k = 0;

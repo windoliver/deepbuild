@@ -131,18 +131,15 @@ fn hex(c: &image::Rgba<u8>) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
 
+/// A rendered frame's encode ms and GPU ms, its hash when asked for, and its bytes when kept.
+type Rendered = (f64, f64, Option<String>, Option<Vec<u8>>);
+
 /// Frame `n` encoded and submitted on the render side and waited for there: the encode's CPU ms
 /// and the GPU layer's ms from the end of the encode to the work done.
-fn render(
-    app: &App,
-    n: u64,
-    encoded: &Encoded,
-    hash: bool,
-    keep: bool,
-) -> Result<(f64, f64, Option<String>, Option<Vec<u8>>), Value> {
+fn render(app: &App, n: u64, encoded: &Encoded, hash: bool, keep: bool) -> Result<Rendered, Value> {
     let encoded = encoded.clone();
     app.worker
-        .call(move |state| -> Result<(f64, f64, Option<String>, Option<Vec<u8>>), String> {
+        .call(move |state| -> Result<Rendered, String> {
             let view = state.view2d.as_mut().ok_or("no 2D surface")?;
             let (drawn, encode) = loop {
                 let started = Instant::now();
@@ -537,13 +534,13 @@ fn indices_of(app: &App, out: &str, taps: &crate::print2d::Taps) -> Result<Strin
 /// A frame's surface as a picture: its premultiplied BGRA over the page's ground, RGBA rows.
 fn picture(bytes: &[u8], size: [u32; 2], ground: Rgb, black: bool) -> Vec<u8> {
     let mut out = Vec::with_capacity((size[0] * size[1] * 4) as usize);
-    for p in bytes.chunks_exact(4) {
+    for p in bytes.as_chunks::<4>().0 {
         let under = |c: u8| u32::from(c) * (255 - u32::from(p[3]));
         let over = |s: u8, g: u8| (u32::from(s) + (under(g) + 127) / 255).min(255) as u8;
         out.extend_from_slice(&[over(p[2], ground[0]), over(p[1], ground[1]), over(p[0], ground[2]), 255]);
     }
     if black {
-        out.chunks_exact_mut(4).for_each(|p| p[..3].fill(0));
+        out.as_chunks_mut::<4>().0.iter_mut().for_each(|p| p[..3].fill(0));
     }
     out
 }

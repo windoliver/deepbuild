@@ -429,7 +429,7 @@ An offline job kind, one per name: its params schema, its outputs, its key (hash
 
 ### `deep.registerJobTool`
 
-Arrives in R6 · preview · `d1:e0da15adcbf3542d5ca183fe047cf64eae611d74f104b058204f380126bb01af`
+Arrives in R6 · preview · `d1:5d582e90a4ba9fbcfeaba21aa699f1f2af376f9ac3bf395fd61a544ee8229a7e`
 
 A tool for a registered kind, pinned by name@version, its files the program the hub runs outside its process. It joins the kind once it writes each qualification fixture's expected bytes, and stays the build it qualified as.
 

@@ -323,7 +323,7 @@ impl Hub<'_> {
         let mut sessions: Vec<DocSession> = Vec::new();
         if !q.paths.is_empty() {
             if self.scenario.planted == Some(Planted::RelationFromPreviousBox) {
-                sessions = self.from_previous_boxes(&revision.drawn, &times);
+                sessions = self.solved_from_previous_boxes(&revision.drawn, &times);
             } else {
                 for t in &times {
                     let s = self.evaluated(&revision.drawn, *t);
@@ -581,7 +581,7 @@ impl Hub<'_> {
     /// The planted `relation_from_previous_box`: at each time in turn, every `at.place`
     /// relation solved against a stand-in for its target holding the box the previous
     /// evaluation left (the box at time 0 before any), the rest evaluated as shipped.
-    fn from_previous_boxes(&mut self, drawn: &Value, times: &[i64]) -> Vec<DocSession> {
+    fn solved_from_previous_boxes(&mut self, drawn: &Value, times: &[i64]) -> Vec<DocSession> {
         let targets: Vec<String> = drawn
             .get("items")
             .and_then(Value::as_object)

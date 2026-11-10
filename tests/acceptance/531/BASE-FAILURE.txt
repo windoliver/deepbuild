@@ -6,7 +6,7 @@
 # the assembler, the Rust program (wasm32, debug info) and deep-sandbox built; the Linux test fails on the Mac build first.
 
 
- RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/github-issue-531-dba4b3/agent-a4558ac5438b59e73/tests/acceptance/531
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-531-dba4b3/agent-a4558ac5438b59e73/tests/acceptance/531
 
  ❯ ac01-fuel-stack.test.ts (3 tests | 3 failed) 4765ms
    ❯ #531.024523a2 a step that runs forever or recurses forever traps where the rewrite put it, the same on two machines (3)

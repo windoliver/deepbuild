@@ -126,6 +126,11 @@ describe('a held push (#1156)', () => {
     ['sl -R ../shop push --to main', 'default'],
     ['gt submit --stack', 'origin'],
     ['git town ship', 'origin'],
+    ['git push 2>&1 | tail -5', 'origin'],
+    ['git push > /tmp/out.log', 'origin'],
+    ['git push 2>/dev/null', 'origin'],
+    ['git push #comment', 'origin'],
+    ['git push \\\n  upstream main', 'upstream'],
   ])('`%s` goes to %s', (line, ref) => {
     expect(pushTargets(line)).toEqual([{ kind: 'remote', ref }]);
   });

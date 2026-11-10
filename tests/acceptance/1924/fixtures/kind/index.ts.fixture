@@ -1,0 +1,22 @@
+// The test plug-in that holds the job kind test.hosted (#1924; README, The surface under test). It registers the kind
+// through deep.registerJob, as #1922's test.upper is registered: a params schema, one text input and one text output,
+// the key hash(tool@version, params, input hashes), no output check, and one qualification fixture. It registers no
+// tool: each tool of the kind runs off the machine and comes from fixtures/tool.
+
+/** test.hosted's params: the case to write the text in, and whether to trim it first, false unless given. */
+const PARAMS = {
+  type: 'object',
+  properties: { case: { enum: ['upper', 'lower'] }, trim: { type: 'boolean', default: false } },
+  required: ['case'],
+  additionalProperties: false,
+};
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerJob('test.hosted', {
+    schema: { params: PARAMS, inputs: { text: { media: 'text/plain' } } },
+    outputs: { text: { media: 'text/plain' } },
+    key: ['tool', 'params', 'inputs'],
+    output_checks: [],
+    qualification: { fixtures: [{ name: 'fx-greeting', params: { case: 'upper' }, inputs: { text: 'hello' }, expect: { text: 'HELLO' } }] },
+  });
+}

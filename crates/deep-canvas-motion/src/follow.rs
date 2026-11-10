@@ -219,7 +219,7 @@ fn solve(model: Model, s: &Segment, t: i64) -> Out {
 mod tests {
     use super::*;
 
-    const S: i64 = FLICKS_PER_SECOND as i64;
+    const S: i64 = FLICKS_PER_SECOND;
 
     #[test]
     fn a_transition_interrupted_midway_starts_from_where_the_value_is() {
