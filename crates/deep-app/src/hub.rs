@@ -37,39 +37,6 @@ pub fn address() -> PathBuf {
     configured_address().unwrap_or_else(|| root().join("hub.sock"))
 }
 
-/// What a replica's hub stand-in heard (#1461): every call the app makes that writes, in order, kept for the replica
-/// to apply to its own record and to keep in its trace. On only in a replica, which no shipped build has (#1457).
-#[cfg(feature = "fixtures")]
-static STOOD_IN: std::sync::Mutex<Option<Vec<(String, Value)>>> = std::sync::Mutex::new(None);
-
-/// Turns the replica's hub stand-in on: from now on calls that write go to it, never to a hub.
-#[cfg(feature = "fixtures")]
-pub fn stand_in() {
-    *STOOD_IN.lock().expect("stand-in") = Some(Vec::new());
-}
-
-/// The calls the stand-in heard since last taken.
-#[cfg(feature = "fixtures")]
-pub fn take_stood_in() -> Vec<(String, Value)> {
-    STOOD_IN
-        .lock()
-        .expect("stand-in")
-        .as_mut()
-        .map(std::mem::take)
-        .unwrap_or_default()
-}
-
-/// Whether a replica's stand-in took the call `method` with `params` in place of the hub.
-pub fn stood_in(method: &str, params: &Value) -> bool {
-    #[cfg(feature = "fixtures")]
-    if let Some(heard) = STOOD_IN.lock().expect("stand-in").as_mut() {
-        heard.push((method.to_owned(), params.clone()));
-        return true;
-    }
-    let _ = (method, params);
-    false
-}
-
 /// The hub contract the app speaks, "major.minor" (#41): the hub's `CONTRACT` in packages/hub/src/wire.ts.
 pub const CONTRACT: &str = "1.0";
 /// Every hub method the app calls (#41), which the hub's hello must list (`FEATURES` in packages/hub/src/wire.ts).
@@ -142,6 +109,41 @@ pub enum HubError {
 impl From<io::Error> for HubError {
     fn from(error: io::Error) -> Self {
         HubError::Io(error)
+    }
+}
+
+/// What a refusal says, in the hub's own words where it gave some.
+pub fn why(error: &HubError) -> String {
+    match error {
+        HubError::Refused(refusal) => refusal["message"]
+            .as_str()
+            .map_or_else(|| refusal.to_string(), str::to_owned),
+        other => format!("{other:?}"),
+    }
+}
+
+/// Issue #1462: a replica's own copy of the hub, which takes every call the app makes of it in place of a socket.
+pub type Local = std::sync::Arc<dyn Fn(&str, &Value) -> Result<Value, HubError> + Send + Sync>;
+
+static LOCAL: std::sync::Mutex<Option<Local>> = std::sync::Mutex::new(None);
+
+/// Sends the app's calls to `local` from now on: the replica's door, in no shipped build.
+#[cfg(feature = "fixtures")]
+pub fn set_local(local: Option<Local>) {
+    *LOCAL.lock().unwrap_or_else(|e| e.into_inner()) = local;
+}
+
+/// The replica's copy of the hub, when one takes the app's calls.
+pub fn local() -> Option<Local> {
+    LOCAL.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// One call the app makes of its hub on a connection of its own: a write a control asks for. Blocks, so a view runs
+/// it off the main thread.
+pub fn call_app(method: &str, params: Value) -> Result<Value, HubError> {
+    match local() {
+        Some(local) => local(method, &params),
+        None => HubClient::app()?.call(method, params),
     }
 }
 

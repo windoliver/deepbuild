@@ -269,6 +269,8 @@ pub struct Shipped {
         std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>,
         Vec<crate::list::Item>,
     )>,
+    /// What you typed in the list, and when the last key came: typing moves to the first row it starts (#1462).
+    typed: (String, u64),
 }
 
 /// The sidebar's open session, drawn in the selected fill with a bar at its leading edge, and the one keyboard focus
@@ -353,7 +355,59 @@ impl Shipped {
             hovered: false,
             pressed: None,
             built: None,
+            typed: (String::new(), 0),
         }
+    }
+
+    /// A key while the list holds the keyboard (#1462): the arrows move along it, Return opens the row, and a letter
+    /// or digit moves to the first row whose title or project starts with what you typed, hiding nothing.
+    fn list_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let stroke = &event.keystroke;
+        let m = stroke.modifiers;
+        if m.platform || m.control || m.alt || m.function {
+            return;
+        }
+        let rows = list_rows(cx);
+        let ids: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
+        let key = stroke.key.as_str();
+        match key {
+            "up" | "down" => {
+                self.rows.key(key, &ids);
+            }
+            "enter" | "space" => {
+                let Some(row) = rows
+                    .iter()
+                    .find(|row| Some(&row.id) == self.rows.focused.as_ref())
+                else {
+                    return;
+                };
+                self.rows.selected = Some(row.id.clone());
+                let address = row.address.clone();
+                crate::open::open(&address, window, cx).ok();
+            }
+            "escape" => {
+                CONTEXT.with(|context| *context.borrow_mut() = None);
+            }
+            typed if typed.chars().count() == 1 && typed.chars().all(|c| c.is_alphanumeric()) => {
+                let now = now();
+                let (words, at) = &mut self.typed;
+                if now.saturating_sub(*at) > 1000 {
+                    words.clear();
+                }
+                words.push_str(&typed.to_lowercase());
+                *at = now;
+                let words = words.clone();
+                if let Some(row) = rows.iter().find(|row| {
+                    row.title.to_lowercase().starts_with(&words)
+                        || row.project.to_lowercase().starts_with(&words)
+                }) {
+                    self.rows.focused = Some(row.id.clone());
+                }
+            }
+            _ => return,
+        }
+        cx.stop_propagation();
+        cx.notify();
     }
 
     /// Sets the view's next tick at the moment the soonest age it drew, as of `now`, reads differently; the view
@@ -666,8 +720,7 @@ thread_local! {
     static RING: RefCell<Option<String>> = const { RefCell::new(None) };
     /// The keys of the session page's Terminal tab, once one opened (#1460).
     static TERMINAL_KEYS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
-    /// The box's keys (#1461), and whether the page that is the box alone gives them to it when it next draws.
-    static BOX_KEYS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
+    /// Whether the page that is the box alone gives the box the keys when it next draws (#1461).
     static FOCUS_BOX: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -676,15 +729,11 @@ pub(crate) fn focus_box_next() {
     FOCUS_BOX.with(|f| f.set(true));
 }
 
-/// The box's text field takes the keys through `keys` (#1461).
-pub(crate) fn box_keys(keys: FocusHandle) {
-    BOX_KEYS.with(|k| *k.borrow_mut() = Some(keys));
-}
-
-/// The `id` of what holds the keyboard (#1459): the question card while it shows, else the sidebar's ringed row.
+/// The `id` of what holds the keyboard (#1459, #1462): the card's focused control while the card has it, the terminal,
+/// the box, else the list's ringed row.
 pub fn focus_id(window: &Window) -> Option<String> {
-    if crate::card::focused(window) {
-        return Some(crate::card::CARD_ID.to_owned());
+    if let Some(id) = crate::card::focus_id(window) {
+        return Some(id);
     }
     if TERMINAL_KEYS.with(|keys| {
         keys.borrow()
@@ -693,14 +742,267 @@ pub fn focus_id(window: &Window) -> Option<String> {
     }) {
         return Some("terminal".to_owned());
     }
-    if BOX_KEYS.with(|keys| {
-        keys.borrow()
-            .as_ref()
-            .is_some_and(|keys| keys.is_focused(window))
-    }) {
+    if crate::words::focused(window) {
         return Some("box-draft".to_owned());
     }
-    RING.with(|ring| ring.borrow().clone())
+    list_focused(window)
+}
+
+/// One row of the list as the keyboard walks it (#1462): its id, what typing matches (its title and project), and
+/// the address Return opens.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ListRow {
+    pub id: String,
+    pub title: String,
+    pub project: String,
+    pub address: Address,
+}
+
+thread_local! {
+    /// The list's keys: the sidebar's, which holds them for the whole list, and the sidebar itself.
+    static LIST_KEYS: RefCell<Option<(FocusHandle, WeakEntity<Shipped>)>> = const { RefCell::new(None) };
+    /// The page's keys, the page region's view's, with the view's kind.
+    static PAGE_KEYS: RefCell<Option<(Kind, FocusHandle)>> = const { RefCell::new(None) };
+    /// The list's rows as the keyboard walks them, as last drawn.
+    static LIST_ROWS: RefCell<Vec<ListRow>> = const { RefCell::new(Vec::new()) };
+    /// The list's rows as last drawn, which focus follows a row that leaves by.
+    static LAST_ROWS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// The ask row the pointer is over, for #1462's planted hover-only control.
+    static HOVERED: RefCell<Option<String>> = const { RefCell::new(None) };
+    /// The row a secondary click opened the actions of, and where (#1462).
+    static CONTEXT: RefCell<Option<(String, Point<Pixels>)>> = const { RefCell::new(None) };
+}
+
+/// The row the list's keyboard is on, while the list holds the keyboard.
+pub fn list_focused(window: &Window) -> Option<String> {
+    let keys = LIST_KEYS.with(|keys| keys.borrow().as_ref().map(|(keys, _)| keys.clone()))?;
+    keys.is_focused(window)
+        .then(|| RING.with(|ring| ring.borrow().clone()))
+        .flatten()
+}
+
+/// The open asks in the order Needs you draws them, each with its question: open ones oldest first, then those put
+/// off till later (#1462).
+pub fn open_asks() -> Vec<(String, String)> {
+    record(Kind::NeedsYou, None)
+        .open
+        .into_iter()
+        .map(|(handle, _, question, ..)| (handle, question))
+        .collect()
+}
+
+/// The asks' handles in Needs you's order: what the next-ask key walks.
+pub fn needs_you_order() -> Vec<String> {
+    open_asks().into_iter().map(|(handle, _)| handle).collect()
+}
+
+/// The list's rows, in the order the window draws them (#1461): each ask, then each project's heading and its rows.
+pub fn list_rows(_: &App) -> Vec<ListRow> {
+    LIST_ROWS.with(|rows| rows.borrow().clone())
+}
+
+/// The rows of `items` the keyboard walks: every row, and each project's heading as `project:<project>` (#1462).
+fn keyboard_rows(items: &[crate::list::Item]) -> Vec<ListRow> {
+    let mut rows = Vec::new();
+    let mut project = String::new();
+    for item in items {
+        match item {
+            crate::list::Item::Heading { id, title, .. } if id != crate::list::HEADING => {
+                let Some(name) = id.strip_prefix("heading:") else {
+                    continue;
+                };
+                let id = crate::list::project_id((name != "none").then_some(name));
+                project = title.clone();
+                rows.push(ListRow {
+                    id: format!("project:{id}"),
+                    title: title.clone(),
+                    project: title.clone(),
+                    address: Address::new(crate::address::Place::Project, &id),
+                });
+            }
+            crate::list::Item::Heading { .. } => {}
+            crate::list::Item::Row(row) => {
+                // An ask's project is its session's.
+                let project = if row.id.starts_with("ask:") {
+                    crate::record::with_view(|view| {
+                        let session = view
+                            .inbox
+                            .iter()
+                            .find(|ask| ask["ask"] == row.id.as_str())?
+                            .get("session")?
+                            .as_str()?
+                            .to_owned();
+                        Some(view.table().project(&session))
+                    })
+                    .flatten()
+                    .unwrap_or_default()
+                } else {
+                    project.clone()
+                };
+                rows.push(ListRow {
+                    id: row.id.clone(),
+                    title: row.title.clone(),
+                    project,
+                    address: row.address.clone(),
+                });
+            }
+        }
+    }
+    rows
+}
+
+/// A project's heading (#1461) and, inside it, the row the keyboard reaches it by, `project:<project>`, which opens
+/// the project's page (#1462).
+fn project_heading(
+    id: &str,
+    title: &str,
+    focused: Option<&str>,
+    chrome: &chrome::Chrome,
+    cx: &mut Context<Shipped>,
+) -> ObservedElement<Stateful<Div>> {
+    let name = id.strip_prefix("heading:").unwrap_or(id);
+    let project = crate::list::project_id((name != "none").then_some(name));
+    let row = format!("project:{project}");
+    let ringed = focused == Some(row.as_str());
+    let address = Address::new(crate::address::Place::Project, &project);
+    let s = sizes();
+    list_heading(id, title, None).child(
+        observed(ElementId::Name(row.clone().into()))
+            .role(Role::Button)
+            .aria_label(title.to_owned())
+            .when(ringed, |row| row.aria_active_descendant())
+            .absolute()
+            .inset_0()
+            .rounded(s.radius)
+            .border(s.ring)
+            .border_color(if ringed {
+                chrome.focus
+            } else {
+                chrome.focus.opacity(0.)
+            })
+            .on_click(cx.listener(move |this, _, window, cx| {
+                this.rows.focused = Some(row.clone());
+                window.focus(&this.focus_handle, cx);
+                crate::open::open(&address, window, cx).ok();
+                cx.notify();
+            })),
+    )
+}
+
+/// Gives the list the keyboard (Esc, F6), on the row it was on, else the open page's row, else its first.
+pub fn focus_list(window: &mut Window, cx: &mut App) {
+    crate::card::let_go();
+    let Some((keys, list)) = LIST_KEYS.with(|keys| keys.borrow().clone()) else {
+        return;
+    };
+    let rows = list_rows(cx);
+    let here = crate::open::current(cx).map(|address| address.to_string());
+    if let Some(list) = list.upgrade() {
+        list.update(cx, |list, cx| {
+            let on = list.rows.focused.clone();
+            if on.is_none_or(|on| !rows.iter().any(|row| row.id == on)) {
+                list.rows.focused = rows
+                    .iter()
+                    .find(|row| Some(row.address.to_string()) == here)
+                    .or(rows.first())
+                    .map(|row| row.id.clone());
+            }
+            cx.notify();
+        });
+    }
+    window.focus(&keys, cx);
+}
+
+/// F6: the keyboard moves from the list to the page, to the box, and back to the list.
+pub fn next_area(window: &mut Window, cx: &mut App) {
+    // The page's keys while its view is the page shown.
+    let page = PAGE_KEYS
+        .with(|keys| keys.borrow().clone())
+        .filter(|(kind, _)| {
+            crate::open::shown_region(cx) == Some(crate::open::Region::Shipped(*kind))
+        })
+        .map(|(_, keys)| keys);
+    let on_page =
+        crate::card::focused(window) || page.as_ref().is_some_and(|k| k.is_focused(window));
+    if list_focused(window).is_some() {
+        if !crate::card::focus(window, cx) {
+            match page {
+                Some(keys) => window.focus(&keys, cx),
+                None => crate::words::focus(window, cx),
+            }
+        }
+    } else if on_page {
+        crate::card::let_go();
+        crate::words::focus(window, cx);
+    } else {
+        focus_list(window, cx);
+    }
+}
+
+/// The row's actions, opened by a secondary click on it: the Session menu's, in its order (#886).
+fn open_context(row: String, at: Point<Pixels>, window: &mut Window, cx: &mut App) {
+    CONTEXT.with(|context| *context.borrow_mut() = Some((row.clone(), at)));
+    if let Some((keys, list)) = LIST_KEYS.with(|keys| keys.borrow().clone()) {
+        if let Some(list) = list.upgrade() {
+            list.update(cx, |list, _| list.rows.focused = Some(row));
+        }
+        crate::card::let_go();
+        window.focus(&keys, cx);
+    }
+    window.refresh();
+}
+
+/// The context menu's items: the Session menu's, and the planted menu's one more.
+fn context_items() -> Vec<&'static str> {
+    let mut items = crate::actions::session_items();
+    if cfg!(feature = "plant-context-only-action") {
+        items.push("Reveal in Finder");
+    }
+    items
+}
+
+/// The open context menu, drawn over the window where the click was.
+fn context_menu(window: &Window) -> Option<AnyElement> {
+    let (_, at) = CONTEXT.with(|context| context.borrow().clone())?;
+    let chrome = chrome::of(window);
+    Some(
+        observed("context-menu")
+            .role(Role::Menu)
+            .aria_label("Actions")
+            .absolute()
+            .left(at.x)
+            .top(at.y)
+            .flex()
+            .flex_col()
+            .p(sizes().space(0))
+            .rounded(sizes().radius)
+            .bg(chrome.raised)
+            .border(sizes().hairline)
+            .border_color(chrome.divider)
+            .shadow_lg()
+            .occlude()
+            .on_mouse_down_out(|_, window, _| {
+                CONTEXT.with(|context| *context.borrow_mut() = None);
+                window.refresh();
+            })
+            .children(context_items().into_iter().map(|name| {
+                observed(ElementId::Name(format!("context:{name}").into()))
+                    .role(Role::MenuItem)
+                    .aria_label(name)
+                    .px(sizes().space(1))
+                    .h(sizes().space(4))
+                    .flex()
+                    .items_center()
+                    .rounded(sizes().radius)
+                    .hover(|style| style.bg(chrome.hover))
+                    .child(name)
+                    .on_click(move |_, window, cx| {
+                        CONTEXT.with(|context| *context.borrow_mut() = None);
+                        crate::actions::run(name, window, cx);
+                    })
+            }))
+            .into_any_element(),
+    )
 }
 
 /// A line of text that is one accessibility node: a label named by its text, in the body role (#1458).
@@ -912,6 +1214,25 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
             })
             .collect()
     };
+    // Put off with Later, an ask goes below the open ones until it comes back, an hour before its default applies
+    // (#1462): the list reads when by its clock.
+    let clock = now();
+    let until = |handle: &str| {
+        view.inbox
+            .iter()
+            .find(|row| row["ask"] == handle)
+            .and_then(|row| row["until"].as_u64())
+    };
+    let mut open = open;
+    for (handle, _, _, status, _) in &mut open {
+        match until(handle) {
+            Some(until) if status == "later" && until <= clock => *status = "shown".to_owned(),
+            // The view draws again when it comes back.
+            Some(until) if status == "later" => states::changes_after(until - clock),
+            _ => {}
+        }
+    }
+    open.sort_by_key(|(_, _, _, status, _)| status == "later");
     // A session's page and its line draw the first session, or the one named "" when the record has none.
     let sessions: Vec<(String, String, states::State)> = match kind {
         Kind::Sidebar if table.listed() => listed
@@ -1528,8 +1849,41 @@ impl Render for Shipped {
         let reach = crate::notify::reach();
         let now = now();
         let name = self.kind.name();
+        // A page in the center takes the keys F6 gives it (#1462): Esc gives them back to the list, and a printable key
+        // goes to the box.
+        let is_page = !matches!(self.kind, Kind::Sidebar | Kind::Line) && !self.popped;
+        if is_page {
+            let shows =
+                crate::open::shown_region(cx) == Some(crate::open::Region::Shipped(self.kind));
+            if shows {
+                PAGE_KEYS
+                    .with(|keys| *keys.borrow_mut() = Some((self.kind, self.focus_handle.clone())));
+            }
+        }
         let page = div()
             .id(ElementId::Name(format!("view:{name}").into()))
+            .when(is_page, |page| {
+                page.track_focus(&self.focus_handle).on_key_down(
+                    |event: &KeyDownEvent, window, cx| {
+                        let stroke = &event.keystroke;
+                        let m = stroke.modifiers;
+                        if m.platform || m.control || m.alt || m.function {
+                            return;
+                        }
+                        if stroke.key == "escape" {
+                            focus_list(window, cx);
+                            cx.stop_propagation();
+                        } else if let Some(typed) = stroke
+                            .key_char
+                            .clone()
+                            .filter(|c| !c.is_empty() && c.chars().all(|c| !c.is_control()))
+                        {
+                            crate::words::type_in(&typed, window, cx);
+                            cx.stop_propagation();
+                        }
+                    },
+                )
+            })
             .size_full()
             .relative()
             .flex()
@@ -1570,6 +1924,15 @@ impl Render for Shipped {
                     }
                 };
                 let attended = self.hovered || self.focus_handle.contains_focused(window, cx);
+                // The row the list's keyboard is on leaves at once when it leaves its state, and the keyboard goes to
+                // the row now in its place (#1462); every other row that left keeps its slot while you're here (#1461).
+                if self.focus_handle.is_focused(window) {
+                    if let Some(on) = self.rows.focused.clone() {
+                        if !fresh.iter().any(|item| item.id() == on) {
+                            self.kept.release(&on);
+                        }
+                    }
+                }
                 let mut items = self.kept.settle(fresh, attended, now).to_vec();
                 if let Some(at) = self.kept.next_change(now) {
                     states::changes_after(at - now);
@@ -1595,14 +1958,42 @@ impl Render for Shipped {
                     (popped && (asks_row(item) || item.id() == crate::list::HEADING))
                         || (replaced.is_some() && asks_row(item))
                 };
-                // The rows the keys walk, in the list's order.
-                let ids: Vec<String> = items
-                    .iter()
-                    .filter(|item| matches!(item, crate::list::Item::Row(_)) && !skip(item))
-                    .map(|item| item.id().to_owned())
-                    .collect();
+                // #1462's planted list hides the rows that don't match what you typed.
+                let typed = self.typed.0.clone();
+                let hidden = |item: &crate::list::Item| {
+                    cfg!(feature = "plant-list-hides-row")
+                        && !typed.is_empty()
+                        && matches!(item, crate::list::Item::Row(row)
+                            if !row.title.to_lowercase().starts_with(&typed))
+                };
+                items.retain(|item| !skip(item) && !hidden(item));
+                // The rows the keyboard walks, in the list's order (#1462): each ask, then each project's heading and
+                // its rows. Only what fits in the window is drawn: the list doesn't scroll yet (#1808), and a frame
+                // over 700 rows costs what it shows.
+                let room = window.viewport_size().height;
+                let mut top = s.space(1);
+                let mut fits = 0;
+                for item in &items {
+                    top += match item {
+                        crate::list::Item::Heading { .. } => s.space(5) + s.space(1),
+                        crate::list::Item::Row(_) => s.space(5),
+                    };
+                    if top > room {
+                        break;
+                    }
+                    fits += 1;
+                }
+                items.truncate(fits);
+                let rows = keyboard_rows(&items);
                 if let Some((selected, focused)) = self.start.take() {
-                    let id = |at: Option<usize>| at.and_then(|i| ids.get(i).cloned());
+                    let id = |at: Option<usize>| {
+                        at.and_then(|i| {
+                            rows.iter()
+                                .filter(|row| !row.id.starts_with("project:"))
+                                .nth(i)
+                                .map(|row| row.id.clone())
+                        })
+                    };
                     self.rows = SidebarRows {
                         selected: id(selected),
                         focused: id(focused),
@@ -1611,35 +2002,33 @@ impl Render for Shipped {
                         window.focus(&self.focus_handle, cx);
                     }
                 }
+                // The sidebar holds the keys for the whole list (#1462).
+                LIST_KEYS.with(|keys| {
+                    *keys.borrow_mut() = Some((self.focus_handle.clone(), cx.entity().downgrade()))
+                });
+                // Focus follows a row that leaves: to the row now in its place, else the last (#1462).
+                if let Some(on) = self.rows.focused.clone() {
+                    if !rows.iter().any(|row| row.id == on) {
+                        let at =
+                            LAST_ROWS.with(|last| last.borrow().iter().position(|id| *id == on));
+                        self.rows.focused = at
+                            .and_then(|at| rows.get(at.min(rows.len().saturating_sub(1))))
+                            .or(rows.last())
+                            .map(|row| row.id.clone());
+                    }
+                }
+                LAST_ROWS.with(|last| {
+                    *last.borrow_mut() = rows.iter().map(|row| row.id.clone()).collect()
+                });
+                LIST_ROWS.with(|list| *list.borrow_mut() = rows);
                 // The ring shows only while keys reach the list, so it never points where they don't go.
                 let focused = (self.focus_handle.is_focused(window))
                     .then(|| self.rows.focused.clone())
                     .flatten();
                 RING.with(|ring| *ring.borrow_mut() = focused.clone());
                 let current = crate::open::current(cx);
-                let addresses: HashMap<String, Address> = items
-                    .iter()
-                    .filter_map(|item| match item {
-                        crate::list::Item::Row(row) => Some((row.id.clone(), row.address.clone())),
-                        _ => None,
-                    })
-                    .collect();
                 let mut drawn: Vec<AnyElement> = Vec::new();
-                // Only what fits in the window is drawn: the list doesn't scroll yet (#1808), and a frame over 700
-                // rows costs what it shows.
-                let room = window.viewport_size().height;
-                let mut top = s.space(1);
                 for item in &items {
-                    if skip(item) {
-                        continue;
-                    }
-                    top += match item {
-                        crate::list::Item::Heading { .. } => s.space(5) + s.space(1),
-                        crate::list::Item::Row(_) => s.space(5),
-                    };
-                    if top > room {
-                        break;
-                    }
                     match item {
                         crate::list::Item::Heading { id, title, count } => {
                             if id == crate::list::HEADING {
@@ -1684,7 +2073,10 @@ impl Render for Shipped {
                                         .into_any_element()
                                 }));
                             } else {
-                                drawn.push(list_heading(id, title, None).into_any_element());
+                                drawn.push(
+                                    project_heading(id, title, focused.as_deref(), chrome, cx)
+                                        .into_any_element(),
+                                );
                             }
                         }
                         crate::list::Item::Row(row) => {
@@ -1694,8 +2086,49 @@ impl Render for Shipped {
                             let ring = focused.as_ref() == Some(&row.id);
                             let id = row.id.clone();
                             let address = row.address.clone();
+                            let actions = id.starts_with("session:") || id.starts_with("ask:");
                             drawn.push(
                                 list_row(row, selected, ring, now, chrome)
+                                    // #1462's planted row draws a control only while the pointer is over it.
+                                    .when(
+                                        cfg!(feature = "plant-hover-only-control")
+                                            && id.starts_with("ask:"),
+                                        |row| {
+                                            let over = HOVERED.with(|h| {
+                                                h.borrow().as_deref() == Some(id.as_str())
+                                            });
+                                            let control_id =
+                                                ElementId::Name(format!("{id}:later").into());
+                                            let hovered = id.clone();
+                                            row.on_hover(move |on, window, _| {
+                                                HOVERED.with(|h| {
+                                                    *h.borrow_mut() = on.then(|| hovered.clone())
+                                                });
+                                                window.refresh();
+                                            })
+                                            .when(
+                                                over,
+                                                |row| {
+                                                    row.child(control(
+                                                        control_id,
+                                                        Control::Plain,
+                                                        "Later",
+                                                        chrome,
+                                                    ))
+                                                },
+                                            )
+                                        },
+                                    )
+                                    // A secondary click opens the row's actions (#1462).
+                                    .when(actions, |row| {
+                                        let id = id.clone();
+                                        row.on_mouse_down(
+                                            MouseButton::Right,
+                                            move |event: &MouseDownEvent, window, cx| {
+                                                open_context(id.clone(), event.position, window, cx)
+                                            },
+                                        )
+                                    })
                                     .on_mouse_down(
                                         MouseButton::Left,
                                         cx.listener({
@@ -1770,22 +2203,8 @@ impl Render for Shipped {
                         this.hovered = *hovered;
                         cx.notify();
                     }))
-                    .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
-                        let was = this.rows.selected.clone();
-                        if this.rows.key(&event.keystroke.key, &ids) {
-                            // Return or space opens the focused row, as a click on it does.
-                            if let Some(row) = this
-                                .rows
-                                .selected
-                                .clone()
-                                .filter(|s| Some(s) != was.as_ref())
-                            {
-                                if let Some(address) = addresses.get(&row) {
-                                    crate::open::open(address, window, cx).ok();
-                                }
-                            }
-                            cx.notify();
-                        }
+                    .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                        this.list_key(event, window, cx)
                     }))
                     .child(
                         // The list's region keeps its accessible name, Tasks (#1348), and draws no title (#1461).
@@ -1832,7 +2251,7 @@ impl Render for Shipped {
                 let empty = empty_now();
                 // The box takes the keys once it's there to take them.
                 if project.is_none() && FOCUS_BOX.with(Cell::get) {
-                    if let Some(keys) = BOX_KEYS.with(|k| k.borrow().clone()) {
+                    if let Some(keys) = crate::words::keys() {
                         FOCUS_BOX.with(|f| f.set(false));
                         window.focus(&keys, cx);
                     }
@@ -2878,7 +3297,6 @@ impl Shell {
         NEEDS_YOU_VIEW.with(|view| *view.borrow_mut() = replaced);
         // The box is this window's, set once it's made (#1461).
         BOX.with(|b| *b.borrow_mut() = None);
-        BOX_KEYS.with(|k| *k.borrow_mut() = None);
         FOCUS_BOX.with(|f| f.set(false));
         // A layout showing a session's page shows the record's first session (#1738); any other opens as the window
         // does once the record is read.
@@ -2989,23 +3407,6 @@ impl Render for Shell {
             .track_focus(&self.focus_handle)
             .capture_any_mouse_down(|_, _, _| touched())
             .capture_key_down(|_, _, _| touched())
-            .on_action(|_: &crate::commands::Back, window, cx| crate::open::walk(true, window, cx))
-            .on_action(|_: &crate::commands::Forward, window, cx| {
-                crate::open::walk(false, window, cx)
-            })
-            .on_action(|action: &crate::commands::OpenPage, window, cx| {
-                if let Ok(address) = action.address.parse::<Address>() {
-                    crate::open::open(&address, window, cx).ok();
-                }
-            })
-            .on_action(
-                cx.listener(|this, _: &crate::commands::OpenCommands, window, cx| {
-                    if let Some(palette) = &this.commands {
-                        let back = this.focus_handle.clone();
-                        palette.update(cx, |palette, cx| palette.show(back, window, cx));
-                    }
-                }),
-            )
             // Dragging the list's edge sets its width; letting go ends it.
             .when(self.resizing, |root| {
                 root.on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
@@ -3113,6 +3514,8 @@ impl Render for Shell {
                     .px(s.space(1))
                     .child(said)
             }))
+            .child(crate::notice::notices(window))
+            .children(context_menu(window))
             .children(self.commands.clone())
     }
 }

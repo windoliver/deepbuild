@@ -55,6 +55,16 @@ pub fn opened_session(cx: &App) -> Option<String> {
         .map(|address| address.id)
 }
 
+/// The shell's window, which the menu bar's items and the table's keys act in (#1462).
+pub fn window(cx: &App) -> Option<AnyWindowHandle> {
+    cx.try_global::<Selection>()?.window
+}
+
+/// Where the page region draws, once an address was opened (#1462).
+pub fn shown_region(cx: &App) -> Option<Region> {
+    cx.try_global::<Selection>()?.shown.region
+}
+
 /// The shipped page popped out into a window of its own.
 pub fn popped(cx: &App) -> Option<Kind> {
     cx.try_global::<Selection>()?

@@ -208,6 +208,8 @@ impl View {
                 .filter(|row| row["ask"] == event["subject"] && row["status"] != "closed")
             {
                 row["status"] = json!("later");
+                // When it comes back, which the list reads by its clock (#1462).
+                row["until"] = event["data"]["until"].clone();
             }
         } else if let Some((_, outcome)) = CLOSING.iter().find(|(k, _)| *k == kind) {
             // The close rule the rest of the app reads, and the first close to append decides, as in the core.
@@ -693,7 +695,9 @@ pub fn call(method: &str, params: Value) -> Option<Value> {
 /// A row's page was open a second while you were present (#1461): the hub marks it read in every reader, off the main
 /// thread. A replica's record marks it as the hub would, with the same `row.set`.
 pub fn mark_read(id: &str) {
-    if crate::hub::stood_in("row.read", &serde_json::json!({ "id": id })) {
+    // A replica's copy of the hub records the read itself (#1462).
+    if let Some(local) = crate::hub::local() {
+        let _ = local("row.read", &serde_json::json!({ "id": id }));
         return;
     }
     let local = READER.with(|cell| matches!(cell.borrow().as_ref(), Some(Source::Local(..))));

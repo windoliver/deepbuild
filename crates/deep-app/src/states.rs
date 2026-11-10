@@ -360,6 +360,8 @@ pub struct Table {
     rows: HashMap<String, (String, Value)>,
     /// Whether the record holds any row.set: a record from before the hub built rows keeps the app's own reading.
     listed: bool,
+    /// Each session's project, from the first event that names one (#1462): the list's heading it goes under.
+    projects: HashMap<String, String>,
 }
 
 /// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
@@ -423,6 +425,15 @@ impl Table {
             reading.read(event, handle);
             if !done && reading.done() {
                 self.asks.retain(|ask| self::handle(ask) != handle);
+            }
+        }
+        if let (Some(session), Some(project)) =
+            (event["session"].as_str(), event["project"].as_str())
+        {
+            if !project.is_empty() {
+                self.projects
+                    .entry(session.to_owned())
+                    .or_insert_with(|| project.to_owned());
             }
         }
         let kind = event["kind"].as_str().unwrap_or_default();
@@ -525,6 +536,11 @@ impl Table {
 
     /// The title of the session's task, as every surface draws it. The agent chooses it, so its controls and
     /// direction marks show as the question card shows them (#1738); the record keeps the bytes.
+    /// The project a session is part of, as its events name it; empty when none does (#1462).
+    pub fn project(&self, session: &str) -> String {
+        self.projects.get(session).cloned().unwrap_or_default()
+    }
+
     pub fn title(&self, session: &str) -> String {
         let title = self
             .titles
@@ -886,8 +902,30 @@ pub fn entry_of(entry: &str) -> &'static str {
         .map_or("idle", |(_, known, _)| known)
 }
 
-/// The menu bar's menu under the count: a line per session, its task and its status mark.
+/// The menu bar's menu under the count: a line per session, its task and its status mark. A record whose rows the hub
+/// built (#1463) says each session as the list and `deep status` do: its row's title, its entry's mark and its word
+/// (#1462).
 pub fn menu(table: &Table, now: u64) -> Vec<String> {
+    if table.listed() {
+        return table
+            .list()
+            .into_iter()
+            .filter(|row| {
+                row["id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("session:"))
+            })
+            .map(|row| {
+                let text = |key: &str| row[key].as_str().unwrap_or_default();
+                let title = crate::question::visible(text("title"));
+                format!(
+                    "{title} · {} {}",
+                    glyph(entry_of(text("entry"))),
+                    text("word")
+                )
+            })
+            .collect();
+    }
     table
         .every_session()
         .into_iter()

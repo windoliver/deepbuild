@@ -13,8 +13,9 @@ use crate::hub::{HubClient, HubError};
 /// Signs `params`, the card's `ask.answer` params, for `ask.answer` on this hub, and sends them. A device the hub no
 /// longer knows, as after a restore, pairs again, once.
 pub fn send(params: &Value) -> Result<Value, HubError> {
-    if crate::hub::stood_in("ask.answer", params) {
-        return Ok(json!({ "answered": true }));
+    // A replica's copy of the hub takes the answer as the card wrote it: it has no device to pair (#1462).
+    if let Some(local) = crate::hub::local() {
+        return local("ask.answer", params);
     }
     let mut client = HubClient::app()?;
     let params = params.as_object().cloned().unwrap_or_default();
@@ -40,9 +41,7 @@ pub fn send(params: &Value) -> Result<Value, HubError> {
 /// The OS confirming you for one press the card can't trust by itself: the hub asks, naming the ask and the option.
 #[cfg(not(feature = "test-confirm"))]
 pub fn confirm(ask: &str, reason: &str) -> Result<(), HubError> {
-    HubClient::app()?
-        .call("ask.confirm", json!({ "ask": ask, "reason": reason }))
-        .map(|_| ())
+    crate::hub::call_app("ask.confirm", json!({ "ask": ask, "reason": reason })).map(|_| ())
 }
 
 /// A file stands in for the OS's prompt, read at each ask: holding `confirmed` is you, anything else a cancelled prompt.

@@ -272,12 +272,20 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
         if held.as_deref() == Some(handle) {
             return "held".to_owned();
         }
-        view.inbox
-            .iter()
-            .find(|ask| ask["ask"] == handle)
+        let row = view.inbox.iter().find(|ask| ask["ask"] == handle);
+        let status = row
             .and_then(|ask| ask["status"].as_str())
             .unwrap_or("open")
-            .to_owned()
+            .to_owned();
+        // Put off with Later, an ask waits until an hour before its default applies (#1462), then shows again.
+        match row.and_then(|ask| ask["until"].as_u64()) {
+            Some(until) if status == "later" && until <= now => "shown".to_owned(),
+            Some(until) if status == "later" => {
+                crate::states::changes_after(until - now);
+                status
+            }
+            _ => status,
+        }
     };
     let ask = |handle: String, question: &str| {
         let made = created.get(&handle);
@@ -291,11 +299,13 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
     };
     if table.listed() {
         let rows = table.list();
-        let asks = rows
+        let mut asks: Vec<Ask> = rows
             .iter()
             .filter(|row| text(row, "id").starts_with("ask:"))
             .map(|row| ask(text(row, "id"), &text(row, "title")))
             .collect();
+        // An ask put off with Later goes below the others until it comes back (#1462).
+        asks.sort_by_key(|ask| ask.status == "later");
         let sessions = rows
             .iter()
             .filter(|row| !text(row, "id").starts_with("ask:"))
@@ -332,12 +342,13 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
             .collect();
         return (asks, sessions);
     }
-    let asks = view
+    let mut asks: Vec<Ask> = view
         .inbox
         .iter()
         .filter(|row| row["status"] != "closed")
         .map(|row| ask(text(row, "ask"), &text(row, "question")))
         .collect();
+    asks.sort_by_key(|ask| ask.status == "later");
     let sessions = table
         .every_session()
         .into_iter()
@@ -370,6 +381,13 @@ pub struct Kept {
 }
 
 impl Kept {
+    /// Lets a row that left its state go at once, its slot with it: the row the list's keyboard is on, which the
+    /// keyboard leaves for the row now in its place (#1462).
+    pub fn release(&mut self, id: &str) {
+        self.drawn.retain(|item| item.id() != id);
+        self.left_at.remove(id);
+    }
+
     /// The list as drawn after the record gave `fresh` at `now`, with `attended` saying whether you're in the list.
     pub fn settle(&mut self, fresh: Vec<Item>, attended: bool, now: u64) -> &[Item] {
         // #1461's planted list closes a gap at once, under a resting pointer or not.

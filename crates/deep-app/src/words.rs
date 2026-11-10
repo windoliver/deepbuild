@@ -26,12 +26,8 @@ pub type Say = Arc<dyn Fn(&str) -> Result<Value, String> + Send + Sync>;
 /// `box.say` through the app's own hub connection.
 pub fn hub_say() -> Say {
     Arc::new(|words| {
-        if crate::hub::stood_in("box.say", &json!({ "words": words })) {
-            return Ok(json!({ "unread": "Nothing was drafted." }));
-        }
-        crate::hub::HubClient::app()
-            .and_then(|mut hub| hub.call("box.say", json!({ "words": words })))
-            .map_err(|error| format!("{error:?}"))
+        crate::hub::call_app("box.say", json!({ "words": words }))
+            .map_err(|error| crate::hub::why(&error))
     })
 }
 
@@ -53,6 +49,50 @@ pub struct WordsBox {
 
 thread_local! {
     static BOX: RefCell<Option<WeakEntity<WordsBox>>> = const { RefCell::new(None) };
+    /// The box's input's keys, which a snapshot reads as `box-draft` holding the keyboard (#1462).
+    static KEYS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
+}
+
+/// Puts the keyboard in the box (⌘N, F6): its words stay as they are.
+pub fn focus(window: &mut Window, cx: &mut App) {
+    let Some(entity) = BOX.with(|cell| cell.borrow().as_ref().and_then(WeakEntity::upgrade)) else {
+        return;
+    };
+    crate::card::let_go();
+    entity.update(cx, |this, cx| {
+        this.input.update(cx, |input, cx| input.focus(window, cx));
+        cx.notify();
+    });
+}
+
+/// A printable key typed on a page: the box takes the keyboard and the key's text (#1462).
+pub fn type_in(text: &str, window: &mut Window, cx: &mut App) {
+    let Some(entity) = BOX.with(|cell| cell.borrow().as_ref().and_then(WeakEntity::upgrade)) else {
+        return;
+    };
+    crate::card::let_go();
+    let text = text.to_owned();
+    entity.update(cx, |this, cx| {
+        this.input.update(cx, |input, cx| {
+            input.focus(window, cx);
+            input.insert(text, window, cx);
+        });
+        cx.notify();
+    });
+}
+
+/// The box's keys, once it's made.
+pub(crate) fn keys() -> Option<FocusHandle> {
+    KEYS.with(|keys| keys.borrow().clone())
+}
+
+/// Whether the box holds the keyboard in `window`.
+pub fn focused(window: &Window) -> bool {
+    KEYS.with(|keys| {
+        keys.borrow()
+            .as_ref()
+            .is_some_and(|keys| keys.is_focused(window))
+    })
 }
 
 impl WordsBox {
@@ -85,7 +125,8 @@ impl WordsBox {
             },
         );
         BOX.with(|cell| *cell.borrow_mut() = Some(cx.entity().downgrade()));
-        crate::views::box_keys(gpui_kit::Focusable::focus_handle(input.read(cx), cx));
+        let keys = input.read(cx).focus_handle(cx);
+        KEYS.with(|cell| *cell.borrow_mut() = Some(keys));
         WordsBox {
             input,
             beside: None,
@@ -127,10 +168,7 @@ impl WordsBox {
 
 /// The card whose page the box is on (#1461), when an ask's page is shown.
 fn answering(cx: &App) -> Option<Entity<crate::card::Card>> {
-    let address = crate::open::current(cx)?;
-    let (ask, card) = crate::card::shown()?;
-    (address.place == crate::address::Place::Ask && ask == format!("ask:{}", address.id))
-        .then_some(card)
+    crate::card::showing(cx)
 }
 
 /// The preferences ⌘K lists, each with the words it is found by: there is no Settings page, so each opens the box.
@@ -269,6 +307,16 @@ impl Render for WordsBox {
             .role(Role::Group)
             .aria_label("Say a change in words")
             .relative()
+            // A press in the box takes the keyboard from the card on an ask's page (#1461).
+            .capture_any_mouse_down(|_, _, _| crate::card::let_go())
+            // Escape gives the keyboard back to the list, the words kept (#1462).
+            .capture_key_down(|event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && event.keystroke.modifiers == Modifiers::none()
+                {
+                    crate::views::focus_list(window, cx);
+                    cx.stop_propagation();
+                }
+            })
             .flex_none()
             .w_full()
             .flex()

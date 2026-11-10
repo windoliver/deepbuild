@@ -88,6 +88,43 @@ thread_local! {
     static SHOWN: RefCell<Option<(String, Entity<Card>)>> = const { RefCell::new(None) };
     /// The keyboard focus of the card drawn last, which a snapshot reads without the app.
     static FOCUS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
+    /// The id of the card's control the keyboard is on, which a snapshot reads (#1462).
+    static KEY_AT: RefCell<Option<String>> = const { RefCell::new(None) };
+    /// You moved the keyboard off the card (Esc, F6, ⌘K, ⌘N): it no longer takes it back each frame (#1462).
+    static LET_GO: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The card stops keeping the keyboard: you moved it elsewhere, with the ask left open and its words kept.
+pub fn let_go() {
+    LET_GO.with(|l| l.set(true));
+}
+
+/// Gives the shown card the keyboard again (F6 to the page).
+pub fn focus(window: &mut Window, cx: &mut App) -> bool {
+    let Some(shown) = showing(cx) else {
+        return false;
+    };
+    LET_GO.with(|l| l.set(false));
+    let handle = shown.read(cx).focus.clone();
+    window.focus(&handle, cx);
+    true
+}
+
+/// What holds the keyboard on the card: its focused control's id, else the card's (#1462).
+pub fn focus_id(window: &Window) -> Option<String> {
+    focused(window).then(|| {
+        KEY_AT
+            .with(|at| at.borrow().clone())
+            .unwrap_or_else(|| CARD_ID.to_owned())
+    })
+}
+
+/// ⌘Z: the shown card's Undo while it is live (#1807), a press like any other.
+pub fn undo(window: &mut Window, cx: &mut App) {
+    let _ = window;
+    if let Some((_, shown)) = SHOWN.with(|cell| cell.borrow().clone()) {
+        shown.update(cx, |card, cx| card.press_key(Target::Undo, cx));
+    }
 }
 
 /// Issue #1461: an ask's page holds its card, in the reading lane beside the list, its content read from the record
@@ -128,12 +165,22 @@ pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
         card.page = true;
         card
     });
+    // An ask opened takes the keyboard to its card, until you move it elsewhere (#1462).
+    LET_GO.with(|l| l.set(false));
     SHOWN.with(|cell| *cell.borrow_mut() = Some((ask.to_owned(), shown)));
 }
 
 /// The card an ask's page shows, with its ask.
 pub fn shown() -> Option<(String, Entity<Card>)> {
     SHOWN.with(|cell| cell.borrow().clone())
+}
+
+/// The card, while its ask's page is the page shown (#1461).
+pub fn showing(cx: &App) -> Option<Entity<Card>> {
+    let address = crate::open::current(cx)?;
+    let (ask, card) = shown()?;
+    (address.place == crate::address::Place::Ask && ask == format!("ask:{}", address.id))
+        .then_some(card)
 }
 
 thread_local! {
@@ -291,6 +338,8 @@ pub struct Card {
     failed: Option<SharedString>,
     /// It's an ask's page's card (#1461), drawn in the page's lane with the box as its words, never as a prompt.
     page: bool,
+    /// The control the keyboard is on (#1462).
+    at: Option<Target>,
 }
 
 /// What a press edge says: its own time and whether the HID system made it.
@@ -321,7 +370,8 @@ impl Card {
     ) -> Self {
         // Issue #1434: while the card shows, no chrome effect may draw over its slot.
         crate::chrome_fx::guard(crate::chrome_fx::CARD, bounds);
-        Card {
+        let at = controller.as_ref().and_then(first_focus);
+        let mut card = Card {
             question,
             options,
             bounds,
@@ -330,7 +380,128 @@ impl Card {
             down: None,
             failed: None,
             page: false,
+            at: None,
+        };
+        card.focus_on(at);
+        card
+    }
+
+    /// Puts the keyboard on `at`, which its focus ring and a snapshot follow.
+    fn focus_on(&mut self, at: Option<Target>) {
+        self.at = at;
+        let id = at.and_then(|at| self.id_of(at));
+        KEY_AT.with(|cell| *cell.borrow_mut() = id);
+    }
+
+    /// A control's id, in the snapshot and the live tree (#1462): an option by its own id, a step by its place.
+    fn id_of(&self, target: Target) -> Option<String> {
+        Some(match target {
+            Target::Option(index) => format!(
+                "card-option:{}",
+                self.controller.as_ref()?.model().options.get(index)?.id
+            ),
+            Target::Step(index) => format!("card-step:{index}"),
+            Target::Send => "card-send".to_owned(),
+            Target::Undo => "card-undo".to_owned(),
+        })
+    }
+
+    /// The card's controls in reading order, as Tab, Shift-Tab and the arrows walk them.
+    fn controls(&self) -> Vec<Target> {
+        self.controller
+            .as_ref()
+            .map(|controller| {
+                let rows = if self.page {
+                    controller.page_rows()
+                } else {
+                    controller.rows()
+                };
+                rows.iter()
+                    .filter_map(|row| match row {
+                        Row::Option { index, .. } => Some(Target::Option(*index)),
+                        Row::Step { index, .. } => Some(Target::Step(*index)),
+                        Row::Send => Some(Target::Send),
+                        Row::Undo => Some(Target::Undo),
+                        Row::Text(_) => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The keyboard on the card (#1462): Tab, Shift-Tab and the arrows walk its controls, a digit moves to that option
+    /// and answers nothing, Space or Return presses the focused control (once armed; a repeat never does), and Esc
+    /// gives the keyboard back to the list with the ask left open. Any other key touches nothing.
+    fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let stroke = &event.keystroke;
+        let m = stroke.modifiers;
+        if m.platform || m.control || m.alt || m.function {
+            return;
         }
+        cx.stop_propagation();
+        let controls = self.controls();
+        let walk = |by: isize, controls: &[Target], at: Option<Target>| {
+            let count = controls.len() as isize;
+            if count == 0 {
+                return None;
+            }
+            let here = at.and_then(|at| controls.iter().position(|c| *c == at));
+            let to = match here {
+                Some(i) => (i as isize + by).rem_euclid(count),
+                None if by > 0 => 0,
+                None => count - 1,
+            };
+            Some(controls[to as usize])
+        };
+        match stroke.key.as_str() {
+            "tab" => {
+                // #1462's planted card passes over Send on Tab.
+                let tabbed: Vec<Target> = if cfg!(feature = "plant-tab-skips-control") {
+                    controls
+                        .iter()
+                        .copied()
+                        .filter(|c| *c != Target::Send)
+                        .collect()
+                } else {
+                    controls.clone()
+                };
+                let by = if m.shift { -1 } else { 1 };
+                let at = walk(by, &tabbed, self.at.filter(|at| tabbed.contains(at)));
+                self.focus_on(at);
+            }
+            "down" | "right" => self.focus_on(walk(1, &controls, self.at)),
+            "up" | "left" => self.focus_on(walk(-1, &controls, self.at)),
+            "escape" => {
+                let_go();
+                crate::views::focus_list(window, cx);
+            }
+            "space" | "enter" if !event.is_held => {
+                if let Some(at) = self.at {
+                    self.press_key(at, cx);
+                }
+            }
+            digit if digit.len() == 1 && digit.as_bytes()[0].is_ascii_digit() => {
+                let n = digit.as_bytes()[0] - b'0';
+                if n > 0 && controls.contains(&Target::Option(n as usize - 1)) {
+                    self.focus_on(Some(Target::Option(n as usize - 1)));
+                }
+            }
+            _ => {}
+        }
+        cx.notify();
+    }
+
+    /// A press from the keyboard on `target`: hardware only when the HID system made the key (#1454).
+    fn press_key(&mut self, target: Target, cx: &mut Context<Self>) {
+        let now = crate::views::now();
+        let source = if crate::trusted_input::key_from_hardware() {
+            Source::Hardware
+        } else {
+            Source::Accessibility {
+                client: Client::Unknown,
+            }
+        };
+        self.press_with(target, now, now, source, cx);
     }
 
     pub fn controller_mut(&mut self) -> Option<&mut Controller> {
@@ -378,6 +549,18 @@ impl Card {
                 client: Client::Unknown,
             }
         };
+        self.press_with(target, down, up, source, cx);
+    }
+
+    /// One whole press on `target`, its down at `down` and its up at `up`: the controller decides what it does.
+    fn press_with(
+        &mut self,
+        target: Target,
+        down: u64,
+        up: u64,
+        source: Source,
+        cx: &mut Context<Self>,
+    ) {
         let Some(controller) = self.controller.as_mut() else {
             return;
         };
@@ -455,20 +638,17 @@ impl Card {
     fn row(&self, index: usize, row: &Row, chrome: &Chrome, cx: &mut Context<Self>) -> AnyElement {
         use crate::views::{control, Control};
         let label: SharedString = row.label().to_owned().into();
-        let (id, kind, target): (ElementId, Option<Control>, Option<Target>) = match row {
-            Row::Text(_) => (("card-line", index).into(), None, None),
-            Row::Option { index, .. } => (
-                ("card-option", *index).into(),
-                Some(Control::Plain),
-                Some(Target::Option(*index)),
-            ),
-            Row::Step { index, on, .. } => (
-                ("card-step", *index).into(),
-                Some(Control::Switch(*on)),
-                Some(Target::Step(*index)),
-            ),
-            Row::Send => ("card-send".into(), Some(Control::Main), Some(Target::Send)),
-            Row::Undo => ("card-undo".into(), Some(Control::Plain), Some(Target::Undo)),
+        let (kind, target): (Option<Control>, Option<Target>) = match row {
+            Row::Text(_) => (None, None),
+            Row::Option { index, .. } => (Some(Control::Plain), Some(Target::Option(*index))),
+            Row::Step { index, on, .. } => (Some(Control::Switch(*on)), Some(Target::Step(*index))),
+            Row::Send => (Some(Control::Main), Some(Target::Send)),
+            Row::Undo => (Some(Control::Plain), Some(Target::Undo)),
+        };
+        // Each control keyed by what it is, never its place (#1462); a line by its place.
+        let id: ElementId = match target.and_then(|target| self.id_of(target)) {
+            Some(id) => ElementId::Name(id.into()),
+            None => ("card-line", index).into(),
         };
         let (Some(kind), Some(target)) = (kind, target) else {
             // The question is the card's largest text, its first line the kind's plain word (#1458).
@@ -485,8 +665,9 @@ impl Card {
                 .child(label)
                 .into_any_element();
         };
-        // No border: the focus ring's room is always kept, and shows on the focused option alone.
-        let focused = matches!(row, Row::Option { focused: true, .. });
+        // No border: the focus ring's room is always kept, and shows on the focused control alone, which an assistive
+        // client reads as focused.
+        let focused = self.at == Some(target);
         // On an ask's page an option is named by its own label; recommended and its cost draw beside it, quieter
         // (#1461).
         let choice = match row {
@@ -506,6 +687,7 @@ impl Card {
             return control(id, kind, choice.label.clone(), chrome)
                 .border(sizes().ring)
                 .border_color(chrome.focus.opacity(if focused { 1. } else { 0. }))
+                .when(focused, |control| control.aria_active_descendant())
                 .children((!beside.is_empty()).then(|| {
                     div()
                         .typed(sizes().small)
@@ -522,6 +704,7 @@ impl Card {
         control(id, kind, label, chrome)
             .border(sizes().ring)
             .border_color(chrome.focus.opacity(if focused { 1. } else { 0. }))
+            .when(focused, |control| control.aria_active_descendant())
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |card, _, _, _| card.pressing(target)),
@@ -547,12 +730,21 @@ impl Focusable for Card {
 
 impl Render for Card {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // A prompt keeps the keyboard while it shows: focus anything else took, it takes back at its next frame. An ask's
-        // page leaves it to you (#1461).
-        if !self.page && !self.focus.is_focused(window) {
+        // The card keeps the keyboard while it shows: focus anything else took, it takes back at its next frame, until
+        // you move the keyboard off it yourself (#1462).
+        if !self.focus.is_focused(window) && !LET_GO.with(std::cell::Cell::get) {
             window.focus(&self.focus, cx);
         }
         FOCUS.with(|focus| *focus.borrow_mut() = Some(self.focus.clone()));
+        // A control that left (the receipt replacing the options) gives the keyboard to the first that stays.
+        let controls = self.controls();
+        if self.at.is_none_or(|at| !controls.contains(&at)) {
+            let at = controls.first().copied();
+            self.focus_on(at);
+        } else {
+            let at = self.at;
+            self.focus_on(at);
+        }
         let chrome = crate::chrome::of(window);
         let rows: Vec<AnyElement> = match &self.controller {
             Some(controller) => {
@@ -634,6 +826,14 @@ impl Render for Card {
                             card.aria_value(controller.state_name())
                         })
                         .track_focus(&self.focus)
+                        .on_key_down(cx.listener(|card, event: &KeyDownEvent, window, cx| {
+                            card.key_down(event, window, cx)
+                        }))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|_, _, _, _| LET_GO.with(|l| l.set(false))),
+                        )
+                        .occlude()
                         .w_full()
                         .flex()
                         .flex_col()
@@ -703,6 +903,26 @@ impl Render for Card {
 
 /// The id every element of a presented card draws under.
 pub const CARD_ID: &str = "question-card";
+
+/// Where the keyboard starts on a presented card (#1462): the option its default would apply (No on an approval), else
+/// the recommended one, else the first.
+fn first_focus(controller: &Controller) -> Option<Target> {
+    let model = controller.model();
+    // #1462's planted card starts on the option that allows.
+    if cfg!(feature = "plant-card-starts-on-allow") {
+        if let Some(index) = model.options.iter().position(|o| o.decision == "allow") {
+            return Some(Target::Option(index));
+        }
+    }
+    let events = crate::record::history();
+    let default = crate::kinds::find(&events, &model.ask)
+        .and_then(|ask| ask["data"]["default"].as_str().map(str::to_owned));
+    let index = default
+        .and_then(|id| model.options.iter().position(|o| o.id == id))
+        .or_else(|| model.options.iter().position(|o| o.recommended))
+        .or((!model.options.is_empty()).then_some(0))?;
+    Some(Target::Option(index))
+}
 
 /// The card's measured size, what a slot must hold to arm.
 pub const SIZE: [i64; 2] = question::CARD_SIZE;

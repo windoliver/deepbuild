@@ -14,12 +14,12 @@ use crate::address::Address;
 use crate::commands::{entries, Entry, Open, Palette, View};
 use crate::views;
 
-/// The pages the View menu and ⌘K list (#1461): Needs you and Home, which open where the window opens, Agents and
-/// Rules, and each view you installed in the `sidebar` area, by its name.
-pub fn pages() -> Vec<(String, Address)> {
+/// The pages ⌘K always lists, which View lists too (#1462): Home, Needs you, Agents and Rules, then each view you
+/// installed in the `sidebar` area as a page by its name (#1461); and the preferences it opens the box for (#1998).
+pub fn shipped_pages() -> Vec<Entry> {
     let shipped = [
-        ("Needs you", "needs-you"),
         ("Home", "home"),
+        ("Needs you", "needs-you"),
         ("Agents", "agents"),
         ("Rules", "rules"),
     ]
@@ -30,75 +30,53 @@ pub fn pages() -> Vec<(String, Address)> {
             format!("page/{name}").parse::<Address>().ok()?,
         ))
     });
-    shipped.into_iter().chain(installed).collect()
-}
-
-/// The pages ⌘K always lists, and the preferences it opens the box for (#1998).
-pub fn shipped_pages() -> Vec<Entry> {
-    pages()
+    shipped
         .into_iter()
+        .chain(installed)
         .map(|(name, address)| Entry::Open { name, address })
         .chain(crate::words::preference_entries())
         .collect()
 }
 
-thread_local! {
-    /// The menu bar as last set: each menu's title and its items, each with the address it opens, as text.
-    static MENUS: std::cell::RefCell<Vec<(String, Vec<(String, String)>)>> = const { std::cell::RefCell::new(Vec::new()) };
+/// A view's command run from ⌘K, off the main thread: it ends in one notice in the window saying it ran or why it
+/// didn't (#1462). The planted opener only logs, as the merge base did.
+pub fn run_command(name: &str, action: &str, cx: &mut App) {
+    let (name, action) = (name.to_owned(), action.to_owned());
+    let ran = cx.background_spawn(async move {
+        crate::hub::call_app("command.run", json!({ "action": action }))
+    });
+    cx.spawn(async move |cx| {
+        let said = match ran.await {
+            Ok(_) => format!("{name} ran."),
+            Err(error) => format!("{name} didn't run: {}", crate::hub::why(&error)),
+        };
+        if cfg!(feature = "plant-opener-only-logs") {
+            eprintln!("deep-app: {said}");
+            return;
+        }
+        cx.update(|cx| crate::notice::show(said, cx));
+    })
+    .detach();
 }
 
-/// The menu bar as last set, for a replica that reads and picks from it (#1461).
-pub fn menus() -> Vec<(String, Vec<(String, String)>)> {
-    MENUS.with(|menus| menus.borrow().clone())
-}
-
-/// The menu bar's View menu (#1461): every page, opened by its address. The rest of the menu bar is #1462's.
-pub fn set_menus(cx: &mut App) {
-    let listed = pages()
-        .into_iter()
-        .map(|(name, address)| (name, address.to_string()));
-    MENUS.with(|menus| *menus.borrow_mut() = vec![("View".to_owned(), listed.collect())]);
-    let items = pages()
-        .into_iter()
-        .map(|(name, address)| {
-            MenuItem::action(
-                name,
-                crate::commands::OpenPage {
-                    address: address.to_string(),
-                },
-            )
-        })
-        .collect();
-    cx.set_menus([
-        Menu {
-            name: "DeepBuild".into(),
-            items: Vec::new(),
-            disabled: false,
-        },
-        Menu {
-            name: "View".into(),
-            items,
-            disabled: false,
-        },
-    ]);
+/// An installed view that didn't load ends as a page that won't open does: one notice in the window naming it (#1462).
+/// The planted app writes it to the error stream only, as the merge base did.
+pub fn failed(name: &str, why: &str, cx: &mut App) {
+    eprintln!("deep-app: {name} didn't load: {why}");
+    if !cfg!(feature = "plant-failed-view-silent") {
+        crate::notice::show(format!("{name} didn't load: {why}"), cx);
+    }
 }
 
 /// What opening a ⌘K entry does in the app: a command runs off the main thread, a page mounts in the page region.
 pub fn opener(runtime: Rc<ShellRuntime>) -> Open {
     Rc::new(move |entry, window, cx| match entry {
         Entry::Command { name, action } => {
-            let (name, action) = (name.clone(), action.clone());
-            cx.background_spawn(async move {
-                let ran = crate::hub::HubClient::app()
-                    .and_then(|mut hub| hub.call("command.run", json!({ "action": action })));
-                if let Err(error) = ran {
-                    eprintln!("deep-app: {name} didn't run: {error:?}");
-                }
-            })
-            .detach();
+            run_command(name, action, cx);
             None
         }
-        Entry::Open { .. } => None,
+        // ⌘K runs an action of the table and opens an address itself.
+        Entry::Open { .. } | Entry::Action { .. } => None,
         Entry::Preference { name, .. } => {
             crate::words::open_preference(name, window, cx);
             None
@@ -110,7 +88,7 @@ pub fn opener(runtime: Rc<ShellRuntime>) -> Open {
             match crate::mount_page(&runtime, panel, &page, window, cx) {
                 Ok(view) => Some(view.into()),
                 Err(error) => {
-                    eprintln!("deep-app: {} didn't open: {error:#}", entry.name());
+                    failed(entry.name(), &format!("{error:#}"), cx);
                     None
                 }
             }
@@ -167,10 +145,7 @@ pub fn load(
     for view in &listed {
         let name = view["name"].as_str().unwrap_or_default();
         if !may_mount(view) {
-            eprintln!(
-                "deep-app: {name} isn't loaded: panel@1 reads {}",
-                view["kit"]
-            );
+            failed(name, &format!("panel@1 reads {}", view["kit"]), cx);
             continue;
         }
         let dir = copy_of(name);
@@ -190,7 +165,7 @@ pub fn load(
                 cx,
             ),
             Err(why) => {
-                eprintln!("deep-app: {name} didn't load: {why}");
+                failed(name, &why, cx);
                 continue;
             }
         }
@@ -202,6 +177,5 @@ pub fn load(
     let mut listed = shipped_pages();
     listed.extend(entries(&views_in_commands));
     palette.update(cx, |palette, cx| palette.set_entries(listed, cx));
-    set_menus(cx);
     window.refresh();
 }

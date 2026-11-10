@@ -15,6 +15,7 @@
 mod check;
 mod frames;
 pub mod glyphs;
+mod hubcopy;
 mod locate;
 mod motion;
 mod plant;
@@ -198,11 +199,9 @@ struct Replica {
     evidence: Vec<Value>,
     trace: Vec<Value>,
     notified: Vec<Value>,
-    /// Issue #1461: how the hub the app reads answers (`answering`, `stopped` or `slow`), the app's watch of it, and
-    /// every call the app made to its stand-in, in order.
+    /// Issue #1461: how the hub the app reads answers (`answering`, `stopped` or `slow`), and the app's watch of it.
     hub_state: String,
     watch: deep_app::record::HubWatch,
-    hub_calls: Vec<Value>,
     /// Issue #1427: the motion recording while one runs, the launch's reduced motion, and the panel's script view,
     /// whose declared transitions and springs a recording lists.
     motion: Option<motion::Recorder>,
@@ -210,6 +209,8 @@ struct Replica {
     script: Option<Entity<gpui_shell::ScriptView>>,
     /// Issue #1546: in `launch.frames: "dirty"`, the frames GPUI drew on request and each step's comparison.
     dirty: Option<frames::Dirty>,
+    /// Issue #1462: the replica's copy of the hub, which every call the app makes of its hub reaches.
+    hub_copy: Arc<hubcopy::HubCopy>,
 }
 
 impl Replica {
@@ -441,8 +442,6 @@ impl Replica {
         if setup == "unfinished" {
             deep_app::setup::assume_unfinished();
         }
-        // The replica stands in for the hub: no call that writes leaves it (#1461).
-        deep_app::hub::stand_in();
         deep_app::record::set_local_hub(match hub_state.as_str() {
             "stopped" => deep_app::record::LocalHub::Stops,
             "slow" => deep_app::record::LocalHub::Slow,
@@ -468,6 +467,14 @@ impl Replica {
         );
         type Mounted = Option<(Rc<gpui_shell::ShellRuntime>, Entity<gpui_shell::ScriptView>)>;
         let mounted: Rc<RefCell<Result<Mounted, String>>> = Rc::new(RefCell::new(Ok(None)));
+        // Issue #1462: a registered view whose panel doesn't load launches anyway, as the app does, naming it in a notice.
+        let failing = view.as_ref().map(|view| view.name.clone());
+        // Every call the app makes of its hub reaches the replica's copy of it.
+        let hub_copy = hubcopy::HubCopy::new(&events);
+        let taker = hub_copy.clone();
+        deep_app::hub::set_local(Some(Arc::new(move |method, params| {
+            taker.take(method, params)
+        })));
         let reduced = args["reduced_motion"].as_bool().unwrap_or(false);
         let window = cx.update(|cx| {
             gpui_kit::init(cx);
@@ -545,36 +552,48 @@ impl Replica {
             }
             let into = mounted.clone();
             let replacing = !replaces.is_empty();
+            let failing = failing.clone();
             let (window, shell) =
                 open_shell_with(options, &layout, cx, move |window, cx| match panel {
                     Some(dir) => {
                         let runtime = deep_app::new_runtime();
-                        *into.borrow_mut() =
-                            runtime.map_err(|e| e.to_string()).and_then(|runtime| {
-                                let view = deep_app::mount_panel(&runtime, &dir, window, cx)
-                                    .map_err(|e| e.to_string())?;
-                                match (&area, replacing) {
-                                    (Some(area), _) => deep_app::views::place(
-                                        area,
-                                        placed_as.as_deref().unwrap_or("panel"),
-                                        view.clone().into(),
-                                        window,
-                                        cx,
-                                    ),
-                                    (None, true) => {}
-                                    (None, false) => {
-                                        deep_app::open::place_extension(view.clone().into(), cx)
-                                    }
+                        let loaded = runtime.map_err(|e| e.to_string()).and_then(|runtime| {
+                            let view = deep_app::mount_panel(&runtime, &dir, window, cx)
+                                .map_err(|e| format!("{e:#}"))?;
+                            match (&area, replacing) {
+                                (Some(area), _) => deep_app::views::place(
+                                    area,
+                                    placed_as.as_deref().unwrap_or("panel"),
+                                    view.clone().into(),
+                                    window,
+                                    cx,
+                                ),
+                                (None, true) => {}
+                                (None, false) => {
+                                    deep_app::open::place_extension(view.clone().into(), cx)
                                 }
-                                Ok(Some((runtime, view)))
-                            });
+                            }
+                            Ok(Some((runtime, view)))
+                        });
+                        *into.borrow_mut() = match (loaded, failing) {
+                            (Err(why), Some(name)) => {
+                                deep_app::open::place_extension(
+                                    deep_app::views::shipped(Kind::Sidebar, cx),
+                                    cx,
+                                );
+                                deep_app::installed::failed(&name, &why, cx);
+                                Ok(None)
+                            }
+                            (loaded, _) => loaded,
+                        };
                     }
                     None => deep_app::open::place_extension(
                         deep_app::views::shipped(Kind::Sidebar, cx),
                         cx,
                     ),
                 });
-            // ⌘K lists a registered view's entries and the preferences, which open the box (#1998).
+            // ⌘K lists what the app's lists: the shipped pages and the preferences, which open the box (#1998), then a
+            // registered view's entries (#1462).
             let _ = window.update(cx, |_, window, cx| {
                 let views: Vec<_> = view.into_iter().collect();
                 let palette = cx.new(|cx| {
@@ -585,9 +604,8 @@ impl Replica {
                         window,
                         cx,
                     );
-                    let mut entries = deep_app::commands::entries(&views);
-                    // ⌘K lists the app's pages, a view in the sidebar area among them, and the preferences (#1461).
-                    entries.extend(deep_app::installed::shipped_pages());
+                    let mut entries = deep_app::installed::shipped_pages();
+                    entries.extend(deep_app::commands::entries(&views));
                     palette.set_entries(entries, cx);
                     palette
                 });
@@ -598,7 +616,6 @@ impl Replica {
                     shell.set_commands(palette, window, cx);
                     shell.set_box(words, cx);
                 });
-                deep_app::installed::set_menus(cx);
             });
             window
         });
@@ -646,11 +663,11 @@ impl Replica {
             notified: Vec::new(),
             hub_state,
             watch: deep_app::record::HubWatch::default(),
-            hub_calls: Vec::new(),
             motion: None,
             reduced,
             script,
             dirty: None,
+            hub_copy,
         };
         replica.draw();
         replica.draw();
@@ -690,10 +707,11 @@ impl Replica {
             "record" => self.record(&call["record"]),
             "motion" => self.motion(&call["motion"]),
             "expect" => self.expect(call, index),
+            "menus" => Ok(self.menus()),
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, close, ui_check and motion_check"),
+                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, menus, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();
@@ -758,7 +776,16 @@ impl Replica {
         // Time passes for the question card as the app's tick passes it, so it arms once its interval ran (#1459).
         let now = self.now + self.clock.t * 1000 / FLICKS;
         self.watch_hub(now);
-        self.stood_in(now);
+        // What the replica's copy of the hub recorded reaches the app's reader as the hub's stream would (#1462).
+        for mut event in self.hub_copy.take_pending() {
+            let log_pos = deep_app::record::with_view(|view| view.log_pos).unwrap_or(0) + 1;
+            event["log_pos"] = json!(log_pos);
+            event["ts"] = json!(now);
+            event["id"] = json!(format!("01KB1462HC{log_pos:016}"));
+            self.notifier.saw(&event, now);
+            self.events.push(event.clone());
+            self.cx.update(|cx| deep_app::record::deliver(event, cx));
+        }
         self.cx.update(|cx| deep_app::views::tick(now, cx));
         if self.motion.is_some() {
             self.sample();
@@ -898,23 +925,31 @@ impl Replica {
                 .as_array()
                 .map(|p| p.iter().filter_map(Value::as_str).collect())
                 .unwrap_or_default();
-            let menus = deep_app::installed::menus();
-            let item = match path.as_slice() {
-                [menu, item] => menus
+            // The item's action, as the menu bar the app set holds it.
+            let action = self.cx.update(|cx| {
+                let [menu, item] = path.as_slice() else {
+                    return None;
+                };
+                cx.get_menus()?
                     .iter()
-                    .find(|(title, _)| title == menu)
-                    .and_then(|(_, items)| items.iter().find(|(title, _)| title == item))
-                    .map(|(_, address)| address.to_string()),
-                _ => None,
-            };
-            let Some(address) = item else {
+                    .find(|m| m.name.as_ref() == *menu)?
+                    .items
+                    .iter()
+                    .find_map(|entry| match entry {
+                        OwnedMenuItem::Action { name, action, .. } if name == item => {
+                            Some(action.boxed_clone())
+                        }
+                        _ => None,
+                    })
+            });
+            let Some(action) = action else {
                 return Err(fail(
                     "locate.none",
                     format!("the menu bar has no item {path:?}"),
                 ));
             };
             self.input_at(self.clock.t);
-            let _ = self.cx.update(|cx| deep_app::open::arrive(&address, cx));
+            self.cx.update(|cx| cx.dispatch_action(action.as_ref()));
             self.tick();
             self.tick();
             return Ok(json!({"menu": path, "result": "delivered"}));
@@ -954,6 +989,13 @@ impl Replica {
                 self.click(at(center), count);
             }
             "hover" => self.input(MouseMoveEvent { position: at(center), pressed_button: None, modifiers: Modifiers::default() }.to_platform_input()),
+            // A secondary click (#1462): the right button down and up where the locator is.
+            "context_click" => {
+                let (position, modifiers, button) = (at(center), Modifiers::default(), MouseButton::Right);
+                self.input(MouseMoveEvent { position, pressed_button: None, modifiers }.to_platform_input());
+                self.input(MouseDownEvent { button, position, modifiers, click_count: 1, first_mouse: false }.to_platform_input());
+                self.input(MouseUpEvent { button, position, modifiers, click_count: 1 }.to_platform_input());
+            }
             "type" => {
                 let Some(text) = act["text"].as_str() else {
                     return Err(fail("refused", "act type needs its text"));
@@ -1016,7 +1058,7 @@ impl Replica {
             other => {
                 return Err(fail(
                     "refused",
-                    format!("{other:?} is no action; they are click, double_click, type, press, drag, scroll, hover and set"),
+                    format!("{other:?} is no action; they are click, double_click, context_click, type, press, drag, scroll, hover and set"),
                 ))
             }
         }
@@ -1334,6 +1376,11 @@ impl Replica {
             add_text(&mut snapshot.tree, run.text.clone(), run.bounds);
         }
         let mut json = snapshot.to_json();
+        // The status item's menu under the count (#1462): a line per session, as the real app's status item lists them.
+        json["menu_bar"]["items"] = json!(deep_app::record::with_view(|view| {
+            deep_app::states::menu(&view.table(), deep_app::views::now())
+        })
+        .unwrap_or_default());
         // #1458: each string drawn with its size and face, and where each shipped view was laid out.
         json["runs"] = frame
             .runs
@@ -1351,6 +1398,68 @@ impl Replica {
             })
             .collect();
         (json, frame)
+    }
+
+    /// `menus` (#1462): the menu bar the app set, as it sets it on the real app, in order, separators left out, each
+    /// item with its key as the macOS menu bar draws it, in the table's form.
+    fn menus(&mut self) -> Value {
+        fn items(list: &[OwnedMenuItem], cx: &App) -> Vec<Value> {
+            list.iter()
+                .filter_map(|item| match item {
+                    OwnedMenuItem::Separator => None,
+                    OwnedMenuItem::Submenu(menu) => Some(json!({
+                        "name": menu.name.to_string(), "key": null, "enabled": !menu.disabled,
+                        "items": items(&menu.items, cx),
+                    })),
+                    OwnedMenuItem::SystemMenu(menu) => {
+                        Some(json!({"name": menu.name.to_string(), "key": null, "enabled": true}))
+                    }
+                    OwnedMenuItem::Action {
+                        name,
+                        action,
+                        disabled,
+                        ..
+                    } => Some(json!({
+                        "name": name, "key": deep_app::actions::menu_key(action.as_ref(), cx),
+                        "enabled": !disabled,
+                    })),
+                })
+                .collect()
+        }
+        let menus: Vec<Value> = self.cx.update(|cx| {
+            cx.get_menus()
+                .unwrap_or_default()
+                .iter()
+                .map(|menu| json!({"name": menu.name.to_string(), "items": items(&menu.items, cx)}))
+                .collect()
+        });
+        json!({"menus": menus})
+    }
+
+    /// The menu bar as `see` gives it (#1461): each menu's title and its items', in order, separators left out.
+    fn see_menus(&mut self) -> Vec<Value> {
+        self.cx.update(|cx| {
+            cx.get_menus()
+                .unwrap_or_default()
+                .iter()
+                .map(|menu| {
+                    let items: Vec<Value> = menu
+                        .items
+                        .iter()
+                        .filter_map(|item| match item {
+                            OwnedMenuItem::Action { name, disabled, .. } => {
+                                Some(json!({"title": name, "enabled": !disabled}))
+                            }
+                            OwnedMenuItem::Submenu(sub) => Some(
+                                json!({"title": sub.name.to_string(), "enabled": !sub.disabled}),
+                            ),
+                            _ => None,
+                        })
+                        .collect();
+                    json!({"title": menu.name.to_string(), "items": items})
+                })
+                .collect()
+        })
     }
 
     fn see(&mut self, call: &Value) -> Result<Value, Fail> {
@@ -1437,19 +1546,12 @@ impl Replica {
         let address = self
             .cx
             .update(|cx| deep_app::open::current(cx).map(|address| address.to_string()));
-        // The menu bar, as the app set it (#1461).
-        let menus: Vec<Value> = deep_app::installed::menus()
-            .into_iter()
-            .map(|(title, items)| {
-                let items: Vec<Value> = items
-                    .into_iter()
-                    .map(|(title, _)| json!({"title": title, "enabled": true}))
-                    .collect();
-                json!({"title": title, "items": items})
-            })
-            .collect();
+        // What the app sent its hub since launch, which the replica's copy of the hub took (#1462), and the menu bar
+        // as the app set it (#1461).
+        let hub = self.hub_copy.calls();
+        let menus = self.see_menus();
         Ok(
-            json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos, "address": address, "menus": menus}),
+            json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos, "address": address, "hub": hub, "menus": menus}),
         )
     }
 
@@ -1487,69 +1589,6 @@ impl Replica {
         if reach != deep_app::notify::reach() {
             deep_app::notify::publish(reach);
         }
-    }
-
-    /// What the app sent the hub's stand-in since the last frame: kept for the trace and applied to the replica's own
-    /// record as the hub would (#1461): an answer closes its ask and its row leaves the list; a read clears the row's
-    /// unread.
-    fn stood_in(&mut self, now: u64) {
-        for (method, params) in deep_app::hub::take_stood_in() {
-            self.hub_calls
-                .push(json!({"t": now, "method": method, "params": params}));
-            match method.as_str() {
-                "ask.answer" => {
-                    let Some(ask) = params["ask"].as_str().map(str::to_owned) else {
-                        continue;
-                    };
-                    let session = self
-                        .events
-                        .iter()
-                        .find(|e| {
-                            e["kind"] == "ask.created"
-                                && format!("ask:{}", e["id"].as_str().unwrap_or_default()) == ask
-                        })
-                        .and_then(|e| e["session"].as_str().map(str::to_owned))
-                        .unwrap_or_default();
-                    let answered = json!({"v": 1, "id": format!("stood-in-{}", self.hub_calls.len()), "kind": "ask.answered", "writer": "core",
-                        "subject": ask, "data": {"answer": params["option"], "words": params["words"], "via": "card"}});
-                    self.apply(&session, answered, now);
-                    self.apply(&session, json!({"v": 1, "kind": "row.set", "writer": "core", "data": {"id": ask, "listed": false}}), now);
-                }
-                "row.read" => {
-                    let Some(id) = params["id"].as_str() else {
-                        continue;
-                    };
-                    let row = deep_app::record::with_view(|view| {
-                        let table = view.table();
-                        Some((table.row_of(id)?.clone(), table.order_of(id)?))
-                    })
-                    .flatten();
-                    if let Some((mut row, order)) = row {
-                        row["unread"] = json!(false);
-                        row["listed"] = json!(true);
-                        row["order"] = json!(order);
-                        let session = row["session"].as_str().unwrap_or_default().to_owned();
-                        self.apply(
-                            &session,
-                            json!({"v": 1, "kind": "row.set", "writer": "core", "data": row}),
-                            now,
-                        );
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    /// One event into the replica's own record, as the hub's stream delivers it: the next `log_pos`, at `now`.
-    fn apply(&mut self, session: &str, mut event: Value, now: u64) {
-        let log_pos = deep_app::record::with_view(|view| view.log_pos).unwrap_or(0) + 1;
-        event["session"] = json!(session);
-        event["log_pos"] = json!(log_pos);
-        event["ts"] = json!(now);
-        self.notifier.saw(&event, now);
-        self.events.push(event.clone());
-        self.cx.update(|cx| deep_app::record::deliver(event, cx));
     }
 
     /// The window's snapshot, written once under `trace/` by its hash: an action's before and after.
@@ -1722,6 +1761,7 @@ impl Replica {
     }
 
     fn close(&mut self) -> Value {
+        deep_app::hub::set_local(None);
         if self.recording.is_some() {
             let _ = self.record(&json!({"action": "stop"}));
         }
@@ -1735,7 +1775,7 @@ impl Replica {
         };
         let trace = json!({
             "format": "deep_drive.trace@1", "replica": self.id, "calls": self.trace, "notifications": self.notified,
-            "hub": self.hub_calls,
+            "hub": self.hub_copy.calls(),
         });
         let path = self.out.join("trace.json");
         let bytes = trace.to_string();
@@ -1767,13 +1807,18 @@ fn recency(plant: Option<Plant>) -> Vec<String> {
 }
 
 /// What opening a ⌘K entry does in a replica (#366): a page mounts its view's panel in the extension slot, given the
-/// page as `props.page`; a command's action has no hub to run on here, so ⌘K just closes.
+/// page as `props.page`; a command runs on the replica's copy of the hub (#1462).
 fn opener(plant: Option<Plant>) -> deep_app::commands::Open {
     // Each page's runtime lives as long as ⌘K does, as the panel's does.
     let runtimes = RefCell::new(Vec::new());
     Rc::new(move |entry, window, cx| {
         if let deep_app::commands::Entry::Preference { name, .. } = entry {
             deep_app::words::open_preference(name, window, cx);
+            return None;
+        }
+        // A command runs as the app runs it, on the replica's copy of the hub (#1462).
+        if let deep_app::commands::Entry::Command { name, action } = entry {
+            deep_app::installed::run_command(name, action, cx);
             return None;
         }
         let (Some(mut page), deep_app::commands::Entry::Page { panel, .. }) =
