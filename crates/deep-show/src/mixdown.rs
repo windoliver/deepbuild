@@ -37,6 +37,11 @@ pub enum MixCall {
     },
     /// #500: one analysis bake of one asset.
     Bake(Value),
+    /// #501: a media document played live on the default output for `seconds` of real time.
+    Soak {
+        media: Value,
+        seconds: u64,
+    },
 }
 
 /// One of this issue's mix calls, or `None` for a line that lacks a field it needs.
@@ -60,6 +65,10 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
             panel: c.get("panel")?.as_str()?.to_string(),
             from: t("from")?,
             to: t("to")?,
+        },
+        "soak" => MixCall::Soak {
+            media: c.get("media").filter(|d| d.is_object())?.clone(),
+            seconds: c.get("seconds")?.as_u64().filter(|s| *s > 0)?,
         },
         _ => return None,
     })
@@ -383,7 +392,13 @@ impl Hub<'_> {
                         Value::Null
                     };
                     player.take_taps();
-                    let (sha, pcm) = read(&mut player, (last - first).max(0), *write);
+                    // #501: the planted mixer whose Linux build is one 16-bit step off.
+                    let step = if cfg!(target_os = "linux") && self.scenario.planted == Some(Planted::MixerLinuxOneStep) {
+                        1.0 / 32_768.0
+                    } else {
+                        0.0
+                    };
+                    let (sha, pcm) = read(&mut player, (last - first).max(0), *write, step);
                     let mut seg = json!({"from": from, "to": to, "first": first, "frames": (last - first).max(0),
                         "channels": 2, "sha256": sha, "seek": seek,
                         "taps": player.take_taps().into_iter().map(|(k, v)| (k, json!(v))).collect::<Map<String, Value>>()});
@@ -428,13 +443,17 @@ impl Hub<'_> {
                 json!({"handed": {"sample_rate": rate, "channels": 2, "first": first, "frames": last - first,
                     "sha256": sha, "wav": w}})
             }
+            MixCall::Soak { media, seconds } => match self.mix_of(media) {
+                Ok(m) => crate::device::soak(Player::new(Arc::new(m), planted_of(self.scenario.planted, true)), *seconds),
+                Err(e) => e,
+            },
         }
     }
 }
 
-/// Reads `frames` from `player`: the SHA-256 of the interleaved f32le samples, and the samples
-/// themselves when `keep`.
-fn read(player: &mut Player, frames: i64, keep: bool) -> (String, Option<Vec<f32>>) {
+/// Reads `frames` from `player`, each sample `step` higher: the SHA-256 of the interleaved f32le
+/// samples, and the samples themselves when `keep`.
+fn read(player: &mut Player, frames: i64, keep: bool, step: f32) -> (String, Option<Vec<f32>>) {
     let mut h = Sha256::new();
     let mut kept = keep.then(Vec::new);
     let mut buf = vec![0f32; 2 * 4096];
@@ -442,6 +461,9 @@ fn read(player: &mut Player, frames: i64, keep: bool) -> (String, Option<Vec<f32
     while left > 0 {
         let n = left.min(4096);
         player.read(&mut buf[..2 * n]);
+        for x in &mut buf[..2 * n] {
+            *x += step;
+        }
         for x in &buf[..2 * n] {
             h.update(x.to_le_bytes());
         }

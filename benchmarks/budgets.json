@@ -1312,6 +1312,17 @@
       "initialReason": "Issue #1425 first measurement: at the merge base a panel imports the toolkit itself and loads with no module check. One process loads each of the 12 panels in crates/deep-app/panels through `deep-panel-host run`, which runs the app's loader (the module check, then @deepbuild/panel written where gpui-shell resolves it), and updates each 20 times; p50 includes Node's and the binary's start. The issue's 4 ms per update and 1 ms the check may add to a load stay in tests/acceptance/1425/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "media-soak",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "media-soak"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #501 first measurement: the merge base plays no media document on a real device. One process plays 32 looping voices, each a 2 s stereo tone in the decode worker's hands, live through the device gate on the default output for 5 s of the real clock through `deep-show run`'s soak, failing unless it played, and prints the gate's stats; p50 includes Node's and the binary's start and the 5 s. The issue's no underruns over 10 minutes with 32 voices and the media worker under 200 MB stay in tests/acceptance/501/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "deep-list-700",
       "command": [
         "node",
