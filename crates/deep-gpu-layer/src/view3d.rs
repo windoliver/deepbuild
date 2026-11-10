@@ -112,6 +112,9 @@ struct Args {
     packs: Vec<(Option<String>, std::path::PathBuf)>,
     /// The paths whose evaluated values each frame reports (#429).
     evaluate: Vec<String>,
+    /// The items whose drawn vertices and sway gust each frame reports, read back from the GPU
+    /// (#2016).
+    sway: Vec<String>,
     /// Writer layers not visible in this session, which draw, light and cast nothing (#422).
     hidden: BTreeSet<String>,
     /// Each frame reports the key sun's cascade splits (#422).
@@ -399,9 +402,17 @@ fn parse(call: &Value) -> Result<Args, Value> {
             _ => return Err(bad("evaluate lists paths items/<id>/…")),
         }
     }
+    let mut sway = Vec::new();
+    for id in call["sway"].as_array().into_iter().flatten() {
+        match id.as_str() {
+            Some(id) => sway.push(id.to_string()),
+            None => return Err(bad("sway lists item IDs")),
+        }
+    }
     Ok(Args {
         packs,
         evaluate,
+        sway,
         docs,
         doc,
         look,
@@ -1754,6 +1765,16 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("notices".into(), json!(notices));
             }
             frame.insert("resident".into(), json!(resident));
+            if !args.sway.is_empty() {
+                let rows: Map<String, Value> =
+                    session3::sway(app, scene.clone(), args.sway.clone())
+                        .into_iter()
+                        .map(|(id, gust, positions)| {
+                            (id, json!({"gust": gust, "positions": positions}))
+                        })
+                        .collect();
+                frame.insert("sway".into(), Value::Object(rows));
+            }
             if let Some(values) = values {
                 frame.insert("values".into(), values);
             }
