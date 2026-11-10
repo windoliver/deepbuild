@@ -746,7 +746,13 @@ pub struct Registrar {
     pub entries: Vec<lists::EntryDef>,
     /// Its Rust for the entries it fills in the core's `outline.source@1`, by entry name (#443).
     pub outline_fills: Vec<(String, crate::outline::Fill)>,
+    /// The pack fields it reads, each with its check at the pack check (#1720).
+    pub pack_fields: Vec<(String, PackField)>,
 }
+
+/// A module's check of a pack field it reads (Pack: fields that land with their features): over the
+/// whole manifest, each refusal `(path under the field, why)`.
+pub type PackField = fn(&Value) -> Vec<(String, String)>;
 
 impl Registrar {
     pub fn kind(&mut self, entry: Entry, needs: &[&str], draws_as: &str) -> &mut Self {
@@ -1039,6 +1045,13 @@ impl Registrar {
             value,
             since: since.into(),
         });
+        self
+    }
+
+    /// A pack field this module reads, which the pack check holds to `check` (#1720): a pack that
+    /// carries it is checked by its module, never refused as a field no one reads.
+    pub fn pack_field(&mut self, name: &str, check: PackField) -> &mut Self {
+        self.pack_fields.push((name.into(), check));
         self
     }
 

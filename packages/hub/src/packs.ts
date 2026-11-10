@@ -1,8 +1,9 @@
 // Installed data packs (#1820): immutable manifests and license files, pinned by owner/name@version.
 // Downloads and authority live in the library fetch job; this module never calls the network or admits bytes.
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
@@ -15,7 +16,11 @@ export interface PackAsset {
   license: { id: string; terms: string; shareable: boolean; credit: string | null };
   upstream: { url: string; version: string; modified: string };
 }
-export interface PackVersion { id: string; version: string; ref: string; digest: string; manifest: Obj; assets: PackAsset[] }
+export interface PackVersion {
+  id: string; version: string; ref: string; digest: string; manifest: Obj; assets: PackAsset[];
+  /** A pack the hub's release ships (#1720), and how many times the canvas core's pack check ran on this version. */
+  origin?: 'first_party'; checks?: number;
+}
 const safe = (path: string) => path.length > 0 && !isAbsolute(path) && !path.includes('\\') && path.split('/').every((p) => p !== '..' && p !== '.' && p !== '');
 const urlOf = (text: string) => { const u = new URL(text); if (u.protocol !== 'https:' || u.username || u.password || u.hash) throw Error(`asset URL ${text} must be https without credentials or a fragment`); return u; };
 
@@ -27,8 +32,10 @@ function local(from: string, path: string): Buffer {
   if (!safe(rel)) throw Error(`pack path ${path} leaves its folder`);
   return readFileSync(file);
 }
-export function readPack(from: string): PackVersion {
+/** Reads a pack folder; `owner` names a pack whose pack.json gives only its `name`, as the release's own do (#1720). */
+export function readPack(from: string, owner?: string): PackVersion {
   const m: unknown = JSON.parse(readFileSync(join(from, 'pack.json'), 'utf8'));
+  if (owner && object(m) && m.id === undefined && typeof m.name === 'string') m.id = `${owner}/${m.name}`;
   if (!object(m) || typeof m.id !== 'string' || !ID.test(m.id) || typeof m.version !== 'string' || !VERSION.test(m.version)) throw Error('pack.json must name owner/name and an exact version');
   const assets: PackAsset[] = [];
   const paths = new Set<string>();
@@ -48,21 +55,47 @@ export function readPack(from: string): PackVersion {
   return { id: m.id, version: m.version, ref: `${m.id}@${m.version}`, digest: hash(canonicalize(m as JsonValue)), manifest: m, assets };
 }
 
+/** The owner of the packs a release ships (#1720): a document names one `deepbuild/<name>@<version>`. */
+export const FIRST_PARTY = 'deepbuild';
+/** The release's packs/ folder, beside the hub's code as in the checkout. */
+const RELEASE_PACKS = fileURLToPath(new URL('../../../packs/', import.meta.url));
+
+/** The packs the release ships: each folder of its packs/ that holds a pack.json, or why it can't be read. */
+export function releasePacks(dir = RELEASE_PACKS): { folder: string; pack?: PackVersion; error?: string }[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).sort().filter((name) => existsSync(join(dir, name, 'pack.json'))).map((folder) => {
+    try { return { folder, pack: readPack(join(dir, folder), FIRST_PARTY) }; } catch (error) { return { folder, error: error instanceof Error ? error.message : String(error) }; }
+  });
+}
+
+/** A version the pack check refused (#1720), kept with its issues so it isn't checked again: `checks` counts the runs. */
+export interface Refusal { ref: string; digest: string; issues: unknown[]; checks: number }
+
 /** Only a copy that passed the canvas pack check is registered. A republished version can't change its bytes. */
 export class Packs {
   private readonly held = new Map<string, PackVersion>();
   private readonly folder: string;
   constructor(root: string) {
     this.folder = join(root, 'packs');
-    mkdirSync(this.folder, { recursive: true });
+    mkdirSync(join(this.folder, 'refused'), { recursive: true });
     for (const name of readdirSync(this.folder)) if (name.endsWith('.json')) {
       const pack = JSON.parse(readFileSync(join(this.folder, name), 'utf8')) as PackVersion;
       this.held.set(pack.ref, pack);
     }
   }
+  private refusalFile(ref: string): string { return join(this.folder, 'refused', `${hash(ref)}.json`); }
+  refusal(ref: string): Refusal | undefined {
+    const file = this.refusalFile(ref);
+    return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as Refusal : undefined;
+  }
+  refuse(refusal: Refusal): void {
+    const file = this.refusalFile(refusal.ref);
+    writeFileSync(`${file}.tmp`, JSON.stringify(refusal));
+    renameSync(`${file}.tmp`, file);
+  }
   get(ref: string): PackVersion | undefined { return this.held.get(ref); }
   named(id: string): boolean { return [...this.held.values()].some((p) => p.id === id); }
-  all(): { id: string; dir: string }[] { return [...this.held.values()].map((p) => ({ id: p.id, dir: this.directory(p) })); }
+  all(): { id: string; dir: string; origin?: string }[] { return [...this.held.values()].map((p) => ({ id: p.id, dir: this.directory(p), ...(p.origin ? { origin: p.origin } : {}) })); }
   asset(ref: string, path: string): PackAsset | undefined { return this.held.get(ref)?.assets.find((a) => a.path === path); }
   byHash(refs: unknown, sha: string): { pack: string; asset: PackAsset } | undefined {
     for (const ref of Array.isArray(refs) ? refs : []) if (typeof ref === 'string') {
@@ -103,6 +136,7 @@ export class Packs {
     writeFileSync(`${file}.tmp`, JSON.stringify(pack));
     renameSync(`${file}.tmp`, file);
     this.held.set(pack.ref, pack);
+    rmSync(this.refusalFile(pack.ref), { force: true });
   }
 }
 

@@ -108,8 +108,29 @@ export async function exportCommand(args: readonly string[]): Promise<number> {
     rmSync(evidence, { recursive: true, force: true });
   }
 }
+/**
+ * The pack check of each pack folder (#306), run once in a canvas core of its own so nothing replays it: the store's
+ * row per version, `{pack, version, state, checks, issues}`, as `deep-show run` answers its `packs` call.
+ */
+export function checkPacks(packs: { id: string; dir: string }[], evidence: string): Promise<Obj[]> {
+  return new Promise((done, fail) => {
+    const child = spawn(canvasCore(), ['run'], { stdio: ['pipe', 'pipe', 'ignore'] });
+    let out = '';
+    child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString('utf8'); });
+    child.on('error', fail);
+    child.on('exit', () => {
+      try {
+        const reply = (JSON.parse(out.split('\n')[0] ?? '') as { replies?: { packs?: Obj[] }[] }).replies?.[0]?.packs;
+        if (!Array.isArray(reply)) throw Error(out.slice(0, 300));
+        done(reply);
+      } catch (error) { fail(Error(`the canvas core gave no pack rows: ${(error as Error).message}`)); }
+    });
+    child.stdin.end(`${JSON.stringify({ evidence, packs, calls: [{ call: 'packs' }] })}\n`);
+  });
+}
+
 /** Still rendering is shared; only the hub supplies installed packs and checked asset bytes. */
-export async function renderStill(document: unknown, still: string, evidence: string, packs: { id: string; dir: string }[] = []): Promise<Obj> {
+export async function renderStill(document: unknown, still: string, evidence: string, packs: { id: string; dir: string; origin?: string }[] = []): Promise<Obj> {
   const canvas = new Canvas(evidence);
   try {
     const world: CanvasWorld = {

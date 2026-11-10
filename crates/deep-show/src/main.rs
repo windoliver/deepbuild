@@ -1444,7 +1444,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             _ => None,
         })
         .collect::<Option<_>>()?;
-    // #306: the packs installed in the store before the first call, each `{id, dir}`.
+    // #306: the packs installed in the store before the first call, each `{id, dir}`, and
+    // `origin: "first_party"` for one the hub's release ships (#1720).
     let packs = match input.get("packs") {
         None => Vec::new(),
         Some(list) => list
@@ -1454,6 +1455,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 Some((
                     p.get("id")?.as_str()?.to_string(),
                     PathBuf::from(p.get("dir")?.as_str()?),
+                    p.get("origin").and_then(Value::as_str) == Some("first_party"),
                 ))
             })
             .collect::<Option<_>>()?,

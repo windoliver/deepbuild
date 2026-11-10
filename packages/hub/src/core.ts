@@ -89,7 +89,7 @@ import { retain } from './retention.js';
 import { Stacks, type StackWant } from './stacks.js';
 import { Starts } from './starts.js';
 import { checkArguments } from './tools.js';
-import { Canvas, nameOf, renderStill, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
+import { Canvas, checkPacks, nameOf, renderStill, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedReload, plantedSessionEnd, plantedStop, type Plant } from './plant.js';
@@ -99,7 +99,7 @@ import { LogReads } from './log-reads.js';
 import { Hosts } from './hosts.js';
 import { Jobs } from './jobs.js';
 import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts, type AssetKind } from './libraries.js';
-import { readPack } from './packs.js';
+import { readPack, releasePacks, type PackVersion } from './packs.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { copySynced, disk, synced, testVfs, writeSynced, type Durable } from './vfs.js';
@@ -6000,7 +6000,9 @@ export class Core {
     // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
     const sessions = ((await this.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
       FROM sessions s WHERE s.last_seen IS NOT NULL ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
+    // The release's packs (#1720), as the canvas core's start left them; nothing is checked here.
+    const packs = await (this.release ?? this.releaseRows(false));
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])), packs };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {
@@ -6828,8 +6830,59 @@ export class Core {
   private appSeen = 0;
   private readonly appOpen = (): boolean => Date.now() - this.appSeen < 250;
 
+  /** The release's packs, checked and installed as the canvas core starts (#1720): what each came to. */
+  private release?: Promise<Obj[]>;
+  /** The release's pack folders, read once a process: the release doesn't change under a running hub. */
+  private shipped?: ReturnType<typeof releasePacks>;
+  /**
+   * Each pack the release ships, as the store holds it: installed, refused with its issues, or not checked yet. With
+   * `check`, a version the store has no check of is checked once, by the canvas core's pack check, and installed if
+   * it passes, so a restart checks nothing again.
+   */
+  private async releaseRows(check: boolean): Promise<Obj[]> {
+    const packs = this.libraries?.packs;
+    if (!packs) return [];
+    const rows: Obj[] = [];
+    const fresh: { folder: string; pack: PackVersion }[] = [];
+    for (const { folder, pack, error } of (this.shipped ??= releasePacks())) {
+      if (!pack) { rows.push({ folder, state: 'refused', issues: [error] }); continue; }
+      const row = { folder, pack: pack.id, version: pack.version };
+      const held = packs.get(pack.ref);
+      const refused = packs.refusal(pack.ref);
+      if (held && held.digest !== pack.digest) rows.push({ ...row, state: 'refused', issues: [`${pack.ref} is installed with other bytes, and a published version never changes`] });
+      else if (held) rows.push({ ...row, state: 'installed', issues: [], checks: held.checks ?? 0 });
+      else if (refused?.digest === pack.digest) rows.push({ ...row, state: 'refused', issues: refused.issues, checks: refused.checks });
+      else if (check) fresh.push({ folder, pack });
+      else rows.push({ ...row, state: 'not_checked', issues: [] });
+    }
+    if (!fresh.length) return rows;
+    const staged = fresh.map(({ folder, pack }) => ({ folder, pack, dir: packs.stage(pack) }));
+    let checked: Obj[];
+    try {
+      checked = await checkPacks(staged.map(({ pack, dir }) => ({ id: pack.id, dir })), this.root.evidence);
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      return [...rows, ...fresh.map(({ folder, pack }) => ({ folder, pack: pack.id, version: pack.version, state: 'not_checked', issues: [why] }))];
+    }
+    for (const { folder, pack } of staged) {
+      const got = checked.find((r) => r.pack === pack.id && r.version === pack.version);
+      const state = got?.state === 'installed' ? 'installed' : 'refused';
+      const issues = Array.isArray(got?.issues) ? got.issues : ['the canvas core gave this version no row'];
+      // The store's own count: the runs the canvas core counted, added to an earlier refusal's.
+      const checks = (packs.refusal(pack.ref)?.checks ?? 0) + (typeof got?.checks === 'number' ? got.checks : 0);
+      if (state === 'installed') packs.admit({ ...pack, origin: 'first_party', checks });
+      else {
+        packs.refuse({ ref: pack.ref, digest: pack.digest, issues, checks });
+        process.stderr.write(`deep hub: the release's pack ${pack.ref} failed its check and isn't installed: ${JSON.stringify(issues).slice(0, 600)}\n`);
+      }
+      rows.push({ folder, pack: pack.id, version: pack.version, state, issues, checks });
+    }
+    return rows;
+  }
+
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
+    await (this.release ??= this.releaseRows(true));
     const file = { ...this.worldFile.read(), packs: this.libraries?.packs.all() ?? [] };
     const sessions = [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
     const record: Obj = {};
@@ -7051,6 +7104,7 @@ export class Core {
   /** The same first-use gate for a shown document and its exports, for every asset-reading kind. */
   private async preparePackAssets(document: Obj): Promise<Obj | undefined> {
     if (!this.libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
+    await (this.release ??= this.releaseRows(true));
     for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !this.libraries.packs.get(pack)) {
       return { status: 'BLOCKED', outcome: 'refused', cause: `pack_missing: ${String(pack)}`, snapshots: [] };
     }

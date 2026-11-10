@@ -38335,6 +38335,7 @@ pub enum DoctorItemCode {
     NotificationsOff,
     ServiceUnpromoted,
     StatuslineShadowed,
+    PackRefused,
     Unknown,
 }
 
@@ -38369,6 +38370,7 @@ impl Contract for DoctorItemCode {
             "notifications_off" => Ok(Self::NotificationsOff),
             "service_unpromoted" => Ok(Self::ServiceUnpromoted),
             "statusline_shadowed" => Ok(Self::StatuslineShadowed),
+            "pack_refused" => Ok(Self::PackRefused),
             "unknown" => Ok(Self::Unknown),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
@@ -38403,6 +38405,7 @@ impl Contract for DoctorItemCode {
             Self::NotificationsOff => "notifications_off",
             Self::ServiceUnpromoted => "service_unpromoted",
             Self::StatuslineShadowed => "statusline_shadowed",
+            Self::PackRefused => "pack_refused",
             Self::Unknown => "unknown",
         }.to_string())
     }

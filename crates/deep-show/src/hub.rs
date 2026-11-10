@@ -951,8 +951,9 @@ pub struct Scenario {
     pub decode_caps: deep_codecs::Caps,
     /// #499: the test audio backend, which replaces the platform's output at its boundary.
     pub audio: Option<crate::audio::Backend>,
-    /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
-    pub packs: Vec<(String, PathBuf)>,
+    /// The packs installed in the store before the first call (#306), each `(owner/name, dir)` and
+    /// whether the hub's release ships it (#1720).
+    pub packs: Vec<(String, PathBuf, bool)>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub
     /// recorded at install.
     pub installed: Vec<Value>,
@@ -1045,6 +1046,8 @@ pub struct Hub<'a> {
     pub pack_rows: Vec<crate::packs::Row>,
     /// #200: the session that installed each pack, by `owner/name@version`.
     pub pack_authors: BTreeMap<String, String>,
+    /// #1720: the packs the hub's release ships, by `owner/name@version`: their origin is first-party.
+    pub first_party: BTreeSet<String>,
     /// Each document's expansions at its last check, for the replies that carry them.
     pub expansions: BTreeMap<String, Vec<Expansion>>,
     /// #544's planted start_on: each session's first evaluated time since its revision loaded.
@@ -1202,6 +1205,7 @@ impl<'a> Hub<'a> {
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
+            first_party: BTreeSet::new(),
             expansions: BTreeMap::new(),
             first_frames: BTreeMap::new(),
             placement: Placement::open(
@@ -1230,8 +1234,12 @@ impl<'a> Hub<'a> {
         };
         deep_text::cache::record();
         // The store's packs, each checked once here and never on a document's open.
-        for (id, dir) in &scenario.packs {
-            hub.install_pack(id, dir, None);
+        for (id, dir, first_party) in &scenario.packs {
+            let reply = hub.install_pack(id, dir, None);
+            if *first_party && reply["outcome"] == "installed" {
+                let version = reply["version"].as_str().unwrap_or_default();
+                hub.first_party.insert(format!("{id}@{version}"));
+            }
         }
         hub
     }

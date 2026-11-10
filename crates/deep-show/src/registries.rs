@@ -29,7 +29,8 @@ fn slot_table() -> Vec<Value> {
 
 impl Hub<'_> {
     /// Every entry admitted packs fill, as each is listed: origin `agent` for a pack the working
-    /// agent installed through its session, else `pack`.
+    /// agent installed through its session, `first_party` for one the hub's release ships (#1720),
+    /// else `pack`.
     fn pack_entries(&self) -> Vec<SealedEntry> {
         // #415: a pack's admitted layouts are data.layout@1 entries beside its `entries`.
         let layouts = self.sandbox.layout_entries.iter().filter(|e| self.packs.all().any(|p| p.id.text() == e.pack));
@@ -39,12 +40,22 @@ impl Hub<'_> {
             .chain(layouts)
             .map(|e| {
                 let mut e = e.clone();
-                if self.pack_authors.contains_key(&e.pack) {
-                    e.origin = "agent";
-                }
+                e.origin = self.pack_origin(&e.pack);
                 e
             })
             .collect()
+    }
+
+    /// Where an admitted pack, `owner/name@version`, came from: `agent` when the working agent
+    /// installed it through its session, `first_party` when the hub's release ships it, else `pack`.
+    pub fn pack_origin(&self, pack: &str) -> &'static str {
+        if self.pack_authors.contains_key(pack) {
+            "agent"
+        } else if self.first_party.contains(pack) {
+            "first_party"
+        } else {
+            "pack"
+        }
     }
 
     /// `{"call": "registries"}`: `deep://registries/<core version>`.
@@ -131,9 +142,7 @@ impl Hub<'_> {
                 .iter()
                 .find(|e| e.registry == registry && e.name == name)?
                 .clone();
-            if self.pack_authors.contains_key(*id) {
-                e.origin = "agent";
-            }
+            e.origin = self.pack_origin(id);
             Some(e)
         })
     }
