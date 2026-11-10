@@ -8,6 +8,7 @@
 //! the registry and seal.
 
 pub mod check;
+pub mod chrome_fx;
 pub mod dirt;
 pub mod emit;
 pub mod fusion;

@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fail, Finding } from '@deepbuild/conformance';
+import { fail, Finding } from '@deepbuild/conformance/findings';
 import type { CheckContext, Fixture, PlantedFill, Random, RunOutcome, SlotCase, SlotKitImpl, SlotRule } from '@deepbuild/conformance';
 import { check } from './check.js';
 import { locateKani } from './kani.js';

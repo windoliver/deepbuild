@@ -15,7 +15,8 @@ import { shipped } from '../packages/adapters/dist/index.js';
 import { openArchive } from '../packages/archive/dist/index.js';
 import { openAsks } from '../packages/asks/dist/index.js';
 import { openEvidenceStore } from '../packages/evidence/dist/index.js';
-import { openWikiBuild, rootOf } from '../packages/hub/dist/index.js';
+import { rootOf } from '../packages/hub/dist/index.js';
+import { openWikiBuild } from '../packages/hub/dist/wiki-build.js';
 import { openRecord } from '../packages/record/dist/index.js';
 
 const T0 = 1_760_013_451_000;

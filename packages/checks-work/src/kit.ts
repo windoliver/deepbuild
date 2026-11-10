@@ -10,7 +10,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { fail, Finding } from '@deepbuild/conformance';
+import { fail, Finding } from '@deepbuild/conformance/findings';
 import type { CheckContext, CheckResult, Fixture, PlantedFill, Random, RunOutcome, SlotCase, SlotKitImpl, SlotRule } from '@deepbuild/conformance';
 import type { JsonType, WorkFill, WorkKind, WorkSpec } from './types.js';
 

@@ -1,0 +1,6 @@
+[
+  { "call": "launch", "launch": { "from": "fixture", "fixture": "$FIXTURE", "center": "deepbuild/needs-you" } },
+  { "call": "expect", "locator": { "role": "button", "name": "Which font for the printed receipt?" }, "expect": { "name": "row 2 shows", "assert": "visible" } },
+  { "call": "act", "locator": { "role": "button", "name": "Which font for the printed receipt?" }, "act": { "kind": "click" } },
+  { "call": "close" }
+]

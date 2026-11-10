@@ -2,7 +2,7 @@
 // the old public key stops counting at that moment"): from the app alone, signed by a device you paired, and counted
 // once you confirm with the new key. Built on #880's acceptance rig: a copy of the hub whose helper is a signed test
 // binary holding a software P-256 key, so no Touch ID shows.
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, sign, X509Certificate } from 'node:crypto';
 import { copyFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -29,9 +29,11 @@ it('sets the key up again only from the app with a paired device, and the old ke
   const raw = device.publicKey.export({ format: 'jwk' }).x!;
   const paired = await cli.call('device.pair', { name: 'test app', public_key: raw }, MINUTE);
   expect(paired.result?.device, JSON.stringify(paired)).toMatch(/^device:/);
+  // Signed as #1579 has it: for confirm.enroll on this hub, now and once, over the params' hash.
+  const hubId = createHash('sha256').update(new X509Certificate(readFileSync(join(rootOf(rig), 'hub.key.cert'))).raw).digest('hex');
   const signed = (params: Record<string, unknown>) => {
-    const body = { ...params, device: paired.result!.device as string };
-    return { ...body, signature: sign(null, canonicalize(body as JsonValue), device.privateKey).toString('base64url') };
+    const body = { device: paired.result!.device as string, method: 'confirm.enroll', hub: hubId, at: Date.now(), once: randomBytes(16).toString('base64url'), params: createHash('sha256').update(canonicalize(params as JsonValue)).digest('hex') };
+    return { ...params, signature: { signed: body, sig: sign(null, canonicalize(body as JsonValue), device.privateKey).toString('base64url') } };
   };
 
   // Not from the CLI, and not from the app without a paired device's signature.

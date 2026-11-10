@@ -1,0 +1,152 @@
+Base commit: f1e8736e (Merge pull request #1742), the merge base: no implementation of #1579.
+Where: the built base export (npm ci, npm run build --workspaces), shown below as <export>, with this folder copied to
+       <export>/tests/acceptance/34/redraft-1579 for the run and deleted after it.
+Command: cd <export> && NO_COLOR=1 scripts/lease node node_modules/vitest/vitest.mjs run tests/acceptance/34/redraft-1579 \
+           --no-file-parallelism --testTimeout=600000
+         (node v24.22.0 first on PATH). scripts/lease ran it unleased: "DeepBuild isn't set up here (no hub token)".
+Date: 2026-11-09 00:36 PST  vitest 5.0.5  darwin-arm64 (Mac17,10, Apple M5 Max: not a reference Mac; no budget here)
+      Load average 200-240 during the run (other sessions on this Mac).
+Exit code: 1
+Result: 1 file, 7 tests, 5 failed, 2 passed.
+
+An earlier run the same minute wrote to a scratch file another blind job also wrote to, so its output was interleaved;
+it had the same 5 failed / 2 passed, at the same assertions. The output below is the clean rerun, verbatim but for
+<export>.
+
+== Per test, at the base
+
+AC2 #34.0e31665e
+  x the app's answer carrying only the control token is refused, ... even with the OS ready to confirm
+      the unsigned refusal holds; fails at "<ask>'s answer counts": the base refuses the new-format signature,
+      credential at /params/signature ("Sign the answer with a device you paired, over exactly the params it sends.")
+  x a signature from a key never paired, or over other words than the answer sent, is refused
+      the three refusals hold (for the base's reason: it reads no signature in the new format); fails at the last
+      step, the good signature over asks[2], "<ask>'s answer counts": credential at /params/signature
+  ok a key paired without the OS confirming you is refused, and nothing it signs counts
+      passes at the base: pairing is refused and nothing signed counts, in either format
+  ok from the CLI, an unsigned authority answer counts only once the OS confirms you, ...
+      passes at the base: no signature in this case (the earlier suite's case, kept as written)
+  x (wrong program) a hub that counts an answer carrying only the control token fails this test, naming the ask
+      fails at "the planted hub counts the unsigned answer, and the judge names its ask": the planted signer signs in
+      the new format, the base refuses it, so the judge found no failure (null)
+AC4 #34.fbf5f587
+  x a taste call answered on the App API is recorded and handed on as its twin answered from the CLI is
+      fails at "<ask>'s answer counts": credential at /params/signature
+  x an authority ask approved on the App API is recorded and handed on as its twin approved from the CLI is
+      fails at "<ask>'s answer counts": credential at /params/signature
+
+== Output
+
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run tests/acceptance/34/redraft-1579 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 <export>
+
+ ❯ tests/acceptance/34/redraft-1579/answers.test.ts (7 tests | 5 failed) 45716ms
+   ❯ AC2 #34.0e31665e an authority answer without a paired device's signature is refused, unless it comes from the CLI and the OS has confirmed you (5)
+     × AC2 the app's answer carrying only the control token is refused, recorded nothing and leaves the ask open, even with the OS ready to confirm 6931ms
+     × AC2 a signature from a key never paired, or over other words than the answer sent, is refused 6254ms
+     × AC2 (wrong program) a hub that counts an answer carrying only the control token fails this test, naming the ask 6376ms
+   ❯ AC4 #34.fbf5f587 an answer posted here is delivered like a CLI answer (2)
+     × AC4 a taste call answered on the App API is recorded and handed on as its twin answered from the CLI is 6640ms
+     × AC4 an authority ask approved on the App API is recorded and handed on as its twin approved from the CLI is 6895ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/34/redraft-1579/answers.test.ts > AC2 #34.0e31665e an authority answer without a paired device's signature is refused, unless it comes from the CLI and the OS has confirmed you > AC2 the app's answer carrying only the control token is refused, recorded nothing and leaves the ask open, even with the OS ready to confirm
+AssertionError: ask:01M6ZQ6V5TFE8QMKVQ4R5GG1ZB's answer counts: {"v":1,"id":"ask.answer#6","error":{"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ counted tests/acceptance/34/redraft-1579/answers.test.ts:44:88
+     42| }
+     43| async function counted(w: World, ask: Seeded, reply: Line): Promise<Li…
+     44|   expect('result' in reply, `${ask.handle}'s answer counts: ${JSON.str…
+       |                                                                                        ^
+     45|   const answered = await eventsAbout(w.app, ask.handle, 'ask.answered'…
+     46|   expect(answered, `${ask.handle} is recorded answered once`).toHaveLe…
+ ❯ tests/acceptance/34/redraft-1579/answers.test.ts:60:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/34/redraft-1579/answers.test.ts > AC2 #34.0e31665e an authority answer without a paired device's signature is refused, unless it comes from the CLI and the OS has confirmed you > AC2 a signature from a key never paired, or over other words than the answer sent, is refused
+AssertionError: ask:01M6ZQ726KGR610H79BEEHQKDD's answer counts: {"v":1,"id":"ask.answer#14","error":{"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ counted tests/acceptance/34/redraft-1579/answers.test.ts:44:88
+     42| }
+     43| async function counted(w: World, ask: Seeded, reply: Line): Promise<Li…
+     44|   expect('result' in reply, `${ask.handle}'s answer counts: ${JSON.str…
+       |                                                                                        ^
+     45|   const answered = await eventsAbout(w.app, ask.handle, 'ask.answered'…
+     46|   expect(answered, `${ask.handle} is recorded answered once`).toHaveLe…
+ ❯ tests/acceptance/34/redraft-1579/answers.test.ts:77:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/34/redraft-1579/answers.test.ts > AC2 #34.0e31665e an authority answer without a paired device's signature is refused, unless it comes from the CLI and the OS has confirmed you > AC2 (wrong program) a hub that counts an answer carrying only the control token fails this test, naming the ask
+AssertionError: the planted hub counts the unsigned answer, and the judge names its ask: the given combination of arguments (null and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ ❯ tests/acceptance/34/redraft-1579/answers.test.ts:117:96
+    115|     const reply = await through.call('ask.answer', approve(ask), 20_00…
+    116|     const failure = await notCounted(w, ask, reply);
+    117|     expect(failure, 'the planted hub counts the unsigned answer, and t…
+       |                                                                                                ^
+    118|     await plant.close();
+    119|   }, 120_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/34/redraft-1579/answers.test.ts > AC4 #34.fbf5f587 an answer posted here is delivered like a CLI answer > AC4 a taste call answered on the App API is recorded and handed on as its twin answered from the CLI is
+AssertionError: ask:01M6ZQ7SYYZ5AD60PTXPKEGXEF's answer counts: {"v":1,"id":"ask.answer#2","error":{"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ counted tests/acceptance/34/redraft-1579/answers.test.ts:44:88
+     42| }
+     43| async function counted(w: World, ask: Seeded, reply: Line): Promise<Li…
+     44|   expect('result' in reply, `${ask.handle}'s answer counts: ${JSON.str…
+       |                                                                                        ^
+     45|   const answered = await eventsAbout(w.app, ask.handle, 'ask.answered'…
+     46|   expect(answered, `${ask.handle} is recorded answered once`).toHaveLe…
+ ❯ tests/acceptance/34/redraft-1579/answers.test.ts:131:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/34/redraft-1579/answers.test.ts > AC4 #34.fbf5f587 an answer posted here is delivered like a CLI answer > AC4 an authority ask approved on the App API is recorded and handed on as its twin approved from the CLI is
+AssertionError: ask:01M6ZQ80EJD3M7MQ3KPGHTJS5Q's answer counts: {"v":1,"id":"ask.answer#2","error":{"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ counted tests/acceptance/34/redraft-1579/answers.test.ts:44:88
+     42| }
+     43| async function counted(w: World, ask: Seeded, reply: Line): Promise<Li…
+     44|   expect('result' in reply, `${ask.handle}'s answer counts: ${JSON.str…
+       |                                                                                        ^
+     45|   const answered = await eventsAbout(w.app, ask.handle, 'ask.answered'…
+     46|   expect(answered, `${ask.handle} is recorded answered once`).toHaveLe…
+ ❯ tests/acceptance/34/redraft-1579/answers.test.ts:141:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 2 passed (7)
+   Start at  00:36:13
+   Duration  47.54s (tests 98%, transform 1%, import 1%)
+

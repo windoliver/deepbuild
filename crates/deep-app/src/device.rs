@@ -1,18 +1,25 @@
 //! Issue #1454: the app as a device you paired (design: The trusted path is a device you paired). Its first answer
 //! makes an Ed25519 key, kept under the hub's root and readable only by you, and pairs it with the hub, which has the
-//! OS confirm you. From then on the app signs what it sends: Ed25519 over the RFC 8785 bytes of the params with `device`
-//! in them and `signature` left out, as the hub checks it (packages/hub/src/trusted.ts).
+//! OS confirm you. From then on the app signs what it sends.
+//!
+//! Issue #1579: a signature says what it's for, as the hub's one verifier checks it (packages/hub/src/trusted.ts):
+//! `signature: {signed: {device, method, hub, at, once, params}, sig}`, Ed25519 over the RFC 8785 bytes of `signed`,
+//! where `params` is the hex SHA-256 of the params' RFC 8785 bytes. So it counts for that method on that hub, for 10
+//! minutes, once.
 
 use std::io::Read as _;
 use std::path::PathBuf;
 
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde_json::{json, Map, Value};
+use sha2::{Digest as _, Sha256};
 
 use crate::hub::{HubClient, HubError};
 
 const NAME: &str = "DeepBuild on this Mac";
 const KEY_BYTES: usize = 32;
+/// A once-only ID's random bytes: 22 base64url characters.
+const ONCE_BYTES: usize = 16;
 
 /// The device the app paired as: its ID at the hub and its key.
 pub struct Device {
@@ -67,16 +74,43 @@ impl Device {
         let _ = std::fs::remove_file(file());
     }
 
-    /// `params` with this device named and signed over exactly those bytes.
-    pub fn sign(&self, mut params: Map<String, Value>) -> Value {
-        params.insert("device".into(), Value::String(self.id.clone()));
+    /// `params` with a signature for `method` on the hub `hub`, over exactly those params, now and once.
+    pub fn sign(
+        &self,
+        method: &str,
+        hub: &str,
+        params: Map<String, Value>,
+    ) -> Result<Value, HubError> {
+        let mut once = [0u8; ONCE_BYTES];
+        std::fs::File::open("/dev/urandom")?.read_exact(&mut once)?;
+        let at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_millis() as u64);
+        Ok(self.signed(method, hub, at, &encode(&once), params))
+    }
+
+    fn signed(
+        &self,
+        method: &str,
+        hub: &str,
+        at: u64,
+        once: &str,
+        mut params: Map<String, Value>,
+    ) -> Value {
         let mut body = String::new();
         canonical(&Value::Object(params.clone()), &mut body);
-        let signature = self.key.sign(body.as_bytes());
-        params.insert(
-            "signature".into(),
-            Value::String(encode(&signature.to_bytes())),
-        );
+        let signed = json!({
+            "device": self.id,
+            "method": method,
+            "hub": hub,
+            "at": at,
+            "once": once,
+            "params": format!("{:x}", Sha256::digest(body.as_bytes())),
+        });
+        let mut bytes = String::new();
+        canonical(&signed, &mut bytes);
+        let sig = encode(&self.key.sign(bytes.as_bytes()).to_bytes());
+        params.insert("signature".into(), json!({ "signed": signed, "sig": sig }));
         Value::Object(params)
     }
 }
@@ -194,7 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn a_signature_covers_the_params_with_the_device_in_them() {
+    fn a_signature_covers_the_method_the_hub_the_time_the_once_and_the_params() {
         let key = SigningKey::from_bytes(&[7; KEY_BYTES]);
         let device = Device {
             id: "device:01ABC".into(),
@@ -203,23 +237,30 @@ mod tests {
         let mut params = Map::new();
         params.insert("ask".into(), json!("ask:01A"));
         params.insert("option".into(), json!("yes"));
-        let signed = device.sign(params);
-        assert_eq!(signed["device"], "device:01ABC");
-        let mut body = signed.as_object().unwrap().clone();
-        let signature = decode(body.remove("signature").unwrap().as_str().unwrap()).unwrap();
-        let signature = Signature::from_slice(&signature).unwrap();
+        let sent = device.signed(
+            "ask.answer",
+            "abc",
+            1_700_000_000_000,
+            "AAAAAAAAAAAAAAAAAAAAAA",
+            params.clone(),
+        );
+        let signature = &sent["signature"];
+        let mut body = String::new();
+        canonical(&Value::Object(params), &mut body);
+        assert_eq!(
+            signature["signed"],
+            json!({ "device": "device:01ABC", "method": "ask.answer", "hub": "abc", "at": 1_700_000_000_000u64,
+                    "once": "AAAAAAAAAAAAAAAAAAAAAA", "params": format!("{:x}", Sha256::digest(body.as_bytes())) })
+        );
+        let sig = decode(signature["sig"].as_str().unwrap()).unwrap();
+        let sig = Signature::from_slice(&sig).unwrap();
         let mut bytes = String::new();
-        canonical(&Value::Object(body.clone()), &mut bytes);
-        assert!(key
-            .verifying_key()
-            .verify(bytes.as_bytes(), &signature)
-            .is_ok());
-        body.insert("option".into(), json!("no"));
-        let mut other = String::new();
-        canonical(&Value::Object(body), &mut other);
-        assert!(key
-            .verifying_key()
-            .verify(other.as_bytes(), &signature)
-            .is_err());
+        canonical(&signature["signed"], &mut bytes);
+        assert!(key.verifying_key().verify(bytes.as_bytes(), &sig).is_ok());
+        let mut other = signature["signed"].clone();
+        other["method"] = json!("ask.undo");
+        let mut moved = String::new();
+        canonical(&other, &mut moved);
+        assert!(key.verifying_key().verify(moved.as_bytes(), &sig).is_err());
     }
 }

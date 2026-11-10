@@ -138,7 +138,7 @@ export class Kinds {
     if (waiting) return result('missing', 'review: second model', '', `BLOCKED: no second model is free to review the diff (${waiting})`);
     if (!job || job.state !== 'finished') return { outcome: ran.outcome, testsRun: ran.testsRun, failures: ran.failures, evidence: ran.evidence, read: ran.read, mask: ran.mask };
     // A review answered by the change's own model, or by one its output doesn't name, counts neither way (#87).
-    const change: ChangeSession = { agent: of.agent === 'codex' ? 'codex' : 'claude-code', transcript: of.transcript ? readTranscript(of.transcript) : '', route: {} };
+    const change: ChangeSession = { agent: of.agent, transcript: of.transcript ? readTranscript(of.transcript) : '', route: {} };
     const counted = independence(job.model ?? 'unknown', change);
     if (!counted.counted) return { ...result('uncounted', 'review: second model', '', `the review is uncounted: ${counted.reason!}`, counted.reason), read: ran.read };
     const note = counted.note ? [`${counted.note} (${counted.answered})`] : [];

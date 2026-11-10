@@ -3715,7 +3715,7 @@ export interface ChannelRefused {
     channel: string;
     thread_key: string;
     answer: string;
-    field?: "device" | "ask" | "revision" | "card_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id";
+    field?: "device" | "ask" | "revision" | "card_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id" | "method" | "once" | "params";
     reason: string;
   };
   evidence?: Array<string>;
@@ -7252,6 +7252,24 @@ export interface SessionEnd {
   kind: "session.end";
   subject?: string;
   writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.end@2 */
+export interface SessionEndV2 {
+  v: 2;
+  id: string;
+  kind: "session.end";
+  subject?: string;
+  writer: string;
   actor: string;
   scope: string;
   ts: number;

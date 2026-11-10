@@ -134,24 +134,44 @@ pub fn script_tree(view: &ScriptView) -> String {
         .debug_tree()
 }
 
-/// The ask handles a script view described, top to bottom: every text node in its published
-/// description whose whole text is an `ask:<id>` handle. An element's id is not a row.
+/// The ask handles a script view's rows are keyed by, top to bottom: every element in its published description
+/// whose id is an `ask:<id>` handle (#1459). A handle drawn as text is no row, so a view draws its question.
 ///
 /// This reads the description the script published, not pixels: gpui-shell's elements are not
 /// gpui-base observed elements, so their drawn bounds and visibility are not readable headless at
-/// this milestone, and a panel that described a handle inside a hidden or zero-size element would
+/// this milestone, and a panel that keyed a hidden or zero-size element by a handle would
 /// still count it as a row. The kit's planted faults are list faults, which this does catch.
 pub fn rows_of(tree: &str) -> Vec<String> {
-    tree.lines()
-        .filter_map(|line| {
-            line.trim_start()
-                .strip_prefix("text \"ask:")
-                .and_then(|rest| rest.strip_suffix('"'))
-                .filter(|id| {
-                    id.chars()
-                        .all(|character| character.is_ascii_alphanumeric())
-                })
-                .map(|id| format!("ask:{id}"))
+    keyed(tree, "ask:").into_iter().map(|(id, _)| id).collect()
+}
+
+/// The elements of a script view's description keyed by an id that starts with `prefix` and goes on in letters and
+/// digits, top to bottom, each with the text drawn inside it, joined by spaces (#1459): `session:` for
+/// `session.row@1`'s rows. Text alone is never a row.
+pub fn keyed(tree: &str, prefix: &str) -> Vec<(String, String)> {
+    let marker = format!(":id[Str(\"{prefix}");
+    let lines: Vec<&str> = tree.lines().collect();
+    let indent = |line: &str| line.len() - line.trim_start().len();
+    lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| !line.trim_start().starts_with("text "))
+        .filter_map(|(at, line)| {
+            let (_, rest) = line.split_once(&marker)?;
+            let id: String = rest
+                .chars()
+                .take_while(char::is_ascii_alphanumeric)
+                .collect();
+            if id.is_empty() || !rest[id.len()..].starts_with('"') {
+                return None;
+            }
+            let drawn: Vec<&str> = lines[at + 1..]
+                .iter()
+                .take_while(|inner| indent(inner) > indent(line))
+                .filter_map(|inner| inner.trim_start().strip_prefix("text "))
+                .map(|text| text.trim_matches('"'))
+                .collect();
+            Some((format!("{prefix}{id}"), drawn.join(" ")))
         })
         .collect()
 }
@@ -160,9 +180,31 @@ pub fn rows_of(tree: &str) -> Vec<String> {
 mod tests {
     use super::rows_of;
 
+    /// Rows are the elements keyed by a handle, in order; a handle drawn as text, or an id that isn't a handle, is none.
     #[test]
-    fn rows_are_the_quoted_handles_in_order() {
-        let tree = "v_flex\n  text \"Needs you\"\n  text \"ask:01A\"\n  div id=\"ask:x\" x\n  text \"ask:02B\"\n";
+    fn rows_are_the_elements_keyed_by_handles_in_order() {
+        let tree = concat!(
+            "v_flex\n  text \"Needs you\"\n  text \"ask:01Z\"\n",
+            "  div :id[Str(\"ask:01A\")] .h[Number(18.0)]\n    text \"First?\"\n",
+            "  div :id[Str(\"row-2\")]\n",
+            "  div :id[Str(\"ask:02B\")]\n    text \"Second?\"\n",
+        );
         assert_eq!(rows_of(tree), ["ask:01A", "ask:02B"]);
+    }
+
+    /// A keyed row holds the text drawn inside it and none drawn after it.
+    #[test]
+    fn a_keyed_row_holds_the_text_inside_it() {
+        let tree = concat!(
+            "v_flex\n  div :id[Str(\"session:01A\")]\n    text \"Cart totals\"\n    div\n      text \"needs you\"\n",
+            "  text \"after\"\n  div :id[Str(\"session:02B\")]\n",
+        );
+        assert_eq!(
+            super::keyed(tree, "session:"),
+            [
+                ("session:01A".to_owned(), "Cart totals needs you".to_owned()),
+                ("session:02B".to_owned(), String::new()),
+            ]
+        );
     }
 }

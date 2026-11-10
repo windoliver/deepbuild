@@ -10,10 +10,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gitEnv, headTrust } from '@deepbuild/gate';
 import { commitsOf, defaultBranch, firstPushes, ForgeRefused, githubPushReader, namesRef, openPulls, pushesWithForks, refChanges, repoOf, restOf, type Push, type RefChange, type Rest } from './pushes.js';
+import { CONTEXT } from './rules.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const CONTEXT = 'deepbuild/verdict';
 /** GitHub refuses a longer description. */
 const DESCRIPTION_MAX = 140;
 const SHA = /^[0-9a-f]{40}$/;

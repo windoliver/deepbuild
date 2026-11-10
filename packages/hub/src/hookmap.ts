@@ -169,6 +169,11 @@ function newest(name: string): string {
   const versions = ((registry().get(name).facts as JsonObject).events as JsonObject).versions as JsonObject;
   return Object.keys(versions).at(-1)!;
 }
+/** The adapter an agent's hooks map through, whose caps and facts answer for it; none for a name no adapter maps. */
+export function adapterOf(agent: string | undefined): Adapter | undefined {
+  const name = agent === undefined ? undefined : ADAPTERS[agent];
+  return name === undefined ? undefined : registry().get(name);
+}
 /** Whether the facts of the adapter an agent's hooks map through cover a version. */
 export const coveredBy = (agent: string, version: string): boolean => ((registry().get(ADAPTERS[agent] ?? agent).facts as JsonObject).versions as string[]).includes(version);
 
