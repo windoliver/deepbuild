@@ -47,7 +47,7 @@ socket's path twice; 29 open with the verdict word BLOCKED; 8 name a fix; 4 exit
 | Requirement | Change | Failed first, then passed |
 |---|---|---|
 | Every row of `deep numbers` has its unit, source and age (#45 AC2) | `hub/src/core.ts`: the hand-backs reading carries `unit`, `source`, `basis` and `age_ms` as every other row does. `hub/src/numbers.ts`: an empty detail prints nothing. The line was `handbacks_sent_back: 0 undefined · undefined · undefined · undefinedms []` | New case in `hub/test/numbers.test.ts`. #45 AC2's blind test failed on main at "handbacks_sent_back names its source" and passes unchanged |
-| A command never ends in a stack trace | `hub/src/hosts.ts`: `deep run follow` reads the hub's token inside the call it already catches. In a home where no hub ever ran it printed Node's `readFileUtf8` trace | New case in `cli/test/cli.test.ts` |
+| `deep run follow` in a home with no hub prints one line, not a stack trace | `hub/src/hosts.ts`: `deep run follow` reads the hub's token inside the call it already catches. In a home where no hub ever ran it printed Node's `readFileUtf8` trace | New case in `cli/test/cli.test.ts` |
 | A command's help names every flag it takes (#1359: an agent asks for help before it uses a command) | `cli/src/main.ts`: eight usage lines gain the flags each command's own usage already names: `start` (`--home`, `--mode`, `--until`, `--host`, `--json`), `rules` and `session rules` (`--json`), `show` (`--removes`, `--t`, `--size`, `--include`), `read` and `find` (`-- <what>`), `hub run` (`--safe`) | New table in `cli/test/cli.test.ts`: 7 of 7 failed on main |
 | The skill says each thing once | `scripts/skill.mjs`: a tool's line stands under the first block that names it; a later block says `deep_propose, as under Check.` Nine repeated lines became short pointers. Every block, every Never cell and every tool name stay | New `tests/skill.test.mjs`. #26's blind drift test passes unchanged |
 | The tool list says each thing once | `hub/src/tools.ts`: `deep_drive` writes a locator at five places, since the strict subset takes no `$ref`. Its seven fields are described at the call's own locator and listed bare at the other four | New `hub/test/tools.test.ts`. #26's strict-schema test passes unchanged |
@@ -74,8 +74,8 @@ making the first screen shorter.
    in `hub/src/core.ts` maps every named field to `type`.
 5. **`deep_env` answers `{"status": "BLOCKED"}` with `isError` false,** so an agent that reads `isError` takes it as
    done.
-6. **Two first steps.** The SessionStart context says to declare work with `deep_claim`; the skill says to begin
-   with `deep_status`.
+6. Withdrawn on a second read. The SessionStart context names the claim that ends a piece of work and the skill
+   names `deep_status` at its start: two different steps, not two first steps.
 7. **A refused pattern prints the regular expression:** "Give commit in the form ^[0-9a-f]{40}$." The schema's own
    description says "by its full SHA".
 
@@ -87,7 +87,10 @@ making the first screen shorter.
 9. **A usage error in a fresh home sets the machine up first.** `deep status --typo` and `deep env` with no
    arguments write the hooks and call the service manager, then fail. #19 AC16's blind contract test
    (`tests/acceptance/19/doctor/contract.test.ts`) fails with 38 lines, 32 of them this. It isn't in
-   `scripts/known-failures.json`. The setup step in `cli/src/main.ts` is unchanged here, so this is main's.
+   `scripts/known-failures.json`. The setup step in `cli/src/main.ts` is unchanged here, so this is main's. Its
+   other six lines: `deep open`, `deep backup`, `deep run follow` and `deep session rules` read a flag as their
+   argument and don't exit 2; `deep lease` passes on its command's exit 127; and `deep kinds --dump <folder>` in a
+   checkout with no canvas core built ends in a stack trace. That form was not among the 93 run here.
 10. **The hub-down numbers above** are #1812's ground. Eight commands answer bad arguments with "Unsupported
     command." in place of their usage: `off now`, `update`, `debug`, `open`, `session`, `explain`, `kinds`,
     `mcp bogus`. #1812 names three.
