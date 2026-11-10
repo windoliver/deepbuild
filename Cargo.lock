@@ -1974,6 +1974,7 @@ dependencies = [
  "chrono",
  "deep-app",
  "deep-canvas-cells",
+ "deep-canvas-effects",
  "deep-canvas-marks",
  "deep-effects-render",
  "deep-gpu",
@@ -2075,6 +2076,16 @@ dependencies = [
  "sha2 0.10.9",
  "taffy 0.14.0",
  "unicode-normalization",
+]
+
+[[package]]
+name = "deep-canvas-media"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-scene3d",
+ "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -2289,9 +2300,11 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-graph",
  "deep-canvas-marks",
+ "deep-canvas-media",
  "deep-canvas-motion",
  "deep-canvas-seams",
  "deep-canvas-vector",
+ "deep-codecs",
  "deep-gpu",
  "deep-marks-gpui",
  "deep-marks-vello",
@@ -2302,6 +2315,8 @@ dependencies = [
  "gpui-pre-apple",
  "image",
  "libc",
+ "objc2-core-foundation",
+ "objc2-core-video",
  "serde_json",
  "skrifa 0.44.0",
  "vello_cpu",
@@ -2405,6 +2420,7 @@ dependencies = [
  "deep-canvas-input",
  "deep-canvas-loop",
  "deep-canvas-marks",
+ "deep-canvas-media",
  "deep-canvas-motion",
  "deep-canvas-record",
  "deep-canvas-sandbox",
@@ -2416,6 +2432,7 @@ dependencies = [
  "deep-codecs",
  "deep-effects-render",
  "deep-gpu",
+ "deep-logic",
  "deep-marks-vello",
  "deep-relay",
  "deep-replica",

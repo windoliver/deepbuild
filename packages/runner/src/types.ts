@@ -1,4 +1,5 @@
 // The runner's public shapes (#159): a job DeepBuild runs on your own agent, headless, apart from your sessions.
+import type { StopCause } from '@deepbuild/adapters';
 import type { Asks } from '@deepbuild/asks';
 import type { Ledger } from '@deepbuild/budget';
 import type { RecordStore } from '@deepbuild/record';
@@ -48,10 +49,8 @@ export interface JobSpec {
   /** How long it may print nothing while the platform reports no CPU or disk use by it. */
   output_timeout_ms?: number;
 }
-/** The stop's closed set (agent.stop@2). */
-export type StopCause =
-  | 'sign_in_required' | 'token_refresh_failed' | 'plan_window_spent' | 'rate_limited' | 'refusal' | 'max_turns'
-  | 'context_overflow' | 'tool_schema_rejected' | 'agent_crashed' | 'timed_out' | 'unknown';
+/** The stop's closed set (agent.stop@2), as the adapters name it. */
+export type { StopCause };
 /** waiting: recorded, not started (`blocked` says on what); stopping: a stop sent and not yet confirmed;
  *  stopped: every process of it proven gone, without a final result; lost: found after a crash and reported, never run. */
 export type JobState = 'waiting' | 'running' | 'stopping' | 'stopped' | 'finished' | 'refused' | 'lost';

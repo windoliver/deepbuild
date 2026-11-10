@@ -2,6 +2,11 @@
 //! build: nodes with fills, text, layers, backdrops and effect slots, drawn through the app's own chrome primitives
 //! (`chrome_fx`), and the shell's question card in its slot. `DEEP_CHROME_PLANT` selects a wrong program, read only
 //! here.
+//!
+//! Issue #1436 (tests/acceptance/1436/README.md) adds chrome-fx@1's effects: colors may name a chrome role, a fixture
+//! may be drawn as a working view over a record at a time, and an effect may carry a seed, bound params, the look or
+//! panel that asked for it and the role it was set for. Its particles stop on the rect of every node with a fill but
+//! its own and its ancestors, and on the card's slot.
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -31,6 +36,49 @@ pub fn apply_plants() {
     }
 }
 
+/// The planted operator criterion 7 adds (#1436): the whole rect a flat grey that flips between dark and light four
+/// times a second, which the pack check must refuse for its rate.
+const PLANTED_FLASH: &str = r#"{
+  "class": "quiet", "params": ["rate"], "still": {"time": 0}, "cost": {"ms": 0.01},
+  "fixture": {"size": [48, 32], "at": 0, "params": {}, "expect": [[1, 1, [179, 179, 179]], [24, 16, [179, 179, 179]]]},
+  "twin": {}, "graph": {
+    "id": "planted.flash@1", "kind": "pass", "origin": "pack", "about": "Flips its rect between two greys `rate` times a second.",
+    "inputs": {
+      "src": {"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}},
+      "time": {"type": "f32", "unit": "s", "from": {"param": "time"}, "range": [0, 1000000], "default": 0},
+      "rate": {"type": "f32", "unit": "1/s", "from": {"param": "rate"}, "range": [0, 60], "default": 4}
+    },
+    "steps": {
+      "uv": {"op": "screen_uv@1"},
+      "under": {"op": "sample@1", "args": {"tex": "src", "uv": "uv", "lod": 0.0}},
+      "n": {"op": "mul@1", "args": {"a": "time", "b": "rate"}},
+      "f": {"op": "fract@1", "args": {"x": "n"}},
+      "on": {"op": "lt@1", "args": {"a": "f", "b": 0.5}},
+      "v": {"op": "select@1", "args": {"f": 0.1, "t": 0.7, "cond": "on"}},
+      "out": {"op": "compose@1", "args": {"x": "v", "y": "v", "z": "v", "w": 1.0}}
+    },
+    "outputs": {"color": "out", "blend": "replace"}, "cost": {"ns_per_px": 0.01}, "resolution": "full"
+  }
+}"#;
+
+/// The pack check on `pack` under the plant `DEEP_CHROME_PLANT` names: `twin:<operator>` swaps that operator for its
+/// planted twin, and `flashes_4hz` adds `planted.flash`.
+pub fn check_pack(mut pack: Value) -> Value {
+    use deep_canvas_effects::chrome_fx;
+    let plant = std::env::var("DEEP_CHROME_PLANT").unwrap_or_default();
+    if let Some(name) = plant.strip_prefix("twin:") {
+        chrome_fx::plant_twin(&mut pack, name);
+    }
+    if plant == "flashes_4hz" {
+        let flash: Value =
+            serde_json::from_str(PLANTED_FLASH).expect("the planted operator is JSON");
+        if let Some(ops) = pack["operators"].as_object_mut() {
+            ops.insert("planted.flash".into(), flash);
+        }
+    }
+    chrome_fx::check_pack(&pack)
+}
+
 thread_local! {
     static OMITTED: RefCell<BTreeSet<String>> = const { RefCell::new(BTreeSet::new()) };
 }
@@ -44,14 +92,28 @@ pub fn omitted(name: &str) -> bool {
     OMITTED.with(|o| o.borrow().contains(name))
 }
 
+thread_local! {
+    static NO_TEXT: RefCell<BTreeSet<String>> = const { RefCell::new(BTreeSet::new()) };
+}
+
+/// Takes the named nodes' glyphs out of every frame, leaving everything else as it is.
+pub fn omit_text(ids: impl IntoIterator<Item = String>) {
+    NO_TEXT.with(|o| o.borrow_mut().extend(ids));
+}
+
 /// A `chrome@1` fixture.
 #[derive(Clone, Debug)]
 pub struct Fixture {
     /// The window, in points.
     pub window: [f32; 2],
     pub scale: f32,
-    pub background: [u8; 3],
+    /// An 8-bit color, or a chrome role's name.
+    pub background: Value,
     pub nodes: Vec<Value>,
+    /// The working view the nodes are drawn as, if they are one.
+    pub view: Option<String>,
+    /// The readings the record's events hold, as the app's one reader folds them.
+    pub readings: std::collections::BTreeMap<String, (f64, u64)>,
     /// The question card: its question, options and slot in points.
     pub card: Option<(String, Vec<String>, [f32; 4])>,
 }
@@ -94,14 +156,45 @@ impl Fixture {
                 Some((question, options, floats(&card["rect"], "the card's rect")?))
             }
         };
-        let background = floats::<3>(&v["background"], "background")?.map(|c| c as u8);
+        let mut table = crate::states::Table::default();
+        for event in v["record"].as_array().into_iter().flatten() {
+            table.apply(event);
+        }
+        let nodes = v["nodes"].as_array().cloned().unwrap_or_default();
+        let readings = handles(&nodes)
+            .into_iter()
+            .filter_map(|h| table.value(&h).map(|r| (h, r)))
+            .collect();
         Ok(Fixture {
             window: floats(&v["window"], "window")?,
             scale: v["scale"].as_f64().unwrap_or(1.0) as f32,
-            background,
-            nodes: v["nodes"].as_array().cloned().unwrap_or_default(),
+            background: v["background"].clone(),
+            nodes,
+            view: v["view"].as_str().map(String::from),
+            readings,
             card,
         })
+    }
+
+    /// Every rect a particle stops on: each node that draws a fill, by id, and the card's slot.
+    fn fills(&self) -> Vec<Fill> {
+        fn walk(nodes: &[Value], up: &[String], out: &mut Vec<Fill>) {
+            for n in nodes {
+                let id = n["id"].as_str().unwrap_or("").to_string();
+                if !n["fill"].is_null() {
+                    out.push((id.clone(), up.to_vec(), rect(n)));
+                }
+                let mut path = up.to_vec();
+                path.push(id);
+                walk(n["children"].as_array().map_or(&[][..], |c| c), &path, out);
+            }
+        }
+        let mut out = Vec::new();
+        walk(&self.nodes, &[], &mut out);
+        if let Some((_, _, slot)) = &self.card {
+            out.push(("card".into(), Vec::new(), *slot));
+        }
+        out
     }
 
     /// Every node with an effect, by id, in paint order.
@@ -132,12 +225,27 @@ impl Fixture {
     }
 }
 
+/// Every reading handle a node's effect binds.
+fn handles(nodes: &[Value]) -> Vec<String> {
+    let mut out = Vec::new();
+    for n in nodes {
+        for (_, src) in n["effect"]["bind"].as_object().into_iter().flatten() {
+            out.extend(src.as_str().map(String::from));
+        }
+        out.extend(handles(n["children"].as_array().map_or(&[][..], |c| c)));
+    }
+    out
+}
+
 /// The fixture drawn as the window's content.
 pub struct ChromeView {
     pub fixture: Fixture,
 }
 
 fn color(c: &Value) -> Option<Rgba> {
+    if let Some(role) = c.as_str() {
+        return ROLES.with(|r| r.get()).named(role).map(Rgba::from);
+    }
     let a = c.as_array()?;
     let at = |i: usize| a.get(i).and_then(Value::as_f64).unwrap_or(255.0) as f32 / 255.0;
     Some(Rgba {
@@ -152,14 +260,61 @@ fn rect(n: &Value) -> [f32; 4] {
     floats(&n["rect"], "rect").unwrap_or([0.; 4])
 }
 
-fn effect(n: &Value) -> Option<Effect> {
+/// A filled node a particle stops on: its id, its ancestors' ids and its rect.
+type Fill = (String, Vec<String>, [f32; 4]);
+
+thread_local! {
+    /// The chrome roles of the frame being built, in its window's appearance.
+    static ROLES: std::cell::Cell<&'static crate::chrome::Chrome> = std::cell::Cell::new(crate::chrome::chrome(false));
+    /// The fixture being built: its view and the rects its particles stop on.
+    static BUILDING: RefCell<(Option<String>, Vec<Fill>)> = const { RefCell::new((None, Vec::new())) };
+}
+
+fn effect(n: &Value, up: &[String]) -> Option<Effect> {
     let e = &n["effect"];
     let operator = e["operator"].as_str()?;
-    let params = match deep_effects_render::chrome::params(operator, &e["params"]) {
-        Ok(params) => params,
-        Err(why) => {
-            eprintln!("deep-app: chrome fixture: {why}");
-            Vec::new()
+    let id = n["id"].as_str().unwrap_or("").to_string();
+    let fx = chrome_fx::operator(operator).map(|_| {
+        let (view, fills) = BUILDING.with(|b| b.borrow().clone());
+        chrome_fx::Fx {
+            params: e["params"].as_object().cloned().unwrap_or_default(),
+            seed: e["seed"].as_u64().unwrap_or(0) as u32,
+            bind: e["bind"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            asked: e["asked"]["by"]
+                .as_str()
+                .is_some_and(|by| by == "look" || by == "panel"),
+            on: e["on"].as_str().map(String::from),
+            view,
+            hold: false,
+            colliders: fills
+                .into_iter()
+                .filter(|(other, _, _)| *other != id && !up.contains(other))
+                .map(|(other, _, [x, y, w, h])| {
+                    (
+                        other,
+                        Bounds {
+                            origin: point(px(x), px(y)),
+                            size: size(px(w), px(h)),
+                        },
+                    )
+                })
+                .collect(),
+        }
+    });
+    let params = if fx.is_some() {
+        Vec::new()
+    } else {
+        match deep_effects_render::chrome::params(operator, &e["params"]) {
+            Ok(params) => params,
+            Err(why) => {
+                eprintln!("deep-app: chrome fixture: {why}");
+                Vec::new()
+            }
         }
     };
     let backdrop = n["backdrop"]["scale"]
@@ -177,14 +332,49 @@ fn effect(n: &Value) -> Option<Effect> {
         } else {
             Place::Over
         },
+        fx,
     })
 }
 
+/// Each text node's rect inside `n` (its own too), in window points.
+fn texts(n: &Value, out: &mut Vec<[f32; 4]>) {
+    if n["text"].is_object() {
+        out.push(rect(n));
+    }
+    for c in n["children"].as_array().into_iter().flatten() {
+        texts(c, out);
+    }
+}
+
 /// A node at its rect, relative to its parent's origin: its under slot, fill, text, children and over slot.
-fn node(n: &Value, parent: [f32; 2]) -> AnyElement {
+fn node(n: &Value, parent: [f32; 2], up: &[String]) -> AnyElement {
     let [x, y, w, h] = rect(n);
+    let id = n["id"].as_str().unwrap_or("").to_string();
     let radius = px(n["radius"].as_f64().unwrap_or(0.0) as f32);
-    let (first, last) = match effect(n) {
+    // The planted effect that covers its texts with the secondary ink from 3 s on (#1436, criterion 5).
+    let dropped: Vec<AnyElement> =
+        if planted("drops_secondary_ink") && !n["effect"].is_null() && chrome_fx::clock() >= 3.0 {
+            let mut rects = Vec::new();
+            texts(n, &mut rects);
+            let ink = ROLES.with(|r| r.get()).ink_secondary;
+            let ink = Hsla { a: 1.0, ..ink };
+            rects
+                .into_iter()
+                .map(|[tx, ty, tw, th]| {
+                    div()
+                        .absolute()
+                        .left(px(tx - x))
+                        .top(px(ty - y))
+                        .w(px(tw))
+                        .h(px(th))
+                        .bg(ink)
+                        .into_any_element()
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+    let (first, last) = match effect(n, up) {
         Some(effect) => {
             let (first, last) = chrome_fx::slots(effect);
             (Some(first), last)
@@ -218,6 +408,7 @@ fn node(n: &Value, parent: [f32; 2]) -> AnyElement {
                 .into_any_element()
         }),
     };
+    let glyphs = !NO_TEXT.with(|o| o.borrow().contains(&id));
     let text = n["text"]["content"].as_str().map(|content| {
         let t = &n["text"];
         div()
@@ -225,19 +416,26 @@ fn node(n: &Value, parent: [f32; 2]) -> AnyElement {
             .left_0()
             .top_0()
             .text_size(px(t["size"].as_f64().unwrap_or(14.0) as f32))
-            .text_color(color(&t["color"]).unwrap_or(Rgba {
-                r: 0.,
-                g: 0.,
-                b: 0.,
-                a: 1.,
-            }))
+            .text_color(match color(&t["color"]) {
+                // Its glyphs taken out, its layout kept: the same text, drawn clear.
+                Some(c) if !glyphs => Rgba { a: 0., ..c },
+                Some(c) => c,
+                None => Rgba {
+                    r: 0.,
+                    g: 0.,
+                    b: 0.,
+                    a: if glyphs { 1. } else { 0. },
+                },
+            })
             .whitespace_nowrap()
             .child(content.to_string())
             .into_any_element()
     });
+    let mut path = up.to_vec();
+    path.push(id);
     let children = n["children"]
         .as_array()
-        .map(|c| c.iter().map(|c| node(c, [x, y])).collect::<Vec<_>>())
+        .map(|c| c.iter().map(|c| node(c, [x, y], &path)).collect::<Vec<_>>())
         .unwrap_or_default();
     let element = div()
         .absolute()
@@ -249,7 +447,8 @@ fn node(n: &Value, parent: [f32; 2]) -> AnyElement {
         .children(fill)
         .children(text)
         .children(children)
-        .children(last);
+        .children(last)
+        .children(dropped);
     let element = match n["layer"].as_object() {
         Some(l) => {
             let radii = floats::<4>(&n["layer"]["radii"], "radii")
@@ -280,19 +479,24 @@ fn node(n: &Value, parent: [f32; 2]) -> AnyElement {
 }
 
 impl Render for ChromeView {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        let [r, g, b] = self.fixture.background;
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        ROLES.with(|r| r.set(crate::chrome::of(window)));
+        BUILDING.with(|b| *b.borrow_mut() = (self.fixture.view.clone(), self.fixture.fills()));
+        chrome_fx::set_readings(self.fixture.readings.clone());
+        chrome_fx::begin_frame();
+        let background = color(&self.fixture.background).unwrap_or(Rgba {
+            r: 1.,
+            g: 1.,
+            b: 1.,
+            a: 1.,
+        });
         div()
             .size_full()
             .relative()
-            .bg(Rgba {
-                r: f32::from(r) / 255.,
-                g: f32::from(g) / 255.,
-                b: f32::from(b) / 255.,
-                a: 1.,
-            })
+            .bg(background)
             .child(chrome_fx::guards())
-            .children(self.fixture.nodes.iter().map(|n| node(n, [0., 0.])))
+            .children(self.fixture.nodes.iter().map(|n| node(n, [0., 0.], &[])))
+            .child(chrome_fx::embers())
     }
 }
 
@@ -300,8 +504,8 @@ impl Render for ChromeView {
 pub fn refusals_json() -> Value {
     Value::Array(
         chrome_fx::take_refusals()
-            .into_iter()
-            .map(|r| serde_json::json!({"effect": r.effect, "operator": r.operator, "over": r.over, "code": r.code}))
+            .iter()
+            .map(chrome_fx::Refusal::to_json)
             .collect(),
     )
 }
@@ -315,6 +519,8 @@ pub enum Live {
     Idle(u64),
     /// Draws that many frames back to back, the whole tree repainted each, timing each.
     Frames(u64),
+    /// Counts the frames presented in that many seconds after the first once the window shows (#1436).
+    AfterFirst(f64),
 }
 
 #[cfg(target_os = "macos")]
@@ -322,7 +528,10 @@ pub use live::run;
 
 #[cfg(target_os = "macos")]
 mod live {
+    use std::cell::Cell;
     use std::time::{Duration, Instant};
+
+    use objc2::msg_send;
 
     use gpui_apple::metal_renderer::{gpu_ledger, layer_colorspace};
     use gpui_kit::*;
@@ -373,18 +582,45 @@ mod live {
                 size: size(px(w), px(h)),
             })),
             kind: WindowKind::PopUp,
+            // The after-first count is of what the app draws by itself, so its window never takes the keyboard: on a
+            // shared desktop, another app taking it back redraws the window (#1436). It's shown below, once it can't.
+            focus: !matches!(live, Live::AfterFirst(_)),
+            show: !matches!(live, Live::AfterFirst(_)),
             ..Default::default()
         };
+        let counting = !options.focus;
         let view = fixture.clone();
         open_window(options, cx, move |window, cx| {
+            if counting {
+                // Nor does it take the pointer: a click or a drag passing over it would redraw it too.
+                if let Some(native) = window_view(window).window() {
+                    native.setIgnoresMouseEvents(true);
+                    // SAFETY: GPUI makes a pop-up an NSPanel, which has this property.
+                    let _: () = unsafe { msg_send![&*native, setBecomesKeyOnlyIfNeeded: true] };
+                    native.orderFrontRegardless();
+                }
+            }
             fixture.present_card(window, cx);
-            visible(window, 0, move |window, cx| {
-                settle(window, cx, 0, fixture, live)
+            visible(window, 0, move |window, cx| match live {
+                Live::AfterFirst(seconds) => {
+                    after_first(window, cx, fixture, seconds, Instant::now())
+                }
+                live => settle(window, cx, 0, fixture, live),
             });
-            cx.new(|_| ChromeView { fixture: view })
+            cx.new(|cx| {
+                if counting {
+                    // GPUI redraws the window when AppKit tells it its screen, which can land after the window shows;
+                    // the window can't move, resize or take the keyboard, so nothing else changes its bounds.
+                    cx.observe_window_bounds(window, |_, _, _| SCREENED.set(true))
+                        .detach();
+                }
+                ChromeView { fixture: view }
+            })
         })
         .expect("open the window");
-        cx.activate(true);
+        if !counting {
+            cx.activate(true);
+        }
     }
 
     fn window_view(window: &Window) -> &NSView {
@@ -413,6 +649,62 @@ mod live {
                 visible(window, frames + 1, then);
             }
         });
+    }
+
+    thread_local! {
+        /// Whether GPUI has been told the counted window's screen.
+        static SCREENED: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// From the window's first frame once shown, counts the frames it presents in `seconds` of the real clock, that
+    /// frame not counted, and whether each effect painted in it. Shown means AppKit has told GPUI the window's screen,
+    /// which redraws it, or a second has passed since it became visible: on a Mac17,10 the news came within 0.4 s of
+    /// the window showing, or not at all.
+    fn after_first(
+        window: &mut Window,
+        cx: &mut App,
+        fixture: Fixture,
+        seconds: f64,
+        visible: Instant,
+    ) {
+        if !SCREENED.get() && visible.elapsed() < Duration::from_secs(1) {
+            // A frame comes only when one is asked for; these come before the first frame, so none is counted.
+            window.refresh();
+            window.on_next_frame(move |window, cx| {
+                after_first(window, cx, fixture, seconds, visible)
+            });
+            return;
+        }
+        let scale = window.scale_factor();
+        let painted = crate::chrome_fx::states();
+        let effects: Vec<Value> = fixture
+            .effects()
+            .into_iter()
+            .map(|id| {
+                let state = painted
+                    .iter()
+                    .find(|(n, _)| *n == id)
+                    .map_or("unpainted", |(_, s)| s);
+                json!({"id": id, "state": state})
+            })
+            .collect();
+        // The first frame commits its command buffers after this callback returns, so the count starts in the task.
+        cx.spawn(async move |cx| {
+            let first = gpu_ledger::read().committed;
+            let start = Instant::now();
+            cx.background_executor()
+                .timer(Duration::from_secs_f64(seconds))
+                .await;
+            let frames = gpu_ledger::read().committed - first;
+            let held = start.elapsed().as_secs_f64();
+            report(
+                "after_first",
+                scale,
+                json!({"seconds": held, "frames": frames, "effects": effects}),
+            );
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
     }
 
     /// Once every effect has painted and settled, and the GPU has finished what it was given, runs the mode.
@@ -483,6 +775,7 @@ mod live {
                 let start = (thread_cpu_ms(), gpu_ledger::read().gpu_ns);
                 frame(window, 1, n, start, Vec::new(), scale);
             }
+            Live::AfterFirst(seconds) => after_first(window, cx, fixture, seconds, Instant::now()),
         }
     }
 

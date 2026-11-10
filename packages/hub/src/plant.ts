@@ -140,6 +140,8 @@ export type Plant =
   | 'paseo-delivers-beside-waiter'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
   | 'signature-covers-anything'
+  // #1579's: the one verifier, skipping the time, so a signature counts however old it is.
+  | 'signature-skips-time'
   // #909's: a hub that never checks its lock again once it holds it.
   | 'lock-never-rechecked'
   // #906's: an answer recorded delivered as the hub writes its reply, and one sent again without reading the session.
@@ -245,6 +247,7 @@ const PLANTS: readonly string[] = [
   'no-work-never-sent-back', 'skips-prompt-turns',
   'paseo-delivers-beside-waiter',
   'signature-covers-anything',
+  'signature-skips-time',
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',

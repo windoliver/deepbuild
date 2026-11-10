@@ -34,24 +34,24 @@ Everything this repo owns runs for real: the hub (`deep hub run`), its record an
 
 | ID | Criterion | Tests | Wrong program it fails on |
 |----|-----------|-------|---------------------------|
-| `#65.82812f3b` AC1 | answered on one channel, gone from every other and from Needs you within 10 s | `answers.test.ts`; `proof.test.ts` | none named |
-| `#65.c0406413` AC2 | an authority answer from chat is refused, pointing to the trusted path | `answers.test.ts`; `proof.test.ts` | none named |
-| `#65.19700b29` AC3 | the phone's signed answer reaches the waiting session as a decision; unsigned, it counts as nothing | `answers.test.ts` (three: signed, unsigned, the real phone BLOCKED); `proof.test.ts` | none named |
+| `#65.82812f3b` AC1 | answered on one channel, gone from every other and from Needs you within 10 s | `redraft-1579/answers.test.ts`; `redraft-1579/proof.test.ts` (both swapped in with the owner's approval after #1579 changed what a paired device signs) | none named |
+| `#65.c0406413` AC2 | an authority answer from chat is refused, pointing to the trusted path | `answers.test.ts`; `redraft-1579/proof.test.ts` | none named |
+| `#65.19700b29` AC3 | the phone's signed answer reaches the waiting session as a decision; unsigned, it counts as nothing | `answers.test.ts` (two: unsigned, the real phone BLOCKED); `redraft-1579/answers.test.ts` (signed); `redraft-1579/proof.test.ts` | none named |
 | `#65.7430b5d9` AC4 | delivered with no acknowledgement: recorded stalled, fails channel@1 at install, naming the item | `kit.test.ts` (two: the kit's planted fill, and `deep install` of the planted package) | the planted fill `delivered-without-ack`; the package `fixtures/planted-channel` |
-| `#65.bd21c26c` AC5 | an answer with a forged signature or an unheld account link is refused, naming the key or the link | `proofs.test.ts` (two); `kit.test.ts` (the planted fill) | `trusts-channel-proof` (hub); the planted fill `signed-without-signature` |
+| `#65.bd21c26c` AC5 | an answer with a forged signature or an unheld account link is refused, naming the key or the link | `proofs.test.ts` (the unheld link); `redraft-1579/proofs.test.ts` (the forged signature); `kit.test.ts` (the planted fill) | `trusts-channel-proof` (hub); the planted fill `signed-without-signature` |
 | `#65.fc037c24` AC6 | no payload holds a secret-shaped string, a diff or evidence, on recorded items | `routes.test.ts` | none named |
 | `#65.0a1ebdd7` AC7 | an unseen urgent item moves on after its wait; quiet hours hold what isn't urgent | `routes.test.ts` (two) | none named |
 | `#65.2fec5389` AC8 | a text message is only a link; an unproven "I did it" is refused | `routes.test.ts`; `proofs.test.ts` | none named |
 | `#65.a9fef351` AC9 | an item reaches a channel within 10 s, a plug-in under 50 MB, against the merge base | `budgets.test.ts` (three) | none named; off the reference Mac or under load, INCONCLUSIVE |
-| `#65.05709fd8` AC10 | B on the phone, C in the app 2 s later: B stands, C refused naming B and its channel | `answers.test.ts` | `last-writer-wins` (hub) |
+| `#65.05709fd8` AC10 | B on the phone, C in the app 2 s later: B stands, C refused naming B and its channel | `redraft-1579/answers.test.ts` | `last-writer-wins` (hub) |
 | `#65.af4419b9` AC11 | a card in flight ends showing the app's answer; a press on a closed card changes nothing; a failed send closes nothing | `sends.test.ts` (three) | `live-buttons-after-answer`, `closes-on-failed-send` (hub) |
 | `#65.b9ca998f` AC12 | a second client on the bot token: conflict, nothing delivered | `sends.test.ts` | `takes-turns-at-token` (hub) |
 | `#65.fbb68832` AC13 | the phone silent 2 minutes: reconnected; chat not delayed, nothing resent | `sends.test.ts` | `reconnects-every-channel` (hub) |
 | `#65.08d3ff31` AC14 | an authority ask on chat: no buttons, the words; a choice: answerable and first | `routes.test.ts` | `buttons-for-authority` (hub) |
-| `#65.fdfea15b` AC15 | an unpaired phone's signature counts for nothing; its next connection is told | `proofs.test.ts` | `keeps-unpaired-key` (hub) |
-| `#65.84e09e8f` AC16 | a replayed, a stale and a changed-card answer are each refused, naming the field | `proofs.test.ts` (three) | none named |
+| `#65.fdfea15b` AC15 | an unpaired phone's signature counts for nothing; its next connection is told | `redraft-1579/proofs.test.ts` | `keeps-unpaired-key` (hub) |
+| `#65.84e09e8f` AC16 | a replayed, a stale and a changed-card answer are each refused, naming the field | `redraft-1579/proofs.test.ts` (three) | none named |
 
-IDs are the first 8 hex digits of SHA-256 of each criterion's text, trimmed, whitespace collapsed. `twins.json` maps each criterion that names a wrong hub to its twin under `twins/`. The Proof is `proof.test.ts`, one end-to-end test tagged AC1, AC2 and AC3.
+IDs are the first 8 hex digits of SHA-256 of each criterion's text, trimmed, whitespace collapsed. `twins.json` maps each criterion that names a wrong hub to its twin under `twins/`. The Proof is `redraft-1579/proof.test.ts`, one end-to-end test tagged AC1, AC2 and AC3; it replaced this draft's `proof.test.ts`, whose phone signed in the format #1579 replaced, with the owner's approval.
 
 ## The surface (my choice)
 

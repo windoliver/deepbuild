@@ -9,7 +9,7 @@ import { basename, extname, join } from 'node:path';
 import type { Asks, PlanInput } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { leftOpen } from '@deepbuild/gate';
-import type { Connection, EventInput } from '@deepbuild/record';
+import type { Connection } from '@deepbuild/record';
 import type { Holds } from './holds.js';
 import type { HookMeta, Plant } from './wire.js';
 import { couldDo, SECRET_NAME, struck, type Found, type Reach } from './could-do.js';
@@ -97,9 +97,7 @@ interface QuestionOptions {
   raw(query: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
   asks: () => Asks;
   holds: Holds;
-  now: () => number;
   plant: Plant | undefined;
-  append(connection: Connection, input: EventInput): Promise<void>;
   connection(session: string, agent: string): Connection;
   pin(cwd: string, question: string): Promise<Obj>;
   reading(session: string, agent: string, reading: string): Promise<void>;

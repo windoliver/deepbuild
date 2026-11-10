@@ -275,7 +275,8 @@ impl Hub<'_> {
                 .pointer("/requires/modules/scene3d")
                 .is_some();
         let drawn = if three {
-            match self.mode_3d(show, args, &revision.drawn, &mut reply) {
+            let placed = self.arranged(&show.doc, &revision.drawn);
+            match self.mode_3d(show, args, &placed, &mut reply) {
                 Ok(rows) => rows,
                 Err(refusal) => return refusal,
             }
