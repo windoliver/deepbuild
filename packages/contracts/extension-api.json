@@ -1203,7 +1203,7 @@
     "since": "R6",
     "stability": "preview",
     "tracking": "#1922",
-    "digest": "d1:e0da15adcbf3542d5ca183fe047cf64eae611d74f104b058204f380126bb01af",
+    "digest": "d1:5d582e90a4ba9fbcfeaba21aa699f1f2af376f9ac3bf395fd61a544ee8229a7e",
     "params": {
       "type": "object",
       "properties": {
@@ -1231,11 +1231,24 @@
                 "entry": {
                   "type": "string",
                   "minLength": 1
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1
                 }
               },
-              "required": [
-                "dir",
-                "entry"
+              "oneOf": [
+                {
+                  "required": [
+                    "dir",
+                    "entry"
+                  ]
+                },
+                {
+                  "required": [
+                    "url"
+                  ]
+                }
               ],
               "additionalProperties": false
             },
@@ -1254,6 +1267,34 @@
                 "usd"
               ],
               "additionalProperties": false
+            },
+            "weights": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "needs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           },
           "required": [

@@ -620,9 +620,11 @@ impl Terminal {
     fn restore(&mut self) {
         if let Some((x, y, pen)) = self.saved {
             self.pen = pen;
+            // A resize since the save may have left the saved place off the grid.
+            let (cols, rows) = (self.cols, self.rows);
             let s = self.screen_mut();
-            s.x = x;
-            s.y = y;
+            s.x = x.min(cols - 1);
+            s.y = y.min(rows - 1);
             s.pending_wrap = false;
         }
     }
@@ -868,12 +870,12 @@ impl Terminal {
             }
             (_, _, b'B' | b'e') => {
                 let s = self.screen_mut();
-                s.y = (s.y + p(0, 1)).min(rows - 1);
+                s.y = s.y.saturating_add(p(0, 1)).min(rows - 1);
                 s.pending_wrap = false;
             }
             (_, _, b'C' | b'a') => {
                 let s = self.screen_mut();
-                s.x = (s.x + p(0, 1)).min(cols - 1);
+                s.x = s.x.saturating_add(p(0, 1)).min(cols - 1);
                 s.pending_wrap = false;
             }
             (_, _, b'D') => {
@@ -924,7 +926,7 @@ impl Terminal {
             }
             (_, _, b'X') => {
                 let (x, y) = (self.screen().x.min(cols - 1), self.screen().y);
-                self.erase(y, x, (x + p(0, 1)).min(cols));
+                self.erase(y, x, x.saturating_add(p(0, 1)).min(cols));
             }
             (_, _, b'S') => {
                 for _ in 0..p(0, 1) {
@@ -1168,5 +1170,26 @@ mod tests {
         assert_eq!(text(&t), ["abc", "", ""]);
         t.feed(b"abcd");
         assert_eq!(text(&t), ["abc", "abc", "d"]);
+    }
+
+    #[test]
+    fn a_cursor_saved_before_a_smaller_resize_restores_inside_the_grid() {
+        let mut t = Terminal::new(80, 24, 0);
+        t.feed(b"\x1b[24;80H\x1b7");
+        t.resize(40, 10);
+        t.feed(b"\x1b8x");
+        assert_eq!(text(&t)[9].chars().count(), 40);
+        assert!(text(&t)[9].ends_with('x'));
+    }
+
+    #[test]
+    fn a_move_or_erase_by_the_largest_count_stops_at_the_edge() {
+        let mut t = Terminal::new(10, 5, 0);
+        t.feed(b"\n\x1b[65535B");
+        assert_eq!(t.cursor().1, 4);
+        t.feed(b"\x1b[5;2H\x1b[65535C");
+        assert_eq!(t.cursor().0, 9);
+        t.feed(b"\x1b[1;1Habcdefghij\x1b[1;2H\x1b[65535X");
+        assert_eq!(text(&t)[0], "a");
     }
 }

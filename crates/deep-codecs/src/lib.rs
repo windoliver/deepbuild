@@ -546,7 +546,7 @@ fn video_frames(
         .iter()
         .map(|i| {
             let s = &t.samples[*i];
-            let range = s.offset as usize..s.offset as usize + s.size as usize;
+            let range = s.offset as usize..(s.offset as usize).saturating_add(s.size as usize);
             (*i, data.get(range).unwrap_or_default().to_vec())
         })
         .collect();
@@ -583,7 +583,7 @@ fn audio(
     let (rate, channels) = (t.entry.sample_rate.max(1), t.entry.channels.max(1) as u32);
     let packets: Vec<Vec<u8>> = (t.samples.iter())
         .map(|s| {
-            data.get(s.offset as usize..(s.offset + s.size as u64) as usize)
+            data.get(s.offset as usize..s.offset.saturating_add(s.size as u64) as usize)
                 .unwrap_or_default()
                 .to_vec()
         })
@@ -1230,5 +1230,51 @@ impl Drop for Helper {
     fn drop(&mut self) {
         drop(self.stdin.take());
         let _ = self.child.wait();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What `f` returns, or `None` when it has not returned after ten seconds.
+    pub(crate) fn finished<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || tx.send(f()));
+        rx.recv_timeout(std::time::Duration::from_secs(10)).ok()
+    }
+
+    /// A track whose one sample ends past the last byte a file can have.
+    fn track_past_the_end() -> mp4::Track {
+        mp4::Track {
+            kind: mp4::Kind::Audio,
+            timescale: 1,
+            duration: 0,
+            edits: Vec::new(),
+            entry: mp4::Entry {
+                config: Some((*b"none", Vec::new())),
+                ..Default::default()
+            },
+            samples: vec![mp4::Sample {
+                offset: u64::MAX - 1,
+                size: 4,
+                dts: 0,
+                cts: 0,
+                key: true,
+            }],
+        }
+    }
+
+    #[test]
+    fn an_audio_sample_past_the_end_of_the_file_reads_as_empty() {
+        let got = audio(&track_past_the_end(), 1, &[], &Planted::default());
+        assert!(got.is_err_and(|e| e.starts_with("no decoder for")));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_video_sample_past_the_end_of_the_file_reads_as_empty() {
+        let got = video_frames(&track_past_the_end(), &[], &[0]);
+        assert!(got.is_err_and(|e| e.starts_with("no decoder for")));
     }
 }
