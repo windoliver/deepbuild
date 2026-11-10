@@ -2,6 +2,7 @@
 // appended events back for subscribers.
 import { parentPort, workerData } from 'node:worker_threads';
 import { Core, type CallContext } from './core.js';
+import type { Part } from './context-fit.js';
 import { ReadOnlyCore, unreadable } from './readonly-core.js';
 import { shedStartup } from './settle.js';
 import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMeta } from './wire.js';
@@ -12,6 +13,8 @@ export type CoreRequest =
   | { op: 'health' }
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
+  // The extensions' context for a call, fitted inside the agent's cap on injected output (#1296).
+  | { op: 'context-fit'; meta: HookMeta; parts: Part[]; join: string }
   | { op: 'tool-gate'; meta: HookMeta; call: Gated }
   | { op: 'permission'; meta: HookMeta; until?: number; inPaseo?: boolean }
   | { op: 'paseo-owner'; meta: HookMeta }
@@ -26,6 +29,8 @@ export type CoreMessage =
   | { op: 'replayed'; drafts: Draft[]; meta: HookMeta }
   | { op: 'waiter-gone'; key: number }
   | { op: 'notifier-gone' }
+  // A deep mcp call whose caller cancelled it or closed its connection (#1923).
+  | { op: 'call-gone'; call: string }
   | { op: 'hook-gone'; id: string; session: string }
   // A call still running past its expected time (#120): recorded as an overrun, with the line the chat shows of it.
   | { op: 'overrun'; session: string; agent: string; cwd: string; data: { call: string; kind: string; command: string | null; expected_ms: number; ran_ms: number; deadline: 'attached' | 'recorded' | 'none' } }
@@ -46,6 +51,7 @@ export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): P
     case 'health': return core.health();
     case 'extension-hook': return core.extensionHook(request.data);
     case 'hook-reply': return core.hookReply(request.meta, request.until);
+    case 'context-fit': return core.fitContext(request.meta, request.parts, request.join);
     case 'tool-gate': return core.toolGate(request.meta, request.call);
     case 'permission': return core.permission(request.meta, request.until, request.inPaseo);
     case 'paseo-owner': return core.paseoOwner(request.meta);
@@ -73,6 +79,7 @@ if (parentPort && workerData?.core) {
     if (message.op === 'replayed') return void core.replayed(message.drafts, message.meta).catch(() => undefined);
     if (message.op === 'waiter-gone') return core.waiterGone(message.key);
     if (message.op === 'notifier-gone') return void core.notifierGone();
+    if (message.op === 'call-gone') return core.callGone(message.call);
     if (message.op === 'hook-gone') return core.hookGone(message.id, message.session);
     if (message.op === 'overrun') return void core.overrun(message).catch(() => undefined);
     if (message.op === 'later') return core.later(message.session, message.cwd, message.text);

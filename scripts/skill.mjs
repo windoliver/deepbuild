@@ -54,12 +54,16 @@ const TOOLS = {
     proves: 'A picture does not prove anything: a snapshot is never evidence for a claim, and only check results are.',
   },
   deep_drive: {
-    use: 'Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease.',
+    use: 'Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, open a page by its address, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease.',
     proves: 'Only assertions count: a drive passes on the assertions that passed, and a screenshot, snapshot or recording proves nothing on its own.',
   },
   deep_kinds: {
     use: 'Look up what this core can draw before you write a document, with the kinds, recipes, packs and registries it has, each with its schema, an example by hash, its stability and whether it is available here; the word another tool uses for one, from a familiar-names pack; and the installed guides and gallery, read in pages.',
     proves: 'A listing does not prove your document is right: only its check and the checks that run on it say so, and an example is read, never run.',
+  },
+  deep_job: {
+    use: 'List the job kinds and the tools that qualified for each, and run a kind on one tool pinned by name@version, outside the hub\'s process; a rerun with the same tool, params and input bytes is a cache hit that starts no process.',
+    proves: 'A job\'s outputs are a reading by hash with a receipt, never a verdict: one reaches an item only after the kind\'s output checks pass, and a job changes no document.',
   },
   deep_env: {
     use: 'Bring your worktree\'s own stack up, on ports leased to that worktree, ready only once its health route answers, or take it down; every process runs through the supervisor.',

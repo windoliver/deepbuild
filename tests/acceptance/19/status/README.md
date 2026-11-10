@@ -133,10 +133,7 @@ computes them). Each test's name starts with its criterion's number and ID.
 |---|---|---|---|---|
 | AC7 | `#19.a34ae696` | `bundle.test.ts` 1: a key for each of the 221 gitleaks rules in `logs/hub.log`, the control token, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `GITHUB_TOKEN` in the environment, an OTLP endpoint, header and a Slack token in `~/.claude/settings.json`'s env, a key in what `claude auth status` prints and in `codex login status`'s API-key line; the bundle holds a marker log line and every doctor item's fix, and none of the keys (the token in every form) | a bundle that copies a log, a setting, the environment or a sign-in command's output as it is; one that leaves the logs or the doctor out (the holding checks) | PASS: the base bundle holds the telemetry doctor and the scrubbed logs, and its doctor reads none of the new sources; kept as regression protection for #19's doctor items |
 | AC7 | `#19.a34ae696` | `bundle.test.ts` 2 (wrong program) | plant `bundle-raw-logs`: the search names the log's keys and the token | FAIL: no such plant; the base bundle is scrubbed |
-| AC8 | `#19.21db8bc2` | `status.test.ts` 1: the 30 with the hub up, then with it down from the database | a listing in log, ID or repo order (an attention session past line 20, named); no fold (a quiet session listed, named); no grouping; not naming the hub; not reading the database with the hub down | FAIL: `deep status` unsupported, exit 2 |
-| AC8 | `#19.21db8bc2` | `status.test.ts` 2: a dev hub (`deep hub run --root`) at the address setting | a status that reads the installed hub's database regardless, or doesn't name the dev hub | FAIL: unsupported, exit 2 |
-| AC8 | `#19.21db8bc2` | `status.test.ts` 3: the judge on planted twins written from the seed | it must fail a log-order listing, an unfolded one, an ungrouped one and one not naming the hub, and pass a right one | PASS (the judge alone) |
-| AC8 | `#19.21db8bc2` | `status.test.ts` 4: the seed read back from the record | a seed the record reads differently | PASS |
+| AC8 | `#19.21db8bc2` | `redraft-1463/thirty.test.ts` (2), the blind redraft swapped in for `status.test.ts` (#1463: the plumbing line `Reading the hub at …` left `deep status` for `deep doctor`) | 30 live sessions through deep-hook; a listing in start, ID, repo or newest-activity order puts the six attention sessions past line 20, named | see its README |
 | AC17 | `#19.26a1fd32` | `budgets.test.ts` 1: tasks `deep-status-30` and `deep-doctor` valid against the merge base, naming #19, and they run | no task, a changed frozen task, a command that fails | FAIL: no task `deep-status-30` |
 | AC17 | `#19.26a1fd32` | `budgets.test.ts` 2: `deep status` on the 30 over 600 sessions of a month (7,200 events), five runs after a warm-up, each listing every attention session, under 200 ms and 100 MB peak (`/usr/bin/time -l`) | a slow or heavy status; one that drops attention sessions under load | FAIL: unsupported, exit 2 (before any machine check) |
 | AC17 | `#19.26a1fd32` | `budgets.test.ts` 3: `deep doctor` on a home `deep setup` installed into, the hub up, under 2 s and 100 MB | a slow or heavy doctor | SKIPPED, INCONCLUSIVE: this Mac was on battery |
@@ -189,6 +186,6 @@ implementation exists. `BASE-FAILURE.txt` holds the base run.
   `events.read`; the seeder and the 30 sessions; the status judge; the bundle reader; the forms and the sweep;
   deep-hook and its payloads; the budget rule and `/usr/bin/time -l`.
 - `fixtures/agent-bin.sh`: the stand-in for `claude`, `codex`, `launchctl` and `systemctl`.
-- `bundle.test.ts` (AC7), `status.test.ts` (AC8), `budgets.test.ts` (AC17), `canary.test.ts` (AC25).
+- `bundle.test.ts` (AC7), `redraft-1463/thirty.test.ts` (AC8), `budgets.test.ts` (AC17), `canary.test.ts` (AC25).
 - `tsconfig.json`: type-checks the folder under the root's strict options with `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the run at the base.

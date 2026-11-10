@@ -100,6 +100,11 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             // #481's.
             Planted::SubsurfaceAcrossParts,
             Planted::SubsurfaceAddsToDiffuse,
+            // #486's.
+            Planted::LobeOutputScalesField,
+            Planted::OcclusionScalesDirect,
+            Planted::BumpIgnoresHandedness,
+            Planted::CoatNormalBendsBase,
         ]
         .iter()
         .position(|q| p == Some(*q))
@@ -117,6 +122,7 @@ pub(crate) fn msaa_planted(p: Option<Planted>) -> Planted3 {
             Some(Planted::SingleSampleTargets | Planted::ClaimsMsaaOverSingleSample)
         ),
         resolve_accumulates: p == Some(Planted::ResolveAccumulatesFrames),
+        missing_lobe_turned_on: p == Some(Planted::MissingLobeTurnedOn),
         ..Default::default()
     }
 }

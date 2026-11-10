@@ -627,7 +627,7 @@ fn fx_params(
         ("seed", json!(f64::from(fx.seed % 16_777_216))),
         ("ink", ink(chrome.ink_secondary)),
         ("floor", json!(INK_FLOORS.0)),
-        ("ink2", ink(chrome.ink_tertiary)),
+        ("ink2", ink(chrome.ink_primary)),
         ("floor2", json!(INK_FLOORS.1)),
     ] {
         given.insert(k.into(), v);
@@ -635,9 +635,9 @@ fn fx_params(
     pack::lay_out(op, &given, f64::from(window.scale_factor()))
 }
 
-/// The floors of the secondary and tertiary inks (#882's ink tiers), the two that may sit on an
-/// effect and set how far it may move: the primary keeps more contrast than the secondary always.
-pub const INK_FLOORS: (f64, f64) = (4.5, 3.0);
+/// The floors of the two text inks (#882's ink tiers; #1458), secondary then primary, that may sit on
+/// an effect and set how far it may move.
+pub const INK_FLOORS: (f64, f64) = (4.5, 4.5);
 
 /// An `edge.flame` drawn this frame, whose embers the frame's particles draw.
 #[derive(Clone, Debug)]
@@ -673,7 +673,7 @@ fn paint_embers(window: &mut Window, cx: &App) {
     let chrome = crate::chrome::of(window);
     let inks = [
         (chrome.ink_secondary, INK_FLOORS.0),
-        (chrome.ink_tertiary, INK_FLOORS.1),
+        (chrome.ink_primary, INK_FLOORS.1),
     ];
     let mut shown = Vec::new();
     for emitter in emitters.iter().filter(|_| !cx.reduce_motion()) {

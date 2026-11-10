@@ -1,0 +1,78 @@
+Base-commit run of tests/acceptance/1546/redraft-1458/ac2-quiet-row.test.ts (#1546 AC2, redrafted for #1458: a length
+reads "N min" with no "ago")
+
+Base: 2721ca7b ("Merge pull request #2088"), worktree clean but for this folder.
+Machine: macOS, 18 cores, load averages 77.23 91.67 73.68 at the start (other sessions' builds).
+Built: npm ci; npm run build --workspaces; cargo build --locked -p deep-replica --bin deep-drive --features env-plants
+       (Rust 1.99.1, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0).
+Run once: npx vitest run --root tests/acceptance/1546 --no-file-parallelism --testTimeout=600000 redraft-1458
+
+Result: 2 failed, each at a named assertion. The base ticks on time (the rows read 1, 2, 3 and 4 min at the right
+readings) but writes every age "N min ago" (crates/deep-app/src/states.rs, State::text: "quiet · last seen {} ago"):
+  - the app: "the drawn row reads "last seen N min", with no "ago", at each minute", naming all six row strings.
+  - planted no-age-timer: "naming the quiet session's row, at the first minute it missed": the judge's first problem is
+    the 1 min reading's "ago", not a missed minute.
+
+As vitest printed it:
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1458-3b28b6/agent-a27a20b5f5f085148/tests/acceptance/1546
+
+ ❯ redraft-1458/ac2-quiet-row.test.ts (2 tests | 2 failed) 2448ms
+   ❯ #1546 AC2 (redraft for #1458) a quiet session's row updates its age by the next minute, on the virtual clock, with no input, written with no "ago" (2)
+     × the row reads "last seen 1 min", then 2, 3 and 4 min, each from its minute on, with no "ago", drawn by the window itself 2272ms
+     × planted no-age-timer: the drawn row keeps "1 min" past the minute, and both the judge and the check fail, naming the row 174ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  redraft-1458/ac2-quiet-row.test.ts > #1546 AC2 (redraft for #1458) a quiet session's row updates its age by the next minute, on the virtual clock, with no input, written with no "ago" > the row reads "last seen 1 min", then 2, 3 and 4 min, each from its minute on, with no "ago", drawn by the window itself
+AssertionError: the drawn row reads "last seen N min", with no "ago", at each minute: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at 29.967 s of the clock the row \"○ Session 01KBQT5Q · quiet · last seen 1 min ago\" should read \"last seen 1 min\", with no \"ago\"",
++   "at 30.033 s of the clock the row \"○ Session 01KBQT5Q · quiet · last seen 2 min ago\" should read \"last seen 2 min\", with no \"ago\"",
++   "at 89.967 s of the clock the row \"○ Session 01KBQT5Q · quiet · last seen 2 min ago\" should read \"last seen 2 min\", with no \"ago\"",
++   "at 90.033 s of the clock the row \"○ Session 01KBQT5Q · quiet · last seen 3 min ago\" should read \"last seen 3 min\", with no \"ago\"",
++   "at 149.967 s of the clock the row \"○ Session 01KBQT5Q · quiet · last seen 3 min ago\" should read \"last seen 3 min\", with no \"ago\"",
++   "at 150.033 s of the clock the row \"○ Session 01KBQT5Q · quiet · last seen 4 min ago\" should read \"last seen 4 min\", with no \"ago\"",
++ ]
+
+ ❯ redraft-1458/ac2-quiet-row.test.ts:55:101
+     53|   it('the row reads "last seen 1 min", then 2, 3 and 4 min, each from …
+     54|     const { readings, frames } = await quiet();
+     55|     expect(wrong(readings), 'the drawn row reads "last seen N min", wi…
+       |                                                                                                     ^
+     56|     for (const r of readings.filter((r) => r.t === minuteAt(r.minutes)…
+     57|       expect(stepOf(frames, r.step).drawn, `the clock step to ${r.minu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  redraft-1458/ac2-quiet-row.test.ts > #1546 AC2 (redraft for #1458) a quiet session's row updates its age by the next minute, on the virtual clock, with no input, written with no "ago" > planted no-age-timer: the drawn row keeps "1 min" past the minute, and both the judge and the check fail, naming the row
+AssertionError: naming the quiet session's row, at the first minute it missed: expected 'at 29.967 s of the clock the row "○ S…' to match /the row "[^"]*quiet · last seen 1 min…/
+
+- Expected:
+/the row "[^"]*quiet · last seen 1 min" should read "last seen 2 min"$/
+
++ Received:
+"at 29.967 s of the clock the row \"○ Session 01KBQT5Q · quiet · last seen 1 min ago\" should read \"last seen 1 min\", with no \"ago\""
+
+ ❯ redraft-1458/ac2-quiet-row.test.ts:68:91
+     66|     const problems = wrong(readings);
+     67|     expect(problems.length, `the judge fails the planted app: ${proble…
+     68|     expect(problems[0], 'naming the quiet session\'s row, at the first…
+       |                                                                                           ^
+     69|     expect(frames.claim, 'the check fails').toBe('FAIL');
+     70|     const missed = readings.find((r) => r.minutes === 2)!;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  23:04:30
+   Duration  2.78s (tests 90%, transform 8%, import 2%)
+
+exit 1

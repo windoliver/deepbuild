@@ -1,0 +1,62 @@
+[
+  {
+    "n": 1,
+    "id": "#1463.f9ab70a8",
+    "text": "On one fixture, the app's list and `deep status --json` hold the same rows, IDs, words and order at one `log_pos`. A planted second order or a planted word fails, naming the row"
+  },
+  {
+    "n": 2,
+    "id": "#1463.824c8001",
+    "text": "`deep` prints the list and exits 0, and on a machine that isn't set up it runs setup first. A planted second count fails, naming it"
+  },
+  {
+    "n": 3,
+    "id": "#1463.59289fca",
+    "text": "With the hub stopped, `deep` prints the rows it can read from the database and says the hub isn't answering and since when, and no count reads 0"
+  },
+  {
+    "n": 4,
+    "id": "#1463.91324b7e",
+    "text": "`deep inbox` prints each question before its handle, and `deep inbox answer <handle>` still works"
+  },
+  {
+    "n": 5,
+    "id": "#1463.31fc1678",
+    "text": "An agent's `deep_status` holds no other session's asks. A planted row leak fails, naming the session"
+  },
+  {
+    "n": 6,
+    "id": "#1463.cc5d1e3f",
+    "text": "`992/agree` still holds, and every word comes from `states::TABLE`"
+  },
+  {
+    "n": 7,
+    "id": "#1463.0c303476",
+    "text": "Budgets, on the reference Mac in the local preflight, compared with the merge base: `deep` answers within 100 ms over the socket on 700 rows"
+  },
+  {
+    "n": 8,
+    "id": "#1463.8ad45787",
+    "text": "An ask that defaults to No at 16:40 today reads \"If you don't answer: No, at 16:40\" in `deep inbox`, and its `--json` row holds `default` and `default_at`. A planted line with no default fails, naming the ask"
+  },
+  {
+    "n": 9,
+    "id": "#1463.03f69be1",
+    "text": "With ten finished sessions of 30 calls each and two open asks, the last line of `deep status` is the count sentence and the output is under 40 lines. On the merge base it's over 200 lines and ends on a tool call"
+  },
+  {
+    "n": 10,
+    "id": "#1463.dacb7e33",
+    "text": "`deep inbox undo` says when the ask now defaults as a clock time in your time zone. On the merge base it prints a UTC timestamp and the test fails, naming the text"
+  },
+  {
+    "n": 11,
+    "id": "#1463.bfbc08f9",
+    "text": "With open asks in three projects, each notification's title names its project. A planted title that holds a session ID fails, naming it"
+  },
+  {
+    "n": 12,
+    "id": "#1463.17f151eb",
+    "text": "The fields the first criterion compares include unread. A planted `deep status` that disagrees with the app on unread fails, naming the row"
+  }
+]

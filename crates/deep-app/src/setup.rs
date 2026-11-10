@@ -259,8 +259,7 @@ pub fn check_for_updates() -> String {
         Ok(output) => String::from_utf8_lossy(&output.stdout)
             .lines()
             .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .last()
+            .rfind(|line| !line.is_empty())
             .map_or_else(
                 || {
                     format!(

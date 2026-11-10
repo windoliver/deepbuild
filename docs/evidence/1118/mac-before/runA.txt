@@ -1,0 +1,28 @@
+FAIL before: tests/acceptance/1118-e2e/cargo.test.mjs › #1118.1f06c2df the workspace builds where the proof runs it: passed on the merge base
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+PASS before: tests/acceptance/1118/lock.test.mjs › #1118.5a7b1fc3 when the change edits the lock, the next proof runs npm ci once, in the change bay: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/lock.test.mjs › #1118.5a7b1fc3 npm ci runs in the base bay only when the merge base moved past a lock change, and once then: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/run.test.mjs › #1118.5a7b1fc3 a second proof of the same tree, with no lock change, runs npm ci 0 times, though every use ran in a bay: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/run.test.mjs › #1118.dc689388 when replay runs, crash's overlay and the before lane's base overlays are absent from the bays, and each use's recipe is in the record: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/run.test.mjs › #1118.1f06c2df a second proof of the same tree, with origin/main pinned and a twin, crash overlay and base overlay that touch no Rust, compiles 0 crates in both bays: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/run.test.mjs › #1118.4cb77839 an untracked tagged test in the worktree is present in the change bay, runs there, and is named in the record: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/run.test.mjs › #1118.e7117f8d proof wall time is a reading: each proof of the same commit prints its own: failed on the merge base at its assertion
+PASS before: tests/acceptance/1118/rust.test.mjs › #1118.1f06c2df when the twin touches Rust, a second proof of the same tree rebuilds only the crate it touches, named in the record: failed on the merge base at its assertion
+     1064.98 real      6020.49 user       521.92 sys
+          2108309504  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+           114082862  page reclaims
+              748906  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+               11418  messages sent
+                8143  messages received
+                2591  signals received
+              245909  voluntary context switches
+            11201421  involuntary context switches
+        176266477900  instructions retired
+         49763723985  cycles elapsed
+            97522048  peak memory footprint

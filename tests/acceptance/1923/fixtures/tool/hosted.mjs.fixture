@@ -1,0 +1,54 @@
+// The paid test job tool of #1923's acceptance tests, hosted-upper@1.0.0 (README, The surface under test, 3-6). The
+// hub runs it with Node as a process of its own in the platform sandbox, once per run that calls its provider. It
+// reads one JSON object on stdin, {params, inputs: {text: <base64>}, call: {provider, key, journal}}; appends
+// {key, provider} to the call journal and syncs it to disk before its request leaves the machine; asks the provider
+// (POST http://<provider>/tasks, the key in Idempotency-Key, {text}); appends {key, provider, task} once the provider
+// answers with its task ID; and writes {outputs: {text: <base64 of the provider's text>}} on stdout. It never reads
+// the journal: whether a call is made again is the hub's to decide.
+import { closeSync, fsyncSync, openSync, writeSync } from 'node:fs';
+import { request } from 'node:http';
+
+const chunks = [];
+for await (const chunk of process.stdin) chunks.push(chunk);
+const job = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+const call = job.call ?? {};
+if (![call.provider, call.key, call.journal].every((v) => typeof v === 'string' && v.length > 0)) {
+  process.stderr.write('hosted-upper: stdin names no call {provider, key, journal}, so no paid call is made\n');
+  process.exit(2);
+}
+const text = Buffer.from(job.inputs.text, 'base64').toString('utf8');
+
+/** One line appended to the call journal, on disk before this returns. */
+function record(line) {
+  const fd = openSync(call.journal, 'a');
+  try {
+    writeSync(fd, `${JSON.stringify(line)}\n`);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+/** The paid call: one POST to the provider, answered {task, text}. */
+function submit() {
+  const body = JSON.stringify({ text });
+  return new Promise((resolve, reject) => {
+    const req = request(`http://${call.provider}/tasks`, {
+      method: 'POST', agent: false,
+      headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), 'idempotency-key': call.key, connection: 'close' },
+    }, (res) => {
+      const parts = [];
+      res.on('data', (d) => parts.push(d));
+      res.on('error', reject);
+      res.on('end', () => {
+        try { resolve(JSON.parse(Buffer.concat(parts).toString('utf8'))); } catch (error) { reject(error); }
+      });
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+record({ key: call.key, provider: call.provider });
+const answer = await submit();
+record({ key: call.key, provider: call.provider, task: answer.task });
+process.stdout.write(`${JSON.stringify({ outputs: { text: Buffer.from(String(answer.text), 'utf8').toString('base64') } })}\n`);

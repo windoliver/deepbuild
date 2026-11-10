@@ -15,4 +15,6 @@ rust-version = "1.95"
 # `deep-effects-render` validates the WGSL with naga and runs it on wgpu.
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+# #486: scene3d's material outputs and step functions, which the operator check types and inlines.
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

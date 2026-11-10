@@ -262,27 +262,30 @@ pub fn place(
     columns: Option<usize>,
     gap: u32,
 ) -> Result<Placed, &'static str> {
+    // Sizes come from a document, so they are summed in u64, where they can't wrap.
+    let wide = |v: u32| u64::from(v);
     let slot = [MARGIN, MARGIN, card[0], card[1]];
-    let left = MARGIN + card[0] + MARGIN;
-    let room = view[0]
-        .checked_sub(left + MARGIN)
+    let left = wide(MARGIN) + wide(card[0]) + wide(MARGIN);
+    let room = wide(view[0])
+        .checked_sub(left + wide(MARGIN))
         .ok_or("sheet.does_not_fit")?;
     let mut rects = Vec::with_capacity(cells.len());
     let mut marks = Vec::with_capacity(cells.len());
-    let (mut x, mut y, mut row_h, mut in_row, mut widest) = (0u32, 0u32, 0u32, 0usize, 0u32);
+    let (mut x, mut y, mut row_h, mut in_row, mut widest) = (0u64, 0u64, 0u64, 0usize, 0u64);
     for c in cells {
-        let [w, h] = c.size;
+        let [w, h] = c.size.map(wide);
         if c.highlights
             .iter()
-            .any(|r| r[0] + r[2] > w || r[1] + r[3] > h)
+            .any(|r| wide(r[0]) + wide(r[2]) > w || wide(r[1]) + wide(r[3]) > h)
         {
             return Err("sheet.highlight_outside");
         }
         let beside = if c.highlights.is_empty() {
             0
         } else {
-            MARK_OFF + MARK
+            wide(MARK_OFF + MARK)
         };
+        let gap = wide(gap);
         let full = columns.is_some_and(|n| in_row == n);
         let over = columns.is_none() && in_row > 0 && x + gap + w + beside > room;
         if full || over {
@@ -292,34 +295,42 @@ pub fn place(
         if in_row > 0 {
             x += gap;
         }
-        let (cx, cy) = (left + x, MARGIN + y);
+        let (cx, cy) = (left + x, wide(MARGIN) + y);
         rects.push([cx, cy, w, h]);
         marks.push(
             c.highlights
                 .iter()
                 .map(|r| {
+                    let r = r.map(wide);
                     [
-                        [cx + w + MARK_OFF, cy + r[1], MARK, r[3]],
-                        [cx + r[0], cy + h + MARK_OFF, r[2], MARK],
+                        [cx + w + wide(MARK_OFF), cy + r[1], wide(MARK), r[3]],
+                        [cx + r[0], cy + h + wide(MARK_OFF), r[2], wide(MARK)],
                     ]
                 })
-                .collect(),
+                .collect::<Vec<_>>(),
         );
         x += w + beside;
         row_h = row_h.max(h + beside);
         widest = widest.max(x);
         in_row += 1;
     }
-    let sheet = [left, MARGIN, widest, y + row_h];
-    let fits = |r: &Rect| r[0] + r[2] + MARGIN <= view[0] && r[1] + r[3] + MARGIN <= view[1];
-    if !fits(&slot) || !fits(&sheet) {
+    let sheet = [left, wide(MARGIN), widest, y + row_h];
+    let fits = |r: [u64; 4]| {
+        r[0] + r[2] + wide(MARGIN) <= wide(view[0]) && r[1] + r[3] + wide(MARGIN) <= wide(view[1])
+    };
+    if !fits(slot.map(wide)) || !fits(sheet) {
         return Err("sheet.does_not_fit");
     }
+    // The sheet fits the view and holds every cell and mark, so each number fits a u32.
+    let narrow = |r: [u64; 4]| r.map(|v| v as u32);
     Ok(Placed {
         card: slot,
-        sheet,
-        cells: rects,
-        marks,
+        sheet: narrow(sheet),
+        cells: rects.into_iter().map(narrow).collect(),
+        marks: marks
+            .into_iter()
+            .map(|m| m.into_iter().map(|pair| pair.map(narrow)).collect())
+            .collect(),
     })
 }
 

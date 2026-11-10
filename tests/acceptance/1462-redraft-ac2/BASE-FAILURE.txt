@@ -1,0 +1,49 @@
+#1462's AC2 redraft (#1462.61a5fe15) run once at a7dee168 (base d51be2c3, Merge pull request #2108, plus the first
+suite tests/acceptance/1462/; no implementation of #1462), on 2026-11-10 at 04:04 PST, on macOS arm64, Node 24.22.2,
+cargo 1.99.1, with Accessibility and Screen Recording granted but the screen locked:
+
+  PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH" CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    caffeinate -di node node_modules/vitest/vitest.mjs run --root tests/acceptance/1462-redraft-ac2 --no-file-parallelism --testTimeout=600000
+
+Result: BLOCKED, not yet the base's failure. The builds passed (deep-hook; deep-app with --features test-confirm, then
+plain) and #26's hub and agent stand-in started on the seeded record; the test stopped in App.launch, where
+../1462/helpers.ts's probe check found the screen locked (`probe access` answered {"locked":true,"screen":true,"ax":true}).
+No key reached the app, so the base's failure on this test's own assertion is not observed in this run.
+
+Expected at the base, as the first suite's AC2 failed there (../1462/BASE-FAILURE.txt): the base's menu bar has no Next
+ask, so the test runs ⌘K, "Next ask", Return, and fails `ask 1 of 2: Next ask (⌘K, "Next ask", Return) brought the window
+to null, not an open ask's page (…)`. Run the command above once on an unlocked screen to record it here.
+
+The type-check, `node node_modules/typescript/bin/tsc -p tests/acceptance/1462-redraft-ac2/tsconfig.json`, exits 0.
+The checkout's path is shortened to <checkout>.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1462-redraft-ac2
+
+ ❯ ac2-real.test.ts (1 test | 1 failed) 77873ms
+   ❯ AC2 #1462.61a5fe15 With no pointer, a person answers two asks, opens a session, pauses it, opens the Map and returns, by keys alone, on the real app (1)
+     × AC2 #1462.61a5fe15 on the real app, by keys posted to it alone: two answers on the card, a session opened and paused (session.paused on its handle), its project opened and left 77809ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-real.test.ts > AC2 #1462.61a5fe15 With no pointer, a person answers two asks, opens a session, pauses it, opens the Map and returns, by keys alone, on the real app > AC2 #1462.61a5fe15 on the real app, by keys posted to it alone: two answers on the card, a session opened and paused (session.paused on its handle), its project opened and left
+Error: BLOCKED: the screen is locked, so the real window draws nothing a person could read and takes no key
+ ❯ blocked ../1462/helpers.ts:60:56
+     58| } as const;
+     59|
+     60| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     61| export const inconclusive = (why: string): never => expect.fail(`INCON…
+     62| /** Stops what the file started and removes its folders, once its test…
+ ❯ ../1462/helpers.ts:524:24
+ ❯ App.launch ../1462/helpers.ts:585:5
+ ❯ ac2-real.test.ts:135:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  04:04:30
+   Duration  78.16s (tests 100%)
+
+exit 1

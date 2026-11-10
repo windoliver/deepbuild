@@ -1,0 +1,42 @@
+Written by the session that started the blind job, which ran this folder against two wrong programs. The job didn't see either run.
+The workspaces built (npm ci --ignore-scripts; npm run build --workspaces), deep-hook built (cargo build -p deep-hook --bin deep-hook,
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/83/redraft-669 --no-file-parallelism \
+           --testTimeout=600000
+Node 24.22.2, darwin-arm64; load average about 7.
+
+== 1. The base: d259c232 (main 422d3fab with #1460, PR #2107's head), with this folder added and nothing else
+
+Exit code: 1
+Result: 1 file, 8 tests, 3 failed, 5 passed.
+
+  x  BLOCKED
+      Expected: "not verified: R1 · BLOCKED 3/4: secret STRIPE_KEY missing · 3 tests · next: you"
+      Received: "not verified: R1 · BLOCKED 3/4: secret STRIPE_KEY missing… · 3 tests · next: you"
+      the whole cause marked as cut: once the receipt gives way, the line keeps the cause whole but still adds "…"
+  x  sent back
+      Expected: "sent back 1/3: receipt shows $18.00 · total.ts:42 · 3 tests · next: agent"
+      Received: "sent back 1/3: receipt shows $18.00… · total.ts:42 · 3 tests · next: agent"
+      the same: a cause that isn't cut is marked "…"
+  x  checks running
+      Expected: "says done 2/4 · 2 checks running · about 4 min · 2 tests · next: DeepBuild"
+      Received: "says done 2/4 · 2 tests · 2 checks running · about 4 min · next: DeepBuild"
+      the count comes before the checks running, which belong to the outcome part (#83's README, Defined here 4.2)
+  ok the goldens cover ..., PASS, says done, long cause, (wrong program)
+
+Both drafts expect the whole cause with no "…" (redraft-1460 too: "secret STRIPE_KEY missing · next: you"). So the redraft
+stands, and the fix is in packages/verdicts/src/line.ts: cut() returns the line with the whole cause when it fits, and the
+count follows the checks running. With that fix: 8 passed, 0 failed.
+
+== 2. A mutant: the fixed line.ts, with the count part dropped (`const tests = '';`), the line before #669
+
+Exit code: 1
+Result: 1 file, 8 tests, 5 failed, 3 passed.
+
+  x  BLOCKED          Received: "not verified: R1 · BLOCKED 3/4: secret STRIPE_KEY missing · next: you"
+  x  checks running   Received: "says done 2/4 · 2 checks running · about 4 min · next: DeepBuild"
+  x  long cause       fails at: the line keeps "2 tests"
+                      Received: "not verified: R2 · sent back 2/3: receipt shows $18… · total.ts:42 · next: agent"
+  x  PASS             Received: "PASS 4/4 · next: you · session/86a9bab1/01M728ZEKGYF8BDG42XFWGC0V2"
+  x  sent back        Received: "sent back 1/3: receipt shows $18.00 · total.ts:42 · next: agent"
+  ok says done (no run finished, so no count), the coverage check, (wrong program)

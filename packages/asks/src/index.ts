@@ -269,6 +269,8 @@ export interface Asks {
   approveBatch(connection: Connection, batch: string, input: { token: string; switches: { ask: string; step: number; on: boolean }[] }): Promise<void>;
   /** Later, on the trusted path: hides the ask until `until`, never past its deadline. */
   later(connection: Connection, ask: string, until: number): Promise<void>;
+  /** Later until `before` ms ahead of the ask's deadline (#1462). */
+  laterBefore(connection: Connection, ask: string, before: number): Promise<void>;
   /** Undo, on the trusted path: a defaulted ask opens again, waiting as long as it first did. */
   undo(connection: Connection, ask: string): Promise<void>;
   /** Every ask in the record, open or closed, with its status, owner and age. */
@@ -939,6 +941,14 @@ class AsksCore implements Asks {
       await this.showNow([...cards].filter((a) => !a.shown || a.later !== undefined).sort((a, b) => a.pos - b.pos));
       return held.map((a) => a.handle);
     });
+  }
+
+  /** Later until `before` ms ahead of the ask's deadline, the earliest it could hide (#1462). */
+  async laterBefore(connection: Connection, handle: string, before: number): Promise<void> {
+    await this.sync();
+    const ask = this.asks.get(bare(handle));
+    if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
+    return this.later(connection, handle, Math.max(0, this.dueBy(ask) - before));
   }
 
   later(connection: Connection, handle: string, until: number): Promise<void> {
@@ -2537,7 +2547,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
     raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
-    later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),
+    later: core.later.bind(core), laterBefore: core.laterBefore.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),
     registerResolver: core.registerResolver.bind(core), saveDecision: core.saveDecision.bind(core), revokeDecision: core.revokeDecision.bind(core), refusals: core.refusals.bind(core),
     overrule: core.overrule.bind(core), widen: core.widen.bind(core), judged: core.judged.bind(core),
   };

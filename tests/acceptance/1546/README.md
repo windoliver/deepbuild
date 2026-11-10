@@ -187,3 +187,8 @@ Each test fails at the base because the surface is missing (BASE-FAILURE.txt).
    `--watch` is the smallest change to it; its frame lines are what the test reads, so the window is judged as it drew.
 10. **The sidebar may change under #329** (quiet sessions folded into one line per repo, new row names). The tests find the
     quiet row as the one button that reads "quiet" and "last seen", and match views by the last segment of their names.
+
+## Swapped for #1458
+
+#1458 (text sizes and spacing are roles of the look) changes what a length reads: "1 min", with no "ago". The AC2 file `ac2-quiet-row.test.ts`, both its tests, was redrafted blind from this
+issue, #1458, the design and the base `2721ca7b`, and swapped in with the owner's approval: `redraft-1458/ac2-quiet-row.test.ts`.

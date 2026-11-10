@@ -1,0 +1,182 @@
+{
+  "failures": [],
+  "seen": {
+    "notes": "f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6",
+    "render": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "89b1ae7d33a85429725a5b4a0197be83594bff192da987ad488df94aae3fae4b"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-b@1.0.0",
+          "key": "ce0ee40dfb5ad0ac289e63075719d43eb0b24217e527e3a1838c988da401f785",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "5724f498ec300524484938c601669a560c0f0e289dfbb255f7b21fa12934f475"
+          },
+          "sent": [
+            {
+              "sha256": "5724f498ec300524484938c601669a560c0f0e289dfbb255f7b21fa12934f475",
+              "host": "127.0.0.1:63786"
+            }
+          ]
+        }
+      },
+      "asks": []
+    },
+    "held": {
+      "job": "the job test.hosted hosted-a@1.0.0 {\"case\":\"upper\"} on f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6",
+      "first": {
+        "status": "held",
+        "ask": "ask:01M72FGJRGG2AP8E3Q9KSDCVHQ"
+      },
+      "second": {
+        "status": "held",
+        "ask": "ask:01M72FGJRGG2AP8E3Q9KSDCVHQ"
+      },
+      "asks": [
+        {
+          "handle": "ask:01M72FGJRGG2AP8E3Q9KSDCVHQ",
+          "kind": "authority",
+          "question": "Send the file f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6, which an agent put in the evidence store, to 127.0.0.1:63785 for hosted-a@1.0.0 (test.hosted)?",
+          "options": [
+            {
+              "id": "send",
+              "label": "Send it",
+              "decision": "allow"
+            },
+            {
+              "id": "decline",
+              "label": "Don't send it",
+              "decision": "deny"
+            }
+          ],
+          "recommended": null,
+          "deadline": 1794392368909,
+          "fallback": "you",
+          "default": "decline",
+          "provisional": false,
+          "owner": "you",
+          "key": "0f2227eef415f9e76b6661620d46791a26b8b7c38afaf23ba887ca3c0efd8d7a",
+          "pinned_to": {
+            "kind": "evidence",
+            "ref": "f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6"
+          }
+        }
+      ],
+      "early": "[]"
+    },
+    "afterYes": [
+      {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "4029f2f8e4b7aa6f4ae3c739d8378acfa262f4ea79c433955194e5cececba214"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-a@1.0.0",
+          "key": "7e269386552e853126aa429c7fea174a0b2e976252a4ee96066016a9e6b78207",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6"
+          },
+          "sent": [
+            {
+              "sha256": "f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6",
+              "host": "127.0.0.1:63785"
+            }
+          ]
+        }
+      }
+    ],
+    "pair": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-a@1.0.0",
+          "key": "9aac37e1164280fb7e0dac4e730c819ef93aa16337d48432e8e287fc5117da98",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6"
+          },
+          "sent": [
+            {
+              "sha256": "f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6",
+              "host": "127.0.0.1:63785"
+            }
+          ]
+        }
+      },
+      "asks": []
+    },
+    "other": {
+      "reply": {
+        "status": "held",
+        "ask": "ask:01M72FGKBAKJ2YB187GGWNJNHT"
+      },
+      "asks": [
+        {
+          "handle": "ask:01M72FGKBAKJ2YB187GGWNJNHT",
+          "kind": "authority",
+          "text": "{\"kind\":\"authority\",\"question\":\"Send the file f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6, which an agent put in the evidence store, to 127.0.0.1:63786 for hosted-b@1.0.0 (test.hosted)?\",\"options\":[{\"id\":\"send\",\"label\":\"Send it\",\"decision\":\"allow\"},{\"id\":\"decline\",\"label\":\"Don't send it\",\"decision\":\"deny\"}],\"recommended\":null,\"deadline\":1794392369513,\"fallback\":\"you\",\"default\":\"decline\",\"provisional\":false,\"owner\":\"you\",\"key\":\"e5486057bbf6bde3d12fbced864f27124650e4eef4ac218bcc20513c9414da0c\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6\"}}",
+          "data": {
+            "kind": "authority",
+            "question": "Send the file f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6, which an agent put in the evidence store, to 127.0.0.1:63786 for hosted-b@1.0.0 (test.hosted)?",
+            "options": [
+              {
+                "id": "send",
+                "label": "Send it",
+                "decision": "allow"
+              },
+              {
+                "id": "decline",
+                "label": "Don't send it",
+                "decision": "deny"
+              }
+            ],
+            "recommended": null,
+            "deadline": 1794392369513,
+            "fallback": "you",
+            "default": "decline",
+            "provisional": false,
+            "owner": "you",
+            "key": "e5486057bbf6bde3d12fbced864f27124650e4eef4ac218bcc20513c9414da0c",
+            "pinned_to": {
+              "kind": "evidence",
+              "ref": "f81e7687ef3e1c75c59501a0c74a97239112ee95423db9eab30b119102cb0bf6"
+            }
+          }
+        }
+      ]
+    },
+    "byPath": {
+      "file": {
+        "status": "refused",
+        "reason": "hosted-a@1.0.0 runs off the machine on 127.0.0.1:63785, so it takes files only by hash from the evidence store, as inputs [{name, sha256}], never by path; nothing was read or sent"
+      },
+      "nothing": {
+        "status": "refused",
+        "reason": "hosted-a@1.0.0 runs off the machine on 127.0.0.1:63785, so it takes files only by hash from the evidence store, as inputs [{name, sha256}], never by path; nothing was read or sent"
+      }
+    },
+    "hosts": {
+      "127.0.0.1:63785": "[\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"aGVsbG8=\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgYjk5ZjE2Yzc1ODJiOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"lower\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgYjk5ZjE2Yzc1ODJiOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\"]",
+      "127.0.0.1:63786": "[\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"aGVsbG8=\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"cmVuZGVyIDRiMmVhYzg3OTE4YTogZnJhbWUgNDIgb2YgdGhlIGhlcm8gc2hvdA==\\\"}}\"]"
+    }
+  }
+}

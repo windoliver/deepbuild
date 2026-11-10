@@ -320,7 +320,7 @@ pub fn split_blur(g: &Value) -> Option<Vec<Part>> {
         "src".into(),
         json!({"type": "texture", "from": {"texture": {"target": {"op": "core", "output": "color"}}}}),
     );
-    let mut blur_stage = |axis: &str| {
+    let blur_stage = |axis: &str| {
         let mut stage = crate::shipped::blur(axis);
         if let Some(r) = call["args"].get("radius") {
             stage["inputs"]["radius"]["default"] = r.clone();

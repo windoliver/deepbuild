@@ -3,7 +3,7 @@
 // the schedule's FAIL count the way a PASS does.
 import { describe, expect, it } from 'vitest';
 import { fixtures, validate, type JsonValue } from '@deepbuild/contracts';
-import { Schedules, type Ended, type RunEvent, type ScheduleDecl } from '../src/schedules.js';
+import { cadenceOf, Schedules, type Ended, type RunEvent, type ScheduleDecl } from '../src/schedules.js';
 
 const DECL: ScheduleDecl = {
   name: 'ext.test.brief', plugin: 'test/brief', cadence: { every: 60_000 }, deadline: 10_000,
@@ -63,5 +63,12 @@ describe('a declared no-op on schedule.run@1', () => {
     await schedules.register(DECL, { runs: [], settings: {} });
     for (let i = 0; i < 9; i++) await runOnce();
     expect(rows().find((r) => r.name === DECL.name)?.state).toBe('on');
+  });
+});
+
+describe('a cadence as edited', () => {
+  it('refuses a cron line for a date that never comes, and takes one that does', () => {
+    for (const cron of ['0 0 31 2 *', '0 0 30 2 *', '0 0 31 4 *']) expect(() => cadenceOf({ cron }), cron).toThrow(/matches no time/);
+    expect(cadenceOf({ cron: '0 0 29 2 *' })).toEqual({ cron: '0 0 29 2 *' });
   });
 });

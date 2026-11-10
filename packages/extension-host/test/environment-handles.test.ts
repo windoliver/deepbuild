@@ -1,5 +1,5 @@
 // A live environment belongs to its load, not to a caller that might forget to close it.
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { join } from 'node:path';

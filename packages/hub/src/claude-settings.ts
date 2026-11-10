@@ -1,7 +1,7 @@
 // Claude Code's user settings, where DeepBuild's hook entries live in R1 (#18): `deep setup` merges them in beside
 // yours, the timing relations read them (design: Numbers, timing relations), and the core puts a removed or weakened
 // entry of ours back. Our entries are the ones setup recorded in <root>/claude-hooks.json, by their exact command.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { writeThrough } from './agent-files.js';
@@ -50,6 +50,29 @@ export function writeJson(file: string, value: Obj): void {
   const next = `${file}.deepbuild-${process.pid}.tmp`;
   writeFileSync(next, text);
   renameSync(next, file);
+}
+
+/** The repo a folder is in: the nearest folder up holding `.git`, else the folder itself. */
+export function topLevel(cwd: string): string {
+  for (let dir = cwd; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, '.git'))) return dir;
+    if (dirname(dir) === dir) return cwd;
+  }
+}
+/** The status line command of DeepBuild's forwarder, as setup writes it. */
+export const FORWARDER = /deep-hook\S*'? statusline$/;
+/**
+ * The repo's own settings files that set a status line, which overrides the user-level forwarder there (#1296):
+ * Claude Code reads a project value over a user one, so no plan window is read in that repo. Only read, never written.
+ */
+export function shadowedBy(repo: string): { file: string; key: string }[] {
+  return ['settings.json', 'settings.local.json'].flatMap((name) => {
+    const file = join(repo, '.claude', name);
+    const line = readJson(file)?.statusLine;
+    if (line === undefined) return [];
+    const command = isObj(line) && typeof line.command === 'string' ? line.command : '';
+    return FORWARDER.test(command) ? [] : [{ file, key: command ? 'statusLine.command' : 'statusLine' }];
+  });
 }
 
 /** What setup installed, or undefined before any setup. */

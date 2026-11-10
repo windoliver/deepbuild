@@ -70,6 +70,8 @@ const TABLES: readonly TableDef[] = [
   T('turns', ['session_id', 'idx'], 'session_id TEXT, idx INTEGER, number INTEGER, start_seq INTEGER, start_id TEXT, stop_seq INTEGER, stopped INTEGER NOT NULL DEFAULT 0, last_seq INTEGER, last_id TEXT'),
   T('turn_events', ['event_id'], 'event_id TEXT, session_id TEXT, turn_idx INTEGER, eff_seq INTEGER, eff_id TEXT, log_pos INTEGER'),
   T('session_readings', ['session_id', 'reading'], 'session_id TEXT, reading TEXT, since INTEGER'),
+  // The list every reader shows (#1463): each row the core built, as its newest row.set gives it, in the list's order.
+  T('rows', ['id'], 'id TEXT, ord TEXT, row TEXT, log_pos INTEGER'),
   // The wiki's claims in force (#355), each from its newest change in force, with its sources and its links, and
   // their text in SQLite FTS5: the default index deep_search reads, rebuilt like every table here.
   T('wiki_claims', ['handle'], 'handle TEXT, page TEXT, claim TEXT, text TEXT, known TEXT, proof INTEGER, scope TEXT, change TEXT, state TEXT, log_pos INTEGER'),
@@ -466,6 +468,12 @@ export class Projector {
         break;
       case 'open_item.closed':
         this.set('open_items', { closed: e.ts }, { task_ref: str(d.task_ref), text: str(d.text) });
+        break;
+      case 'row.set':
+        if (d.listed === true) {
+          const { listed: _, order, ...row } = d;
+          this.up('rows', { id: str(d.id), ord: str(order), row: JSON.stringify(row), log_pos: e.log_pos });
+        } else this.stmt('DELETE FROM rows WHERE id = ?').run(str(d.id));
         break;
       case 'notice.subscribed':
         this.up('notices', { kind: str(d.notice_kind), key: str(d.key), id: e.id, subscribed_by: str(d.by), created: e.ts });

@@ -115,6 +115,27 @@
       { "case": "interactive", "text": "the call is AskUserQuestion or another tool that needs your interaction, from 2.1.292", "since": "2.1.292", "tools": ["AskUserQuestion"] }
     ]
   },
+  "contextOutput": {
+    "readBy": "the hub keeps each hook reply's injected text within capChars and sends the rest by handle with a line saying where to continue, and sends text the model needs only on an output these events mark model",
+    "conformance": "context/reaches-model",
+    "capChars": 10000,
+    "previewChars": 2000,
+    "versions": ["2.1.299", "2.1.304", "2.1.308"],
+    "source": "code.claude.com/docs/en/hooks (Add context for Claude; exit code output), read Nov 9 2026 against 2.1.308: past the cap the text goes to a file in the session folder with a preview, and Claude isn't asked to read it",
+    "events": {
+      "SessionStart": { "additionalContext": "model", "systemMessage": "user", "stdout": "model", "stderr": "debug", "stderrOnBlock": "user" },
+      "UserPromptSubmit": { "additionalContext": "model", "systemMessage": "user", "stdout": "model", "stderr": "debug", "stderrOnBlock": "user" },
+      "PreToolUse": { "additionalContext": "model", "systemMessage": "user", "stdout": "debug", "stderr": "debug", "stderrOnBlock": "model" },
+      "PermissionRequest": { "additionalContext": "none", "systemMessage": "user", "stdout": "debug", "stderr": "debug", "stderrOnBlock": "none" },
+      "PostToolUse": { "additionalContext": "model", "systemMessage": "user", "stdout": "debug", "stderr": "debug", "stderrOnBlock": "model" },
+      "PostToolUseFailure": { "additionalContext": "model", "systemMessage": "user", "stdout": "debug", "stderr": "debug", "stderrOnBlock": "model" },
+      "Stop": { "additionalContext": "model", "systemMessage": "user", "stdout": "debug", "stderr": "debug", "stderrOnBlock": "model" },
+      "SubagentStop": { "additionalContext": "model", "systemMessage": "user", "stdout": "debug", "stderr": "debug", "stderrOnBlock": "model" },
+      "PostCompact": { "additionalContext": "none", "systemMessage": "none", "stdout": "debug", "stderr": "debug", "stderrOnBlock": "user" },
+      "Notification": { "additionalContext": "none", "systemMessage": "none", "stdout": "debug", "stderr": "debug", "stderrOnBlock": "none" },
+      "SessionEnd": { "additionalContext": "none", "systemMessage": "none", "stdout": "debug", "stderr": "debug", "stderrOnBlock": "user" }
+    }
+  },
   "transcripts": {
     "readBy": "a run keeps its session's own transcript",
     "conformance": "claude/transcripts/folder",

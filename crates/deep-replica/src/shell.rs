@@ -66,15 +66,15 @@ pub fn open_with_card(
         Some(dir) => {
             let runtime = deep_app::new_runtime().expect("the panel runtime");
             if let Ok(view) = deep_app::mount_panel(&runtime, dir, window, cx) {
-                deep_app::views::place_extension(view.into());
+                deep_app::open::place_extension(view.into(), cx);
             }
             // The runtime outlives the window, as the app's does: its mounted views keep their state.
             std::mem::forget(runtime);
         }
-        None => deep_app::views::place_extension(deep_app::views::shipped(
-            deep_app::views::Kind::Sidebar,
+        None => deep_app::open::place_extension(
+            deep_app::views::shipped(deep_app::views::Kind::Sidebar, cx),
             cx,
-        )),
+        ),
     });
     let question = deep_app::record::history()
         .iter()
