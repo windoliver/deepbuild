@@ -8,9 +8,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use deep_canvas_media::emitter::{Cone, Distance, Model};
+use deep_canvas_media::delay::{DelaySpec, PitchSpec};
+use deep_canvas_media::dynamics::{CompressorSpec, LimiterSpec, Makeup};
 use deep_canvas_media::mix::{
-    Bus, Curve, Emit, Gain, Mix, Place, Planted as MixPlanted, Player, Proc, ProcKind, Source,
-    Strip,
+    Bus, BusSend, Curve, Emit, Gain, Mix, Place, Planted as MixPlanted, Player, Proc, ProcKind,
+    Source, Strip,
 };
 use deep_canvas_media::{doc, eq, reverb, FLICKS};
 use deep_codecs::DECODE_WORKER;
@@ -114,6 +116,13 @@ pub fn planted_of(p: Option<Planted>, live: bool) -> MixPlanted {
         holds_gain_per_block: live && p == Some(Planted::MixerHoldsGainPerBlock),
         inverse_only: p == Some(Planted::EmitterAlwaysInverse),
         cone_reversed: p == Some(Planted::ConeSignReversed),
+        // #1818's live in the media module's list, planted for the whole run.
+        limiter_sample_peaks: deep_canvas_media::planted("limiter_holds_sample_peaks"),
+        hard_knee: deep_canvas_media::planted("compressor_hard_knee"),
+        no_latency_compensation: deep_canvas_media::planted("mix_without_latency_compensation"),
+        pitch_ignores_semitones: deep_canvas_media::planted("pitch_ignores_semitones"),
+        sends_tap_post: deep_canvas_media::planted("send_always_post"),
+        delay_empties_at_seek: deep_canvas_media::planted("delay_empties_line_at_seek"),
     }
 }
 
@@ -244,7 +253,23 @@ impl Hub<'_> {
             for p in b.get("processors").and_then(Value::as_array).into_iter().flatten() {
                 let pid = p.as_str().ok_or_else(|| bad(format!("bus {id}: a processor ID")))?;
                 let pv = procs.get(pid).ok_or_else(|| bad(format!("bus {id}: no processor {pid}")))?;
-                processors.push(processor(pid, pv).map_err(bad)?);
+                processors.push(processor(pid, pv, &index).map_err(bad)?);
+            }
+            // #1818: sends, each tapped pre or post (post by default).
+            let mut sends = Vec::new();
+            for (j, sv) in b.get("sends").and_then(Value::as_array).into_iter().flatten().enumerate() {
+                let to = sv.get("to").and_then(Value::as_str).ok_or_else(|| bad(format!("bus {id}: send {j}'s to")))?;
+                let pre = match sv.get("tap").and_then(Value::as_str) {
+                    None | Some("post") => false,
+                    Some("pre") => true,
+                    Some(t) => return Err(bad(format!("bus {id}: send {j}'s tap {t} isn't pre or post"))),
+                };
+                sends.push(BusSend {
+                    id: format!("{id}/sends/{j}"),
+                    to: index(to).ok_or_else(|| bad(format!("bus {id} sends to {to}, which isn't a bus")))?,
+                    gain_db: sv.get("gain").and_then(Value::as_f64).unwrap_or(0.0),
+                    pre,
+                });
             }
             buses.push(Bus {
                 id: id.clone(),
@@ -253,6 +278,7 @@ impl Hub<'_> {
                 mute: b.get("mute").and_then(Value::as_bool).unwrap_or(false),
                 processors,
                 out,
+                sends,
             });
         }
         // Emitters, by the strip they play.
@@ -475,7 +501,8 @@ fn read(player: &mut Player, frames: i64, keep: bool, step: f32) -> (String, Opt
     (hex(h.finalize()), kept)
 }
 
-fn processor(id: &str, p: &Value) -> Result<Proc, String> {
+fn processor(id: &str, p: &Value, bus: &dyn Fn(&str) -> Option<usize>) -> Result<Proc, String> {
+    let n = |k: &str| p.get(k).and_then(Value::as_f64);
     let kind = match p.get("kind").and_then(Value::as_str) {
         Some("eq") => ProcKind::Eq(
             p.get("bands")
@@ -503,6 +530,56 @@ fn processor(id: &str, p: &Value) -> Result<Proc, String> {
                 mix: p.get("mix").and_then(Value::as_f64).unwrap_or(0.3),
             })
         }
+        // #1818: the compressor, limiter, delay and pitch, at the Processor row's defaults.
+        Some("compressor") => {
+            let d = CompressorSpec::default();
+            let makeup = match p.get("makeup") {
+                None => d.makeup,
+                Some(Value::String(a)) if a == "auto" => Makeup::Auto,
+                Some(v) => Makeup::Db(v.as_f64().ok_or(format!("processor {id}: makeup is dB or auto"))?),
+            };
+            let key = match p.get("key").and_then(Value::as_str) {
+                None => None,
+                Some(k) => Some(bus(k).ok_or(format!("processor {id}: key {k} isn't a bus"))?),
+            };
+            ProcKind::Compressor(
+                CompressorSpec {
+                    threshold: n("threshold").unwrap_or(d.threshold),
+                    knee: n("knee").unwrap_or(d.knee).max(0.0),
+                    ratio: n("ratio").unwrap_or(d.ratio).max(1.0),
+                    attack: n("attack").unwrap_or(d.attack).max(0.0),
+                    release: n("release").unwrap_or(d.release).max(0.0),
+                    makeup,
+                },
+                key,
+            )
+        }
+        Some("limiter") => {
+            let d = LimiterSpec::default();
+            let oversample = match p.get("oversample").and_then(Value::as_u64) {
+                None => d.oversample,
+                Some(o @ (4 | 8)) => o as u32,
+                Some(o) => return Err(format!("processor {id}: oversample {o} isn't 4 or 8")),
+            };
+            ProcKind::Limiter(LimiterSpec {
+                ceiling: n("ceiling").unwrap_or(d.ceiling),
+                lookahead: n("lookahead").unwrap_or(d.lookahead).max(0.0),
+                release: n("release").unwrap_or(d.release).max(0.0),
+                oversample,
+            })
+        }
+        Some("delay") => {
+            let time = n("time").ok_or(format!("processor {id}: time"))?;
+            let feedback = n("feedback").unwrap_or(0.0);
+            if !(0.0..=2.0).contains(&time) || !(0.0..1.0).contains(&feedback) {
+                return Err(format!("processor {id}: time is 0 to 2 s and feedback in [0, 1)"));
+            }
+            ProcKind::Delay(DelaySpec { time, feedback, mix: n("mix").unwrap_or(1.0).clamp(0.0, 1.0) })
+        }
+        Some("pitch") => ProcKind::Pitch(PitchSpec {
+            semitones: n("semitones").unwrap_or(0.0),
+            window: n("window").unwrap_or(0.1),
+        }),
         k => return Err(format!("processor {id}: kind {k:?} isn't built")),
     };
     Ok(Proc {

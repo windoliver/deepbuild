@@ -164,7 +164,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     kind: maybe(str('run: the job kind, as the list names it.')),
     tool: maybe(str('run: the tool, pinned by name@version as the list names it.')),
     params: maybe(str('run: the kind\'s params as JSON text; null for its defaults.')),
-    inputs: maybe({ type: 'array', items: object({ name: str('The input, as the kind names it.'), path: str('The file whose bytes it is, by absolute path.') }), description: 'run: each input the kind takes, once.' }),
+    inputs: maybe({ type: 'array', items: object({ name: str('The input, as the kind names it.'), sha256: maybe(str('The file whose bytes it is, by its SHA-256 in the evidence store; a tool that runs off the machine takes files only this way.', '^[0-9a-f]{64}$')), path: maybe(str('The file whose bytes it is, by absolute path, for a tool that runs on this machine; null when sha256 names it.')) }), description: 'run: each input the kind takes, once.' }),
   }),
   deep_env: object({ action:{ type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
   deep_propose: object({
