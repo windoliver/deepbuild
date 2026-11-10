@@ -276,6 +276,8 @@ alone.push('tests/acceptance/532/');
 alone.push('tests/acceptance/545/', 'tests/acceptance/545-redraft-ac3/', 'tests/acceptance/545-redraft-ac5/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
+// #1820 starts the same real hub and sandboxed library fixture, plus the pack's HTTPS source.
+alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
 alone.push('tests/acceptance/1732/');
 
@@ -349,6 +351,8 @@ byHand.push('tests/acceptance/405/budgets.test.ts');
 alone.push('tests/acceptance/544/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
+// #1976's file builds deep-gpu and clicks 200 seeded rays through seven views of a plane and a sphere.
+alone.push('tests/acceptance/1976/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
