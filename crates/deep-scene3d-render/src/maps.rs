@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use deep_canvas_scene3d::light::{Maps, Texels, Wrap};
-use deep_gpu::device::Device;
 
 /// The maps in the order the shader numbers them: base color, metallic-roughness, normal,
 /// occlusion, emission.
@@ -372,12 +371,4 @@ impl Store {
             entries: &entries,
         })
     }
-}
-
-/// Whether the device can sample BC formats (macOS's adapters can).
-pub fn has_bc(device: &Device) -> bool {
-    device
-        .device
-        .features()
-        .contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
 }

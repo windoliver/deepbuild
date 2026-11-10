@@ -78,6 +78,15 @@ describe('the reference runner on a checkout that changes between runs', () => {
   });
 });
 
+describe('the reference runner on a command that pipes both of its streams', () => {
+  it('names the `|&` pipe as the mask, as the gate does', async () => {
+    const { checkout } = knownPass();
+    const [fill] = cleanFills(slotKits().find((k) => k.slot === 'check.kind@1')!) as CheckRunnerFill[];
+    const piped = await fill!.run({ ...spec, runner: `${spec.runner} |& tee /dev/null` }, { checkout, deadline: 60_000, now: () => Date.now() });
+    expect(piped).toMatchObject({ outcome: 'uncounted', mask: '|& tee' });
+  });
+});
+
 describe('the reference runner after a run that left a detached child writing', () => {
   it('still reports the detached child, though the child keeps writing into the run\'s folder as the runner clears it', async () => {
     const { checkout, run } = knownPass();

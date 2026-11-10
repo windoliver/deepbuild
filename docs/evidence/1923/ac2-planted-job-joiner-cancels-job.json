@@ -1,0 +1,52 @@
+{
+  "failures": [
+    "cancelling the joining request stopped the job for the key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93: the tool's request to the provider was dropped before the provider answered",
+    "cancelling the joining request ended the first request for the key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93 before the provider answered: {\"status\":\"failed\",\"reason\":\"hosted-upper@1.0.0 failed: hosted-upper@1.0.0's run was stopped: every request for it was cancelled; nothing was kept\",\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"hosted-upper@1.0.0\",\"key\":\"491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93\",\"build\":\"d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f\",\"cache\":\"miss\",\"inputs\":{\"text\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"}}}",
+    "a deep_job with the key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93, sent while the job ran after its other joiner cancelled, didn't join it: it was answered before the job ended: {\"status\":\"BLOCKED\",\"cause\":\"hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:50783 under the submission key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93, and its answer never reached DeepBuild, so it isn't made again; nothing was sent\",\"ask\":\"ask:01M72GP7T4DYMBJ83QWR0FS4KF\"}",
+    "the first request for the key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93 wasn't answered with the job's \"ABC\" by hash once the provider answered: {\"status\":\"failed\",\"reason\":\"hosted-upper@1.0.0 failed: hosted-upper@1.0.0's run was stopped: every request for it was cancelled; nothing was kept\",\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"hosted-upper@1.0.0\",\"key\":\"491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93\",\"build\":\"d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f\",\"cache\":\"miss\",\"inputs\":{\"text\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"}}}",
+    "the joining request for the key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93 isn't answered with the job's \"ABC\" by hash and a receipt naming that key with joined: true: {\"status\":\"BLOCKED\",\"cause\":\"hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:50783 under the submission key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93, and its answer never reached DeepBuild, so it isn't made again; nothing was sent\",\"ask\":\"ask:01M72GP7T4DYMBJ83QWR0FS4KF\"}"
+  ],
+  "seen": {
+    "join": {
+      "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+      "calls": [
+        {
+          "n": 2,
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "text": "abc",
+          "task": "task-2",
+          "journaled": true,
+          "answered": false,
+          "dropped": true
+        }
+      ],
+      "first": {
+        "status": "failed",
+        "reason": "hosted-upper@1.0.0 failed: hosted-upper@1.0.0's run was stopped: every request for it was cancelled; nothing was kept",
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-upper@1.0.0",
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "build": "d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f",
+          "cache": "miss",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      },
+      "joined": {
+        "status": "BLOCKED",
+        "cause": "hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:50783 under the submission key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93, and its answer never reached DeepBuild, so it isn't made again; nothing was sent",
+        "ask": "ask:01M72GP7T4DYMBJ83QWR0FS4KF"
+      },
+      "cancelled": null,
+      "journal": [
+        {
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "provider": "127.0.0.1:50783",
+          "file": "/private/tmp/dh1923-Yksq0Q/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+        }
+      ]
+    }
+  }
+}

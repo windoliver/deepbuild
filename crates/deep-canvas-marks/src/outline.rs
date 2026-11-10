@@ -175,7 +175,8 @@ pub fn circle(center: [f64; 2], r: f64, inner_r: f64) -> Vec<Verb> {
 /// `rect@1`'s box `[x, y, w, h]` as an outline from its top left corner, clockwise on screen, its
 /// corners rounded by `radius`.
 pub fn rect([x, y, w, h]: [f64; 4], radius: f64) -> Vec<Verb> {
-    let r = radius.clamp(0.0, w.min(h) / 2.0);
+    // A box with a negative size has no room for a radius.
+    let r = radius.clamp(0.0, (w.min(h) / 2.0).max(0.0));
     if r == 0.0 {
         return vec![
             Verb::Move([x, y]),
@@ -232,5 +233,12 @@ mod tests {
             .filter(|v| matches!(v, Verb::Cubic(..)))
             .count();
         assert_eq!(cubics, 5, "one cubic per outer vertex");
+    }
+
+    #[test]
+    fn a_rect_with_a_negative_size_has_square_corners() {
+        let verbs = rect([0.0, 0.0, -10.0, 20.0], 4.0);
+        assert_eq!(verbs.len(), 5, "four corners and a close");
+        assert!(matches!(verbs[1], Verb::Line([x, y]) if x == -10.0 && y == 0.0));
     }
 }

@@ -1,0 +1,33 @@
+// The test plug-in of #1923's acceptance tests (README, The surface under test, 1-2): it registers the job kind
+// test.hosted through deep.registerJob and its one tool through deep.registerJobTool, a paid tool that calls a
+// provider. Everything it registers is data: the tool is the program in ./tool, which the hub runs. probe.json names
+// the tool: hosted-upper@1.0.0, or the planted hosted-resubmit@1.0.0, whose ./tool/hosted.mjs is the planted program.
+import { readFileSync } from 'node:fs';
+
+interface Probe { tool: string }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+
+/** test.hosted's params: the case the provider writes the text in, upper only. */
+const PARAMS = {
+  type: 'object',
+  properties: { case: { enum: ['upper'] } },
+  required: ['case'],
+  additionalProperties: false,
+};
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerJob('test.hosted', {
+    schema: { params: PARAMS, inputs: { text: { media: 'text/plain' } } },
+    outputs: { text: { media: 'text/plain' } },
+    key: ['tool', 'params', 'inputs'],
+    output_checks: [],
+    qualification: { fixtures: [{ name: 'fx-hello', params: { case: 'upper' }, inputs: { text: 'hello' }, expect: { text: 'HELLO' } }] },
+  });
+  await deep.registerJobTool('test.hosted', {
+    tool: probe.tool,
+    params: PARAMS,
+    run: { dir: 'tool', entry: 'hosted.mjs' },
+    qualification: { same_bytes: false },
+    cost: { usd: 0.02 },
+  });
+}

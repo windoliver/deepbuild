@@ -33,3 +33,13 @@ describe('the slot runner on a fill newer than its kit', () => {
     }
   });
 });
+
+describe('the state-source@1 kit on a source whose fixture offers no change', () => {
+  it('reads BLOCKED: nothing was read, compared or undone', async () => {
+    const kit = slotKits().find((k) => k.slot === 'state-source@1')!;
+    const fill = { ...cleanFills(kit)[0]!, fixture: { start: () => [], make() {}, run() {} } };
+    const report = await runKit(kit, fill, { parts: ['fixed'] });
+    expect(report.cases.map((c) => [c.outcome, c.message])).toEqual([['BLOCKED', "the source's fixture offers no change to try, so the kit held nothing"]]);
+    expect(report.verdict).toBe('BLOCKED');
+  });
+});

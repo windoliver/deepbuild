@@ -1256,7 +1256,6 @@ mod tests {
         lights.push(point("far", [0.0, 1.0, 500.0], 800.0));
         let p = policy(&lights, &cam);
         assert_eq!(p.left_out, vec!["b-near".to_string(), "c-cut".to_string()]);
-        let mut lights = lights;
         lights.remove(0);
         let p = policy(&lights, &cam);
         let w = p

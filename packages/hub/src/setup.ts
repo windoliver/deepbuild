@@ -250,6 +250,8 @@ function installCodex(root: string, record: ReturnType<typeof setupRecord>, cli:
 function withStatusLine(root: string, settings: Obj, ours: string): Obj {
   const line = isObj(settings.statusLine) ? settings.statusLine : undefined;
   if (line?.command === ours) return settings;
+  // An earlier setup's forwarder, from where deep-hook was then: yours stays as that setup kept it.
+  if (typeof line?.command === 'string' && /deep-hook\S*'? statusline$/.test(line.command)) return { ...settings, statusLine: { ...line, command: ours } };
   editConfig(root, (c) => {
     const statusline = isObj(c.statusline) ? c.statusline : {};
     if (typeof line?.command === 'string') c.statusline = { ...statusline, yours: line.command };

@@ -447,6 +447,18 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             )),
         }
     }
+    // Sized in u64 and held to the largest memory, so no region's size or offset passes a u32.
+    let total: u64 = writes
+        .iter()
+        .map(|w: &Write| (u64::from(w.ty.size()) * u64::from(w.count)).div_ceil(8) * 8)
+        .sum();
+    if total > 64 * MIB {
+        refused.push(refusal(
+            "write",
+            "the writes pass a logic item's largest memory, 64 MiB".into(),
+            json!({}),
+        ));
+    }
     if !refused.is_empty() {
         return Err(logic_refused(id, refused));
     }
@@ -667,6 +679,15 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
                 ));
                 continue;
             };
+            // A read region past what a u32 addresses fits no memory, and leaves the seed 8 bytes.
+            let Some(end) = at.checked_add(size).filter(|n| *n <= u32::MAX - 15) else {
+                refused.push(refusal(
+                    "read",
+                    format!("{r} takes the read region past 4 GiB"),
+                    json!({"read": r}),
+                ));
+                continue;
+            };
             entries.push(Region {
                 region: "reads",
                 name: r.clone(),
@@ -675,7 +696,7 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
                 ty,
                 read,
             });
-            at = align8(at + size);
+            at = align8(end);
         }
         entries.push(Region {
             region: "reads",
@@ -904,4 +925,47 @@ fn stale(now: &Layout, theirs: u64, past: &[Layout], planted: &Planted) -> Vec<V
                 json!({}),
             )]
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EMPTY: &str = r#"(module (memory (export "memory") 1 1)
+  (global (export "reads_at") i32 (i32.const 0)) (global (export "writes_at") i32 (i32.const 1024))
+  (func (export "init") (param i64)) (func (export "step") (param i64)))"#;
+
+    /// The refusals of a piece whose items, given as params, all run the same empty program.
+    fn refusals(items: Value) -> Value {
+        let bytes = wat::parse_str(EMPTY).expect("a program");
+        let sha = hash(&bytes);
+        let mut piece = json!({"seed": 0, "assets": {&sha: B64.encode(&bytes)}, "items": {}});
+        for (id, params) in items.as_object().expect("items") {
+            let mut params = params.clone();
+            params["program"] = json!(sha);
+            piece["items"][id] = json!({"kind": "logic@1", "params": params});
+        }
+        match check(&piece, &Planted::default(), &mut History::new()) {
+            Ok(_) => json!([]),
+            Err(Refused(v)) => json!([v["item"], v["refusals"][0]["rule"]]),
+        }
+    }
+
+    #[test]
+    fn writes_past_the_largest_memory_are_refused() {
+        for (ty, count) in [("quat", 134_217_728u64), ("f64", 536_870_913)] {
+            let items = json!({"e": {"writes": {"a": {"type": ty, "count": count}}}});
+            assert_eq!(refusals(items), json!(["e", "write"]), "{ty} x {count}");
+        }
+    }
+
+    #[test]
+    fn a_read_region_past_a_u32_is_refused() {
+        let reads = vec!["a.x"; 65];
+        let items = json!({
+            "b": {"reads": reads},
+            "a": {"writes": {"x": {"type": "f64", "count": 8_388_608}}},
+        });
+        assert_eq!(refusals(items), json!(["b", "read"]));
+    }
 }

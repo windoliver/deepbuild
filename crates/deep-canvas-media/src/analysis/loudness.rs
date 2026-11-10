@@ -233,16 +233,16 @@ fn channel_energy(x: &[f64], stages: &[Biquad; 2], bounds: &[usize]) -> Vec<f64>
 }
 
 /// Taps per interpolator phase: each point between samples i and i + 1 reads x[i − 7] to x[i + 8].
-const TAPS: usize = 16;
+pub(crate) const TAPS: usize = 16;
 /// Zeros before a channel's first sample in the padded buffer.
-const BEFORE: usize = TAPS / 2 - 1;
+pub(crate) const BEFORE: usize = TAPS / 2 - 1;
 /// The Kaiser window's β: passband flat within 0.01 dB to 0.35 × rate, −0.2 dB at 0.4 × rate.
 const BETA: f64 = 6.0;
 
 /// The polyphase interpolator for `oversample` × the rate: for each phase p in 1 to L − 1, the
 /// taps reading the point p ÷ L of the way from sample i to i + 1, a Kaiser-windowed sinc cut off
 /// at the input's Nyquist frequency and scaled to unit gain at DC. Phase 0 is the sample itself.
-fn interpolator(oversample: u32) -> Vec<[f64; TAPS]> {
+pub(crate) fn interpolator(oversample: u32) -> Vec<[f64; TAPS]> {
     let half = (TAPS / 2) as f64;
     let i0_beta = bessel_i0(BETA);
     (1..oversample)
