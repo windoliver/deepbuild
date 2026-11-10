@@ -272,7 +272,7 @@ alone.push('tests/acceptance/1718/');
 alone.push('tests/acceptance/1637/');
 timed.push('tests/acceptance/1637/budgets.test.ts');
 // #501's files each build deep-show (seal.test.ts three times), export films through the GPU and the encode tool, and run a 600 s soak on the audio output.
-alone.push('tests/acceptance/501/');
+alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
 
 export const checks = [
