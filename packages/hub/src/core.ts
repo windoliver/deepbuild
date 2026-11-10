@@ -94,6 +94,7 @@ import { plantedReload, plantedSessionEnd, plantedStop, type Plant } from './pla
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { LogReads } from './log-reads.js';
+import { Jobs } from './jobs.js';
 import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts, type AssetKind } from './libraries.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
@@ -424,6 +425,8 @@ export class Core {
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
+  /** The job kinds' runs (#1922): the cache by key, your standing rules for paid tools, and the asks they wait on. */
+  private jobKinds?: Jobs;
   /** What the app last said of macOS and its notifications (#994). */
   private notifications: string | null = null;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
@@ -1144,7 +1147,15 @@ export class Core {
         return (await readIssue(fetch, owner, name, n, undefined))?.[0];
       },
     });
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite') });
+    // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
+    const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'), ...plant });
+    this.jobKinds = new Jobs({
+      root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
+      keep: async (bytes, source) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
+      has: async (sha) => (await this.store.get(sha)) !== undefined,
+      raise: (ask, plan) => this.asks.raise(this.connection('core'), 'job.paid', ask, plan),
+    });
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,
       keep: async (bytes, kind, source, license) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind, source, redaction: 'complete', license }), `${kind} from ${source}`)).sha256,
@@ -3099,6 +3110,8 @@ export class Core {
     if (this.prompts.has(delivery.ask)) return;
     // Your answer to a library fetch's authority ask (#1731), which no session raised: a yes runs the fetch's job.
     if (this.libraries?.answered(delivery.ask, delivery.decision)) return;
+    // Your answer to a paid job call's authority ask (#1922): a yes lets that call run once.
+    if (this.jobKinds?.answered(delivery.ask, delivery.decision)) return;
     this.tasks.answered(delivery);
     this.acceptance?.answered(delivery);
     this.delivery(delivery);
@@ -5668,6 +5681,7 @@ export class Core {
       case 'sessions.read': return this.log.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
       case 'person.add': return this.addPerson(params, context);
       case 'library.on': case 'library.off': case 'library.rule': return this.library(method, params, context);
+      case 'job.rule': return this.jobRule(params, context);
       case 'person.invite': return this.invitePerson(params, context);
       case 'person.revoke': return this.revokePerson(params, context);
       // An invite spent over the network (#1338): only the server's network hello calls it, with the key the joining machine proved.
@@ -6541,12 +6555,13 @@ export class Core {
       await (this.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
-      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'find_actions'));
+      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'deep_job' && tool !== 'find_actions'));
       switch (tool) {
         case 'find_actions': return await this.findActions(args.query as string | null);
         case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_kinds': return await this.kinds(args);
+        case 'deep_job': return await this.job(args);
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
         case 'deep_ask': return await this.askFor(session!, args);
@@ -6743,6 +6758,28 @@ export class Core {
       if (e instanceof LibraryRefused) return { status: 'refused', reason: e.message };
       throw e;
     }
+  }
+  /**
+   * deep_job (#1922): the job kinds and their qualified tools, or one run of a kind on a pinned tool, outside the hub's
+   * process. It changes no document and needs no session; its result is a reading with a receipt, never a verdict.
+   */
+  private async job(args: Obj): Promise<Obj> {
+    if (!this.jobKinds) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_job', true);
+    return args.op === 'list' ? this.jobKinds.list() : this.jobKinds.run(args);
+  }
+  /** `job.rule` (#1922): your standing rule for a paid tool, from your own terminal once the OS confirms you: the most a run may cost with no ask. */
+  private async jobRule(params: Obj, context: CallContext): Promise<Obj> {
+    const { tool, usd } = params;
+    if (typeof tool !== 'string' || !/^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/.test(tool)) throw new Refused(refusal('type', '/params/tool', 'Name the tool by name@version, as deep_job lists it.', tool));
+    if (typeof usd !== 'number' || !Number.isFinite(usd) || usd < 0) throw new Refused(refusal('type', '/params/usd', 'Give usd, the most a run of the tool may cost with no ask, in US dollars.', usd));
+    if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A paid tool\'s standing rule is set from your own terminal, once the OS confirms you.', 'job.rule'));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing changed: this deep command runs inside agent session ${agent}'s process tree, and no agent sets a paid tool's rule. Run it from your own terminal.`, 'job.rule'));
+    const what = `let ${tool} run at up to $${usd} a run with no ask`;
+    const why = await this.confirmer.you(what, { handle: `job:${tool}`, revision: what });
+    if (why) throw new Refused(refusal('unconfirmed', '/method', `${what} changed nothing: the OS didn't confirm you (${why}).`, 'job.rule', true));
+    if (!this.jobKinds) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'job.rule', true));
+    return this.jobKinds.rule(tool, usd);
   }
   /** `library.on`, `library.off` and `library.rule` (#1731): yours alone, from your own terminal, once the OS confirms you. */
   private async library(method: string, params: Obj, context: CallContext): Promise<Obj> {

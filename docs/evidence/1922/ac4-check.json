@@ -1,0 +1,63 @@
+{
+  "runs": [
+    {
+      "attempt": "first",
+      "started": 1,
+      "reply": {
+        "status": "failed",
+        "check": "test.upper_only",
+        "outcome": "failed",
+        "reason": "upper-a@1.0.0's output fails test.upper's output check test.upper_only (failed: test.upper_only: the output \"abc\" holds a lower-case letter); nothing was kept, so no item can name it",
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-a@1.0.0",
+          "key": "e0648978dee2850954934c74a3c93b92d7622a88f67a2783d15d022df1c100f8",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "miss",
+          "inputs": {
+            "text": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        }
+      }
+    },
+    {
+      "attempt": "again",
+      "started": 1,
+      "reply": {
+        "status": "failed",
+        "check": "test.upper_only",
+        "outcome": "failed",
+        "reason": "upper-a@1.0.0's output fails test.upper's output check test.upper_only (failed: test.upper_only: the output \"abc\" holds a lower-case letter); nothing was kept, so no item can name it",
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-a@1.0.0",
+          "key": "e0648978dee2850954934c74a3c93b92d7622a88f67a2783d15d022df1c100f8",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "miss",
+          "inputs": {
+            "text": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        }
+      }
+    }
+  ],
+  "stored": null,
+  "passing": {
+    "status": "done",
+    "outputs": {
+      "text": {
+        "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+      }
+    },
+    "receipt": {
+      "kind": "test.upper",
+      "tool": "upper-a@1.0.0",
+      "key": "edcf59a3b3b72a94d1e324f9e2be93096176764cd81e96288c5fd4025e454219",
+      "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+      "cache": "miss",
+      "inputs": {
+        "text": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+      }
+    }
+  }
+}

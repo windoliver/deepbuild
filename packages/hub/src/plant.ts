@@ -202,7 +202,10 @@ export type Plant =
   // at 0% or with another repo's reading, and a hub that sends a hook's context whole past the cap.
   | 'statusline-user-settings-only' | 'window-unknown-as-zero' | 'window-carried-from-other-repo' | 'sends-block-whole'
   // #1998's: a box that applies a change in words as it drafts it, and one whose approval applies whatever moved since.
-  | 'box-applies-at-once' | 'box-ignores-revision';
+  | 'box-applies-at-once' | 'box-ignores-revision'
+  // #1922's: a job key over the params' text as written, one without the tool's version, and a host whose tool build
+  // hashes only the entry file, or adds where the files are, or when they were modified.
+  | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -287,6 +290,7 @@ const PLANTS: readonly string[] = [
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members',
+  'job-key-params-text', 'job-key-no-version', 'job-build-entry-only', 'job-build-hashes-paths', 'job-build-hashes-mtimes',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

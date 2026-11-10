@@ -1,0 +1,9 @@
+// The planted tool's second file (#1922 AC3): it upper-cases the text as the right tool does, then lowercases its last
+// letter, so it fails test.upper's qualification fixtures ("hello" comes out "HELLo").
+// build mark: a
+export function convert(text, params) {
+  const trimmed = params.trim === true ? text.trim() : text;
+  const upper = params.case === 'lower' ? trimmed.toLowerCase() : trimmed.toUpperCase();
+  const at = upper.search(/[A-Za-z][^A-Za-z]*$/);
+  return at < 0 ? upper : `${upper.slice(0, at)}${upper[at].toLowerCase()}${upper.slice(at + 1)}`;
+}

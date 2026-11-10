@@ -271,6 +271,9 @@ alone.push('tests/acceptance/1718/');
 // #1637's files build deep-gpu and draw a city of 120,000 solids on Metal; its budget runs as a timed file.
 alone.push('tests/acceptance/1637/');
 timed.push('tests/acceptance/1637/budgets.test.ts');
+// #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
+// counting the record's process starts around each deep_job call: one file at a time.
+alone.push('tests/acceptance/1922/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
