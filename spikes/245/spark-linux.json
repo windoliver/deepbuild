@@ -1,0 +1,173 @@
+{
+ "host": "Spark: Linux arm64, 20 cores, 4 KiB pages; not a reference Mac, so every timing here is INCONCLUSIVE",
+ "load_1m": {
+  "start": 41.07,
+  "end": 25.65
+ },
+ "commit": "cd6d93be",
+ "command": "spikes/245/target/release/spike-245 spikes/245/steer.wat 3600",
+ "agents": 8000,
+ "blocks": 8,
+ "rate_hz": 60,
+ "warmup_steps": 120,
+ "os_page_bytes": 4096,
+ "wasmtime": "49.0.2",
+ "rewritten_sha256": "43ac7f0b936f3882d40240df1daafda5a2a65995016099c4be33f878407cf6d2",
+ "same_bits": true,
+ "forms": {
+  "one_instance": {
+   "threads": 1,
+   "steps": 3600,
+   "deep_hash": "86bb805abbf50866887e4d042895efa70f2bc1ce374fe2a749f4325c3423c9f2",
+   "wall_ms": {
+    "p50": 2.247587,
+    "p95": 3.306868,
+    "max": 19.436267
+   },
+   "overhead_ms": {
+    "p50": 0.04752,
+    "p95": 0.135201,
+    "max": 3.429269
+   },
+   "map_ms": {
+    "p50": 0.0,
+    "p95": 0.0,
+    "max": 0.0
+   },
+   "fault_ms": {
+    "p50": 0.0,
+    "p95": 0.0,
+    "max": 0.0
+   },
+   "restore_ms": {
+    "p50": 0.04752,
+    "p95": 0.135201,
+    "max": 3.429269
+   },
+   "check_ms": {
+    "p50": 0.679952,
+    "p95": 0.845952,
+    "max": 11.322673
+   },
+   "memory_file": null,
+   "touched_pages": 0,
+   "late_faults_max": null,
+   "minor_faults": {
+    "p50": 0,
+    "p95": 0
+   },
+   "fuel": {
+    "step": {
+     "p50": 1315927,
+     "max": 1315927
+    },
+    "join": {
+     "p50": 256009,
+     "max": 256009
+    },
+    "blocks": {
+     "p50": 5845983,
+     "max": 8390516
+    },
+    "block_max": {
+     "p50": 738287,
+     "max": 1055708
+    },
+    "total": {
+     "p50": 7417919,
+     "max": 9962452
+    },
+    "critical_path_4": {
+     "p50": 3040164,
+     "max": 3677043
+    }
+   },
+   "hashes": {
+    "600": "742f29a0784dfcd3bc640ce3785fd6d3f2bbad94ae66b074029c9fcbbca2d079",
+    "1200": "549d75ba16bc321addd3a8bfe0d6abe7fcd48c6eeda0c44e4fb9088b609ae23f",
+    "1800": "096fc7d8c83ea21af91a446e14d56db93c25b6ec9df36ed486a9b303132a6cb6",
+    "2400": "85ddeed2ab0647f8effd6a5cd403db6fcfd3d9579a1fabc836f8ced1aabbacdf",
+    "3000": "4aed1eed8d9cb054a2f4692a162e667bfa944fa3543820b619c9234228b1f6e8",
+    "3600": "722dc84e64f656968b80c812c3f1fd1b8929c45501bcf4fffbb002f21760cd19",
+    "3720": "86bb805abbf50866887e4d042895efa70f2bc1ce374fe2a749f4325c3423c9f2"
+   }
+  },
+  "copy_on_write": {
+   "threads": 4,
+   "steps": 3600,
+   "deep_hash": "86bb805abbf50866887e4d042895efa70f2bc1ce374fe2a749f4325c3423c9f2",
+   "wall_ms": {
+    "p50": 2.164659,
+    "p95": 7.205193,
+    "max": 26.116451
+   },
+   "overhead_ms": {
+    "p50": 1.906307,
+    "p95": 6.042346,
+    "max": 57.088129
+   },
+   "map_ms": {
+    "p50": 0.747568,
+    "p95": 3.366294,
+    "max": 39.289734
+   },
+   "fault_ms": {
+    "p50": 1.108033,
+    "p95": 3.332771,
+    "max": 17.798395
+   },
+   "restore_ms": {
+    "p50": 0.0,
+    "p95": 0.0,
+    "max": 0.0
+   },
+   "check_ms": {
+    "p50": 0.704288,
+    "p95": 0.947138,
+    "max": 11.302638
+   },
+   "memory_file": "memfd",
+   "touched_pages": 819,
+   "late_faults_max": 0,
+   "minor_faults": {
+    "p50": 177,
+    "p95": 183
+   },
+   "fuel": {
+    "step": {
+     "p50": 1315927,
+     "max": 1315927
+    },
+    "join": {
+     "p50": 256009,
+     "max": 256009
+    },
+    "blocks": {
+     "p50": 5845983,
+     "max": 8390516
+    },
+    "block_max": {
+     "p50": 738287,
+     "max": 1055708
+    },
+    "total": {
+     "p50": 7417919,
+     "max": 9962452
+    },
+    "critical_path_4": {
+     "p50": 3040164,
+     "max": 3677043
+    }
+   },
+   "hashes": {
+    "600": "742f29a0784dfcd3bc640ce3785fd6d3f2bbad94ae66b074029c9fcbbca2d079",
+    "1200": "549d75ba16bc321addd3a8bfe0d6abe7fcd48c6eeda0c44e4fb9088b609ae23f",
+    "1800": "096fc7d8c83ea21af91a446e14d56db93c25b6ec9df36ed486a9b303132a6cb6",
+    "2400": "85ddeed2ab0647f8effd6a5cd403db6fcfd3d9579a1fabc836f8ced1aabbacdf",
+    "3000": "4aed1eed8d9cb054a2f4692a162e667bfa944fa3543820b619c9234228b1f6e8",
+    "3600": "722dc84e64f656968b80c812c3f1fd1b8929c45501bcf4fffbb002f21760cd19",
+    "3720": "86bb805abbf50866887e4d042895efa70f2bc1ce374fe2a749f4325c3423c9f2"
+   }
+  }
+ }
+}
