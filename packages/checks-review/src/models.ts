@@ -22,7 +22,7 @@ const PROXIED = ['ANTHROPIC_BASE_URL', 'OPENAI_BASE_URL', 'model_provider'];
 
 /** The model's canonical ID: no context suffix ([1m]), cloud prefix (us.anthropic.), Bedrock version (-v1:0), Vertex
  *  or date suffix (@20250805, -20250805) or -latest. */
-export const canonicalModel = (name: string): string => name.trim()
+const canonicalModel = (name: string): string => name.trim()
   .replace(/\[[^\]]*\]$/, '')
   .replace(/^(?:[a-z]{2,6}\.)?anthropic\./, '')
   .replace(/-v\d+(?::\d+)?$/, '')

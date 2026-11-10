@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use deep_canvas::budget::Class;
 use deep_canvas_sandbox::rewrite::{self, hash, Mode, Rewritten};
 use deep_sandbox_wasmtime::service::{refusals_json, Budget, Sandbox};
 use serde_json::{json, Map, Value};
@@ -304,7 +305,8 @@ impl Item {
             .map(|l| json!({"name": l.label, "hash": l.hash, "pack": l.pack, "fixtures": self.fixtures.get(&l.hash).cloned().unwrap_or(json!([]))}))
             .collect();
         json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
-            "linked": linked, "libraries": libraries, "link_ns": self.link_ns})
+            "linked": linked, "libraries": libraries, "link_ns": self.link_ns,
+            "pipelined": crate::budget::pipelined(self)})
     }
     /// The assets as memory holds them from `assets_at`: each after a u32 of its length.
     pub fn asset_bytes(&self) -> Vec<u8> {
@@ -332,6 +334,8 @@ impl Item {
 #[derive(Clone, Debug)]
 pub struct Piece {
     pub seed: i64,
+    /// Its budget class (Budget classes): `class`, figure when it names none.
+    pub class: Class,
     pub controls: BTreeSet<String>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
@@ -465,36 +469,71 @@ fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
     let kinds = match v {
         None => return Ok(Vec::new()),
         Some(Value::Object(k)) => k,
-        Some(_) => return Err(vec![what("", "emits maps each kind to its fields and max_per_step".into())]),
+        Some(_) => {
+            return Err(vec![what(
+                "",
+                "emits maps each kind to its fields and max_per_step".into(),
+            )])
+        }
     };
     let mut out = Vec::new();
     let mut refused = Vec::new();
     if kinds.len() > 64 {
-        refused.push(what("", format!("emits declares {} kinds, past 64", kinds.len())));
+        refused.push(what(
+            "",
+            format!("emits declares {} kinds, past 64", kinds.len()),
+        ));
     }
     for (kind, e) in kinds {
-        let other = e.as_object().and_then(|o| o.keys().find(|k| !["fields", "max_per_step"].contains(&k.as_str())));
+        let other = e.as_object().and_then(|o| {
+            o.keys()
+                .find(|k| !["fields", "max_per_step"].contains(&k.as_str()))
+        });
         if let Some(k) = other {
-            refused.push(what(kind, format!("{kind}: an emitted kind has no field {k}")));
+            refused.push(what(
+                kind,
+                format!("{kind}: an emitted kind has no field {k}"),
+            ));
             continue;
         }
-        let max = e.get("max_per_step").map_or(Some(16), Value::as_u64).filter(|n| *n <= 1024);
+        let max = e
+            .get("max_per_step")
+            .map_or(Some(16), Value::as_u64)
+            .filter(|n| *n <= 1024);
         let fields: Option<Vec<(String, Ty)>> = match e.get("fields") {
             None => Some(Vec::new()),
             Some(Value::Object(f)) => f
                 .iter()
-                .map(|(n, t)| Some((n.clone(), t.as_str().and_then(Ty::named).filter(|t| *t != Ty::Quat)?)))
+                .map(|(n, t)| {
+                    Some((
+                        n.clone(),
+                        t.as_str().and_then(Ty::named).filter(|t| *t != Ty::Quat)?,
+                    ))
+                })
                 .collect(),
             Some(_) => None,
         };
         match (fields, max) {
-            (Some(f), _) if f.len() > 8 => refused.push(what(kind, format!("{kind} declares {} fields, past 8", f.len()))),
-            (Some(f), _) if f.iter().any(|(n, _)| ROW_COLUMNS.contains(&n.as_str())) => refused.push(what(
+            (Some(f), _) if f.len() > 8 => refused.push(what(
                 kind,
-                format!("{kind}: a field can't be named step, t, kind, a or b, a row's own columns"),
+                format!("{kind} declares {} fields, past 8", f.len()),
             )),
-            (Some(fields), Some(max)) => out.push(Emit { kind: kind.clone(), fields, max: max as u32 }),
-            (None, _) => refused.push(what(kind, format!("{kind}: each field is bool, i32, f64, vec2 or vec3"))),
+            (Some(f), _) if f.iter().any(|(n, _)| ROW_COLUMNS.contains(&n.as_str())) => refused
+                .push(what(
+                    kind,
+                    format!(
+                        "{kind}: a field can't be named step, t, kind, a or b, a row's own columns"
+                    ),
+                )),
+            (Some(fields), Some(max)) => out.push(Emit {
+                kind: kind.clone(),
+                fields,
+                max: max as u32,
+            }),
+            (None, _) => refused.push(what(
+                kind,
+                format!("{kind}: each field is bool, i32, f64, vec2 or vec3"),
+            )),
             (_, None) => refused.push(what(kind, format!("{kind}: max_per_step is at most 1,024"))),
         }
     }
@@ -726,7 +765,9 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    check_in(piece, planted, history, &|sha| B64.decode(assets.get(sha)?.as_str()?).ok())
+    check_in(piece, planted, history, &|sha| {
+        B64.decode(assets.get(sha)?.as_str()?).ok()
+    })
 }
 
 /// [`check`], each asset's bytes read by `stored` (a document's from the evidence store, #544)
@@ -739,6 +780,10 @@ pub fn check_in(
 ) -> Result<Piece, Refused> {
     let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
     let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
+    let class = match piece.get("class") {
+        None => Class::Figure,
+        Some(c) => c.as_str().and_then(Class::parse).ok_or_else(bad)?,
+    };
     let controls: BTreeSet<String> = piece
         .get("controls")
         .and_then(Value::as_object)
@@ -1110,6 +1155,7 @@ pub fn check_in(
     }
     Ok(Piece {
         seed,
+        class,
         controls,
         tour: piece.get("tour").cloned(),
         items,
@@ -1257,8 +1303,13 @@ mod tests {
     /// emits_at); past any of them, or with a type or field name it can't have, it is refused.
     #[test]
     fn emits_past_its_limits_are_refused() {
-        let named = |n: usize, v: Value| Value::Object((0..n).map(|i| (format!("x{i}"), v.clone())).collect());
-        let within = [named(64, json!({})), json!({"shot": {"fields": named(8, json!("vec3")), "max_per_step": 1024}})];
+        let named = |n: usize, v: Value| {
+            Value::Object((0..n).map(|i| (format!("x{i}"), v.clone())).collect())
+        };
+        let within = [
+            named(64, json!({})),
+            json!({"shot": {"fields": named(8, json!("vec3")), "max_per_step": 1024}}),
+        ];
         let past = [
             named(65, json!({})),
             json!({"shot": {"fields": named(9, json!("f64"))}}),
@@ -1268,10 +1319,17 @@ mod tests {
             json!({"shot": {"offset": true}}),
         ];
         for emits in within {
-            assert_eq!(refusals(json!({"e": {"emits": emits}})), json!(["e", "region"]));
+            assert_eq!(
+                refusals(json!({"e": {"emits": emits}})),
+                json!(["e", "region"])
+            );
         }
         for emits in past {
-            assert_eq!(refusals(json!({"e": {"emits": emits.clone()}})), json!(["e", "emits"]), "{emits}");
+            assert_eq!(
+                refusals(json!({"e": {"emits": emits.clone()}})),
+                json!(["e", "emits"]),
+                "{emits}"
+            );
         }
     }
 

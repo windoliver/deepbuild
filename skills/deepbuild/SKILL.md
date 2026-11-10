@@ -120,4 +120,4 @@ Never: Sound that starts without your gesture, a capture without the system pick
 
 ## Working on a canvas document
 
-Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it.
+Start from a piece recipe, or from a kind deep_kinds lists. Check the document with deep_show before you render it. Then render small and read its issues. Fix by patch, changing one item at a time, and render in full only once the numbers pass; judge by numbers, never by eye. When no kind or field does what the piece needs, raise an open item with deep_open_item naming the missing kind or field, instead of approximating it. When a logic step needs more fuel than its step ceiling, which deep_kinds lists by step rate, budget class and host, split the work across steps and keep the progress in memory.

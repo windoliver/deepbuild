@@ -223,6 +223,8 @@ test-steps-in-effects = []
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+# Issue #1486: the one image service: still pictures drawn at their levels.
+deep-images = { path = "../deep-images" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-graph = { path = "../deep-canvas-graph" }

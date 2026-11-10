@@ -2,7 +2,7 @@
 // In a temp HOME with stand-ins for claude and codex first on PATH (each answers --version and its sign-in at once),
 // it starts the hub, runs `deep setup`, and times five `deep doctor` runs after a warm-up, printing the median as one
 // JSON line. The issue's 2 s stays in tests/acceptance/19/status/budgets.test.ts. It stops only the hub it started.
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';

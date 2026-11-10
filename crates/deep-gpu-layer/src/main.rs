@@ -24,6 +24,7 @@ mod drawn;
 mod effects;
 #[cfg(feature = "test-faults")]
 mod faults;
+mod fix;
 mod film;
 mod fixtures;
 mod flat;
@@ -355,6 +356,8 @@ pub enum Planted {
     RepeatsLastReading,
     DropsUnresolvedFrames,
     LadderActsInBudgetRun,
+    /// #1937's wrong chooser (tests/acceptance/1937/README.md: Planted programs).
+    PicksLargestGain,
 }
 
 impl Planted {
@@ -570,6 +573,7 @@ impl Planted {
             "repeats_last_reading" => Planted::RepeatsLastReading,
             "drops_unresolved_frames" => Planted::DropsUnresolvedFrames,
             "ladder_acts_in_budget_run" => Planted::LadderActsInBudgetRun,
+            "picks_largest_gain" => Planted::PicksLargestGain,
             _ => return None,
         })
     }
@@ -827,6 +831,7 @@ impl App {
             Some("film2d") => film::film2d(self, out, call),
             Some("canonical") => live::canonical(self, out, call),
             Some("frame_budget") => budget::call(self, call),
+            Some("budget_fix") => fix::call(self, out, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
             #[cfg(feature = "test-meter")]

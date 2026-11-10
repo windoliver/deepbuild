@@ -701,25 +701,25 @@ impl<C: Glyphs> Painter<'_, C> {
                 tile,
             } => {
                 let looks = (*opacity, adjust);
-                let (pixmap, [w, h]) = match self.kept {
+                let placed = (*bounds, *fit, self.zoom);
+                let (pixmap, [w, h], to) = match self.kept {
                     Some(kept) => kept.borrow_mut().pixmap(
                         self.store,
                         hash,
-                        *crop,
-                        tile.as_ref(),
+                        (*crop, tile.as_ref()),
                         looks,
+                        placed,
                         item,
                     )?,
                     None => asset::Kept::default().pixmap(
                         self.store,
                         hash,
-                        *crop,
-                        tile.as_ref(),
+                        (*crop, tile.as_ref()),
                         looks,
+                        placed,
                         item,
                     )?,
                 };
-                let to = fit.fitted(*bounds, [w, h]);
                 self.ctx.set_paint(
                     Image {
                         image: ImageSource::Pixmap(pixmap),
@@ -979,6 +979,9 @@ thread_local! {
 pub fn answer(req: Request) -> Value {
     KEPT.with(|kept| {
         kept.borrow_mut().plant = req.image_plant;
+        let images = asset::images();
+        images.configure(deep_images::BUDGET, deep_images::ENTRIES, req.image_plant);
+        images.frame_start();
         let answer = draw(&req, kept);
         kept.borrow_mut().frame_ended();
         match answer {
@@ -1109,6 +1112,8 @@ fn draw(req: &Request, kept: &RefCell<asset::Kept>) -> Result<Value, Value> {
             "name": "vello_cpu", "version": VELLO_CPU,
             "pipeline": if req.config.u8 { "u8" } else { "f32" }, "simd": level_name(level),
         },
+        // #1486: the level each picture drew at, the levels live frames draw.
+        "levels": kept.borrow().levels,
     });
     if let Some(dir) = &req.blend_inputs {
         let write = |name: String, pixmap: &Pixmap| -> Result<String, Value> {
