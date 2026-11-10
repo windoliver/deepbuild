@@ -61,8 +61,9 @@ making the first screen shorter.
 
 1. **`deep_status` tells an agent nothing at the start of a task.** The skill says to begin with it. On a new
    session it answers `{"session", "gates", "claims": []}`. It names no check the repo's spec holds, no open ask and
-   no open item, so the names `deep_claim`'s predictions and `deep_run` need are learnt from a refusal. Make it the
-   orientation call. It changes a design row and #26's suite, so it needs an issue.
+   no open item. The check names `deep_claim`'s predictions and `deep_run` need reach an agent only in the context
+   the SessionStart hook adds; where no hook adds one they are learnt from a refusal. Make it the orientation call.
+   It changes a design row and #26's suite, so it needs an issue.
 2. **Four canvas tools are 61% of the tool list in every session:** `deep_show`, `deep_drive`, `deep_kinds` and
    `deep_job` take 3,741 of 6,143 tokens. A session that fixes a test never calls them. `deep-actions` is already a
    second server entry; the canvas tools could be a third, or listed only where the spec uses the canvas.
