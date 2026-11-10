@@ -719,6 +719,12 @@ pub(crate) fn read_indices(
         .collect())
 }
 
+/// #465: the bytes of the GPU targets the indexed basis draws into at `size`: the index target
+/// and the resolved colors (light rides in the index), a u32 per target pixel each.
+pub fn target_bytes(size: [u32; 2]) -> u64 {
+    2 * u64::from(size[0]) * u64::from(size[1]) * 4
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -735,10 +741,4 @@ mod tests {
         }
         assert_eq!(super::class(), "exact");
     }
-}
-
-/// #465: the bytes of the GPU targets the indexed basis draws into at `size`: the index target
-/// and the resolved colors (light rides in the index), a u32 per target pixel each.
-pub fn target_bytes(size: [u32; 2]) -> u64 {
-    2 * u64::from(size[0]) * u64::from(size[1]) * 4
 }

@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-493-929fac/agent-ae355f500511b416f/tests/acceptance/493-redraft-ac18
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-493-929fac/agent-ae355f500511b416f/tests/acceptance/493-redraft-ac18
 
  ❯ match-cut.test.ts (2 tests | 2 failed) 1586ms
    ❯ AC18: a match cut solves the incoming framing onto the outgoing item (2)

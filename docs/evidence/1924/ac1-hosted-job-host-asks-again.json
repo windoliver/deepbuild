@@ -1,0 +1,197 @@
+{
+  "failures": [
+    "a second job with the same file and host: the job test.hosted hosted-a@1.0.0 {\"case\":\"lower\"} on 57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544 asked again for the pair you approved (the agent's file 57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544 to 127.0.0.1:63865): {\"status\":\"held\",\"ask\":\"ask:01M72FGVC2W2DKM80HCVY4RBCV\"} [{\"kind\":\"authority\",\"question\":\"Send the file 57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544, which an agent put in the evidence store, to 127.0.0.1:63865 for hosted-a@1.0.0 (test.hosted)?\",\"options\":[{\"id\":\"send\",\"label\":\"Send it\",\"decision\":\"allow\"},{\"id\":\"decline\",\"label\":\"Don't send it\",\"decision\":\"deny\"}],\"recommended\":null,\"deadline\":1794392377730,\"fallback\":\"you\",\"default\":\"decline\",\"provisional\":false,\"owner\":\"you\",\"key\":\"69b3ce84eff17e55052b745154ca0cb643bdca601c79812d3bd5fb235d0a4e94\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544\"}}]"
+  ],
+  "seen": {
+    "notes": "57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544",
+    "render": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "9a87baa69d6bd187a2c597d36a69183ebb8bb015fa87cbc971bab7a7aca89da9"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-b@1.0.0",
+          "key": "81e546612c57f361b70897caebd200c541bcf6e4402ea23deab087e96d57ce95",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "ff218e0b553e27bee7c75eea36a1b1ff09cdd4f6c056cf88ef4aad4cc79c1258"
+          },
+          "sent": [
+            {
+              "sha256": "ff218e0b553e27bee7c75eea36a1b1ff09cdd4f6c056cf88ef4aad4cc79c1258",
+              "host": "127.0.0.1:63866"
+            }
+          ]
+        }
+      },
+      "asks": []
+    },
+    "held": {
+      "job": "the job test.hosted hosted-a@1.0.0 {\"case\":\"upper\"} on 57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544",
+      "first": {
+        "status": "held",
+        "ask": "ask:01M72FGTWSAB4JBSV0160ZESM0"
+      },
+      "second": {
+        "status": "held",
+        "ask": "ask:01M72FGTWSAB4JBSV0160ZESM0"
+      },
+      "asks": [
+        {
+          "handle": "ask:01M72FGTWSAB4JBSV0160ZESM0",
+          "kind": "authority",
+          "question": "Send the file 57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544, which an agent put in the evidence store, to 127.0.0.1:63865 for hosted-a@1.0.0 (test.hosted)?",
+          "options": [
+            {
+              "id": "send",
+              "label": "Send it",
+              "decision": "allow"
+            },
+            {
+              "id": "decline",
+              "label": "Don't send it",
+              "decision": "deny"
+            }
+          ],
+          "recommended": null,
+          "deadline": 1794392377238,
+          "fallback": "you",
+          "default": "decline",
+          "provisional": false,
+          "owner": "you",
+          "key": "a1c1b7bfa271981aa7ad65cf25c3042279e00ae4c62c3f8328053e6cafb66bae",
+          "pinned_to": {
+            "kind": "evidence",
+            "ref": "57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544"
+          }
+        }
+      ],
+      "early": "[]"
+    },
+    "afterYes": [
+      {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "f29ebc31f06d54fcf37c433fefa41b877334978b63a6826b77b4e3d117813215"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-a@1.0.0",
+          "key": "b68f58d31d2a39f98205299e8a747f8821893bd56f6f8989b56f03abfce64b05",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544"
+          },
+          "sent": [
+            {
+              "sha256": "57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544",
+              "host": "127.0.0.1:63865"
+            }
+          ]
+        }
+      }
+    ],
+    "pair": {
+      "reply": {
+        "status": "held",
+        "ask": "ask:01M72FGVC2W2DKM80HCVY4RBCV"
+      },
+      "asks": [
+        {
+          "handle": "ask:01M72FGVC2W2DKM80HCVY4RBCV",
+          "kind": "authority",
+          "text": "{\"kind\":\"authority\",\"question\":\"Send the file 57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544, which an agent put in the evidence store, to 127.0.0.1:63865 for hosted-a@1.0.0 (test.hosted)?\",\"options\":[{\"id\":\"send\",\"label\":\"Send it\",\"decision\":\"allow\"},{\"id\":\"decline\",\"label\":\"Don't send it\",\"decision\":\"deny\"}],\"recommended\":null,\"deadline\":1794392377730,\"fallback\":\"you\",\"default\":\"decline\",\"provisional\":false,\"owner\":\"you\",\"key\":\"69b3ce84eff17e55052b745154ca0cb643bdca601c79812d3bd5fb235d0a4e94\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544\"}}",
+          "data": {
+            "kind": "authority",
+            "question": "Send the file 57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544, which an agent put in the evidence store, to 127.0.0.1:63865 for hosted-a@1.0.0 (test.hosted)?",
+            "options": [
+              {
+                "id": "send",
+                "label": "Send it",
+                "decision": "allow"
+              },
+              {
+                "id": "decline",
+                "label": "Don't send it",
+                "decision": "deny"
+              }
+            ],
+            "recommended": null,
+            "deadline": 1794392377730,
+            "fallback": "you",
+            "default": "decline",
+            "provisional": false,
+            "owner": "you",
+            "key": "69b3ce84eff17e55052b745154ca0cb643bdca601c79812d3bd5fb235d0a4e94",
+            "pinned_to": {
+              "kind": "evidence",
+              "ref": "57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544"
+            }
+          }
+        }
+      ]
+    },
+    "other": {
+      "reply": {
+        "status": "held",
+        "ask": "ask:01M72FGVDB2PZ7MEEQXK75WK3A"
+      },
+      "asks": [
+        {
+          "handle": "ask:01M72FGVDB2PZ7MEEQXK75WK3A",
+          "kind": "authority",
+          "text": "{\"kind\":\"authority\",\"question\":\"Send the file 57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544, which an agent put in the evidence store, to 127.0.0.1:63866 for hosted-b@1.0.0 (test.hosted)?\",\"options\":[{\"id\":\"send\",\"label\":\"Send it\",\"decision\":\"allow\"},{\"id\":\"decline\",\"label\":\"Don't send it\",\"decision\":\"deny\"}],\"recommended\":null,\"deadline\":1794392377771,\"fallback\":\"you\",\"default\":\"decline\",\"provisional\":false,\"owner\":\"you\",\"key\":\"539a9de2dd90ccc930869ddcd7335ec8c3da9eebed8c8c37ec1560635abde5dd\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544\"}}",
+          "data": {
+            "kind": "authority",
+            "question": "Send the file 57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544, which an agent put in the evidence store, to 127.0.0.1:63866 for hosted-b@1.0.0 (test.hosted)?",
+            "options": [
+              {
+                "id": "send",
+                "label": "Send it",
+                "decision": "allow"
+              },
+              {
+                "id": "decline",
+                "label": "Don't send it",
+                "decision": "deny"
+              }
+            ],
+            "recommended": null,
+            "deadline": 1794392377771,
+            "fallback": "you",
+            "default": "decline",
+            "provisional": false,
+            "owner": "you",
+            "key": "539a9de2dd90ccc930869ddcd7335ec8c3da9eebed8c8c37ec1560635abde5dd",
+            "pinned_to": {
+              "kind": "evidence",
+              "ref": "57e9dc412e6c60d33f4f6ec57af1c15cca7dc1e1a11f76d3651ff7416c5a9544"
+            }
+          }
+        }
+      ]
+    },
+    "byPath": {
+      "file": {
+        "status": "refused",
+        "reason": "hosted-a@1.0.0 runs off the machine on 127.0.0.1:63865, so it takes files only by hash from the evidence store, as inputs [{name, sha256}], never by path; nothing was read or sent"
+      },
+      "nothing": {
+        "status": "refused",
+        "reason": "hosted-a@1.0.0 runs off the machine on 127.0.0.1:63865, so it takes files only by hash from the evidence store, as inputs [{name, sha256}], never by path; nothing was read or sent"
+      }
+    },
+    "hosts": {
+      "127.0.0.1:63865": "[\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"aGVsbG8=\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgYzMyYTZhNGEyMDFhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\"]",
+      "127.0.0.1:63866": "[\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"aGVsbG8=\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"cmVuZGVyIDFhNDNjN2ExZmJiMDogZnJhbWUgNDIgb2YgdGhlIGhlcm8gc2hvdA==\\\"}}\"]"
+    }
+  }
+}

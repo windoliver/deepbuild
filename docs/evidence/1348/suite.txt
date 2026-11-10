@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/doneright/github-issue-1348-7c5142/tests/acceptance/1348
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-1348-7c5142/tests/acceptance/1348
 
 
  Test Files  2 passed (2)

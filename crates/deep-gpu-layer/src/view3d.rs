@@ -1616,9 +1616,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             };
             let mut subs: Vec<(f64, Part)> = Vec::new();
             if !settling_now {
-                for k in 1..n_all as usize {
+                for (k, step) in plan[..n_all as usize].iter().enumerate().skip(1) {
                     subs.push((
-                        plan[k].weight,
+                        step.weight,
                         Part::of(&session3::draw(
                             app,
                             &opened,

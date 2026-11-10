@@ -1,0 +1,46 @@
+Base commit: d51be2c3 ("Merge pull request #2108 from windoliver/worktree-github-issue-1458-3b28b6")
+Command: npx vitest run --root tests/acceptance/1899 --no-file-parallelism
+
+NOT RUN. This file is reasoned from the base's code, not from a run: the suite's call plainly doesn't exist at the
+base, and a cold `cargo build --features test-meter` of deep-gpu is a long build on a shared, loaded Mac, so the job
+that wrote these tests was told not to build or run them there. What was run: `npx tsc -p
+tests/acceptance/1899/tsconfig.json`, which passes.
+
+Expected at the base: every one of the 11 tests fails for the expected reason, at a named assertion.
+
+- The build. Each file runs `cargo build --locked --bin deep-gpu --features test-meter`. The feature exists at the
+  base (crates/deep-gpu-layer/Cargo.toml, #379), so the build is expected to succeed and no test should fail at "the
+  binary builds"; if it did, that is the line each test would fail at instead.
+
+- 8 tests start `deep-gpu run --backend noop` and send one scenario whose calls are `frame_budget`. The base accepts
+  the scenario (main.rs `serve`: `{"ok": true, "replies": […]}`, exit 0), but `App::call` has no `frame_budget` arm,
+  so each call is answered by its fallback `refused("bad_input", "unknown call")`:
+      {"code":"bad_input","reason":"unknown call"}
+  before any of its fields (`stub_meter`, `stub_timer`, `stub_environment`, `report`) is read. helpers.ts's
+  `budgetOf` / `seedsOf` then fail at "<what> is answered, not refused: {"code":"bad_input","reason":"unknown call"}":
+    over-budget.test.ts     #1899.f1c79d5d … fails against its 10 ms … at 3 ms the same run passes
+                            ("the 14 ms run is answered, not refused")
+    invalid-frames.test.ts  #1899.38e30b39 frames 560–599 unresolved … BLOCKED … never PASS
+                            ("the first run is answered, not refused")
+                            #1899.38e30b39 frames 560–579 unresolved and a forced device loss at frame 300 … passes
+                            ("the second run is answered, not refused")
+                            #1899.38e30b39 on a test adapter without pass timestamps the GPU limit is BLOCKED …
+                            ("no timestamps, CPU encode 3 ms is answered, not refused")
+    five-runs.test.ts       #1899.40e3ec20 drawn around 9.9 ms ± 0.2 against 10 ms: no FAIL over 1,000 seeds …
+                            ("the stub timer at 9.9 ms is answered, not refused")
+                            #1899.40e3ec20 … under another machine's environment fingerprint (Mac14,6) is INCONCLUSIVE …
+                            #1899.40e3ec20 … under the reference Mac's on battery is INCONCLUSIVE …
+                            ("3 ms a frame under <model> on <power> is answered, not refused")
+    ladder.test.ts          #1899.3bcb7572 a showpiece whose passes take 14 ms of GPU at p95 FAILs, the rung log …
+                            ("the 14 ms showpiece is answered, not refused")
+
+- 3 tests start `deep-gpu run --backend noop --planted <name>` with `repeats_last_reading`,
+  `drops_unresolved_frames` or `ladder_acts_in_budget_run`. None is in the base's `Planted::parse`, so main.rs's
+  `bad_input()` prints one line {"ok":false,"code":"bad_input"} and exits 2. helpers.ts's `run` fails at
+  "deep-gpu run --backend noop --planted <name> exited 0 (no signal)" (expected 0, got 2):
+    invalid-frames.test.ts  #1899.38e30b39 planted repeats_last_reading passes the first run and fails this criterion …
+                            #1899.38e30b39 planted drops_unresolved_frames passes the first run and fails this criterion …
+    ladder.test.ts          #1899.3bcb7572 a planted run that lets the ladder step to 30 Hz reports p95 under 10 ms …
+
+No test reads this machine's model, power, thermal state or load, or a device's timing, so none can fail as
+INCONCLUSIVE here or pass for a reason other than the surface above.
