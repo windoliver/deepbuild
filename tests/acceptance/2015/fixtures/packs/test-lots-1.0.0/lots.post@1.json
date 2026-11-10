@@ -1,0 +1,41 @@
+{
+  "id": "lots.post",
+  "version": "1.0",
+  "title": "Posts",
+  "license": "MIT",
+  "author": "the #2015 acceptance suite",
+  "description": "One post, a mark.box@1, per face of the top part of the builder item `ground` holds, standing at the face's centre.",
+  "inputs": {
+    "ground": {
+      "type": "ID",
+      "about": "a builder item of the same document whose top faces each get a post"
+    }
+  },
+  "steps": {
+    "post": {
+      "op": "mark",
+      "kind": "mark.box@1",
+      "repeat": {
+        "each": {
+          "part": "ground#top",
+          "domain": "face"
+        },
+        "as": "e"
+      },
+      "params": {
+        "size": [0.2, 0.5, 0.2],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": "e.center"
+      }
+    }
+  },
+  "outputs": {
+    "parts": ["post"]
+  }
+}
