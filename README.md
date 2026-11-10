@@ -50,8 +50,8 @@ deep --help
 scripts/preflight
 ```
 
-`npm run build` compiles the TypeScript workspaces and the `crates/deep-hook`
-binary, and `npm link` puts the built `deep` command in your npm prefix's `bin`
+`npm run build` compiles the TypeScript workspaces and the Rust workspace under
+`crates/`, the `deep-hook` binary among it, and `npm link` puts the built `deep` command in your npm prefix's `bin`
 directory, which must be on `PATH`. Run `npm run build` again after each pull:
 `deep` runs the built files, not the source.
 
@@ -65,10 +65,11 @@ it. `deep setup --undo` removes all of it and keeps your record in
 
 `scripts/preflight` runs every check locally; `npm run preflight` and
 `npm run release:check` run the same entry point, and there are no GitHub
-workflows. Its lanes are `typecheck`, `lint`, `unit`, `parity quick` and
-`perf`. A failed lane reports its first error and a fix, later lanes still run,
-and `perf` is `BLOCKED` when they fail. The checks with their builds must finish
-in under five minutes.
+workflows. Its lanes are the `checks` list in `scripts/lanes.mjs`, from
+`typecheck`, `lint` and `unit` to `parity quick` and `proof`, then `perf`. A
+failed lane reports its first error and a fix, later lanes still run, and `perf`
+is `BLOCKED` when they fail. The checks with their builds must finish within the
+`preflight` budget in `benchmarks/budgets.json`, 15 minutes today.
 
 `lint` also runs `scripts/repo-rules.mjs`, which fails on GitHub workflows,
 agent hooks or plugins in a repo's `.claude` or `.codex` settings, secrets such

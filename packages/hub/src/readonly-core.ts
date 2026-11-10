@@ -84,6 +84,7 @@ export class ReadOnlyCore {
   replayed(): Promise<void> { return Promise.resolve(); }
   waiterGone(): void {}
   notifierGone(): void {}
+  callGone(): void {}
   hookGone(): void {}
   overrun(): Promise<void> { return Promise.resolve(); }
   later(): void {}

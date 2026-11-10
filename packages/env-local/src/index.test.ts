@@ -1,15 +1,16 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Host } from '@deepbuild/supervisor';
-import { afterEach, expect, test } from 'vitest';
-import { composeKind, composeRefusal, portKind, upStack } from './index.js';
+import { afterEach, expect, test, vi } from 'vitest';
+import { composeKind, composeRefusal, downStack, portKind, upStack, WarmStack, type WarmProducts } from './index.js';
 
 const dirs: string[] = [];
 const { PATH: path, DOCKER_CONFIG: config } = process.env;
 afterEach(() => {
+  vi.unstubAllEnvs();
   process.env.PATH = path;
   if (config === undefined) delete process.env.DOCKER_CONFIG; else process.env.DOCKER_CONFIG = config;
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -231,3 +232,54 @@ test('a credential dotfile linked into the worktree from outside it is BLOCKED, 
   expect(up).toMatchObject({ status: 'BLOCKED', cause: expect.stringMatching(/SHOP_KEY.*inside the worktree/) });
   expect(stack).toEqual([]);
 });
+
+test('a warm stack that could not open leaves neither of its folders once it is taken down', async () => {
+  const dir = repo('http://127.0.0.1:${web}/health');
+  writeFileSync(join(dir, '.deepbuild', 'done.yaml'), 'environment:\n  compose: compose.yaml\n  ports: [web]\n  ready: { http: "http://127.0.0.1:${web}/health", within: 1 }\n');
+  // The stack's two folders are made under these: the hub's folder for its stacks, and the temp folder.
+  const [hub, temp] = [join(dir, 'hub'), join(dir, 'tmp')];
+  mkdirSync(temp);
+  vi.stubEnv('TMPDIR', temp);
+  // The hub found no Docker CLI, so nothing starts; the host knows no run of the stack's.
+  const unknown = () => Promise.reject(Error('no such run'));
+  const host = { ...noStart, wait: unknown, signal: unknown } as unknown as Host;
+  const stack = new WarmStack({ host, compose: { dir: hub }, products: {} as WarmProducts, take: async () => ({ key: '' }), scrub: () => undefined });
+  expect(await stack.open(dir)).toMatch(/no Docker CLI/);
+  await downStack(host, stack.id);
+  expect([readdirSync(join(hub, 'warm')), readdirSync(temp)]).toEqual([[], []]);
+});
+
+test("a warm run whose app never answers its health route has the app's run cleaned up, not only signalled", async () => {
+  // A port the kernel just handed out and that was given back: nothing answers on it.
+  const server = net.createServer();
+  await new Promise<void>((resolve) => server.listen({ port: 0, host: '127.0.0.1' }, resolve));
+  const port = (server.address() as net.AddressInfo).port;
+  await new Promise((resolve) => server.close(resolve));
+  const dir = repo('http://127.0.0.1:${web}/health');
+  writeFileSync(join(dir, '.deepbuild', 'done.yaml'), 'environment:\n  up: "sleep 30"\n  ports: [web]\n  ready: { http: "http://127.0.0.1:${web}/health", within: 1 }\n');
+  // The stand-in host starts nothing: a run ends when it is signalled, and the host keeps which runs it was asked to clean up.
+  const runs = new Map<string, { ended: Promise<unknown>; end: () => void }>();
+  const cleaned: string[] = [];
+  const host = {
+    name: 'test',
+    start: async (spec: { run: string; leases?: { kind: string }[] }) => {
+      let end = (): void => undefined;
+      const ended = new Promise((resolve) => { end = () => resolve({ run: spec.run, code: null, signal: 'SIGTERM', evidence: { stdout: '', stderr: '' } }); });
+      runs.set(spec.run, { ended, end });
+      return { run: spec.run, status: 'started', pid: 1, pgid: 1, start: '0', leases: (spec.leases ?? []).map((l) => ({ kind: l.kind, key: String(port) })) };
+    },
+    wait: (run: string) => runs.get(run)!.ended,
+    signal: async (run: string) => runs.get(run)!.end(),
+    cleanup: async (run: string) => { cleaned.push(run); },
+  } as unknown as Host;
+  const stack = new WarmStack({ host, compose: { dir: join(dir, 'hub') }, products: {} as WarmProducts, take: async () => ({ key: '' }), scrub: () => undefined });
+  try {
+    expect(await stack.open(dir)).toBeUndefined();
+    const served = await stack.serve({ run: 'run:01K0UN1T000000000000000000', folder: dir, worktree: dir, began: Date.now() });
+    expect(served).toMatchObject({ cause: expect.stringContaining('/health') });
+    const app = [...runs.keys()].find((run) => run !== stack.id)!;
+    expect(cleaned).toEqual([app]);
+  } finally {
+    await downStack(host, stack.id);
+  }
+}, 30_000);

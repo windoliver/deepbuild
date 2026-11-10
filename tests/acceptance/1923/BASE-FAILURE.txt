@@ -1,0 +1,48 @@
+Base commit: d51be2c3 (Merge pull request #2108), the brief's base; it has #1922's job API and no implementation of #1923.
+Date: 2026-11-10  Machine: macOS (Apple silicon)  Node: v24.22.0.
+
+The suite was NOT run on the base. By the brief, the workspaces weren't built (npm run build --workspaces and the
+deep-hook build are slow) and the hub's proof lane runs the suite on the merge base itself. What follows is read from
+the base's code, not observed from a run.
+
+What was run:
+  - npm ci --ignore-scripts (node_modules was missing), then
+    node node_modules/typescript/bin/tsc -p tests/acceptance/1923/tsconfig.json: passes (exit 0, no output).
+  - A throwaway check of the two fixture tools (not kept in the suite), each run with Node against a local HTTP server
+    on 127.0.0.1 with a journal in a temp folder:
+      fixtures/tool/hosted.mjs (hosted-upper): exit 0, output "ABC" for "abc"; the request carried Idempotency-Key k123
+        and the journal already held {"key":"k123","provider":"127.0.0.1:<port>"} when it arrived; afterwards the
+        journal held that line and {"key":"k123","provider":"127.0.0.1:<port>","task":"task-1"}.
+      fixtures/tool/resubmit.mjs (the planted hosted-resubmit): exit 0, output "ABC"; the journal was empty when the
+        request arrived, and held the same two lines only after the answer.
+      Both, given stdin with no `call`: exit 2, "stdin names no call {provider, key, journal}, so no paid call is made".
+  - A throwaway check of the provider's hold (not kept): a held request whose client is killed reads dropped; a held
+    request released later reads answered and its client exits 0; closeAllConnections ends a held one.
+
+Why every test fails at the base (each judge returns its first failure, and each test fails at its assertion):
+
+  The 2 unplanted tests (AC1, AC2) and the planted-tool test (AC1, hosted-resubmit@1.0.0): `deep install` of
+  test/hosted is refused. At install the host runs the kind's qualification fixture through runTool, which hands the
+  tool only {params, inputs} on stdin and a read-only grant, with no call, no provider host and no journal
+  (packages/extension-host/src/host.ts:2179 and :2183); the fixture tool makes no call without `call` and exits 2,
+  so the qualification at fx-hello fails and nothing is installed (host.ts:2152-2157). Behind it, the manifest's
+  `job_tools[0].provider` isn't a field extension.manifest@1 takes: any key but kind and tool is refused as a type
+  issue at /job_tools/0 (packages/contracts/src/manifest.ts:109), which conformance reports (host.ts:2105), and the
+  install grants hosts only from library sources (packages/hub/src/core.ts:6470, install.ts:52), never a job tool's.
+  The planted-tool test's assertion (a failure naming the second call) fails because the judge stops at the install.
+
+  The 2 planted-runner tests (AC2, job-second-call and job-joiner-cancels-job): the hub refuses the plant name and
+  doesn't start: "DEEP_HUB_PLANT=<plant> names no planted program" (packages/hub/src/plant.ts:302; the list at
+  plant.ts:298 ends with #1922's job-* plants). The judge returns that as its failure, so no key is named and the
+  test fails at expect(key).toBeTruthy().
+
+Also missing at the base, behind those (read from the code):
+  - No call journal: deep_job's run (packages/hub/src/jobs.ts:87-151) answers only done, held, refused or failed
+    (jobs.ts:89, :117, :124, :131); it reads no journal, has no BLOCKED reply and raises no unblock ask.
+  - No in-flight join: the same run starts the tool for every request that misses the cache (jobs.ts:119-129); no
+    running job is kept by key, and no receipt says joined.
+  - No cancellation: `deep mcp` drops every notification, notifications/cancelled among them
+    (packages/hub/src/mcp.ts:121), and the hub has no call to end one request's wait.
+  - Present at the base and used by the readings: the hub's jobs/ folder is left to runs' own grants
+    (packages/hub/src/core.ts:1099), Grant.hosts and Grant.write exist (packages/supervisor/src/types.ts), and
+    job.rule keeps your standing rule across a restart in jobs.json (jobs.ts:71-75).

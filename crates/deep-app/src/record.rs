@@ -174,7 +174,8 @@ impl View {
                     "question": event["data"]["question"],
                 }));
             }
-        } else if kind == "ask.later" {
+        } else if kind == "ask.later" && event["writer"] == "core" {
+            // Only the core's Later hides an ask, as in the core: an app's or the CLI's own event changes nothing.
             for row in self
                 .inbox
                 .iter_mut()
@@ -711,5 +712,18 @@ mod tests {
         assert_eq!(row(&view, "ask:a1"), closed("decided_for_you"));
         assert_eq!(row(&view, "ask:a2"), open);
         assert_eq!(row(&view, "ask:a3"), closed("defaulted"));
+    }
+
+    #[test]
+    fn only_the_cores_later_moves_an_ask_to_later() {
+        let mut view = View::default();
+        for id in ["a1", "a2"] {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "data": {"kind": "choice"}}));
+        }
+        let later = |id: &str, writer: &str| json!({"kind": "ask.later", "writer": writer, "subject": format!("ask:{id}"), "data": {"until": 9}});
+        view.apply(later("a1", "cli"));
+        view.apply(later("a2", "core"));
+        assert_eq!(row(&view, "ask:a1").0, "shown");
+        assert_eq!(row(&view, "ask:a2").0, "later");
     }
 }

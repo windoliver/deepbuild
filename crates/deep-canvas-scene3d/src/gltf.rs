@@ -138,6 +138,10 @@ fn accessor_rows(
         .get("byteStride")
         .and_then(Value::as_u64)
         .map_or(size * width, |s| s as usize);
+    // Rows of a stride under its element overlap, and the buffer's end never stops their count.
+    if stride < size * width {
+        return Err(bad("a byte stride under its element"));
+    }
     (0..count)
         .map(|r| {
             (0..width)
@@ -258,7 +262,8 @@ pub fn mesh(bytes: &[u8], node: &Value) -> Result<Mesh, Fault> {
                     .into_iter()
                     .map(|r| base + r[0] as u32)
                     .collect();
-                if idx.len() % 3 != 0 || idx.iter().any(|i| (*i - base) as usize >= positions.len())
+                if !idx.len().is_multiple_of(3)
+                    || idx.iter().any(|i| (*i - base) as usize >= positions.len())
                 {
                     return Err(bad("a level's index past its positions"));
                 }
@@ -1094,5 +1099,14 @@ mod tests {
         }
         assert!(mesh(&glb, &json!(3)).is_err());
         assert!(mesh(&glb[..40], &json!(0)).is_err());
+    }
+
+    #[test]
+    fn a_byte_stride_under_its_element_is_refused() {
+        // Every row of a zero stride reads the same bytes, so the buffer's end never stops the
+        // count.
+        let view = json!({"byteStride": 0});
+        let rows = accessor_rows(&json!({}), &view, &[0; 12], 100_000, 3, 5126, 4, false);
+        assert!(rows.is_err());
     }
 }

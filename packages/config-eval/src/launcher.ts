@@ -237,7 +237,8 @@ export function defaultLauncher(plan: ReplayPlan, env: Record<string, string>, d
       const lastLine = (answer.result ?? '').trim().split('\n').at(-1) ?? '';
       const parsed = JSON.parse(lastLine.slice(lastLine.indexOf('{'))) as unknown;
       const grades = isObj(parsed) && Array.isArray(parsed.grades) ? parsed.grades : [];
-      return grades.filter(isObj).map((g) => ({ label: String(g.label), score: Number(g.score) }));
+      // A score the judge left out or null is no number: `Number(null)` would read it as a grade of 0.
+      return grades.filter(isObj).map((g) => ({ label: String(g.label), score: typeof g.score === 'number' || (typeof g.score === 'string' && g.score.trim() !== '') ? Number(g.score) : NaN }));
     },
     async planUsed() {
       if (agent !== 'claude') return null;

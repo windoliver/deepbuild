@@ -767,7 +767,8 @@ class LocalSupervisor implements Supervisor {
       return Promise.resolve({ run, outcome: 'clean', left: [], stopped: [] });
     }
     if (r.cleaning) return r.cleaning;
-    const cleaning = (r.cleaning = this.cleanupOnce(r));
+    // A cleanup that threw is forgotten, so the next ask runs it again.
+    const cleaning: Promise<Cleanup> = (r.cleaning = this.cleanupOnce(r).catch((error: unknown) => { delete r.cleaning; throw error; }));
     this.cleaning.add(cleaning);
     void cleaning.finally(() => this.cleaning.delete(cleaning)).catch(() => undefined);
     return cleaning;
@@ -820,6 +821,8 @@ class LocalSupervisor implements Supervisor {
         }
         await this.release(run, lease, r.gone);
         this.keys.set(name, {});
+        // Given back: a cleanup that runs again after a throw gives it back no second time.
+        r.leases = r.leases.filter((l) => l !== lease);
       }
     }
     const outcome = left.length ? 'unfinished' : 'clean';

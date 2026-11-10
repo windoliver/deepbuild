@@ -29,6 +29,8 @@ export type CoreMessage =
   | { op: 'replayed'; drafts: Draft[]; meta: HookMeta }
   | { op: 'waiter-gone'; key: number }
   | { op: 'notifier-gone' }
+  // A deep mcp call whose caller cancelled it or closed its connection (#1923).
+  | { op: 'call-gone'; call: string }
   | { op: 'hook-gone'; id: string; session: string }
   // A call still running past its expected time (#120): recorded as an overrun, with the line the chat shows of it.
   | { op: 'overrun'; session: string; agent: string; cwd: string; data: { call: string; kind: string; command: string | null; expected_ms: number; ran_ms: number; deadline: 'attached' | 'recorded' | 'none' } }
@@ -77,6 +79,7 @@ if (parentPort && workerData?.core) {
     if (message.op === 'replayed') return void core.replayed(message.drafts, message.meta).catch(() => undefined);
     if (message.op === 'waiter-gone') return core.waiterGone(message.key);
     if (message.op === 'notifier-gone') return void core.notifierGone();
+    if (message.op === 'call-gone') return core.callGone(message.call);
     if (message.op === 'hook-gone') return core.hookGone(message.id, message.session);
     if (message.op === 'overrun') return void core.overrun(message).catch(() => undefined);
     if (message.op === 'later') return core.later(message.session, message.cwd, message.text);

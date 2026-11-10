@@ -1,0 +1,192 @@
+{
+  "failures": [],
+  "seen": {
+    "render": "9e196fe66f0eae4703a9d6c7637032860775fc86e03973d506ff4b150707ac5b",
+    "weights": {
+      "model": "e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7",
+      "tokenizer": "4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3",
+      "swapped": "3b2897601609438ef548baeae6749d4913bc57ac660a5fb707a1dc7ad52379a5"
+    },
+    "both": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "f49b9b219972b949a1a165ce80cf6a7381eb044e60139aa0f75610b839157b53"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "open-a@1.0.0",
+          "key": "fb9a0ddc75de02c29120bdfc3fffffa7f22b5b6470bae332388ae3cf056ccd2b",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "9e196fe66f0eae4703a9d6c7637032860775fc86e03973d506ff4b150707ac5b"
+          },
+          "sent": [
+            {
+              "sha256": "9e196fe66f0eae4703a9d6c7637032860775fc86e03973d506ff4b150707ac5b",
+              "host": "127.0.0.1:63955"
+            }
+          ],
+          "weights": [
+            {
+              "name": "model.safetensors",
+              "sha256": "e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7"
+            },
+            {
+              "name": "tokenizer.json",
+              "sha256": "4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3"
+            }
+          ]
+        }
+      },
+      "calls": 1
+    },
+    "a weight file swapped": {
+      "reply": {
+        "status": "BLOCKED",
+        "cause": "open-a@1.0.0's host 127.0.0.1:63955 holds model.safetensors as 3b2897601609438ef548baeae6749d4913bc57ac660a5fb707a1dc7ad52379a5, where open-a@1.0.0 declares e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7; nothing was sent",
+        "ask": "ask:01M72FHAKXYXPACKBKDCADF1PV"
+      },
+      "asks": [
+        {
+          "handle": "ask:01M72FHAKXYXPACKBKDCADF1PV",
+          "kind": "unblock",
+          "text": "{\"kind\":\"unblock\",\"question\":\"open-a@1.0.0 can't run on 127.0.0.1:63955: its weight file model.safetensors there is 3b2897601609438ef548baeae6749d4913bc57ac660a5fb707a1dc7ad52379a5, and open-a@1.0.0 declares e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7. Put that file on the host?\",\"options\":[{\"id\":\"done\",\"label\":\"I did it\",\"decision\":\"none\"},{\"id\":\"agent\",\"label\":\"The agent can do it\",\"decision\":\"none\"}],\"recommended\":\"done\",\"default\":\"done\",\"deadline\":1794392393338,\"steps\":[\"Put model.safetensors with SHA-256 e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7 on 127.0.0.1:63955\",\"Run the job on open-a@1.0.0 again\"],\"where\":\"127.0.0.1:63955\",\"why\":\"open-a@1.0.0 runs only the weights it declares, by hash\",\"unblocks\":[\"req:e471b8e15d07af0d\"],\"proves\":\"model.safetensors e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7 on 127.0.0.1:63955\",\"fallback\":\"you\",\"provisional\":false,\"owner\":\"you\",\"key\":\"e471b8e15d07af0d3d9bf8598f8f929f9c6ca31fcb35f07faa978261c7d1124c\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"e471b8e15d07af0d3d9bf8598f8f929f9c6ca31fcb35f07faa978261c7d1124c\"}}",
+          "data": {
+            "kind": "unblock",
+            "question": "open-a@1.0.0 can't run on 127.0.0.1:63955: its weight file model.safetensors there is 3b2897601609438ef548baeae6749d4913bc57ac660a5fb707a1dc7ad52379a5, and open-a@1.0.0 declares e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7. Put that file on the host?",
+            "options": [
+              {
+                "id": "done",
+                "label": "I did it",
+                "decision": "none"
+              },
+              {
+                "id": "agent",
+                "label": "The agent can do it",
+                "decision": "none"
+              }
+            ],
+            "recommended": "done",
+            "default": "done",
+            "deadline": 1794392393338,
+            "steps": [
+              "Put model.safetensors with SHA-256 e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7 on 127.0.0.1:63955",
+              "Run the job on open-a@1.0.0 again"
+            ],
+            "where": "127.0.0.1:63955",
+            "why": "open-a@1.0.0 runs only the weights it declares, by hash",
+            "unblocks": [
+              "req:e471b8e15d07af0d"
+            ],
+            "proves": "model.safetensors e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7 on 127.0.0.1:63955",
+            "fallback": "you",
+            "provisional": false,
+            "owner": "you",
+            "key": "e471b8e15d07af0d3d9bf8598f8f929f9c6ca31fcb35f07faa978261c7d1124c",
+            "pinned_to": {
+              "kind": "evidence",
+              "ref": "e471b8e15d07af0d3d9bf8598f8f929f9c6ca31fcb35f07faa978261c7d1124c"
+            }
+          }
+        }
+      ],
+      "calls": 0
+    },
+    "the capability missing": {
+      "reply": {
+        "status": "BLOCKED",
+        "cause": "open-a@1.0.0's host 127.0.0.1:63955 doesn't report the capability fp16, which its call needs; nothing was sent",
+        "ask": "ask:01M72FHANFH1QMCY91005F3XA6"
+      },
+      "asks": [
+        {
+          "handle": "ask:01M72FHANFH1QMCY91005F3XA6",
+          "kind": "unblock",
+          "text": "{\"kind\":\"unblock\",\"question\":\"open-a@1.0.0 can't run on 127.0.0.1:63955: its call needs the capability fp16, which the host doesn't report. Give the host fp16?\",\"options\":[{\"id\":\"done\",\"label\":\"I did it\",\"decision\":\"none\"},{\"id\":\"agent\",\"label\":\"The agent can do it\",\"decision\":\"none\"}],\"recommended\":\"done\",\"default\":\"done\",\"deadline\":1794392393388,\"steps\":[\"Give 127.0.0.1:63955 the capability fp16\",\"Run the job on open-a@1.0.0 again\"],\"where\":\"127.0.0.1:63955\",\"why\":\"open-a@1.0.0's call needs fp16\",\"unblocks\":[\"req:20ced24d8dc823b0\"],\"proves\":\"fp16 on 127.0.0.1:63955\",\"fallback\":\"you\",\"provisional\":false,\"owner\":\"you\",\"key\":\"20ced24d8dc823b00dbf0c61da51f261ca97a29ac017fa28abff5f2da57975f8\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"20ced24d8dc823b00dbf0c61da51f261ca97a29ac017fa28abff5f2da57975f8\"}}",
+          "data": {
+            "kind": "unblock",
+            "question": "open-a@1.0.0 can't run on 127.0.0.1:63955: its call needs the capability fp16, which the host doesn't report. Give the host fp16?",
+            "options": [
+              {
+                "id": "done",
+                "label": "I did it",
+                "decision": "none"
+              },
+              {
+                "id": "agent",
+                "label": "The agent can do it",
+                "decision": "none"
+              }
+            ],
+            "recommended": "done",
+            "default": "done",
+            "deadline": 1794392393388,
+            "steps": [
+              "Give 127.0.0.1:63955 the capability fp16",
+              "Run the job on open-a@1.0.0 again"
+            ],
+            "where": "127.0.0.1:63955",
+            "why": "open-a@1.0.0's call needs fp16",
+            "unblocks": [
+              "req:20ced24d8dc823b0"
+            ],
+            "proves": "fp16 on 127.0.0.1:63955",
+            "fallback": "you",
+            "provisional": false,
+            "owner": "you",
+            "key": "20ced24d8dc823b00dbf0c61da51f261ca97a29ac017fa28abff5f2da57975f8",
+            "pinned_to": {
+              "kind": "evidence",
+              "ref": "20ced24d8dc823b00dbf0c61da51f261ca97a29ac017fa28abff5f2da57975f8"
+            }
+          }
+        }
+      ],
+      "calls": 0
+    },
+    "newHash": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "f49b9b219972b949a1a165ce80cf6a7381eb044e60139aa0f75610b839157b53"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "open-a@1.0.0",
+          "key": "12e09018b8ebd626cd47c0abf562b76337df2b2058f1e40b3aab2e6ce091f665",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "9e196fe66f0eae4703a9d6c7637032860775fc86e03973d506ff4b150707ac5b"
+          },
+          "sent": [
+            {
+              "sha256": "9e196fe66f0eae4703a9d6c7637032860775fc86e03973d506ff4b150707ac5b",
+              "host": "127.0.0.1:63955"
+            }
+          ],
+          "weights": [
+            {
+              "name": "model.safetensors",
+              "sha256": "3b2897601609438ef548baeae6749d4913bc57ac660a5fb707a1dc7ad52379a5"
+            },
+            {
+              "name": "tokenizer.json",
+              "sha256": "4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3"
+            }
+          ]
+        }
+      },
+      "calls": 1
+    },
+    "host": {
+      "127.0.0.1:63955": "[\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"aGVsbG8=\\\"}}\",\"GET /report \",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"cmVuZGVyIGQyYTA5YzFlZTk4ODogZnJhbWUgNDIgb2YgdGhlIGhlcm8gc2hvdA==\\\"}}\",\"GET /report \",\"GET /report \",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"aGVsbG8=\\\"}}\",\"GET /report \",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"cmVuZGVyIGQyYTA5YzFlZTk4ODogZnJhbWUgNDIgb2YgdGhlIGhlcm8gc2hvdA==\\\"}}\"]"
+    }
+  }
+}
