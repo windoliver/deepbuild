@@ -65,7 +65,8 @@
       "roles": [
         "divider",
         "ground",
-        "ink_primary"
+        "ink_primary",
+        "ink_secondary"
       ],
       "literals": []
     },
