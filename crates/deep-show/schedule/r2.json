@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "0c2173b1c21ba688feeebf9306f0986854076761dec83a47cee89bbbc23f40c2",
+  "set_digest": "9de4386fedfd9e3b3658745ff7c6c92a6373aee2607263c903450c51b26a5b58",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -237,7 +237,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "1235792443270721f90858c1162ff00a38d4f9238363f0d227ec44796376365d",
+      "digest": "4f12521ecbe836c5f78e43fd231717d91212951c4439c3ddf103424e8135d93e",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -324,7 +324,7 @@
       }
     },
     "vector@1": {
-      "digest": "0158aea41637608890c4b742799200c23bc3e5f1aef98adb9c0e56b1d4b48a40",
+      "digest": "2b0f07530c67f0a57f36cc513e85d204d613ea8ea819a928a9015b078c42f418",
       "reference": "vector",
       "kit": [
         "fixtures",
@@ -755,6 +755,18 @@
         "per": "item"
       },
       {
+        "operator": "vector.glyphs",
+        "module": "vector",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "vector.glyphs"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "vector.paint",
         "module": "vector",
         "version": "1.0.0",
@@ -828,6 +840,9 @@
   "contributions": {
     "core.fields": [
       "motion.fields"
+    ],
+    "core.glyphs": [
+      "vector.glyphs"
     ],
     "core.status": [
       "look.status"

@@ -110,6 +110,34 @@ pub fn tables(doc: &mut Map<String, Value>, evidence: Option<&Path>) -> Result<(
     deep_marks_vello::tables::tables(doc, evidence).map_err(|r| refused(r.code, &r.path))
 }
 
+/// #1653: an atlas row's cell of `atlas`, turned by its flip bits (transpose, then h, then v). A
+/// cell past the atlas is refused, naming the set's tile column.
+pub fn cell(
+    atlas: &RgbaImage,
+    tile: &deep_canvas_marks::scene::AtlasCell,
+    item: &str,
+) -> Result<RgbaImage, Value> {
+    let set = item.split('#').next().unwrap_or(item);
+    let Some([x, y, w, h]) = tile.rect([atlas.width(), atlas.height()]) else {
+        return Err(refused(
+            "out_of_range",
+            &format!("items/{set}/params/columns/tile"),
+        ));
+    };
+    let mut out =
+        image::imageops::crop_imm(atlas, x as u32, y as u32, w as u32, h as u32).to_image();
+    if tile.flip & 4 != 0 {
+        out = image::imageops::flip_horizontal(&image::imageops::rotate90(&out));
+    }
+    if tile.flip & 1 != 0 {
+        out = image::imageops::flip_horizontal(&out);
+    }
+    if tile.flip & 2 != 0 {
+        out = image::imageops::flip_vertical(&out);
+    }
+    Ok(out)
+}
+
 /// The asset's pixels, straight RGBA, cropped to `crop` (`[x, y, w, h]` in image pixels). Its
 /// header is read first: an image with a side past the decode cap, or whose `w × h × 4` bytes
 /// pass the `remaining` budget, is refused `over_budget`, naming the asset, before its pixels are
@@ -178,8 +206,8 @@ fn cropped(mut rgba: RgbaImage, crop: Option<[f64; 4]>, item: &str) -> Result<Rg
     Ok(rgba)
 }
 
-/// An image kept by its store, hash and crop.
-type KeptKey = (Option<PathBuf>, String, [u64; 4]);
+/// An image kept by its store, hash and crop, and for an atlas row its cell (#1653).
+type KeptKey = (Option<PathBuf>, String, [u64; 4], String);
 
 /// A decoded image and the pixmap last made from it, at the opacity and adjust it was made with.
 struct KeptImage {
@@ -200,50 +228,18 @@ pub struct Kept {
 impl Kept {
     /// The image's premultiplied pixmap at `opacity` and `adjust`, and its size: its asset read
     /// and decoded the first time a frame draws it, and the pixmap made again only when the
-    /// opacity or the adjust changes.
+    /// opacity or the adjust changes. An atlas row's `tile` is its cell of the whole atlas, which
+    /// is itself decoded once (#1653).
     pub fn pixmap(
         &mut self,
         store: Option<&Path>,
         asset: &str,
         crop: Option<[f64; 4]>,
+        tile: Option<&deep_canvas_marks::scene::AtlasCell>,
         (opacity, adjust): (f64, &Adjust),
         item: &str,
     ) -> Result<(Arc<Pixmap>, [u32; 2]), Value> {
-        let key: KeptKey = (
-            store.map(Path::to_path_buf),
-            asset.to_string(),
-            crop.map_or([u64::MAX; 4], |c| c.map(f64::to_bits)),
-        );
-        if self.plant == Plant::DecodesPerDraw {
-            self.images.remove(&key);
-        }
-        if !self.images.contains_key(&key) {
-            let held: u64 = (self.drawn.iter())
-                .filter_map(|k| self.images.get(k))
-                .map(|i| i.straight.as_raw().len() as u64)
-                .sum();
-            let held = if self.plant == Plant::CapCountsCopiesOnly {
-                0
-            } else {
-                held
-            };
-            let straight = decoded(
-                store,
-                asset,
-                crop,
-                item,
-                CAP.saturating_sub(held),
-                self.plant,
-            )?;
-            self.images.insert(
-                key.clone(),
-                KeptImage {
-                    straight: Arc::new(straight),
-                    made: None,
-                },
-            );
-        }
-        self.drawn.insert(key.clone());
+        let key = self.straight(store, asset, crop, tile, item)?;
         let kept = self.images.get_mut(&key).expect("inserted above");
         let (w, h) = kept.straight.dimensions();
         let (Ok(pw), Ok(ph)) = (u16::try_from(w), u16::try_from(h)) else {
@@ -261,6 +257,64 @@ impl Kept {
                 Ok((pixmap, [w, h]))
             }
         }
+    }
+
+    /// The key of the image's straight pixels, read and decoded (or cut from its atlas) if not
+    /// kept, and counted as drawn this frame.
+    fn straight(
+        &mut self,
+        store: Option<&Path>,
+        asset: &str,
+        crop: Option<[f64; 4]>,
+        tile: Option<&deep_canvas_marks::scene::AtlasCell>,
+        item: &str,
+    ) -> Result<KeptKey, Value> {
+        let key: KeptKey = (
+            store.map(Path::to_path_buf),
+            asset.to_string(),
+            crop.map_or([u64::MAX; 4], |c| c.map(f64::to_bits)),
+            tile.map_or(String::new(), |t| format!("{t:?}")),
+        );
+        if self.plant == Plant::DecodesPerDraw {
+            self.images.remove(&key);
+        }
+        if !self.images.contains_key(&key) {
+            let straight = match tile {
+                Some(tile) => {
+                    let whole = self.straight(store, asset, None, None, item)?;
+                    let atlas = self.images[&whole].straight.clone();
+                    cell(&atlas, tile, item)?
+                }
+                None => {
+                    let held: u64 = (self.drawn.iter())
+                        .filter_map(|k| self.images.get(k))
+                        .map(|i| i.straight.as_raw().len() as u64)
+                        .sum();
+                    let held = if self.plant == Plant::CapCountsCopiesOnly {
+                        0
+                    } else {
+                        held
+                    };
+                    decoded(
+                        store,
+                        asset,
+                        crop,
+                        item,
+                        CAP.saturating_sub(held),
+                        self.plant,
+                    )?
+                }
+            };
+            self.images.insert(
+                key.clone(),
+                KeptImage {
+                    straight: Arc::new(straight),
+                    made: None,
+                },
+            );
+        }
+        self.drawn.insert(key.clone());
+        Ok(key)
     }
 
     /// A frame is drawn: every image it didn't draw is let go.

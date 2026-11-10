@@ -151,6 +151,24 @@ pub fn expand(id: &str, item: &Value) -> Result<(String, Value), Refused> {
     Ok((format!("{id}.tiles"), derived))
 }
 
+/// The set [`expand`] gives, as a frame draws it (#1653): its columns as f64 data.
+pub fn drawn(id: &str, item: &Value) -> Result<(String, Value), Refused> {
+    let (name, mut set) = expand(id, item)?;
+    if let Some(Value::Object(columns)) = set.pointer_mut("/params/columns") {
+        for column in columns.values_mut() {
+            let values: Vec<f64> = column
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_f64)
+                .collect();
+            let bytes: Vec<u8> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
+            *column = json!({"dtype": "f64", "len": values.len(), "data": deep_canvas::base64::encode(&bytes)});
+        }
+    }
+    Ok((name, set))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
