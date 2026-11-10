@@ -490,6 +490,13 @@ pub type Rule = fn(&Value, &str, &Value) -> Vec<Raised>;
 /// One item's CPU time per frame, in ms, for the budget estimate (`document.budget`).
 pub type Cost = fn(&Value) -> f64;
 
+/// The elements of a built item's named part in one domain, in index order, each an object of
+/// `i`, `center`, `normal`, `area`, `size` and the part's attributes, for a recipe's repeat over
+/// elements (Recipe: repeat over elements; #2015): `(document, item ID, item, part, domain,
+/// planted wrong program)`, or why there are none to count.
+pub type Elements =
+    fn(&Value, &str, &Value, &str, &str, Option<&str>) -> Result<Vec<Value>, String>;
+
 /// One code a canvas module's check can emit, in the check catalog: what it means, its fix, and
 /// whether that fix is given as patch ops.
 #[derive(Clone, Debug)]
@@ -729,6 +736,8 @@ pub struct Registrar {
     pub rules: Vec<(String, Rule)>,
     /// Its kinds' CPU cost per item, by kind (`family.name`).
     pub costs: Vec<(String, Cost)>,
+    /// Its builders' elements by part and domain, by kind (`family.name`; #2015).
+    pub elements: Vec<(String, Elements)>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).
@@ -831,6 +840,12 @@ impl Registrar {
     /// The CPU cost of an item of the kind `family.name`.
     pub fn cost(&mut self, kind: &str, cost: Cost) -> &mut Self {
         self.costs.push((kind.into(), cost));
+        self
+    }
+
+    /// The elements of an item of the builder kind `family.name`, by part and domain (#2015).
+    pub fn elements(&mut self, kind: &str, elements: Elements) -> &mut Self {
+        self.elements.push((kind.into(), elements));
         self
     }
 
@@ -1519,6 +1534,15 @@ impl Sealed {
             .filter(|(k, _)| k == full)
             .map(|(_, c)| *c)
             .collect()
+    }
+
+    /// The elements function of the kind `family.name`, from the first module that registers one.
+    pub fn elements_for(&self, full: &str) -> Option<Elements> {
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.elements.iter())
+            .find(|(k, _)| k == full)
+            .map(|(_, e)| *e)
     }
 
     /// Whether any module registered a cost: the budget estimate then sums the whole document.

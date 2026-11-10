@@ -1272,6 +1272,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "layout_text_by_kind" => Planted::LayoutTextByKind,
                 "sweep_audits_samples_only" => Planted::SweepAuditsSamplesOnly,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
+                "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
+                "each_face_per_triangle" => Planted::EachFacePerTriangle,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,

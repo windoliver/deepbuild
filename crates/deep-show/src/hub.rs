@@ -160,6 +160,10 @@ pub enum Planted {
     SweepAuditsSamplesOnly,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
+    /// #2015: a repeat over elements seeds each derived item with the part's element count too.
+    EachSeedsByElementCount,
+    /// #2015: a repeat over faces walks the part's triangles, not its polygon view's faces.
+    EachFacePerTriangle,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
     ReexpansionOverwritesBrokenOut,
     /// #306: the pack check never reads `requires.modules`.
@@ -1158,6 +1162,8 @@ impl<'a> Hub<'a> {
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
             key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
+            each_by_count: scenario.planted == Some(Planted::EachSeedsByElementCount),
+            each_per_triangle: scenario.planted == Some(Planted::EachFacePerTriangle),
         };
         let mut hub = Hub {
             scenario,
