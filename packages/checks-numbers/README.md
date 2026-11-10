@@ -8,7 +8,7 @@ The numbers check plug-in (#87): check kind `numbers` re-runs the query behind e
 
 - `src/index.ts`: the plug-in entry and its fill; `src/run.ts`: one run, its queries in `runtime/probe.mjs` in a process group of its own so the deadline can end it; `src/speed.ts`: the timing check.
 - `src/kit.ts`: the `check.kind@1` kit; `src/types.ts`: the shapes.
-- There is no `test/` folder: its tests are the acceptance suite in `tests/acceptance/87/numbers` (never edited).
+- Regression tests go in `test/`; the acceptance suite is `tests/acceptance/87/numbers` (never edited).
 
 ## What it may import
 

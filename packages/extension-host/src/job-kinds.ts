@@ -16,9 +16,24 @@ export interface JobKind {
   output_checks: string[];
   qualification: { fixtures: JobFixture[] };
 }
-export interface JobTool { tool: string; params: Schema; run: { dir: string; entry: string }; qualification: unknown; cost?: { usd: number } }
-/** What an install holds of the job API: the kinds it registered, and its tools, each with the build it qualified as. */
-export interface HeldJobs { kinds: Record<string, JobKind>; tools: { kind: string; tool: string; build: string; descriptor: JobTool }[] }
+/** A weight file an open model's tool runs, by its name on the host and its hash (#1924). */
+export interface Weight { name: string; sha256: string }
+/**
+ * A tool runs as its own files (`run {dir, entry}`), or off the machine at a URL on the one host its manifest names
+ * (`run {url}`, #1924); one that runs an open model there declares its weight files by hash and the capabilities its
+ * call needs, which the host reports before each call.
+ */
+export interface JobTool {
+  tool: string; params: Schema; run: { dir: string; entry: string } | { url: string }; qualification: unknown; cost?: { usd: number };
+  weights?: Weight[]; needs?: string[];
+}
+/**
+ * What an install holds of the job API: the kinds it registered, and its tools, each with the build it qualified as,
+ * none for a tool off the machine, whose files aren't here, and the host it runs on.
+ */
+export interface HeldJobs { kinds: Record<string, JobKind>; tools: { kind: string; tool: string; build: string | null; host?: string; descriptor: JobTool }[] }
+/** The URL a tool off the machine is called at, or undefined for one that runs as its own files. */
+export const urlOf = (t: JobTool): string | undefined => ('url' in t.run ? t.run.url : undefined);
 /** The planted hosts of #1922 AC6 and AC7, each a build that isn't the digest of the tool's files as installed. */
 export type BuildPlant = 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes';
 /** A running tool's own counter (#1925): done of a total, such as frames written or steps of a span, or a provider's percent. */
@@ -92,14 +107,31 @@ export function kindOf(kind: string, raw: unknown): JobKind {
   return plain(k) as unknown as JobKind;
 }
 
-/** A tool as `deep.registerJobTool` declares it, its files under the package's folder, or an Error naming what isn't so. */
-export function toolOf(kind: string, raw: unknown, folder: string): JobTool {
+/**
+ * A tool as `deep.registerJobTool` declares it, its files under the package's folder or its URL on `host`, the one
+ * host its manifest names for it, or an Error naming what isn't so.
+ */
+export function toolOf(kind: string, raw: unknown, folder: string, host?: string): JobTool {
   const t = (isPlain(raw) ? raw : {}) as Partial<JobTool>;
   if (typeof t.tool !== 'string' || !TOOL.test(t.tool)) throw Error(`a tool of ${kind} is pinned by name@version, not ${JSON.stringify(t.tool)}`);
-  const { dir, entry } = (isPlain(t.run) ? t.run : {}) as Partial<JobTool['run']>;
-  const inside = (p: unknown): p is string => typeof p === 'string' && !!p && !isAbsolute(p) && !normalize(p).startsWith('..');
-  if (!inside(dir) || !inside(entry)) throw Error(`${t.tool} names its files as run {dir, entry} inside its package`);
-  if (!statSync(join(folder, dir, entry), { throwIfNoEntry: false })?.isFile()) throw Error(`${t.tool}'s entry ${dir}/${entry} isn't a file of its package`);
+  const run = (isPlain(t.run) ? t.run : {}) as { dir?: unknown; entry?: unknown; url?: unknown };
+  if (run.url !== undefined || host !== undefined) {
+    let url: URL | undefined;
+    try { url = new URL(String(run.url)); } catch { /* not a URL */ }
+    // Over https, or plain http on loopback only, as a model's call is made.
+    const loopback = url && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
+    if (!url || !(url.protocol === 'https:' || (url.protocol === 'http:' && loopback))) throw Error(`${t.tool} runs off the machine at run {url}, over https or plain http on loopback, not ${JSON.stringify(run.url)}`);
+    if (url.host !== host) throw Error(`${t.tool}'s run {url} is on ${url.host}, and its manifest's job_tools names ${host ?? 'no host'} for it: a call goes only to the host the manifest names`);
+    const weights = t.weights ?? [];
+    if (!Array.isArray(weights) || !weights.every((w) => isPlain(w) && typeof w.name === 'string' && !!w.name && typeof w.sha256 === 'string' && /^[0-9a-f]{64}$/.test(w.sha256))) throw Error(`${t.tool}'s weights are [{name, sha256}], each file by its SHA-256`);
+    if (!Array.isArray(t.needs ?? []) || !(t.needs ?? []).every((n) => typeof n === 'string' && !!n)) throw Error(`${t.tool}'s needs are the capabilities its call needs, by name`);
+  } else {
+    const { dir, entry } = run;
+    const inside = (p: unknown): p is string => typeof p === 'string' && !!p && !isAbsolute(p) && !normalize(p).startsWith('..');
+    if (!inside(dir) || !inside(entry)) throw Error(`${t.tool} names its files as run {dir, entry} inside its package`);
+    if (!statSync(join(folder, dir, entry), { throwIfNoEntry: false })?.isFile()) throw Error(`${t.tool}'s entry ${dir}/${entry} isn't a file of its package`);
+    if (t.weights !== undefined || t.needs !== undefined) throw Error(`${t.tool} declares weights or needs, which its host reports before each call, and runs on no host`);
+  }
   if (!isPlain(t.params)) throw Error(`${t.tool} declares no params schema`);
   if (t.cost !== undefined && !(isPlain(t.cost) && typeof t.cost.usd === 'number' && t.cost.usd >= 0)) throw Error(`${t.tool}'s cost is {usd}, a price per run`);
   return plain(t) as unknown as JobTool;

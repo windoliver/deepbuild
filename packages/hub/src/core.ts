@@ -836,7 +836,7 @@ export class Core {
       checkouts: () => this.checkouts, invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), stopping: () => this.stopping,
       stoodIn: (r) => this.tasks.stoodIn(this.connection('core'), r),
       kept: async (evidence) => (await Promise.all(evidence.map((sha) => this.store.get(sha)))).every(Boolean),
-      slots: () => ({ free: Math.max(0, Math.floor(CORES / 2) - this.runs.size) }),
+      slots: () => ({ free: Math.max(0, Math.max(1, Math.floor(CORES / 2)) - this.runs.size) }),
       capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined), plant: options.plant, load: machineLoad,
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
@@ -1169,7 +1169,9 @@ export class Core {
       root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
       keep: async (bytes, source) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
       has: async (sha) => (await this.store.get(sha)) !== undefined,
-      raise: (ask, plan) => this.asks.raise(this.connection('core'), 'job.paid', ask, plan),
+      read: (sha) => this.store.read(sha),
+      send: (request, boundary) => this.store.send(request, boundary),
+      raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
       row: (job, running) => this.jobShown(job, running),
     });
     this.libraries = new Libraries({
@@ -7517,7 +7519,12 @@ export class Core {
       return { ...ran, findings };
     })();
     this.lanes.set(r.claim, lane);
-    lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${error instanceof Error ? error.message : String(error)}\n`));
+    // A claim whose checks could not start is INCONCLUSIVE, naming why, as one past its budget is: never left with no verdict.
+    lane.catch((error: unknown) => {
+      const why = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${why}\n`);
+      void this.invalid(r.claim, r.commit, `its checks did not start: ${why}`, 'INCONCLUSIVE').catch((failed: unknown) => process.stderr.write(`deep hub: ${r.claim}'s verdict wasn't recorded: ${failed instanceof Error ? failed.message : String(failed)}\n`));
+    });
   }
   /**
    * The repo's spec checks (#322): each check the spec's `done` claim names (or, with no claims block, every check),

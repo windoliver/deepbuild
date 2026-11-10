@@ -105,7 +105,13 @@ impl Connection {
         let name = host.rsplit_once(':').map_or(host.as_str(), |(n, _)| n);
         let server = ServerName::try_from(name.to_string())
             .map_err(|e| fail(format!("isn't a host name: {e}")))?;
-        let addr: SocketAddr = host
+        // https's own port when the URL names none.
+        let authority = if name == host {
+            format!("{host}:443")
+        } else {
+            host.clone()
+        };
+        let addr: SocketAddr = authority
             .to_socket_addrs()
             .map_err(|e| fail(format!("can't be resolved: {e}")))?
             .next()
@@ -284,5 +290,17 @@ mod tests {
         let good =
             serde_json::json!({"protocol": "relay@1", "digest": wire::digest(), "limits": limits});
         assert!(check_hello("h:1", &good).is_ok());
+    }
+
+    #[test]
+    fn a_relay_url_with_no_port_is_reached_on_https_s_own() {
+        // No authority is trusted, so this ends at the connection or the handshake, never at the address.
+        let Err(why) = Connection::open("https://localhost", b"") else {
+            panic!("a relay was trusted with no authority");
+        };
+        assert!(
+            why.starts_with("the relay localhost ") && !why.contains("can't be resolved"),
+            "{why}"
+        );
     }
 }

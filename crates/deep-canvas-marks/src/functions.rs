@@ -729,7 +729,8 @@ fn columns(
             ));
             continue;
         }
-        let n = n.unwrap_or(0.0).round().clamp(0.0, max) as usize;
+        // A negative count draws no rows.
+        let n = n.unwrap_or(0.0).round().clamp(0.0, max.max(0.0)) as usize;
         let cols = params["columns"].as_object().cloned().unwrap_or_default();
         let computed: Vec<String> = cols
             .iter()
@@ -837,5 +838,21 @@ fn columns(
                 json!({"dtype": "f64", "len": n, "data": deep_canvas::base64::encode(&bytes)}),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_computed_set_with_a_negative_n_has_no_rows() {
+        let set = json!({"kind": "marks@1", "params": {"n": -1, "columns": {"y": {"expr": "i"}}}});
+        let mut items = Map::new();
+        items.insert("s".to_string(), set);
+        let out = lower(&Map::new(), &mut items, &|_| None, Planted::None);
+        assert!(out.issues.is_empty(), "{} issues", out.issues.len());
+        assert_eq!(items["s"]["params"]["n"], json!(0));
+        assert_eq!(items["s"]["params"]["columns"]["y"]["len"], json!(0));
     }
 }
