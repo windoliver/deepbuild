@@ -2473,20 +2473,18 @@ class Host implements ExtensionHost {
     const dir = mkdtempSync(join(this.options.home, 'ext-'));
     const path = join(dir, 's');
     const server = createServer();
-    const output: string[] = [];
-    const keep = (chunk: Buffer): void => { if (output.length < 64) output.push(chunk.toString('utf8')); };
     try {
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(path, resolve); });
       const connected = new Promise<Socket>((resolve) => server.once('connection', resolve));
       const started = await supervisor.start({
         run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
-        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] }, output: { stdout: keep, stderr: keep },
+        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] },
       });
       if (started.status !== 'started') throw Error(`the sandbox held it: BLOCKED on ${started.kind}`);
       // Stoppable from here on: an unload while it connects, at close or a revoke, ends its process.
       ext.stop = async () => { ext.cleaned = await supervisor.cleanup(run).catch(() => undefined); };
-      // What it printed is the package's own words: only a release package's reach the refusal, and the hub's log.
-      const early = supervisor.wait(run).then((exit) => Promise.reject(Error(`it exited (${exit.code ?? exit.signal}) before it connected${ext.released ? `: ${output.join('').trim()}` : ''}`)));
+      // What it printed is the package's own words, and only a release package's reach a refusal: none loads here as one.
+      const early = supervisor.wait(run).then((exit) => Promise.reject(Error(`it exited (${exit.code ?? exit.signal}) before it connected`)));
       early.catch(() => undefined);
       let socket: Socket;
       try {
