@@ -2,6 +2,9 @@
 // One process archives seeded Claude Code sessions into a record in a temp folder, then reads slices of them as `deep
 // read` does, failing unless each holds at most 8,192 characters and each cut one's cursor leads on to the end. The
 // issue's 200 ms per `deep read` stays in tests/acceptance/63/budgets.test.ts.
+// `find` (issue #1515): the same archive of 300 sessions, indexed as the hub indexes it, then `deep find` queries for
+// part of a word, a Greek and a Chinese word, failing unless each finds its seeded message. The issue's 100 ms per
+// search stays in tests/acceptance/1515/budgets.test.ts.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -33,12 +36,17 @@ function session(seed, count, size) {
 const task = process.argv[2];
 const root = mkdtempSync(join(tmpdir(), 'deep-reading-bench-'));
 try {
-  if (task !== 'slice') throw Error(`Unknown task ${task}; one of: slice`);
+  if (task !== 'slice' && task !== 'find') throw Error(`Unknown task ${task}; one of: slice, find`);
   const now = () => T0;
   const env = { HOME: root, CLAUDE_CONFIG_DIR: join(root, 'claude') };
   const folder = join(env.CLAUDE_CONFIG_DIR, 'projects', '-tmp-shop');
   mkdirSync(folder, { recursive: true });
-  const sessions = [...Array.from({ length: 50 }, (_, i) => session(0x6300 + i, 60, 1000)), session(0x63ff, 1000, 300)];
+  const sessions = task === 'find'
+    ? Array.from({ length: 300 }, (_, i) => session(0x1515 + i, 40, 400))
+    : [...Array.from({ length: 50 }, (_, i) => session(0x6300 + i, 60, 1000)), session(0x63ff, 1000, 300)];
+  // The words `find` looks for, each in one message of one session.
+  const seeded = { thBackoffJit: 'retryWithBackoffJitter', 'ανασύνδ': 'επανασύνδεση', '重试': '连接重试失败' };
+  if (task === 'find') Object.values(seeded).forEach((word, i) => { const s = sessions[100 * i + 7]; s.text = s.text.replace('"content":"', `"content":"${word} `); });
   for (const s of sessions) writeFileSync(join(folder, `${s.id}.jsonl`), s.text);
   const hub = join(root, 'hub');
   const store = await openEvidenceStore({ root: join(hub, 'evidence'), now });
@@ -46,20 +54,27 @@ try {
   const asks = await openAsks({ record, now, deliver: () => undefined });
   const archive = await openArchive({ record, evidence: store, asks, adapters: shipped(), env, connection: { writer: 'ext:deepbuild/archive', actor: 'you', scope: 'you' }, now });
   await archive.pass();
+  if (task === 'find') await record.indexTranscripts();
   await record.sync();
   const slicer = await openSlicer(hub);
   try {
-    const archived = await slicer.archived();
-    if (archived.length !== sessions.length) throw Error(`${archived.length} of ${sessions.length} sessions archived`);
-    // Every slice of the long session, then message 900 and its continuations, as an agent's reads would come.
-    const long = sessions[sessions.length - 1];
-    for (const handle of [long.handle, `${long.handle}#m900`, ...sessions.slice(0, 10).map((s) => s.handle)]) {
-      let slice = await slicer.read(handle);
-      for (let n = 0; ; n++) {
-        if (slice.text.length > CAP) throw Error(`${handle}: a slice of ${slice.text.length} characters, past the cap`);
-        if (slice.next === undefined) break;
-        if (n > 1000) throw Error(`${handle}: a slice's next leads round in circles`);
-        slice = await slicer.read(handle, slice.next);
+    if (task === 'find') {
+      for (let n = 0; n < 10; n++) {
+        for (const query of Object.keys(seeded)) if (!(await slicer.find(query)).hits.length) throw Error(`deep find ${query} found nothing`);
+      }
+    } else {
+      const archived = await slicer.archived();
+      if (archived.length !== sessions.length) throw Error(`${archived.length} of ${sessions.length} sessions archived`);
+      // Every slice of the long session, then message 900 and its continuations, as an agent's reads would come.
+      const long = sessions[sessions.length - 1];
+      for (const handle of [long.handle, `${long.handle}#m900`, ...sessions.slice(0, 10).map((s) => s.handle)]) {
+        let slice = await slicer.read(handle);
+        for (let n = 0; ; n++) {
+          if (slice.text.length > CAP) throw Error(`${handle}: a slice of ${slice.text.length} characters, past the cap`);
+          if (slice.next === undefined) break;
+          if (n > 1000) throw Error(`${handle}: a slice's next leads round in circles`);
+          slice = await slicer.read(handle, slice.next);
+        }
       }
     }
   } finally {

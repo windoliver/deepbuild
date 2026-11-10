@@ -1565,7 +1565,15 @@ impl Paints<'_> {
             return Ok(Fill::Solid(steps.color(self.step(id, &steps, &path)?)));
         }
         // #149: a noise fill draws its ramp through the drawn pass, and a named fill or line takes
-        // the ink when it names no role.
+        // the ink when it names no role; #1646: so does a dither fill its stops.
+        if let Some(n) = p.get("dither") {
+            let first = n.pointer("/stops/0");
+            return Ok(Fill::Solid(role(
+                self.palette,
+                first,
+                &format!("{path}/dither/stops/0"),
+            )?));
+        }
         if let Some(n) = p.get("noise") {
             let first = n.pointer("/stops/0/role");
             return Ok(Fill::Solid(role(
@@ -4661,6 +4669,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         look.light.is_some()
             || look.strokes.is_some()
             || names("fill", ["fill", "noise"])
+            || names("fill", ["dither", "dither"])
             || names("stroke", ["line", "line"])
     });
     let kinetic = kinetic || dressing.is_some();

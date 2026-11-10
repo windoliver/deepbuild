@@ -133,6 +133,8 @@ pub enum Planted {
     /// #493: every function's interval form from its point values at the range's ends, each
     /// rounded to nearest rather than outward.
     RoundsToNearest,
+    /// #1646: cells takes its seed with the time, the var `t`, so a still point's outputs move.
+    CellsSeededFromT,
 }
 
 impl Planted {
@@ -144,6 +146,7 @@ impl Planted {
             "sinc_as_sin_over_x" => Planted::SincAsSinOverX,
             "noise_form_samples_8" => Planted::NoiseFormSamples8,
             "rounds_to_nearest" => Planted::RoundsToNearest,
+            "cells_seeded_from_t" => Planted::CellsSeededFromT,
             _ => return None,
         })
     }
@@ -381,6 +384,8 @@ enum Fun {
     Noise3,
     Fbm,
     Cells,
+    /// #1646: one of `cells(p, seed)`'s outputs, read by name: 0 f1, 1 f2, 2 id, 3 center.
+    CellsOut(u8),
     Rand,
 }
 
@@ -900,6 +905,16 @@ impl Binder<'_> {
                 )
             }
             P::Swizzle(a, s) => {
+                // #1646: cells(p, seed) states its outputs, read by name.
+                if let P::Call(name, args, call) = &**a {
+                    let out = ["f1", "f2", "id", "center"].iter().position(|o| o == s);
+                    if let (true, Some(k)) = (name == "cells", out) {
+                        let (Node::Call(_, nodes), size) = self.call(name, args, call)? else {
+                            unreachable!("cells binds to a call");
+                        };
+                        return Ok((Node::Call(Fun::CellsOut(k as u8), nodes), size));
+                    }
+                }
                 let (a, sa) = self.bind(a)?;
                 let Some(idx) = swizzle(s) else {
                     return Err(refuse(s, "is no swizzle of x, y, z, w (or r, g, b, a)"));
@@ -982,6 +997,10 @@ impl Binder<'_> {
             let (n, s) = self.bind(a)?;
             size += s;
             nodes.push(n);
+        }
+        if *fun == Fun::Cells && self.resolve.planted() == Some(Planted::CellsSeededFromT) {
+            let (t, _) = self.bind(&P::Name("t".into()))?;
+            nodes.push(t);
         }
         if *fun == Fun::Factorial {
             if let Some(n) = constant(&nodes[0]) {
@@ -1612,7 +1631,16 @@ fn call(f: Fun, a: &[V]) -> V {
             let (oct, lac, gain) = fbm_params(a);
             V::S(noise::fbm(&comps(a[0]), seed_of(a.get(1)), oct, lac, gain))
         }
-        Fun::Cells => V::S(noise::cells(&comps(a[0]), seed_of(a.get(1)))),
+        Fun::Cells => V::S(noise::cells(&comps(a[0]), cells_seed(a)).f1),
+        Fun::CellsOut(k) => {
+            let c = noise::cells(&comps(a[0]), cells_seed(a));
+            match k {
+                0 => V::S(c.f1),
+                1 => V::S(c.f2),
+                2 => V::S(f64::from(c.id)),
+                _ => vec_of(&c.center[..c.dims]),
+            }
+        }
     }
 }
 
@@ -1625,6 +1653,12 @@ fn dot(u: &[f64], v: &[f64]) -> f64 {
 
 fn seed_of(v: Option<&V>) -> u32 {
     v.map_or(0, |v| v.num() as i64 as u32)
+}
+
+/// cells' seed: its second argument, with the planted form's time (a third) mixed in.
+fn cells_seed(a: &[V]) -> u32 {
+    let t = a.get(2).map_or(0, |t| (t.num() * 1000.0) as i64 as u32);
+    seed_of(a.get(1)).wrapping_add(t)
 }
 
 /// fbm(p, seed, octaves = 6, gain = 0.5, lacunarity = 2).
@@ -2106,8 +2140,34 @@ fn bcall(f: Fun, a: &[B]) -> B {
                 _ => B::S(Iv::ENTIRE),
             }
         }
-        Fun::Cells => B::S(noise::cells_bound(&bcomps(a[0]), bseed(a.get(1)))),
+        Fun::Cells => B::S(noise::cells_bound(&bcomps(a[0]), cells_bseed(a))),
+        Fun::CellsOut(k) => {
+            let p = bcomps(a[0]);
+            match k {
+                0 => B::S(noise::cells_bound(&p, cells_bseed(a))),
+                1 => B::S(Iv::new(
+                    noise::cells_bound(&p, cells_bseed(a)).lo,
+                    ops::sqrt(p.len().min(3) as f64) * 2.0,
+                )),
+                2 => B::S(Iv::new(0.0, f64::from(u32::MAX))),
+                // A center lies in one of the 3 × 3 (× 3) cells around p's.
+                _ => bvec(
+                    &p.iter()
+                        .take(3)
+                        .map(|c| Iv::new(c.lo.floor() - 1.0, c.hi.floor() + 2.0))
+                        .collect::<Vec<_>>(),
+                ),
+            }
+        }
     }
+}
+
+/// cells' seed when one point, with the planted form's time arg making it vary.
+fn cells_bseed(a: &[B]) -> Option<u32> {
+    if a.len() > 2 {
+        return None;
+    }
+    bseed(a.get(1))
 }
 
 /// A seed's value when its range is one point; `None` when it varies.
@@ -2360,14 +2420,40 @@ pub mod noise {
         out
     }
 
-    /// Cellular noise: the distance from p to the nearest feature point in its 3 × 3 (× 3) block.
-    pub fn cells(p: &[f64], seed: u32) -> f64 {
+    /// `cells(p, seed)`'s outputs: the distances to the nearest and second-nearest feature
+    /// points, the nearest's cell id and the nearest point itself (`dims` components used).
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub struct Cells {
+        pub f1: f64,
+        pub f2: f64,
+        pub id: u32,
+        pub center: [f64; 3],
+        pub dims: usize,
+    }
+
+    /// A cell's id: the fold of the hash over the seed and its coordinates, one per cell.
+    fn cell_id(seed: u32, cell: &[i64]) -> u32 {
+        cell.iter()
+            .fold(hash32(seed ^ 0x2c1b_3c6d), |h, c| mix(h, *c as u32))
+    }
+
+    /// Cellular noise over the 3 × 3 (× 3) block around p's cell, euclidean: f1 ≤ f2, the
+    /// nearest feature point's cell id and the point.
+    pub fn cells(p: &[f64], seed: u32) -> Cells {
         let d = p.len().min(3);
+        let none = Cells {
+            f1: f64::NAN,
+            f2: f64::NAN,
+            id: 0,
+            center: [f64::NAN; 3],
+            dims: d.max(1),
+        };
         if d == 0 || p.iter().any(|v| !v.is_finite()) {
-            return f64::NAN;
+            return none;
         }
         let cell: Vec<i64> = p[..d].iter().map(|v| v.floor() as i64).collect();
-        let mut best = f64::INFINITY;
+        let (mut s1, mut s2) = (f64::INFINITY, f64::INFINITY);
+        let mut out = none;
         for n in 0..3usize.pow(d as u32) {
             let mut c = [0i64; 3];
             let mut m = n;
@@ -2377,9 +2463,18 @@ pub mod noise {
             }
             let fp = feature(seed, &c[..d]);
             let s: f64 = (0..d).map(|k| (p[k] - fp[k]) * (p[k] - fp[k])).sum();
-            best = best.min(s);
+            if s < s1 {
+                s2 = s1;
+                s1 = s;
+                out.id = cell_id(seed, &c[..d]);
+                out.center = fp;
+            } else if s < s2 {
+                s2 = s;
+            }
         }
-        ops::sqrt(best)
+        out.f1 = ops::sqrt(s1);
+        out.f2 = ops::sqrt(s2);
+        out
     }
 
     /// cells' interval form: per cell the box covers (at most 64), the least and greatest

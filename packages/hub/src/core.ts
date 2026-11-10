@@ -69,7 +69,7 @@ import { aboutCall, aboutPermission, standingRules, type About } from './standin
 import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
-import { openIndex, pageClaims, search, type IndexFill } from './search.js';
+import { aboutSessions, openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { gateTokens, openGitHub, type AppKey, type GitHub, type GitHubPlant } from '@deepbuild/github';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
 import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
@@ -545,6 +545,13 @@ export class Core {
   private readonly expected = new Map<string, number>();
   /** Each process's start time, as `ps -o lstart=` prints it: how a process is told apart from a reused PID. */
   private readonly starts = new Map<number, Promise<string | undefined>>();
+  /** A hook's parent's command line, read once for the hook: its start's readers share one `ps`. */
+  private readonly argsRead = new WeakMap<HookMeta, Promise<string>>();
+  private parentArgs(meta: HookMeta): Promise<string> {
+    let read = this.argsRead.get(meta);
+    if (!read) this.argsRead.set(meta, (read = argsOf(meta.ppid).catch(() => '')));
+    return read;
+  }
   /** Hooks and calls run in arrival order: a deep_* call finds the stamp its PreToolUse left. */
   private chain: Promise<unknown> = Promise.resolve();
   /** Whether the start has finished: from then on, work waiting for it joins the queue at once. */
@@ -1181,7 +1188,10 @@ export class Core {
         // With no token the forge's logs can't be read, so no run is asked for.
         repos.splice(0, repos.length, ...(env.GH_TOKEN ? await this.forgeRepos() : []));
         await archive.pass();
-      })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => { archiving = undefined; });
+      })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); })
+        // The archive's text index follows each pass, whatever the pass copied (#1515): a session it doesn't hold yet is read from its transcript.
+        .then(() => this.record.indexTranscripts()).catch((error: unknown) => { process.stderr.write(`deep hub: archive index: ${error instanceof Error ? error.message : String(error)}\n`); })
+        .finally(() => { archiving = undefined; });
       return archiving;
     };
     archivePass();
@@ -1396,7 +1406,7 @@ export class Core {
     if (meta.transcript && resolve(meta.transcript) !== session.transcript) return;
     // npm's Codex runs as node with its bin script, its native build as codex itself.
     const binaries = meta.agent === 'codex' ? [CODEX_BINARY, /@openai\/codex\/bin\/codex\.js(?:\s|$)/] : meta.agent === 'claude-code' || meta.agent === 'claude' ? [CLAUDE_BINARY] : [];
-    const args = binaries.length ? await argsOf(meta.ppid) : '';
+    const args = binaries.length ? await this.parentArgs(meta) : '';
     if (binaries.length && !binaries.some((b) => b.test(args))) return;
     const ppid = meta.ppid;
     const [last] = (await this.record.raw(`SELECT ts, json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [session.id, `${OLDER_SET}%`, `${NEWER_SET}%`])) as { ts: number; text: string }[];
@@ -1867,7 +1877,7 @@ export class Core {
   /** The mods of the Claude Code home a session's transcript lives in, and the folders its command line loads; another agent loads none. */
   private async sessionMods(meta: HookMeta): Promise<HomeMods> {
     if (meta.agent !== 'claude-code' && meta.agent !== 'claude') return { home: '', mods: [] };
-    const dirs = pluginDirs(await argsOf(meta.ppid).catch(() => ''));
+    const dirs = pluginDirs(await this.parentArgs(meta));
     const home = homeOfTranscript(meta.transcript) ?? claudeHomes(process.env)[0]!;
     // Read again only when what Claude Code lists them from changes, or after MODS_MS: each read starts claude several
     // times. A read in flight is shared, so starts that arrive together start claude once.
@@ -2710,10 +2720,23 @@ export class Core {
       this.letGoLive(session.id);
       const ts = this.now();
       await this.append(this.connection('core', { session: session.id, agent: session.agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(session.id)}`, data: { pid: session.pid, start: session.start } }).catch(() => undefined);
+      if (session.agent === 'codex' && this.options.plant !== 'leaves-codex-session-open') await this.closedAtExit(session).catch(() => undefined);
       this.endedOrder.delete(session.id);
       this.endedOrder.add(session.id);
       this.forgetEnded();
     }
+  }
+  /**
+   * Codex ended with Ctrl-C may fire no SessionEnd (#1023), so its process ending is its end: the core records the
+   * session.end, a reading that says so, and each answer still waiting for it goes by its task, as an ended Codex
+   * session's answer does (#39).
+   */
+  private async closedAtExit(session: Session): Promise<void> {
+    this.sessionOver(session);
+    const ts = this.now();
+    await this.append(this.connection('core', { session: session.id, agent: session.agent }), { v: 2, id: ulid(ts), kind: 'session.end', ts, subject: `session:${letters(session.id)}`, data: { reason: 'process_exited' } });
+    await this.appendReading(session.id, session.agent, `Codex fired no SessionEnd: the hub closed this session when its process (pid ${session.pid}) exited`);
+    for (const answer of await this.answers.waitingFor(session.id)) await this.answers.outcome(answer.id, 'on_task', 'waiting');
   }
   /** A session has ended, by its SessionEnd or its Archive: what it started goes with it (#342). */
   private sessionOver(session: Session): void {
@@ -2841,13 +2864,9 @@ export class Core {
 
   // ---- Our entries in Claude Code's settings (#18).
 
-  /** A file's identity and size and time, so a change is seen once. */
-  private keyOf(file: string): string {
-    try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; }
-  }
   private watchSettings(): void {
     const file = claudeSettings();
-    this.settingsKey = this.keyOf(file);
+    this.settingsKey = statKey(file);
     const check = () => void this.queue(() => this.settingsChanged()).catch(() => undefined);
     try {
       this.watcher = watch(resolve(file, '..'), (_, name) => { if (!name || String(name) === 'settings.json') check(); });
@@ -2863,7 +2882,7 @@ export class Core {
    */
   private async settingsChanged(): Promise<void> {
     const file = claudeSettings();
-    const key = this.keyOf(file);
+    const key = statKey(file);
     if (key === this.settingsKey) return;
     this.settingsKey = key;
     const record = installed(this.root.dir);
@@ -2873,7 +2892,7 @@ export class Core {
     const running = [...this.live].flatMap(([id, l]) => [...l.calls.values()].filter((c) => c.ended === undefined || now - c.ended <= CALL_GRACE).map((c) => ({ id, agent: l.agent, what: c.what })));
     if (!running.length) return;
     restore(record);
-    this.settingsKey = this.keyOf(file);
+    this.settingsKey = statKey(file);
     for (const r of running) {
       const text = `DeepBuild's hook entries in ${file} were removed or changed (${changed.join('; ')}) while the ${r.what} was running; they were put back at once.`;
       this.settingsReadings.push(text);
@@ -2901,7 +2920,7 @@ export class Core {
     const rows = (await this.record.raw(`SELECT id, session_id, agent, data FROM events WHERE kind IN ('tool.before', 'tool.after') AND ts >= ? AND session_id IS NOT NULL AND (instr(data, ?) > 0 OR instr(data, '.claude/settings.json') > 0) ORDER BY log_pos`, [since, file])) as { id: string; session_id: string; agent: string | null; data: string }[];
     if (!rows.length) return;
     restore(record, flag);
-    this.settingsKey = this.keyOf(file);
+    this.settingsKey = statKey(file);
     const what = [flag ? 'turned Claude Code\'s hooks off (disableAllHooks)' : '', changed.length ? `changed DeepBuild's entries (${changed.join('; ')})` : ''].filter(Boolean).join(' and ');
     for (const session of new Set(rows.map((r) => r.session_id))) {
       const mine = rows.filter((r) => r.session_id === session);
@@ -5497,7 +5516,7 @@ export class Core {
     const binary = meta.agent === 'codex' ? CODEX_BINARY : meta.agent === 'claude-code' || meta.agent === 'claude' ? CLAUDE_BINARY : undefined;
     const resumed = meta.fields?.source === 'resume' || (meta.agent === 'codex' && meta.fields?.source === 'startup');
     if (binary && transcript === session.transcript && meta.event === 'SessionStart' && resumed
-      && (session.ended || await this.startOf(session.pid, true) !== session.start) && binary.test(await argsOf(meta.ppid))) {
+      && (session.ended || await this.startOf(session.pid, true) !== session.start) && binary.test(await this.parentArgs(meta))) {
       Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false, interrupted: false, watched: false });
       return true;
     }
@@ -5793,7 +5812,11 @@ export class Core {
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
     const claude = { relations: relations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.settingsReadings] };
     const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...modified(this.root.dir), ...trustProblems(this.root.dir).map((p) => `Codex's hook list reports ${p}`)], trust: readTrust(this.root.dir) ?? null };
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
+    // The newest sessions, each closed once an end is on record since its last start (#1023); as `deep status` does, this
+    // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
+    const sessions = ((await this.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
+      FROM sessions s WHERE s.last_seen IS NOT NULL ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {
@@ -6413,6 +6436,8 @@ export class Core {
    */
   private async agentAbove(peer: CallContext['peer']): Promise<string | undefined> {
     if (!peer || (await this.startOf(peer.pid, true)) !== peer.start) return undefined;
+    // Only a session of another process can be above it (a process table has no cycles): with none, the table isn't read.
+    if (![...this.sessions.values()].some((s) => s.pid > 1 && s.pid !== peer.pid)) return undefined;
     const up = await parents();
     const seen = new Set<number>();
     for (let pid = up.get(peer.pid); pid !== undefined && pid > 1 && !seen.has(pid); pid = up.get(pid)) {
@@ -6463,7 +6488,7 @@ export class Core {
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_kinds': return await this.kinds(args);
         case 'deep_status': return await this.status(session);
-        case 'deep_search': return await this.find(String(args.query), session, context);
+        case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
         case 'deep_ask': return await this.askFor(session!, args);
         case 'deep_wait': return await this.waitFor(session!, String(args.ask));
         case 'deep_open_item': return await this.openItem(session!, String(args.text));
@@ -6820,8 +6845,11 @@ export class Core {
     return { session, gates, claims };
   }
 
-  /** deep_search: the wiki, decisions and the project's spec; bound to a session, its own open items and verdicts too. */
-  private async find(query: string, session: string | undefined, context: CallContext): Promise<Obj> {
+  /**
+   * deep_search: the wiki, decisions and the project's spec; bound to a session, its own open items and verdicts too,
+   * and its repo's past sessions (#1515), narrowed to those that touched `file` when it names one.
+   */
+  private async find(query: string, session: string | undefined, context: CallContext, file?: string, cursor?: string): Promise<Obj> {
     const worktree = session ? this.sessions.get(session)?.cwd : this.worktreeAt(context.cwd);
     const everyone = !session && this.options.plant === 'unbound-reads-all';
     // A claim reaches a session at its own scope, its repo's or everywhere's; a call bound to no session reads every repo's.
@@ -6832,7 +6860,21 @@ export class Core {
       query, index: await this.wikiIndex(), raw: (q, params) => this.record.raw(q, params), worktree, session: everyone ? { everyone: true } : session, covers,
       trustsIndex: this.options.plant === 'trusts-index',
       readings: (q) => this.numbers.search(q, everyone ? { everyone: true } : session),
+      ...(session ? { past: await this.pastSessions(project?.project_id ?? null, file, worktree) } : {}),
+      ...(cursor !== undefined ? { cursor } : {}),
     });
+  }
+  /**
+   * The past sessions a bound call reads (#1515): its repo's archived ones, newest first, and, naming a file, only
+   * those whose recorded reads and edits touched it. Another repo's are reached only as a wiki claim's scope allows.
+   */
+  private async pastSessions(project: string | null, file: string | undefined, worktree: string | undefined): Promise<NonNullable<Parameters<typeof search>[0]['past']>> {
+    let sessions = project === null ? [] : ((await this.record.raw('SELECT id FROM sessions WHERE project_id = ? AND transcript IS NOT NULL ORDER BY last_seen DESC, id', [project])) as { id: string }[]).map((r) => r.id);
+    if (file !== undefined) {
+      const by = new Set((await this.record.touched(file, worktree)).map((t) => t.session));
+      sessions = sessions.filter((id) => by.has(id));
+    }
+    return { sessions, messages: (terms, ids) => this.record.findMessages(terms, ids), about: (ids) => aboutSessions((sql, params) => this.record.raw(sql, params), ids) };
   }
   /** The wiki's index: a loaded package's in place of the shipped one, rebuilt from the pages when it first serves (#355). */
   private async wikiIndex(): Promise<IndexFill | undefined> {

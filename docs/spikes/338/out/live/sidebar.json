@@ -10,6 +10,7 @@
     "role": "window",
     "name": null,
     "value": null,
+    "id": null,
     "bounds": [
       0,
       0,
@@ -21,6 +22,7 @@
         "role": "label",
         "name": "Tasks",
         "value": null,
+        "id": "sidebar-title",
         "bounds": [
           16,
           16,
@@ -33,6 +35,7 @@
         "role": "button",
         "name": "40 asks need you",
         "value": null,
+        "id": "sidebar-count",
         "bounds": [
           16,
           80,
@@ -45,6 +48,7 @@
         "role": "button",
         "name": "Agents: MCP servers and skills",
         "value": null,
+        "id": "sidebar-agents",
         "bounds": [
           16,
           128,
@@ -56,7 +60,8 @@
       {
         "role": "button",
         "name": "! Session 01MCBH57 · needs you",
-        "value": null,
+        "value": "needs_you",
+        "id": "session:01MCBH57D812FQ88XJ33AV9KCE",
         "bounds": [
           16,
           176,
@@ -68,7 +73,8 @@
       {
         "role": "button",
         "name": "! Session 01MCBH58 · needs you",
-        "value": null,
+        "value": "needs_you",
+        "id": "session:01MCBH58CGAQESGES1C4G0D6KF",
         "bounds": [
           16,
           224,
@@ -80,7 +86,8 @@
       {
         "role": "button",
         "name": "! Session 01MCBH59 · needs you",
-        "value": null,
+        "value": "needs_you",
+        "id": "session:01MCBH59BR567E65G5ZMQVD50Y",
         "bounds": [
           16,
           272,
@@ -92,7 +99,8 @@
       {
         "role": "button",
         "name": "! Session 01MCBH5A · needs you",
-        "value": null,
+        "value": "needs_you",
+        "id": "session:01MCBH5AB06WMYG6MC4XXAC1Y8",
         "bounds": [
           16,
           320,
@@ -104,7 +112,8 @@
       {
         "role": "button",
         "name": "! Session 01MCBH5B · needs you",
-        "value": null,
+        "value": "needs_you",
+        "id": "session:01MCBH5BA8VDDP75ES6BGN4S84",
         "bounds": [
           16,
           368,
@@ -116,7 +125,8 @@
       {
         "role": "button",
         "name": "! Session 01MCBH5C · needs you",
-        "value": null,
+        "value": "needs_you",
+        "id": "session:01MCBH5C9GCHP932NZK0RVQ19S",
         "bounds": [
           16,
           416,
@@ -128,7 +138,8 @@
       {
         "role": "button",
         "name": "! Session 01MCBH5D · needs you",
-        "value": null,
+        "value": "needs_you",
+        "id": "session:01MCBH5D8RGQHJD9XH63321Q3Q",
         "bounds": [
           16,
           464,
@@ -141,6 +152,7 @@
         "role": "label",
         "name": "Home",
         "value": null,
+        "id": "home-title",
         "bounds": [
           536,
           16,
@@ -153,6 +165,7 @@
         "role": "label",
         "name": "40 asks need you",
         "value": null,
+        "id": "home-needs-you",
         "bounds": [
           536,
           80,
@@ -164,7 +177,8 @@
       {
         "role": "label",
         "name": "! Session 01MCBH57 · needs you",
-        "value": null,
+        "value": "needs_you",
+        "id": "line-status",
         "bounds": [
           536,
           1740,
@@ -175,5 +189,9 @@
       }
     ]
   },
-  "items": []
+  "items": [],
+  "menu_bar": {
+    "title": "40 asks need you"
+  },
+  "focus": null
 }

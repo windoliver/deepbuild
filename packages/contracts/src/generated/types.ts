@@ -7263,6 +7263,24 @@ export interface SessionEnd {
   evidence?: Array<string>;
 }
 
+/** session.end@2 */
+export interface SessionEndV2 {
+  v: 2;
+  id: string;
+  kind: "session.end";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reason: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** session.gone@1 */
 export interface SessionGone {
   v: 1;
