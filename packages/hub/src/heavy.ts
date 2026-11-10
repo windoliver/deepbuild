@@ -36,8 +36,8 @@ export type Pressure = 'normal' | 'warn' | 'critical';
  */
 /** macOS's own reading, kept a second: every waiting `deep lease` asks four times a second, and each read is a process the core waits on. */
 let macRead: { at: number; level: Pressure } | undefined;
-export function memoryPressure(env: NodeJS.ProcessEnv = process.env): Pressure {
-  const file = env.DEEP_TEST_MEMORY_PRESSURE_FILE;
+function memoryPressure(): Pressure {
+  const file = process.env.DEEP_TEST_MEMORY_PRESSURE_FILE;
   if (file) {
     try {
       const word = readFileSync(file, 'utf8').trim();

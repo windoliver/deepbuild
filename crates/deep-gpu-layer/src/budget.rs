@@ -25,7 +25,7 @@ use deep_gpu::meter::{self, Ladder, Rung, MAX_PASSES};
 use deep_gpu::surface::Path;
 use serde_json::{json, Value};
 
-use crate::live::{admit, pair, read_payload, Plants};
+use crate::live::{admit, pair, read_payload, Admitted, Plants};
 use crate::liveview::{Content, Drawing, Kit, Timer, View};
 use crate::{refused, App, Planted};
 
@@ -48,18 +48,47 @@ struct Entry {
     cpu_encode_ms: f64,
 }
 
-struct StubMeter {
+pub(crate) struct StubMeter {
     timestamps: bool,
     frames: Vec<Entry>,
     unresolved: BTreeSet<u64>,
     reversed: BTreeSet<u64>,
     /// The frame after whose submission the device is lost, and the frames then in flight.
     lose: Option<(u64, u64)>,
+    /// #1937: while the drawn document holds `equals` at `path`, each frame costs `gpu_ms` more,
+    /// and the test build's cost model predicts `predicted_ms` (else `gpu_ms`) for it.
+    terms: Vec<Term>,
+}
+
+struct Term {
+    path: String,
+    equals: Value,
+    gpu_ms: f64,
+    predicted_ms: Option<f64>,
 }
 
 impl StubMeter {
     fn entry(&self, k: u64) -> Option<&Entry> {
         self.frames.iter().rev().find(|e| e.from <= k && k <= e.to)
+    }
+
+    /// The terms that hold on `doc`.
+    fn holding<'a>(&'a self, doc: &'a Value) -> impl Iterator<Item = &'a Term> {
+        self.terms
+            .iter()
+            .filter(move |t| doc.pointer(&format!("/{}", t.path)) == Some(&t.equals))
+    }
+
+    /// The test build's cost model, with terms: frame 0's GPU time plus each holding term's
+    /// prediction.
+    pub(crate) fn predicted(&self, doc: &Value) -> Option<f64> {
+        let base = self.entry(0)?.gpu_ms;
+        (!self.terms.is_empty()).then(|| {
+            base + self
+                .holding(doc)
+                .map(|t| t.predicted_ms.unwrap_or(t.gpu_ms))
+                .sum::<f64>()
+        })
     }
 }
 
@@ -69,21 +98,21 @@ struct StubTimer {
     seeds: Vec<i64>,
 }
 
-struct Args {
-    look: Look3,
-    writer: String,
+pub(crate) struct Args {
+    pub(crate) look: Look3,
+    pub(crate) writer: String,
     doc: PathBuf,
-    size: [u32; 2],
+    pub(crate) size: [u32; 2],
     fps: u64,
     warmup: u64,
     per_run: u64,
     frames: bool,
-    meter: Option<StubMeter>,
+    pub(crate) meter: Option<StubMeter>,
     timer: Option<StubTimer>,
-    environment: Option<Value>,
+    pub(crate) environment: Option<Value>,
 }
 
-fn parse(call: &Value) -> Result<Args, Value> {
+pub(crate) fn parse(call: &Value) -> Result<Args, Value> {
     let bad = |what: &str| refused("bad_input", what);
     let test_build = cfg!(feature = "test-meter");
     let (Some(writer), Some(doc), Some(size), Some(seconds)) = (
@@ -171,6 +200,22 @@ fn meter_of(s: &Value, longest: u64) -> Option<StubMeter> {
             .map(Value::as_u64)
             .collect()
     };
+    let terms = s["terms"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|t| {
+            Some(Term {
+                path: t["path"].as_str()?.to_string(),
+                equals: t.get("equals")?.clone(),
+                gpu_ms: t["gpu_ms"].as_f64()?,
+                predicted_ms: match t.get("predicted_ms") {
+                    None => None,
+                    Some(p) => Some(p.as_f64()?),
+                },
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
     let lose = match s.get("lose_device") {
         None => None,
         Some(l) => Some((l["frame"].as_u64()?, l["in_flight"].as_u64()?.max(1))),
@@ -181,6 +226,7 @@ fn meter_of(s: &Value, longest: u64) -> Option<StubMeter> {
         unresolved: set("unresolved")?,
         reversed: set("reversed")?,
         lose,
+        terms,
     };
     (0..longest)
         .all(|k| stub.entry(k).is_some())
@@ -201,7 +247,7 @@ fn timer_of(s: &Value) -> Option<StubTimer> {
 
 /// One frame the run drew: its rung, its GPU reading (none without pass timestamps), its CPU
 /// time and its CPU encode time.
-struct Row {
+pub(crate) struct Row {
     rung: Rung,
     gpu: Option<Result<f64, Invalid>>,
     cpu: f64,
@@ -216,22 +262,9 @@ pub fn call(app: &mut App, call: &Value) -> Value {
     let planted = app.planted;
     app.worker.call(move |state| {
         let mut labels = Labels::new();
-        let admitted = read_payload(&args.doc).and_then(|payload| {
-            admit(
-                payload,
-                &args.writer,
-                "01jb3790000000000000000000",
-                Some(args.size),
-                &args.look,
-                0,
-                &mut labels,
-                None,
-                None,
-            )
-        });
-        let a = match admitted {
+        let a = match admitted(&args, &mut labels) {
             Ok(a) => a,
-            Err(issues) => return json!({"code": "refused", "issues": issues}),
+            Err(e) => return e,
         };
         let environment = args.environment.clone().unwrap_or_else(this_machine);
         let reference = is_reference(&environment);
@@ -301,6 +334,25 @@ pub fn call(app: &mut App, call: &Value) -> Value {
     })
 }
 
+/// The call's document checked as the writer's revision, or the refusal naming its issues.
+pub(crate) fn admitted(args: &Args, labels: &mut Labels) -> Result<Admitted, Value> {
+    read_payload(&args.doc)
+        .and_then(|payload| {
+            admit(
+                payload,
+                &args.writer,
+                "01jb3790000000000000000000",
+                Some(args.size),
+                &args.look,
+                0,
+                labels,
+                None,
+                None,
+            )
+        })
+        .map_err(|issues| json!({"code": "refused", "issues": issues}))
+}
+
 /// The run's view: the document's frames drawn as a canonical render draws them.
 fn view_of(
     device: &Device,
@@ -334,7 +386,7 @@ fn view_of(
 
 /// The warm-up (run 0) and the five timed runs, frame by frame.
 #[allow(clippy::too_many_arguments)]
-fn measure(
+pub(crate) fn measure(
     gpu: &deep_gpu::device::Gpu,
     mut device: Arc<Device>,
     args: &Args,
@@ -354,6 +406,7 @@ fn measure(
     let mut intervals = [[0.0f64; 2]; MAX_PASSES];
     let mut cpu_marks = [[0.0f64; 2]; MAX_PASSES];
     let mut runs = Vec::with_capacity(RUNS + 1);
+    let extra: f64 = stub.map_or(0.0, |s| s.holding(doc).map(|t| t.gpu_ms).sum());
     for run in 0..=RUNS as u64 {
         let n = if run == 0 { args.warmup } else { args.per_run };
         let timed = run > 0;
@@ -401,7 +454,7 @@ fn measure(
             let row = match stub {
                 Some(s) => {
                     let e = s.entry(k).expect("every frame has an entry");
-                    let ms = *e.by_rung.get(rung.name()).unwrap_or(&e.gpu_ms);
+                    let ms = *e.by_rung.get(rung.name()).unwrap_or(&e.gpu_ms) + extra;
                     let gpu = s.timestamps.then(|| {
                         let unresolved = timed && s.unresolved.contains(&k);
                         match reading(lost, !unresolved, timed && s.reversed.contains(&k), ms) {
@@ -468,7 +521,12 @@ fn measure(
 }
 
 /// The five timed runs judged against the class's limits.
-fn result(limits: &Limits, runs: &[Vec<Row>], reference: bool, planted: Option<Planted>) -> Value {
+pub(crate) fn result(
+    limits: &Limits,
+    runs: &[Vec<Row>],
+    reference: bool,
+    planted: Option<Planted>,
+) -> Value {
     let drops = planted == Some(Planted::DropsUnresolvedFrames);
     let timestamps = runs.iter().flatten().all(|r| r.gpu.is_some());
     let gpu = limits.gpu_ms.map(|limit| {
@@ -553,7 +611,7 @@ fn limit_json(limit: f64, p95s: &[RunP95], runs: Vec<Value>, reference: bool) ->
 }
 
 /// Whether an environment is a reference Mac's in its conditions (scripts/benchmark.mjs).
-fn is_reference(e: &Value) -> bool {
+pub(crate) fn is_reference(e: &Value) -> bool {
     REFERENCES.iter().any(|(model, chip, memory)| {
         e["model"] == *model && e["chip"] == *chip && e["memoryBytes"].as_u64() == Some(*memory)
     }) && e["power"] == "ac"
@@ -563,7 +621,7 @@ fn is_reference(e: &Value) -> bool {
 }
 
 /// This machine's environment, read as scripts/benchmark.mjs's `fingerprint()` reads it.
-fn this_machine() -> Value {
+pub(crate) fn this_machine() -> Value {
     let read = |cmd: &str, args: &[&str]| -> Option<String> {
         let o = Command::new(cmd)
             .args(args)

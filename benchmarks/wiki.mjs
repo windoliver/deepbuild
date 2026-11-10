@@ -10,7 +10,7 @@
 // issue's 60 s stays in tests/acceptance/111/budgets.test.ts.
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { shipped } from '../packages/adapters/dist/index.js';
 import { openArchive } from '../packages/archive/dist/index.js';
 import { openAsks } from '../packages/asks/dist/index.js';

@@ -454,7 +454,7 @@ async function recordCommand(options) {
   const only = options.scenarios?.split(',');
   const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts, only);
   const redact = redactor();
-  for (const { scenario, dir, blocked, payloads } of results) {
+  for (const { scenario, blocked, payloads } of results) {
     if (!payloads.length) { say({ type: 'session', scenario, blocked: blocked ?? 'no payload was recorded' }); continue; }
     const target = join(out, agent, version, scenario);
     mkdirSync(target, { recursive: true });
