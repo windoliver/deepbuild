@@ -327,6 +327,13 @@ alone.push('tests/acceptance/408/crossing.test.ts', 'tests/acceptance/408/overla
 alone.push('tests/acceptance/408-redraft-ac5/');
 timed.push('tests/acceptance/408-redraft-ac5/machines.test.ts');
 byHand.push('tests/acceptance/408/machines.test.ts');
+// #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
+// that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the
+// original criterion-4 file, whose rendered fixture the base refuses (lit solids with no paint), runs by hand.
+alone.push('tests/acceptance/405/broken-fixture.test.ts', 'tests/acceptance/405/floating-exception.test.ts', 'tests/acceptance/405/lid-sweep.test.ts');
+alone.push('tests/acceptance/405-redraft-ac4/');
+timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
+byHand.push('tests/acceptance/405/budgets.test.ts');
 // #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
 alone.push('tests/acceptance/544/');
 

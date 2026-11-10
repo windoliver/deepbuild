@@ -2645,6 +2645,35 @@ impl Program {
         (!self.writes(s..s + 1)).then(|| Iv::point(self.base[s]))
     }
 
+    /// #405: whether channels alone write slot `s` (keys over time, with no driver, follow,
+    /// placement, limit or constraint), so at one time it holds one value whatever a control is.
+    pub fn time_only(&self, s: usize) -> bool {
+        !(self.follows.contains(&s)
+            || self.placements.iter().flatten().any(|w| (w.slot..w.slot + w.width).contains(&s))
+            || self.drivers.iter().any(|(slot, _)| *slot == s)
+            || self.limits.iter().any(|(first, _)| (*first..first + 3).contains(&s))
+            || (0..self.constraints.len()).any(|k| self.constraint_slots(k).1.contains(&s)))
+    }
+
+    /// #405: what slot `s` holds over the flicks `[a, b]`, given its values at both ends: a
+    /// driver's bound over that time, a lone channel's window, or the base where nothing writes
+    /// it; `None` where no form bounds it.
+    pub fn slot_window(&self, s: usize, a: i64, b: i64, at_a: f64, at_b: f64) -> Option<Iv> {
+        let lone: Vec<usize> = (0..self.channels.len())
+            .filter(|&c| (self.channels[c].0..self.channels[c].0 + self.channels[c].1).contains(&s))
+            .collect();
+        // A window reads a channel's first component, so only a one-wide channel has one.
+        if let ([c], true) = (lone.as_slice(), self.time_only(s)) {
+            if self.channels[*c].1 != 1 {
+                return None;
+            }
+            let ch = &self.motion.channels[*c];
+            return channel_bound(ch).map(|_| channel_window(ch, a, b, at_a, at_b));
+        }
+        let f = deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+        self.slot_bound_over(s, Iv::new(a as f64 / f, b as f64 / f))
+    }
+
     /// #493: the key times of the channels that write slot `s`, where a channel's monotone
     /// segments reach their extremes.
     pub fn slot_key_times(&self, s: usize) -> Vec<i64> {

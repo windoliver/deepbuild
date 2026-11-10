@@ -156,6 +156,8 @@ pub enum Planted {
     /// #408: film.layout takes its texts by the kinds text@1, vector@1, mark.text and counter,
     /// not from the core's glyph-box array.
     LayoutTextByKind,
+    /// #405: a control sweep audits its samples alone and bounds nothing between them.
+    SweepAuditsSamplesOnly,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
@@ -804,6 +806,8 @@ pub enum Call {
     Verdict(String),
     /// Every verdict made on a claim, `stale` as of now (#403).
     Verdicts(String),
+    /// #405: an answer to the approval asks a geometry audit opened on a claim's requirement.
+    Answer { via: Option<Via>, claim: String, requirement: String, yes: bool },
     /// A fixture's snapshot on a backend, judged against the golden store (#138).
     Golden {
         fixture: String,
@@ -1014,6 +1018,8 @@ pub struct Hub<'a> {
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
     /// is none.
     pub gpu3: Option<Option<crate::scene3d::Gpu3>>,
+    /// The GPU pixel hash's pipeline, built on the first canonical render it hashes (#405).
+    pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
     pub pending3d: Option<Result<Raster, ()>>,
     /// Each panel's interaction scope (#383).
@@ -1028,6 +1034,8 @@ pub struct Hub<'a> {
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
     /// The verdicts made on each claim, in the order made, each as recorded (#403).
     pub verdicts_made: BTreeMap<String, Vec<Value>>,
+    /// #405: the approval asks a geometry audit made, by ID, each with your answer once given.
+    pub audit_asks: BTreeMap<String, Option<bool>>,
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
@@ -1170,6 +1178,7 @@ impl<'a> Hub<'a> {
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
+            hash_pass: None,
             pending3d: None,
             scopes: BTreeMap::new(),
             serial: 0,
@@ -1183,6 +1192,7 @@ impl<'a> Hub<'a> {
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
+            audit_asks: BTreeMap::new(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
@@ -1803,6 +1813,7 @@ impl<'a> Hub<'a> {
             Call::Catalog => self.catalog_reply(),
             Call::Verdict(claim) => self.verdict_call(claim),
             Call::Verdicts(claim) => self.verdicts_call(claim),
+            Call::Answer { via, claim, requirement, yes } => self.answer_call(via.as_ref(), claim, requirement, *yes),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
             Call::Record {
                 via,
