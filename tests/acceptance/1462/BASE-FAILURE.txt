@@ -1,0 +1,95 @@
+#1462's blind suite at base d51be2c3 (Merge pull request #2108), run once on 2026-11-10 on a shared Mac at load average
+240-330, with Accessibility and Screen Recording granted and the screen unlocked, so the real-window tests reached the app:
+
+  caffeinate -di node node_modules/vitest/vitest.mjs run --root tests/acceptance/1462 --no-file-parallelism --testTimeout=600000
+
+  Test Files  7 failed (7)
+       Tests  41 failed | 1 passed (42)
+    Duration  1064.01s
+
+Two helper defects showed in that run and were fixed, then only the tests they touch were run again (output below is the
+second run's for those): ROW_ID also matched the ask row's `ask:<ULID>:applies` label, so AC19 read six asks before Later;
+and probe.swift's `status` read only AXExtrasMenuBar, so it now also reads the element at each status-layer window the app
+owns (README, Disputes 9). Re-run: `... run --root tests/acceptance/1462 list` (7 failed | 1 passed) and
+`... real -t "AC13|AC22"` (2 failed | 2 skipped).
+
+Each test, trimmed to its first failure line (the failures name a missing surface or the criterion's reading):
+
+real.test.ts
+  × AC2  #1462.61a5fe15  "Next ask (⌘K, \"Next ask\", Return) brought the window to null, not an open ask"   (no Next ask, no table)
+  × AC10 #1462.efa89138  Error: the window never showed the push's page ask/01M72G3Y…: it shows null
+  × AC13 #1462.bac1a512  "the menu bar has no Quit item: no item named \"Quit …\" in any menu",
+                         "before ⌘W the status item shows no count: null (if the app does make one, macOS may be keeping it out of …)",
+                         "⌘W left the window open", "⌘Q didn't quit the app in 15 s"
+  × AC22 #1462.bda7846d  "the app has no status item an assistive client finds: none in its AXExtrasMenuBar and none at a
+                          status-layer window it owns (…)"   (the merge base, naming the surface; see README Disputes 9)
+
+answers.test.ts
+  × AC4  #1462.3f4642da  Error: deep_drive has no menu bar to read: {"call": "menus"} answered {"code":"refused","message":"\"menus\" is no call; …"} (README, Pinned 2)
+  × AC4  plant           Error: crates/deep-app/Cargo.toml has no feature plant-approve-menu-item (README, Pinned 16), so this wrong program can't be built
+  × AC4  unarmed Return  "deep_drive's see reply has no `hub` list of what the app sent its hub (README, Pinned 3), so \"writes nothing\" can't be read"
+  × AC8  #1462.37c12e9d  "deep_drive's see reply has no `hub` list of what the app sent its hub (README, Pinned 3), so \"writes nothing\" can't be read"
+  × AC11 #1462.f51260a6  Error: the card draws 0 options with a card-option:<id> id (README, Pinned 8), not four: its controls are
+                         [[null,"SQLite (recommended)"],[null,"Plain files"],[null,"Postgres"],[null,"Redis"],["card-send","Send"]]
+  × AC11 Esc and words   "Esc left focus on \"question-card\", not a row of the list",
+                         "opening ask:01KB1462AK0000000000000001 again doesn't show the words \"the darker blue reads better\": the box reads \"\""
+  × AC18 #1462.d9f64dd4  "the step \"git push origin main\" stayed \"off\" after a press that isn't hardware and the OS confirming you"
+  × AC18 plant           Error: crates/deep-app/Cargo.toml has no feature plant-step-ignores-press (README, Pinned 16), …
+  × AC10 plant (Tab)     Error: crates/deep-app/Cargo.toml has no feature plant-tab-skips-control (README, Pinned 16), …
+  × AC10 plant (Allow)   Error: crates/deep-app/Cargo.toml has no feature plant-card-starts-on-allow (README, Pinned 16), …
+
+list.test.ts (the re-run)
+  ✓ AC5  #1462.dc5506c4  hovering each row shows no control the tree didn't hold at rest   (passes on purpose: the base has
+                         the property; README, Criterion to tests)
+  × AC5  plant           Error: crates/deep-app/Cargo.toml has no feature plant-hover-only-control (README, Pinned 16), …
+  × AC6  #1462.8cf69728  Error: the arrows never put the keyboard on ask:01KB1462AK0000000000000002's row: focus is "session:1462e55a-…-000000000001"
+  × AC7  #1462.80c987cd  Error: F6 never put the keyboard in the list: focus is null
+  × AC16 #1462.bc2ffc0b  "typing \"shop\" put the keyboard on \"session:…-000000000002\", not session:…-000000000001 (\"Cart totals\"),
+                          the first row whose title or project starts with it"
+  × AC16 plant           Error: crates/deep-app/Cargo.toml has no feature plant-list-hides-row (README, Pinned 16), …
+  × AC19 #1462.e1f0fec7  "Later on ask:01KB1462AK0000000000000001 (⌘K, \"Later\", Return) left the asks in the order […01, …02, …03]:
+                          there's no way to set Later that puts it at the end",
+                         "after Later its row reads [\"Which header colour for the cart page?\",\"needs_you\",\"01:00\"], not \"set for later\""
+  × AC19 plant           Error: crates/deep-app/Cargo.toml has no feature plant-no-later (README, Pinned 16), …
+
+commands.test.ts
+  × AC12 #1462.a91570d4  "⌘K, \"need\", Return opened \"session/1462e55a-…-000000000004\", not the first ask ask:01KB1462AK0000000000000001
+                          (\"Which header colour for the cart page?\")"
+  × AC12 plant (click)   Error: crates/deep-app/Cargo.toml has no feature plant-commands-click-only (README, Pinned 16), …
+  × AC12 refusal         "\"Refresh board\" ran from ⌘K and within 1 s the window shows no notice of the hub's reason
+                          \"No installed view runs ext.board.refresh.\": its notices are []"
+  × AC12 plant (logs)    Error: crates/deep-app/Cargo.toml has no feature plant-opener-only-logs (README, Pinned 16), …
+  × AC17 #1462.c6bf9687  "the replica refused to launch with the plug-in whose view fails its kit, as the app does, so the window shows
+                          nothing of the view \"Refused board\": {\"code\":\"refused\",\"message\":\"the panel didn't load: main.js:4 imports
+                          \\\"gpui-kit\\\", the toolkit under DeepBuild's module; …\"}"
+  × AC17 plant           Error: crates/deep-app/Cargo.toml has no feature plant-failed-view-silent (README, Pinned 16), …
+  × AC21 #1462.0251dfc8  Error: crates/deep-app/src/actions.json, the action table (README, Pinned 1), doesn't exist
+  × AC21 plant           Error: crates/deep-app/src/actions.json, the action table (README, Pinned 1), doesn't exist
+  × AC13 plant           Error: crates/deep-app/Cargo.toml has no feature plant-no-quit-item (README, Pinned 16), …
+
+actions.test.ts
+  × AC1  #1462.d090fc8d  Error: crates/deep-app/src/actions.json, the action table (README, Pinned 1), doesn't exist
+  × AC1  plant           Error: crates/deep-app/src/actions.json, the action table (README, Pinned 1), doesn't exist
+  × AC3  #1462.84d5c9de  Error: deep_drive has no menu bar to read: {"call": "menus"} answered {"code":"refused", …} (README, Pinned 2)
+  × AC14 #1462.a484845b  Error: deep_drive has no menu bar to read: {"call": "menus"} answered {"code":"refused", …} (README, Pinned 2)
+  × AC14 plant           Error: crates/deep-app/Cargo.toml has no feature plant-context-only-action (README, Pinned 16), …
+  × AC15 #1462.bb9f84a2  "⌘, didn't open ⌘K: the window has no command-list",
+                         "deep_drive's see reply has no `hub` list of what the app sent its hub (README, Pinned 3), …"
+
+guard.test.ts
+  × AC9  #1462.da9a3a2e  Error: scripts/keymap-guard.mjs, the key planes' guard (README, Pinned 17), doesn't exist
+  × AC9  plant (⌘⌥X)     Error: crates/deep-app/src/actions.json, the action table (README, Pinned 1), doesn't exist
+  × AC9  plant (⌃A)      Error: crates/deep-app/src/actions.json, the action table (README, Pinned 1), doesn't exist
+  × AC9  plant (moved)   Error: crates/deep-app/src/actions.json, the action table (README, Pinned 1), doesn't exist
+
+shown.test.ts
+  × AC20 #1462.7b2b38a6  AssertionError: each state is right before its picture is taken:
+                         "the menu bar has no View menu with items to picture: {\"found\":false}",
+                         "the menu bar has no Session menu with items to picture: {\"found\":false}",
+                         "⌘K shows no \"Next ask\" with its key beside it to picture"
+                         (a fail, not INCONCLUSIVE: the pictures' states are wrong before any taste call is read)
+
+Not exercised at the base, since each test stops at its first missing surface: every check after a menu bar, a `hub` list,
+the action table or the guard exists; the real app's keyboard path past Next ask (F6, focus by AXFocusedUIElement, Pause's
+record, the project's heading, ⌘[); AC19's ten minutes of the replica's clock; the TASTE.json comparison; the replica's
+record_copy beside the real status menu (AC22).
