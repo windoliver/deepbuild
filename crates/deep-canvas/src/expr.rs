@@ -2929,6 +2929,7 @@ mod tests {
         // Every other node counts too: the first term past the bound tips each of these chains.
         for (unit, k) in [
             ("1*", 512),
+            ("+1+", 512),
             ("-1+", 342),
             ("!1+", 342),
             ("2^1+", 256),
@@ -2952,8 +2953,13 @@ mod tests {
         for (text, want) in forms {
             assert_eq!(value(text).ok(), Some(want), "{text}");
         }
-        // An `e` with no digits after it is a name, never an exponent.
-        assert!(value("2e + 1").is_ok());
+        assert_eq!(value("1e-2 * 100 + 7 % 4").ok(), Some(4.0));
+        assert_eq!(
+            value("(1 ≤ 1) + (1 ≥ 1) + (1 < 2) + (1 && 0)").ok(),
+            Some(3.0)
+        );
+        // An `e` with no digits after it is a name, never an exponent, and a name may start `_`.
+        assert!(value("2e + 1").is_ok() && value("_x").is_ok());
         for (text, call) in [
             ("factorial(2.5) + 1", "factorial(2.5)"),
             ("é + factorial(2.5) + 1", "factorial(2.5)"),

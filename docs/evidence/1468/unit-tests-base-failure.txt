@@ -63,3 +63,16 @@ thread 'document::packs::tests::long_text_that_is_no_expression_stays_a_literal'
 assertion `left == right` failed: ((0, 0), (0, 0), (0, 0), (0, 0), (0, 0),
   left: Err("runs past the cap of 1024 tokens")
 test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 268 filtered out; finished in 0.01s
+
+## Review round 13 (on main 96b462a6, before the fix): a number's name followed by `(` was read as a call by the flat check
+cargo test --locked -p deep-canvas --lib document::packs::
+test document::packs::tests::long_text_that_is_no_expression_stays_a_literal ... FAILED
+test document::packs::tests::a_recipe_value_past_a_cap_is_refused_not_read_as_text ... ok
+test document::packs::tests::the_flat_check_reads_each_rule_of_the_grammar ... ok
+--
+thread 'document::packs::tests::long_text_that_is_no_expression_stays_a_literal' (44040) panicked at crates/deep-canvas/src/document/packs.rs:3445:13:
+assertion `left == right` failed: pi(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+  left: Err("runs past the cap of 1024 tokens")
+--
+test result: FAILED. 19 passed; 1 failed; 0 ignored; 0 measured; 254 filtered out; finished in 0.70s
+

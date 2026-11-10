@@ -2984,6 +2984,8 @@ fn could_be_expression(text: &str) -> bool {
                 stack.push(open(')', false));
                 true
             }
+            // A number's name (`pi`, `inf`) is read as the number, as atom reads it.
+            (true, _) if t.parse::<f64>().is_ok() || t == "pi" || t == "tau" => false,
             (true, _) if well_named_member(&t) => {
                 if matches!(tokens.peek(), Some(Ok(p)) if p == "(") {
                     tokens.next();
@@ -2998,12 +3000,7 @@ fn could_be_expression(text: &str) -> bool {
                     false
                 }
             }
-            (true, _) => {
-                if t.parse::<f64>().is_err() {
-                    return false;
-                }
-                false
-            }
+            (true, _) => return false,
             (false, ")" | "]") => {
                 if top.close != t.chars().next() || top.asks > 0 {
                     return false;
@@ -3362,6 +3359,7 @@ mod tests {
     fn the_recipe_lexer_reads_each_token_form() {
         let value = |t: &str| Expr::parse(t).and_then(|e| e.eval(&scope()));
         assert_eq!(value("(i == 2) + (1 != 2) + (2 >= 1)"), Ok(3.0));
+        assert!(Expr::parse("f() + 1").is_ok());
         assert_eq!(value(".5 + 1.5\t+\n1"), Ok(3.0));
         // Names are ASCII letters, digits and `_`, and numbers ASCII digits and dots.
         let (names, _) = Template::of(&json!("_a + a_1 + b2")).reads();
@@ -3396,6 +3394,7 @@ mod tests {
             "max(1, i ? 2 : 3)",
             "a.b[1] - !c",
             "(a == b) * (a != b) / (a >= b)",
+            "pi + tau * inf - nan",
         ];
         for text in could {
             assert!(could_be_expression(text), "{text}");
@@ -3433,6 +3432,11 @@ mod tests {
             format!("({}(0,0))", "(0, 0), ".repeat(400)),
             format!("{}1", "1 < ".repeat(600)),
             format!("{}1", "1 ? ".repeat(600)),
+            // A number's name is read as the number, so no call follows it.
+            format!("pi({}1)", "1, ".repeat(600)),
+            format!("tau({}1)", "1, ".repeat(600)),
+            format!("inf({}1)", "1, ".repeat(600)),
+            format!("nan({}1)", "1, ".repeat(600)),
         ];
         for text in texts {
             let got = Template::of(&json!(text)).eval(&scope());
