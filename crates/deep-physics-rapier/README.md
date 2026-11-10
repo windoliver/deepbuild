@@ -25,5 +25,5 @@ physics.world@1's backend (issue #2009): Rapier 0.36.1, pinned with enhanced-det
 ## Deviations
 
 - `src/lib.rs` keeps Rapier's own contact prediction distance and sleep's angular threshold, which no world field sets.
-- `build.rs` runs `cargo tree --frozen` for the build's own resolution, so a build without the registry's cached index can't read its pins and fails.
+- `build.rs` runs `cargo tree --locked` for the build's own resolution: the lockfile is never changed, but cargo may fetch a git source the outer build never needed (issue #2012: with `--frozen`, a build in fresh linux containers failed on gpui-shell's quickjs-jit), so an offline build without those sources can't read its pins and fails.
 - `src/main.rs` keeps bakes in a store folder by key as JSON, not yet in the evidence store, which no criterion of #2010 reads.
