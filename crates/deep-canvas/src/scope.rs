@@ -597,6 +597,11 @@ impl Scope {
     /// The items the view hides: those the filter names by kind or writer, and outside an
     /// isolated item, its parents and its children, by ID. The document keeps them all.
     pub fn hidden(&self, doc: &Value) -> Vec<String> {
+        // With no filter and no isolation, the usual state, nothing is hidden: no walk.
+        let v = &self.view;
+        if v.kinds.is_empty() && v.writers.is_empty() && v.isolate.is_none() {
+            return Vec::new();
+        }
         let Some(items) = member(doc, "items").and_then(Value::as_object) else {
             return Vec::new();
         };

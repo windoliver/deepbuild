@@ -323,9 +323,30 @@ impl Call {
                 } else {
                     (&self.reads, &self.by.1, "reads")
                 };
+                if paths.is_empty() {
+                    return None;
+                }
+                // Each glob and each path is spelled out once, its links resolved, not once per pair
+                // of them; the exceptions only once some glob matches.
+                let globs: Vec<Vec<String>> =
+                    globs.iter().map(|g| self.glob_spellings(g)).collect();
+                let mut excepted: Option<Vec<Vec<String>>> = None;
+                let any = |globs: &[Vec<String>], forms: &[String]| {
+                    globs.iter().any(|g| {
+                        forms
+                            .iter()
+                            .any(|text| g.iter().any(|p| glob_path(p.as_bytes(), text.as_bytes())))
+                    })
+                };
                 let k = paths.iter().position(|w| {
-                    globs.iter().any(|g| self.path_matches(g, w))
-                        && !but.iter().any(|g| self.path_matches(&g[1..], w))
+                    let forms = self.path_spellings(w);
+                    any(&globs, &forms)
+                        && !any(
+                            excepted.get_or_insert_with(|| {
+                                but.iter().map(|g| self.glob_spellings(&g[1..])).collect()
+                            }),
+                            &forms,
+                        )
                 })?;
                 // A redirection isn't one of its run's words, so the call's own line names it.
                 let ran = match (by[k], &self.command) {
@@ -622,6 +643,10 @@ impl Call {
 
     fn effect(&self, class: &str) -> Option<Hit> {
         if class == "top-level-folder" {
+            // A call that writes nothing makes no folder: its checkout is never looked up.
+            if self.writes.is_empty() {
+                return None;
+            }
             let root = checkout(self.cwd.as_deref()?)?.root;
             let new = self.writes.iter().zip(&self.by.0).find_map(|(w, by)| {
                 let rest = real(w).strip_prefix(&root).ok()?.to_path_buf();
@@ -682,7 +707,9 @@ impl Call {
         })
     }
 
-    fn path_matches(&self, pattern: &str, written: &Path) -> bool {
+    /// A path glob as it is matched whole: as written and, when anchored, with its literal part's
+    /// links resolved; one that isn't anchored matches under any folder.
+    fn glob_spellings(&self, pattern: &str) -> Vec<String> {
         let pattern = match pattern.strip_prefix("~/") {
             Some(rest) => format!("{}/{rest}", self.home.display()),
             None if pattern == "~" => self.home.display().to_string(),
@@ -706,26 +733,39 @@ impl Call {
         if cfg!(feature = "plant-paths-as-written") {
             patterns.truncate(1);
         }
+        patterns
+            .iter()
+            .map(|p| {
+                let p = same_name(p);
+                if anchored {
+                    p
+                } else {
+                    format!("*/{p}")
+                }
+            })
+            .collect()
+    }
+
+    /// A path as a glob is matched against it: as written and as its links resolve.
+    fn path_spellings(&self, written: &Path) -> Vec<String> {
+        // The planted twin matches the path only as written.
         let forms = if cfg!(feature = "plant-paths-as-written") {
             vec![lexical(written)]
         } else {
             vec![lexical(written), real(written)]
         };
-        let patterns: Vec<String> = patterns.iter().map(|p| same_name(p)).collect();
-        forms.iter().any(|form| {
-            let text = same_name(&form.to_string_lossy());
-            patterns.iter().any(|p| {
-                if anchored {
-                    glob_path(p.as_bytes(), text.as_bytes())
-                } else {
-                    glob_path(format!("*/{p}").as_bytes(), text.as_bytes())
-                }
-            })
-        })
+        forms
+            .iter()
+            .map(|form| same_name(&form.to_string_lossy()))
+            .collect()
     }
 
     /// The other checkout a git run is aimed at, and the command for you to run there.
     fn other_checkout(&self) -> Option<String> {
+        // A call that runs no git is aimed at no checkout: its own is never looked up.
+        if !self.runs.iter().any(|r| r.is("git")) {
+            return None;
+        }
         let own = checkout(self.cwd.as_deref()?)?;
         for run in self.runs.iter().filter(|r| r.is("git")) {
             let Some(theirs) = git_target(run) else {
@@ -1723,10 +1763,11 @@ fn checkout(dir: &Path) -> Option<Checkout> {
         let dot = at.join(".git");
         if let Ok(meta) = fs::metadata(&dot) {
             return Some(if meta.is_dir() {
+                let git = real(&dot);
                 Checkout {
                     root: at.clone(),
-                    gitdir: real(&dot),
-                    common: real(&dot),
+                    gitdir: git.clone(),
+                    common: git,
                 }
             } else {
                 let gitdir = gitdir_of(&dot, &at)?;

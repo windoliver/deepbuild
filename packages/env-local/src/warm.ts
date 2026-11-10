@@ -87,7 +87,8 @@ async function walk(folder: string, skip: (path: string, dir: boolean) => boolea
     }
   };
   await into('');
-  return out.sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  // Each path's bytes are made once: encoding both sides inside the comparison made two buffers per comparison.
+  return out.map((path) => ({ path, bytes: Buffer.from(path) })).sort((a, b) => Buffer.compare(a.bytes, b.bytes)).map((entry) => entry.path);
 }
 const filesDigest = async (folder: string, files: string[]): Promise<string> => {
   const h = createHash('sha256');

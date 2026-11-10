@@ -194,9 +194,16 @@ export function goTest(stdout: string, checkout: string): Reported {
   const failed = new Set(leaves.filter((t) => t.Action === 'fail').map((t) => t.Package));
   const ran: Ran[] = [];
   const failures: Failure[] = [];
+  // A package's folder is the same for each of its tests: go.mod is read once per package, not once per test.
+  const dirs = new Map<string, string | null>();
+  const dirOf = (pkg: string): string | null => {
+    let dir = dirs.get(pkg);
+    if (dir === undefined) dirs.set(pkg, (dir = packageDir(checkout, pkg)));
+    return dir;
+  };
   for (const e of leaves) {
     const test = e.Test as string;
-    const dir = packageDir(checkout, e.Package as string);
+    const dir = dirOf(e.Package as string);
     const text = output.get(key(e)) ?? '';
     const logged = /^\s+([\w.-]+\.go):(\d+): (.*)$/m.exec(text);
     const file = logged && dir ? under(checkout, resolve(dir, logged[1]!)) : null;
