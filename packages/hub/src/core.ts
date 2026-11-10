@@ -6165,7 +6165,7 @@ export class Core {
   private async handbacks(): Promise<Obj> {
     const rows = (await this.record.raw(`SELECT session_id, json_extract(data, '$.reading') AS reading FROM events WHERE kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Hand-back %' ORDER BY log_pos`)) as { session_id: string; reading: string }[];
     const detail = rows.map((r) => ({ session: r.session_id, sent_back: r.reading.startsWith('Hand-back sent back'), reading: r.reading }));
-    return { id: 'handbacks_sent_back', label: 'Hand-backs sent back with the tool to use', value: detail.filter((d) => d.sent_back).length, of: detail.length, detail };
+    return { id: 'handbacks_sent_back', label: 'Hand-backs sent back with the tool to use', value: detail.filter((d) => d.sent_back).length, unit: 'count', source: 'record', age_ms: 0, basis: 'observed', of: detail.length, detail };
   }
   /** The question card's document (#84): the asks core's card, with the ask's text and where a task sends you. A URL in the text stays plain text. */
   private async askCard(params: Obj): Promise<Obj> {
