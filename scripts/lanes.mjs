@@ -279,12 +279,17 @@ byHand.push('tests/acceptance/1458/redraft-ac13/shown.test.ts');
 // #501's files each build deep-show (seal.test.ts three times), export films through the GPU and the encode tool, and run a 600 s soak on the audio output.
 alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
+// #1818's files each build deep-show and mix seconds of audio through the media processors.
+alone.push('tests/acceptance/1818/');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
 // #1924's files each start a hub, an agent stand-in and test hosts on loopback, and read every request a host gets
 // around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1924/');
+// #1923's files each start a hub and a provider on 127.0.0.1, kill and restart the hub mid-call, and count the
+// provider's submissions around each deep_job call: one file at a time.
+alone.push('tests/acceptance/1923/');
 // #1901's files build deep-show; build-digest.test.ts builds it three times, one with a canvas module's source changed
 // for that build and restored after it, so nothing else may build in the checkout while it runs.
 alone.push('tests/acceptance/1901/');
