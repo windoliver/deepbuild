@@ -30,3 +30,7 @@ UserPromptSubmit exit=0 ms=14
 # base 6042ef5a: 13/30 passes lost nothing, 202 of 6000 calls lost, silently
 # this fix:      20/30 passes lost nothing, 131 of 6000 lost, each one logged "could not spool ... within the hook's 50 ms"
 #                (a write the swapping disk stalled past the hook's budget); none lost silently
+
+## D. A real Claude Code session with tool calls on the Mac (2.1.318): not run
+# It stopped at Claude Code's folder-trust prompt for the new work folder before any prompt was typed. The runner
+# accepts no approval prompt, so no hook ran: there is no spool, ledger or screenshot. It needs the folder trusted by hand.
