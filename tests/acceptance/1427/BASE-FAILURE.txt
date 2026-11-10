@@ -24,7 +24,7 @@ one finding with the README's time and value, and every twin gives none.
 Run 1: the whole suite
 ======================================================================================================
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-1427-3bce88/agent-a2f11bf688600eff4/tests/acceptance/1427
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1427-3bce88/agent-a2f11bf688600eff4/tests/acceptance/1427
 
  ❯ scope-recording.test.ts (8 tests | 8 failed) 147462ms
    ❯ #1427 scope: a journey records every element's bounds, opacity and text at each 1/120 s step, keyed by stable identity (8)
@@ -146,7 +146,7 @@ Distinct failure messages, and how many tests gave each (run 1):
 Run 2: ac5-repeat and the budget file (opted in)
 ======================================================================================================
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-1427-3bce88/agent-a2f11bf688600eff4/tests/acceptance/1427
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1427-3bce88/agent-a2f11bf688600eff4/tests/acceptance/1427
 
  ❯ ac5-repeat.test.ts (3 tests | 3 failed) 43230ms
    ❯ #1427 AC5 the same journey recorded twice gives byte-equal findings (3)

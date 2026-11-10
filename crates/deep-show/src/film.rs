@@ -113,7 +113,7 @@ pub(crate) fn finish(rgba: &mut [u8], map: ToneMap) {
         return;
     }
     let mut seen: std::collections::HashMap<[u8; 3], [u8; 3]> = std::collections::HashMap::new();
-    for px in rgba.chunks_exact_mut(4) {
+    for px in rgba.as_chunks_mut::<4>().0 {
         let key = [px[0], px[1], px[2]];
         let out = *seen.entry(key).or_insert_with(|| {
             let y = tone(map, key.map(|v| srgb_decode(f64::from(v) / 255.0)));
@@ -195,7 +195,12 @@ pub(crate) fn blend(a: &[u8], b: &[u8], mix: &Mix, size: [u16; 2], ink: [u8; 3])
 
 /// `over` composited over `under`: the status pass drawn once on the blended sides.
 pub(crate) fn over(under: &mut [u8], over: &[u8]) {
-    for (u, o) in under.chunks_exact_mut(4).zip(over.chunks_exact(4)) {
+    for (u, o) in under
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(over.as_chunks::<4>().0)
+    {
         let a = u32::from(o[3]);
         if a == 0 {
             continue;

@@ -62,3 +62,23 @@ fn time_past_the_span_reads_the_span() {
     let (pos, _) = p.item_values(&s, "a").unwrap();
     assert_eq!(pos[0], 10.0);
 }
+
+#[test]
+fn limits_written_max_below_min_are_refused() {
+    let c = json!({"c": {"target": "items/a/at/pos/0", "keys": {"k0": {"t": "0s", "value": 0, "interp": "hold"}},
+        "modifiers": [{"limits": {"min": 1, "max": 0}}]}});
+    let r = Program::compile(&doc(json!({"channels": c}))).expect_err("min 1 is above max 0");
+    assert_eq!(r.code, "out_of_range");
+    assert_eq!(r.path, "channels/c/modifiers/0/limits/min");
+}
+
+#[test]
+fn a_control_range_written_high_to_low_is_refused() {
+    let d = doc(json!({
+        "controls": {"k": {"kind": "slider", "class": "document", "label": "K", "range": [10, 0], "default": 0}},
+        "drivers": {"d": {"target": "items/a/at/pos/0", "expr": "k", "vars": {"k": "controls/k/value"}}},
+    }));
+    let r = Program::compile(&d).expect_err("range [10, 0] has its low end above its high end");
+    assert_eq!(r.code, "out_of_range");
+    assert_eq!(r.path, "controls/k/range");
+}

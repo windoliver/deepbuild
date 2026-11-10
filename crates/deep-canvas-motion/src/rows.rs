@@ -193,8 +193,10 @@ mod tests {
             let data = item["params"]["columns"][name]["data"].as_str().unwrap();
             let bytes = deep_canvas::base64::decode(data).unwrap();
             bytes
-                .chunks_exact(8)
-                .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .map(|b| f64::from_le_bytes(*b))
                 .collect()
         };
         assert_eq!(

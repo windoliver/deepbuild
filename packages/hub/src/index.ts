@@ -32,7 +32,8 @@ export const setupCommand = async (cli: string, args: Args = []): Promise<number
 export const waiterCommand = async (): Promise<number> => (await import('./setup.js')).waiterCommand();
 export const gateCommand = async (args: Args): Promise<number> => (await import('./gate-command.js')).gateCommand(args);
 export const numbersCommand = async (args: Args): Promise<number> => (await import('./status.js')).numbersCommand(args);
-export const statusCommand = async (args: Args): Promise<number> => (await import('./status.js')).statusCommand(args);
+export const statusCommand = async (args: Args): Promise<number> => (await import('./list.js')).listCommand(args, true);
+export const listCommand = async (args: Args): Promise<number> => (await import('./list.js')).listCommand(args, false);
 export const joinCommand = async (args: Args): Promise<number> => (await import('./remote.js')).joinCommand(args);
 export const showCommand = async (args: Args): Promise<number> => (await import('./show.js')).showCommand(args);
 export const doctorCommand = async (args: Args, also: () => Promise<Item[]>): Promise<number> => (await import('./doctor.js')).doctorCommand(args, also);

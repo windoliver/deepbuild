@@ -20,6 +20,7 @@ use sha2::{Digest, Sha256};
 use crate::evidence;
 use crate::hub::{Hub, Planted};
 use crate::refused;
+use crate::spawn;
 
 /// An open span's end: far past any play, with room for sums of flicks.
 const OPEN: i64 = i64::MAX / 8;
@@ -33,6 +34,13 @@ pub enum MixCall {
         panel: String,
         from: i64,
         to: i64,
+    },
+    /// #500: one analysis bake of one asset.
+    Bake(Value),
+    /// #501: a media document played live on the default output for `seconds` of real time.
+    Soak {
+        media: Value,
+        seconds: u64,
     },
 }
 
@@ -52,10 +60,15 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
                 })
                 .collect::<Option<_>>()?,
         },
+        "media_bake" => MixCall::Bake(c.get("bake").filter(|b| b.is_object())?.clone()),
         "handed" => MixCall::Handed {
             panel: c.get("panel")?.as_str()?.to_string(),
             from: t("from")?,
             to: t("to")?,
+        },
+        "soak" => MixCall::Soak {
+            media: c.get("media").filter(|d| d.is_object())?.clone(),
+            seconds: c.get("seconds")?.as_u64().filter(|s| *s > 0)?,
         },
         _ => return None,
     })
@@ -148,11 +161,26 @@ fn vec3(v: Option<&Value>) -> Option<[f64; 3]> {
 }
 
 impl Hub<'_> {
-    /// An asset from the evidence store, decoded in the decode worker: interleaved f32 frames.
-    fn source(&mut self, sha: &str) -> Result<Arc<Source>, Value> {
+    /// An asset from the evidence store, decoded in the decode worker, for the mix: interleaved
+    /// f32 frames of its first two channels' worth.
+    pub(crate) fn source(&mut self, sha: &str) -> Result<Arc<Source>, Value> {
         if let Some(s) = self.gate.sources.get(sha) {
             return Ok(s.clone());
         }
+        let (rate, channels, samples) = self.pcm(sha)?;
+        let s = Arc::new(Source {
+            rate,
+            channels: channels.clamp(1, 2),
+            samples,
+            loop_region: None,
+        });
+        self.gate.sources.insert(sha.to_string(), s.clone());
+        Ok(s)
+    }
+
+    /// An asset from the evidence store, decoded in the decode worker: its rate, its channel
+    /// count and its interleaved f32 frames, every channel kept.
+    pub(crate) fn pcm(&mut self, sha: &str) -> Result<(i64, usize, Vec<f32>), Value> {
         if sha.len() < 3 || evidence::read(&self.scenario.evidence, sha).is_none() {
             return Err(json!({"code": "unknown_asset", "asset": sha}));
         }
@@ -168,22 +196,24 @@ impl Hub<'_> {
             let bytes = std::fs::read(out.join(s["file"].as_str().unwrap_or_default()))
                 .map_err(|_| refused("unreadable"))?;
             let samples = bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
-            Ok(Arc::new(Source {
-                rate: s["sample_rate"].as_i64().unwrap_or(48_000).max(1),
-                channels: s["channels"].as_u64().unwrap_or(1).clamp(1, 2) as usize,
+            Ok((
+                s["sample_rate"].as_i64().unwrap_or(48_000).max(1),
+                s["channels"].as_u64().unwrap_or(1).max(1) as usize,
                 samples,
-                loop_region: None,
-            }))
+            ))
         })();
         let _ = std::fs::remove_dir_all(&out);
-        if let Ok(s) = &result {
-            self.gate.sources.insert(sha.to_string(), s.clone());
-        }
         result
     }
 
     /// A media document's mix: its strips, buses, processors and emitters.
     pub(crate) fn mix_of(&mut self, d: &Value) -> Result<Mix, Value> {
+        self.mix_with(d).map(|(m, _)| m)
+    }
+
+    /// A media document's mix, and what #500 adds to the reply: its spawns' `voices` and its
+    /// sound `cues`.
+    fn mix_with(&mut self, d: &Value) -> Result<(Mix, Map<String, Value>), Value> {
         let bad = |what: String| json!({"code": "bad_media", "what": what});
         let rate = d.pointer("/transport/sample_rate").and_then(Value::as_i64).unwrap_or(48_000);
         if rate <= 0 || FLICKS % rate != 0 {
@@ -303,7 +333,7 @@ impl Hub<'_> {
                 None => index("master").unwrap_or(0),
                 Some(b) => index(b).ok_or_else(|| bad(format!("strip {sid}: no bus {b}")))?,
             };
-            strips.push(Strip {
+            let mut strip = Strip {
                 id: sid.clone(),
                 source,
                 start,
@@ -319,16 +349,30 @@ impl Hub<'_> {
                 bus,
                 disabled,
                 emitter: emits.remove(sid),
-            });
+            };
+            if let Some(at) = spawn::aligned_start(d, sid, s, &strip).map_err(bad)? {
+                strip.start = at;
+            }
+            strips.push(strip);
         }
-        Mix::new(rate, strips, buses).map_err(|b| json!({"code": "bus_cycle", "bus": b}))
+        let mut extra = Map::new();
+        if d.get("cues").is_some() {
+            extra.insert("cues".into(), Value::Object(spawn::cues(d, &mut strips)));
+        }
+        if d.get("spawns").is_some() {
+            let (voices, report) = self.spawned(d, index("master").unwrap_or(0))?;
+            strips.extend(voices);
+            extra.insert("voices".into(), Value::Array(report));
+        }
+        let mix = Mix::new(rate, strips, buses).map_err(|b| json!({"code": "bus_cycle", "bus": b}))?;
+        Ok((mix, extra))
     }
 
     pub fn mix_call(&mut self, call: &MixCall) -> Value {
         match call {
             MixCall::Mix { doc, segments } => {
-                let mix = match self.mix_of(doc) {
-                    Ok(m) => Arc::new(m),
+                let (mix, extra) = match self.mix_with(doc) {
+                    Ok((m, extra)) => (Arc::new(m), extra),
                     Err(e) => return e,
                 };
                 let rate = mix.rate;
@@ -348,7 +392,13 @@ impl Hub<'_> {
                         Value::Null
                     };
                     player.take_taps();
-                    let (sha, pcm) = read(&mut player, (last - first).max(0), *write);
+                    // #501: the planted mixer whose Linux build is one 16-bit step off.
+                    let step = if cfg!(target_os = "linux") && self.scenario.planted == Some(Planted::MixerLinuxOneStep) {
+                        1.0 / 32_768.0
+                    } else {
+                        0.0
+                    };
+                    let (sha, pcm) = read(&mut player, (last - first).max(0), *write, step);
                     let mut seg = json!({"from": from, "to": to, "first": first, "frames": (last - first).max(0),
                         "channels": 2, "sha256": sha, "seek": seek,
                         "taps": player.take_taps().into_iter().map(|(k, v)| (k, json!(v))).collect::<Map<String, Value>>()});
@@ -370,8 +420,11 @@ impl Hub<'_> {
                                      "checkpoints": r.checkpoints.iter().map(|(t, b)| json!({"t": t, "bytes": b})).collect::<Vec<_>>()}}))
                     })
                     .collect();
-                json!({"mix": {"sample_rate": rate, "channels": 2, "segments": out, "processors": processors}})
+                let mut reply = json!({"sample_rate": rate, "channels": 2, "segments": out, "processors": processors});
+                reply.as_object_mut().into_iter().for_each(|r| r.extend(extra.clone()));
+                json!({"mix": reply})
             }
+            MixCall::Bake(b) => self.bake_call(b),
             MixCall::Handed { panel, from, to } => {
                 let now = self.now;
                 let Some(live) = self.gate.live_of(panel, now) else {
@@ -390,13 +443,17 @@ impl Hub<'_> {
                 json!({"handed": {"sample_rate": rate, "channels": 2, "first": first, "frames": last - first,
                     "sha256": sha, "wav": w}})
             }
+            MixCall::Soak { media, seconds } => match self.mix_of(media) {
+                Ok(m) => crate::device::soak(Player::new(Arc::new(m), planted_of(self.scenario.planted, true)), *seconds),
+                Err(e) => e,
+            },
         }
     }
 }
 
-/// Reads `frames` from `player`: the SHA-256 of the interleaved f32le samples, and the samples
-/// themselves when `keep`.
-fn read(player: &mut Player, frames: i64, keep: bool) -> (String, Option<Vec<f32>>) {
+/// Reads `frames` from `player`, each sample `step` higher: the SHA-256 of the interleaved f32le
+/// samples, and the samples themselves when `keep`.
+fn read(player: &mut Player, frames: i64, keep: bool, step: f32) -> (String, Option<Vec<f32>>) {
     let mut h = Sha256::new();
     let mut kept = keep.then(Vec::new);
     let mut buf = vec![0f32; 2 * 4096];
@@ -404,6 +461,9 @@ fn read(player: &mut Player, frames: i64, keep: bool) -> (String, Option<Vec<f32
     while left > 0 {
         let n = left.min(4096);
         player.read(&mut buf[..2 * n]);
+        for x in &mut buf[..2 * n] {
+            *x += step;
+        }
         for x in &buf[..2 * n] {
             h.update(x.to_le_bytes());
         }
@@ -453,6 +513,15 @@ fn processor(id: &str, p: &Value) -> Result<Proc, String> {
     })
 }
 
+/// The listener (the camera) and its right, forward × up.
+pub(crate) fn listener(d: &Value) -> ([f64; 3], [f64; 3]) {
+    let cam = vec3(d.pointer("/scene/camera/position")).unwrap_or([0.0; 3]);
+    let fwd = vec3(d.pointer("/scene/camera/forward")).unwrap_or([0.0, 0.0, -1.0]);
+    let r = [-fwd[2], 0.0, fwd[0]];
+    let rl = deep_canvas::ops::sqrt(r[0] * r[0] + r[2] * r[2]);
+    (cam, if rl > 0.0 { [r[0] / rl, 0.0, r[2] / rl] } else { [1.0, 0.0, 0.0] })
+}
+
 /// An emitter: its item's place in the document's scene at t, heard by the camera.
 fn emitter(d: &Value, id: &str, e: &Value) -> Result<Emit, String> {
     let item = e.get("item").and_then(Value::as_str).ok_or(format!("emitter {id}: item"))?;
@@ -468,12 +537,7 @@ fn emitter(d: &Value, id: &str, e: &Value) -> Result<Emit, String> {
             .collect::<Option<_>>()
             .ok_or(format!("emitter {id}: a yaw key"))?,
     };
-    let cam = vec3(d.pointer("/scene/camera/position")).unwrap_or([0.0; 3]);
-    let fwd = vec3(d.pointer("/scene/camera/forward")).unwrap_or([0.0, 0.0, -1.0]);
-    // The listener's right: forward × up.
-    let r = [-fwd[2], 0.0, fwd[0]];
-    let rl = deep_canvas::ops::sqrt(r[0] * r[0] + r[2] * r[2]);
-    let right = if rl > 0.0 { [r[0] / rl, 0.0, r[2] / rl] } else { [1.0, 0.0, 0.0] };
+    let (cam, right) = listener(d);
     let dist = e.get("distance");
     let f = |o: Option<&Value>, k: &str, dflt: f64| o.and_then(|o| o.get(k)).and_then(Value::as_f64).unwrap_or(dflt);
     let model = match dist.and_then(|o| o.get("model")).and_then(Value::as_str) {

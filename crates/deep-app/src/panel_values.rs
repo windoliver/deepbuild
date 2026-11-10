@@ -7,6 +7,7 @@
 use std::path::Path;
 use std::time::Duration;
 
+use crate::chrome::sizes;
 use deep_canvas_marks::scene::{bound_text, Record, Shown};
 use gpui_kit::*;
 use serde_json::{json, Map, Value};
@@ -115,8 +116,8 @@ impl Render for BoundPanel {
             };
             Some(
                 div()
-                    .px_2()
-                    .py_1()
+                    .px(sizes().space(1))
+                    .py(sizes().space(0))
                     .child(text::label(id, label, color, None)),
             )
         });

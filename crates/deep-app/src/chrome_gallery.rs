@@ -3,6 +3,7 @@
 //! asks for every operator it shows, the expressive ones too; and since a tile shows the still pose, nothing in it
 //! moves or asks for a frame.
 
+use crate::chrome::{sizes, Typed as _};
 use gpui_kit::*;
 use serde_json::Map;
 
@@ -17,6 +18,11 @@ const GAP: f32 = 12.;
 const STAGE: f32 = 120.;
 /// How far the sample card sits inside a stage: the inset the edge and halo operators draw around.
 const INSET: f32 = 18.;
+
+/// A tile's width, its stage's height and the stage's inset, as [`Gallery::layout`] places them.
+fn tile() -> (Pixels, Pixels, Pixels) {
+    (px(TILE[0]), px(STAGE), px(INSET)) // size-literal-exception: the gallery's tiles, which its layout places (#1436); review 2027-04-30
+}
 
 /// A tile: its operator, the operator's class and cost, and its rect in window points.
 #[derive(Clone, Debug)]
@@ -87,7 +93,7 @@ fn effect(operator: &'static str, place: Place) -> Effect {
         operator: operator.into(),
         params: Vec::new(),
         backdrop: Some(BackdropScale::Full),
-        radii: Corners::all(px(12.)),
+        radii: Corners::all(sizes().radius),
         place,
         fx: Some(Fx {
             params: Map::new(),
@@ -109,18 +115,18 @@ fn ground(c: &crate::chrome::Chrome) -> Div {
     div()
         .absolute()
         .size_full()
-        .rounded(px(12.))
+        .rounded(sizes().radius)
         .bg(c.raised)
-        .border_1()
+        .border(sizes().hairline)
         .border_color(c.divider)
         .child(
             div()
                 .absolute()
-                .left(px(10.))
-                .bottom(px(14.))
-                .w(px(56.))
-                .h(px(4.))
-                .rounded(px(2.))
+                .left(sizes().space(2))
+                .bottom(sizes().space(3))
+                .w(relative(0.3))
+                .h(sizes().space(0))
+                .rounded(sizes().radius)
                 .bg(c.accent),
         )
 }
@@ -132,31 +138,27 @@ fn ink(c: &crate::chrome::Chrome) -> Div {
     div()
         .absolute()
         .size_full()
-        .p(px(10.))
+        .p(sizes().space(2))
         .flex()
         .flex_col()
-        .gap(px(4.))
+        .gap(sizes().space(0))
         .child(
             div()
-                .text_size(px(13.))
+                .typed(sizes().body)
                 .text_color(c.ink_primary)
                 .child("Session 1436"),
         )
         .child(
             div()
-                .text_size(px(11.))
+                .typed(sizes().small)
                 .text_color(c.ink_secondary)
                 .child("Three checks ran"),
         )
 }
 
 fn stage(operator: &'static str, c: &crate::chrome::Chrome) -> AnyElement {
-    let base = div()
-        .absolute()
-        .left_0()
-        .top_0()
-        .w(px(TILE[0]))
-        .h(px(STAGE));
+    let (width, height, inset) = tile();
+    let base = div().absolute().left_0().top_0().w(width).h(height);
     match staging(operator) {
         "around" => {
             let (first, _) = chrome_fx::slots(effect(operator, Place::Under));
@@ -164,10 +166,10 @@ fn stage(operator: &'static str, c: &crate::chrome::Chrome) -> AnyElement {
                 .child(
                     div()
                         .absolute()
-                        .left(px(INSET))
-                        .top(px(INSET))
-                        .w(px(TILE[0] - 2. * INSET))
-                        .h(px(STAGE - 2. * INSET))
+                        .left(inset)
+                        .top(inset)
+                        .w(width - inset * 2.)
+                        .h(height - inset * 2.)
                         .child(card(c)),
                 )
                 .into_any_element()
@@ -184,7 +186,7 @@ fn stage(operator: &'static str, c: &crate::chrome::Chrome) -> AnyElement {
                     .child(first)
                     .child(
                         div()
-                            .text_size(px(30.))
+                            .typed(sizes().title)
                             .text_color(c.ink_primary)
                             .child("Glow"),
                     )
@@ -197,10 +199,10 @@ fn stage(operator: &'static str, c: &crate::chrome::Chrome) -> AnyElement {
             base.child(
                 div()
                     .absolute()
-                    .left(px(10.))
-                    .top(px(10.))
-                    .w(px(TILE[0] - 20.))
-                    .h(px(STAGE - 20.))
+                    .left(sizes().space(2))
+                    .top(sizes().space(2))
+                    .w(width - sizes().space(2) * 2.)
+                    .h(height - sizes().space(2) * 2.)
                     .child(ground(c))
                     .child(first)
                     .children(last)
@@ -215,6 +217,7 @@ impl Render for Gallery {
     fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         chrome_fx::begin_frame();
         let c = crate::chrome::of(window);
+        let (_, stage_height, _) = tile();
         let tiles = Self::layout().tiles.into_iter().map(|t| {
             let [x, y, w, h] = t.rect;
             div()
@@ -223,28 +226,27 @@ impl Render for Gallery {
                 .top(px(y))
                 .w(px(w))
                 .h(px(h))
-                .rounded(px(12.))
+                .rounded(sizes().radius)
                 .overflow_hidden()
-                .border_1()
+                .border(sizes().hairline)
                 .border_color(c.divider)
                 .child(stage(t.operator, c))
                 .child(
                     div()
                         .absolute()
-                        .left(px(12.))
-                        .top(px(STAGE + 8.))
+                        .left(sizes().space(2))
+                        .top(stage_height + sizes().space(1))
                         .flex()
                         .flex_col()
-                        .gap(px(2.))
                         .child(
                             div()
-                                .text_size(px(13.))
+                                .typed(sizes().body)
                                 .text_color(c.ink_primary)
                                 .child(t.operator),
                         )
                         .child(
                             div()
-                                .text_size(px(11.))
+                                .typed(sizes().small)
                                 .text_color(c.ink_secondary)
                                 .child(format!("{} · {:.2} ms · still pose", t.class, t.cost_ms)),
                         ),

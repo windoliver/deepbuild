@@ -1,0 +1,13 @@
+
+failed to clean entries from the global cache
+
+Caused by:
+  failed to remove file `~/.cargo/registry/src/github.com-1ecc6299db9ec823/pkg-config-0.3.19/Cargo.toml`
+
+Caused by:
+  Permission denied (os error 13)
+memory file: no private mapping: Invalid argument (os error 22)
+one_instance: wall p50 4.230 ms, p95 6.136 ms; overhead p50 0.098 ms, p95 0.129 ms
+copy_on_write: wall p50 3.473 ms, p95 4.540 ms; overhead p50 2.067 ms, p95 3.420 ms
+verdict: one_instance
+stored: spikes/245/record.json

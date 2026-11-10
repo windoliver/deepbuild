@@ -10,7 +10,7 @@
 //! font must be a bundled face that may be embedded.
 //!
 //! The app's chrome draws from the look's roles too (#882): ground, raised and divider; the one ink
-//! at four tiers, and hover and selected fills, each the ink at an alpha (`#rrggbbaa`); accent; and
+//! at its tiers, and hover and selected fills, each the ink at an alpha (`#rrggbbaa`); accent; and
 //! the session readout and line. The guard holds each ink tier to its contrast floor on the ground,
 //! the raised ground and hover over either, and every role, an alpha role blended over the ground and
 //! the raised ground, to the status distance.
@@ -42,13 +42,22 @@ use crate::scene::{Palette, Rgb, Type};
 /// A color at an alpha: sRGB-encoded bytes, the alpha last.
 pub type Rgba = [u8; 4];
 
-/// The ink tiers and the contrast each keeps on the ground, the raised ground and hover (#882).
-const INK_TIERS: [(&str, f64); 4] = [
-    ("ink_primary", 4.5),
-    ("ink_secondary", 4.5),
-    ("ink_tertiary", 3.0),
-    ("ink_disabled", 0.0),
+/// The ink tiers and the contrast each keeps on every fill a row is drawn on (#882): in the app's
+/// chrome, and in a film played on its own. Text has two inks and disabled (#1458); a look that
+/// still gives `ink_tertiary` holds it to the text floor wherever it's shown in chrome.
+const INK_TIERS: [(&str, f64, f64); 4] = [
+    ("ink_primary", 4.5, 4.5),
+    ("ink_secondary", 4.5, 4.5),
+    ("ink_tertiary", 4.5, 3.0),
+    ("ink_disabled", 0.0, 0.0),
 ];
+
+/// The chrome's text roles (#1458), the weights one may take, and the smallest size anything draws at.
+pub const TEXT_ROLES: [&str; 3] = ["title", "body", "small"];
+const WEIGHTS: [&str; 3] = ["regular", "medium", "semibold"];
+const SMALLEST: f64 = 10.0;
+/// The platform's own face, which chrome's text may be set in.
+pub const SYSTEM_FACE: &str = ".SystemUIFont";
 
 /// The chrome roles whose look must give the focus ring (#1003), and the ring's floor.
 const CHROME: [&str; 7] = [
@@ -193,6 +202,33 @@ pub struct Look {
     /// How far apart (OKLab ΔE) two data roles a chart tells apart by color alone stay, as seen
     /// and under each simulated color-vision deficiency (Look: `data_distance`).
     pub data_distance: f64,
+    /// #1458: the chrome's sizes, when the look gives them.
+    pub sizes: Option<Sizes>,
+}
+
+/// The chrome's sizes, roles of the look as its colors are (#1458): `type`'s three text roles, the
+/// `space` scale, the one corner `radius`, the `shell`'s named sizes, the widths of its lines
+/// (`stroke`) and the chrome's faces (`chrome_fonts`, #1035's field), all in points.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Sizes {
+    /// `title`, `body` and `small`.
+    pub text: BTreeMap<String, TextRole>,
+    /// Steps of 4, smallest first.
+    pub space: Vec<f64>,
+    pub radius: f64,
+    pub shell: BTreeMap<String, f64>,
+    pub stroke: BTreeMap<String, f64>,
+    /// `text`, the platform's face (`.SystemUIFont`) or a family of the look's fonts, and `code`, a
+    /// family of the look's fonts.
+    pub face: BTreeMap<String, String>,
+}
+
+/// One text role: its size and line height in points, and its weight.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextRole {
+    pub size: f64,
+    pub line: f64,
+    pub weight: &'static str,
 }
 
 /// Where a look's status distance holds (The status-color rule): everywhere, for the app's look,
@@ -625,6 +661,90 @@ fn fonts(
     Ok(out)
 }
 
+/// The chrome's sizes (#1458), `None` for a look that gives none of them. Each text role has a size
+/// of at least 10 pt, a line at least its size and one of three weights; `space` is steps of 4,
+/// smallest first; the radius, every shell size and every stroke are numbers; the chrome's code face is
+/// a family of the look's fonts and its text face the platform's or one of them. A look gives `type`'s three sizes and
+/// `space` as the clean look does, or not at all, so a look pack (#1035) can't change a page's layout.
+fn sizes(
+    def: &Map<String, Value>,
+    fonts: &BTreeMap<String, &'static str>,
+) -> Result<Option<Sizes>, Refusal> {
+    const KEYS: [&str; 6] = ["type", "space", "radius", "shell", "stroke", "chrome_fonts"];
+    if !KEYS.iter().any(|k| def.contains_key(*k)) {
+        return Ok(None);
+    }
+    let clean = shipped("clean").unwrap_or_default();
+    for key in ["type", "space"] {
+        if def.get(key).is_some_and(|v| Some(v) != clean.get(key)) {
+            return Err(Refusal::Bad(key.into()));
+        }
+    }
+    let bad = |path: String| Refusal::Bad(path);
+    let number = |v: Option<&Value>, path: String| {
+        v.and_then(Value::as_f64)
+            .filter(|n| n.is_finite() && *n >= 0.0)
+            .ok_or_else(|| bad(path))
+    };
+    let mut out = Sizes::default();
+    let ty = object(def.get("type").or_else(|| clean.get("type")), "type")?;
+    let ty = ty.ok_or_else(|| bad("type".into()))?;
+    if ty.len() != TEXT_ROLES.len() {
+        return Err(bad("type".into()));
+    }
+    for role in TEXT_ROLES {
+        let path = format!("type/{role}");
+        let r = ty.get(role).ok_or_else(|| bad(path.clone()))?;
+        let size = number(r.get("size"), format!("{path}/size"))?;
+        let line = number(r.get("line"), format!("{path}/line"))?;
+        let weight = r.get("weight").and_then(Value::as_str);
+        let weight = WEIGHTS
+            .into_iter()
+            .find(|w| Some(*w) == weight)
+            .ok_or_else(|| bad(format!("{path}/weight")))?;
+        if size < SMALLEST {
+            return Err(bad(format!("{path}/size")));
+        }
+        if line < size {
+            return Err(bad(format!("{path}/line")));
+        }
+        out.text
+            .insert(role.into(), TextRole { size, line, weight });
+    }
+    let space = def.get("space").or_else(|| clean.get("space"));
+    let space = space
+        .and_then(Value::as_array)
+        .ok_or_else(|| bad("space".into()))?;
+    for (i, step) in space.iter().enumerate() {
+        let step = number(Some(step), format!("space/{i}"))?;
+        if step == 0.0 || step % 4.0 != 0.0 || out.space.last().is_some_and(|l| *l >= step) {
+            return Err(bad(format!("space/{i}")));
+        }
+        out.space.push(step);
+    }
+    out.radius = number(
+        def.get("radius").or_else(|| clean.get("radius")),
+        "radius".into(),
+    )?;
+    for (key, into) in [("shell", &mut out.shell), ("stroke", &mut out.stroke)] {
+        for (name, size) in object(def.get(key), key)?.into_iter().flatten() {
+            into.insert(name.clone(), number(Some(size), format!("{key}/{name}"))?);
+        }
+    }
+    for (name, face) in object(def.get("chrome_fonts"), "chrome_fonts")?
+        .into_iter()
+        .flatten()
+    {
+        let face = face.as_str().unwrap_or("");
+        let bundled = fonts.values().any(|family| *family == face);
+        if !(bundled || name == "text" && face == SYSTEM_FACE) {
+            return Err(bad(format!("chrome_fonts/{name}")));
+        }
+        out.face.insert(name.clone(), face.into());
+    }
+    Ok(Some(out))
+}
+
 /// A theme's type (#417): each font by its name, each font role by the font it names, and the
 /// fallback list's fonts in order, each one of the look's fonts.
 fn type_of(
@@ -839,6 +959,7 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
             .get("data_distance")
             .and_then(Value::as_f64)
             .unwrap_or(DATA_DISTANCE),
+        sizes: sizes(def, &fonts)?,
     };
     // Data colors keep the look's distance from every status color where status shows; the
     // ground sits behind them.
@@ -940,7 +1061,10 @@ fn chrome(
         }
     }
     let surfaces = surfaces(palette, alpha);
-    for (role, floor) in INK_TIERS {
+    // The app's chrome, which a look holds wherever it's shown, not a film played on its own (#464).
+    let shown_in_chrome = status.is_some();
+    for (role, in_chrome, alone) in INK_TIERS {
+        let floor = if shown_in_chrome { in_chrome } else { alone };
         let Some(tier) = color(role) else { continue };
         for (on, surface) in &surfaces {
             let ratio = contrast(over(tier, *surface), *surface);
@@ -954,9 +1078,7 @@ fn chrome(
             }
         }
     }
-    // The focus ring reads on every fill, so a focused row shows beside a selected one (#1003):
-    // the app's chrome, which a look holds wherever it's shown, not a film played on its own (#464).
-    let shown_in_chrome = status.is_some();
+    // The focus ring reads on every fill, so a focused row shows beside a selected one (#1003).
     if shown_in_chrome && (CHROME.iter().any(|r| color(r).is_some()) || color("focus").is_some()) {
         let focus = color("focus").ok_or_else(|| Refusal::Bad(format!("roles/focus ({theme})")))?;
         for (on, surface) in &surfaces {
@@ -967,6 +1089,26 @@ fn chrome(
         }
     }
     Ok(())
+}
+
+/// Every ink tier's contrast on every fill a row is drawn on, in light then dark: the pairs the guard holds (#1458).
+pub fn ink_pairs(look: &Look) -> Vec<(&'static str, &'static str, &'static str, f64)> {
+    let mut out = Vec::new();
+    for (theme, palette, alpha) in [
+        ("light", &look.light, &look.light_alpha),
+        ("dark", &look.dark, &look.dark_alpha),
+    ] {
+        let surfaces = surfaces(palette, alpha);
+        for (role, ..) in INK_TIERS {
+            let Some(ink) = role_color(palette, alpha, role) else {
+                continue;
+            };
+            for (on, surface) in &surfaces {
+                out.push((theme, role, *on, contrast(over(ink, *surface), *surface)));
+            }
+        }
+    }
+    out
 }
 
 /// A role's color, opaque or at an alpha.

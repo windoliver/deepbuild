@@ -184,7 +184,7 @@ export async function openEgress(credentials: Credential[], refused: (r: Refusal
         if (seen > 1) return deny('stand-in-twice', c.env);
         if (!c.hosts.has(target) && plant !== 'standin-every-host') return deny('stand-in-to-other-host', c.env);
         if (c.methods && !c.methods.has(req.method ?? '')) return deny('stand-in-method', c.env);
-        headers[at] = headers[at]!.replace(c.standIn, c.value);
+        headers[at] = headers[at]!.replace(c.standIn, () => c.value);
       }
       const out: string[] = [];
       for (let i = 0; i < headers.length; i += 2) if (!HOP.test(headers[i]!)) out.push(headers[i]!, headers[i + 1]!);

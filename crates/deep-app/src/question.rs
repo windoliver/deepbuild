@@ -403,7 +403,7 @@ impl Controller {
         }
         if !self.faults.no_default {
             rows.push(Row::Text(format!(
-                "Default: {} · applies {}",
+                "Default: {} · at {}",
                 self.model.default, self.model.applies
             )));
         }
@@ -413,17 +413,21 @@ impl Controller {
             }
             rows.push(Row::Text(format!("{name}: {value}")));
         }
+        // A step is a switch: its state is the node's value and its mark, never a word in its label (#1458).
         for (index, step) in self.model.steps.iter().enumerate() {
-            let label = format!(
-                "{} · {} · {}",
+            let mut label = format!(
+                "{} · {}",
                 step.does,
                 if step.undoable {
                     "can be undone"
                 } else {
                     "can't be undone"
-                },
-                if step.on { "on" } else { "off" }
+                }
             );
+            // #1458's planted switch says its state as a word in its label.
+            if crate::plain::planted("step-state-in-label") {
+                label.push_str(if step.on { " · on" } else { " · off" });
+            }
             rows.push(Row::Step {
                 index,
                 label,

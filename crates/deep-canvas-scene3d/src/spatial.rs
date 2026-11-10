@@ -27,9 +27,9 @@ impl Aabb {
             max: [f64::NEG_INFINITY; 3],
         };
         for p in points {
-            for k in 0..3 {
-                b.min[k] = b.min[k].min(p[k]);
-                b.max[k] = b.max[k].max(p[k]);
+            for (k, &v) in p.iter().enumerate() {
+                b.min[k] = b.min[k].min(v);
+                b.max[k] = b.max[k].max(v);
             }
         }
         b

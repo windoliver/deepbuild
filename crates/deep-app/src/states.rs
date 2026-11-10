@@ -39,8 +39,10 @@ pub enum State {
     },
 }
 
-/// The table's rows: the word on every surface, its status-map entry, and the words that never name it.
-pub const TABLE: [(&str, &str, &[&str]); 11] = [
+/// The table's rows: the word on every surface, its status-map entry, and the words that never name it. The last
+/// three are the states the hub's one reading gives a session that no claim names (#992), which the list's rows carry
+/// (#1463).
+pub const TABLE: [(&str, &str, &[&str]); 14] = [
     ("queued", "idle", &[]),
     ("working", "running", &["in progress"]),
     ("says done", "running", &["done"]),
@@ -52,6 +54,9 @@ pub const TABLE: [(&str, &str, &[&str]); 11] = [
     ("needs you", "needs_you", &["waiting on you"]),
     ("stale", "stale", &["pass", "passed", "proven"]),
     ("quiet", "idle", &[]),
+    ("stuck", "blocked", &[]),
+    ("flagged", "fail", &[]),
+    ("finished", "idle", &[]),
 ];
 
 impl State {
@@ -90,24 +95,29 @@ impl State {
             State::Quiet { last_seen } => {
                 let age = now.saturating_sub(*last_seen);
                 changes_after(changes_in(age));
-                format!("quiet · last seen {} ago", span(age))
+                // #1458's planted row reads its time the way no surface may, in a test build only.
+                if crate::plain::planted("row-says-ago") {
+                    return "quiet · last seen 2 min ago".to_owned();
+                }
+                format!("quiet · last seen {}", span(age))
             }
             other => other.word().to_owned(),
         }
     }
 }
 
-/// How long until `deadline` from `now`, as a card or a notification says when a default applies: whole days once a
-/// day or more is left ("3 d"), else [`span`]. Read to the nearest minute first, so a deadline a second short of
-/// three days away still reads "3 d".
-pub fn span_until(deadline: u64, now: u64) -> String {
-    const MINUTE: u64 = 60_000;
-    const DAY: u64 = 86_400_000;
-    let left = (deadline.saturating_sub(now) + MINUTE / 2) / MINUTE * MINUTE;
-    if left >= DAY {
-        format!("{} d", left / DAY)
-    } else {
-        span(left)
+/// A moment as every surface writes it (#1458), in your time zone: "16:40" today, "tomorrow 16:40", and on another
+/// day its weekday, "Mon 16:40". An ask's row, its card and its notification say when its default applies in these
+/// words.
+pub fn moment(at: u64, now: u64) -> String {
+    use chrono::{Local, TimeZone as _};
+    let local = |ms: u64| Local.timestamp_millis_opt(ms as i64).unwrap();
+    let (at, today) = (local(at), local(now).date_naive());
+    let time = at.format("%H:%M");
+    match (at.date_naive() - today).num_days() {
+        0 => time.to_string(),
+        1 => format!("tomorrow {time}"),
+        _ => format!("{} {time}", at.format("%a")),
     }
 }
 
@@ -130,9 +140,10 @@ pub fn changes_after(wait: u64) {
     });
 }
 
-/// How long until [`span`] of an age `ms` reads differently: at the next whole second, minute or hour it shows.
+/// How long until [`span`] of an age `ms` reads differently: at the next whole second, minute, hour or day it shows.
 pub fn changes_in(ms: u64) -> u64 {
     let unit = match ms / 1000 {
+        s if s >= 86_400 => 86_400_000,
         s if s >= 3600 => 3_600_000,
         s if s >= 60 => 60_000,
         _ => 1000,
@@ -140,9 +151,27 @@ pub fn changes_in(ms: u64) -> u64 {
     unit - ms % unit
 }
 
-/// A span of time as a person reads it: "4 min", "2 h", "12 s".
+/// `words` and the length [`span`] wrote at their end, if one is: a row draws that length in a slot of its own at
+/// its right edge, so a ticking time moves nothing else in the row (#1458).
+pub fn time_at_end(words: &str) -> (&str, Option<&str>) {
+    let mut parts = words.rsplitn(3, ' ');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(unit), Some(n), Some(rest))
+            if ["s", "min", "h", "d"].contains(&unit)
+                && !n.is_empty()
+                && n.bytes().all(|b| b.is_ascii_digit()) =>
+        {
+            (rest, Some(&words[rest.len() + 1..]))
+        }
+        _ => (words, None),
+    }
+}
+
+/// A length of time as every surface writes it (#1458): "40 s", "12 min", "3 h" or "2 d", with a space and no "ago",
+/// since the slot it's in says it's since.
 pub fn span(ms: u64) -> String {
     match ms / 1000 {
+        s if s >= 86_400 => format!("{} d", s / 86_400),
         s if s >= 3600 => format!("{} h", s / 3600),
         s if s >= 60 => format!("{} min", s / 60),
         s => format!("{s} s"),
@@ -326,6 +355,11 @@ pub struct Table {
     /// the repo, by start; and the session each start became, from its `start.session`.
     starts: HashMap<String, Start>,
     started: HashMap<String, String>,
+    /// The list's rows the hub built (#1463), by ID: each one's place in the list and the row, as its newest
+    /// row.set gives them.
+    rows: HashMap<String, (String, Value)>,
+    /// Whether the record holds any row.set: a record from before the hub built rows keeps the app's own reading.
+    listed: bool,
 }
 
 /// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
@@ -422,6 +456,18 @@ impl Table {
                 self.started.insert(session.to_owned(), run.to_owned());
             }
         }
+        if kind == "row.set" {
+            let data = &event["data"];
+            if let Some(id) = data["id"].as_str() {
+                self.listed = true;
+                if data["listed"] == true {
+                    let order = data["order"].as_str().unwrap_or_default().to_owned();
+                    self.rows.insert(id.to_owned(), (order, data.clone()));
+                } else {
+                    self.rows.remove(id);
+                }
+            }
+        }
         if kind == "task.created" {
             if let Some(thread) = event["data"]["thread"].as_str() {
                 self.titles
@@ -439,6 +485,27 @@ impl Table {
             .entry(session.to_owned())
             .or_default()
             .apply(event, kind);
+    }
+
+    /// Whether the record holds the list's rows (#1463), so every view reads them and not its own reading.
+    pub fn listed(&self) -> bool {
+        self.listed
+    }
+
+    /// The list's rows (#1463), in the list's one order: by each row's order key's bytes, then by ID.
+    pub fn list(&self) -> Vec<&Value> {
+        let mut rows: Vec<(&String, &String, &Value)> = self
+            .rows
+            .iter()
+            .map(|(id, (order, row))| (order, id, row))
+            .collect();
+        rows.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+        rows.into_iter().map(|(.., row)| row).collect()
+    }
+
+    /// The list's row with this ID.
+    pub fn row_of(&self, id: &str) -> Option<&Value> {
+        self.rows.get(id).map(|(_, row)| row)
     }
 
     /// A reading's newest value and the time it is as of, in ms.
@@ -796,7 +863,22 @@ pub fn verdict_line(table: &Table, session: &str, now: u64) -> String {
 
 /// The one count of what needs you: every open ask in the record, the same on every device.
 pub fn count(table: &Table) -> usize {
+    if table.listed() {
+        return table
+            .list()
+            .iter()
+            .filter(|row| row["id"].as_str().is_some_and(|id| id.starts_with("ask:")))
+            .count();
+    }
     table.open_asks(None).len()
+}
+
+/// A status-map entry the hub names, as the table holds it; one the table doesn't name draws as idle.
+pub fn entry_of(entry: &str) -> &'static str {
+    TABLE
+        .iter()
+        .find(|(_, known, _)| *known == entry)
+        .map_or("idle", |(_, known, _)| known)
 }
 
 /// The menu bar's menu under the count: a line per session, its task and its status mark.
@@ -816,9 +898,17 @@ mod tests {
     /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.
     #[test]
     fn an_age_changes_exactly_when_its_span_next_reads_differently() {
-        let ages = (0..200_000)
-            .step_by(997)
-            .chain([59_999, 60_000, 90_000, 3_599_999, 3_600_000, 7_300_123]);
+        let ages = (0..200_000).step_by(997).chain([
+            59_999,
+            60_000,
+            90_000,
+            3_599_999,
+            3_600_000,
+            7_300_123,
+            86_399_999,
+            86_400_000,
+            200_000_000,
+        ]);
         for age in ages {
             let wait = changes_in(age);
             assert!(wait > 0, "{age}");

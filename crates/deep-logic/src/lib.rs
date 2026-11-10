@@ -195,7 +195,8 @@ fn track(piece: &Piece, line: &Value, steps: i64) -> Option<Vec<Entry>> {
             let mut seq = 0;
             for lap in 0.. {
                 let at = start + lap * period;
-                if at > end || (lap > 0 && period == 0) {
+                // A tour whose last key is at or before 0 has no period: it plays once.
+                if at > end || (lap > 0 && period <= 0) {
                     break;
                 }
                 for (t, value) in &ks {
@@ -1000,4 +1001,29 @@ fn saves_dir(line: &Value) -> Option<std::path::PathBuf> {
     line.get("saves_dir")
         .and_then(Value::as_str)
         .map(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_tour_whose_keys_all_come_before_its_start_plays_once() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let piece = Piece {
+                seed: 0,
+                controls: Default::default(),
+                tour: Some(json!({"idle_after": 0, "keys": {"a": [[-1, 1]]}})),
+                items: Vec::new(),
+                machine: Vec::new(),
+                document: String::new(),
+            };
+            let entries = track(&piece, &json!({}), 0).expect("a track");
+            let played: Vec<(i64, f64)> = entries.iter().map(|e| (e.t, e.value)).collect();
+            tx.send(played).ok();
+        });
+        let got = rx.recv_timeout(std::time::Duration::from_secs(1));
+        assert_eq!(got, Ok(vec![(-F, 1.0)]));
+    }
 }

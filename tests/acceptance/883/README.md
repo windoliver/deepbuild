@@ -182,3 +182,8 @@ every open ask on start, is shown failing by the planted cases.
   only the relative wording and the wrong day.
 - A channel reconnect is read as the app's stream to the hub reconnecting and the record's events reaching the app
   again; channels to a phone or a chat app aren't in the replica.
+
+## Swapped for #1458
+
+#1458 (text sizes and spacing are roles of the look) changes what a moment reads on another day: "tomorrow 16:40". The AC3 tomorrow case `ac3_a_default_at_16_40_tomorrow_reads_tomorrow_at_16_40` was redrafted blind from this
+issue, #1458, the design and the base `2721ca7b`, and swapped in with the owner's approval: `redraft-1458/ac3_tomorrow.rs` (the test `acceptance_883_ac3_redraft`).
