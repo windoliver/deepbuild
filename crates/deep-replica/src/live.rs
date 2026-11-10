@@ -395,6 +395,8 @@ mod live {
             "window" => "AXGroup",
             "label" => "AXStaticText",
             "button" => "AXButton",
+            // The list, a page and an agent's view (#1461, #1460, #1459), as AccessKit maps Role::Group.
+            "group" => "AXGroup",
             // The session chart's line (#1455), as vendor/accesskit_macos/src/node.rs maps Role::Image.
             "image" => "AXImage",
             other => {

@@ -13,11 +13,13 @@ mod bake;
 mod ask;
 mod capture;
 mod costs;
+mod determinism;
 mod efficiency;
 mod familiar;
 mod evidence;
 mod export;
 mod film;
+mod film_layout;
 mod film_viewer;
 mod frames;
 mod function;
@@ -30,6 +32,7 @@ mod jobs;
 mod kept;
 mod kinds;
 mod kit;
+mod logic;
 mod media;
 mod mixdown;
 mod modes;
@@ -424,6 +427,16 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                     Some(a) => a.as_str()? == "software",
                 },
             });
+        }
+        "pixel_hash" => {
+            let frames = c.get("frames")?.as_array()?.iter().map(|f| {
+                let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
+                let w = u32::try_from(size[0].as_u64()?).ok()?;
+                let h = u32::try_from(size[1].as_u64()?).ok()?;
+                let format = deep_gpu::pixel_hash::Format::named(f.get("format")?.as_str()?)?;
+                Some(([w, h], format, f.get("bytes")?.as_str()?.to_string()))
+            });
+            return Some(Call::PixelHash(frames.collect::<Option<_>>()?));
         }
         "cross_machine" => {
             let a = c.get("audio")?.as_array().filter(|a| a.len() == 2)?;
@@ -1167,6 +1180,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_media::PLANTED.contains(p)
                 // #1732's wrong programs live in the motion module's arrangement solve.
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
+                || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1194,6 +1208,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "sorts_by_order_key_alone" => Planted::SortsByOrderKeyAlone,
                 "reply_without_digest" => Planted::ReplyWithoutDigest,
                 "reads_wasm_bytes" => Planted::ReadsWasmBytes,
+                "start_on_at_first_frame" => Planted::StartOnAtFirstFrame,
                 "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
                 "diffs_whole_document" => Planted::DiffsWholeDocument,
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
@@ -1241,6 +1256,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
+                "layout_text_by_kind" => Planted::LayoutTextByKind,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
@@ -1794,6 +1810,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-look",
     feature = "test-leave-out-text",
     feature = "test-check-kind",
+    feature = "test-glyph-label",
     feature = "test-leave-out-logic",
     feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
@@ -1988,6 +2005,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::deprecated());
     #[cfg(feature = "test-check-kind")]
     out.push(deep_canvas_test_modules::checks());
+    #[cfg(feature = "test-glyph-label")]
+    out.push(deep_canvas_test_modules::label());
     // Issue #185: test.sim@1's implementations, and test module c.
     #[cfg(feature = "test-sim-a")]
     out.push(deep_canvas_test_modules::sim::a());
@@ -2899,9 +2918,10 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
     }
 }
 
-/// #501's wrong programs, by the names its acceptance suite gives them.
+/// #501's wrong programs, and #1897's, by the names their acceptance suites give them.
 fn export_planted(name: &str) -> Option<Planted> {
     Some(match name {
+        "hash_xors_without_position" => Planted::HashXorsWithoutPosition,
         "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
         "span_rounds_start" => Planted::SpanRoundsStart,
         "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,

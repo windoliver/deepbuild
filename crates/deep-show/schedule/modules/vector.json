@@ -3,6 +3,18 @@
   "phases": {
     "items": [
       {
+        "operator": "vector.glyphs",
+        "module": "vector",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "vector.glyphs"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "vector.paint",
         "module": "vector",
         "version": "1.0.0",
@@ -16,5 +28,9 @@
       }
     ]
   },
-  "contributions": {}
+  "contributions": {
+    "core.glyphs": [
+      "vector.glyphs"
+    ]
+  }
 }

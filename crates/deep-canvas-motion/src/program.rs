@@ -213,6 +213,8 @@ pub enum Planted {
     UnkeyedResetsToBase,
     /// #492: a ramp that sums the rate times the frame step.
     RampSumsPerFrame,
+    /// #544: a check that accepts a reader naming a kind or field a logic item doesn't emit.
+    AcceptsUndeclaredOccurrence,
     /// #492: a `then: lag` hitstop that matches in parent time.
     HitstopMatchesParentTime,
     /// #493: a log zoom that eases the view width, not its logarithm.
@@ -618,7 +620,7 @@ impl Program {
         program.motion.markers.sort_by(|a, b| a.id.cmp(&b.id));
         program.resolve_times(doc)?;
         program.gather_mixes();
-        program.rows = program.occurrence_rows(items_json, doc.get("controls").and_then(Value::as_object))?;
+        program.rows = program.occurrence_rows(doc, items_json, doc.get("controls").and_then(Value::as_object))?;
         for driver in &motion.drivers {
             let path = format!("drivers/{}", driver.id);
             let mut vars = Vec::new();
@@ -773,7 +775,9 @@ impl Program {
         use crate::remap::{self, Pending};
         let controls = doc.get("controls").and_then(Value::as_object);
         let times = |this: &Program, filter: &crate::occurrence::Filter, path: String| -> Result<Vec<crate::occurrence::Occurrence>, Refused> {
-            let list = this.occurrences(filter, controls).ok_or_else(|| Refused { code: "ref_unresolved", path: path.clone(), detail: None })?;
+            // The reader: `placements/<id>` or `time_remaps/<id>`.
+            let reader = path.splitn(3, '/').take(2).collect::<Vec<_>>().join("/");
+            let list = this.occurrences(filter, doc, &reader, &[])?.ok_or_else(|| Refused { code: "ref_unresolved", path: path.clone(), detail: None })?;
             crate::occurrence::filtered(filter, list).map_err(|r| Refused { code: r.code, path, detail: Some(Box::new(json!({"why": r.why}))) })
         };
         for r in 0..self.motion.remaps.len() {
@@ -2232,7 +2236,8 @@ impl Program {
             let Some((_, doc::DriverInput::List(filter))) = driver.inputs.iter().find(|(n, _)| *n == f.list) else {
                 continue;
             };
-            let entries = self.occurrences(filter, controls).ok_or_else(|| Refused {
+            let fields: Vec<&str> = f.field.first().map(String::as_str).into_iter().collect();
+            let entries = self.occurrences(filter, doc, &format!("drivers/{}", driver.id), &fields)?.ok_or_else(|| Refused {
                 code: "ref_unresolved",
                 path: format!("{path}/vars/{}/list", f.list),
                 detail: Some(Box::new(json!({"driver": driver.id, "list": filter.list}))),
@@ -2478,6 +2483,7 @@ impl Program {
     /// Each mark set whose `rows` read an occurrence list, its filter applied once.
     fn occurrence_rows(
         &self,
+        doc: &Map<String, Value>,
         items: &Map<String, Value>,
         controls: Option<&Map<String, Value>>,
     ) -> Result<Vec<crate::rows::RowList>, Refused> {
@@ -2500,8 +2506,16 @@ impl Program {
             };
             let from = rows.get("from").and_then(Value::as_object);
             let filter = doc::filter_of(from.ok_or(bad("bad_doc", "/from"))?, &format!("{path}/from"))?;
+            // The payload fields its columns name.
+            let fields: Vec<&str> = rows
+                .get("columns")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .filter_map(|(_, c)| c.as_str())
+                .collect();
             let entries = self
-                .occurrences(&filter, controls)
+                .occurrences(&filter, doc, &format!("items/{id}"), &fields)?
                 .ok_or(bad("ref_unresolved", "/from/list"))?;
             let list = crate::occurrence::filtered(&filter, entries).map_err(|r| Refused {
                 code: r.code,
@@ -2522,7 +2536,43 @@ impl Program {
     /// The occurrences a list names: `markers.<kind>`, or `input.<control>`, the input track's
     /// entries for a control in the track's order, each a match whose payload is `{value,
     /// player}`, so a `where` can count one player's (#497).
-    fn occurrences(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
+    ///
+    /// A logic item's `<logic ID>.occurrences` reads the rows its bake left in the document's
+    /// `occurrences` (#544), after `reader`'s kinds and payload `fields` are checked against the
+    /// item's `emits`: a name it doesn't declare is refused `occurrence.undeclared`, from the
+    /// document alone, so before any step runs.
+    fn occurrences(
+        &self,
+        filter: &crate::occurrence::Filter,
+        doc: &Map<String, Value>,
+        reader: &str,
+        fields: &[&str],
+    ) -> Result<Option<Vec<crate::occurrence::Occurrence>>, Refused> {
+        use crate::occurrence::Occurrence;
+        if let Some(emits) = logic_emits(doc, &filter.list) {
+            if self.options.planted != Planted::AcceptsUndeclaredOccurrence {
+                undeclared(emits, filter, reader, fields)?;
+            }
+            let rows = doc.get("occurrences").and_then(|o| o.get(&filter.list)).and_then(Value::as_array);
+            let id = |r: &Value, k: &str| r.get(k).map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_string));
+            return Ok(Some(
+                rows.into_iter()
+                    .flatten()
+                    .filter_map(|r| {
+                        let kind = r.get("kind")?.as_str()?;
+                        let declared = emits.get(kind)?.get("fields").and_then(Value::as_object);
+                        let payload: Map<String, Value> =
+                            declared.into_iter().flatten().filter_map(|(n, _)| Some((n.clone(), r.get(n)?.clone()))).collect();
+                        let t = r.get("t")?.as_i64()?;
+                        Some(Occurrence { t, end: t, a: id(r, "a"), b: id(r, "b"), kind: kind.to_string(), tags: Vec::new(), payload: Value::Object(payload) })
+                    })
+                    .collect(),
+            ));
+        }
+        Ok(self.listed(filter, doc.get("controls").and_then(Value::as_object)))
+    }
+
+    fn listed(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
         use crate::occurrence::Occurrence;
         // A list names a marker kind or a declared control; any other would read empty forever.
         if let Some(kind) = filter.list.strip_prefix("markers.") {
@@ -2905,6 +2955,30 @@ impl Program {
 enum Var {
     Slot(usize),
     World(usize, usize),
+}
+
+/// The `emits` of the logic item `<logic ID>.occurrences` names, when `list` names one (#544).
+fn logic_emits<'d>(doc: &'d Map<String, Value>, list: &str) -> Option<&'d Map<String, Value>> {
+    let item = doc.get("items")?.get(list.strip_suffix(".occurrences")?)?;
+    if item.get("kind").and_then(Value::as_str) != Some("logic@1") {
+        return None;
+    }
+    static NONE: std::sync::LazyLock<Map<String, Value>> = std::sync::LazyLock::new(Map::new);
+    Some(item.get("params").and_then(|p| p.get("emits")).and_then(Value::as_object).unwrap_or(&NONE))
+}
+
+/// Refuses a reader of a logic item's occurrences that names a kind the item doesn't declare in
+/// `emits`, or a field none of the kinds it reads declares: `occurrence.undeclared`, naming the
+/// reader, the name and up to three close declared names (Logic: occurrences).
+fn undeclared(emits: &Map<String, Value>, filter: &crate::occurrence::Filter, reader: &str, fields: &[&str]) -> Result<(), Refused> {
+    match deep_canvas::document::undeclared(emits, filter.kinds.as_deref(), fields) {
+        None => Ok(()),
+        Some((name, close)) => Err(Refused {
+            code: "occurrence.undeclared",
+            path: reader.to_string(),
+            detail: Some(Box::new(json!({"reader": reader, "list": filter.list, "name": name, "close": close}))),
+        }),
+    }
 }
 
 fn compile_ops(

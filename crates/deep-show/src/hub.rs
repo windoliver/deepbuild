@@ -46,6 +46,9 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The criteria's wrong programs, each reachable only through the scenario's `planted`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #544: a start_on run on a logic item's occurrences starts at the first frame its session
+    /// evaluates at or after the occurrence.
+    StartOnAtFirstFrame,
     PresentsUnnamedRemoval,
     DiffsItemsOnly,
     InlinesEveryIssue,
@@ -150,6 +153,9 @@ pub enum Planted {
     ChecksSkipUnknownKind,
     /// #403: a check kind no module in the build registers is INCONCLUSIVE.
     MissingKindInconclusive,
+    /// #408: film.layout takes its texts by the kinds text@1, vector@1, mark.text and counter,
+    /// not from the core's glyph-box array.
+    LayoutTextByKind,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
@@ -282,6 +288,9 @@ pub enum Planted {
     SpanRoundsStart,
     /// #501: the GPU BLAKE3 joins each parent's two children in the wrong order.
     ChunkTreeWrongOrder,
+    /// #1897: the GPU pixel hash and its CPU twin XOR each pixel's words with no term for where
+    /// it is, so no swap moves it.
+    HashXorsWithoutPosition,
     /// #501: a range's timecode starts at the job's start label, not at its first frame's.
     RangeRestartsTimecode,
     /// #501: the export skips its readiness gate, starts and stops at the missing asset's first
@@ -656,6 +665,8 @@ pub enum Call {
     FrameHash { frames: Vec<([u32; 2], String)>, software: bool },
     /// #501: the cross-machine audio check on two float WAVs.
     CrossMachine([String; 2]),
+    /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
+    PixelHash(Vec<([u32; 2], deep_gpu::pixel_hash::Format, String)>),
     /// A document's session played on a virtual display to `to` (#488).
     Play {
         doc: String,
@@ -1024,6 +1035,8 @@ pub struct Hub<'a> {
     pub pack_authors: BTreeMap<String, String>,
     /// Each document's expansions at its last check, for the replies that carry them.
     pub expansions: BTreeMap<String, Vec<Expansion>>,
+    /// #544's planted start_on: each session's first evaluated time since its revision loaded.
+    pub first_frames: BTreeMap<String, i64>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -1174,6 +1187,7 @@ impl<'a> Hub<'a> {
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
             expansions: BTreeMap::new(),
+            first_frames: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
@@ -1679,6 +1693,7 @@ impl<'a> Hub<'a> {
             Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
             Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
             Call::CrossMachine(wavs) => self.cross_machine(wavs),
+            Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
                 doc,
                 display_hz,
@@ -2127,6 +2142,14 @@ impl<'a> Hub<'a> {
                 issues.push(unfit_issue(r.code, r.path));
             }
             issues.extend(self.inline_vectors(form));
+            // #544: a spawn's reads of a logic item's occurrences, checked against its emits
+            // before any step runs; then the logic items baked into the lists their readers read.
+            if !deep_canvas_media::planted("undeclared_field_reads_zero") {
+                issues.extend(crate::spawn::undeclared_issues(form));
+            }
+            if let Err(i) = self.inline_occurrences(form, &[]) {
+                issues.push(i);
+            }
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
@@ -2224,6 +2247,7 @@ impl<'a> Hub<'a> {
         if let Some(session) = self.sessions.get_mut(&show.doc) {
             session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
         }
+        self.first_frames.remove(&show.doc);
         // #1732: render-back's geometry audit of the revision, on its frame at `t`.
         if show.include.iter().any(|i| matches!(i, Include::Audit)) {
             let audit = self.audit_of(&show.doc, show.t);

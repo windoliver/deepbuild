@@ -1341,6 +1341,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #1942 first measurement: the merge base has no host link. One process names the reference Mac's Lima VM deep-ubuntu in a temp home's SSH config, refreshes its facts over SSH and starts a remote run there that writes 20 lines stamped with the host's clock, failing unless the facts hold its kernel release, every line arrives in order within 500 ms and the run ends 0; p50 includes Node's start, three SSH connections and the run's 2 s. The issue's 5 s facts refresh and 500 ms output lag stay in tests/acceptance/1942/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "app-select-700",
+      "command": [
+        "node",
+        "benchmarks/app-select-700.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1461 first measurement: at the merge base the replica's list has no row a press at a point opens. One process writes a record of 700 working sessions in 7 projects with the rows the hub builds, launches the replica on it with the real clock, and presses a row 21 times, the first a warm-up, failing unless each press opens its row's page; p50 includes the replica's launch. The issue's 100 ms at the 95th percentile stays in tests/acceptance/1461/budget.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

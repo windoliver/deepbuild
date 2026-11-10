@@ -84,7 +84,7 @@ export function fixture() {
   push(release.id, { v: 1, id: ulid(ts + 60_000, 'moot'), kind: 'ask.moot', subject: `ask:${moot.id}`, writer: 'core', actor: 'you', scope: 'you', data: { because: 'check_passed', verdict: `verdict:${ulid(START, 'verdict')}` } });
   // The docs session: five open, the second of them put off until an hour from now.
   const docsAsks = Array.from({ length: 5 }, () => ask(docs));
-  push(docs.id, { v: 1, id: ulid(ts + 60_000, 'later'), kind: 'ask.later', subject: `ask:${docsAsks[1].id}`, writer: 'app', actor: 'you', scope: 'you', data: { until: NOW + HOUR } });
+  push(docs.id, { v: 1, id: ulid(ts + 60_000, 'later'), kind: 'ask.later', subject: `ask:${docsAsks[1].id}`, writer: 'core', actor: 'you', scope: 'you', data: { until: NOW + HOUR } });
   // The review session: five open, the third held for a message the agent hasn't read.
   const reviewAsks = Array.from({ length: 5 }, () => ask(review));
   for (const session of rest) for (let i = 0; i < 5; i++) ask(session);
