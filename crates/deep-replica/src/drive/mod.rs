@@ -663,9 +663,8 @@ impl Replica {
         };
         let before = nanos(self.clock.t);
         self.clock.t += step;
-        if self.dirty.is_some() {
-            self.move_views_clock();
-        }
+        // The views' clock follows the replica's in every mode, so an age a row writes ticks as the clock runs (#1458).
+        self.move_views_clock();
         self.cx
             .advance_clock(Duration::from_nanos(nanos(self.clock.t) - before));
         self.cx.run_until_parked();
@@ -1205,7 +1204,24 @@ impl Replica {
         for run in frame.runs.iter().filter(|r| r.visible) {
             add_text(&mut snapshot.tree, run.text.clone(), run.bounds);
         }
-        (snapshot.to_json(), frame)
+        let mut json = snapshot.to_json();
+        // #1458: each string drawn with its size and face, and where each shipped view was laid out.
+        json["runs"] = frame
+            .runs
+            .iter()
+            .filter(|r| r.visible)
+            .map(|r| json!({"text": r.text, "bounds": r.bounds, "size": r.size, "face": r.face, "cut": r.cut}))
+            .collect();
+        let scale = frame.scale;
+        let device = |v: gpui_kit::Pixels| (f32::from(v) * scale).round() as i64;
+        json["views"] = deep_app::views::drawn_views()
+            .into_iter()
+            .map(|(name, b)| {
+                let bounds = [b.origin.x, b.origin.y, b.size.width, b.size.height].map(device);
+                json!({"name": name, "bounds": bounds})
+            })
+            .collect();
+        (json, frame)
     }
 
     fn see(&mut self, call: &Value) -> Result<Value, Fail> {

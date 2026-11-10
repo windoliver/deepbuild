@@ -90,24 +90,29 @@ impl State {
             State::Quiet { last_seen } => {
                 let age = now.saturating_sub(*last_seen);
                 changes_after(changes_in(age));
-                format!("quiet · last seen {} ago", span(age))
+                // #1458's planted row reads its time the way no surface may, in a test build only.
+                if crate::plain::planted("row-says-ago") {
+                    return "quiet · last seen 2 min ago".to_owned();
+                }
+                format!("quiet · last seen {}", span(age))
             }
             other => other.word().to_owned(),
         }
     }
 }
 
-/// How long until `deadline` from `now`, as a card or a notification says when a default applies: whole days once a
-/// day or more is left ("3 d"), else [`span`]. Read to the nearest minute first, so a deadline a second short of
-/// three days away still reads "3 d".
-pub fn span_until(deadline: u64, now: u64) -> String {
-    const MINUTE: u64 = 60_000;
-    const DAY: u64 = 86_400_000;
-    let left = (deadline.saturating_sub(now) + MINUTE / 2) / MINUTE * MINUTE;
-    if left >= DAY {
-        format!("{} d", left / DAY)
-    } else {
-        span(left)
+/// A moment as every surface writes it (#1458), in your time zone: "16:40" today, "tomorrow 16:40", and on another
+/// day its weekday, "Mon 16:40". An ask's row, its card and its notification say when its default applies in these
+/// words.
+pub fn moment(at: u64, now: u64) -> String {
+    use chrono::{Local, TimeZone as _};
+    let local = |ms: u64| Local.timestamp_millis_opt(ms as i64).unwrap();
+    let (at, today) = (local(at), local(now).date_naive());
+    let time = at.format("%H:%M");
+    match (at.date_naive() - today).num_days() {
+        0 => time.to_string(),
+        1 => format!("tomorrow {time}"),
+        _ => format!("{} {time}", at.format("%a")),
     }
 }
 
@@ -130,9 +135,10 @@ pub fn changes_after(wait: u64) {
     });
 }
 
-/// How long until [`span`] of an age `ms` reads differently: at the next whole second, minute or hour it shows.
+/// How long until [`span`] of an age `ms` reads differently: at the next whole second, minute, hour or day it shows.
 pub fn changes_in(ms: u64) -> u64 {
     let unit = match ms / 1000 {
+        s if s >= 86_400 => 86_400_000,
         s if s >= 3600 => 3_600_000,
         s if s >= 60 => 60_000,
         _ => 1000,
@@ -140,9 +146,27 @@ pub fn changes_in(ms: u64) -> u64 {
     unit - ms % unit
 }
 
-/// A span of time as a person reads it: "4 min", "2 h", "12 s".
+/// `words` and the length [`span`] wrote at their end, if one is: a row draws that length in a slot of its own at
+/// its right edge, so a ticking time moves nothing else in the row (#1458).
+pub fn time_at_end(words: &str) -> (&str, Option<&str>) {
+    let mut parts = words.rsplitn(3, ' ');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(unit), Some(n), Some(rest))
+            if ["s", "min", "h", "d"].contains(&unit)
+                && !n.is_empty()
+                && n.bytes().all(|b| b.is_ascii_digit()) =>
+        {
+            (rest, Some(&words[rest.len() + 1..]))
+        }
+        _ => (words, None),
+    }
+}
+
+/// A length of time as every surface writes it (#1458): "40 s", "12 min", "3 h" or "2 d", with a space and no "ago",
+/// since the slot it's in says it's since.
 pub fn span(ms: u64) -> String {
     match ms / 1000 {
+        s if s >= 86_400 => format!("{} d", s / 86_400),
         s if s >= 3600 => format!("{} h", s / 3600),
         s if s >= 60 => format!("{} min", s / 60),
         s => format!("{s} s"),
@@ -816,9 +840,17 @@ mod tests {
     /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.
     #[test]
     fn an_age_changes_exactly_when_its_span_next_reads_differently() {
-        let ages = (0..200_000)
-            .step_by(997)
-            .chain([59_999, 60_000, 90_000, 3_599_999, 3_600_000, 7_300_123]);
+        let ages = (0..200_000).step_by(997).chain([
+            59_999,
+            60_000,
+            90_000,
+            3_599_999,
+            3_600_000,
+            7_300_123,
+            86_399_999,
+            86_400_000,
+            200_000_000,
+        ]);
         for age in ages {
             let wait = changes_in(age);
             assert!(wait > 0, "{age}");

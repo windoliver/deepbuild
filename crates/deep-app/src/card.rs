@@ -13,6 +13,7 @@
 
 use std::cell::RefCell;
 
+use crate::chrome::{sizes, Typed as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
@@ -37,7 +38,7 @@ pub fn init(cx: &mut App) {
             let size = window.viewport_size();
             Bounds::centered_at(
                 point(size.width / 2., size.height / 2.),
-                gpui_kit::size(px(480.), px(240.)),
+                gpui_kit::size(px(480.), px(240.)), // size-literal-exception: the slot of a prompt no ask placed (#327); review 2027-04-30
             )
         });
         let options = options
@@ -89,15 +90,22 @@ thread_local! {
     static FOCUS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
 }
 
-/// Issue #1172: a Needs you row's click: presents `ask`'s card in the middle of the window, its content read from the
-/// record once. One already up leaves first, unanswered. An ask the record no longer holds open presents nothing.
+/// Issue #1172: a Needs you row's click: presents `ask`'s card in the middle of the page region, right of the list
+/// where the window shows it (#1458), its content read from the record once. One already up leaves first, unanswered.
+/// An ask the record no longer holds open presents nothing.
 pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
     leave(cx);
     let viewport = window.viewport_size();
     let (width, height) = (f32::from(viewport.width), f32::from(viewport.height));
+    let left = crate::views::drawn_views()
+        .into_iter()
+        .find(|(name, _)| *name == crate::views::SIDEBAR)
+        .map_or(0, |(_, list)| f32::from(list.right()) as i64);
     let [w, h] = SIZE;
+    // A page region too narrow for the card leaves it in the middle of the window, as before.
+    let left = if width as i64 - left >= w { left } else { 0 };
     let rect = [
-        ((width as i64 - w) / 2).max(0),
+        left + ((width as i64 - left - w) / 2).max(0),
         ((height as i64 - h) / 2).max(0),
         w,
         h,
@@ -305,47 +313,49 @@ impl Card {
     }
 
     fn row(&self, index: usize, row: &Row, chrome: &Chrome, cx: &mut Context<Self>) -> AnyElement {
+        use crate::views::{control, Control};
         let label: SharedString = row.label().to_owned().into();
-        let (id, role, target): (ElementId, Role, Option<Target>) = match row {
-            Row::Text(_) => (("card-line", index).into(), Role::Label, None),
+        let (id, kind, target): (ElementId, Option<Control>, Option<Target>) = match row {
+            Row::Text(_) => (("card-line", index).into(), None, None),
             Row::Option { index, .. } => (
                 ("card-option", *index).into(),
-                Role::Button,
+                Some(Control::Plain),
                 Some(Target::Option(*index)),
             ),
-            Row::Step { index, .. } => (
+            Row::Step { index, on, .. } => (
                 ("card-step", *index).into(),
-                Role::Button,
+                Some(Control::Switch(*on)),
                 Some(Target::Step(*index)),
             ),
-            Row::Send => ("card-send".into(), Role::Button, Some(Target::Send)),
-            Row::Undo => ("card-undo".into(), Role::Button, Some(Target::Undo)),
+            Row::Send => ("card-send".into(), Some(Control::Main), Some(Target::Send)),
+            Row::Undo => ("card-undo".into(), Some(Control::Plain), Some(Target::Undo)),
         };
-        let focused = matches!(row, Row::Option { focused: true, .. });
-        let element = crate::views::observed(id)
-            .role(role)
-            .aria_label(label.clone())
+        let (Some(kind), Some(target)) = (kind, target) else {
+            // The question is the card's largest text, its first line the kind's plain word (#1458).
+            let role = match index {
+                0 => sizes().small,
+                1 => sizes().title,
+                _ => sizes().body,
+            };
             // A block, not a flex row, so the text takes the card's width and a long question wraps (#1550).
-            .text_xs()
-            .child(label);
-        match target {
-            Some(target) => element
-                .px_3()
-                .py_1()
-                .border_1()
-                .border_color(if focused {
-                    chrome.focus
-                } else {
-                    chrome.ink_primary
-                })
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |card, _, _, _| card.pressing(target)),
-                )
-                .on_click(cx.listener(move |card, _, _, cx| card.pressed(target, cx)))
-                .into_any_element(),
-            None => element.into_any_element(),
-        }
+            return crate::views::observed(id)
+                .role(Role::Label)
+                .aria_label(label.clone())
+                .typed(role)
+                .child(label)
+                .into_any_element();
+        };
+        // No border: the focus ring's room is always kept, and shows on the focused option alone.
+        let focused = matches!(row, Row::Option { focused: true, .. });
+        control(id, kind, label, chrome)
+            .border(sizes().ring)
+            .border_color(chrome.focus.opacity(if focused { 1. } else { 0. }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |card, _, _, _| card.pressing(target)),
+            )
+            .on_click(cx.listener(move |card, _, _, cx| card.pressed(target, cx)))
+            .into_any_element()
     }
 }
 
@@ -383,7 +393,7 @@ impl Render for Card {
                     crate::views::observed("card-failed")
                         .role(Role::Label)
                         .aria_label(line.clone())
-                        .text_xs()
+                        .typed(sizes().small)
                         .child(line)
                         .into_any_element()
                 }));
@@ -391,23 +401,20 @@ impl Render for Card {
             }
             None => vec![
                 div()
-                    .text_base()
+                    .typed(sizes().title)
                     .child(self.question.clone())
                     .into_any_element(),
                 div()
                     .flex()
-                    .gap_2()
+                    .gap(sizes().space(1))
                     .children(self.options.iter().enumerate().map(|(index, option)| {
-                        div()
-                            .id(("card-option", index))
-                            .px_3()
-                            .py_1()
-                            .border_1()
-                            .border_color(chrome.ink_primary)
-                            .on_click(
-                                cx.listener(move |_, _, _, cx| cx.emit(PromptResponse(index))),
-                            )
-                            .child(option.clone())
+                        crate::views::control(
+                            ("card-option", index),
+                            crate::views::Control::Plain,
+                            option.clone(),
+                            chrome,
+                        )
+                        .on_click(cx.listener(move |_, _, _, cx| cx.emit(PromptResponse(index))))
                     }))
                     .into_any_element(),
             ],
@@ -432,13 +439,18 @@ impl Render for Card {
         .absolute()
         .size_full();
         // The prompt fills the window; only the card itself takes a hitbox, so the rest of the window still
-        // takes your input. The card's outer edge is what's measured, its border included.
+        // takes your input. The card's outer edge is what's measured; it draws no border (#1458). A window made
+        // smaller while the card shows keeps the card inside it, never cut at its edge (#1458).
+        let viewport = window.viewport_size();
+        let (origin, size) = (self.bounds.origin, self.bounds.size);
+        let left = origin.x.min(viewport.width - size.width).max(px(0.));
+        let top = origin.y.min(viewport.height - size.height).max(px(0.));
         div().size_full().child(
             div()
                 .absolute()
-                .left(self.bounds.origin.x)
-                .top(self.bounds.origin.y)
-                .w(self.bounds.size.width)
+                .left(left)
+                .top(top)
+                .w(size.width)
                 .child(
                     // One node holding the card's rows, its value the card's arming state, so a snapshot and an
                     // assistive client read whether a press would count (#1459).
@@ -455,11 +467,10 @@ impl Render for Card {
                         .min_h(self.bounds.size.height)
                         .flex()
                         .flex_col()
-                        .gap_1()
-                        .p_4()
+                        .gap(sizes().space(0))
+                        .p(sizes().space(3))
+                        .rounded(sizes().radius)
                         .bg(chrome.raised)
-                        .border_1()
-                        .border_color(chrome.ink_primary)
                         .text_color(chrome.ink_primary)
                         .children(rows),
                 )

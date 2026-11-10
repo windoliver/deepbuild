@@ -302,13 +302,26 @@ pub fn new_runtime() -> anyhow::Result<Rc<ShellRuntime>> {
 /// Registers gpui-shell's component catalog, the shipped views and DeepBuild's empty-policy
 /// default.
 pub fn init(cx: &mut App) {
+    // The chrome's code face is bundled, not the system's (#1458), so GPUI's text system is given it; a test build's
+    // planted row asks for the canvas's face, which it's given too.
+    let code = chrome::sizes().code.clone();
+    let canvas =
+        plain::planted("row-label-canvas-face").then(|| deep_text_gpui::Role::Body.family());
+    let faces = deep_text::FACES
+        .iter()
+        .filter(|face| face.family == code.as_ref() || Some(face.family) == canvas)
+        .map(|face| std::borrow::Cow::Borrowed(face.bytes))
+        .collect();
+    let _ = cx.text_system().add_fonts(faces);
     gpui_shell::components::init(cx);
     views::register_views(cx);
     card::init(cx);
     commands::init(cx);
     // Chrome effects hold their still pose under macOS's Reduce Motion (#1436).
     #[cfg(target_os = "macos")]
-    cx.set_reduce_motion(objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion());
+    cx.set_reduce_motion(
+        objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion(),
+    );
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")
