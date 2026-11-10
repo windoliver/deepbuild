@@ -15,88 +15,22 @@
 // (0.15 s) the last mover step before it is step 1, so it reads 1 m. The issue's comment adds that linear on f64, vec2
 // and quat draws as vec3 does (lerp, and nlerp for a quat), and that i32 and bool are refused, naming the write.
 // `linear_blends_forward` blends a linear write from step k's value toward step k + 1's by α.
+//
+// The first two tests of this file (the 10 Hz vec3 drawn played and seeked, and linear_blends_forward) were swapped for
+// their blind redraft, tests/acceptance/545-redraft-ac3/: they compared draws["mover.pos"] as one flat vector while the
+// README lays draws out as a bake's arrays, a list of elements, as this file's last test reads them.
 import { describe, expect, it } from 'vitest';
 import {
-  AC, FLICKS, TIMEOUT, bakeCall, bakeOf, checkCall, drawn, failsNaming, live, logic, logicBin, near, none, openView, piece, prebuild, refusedWrites, admitted,
-  type JsonObject, type JsonValue, type Planted, type WriteSpec,
+  AC, TIMEOUT, checkCall, drawn, live, logic, logicBin, near, none, openView, piece, prebuild, refusedWrites, admitted,
+  type JsonObject, type WriteSpec,
 } from './helpers.ts';
-import { BLEND_WRITES, SQRT_HALF, blend, moverItem, readerItem, still } from './programs.ts';
+import { BLEND_WRITES, SQRT_HALF, blend, still } from './programs.ts';
 
 prebuild(() => { logicBin(); });
 
 const SEED = 545_03;
-type Write = 'linear' | 'hold';
-const moverPiece = (w: Write): JsonObject => piece({ seed: SEED, items: { mover: moverItem(w) } });
-const bothPiece = (w: Write): JsonObject => piece({ seed: SEED, items: { mover: moverItem(w), reader: readerItem() } });
-/** What the issue says each write draws at each time, in metres. */
-const WANT: Record<Write, Record<string, number>> = { linear: { '0.1': 0, '0.15': 0.5 }, hold: { '0.1': 1, '0.15': 1 } };
-
-interface Drawn { write: Write; how: string; t: number; landed: number; x: JsonValue[] }
-/** The mover's `pos` as drawing reads it at 0.1 s and 0.15 s: played straight, seeked back from 1 s, and seeked once in
- * a fresh view. */
-async function drawsOf(write: Write, planted: Planted[] = []): Promise<Drawn[]> {
-  const l = live(planted);
-  const out: Drawn[] = [];
-  try {
-    const v = await openView(l, moverPiece(write), [], 1);
-    await v.frame();
-    for (let i = 1; i <= 60; i++) {
-      const f = await v.frame({ play: 1 / 60 });
-      if (i === 6 || i === 9) out.push({ write, how: 'played', t: i === 6 ? 0.1 : 0.15, landed: f.landed.t, x: drawn(f.landed, 'mover.pos', `${write}, played to ${i}/60 s`) });
-    }
-    for (const t of [0.15, 0.1]) {
-      const f = await v.frame({ seek: t });
-      out.push({ write, how: 'seeked back from 1 s', t, landed: f.landed.t, x: drawn(f.landed, 'mover.pos', `${write}, seeked back to ${t} s`) });
-    }
-    for (const t of [0.15, 0.1]) {
-      const w = await openView(l, moverPiece(write), [], 1);
-      const f = await w.frame({ seek: t });
-      out.push({ write, how: 'seeked in a fresh view', t, landed: f.landed.t, x: drawn(f.landed, 'mover.pos', `${write}, seeked to ${t} s in a fresh view`) });
-    }
-  } finally { l.stop(); }
-  return out;
-}
-/** The criterion over what was drawn, each failure naming the time and both values. */
-function judge(ds: Drawn[]): string[] {
-  const failures: string[] = [];
-  for (const d of ds) {
-    if (d.landed !== Math.round(d.t * FLICKS)) failures.push(`${d.write}, ${d.how}: the frame for ${d.t} s landed at flick ${d.landed}`);
-    const want = WANT[d.write][String(d.t)]!;
-    if (!near(d.x, [want, 0, 0])) failures.push(`${d.write}, ${d.how}: at t = ${d.t} s it drew x = ${Array.isArray(d.x) ? String(d.x[0]) : JSON.stringify(d.x)} m, not ${want} m (${JSON.stringify(d.x)})`);
-  }
-  if (ds.length !== 12) failures.push(`${ds.length} draws read, not 12`);
-  return failures;
-}
 
 describe(`${AC[3]} a linear write draws one step late, blended toward the stored value, and nothing else reads the blend`, () => {
-  it(`${AC[3]} the 10 Hz item's linear vec3 draws 0.5 m at 0.15 s and 0 m at 0.1 s played and seeked, held it draws 1 m; a reader reads whole metres; step and full-state hashes are equal either way`, async () => {
-    none(judge([...await drawsOf('linear'), ...await drawsOf('hold')]), 'what drawing reads');
-    const [lin, hold] = logic([bakeCall(bothPiece('linear'), { steps: 120 }), bakeCall(bothPiece('hold'), { steps: 120 })]).map((r, i) => bakeOf(r, `the bake with ${i ? 'hold' : 'linear'}`));
-    const failures: string[] = [];
-    for (const s of lin!.steps) {
-      const seen = s.arrays['reader.seen'];
-      if (seen && !(Array.isArray(seen[0]) && Number.isInteger(seen[0][0]) && seen[0][1] === 0 && seen[0][2] === 0)) failures.push(`reader step ${s.step}: it read ${JSON.stringify(seen)}, not whole metres`);
-      const pos = s.arrays['mover.pos'];
-      if (pos && s.items['mover'] && !near(pos[0], [s.step, 0, 0])) failures.push(`mover step ${s.step}: it stored ${JSON.stringify(pos)}, not [${s.step}, 0, 0]`);
-    }
-    const at9 = lin!.steps.find((s) => s.step === 9)?.arrays['reader.seen'];
-    if (!near(at9?.[0], [1, 0, 0])) failures.push(`reader step 9 (0.15 s) read ${JSON.stringify(at9)}, not step 1's stored [1, 0, 0]`);
-    for (const id of ['mover', 'reader']) {
-      const hashes = (b: typeof lin): string => JSON.stringify(b!.steps.map((s) => [s.step, s.items[id]?.hash ?? null]));
-      if (hashes(lin) !== hashes(hold)) failures.push(`${id}: its step hashes differ between linear and hold`);
-      if (JSON.stringify(lin!.checkpoints[id]) !== JSON.stringify(hold!.checkpoints[id])) failures.push(`${id}: its full-state hashes at the checkpoints differ between linear and hold: ${JSON.stringify(lin!.checkpoints[id])} against ${JSON.stringify(hold!.checkpoints[id])}`);
-    }
-    if (!(lin!.checkpoints['mover']?.length ?? 0)) failures.push('the bake holds no checkpoint of the mover to compare');
-    none(failures, 'the stored values, with linear and with hold');
-  }, TIMEOUT);
-
-  it(`${AC[3]} a planted blend toward the next step (linear_blends_forward) draws 1.5 m at 0.15 s and fails, naming the time and both values`, async () => {
-    none(judge([...await drawsOf('linear'), ...await drawsOf('hold')]), 'the real module');
-    const planted = [...await drawsOf('linear', ['linear_blends_forward']), ...await drawsOf('hold', ['linear_blends_forward'])];
-    expect(planted.filter((d) => d.write === 'linear' && d.t === 0.15).map((d) => near(d.x, [1.5, 0, 0])), 'the planted blend draws 1.5 m at 0.15 s, played and seeked').toEqual([true, true, true]);
-    failsNaming(judge(planted), /linear, played: at t = 0\.15 s it drew x = 1\.5 m, not 0\.5 m/, 'the planted blend');
-  }, TIMEOUT);
-
   it(`${AC[3]} an i32 or bool write declared linear is refused at check, naming it; f64, vec2, vec3 and quat writes may be linear`, () => {
     const one = (writes: Record<string, WriteSpec>): JsonObject => checkCall(piece({ seed: SEED, items: { cam: { program: still(), writes } } }));
     const [i32, bool, fine] = logic([
