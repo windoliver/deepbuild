@@ -117,13 +117,9 @@ impl Hub<'_> {
         if size[0] * size[1] == 0 {
             return Err("no_drawing".into());
         }
-        let h = PixelHash::new(&dev.device, planted).hash(
-            &dev.device,
-            &dev.queue,
-            rgba,
-            size,
-            Format::Rgba8,
-        );
+        // One pipeline for every render the hub hashes, so hashing adds only its pass (#405).
+        let pass = self.hash_pass.get_or_insert_with(|| PixelHash::new(&dev.device, planted));
+        let h = pass.hash(&dev.device, &dev.queue, rgba, size, Format::Rgba8);
         Ok(hex(h.gpu))
     }
 

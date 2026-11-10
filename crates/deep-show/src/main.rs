@@ -20,6 +20,7 @@ mod evidence;
 mod export;
 mod film;
 mod film_layout;
+mod geometry_audit;
 mod film_viewer;
 mod frames;
 mod function;
@@ -769,6 +770,18 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "catalog" => return Some(Call::Catalog),
         "verdict" => return Some(Call::Verdict(c.get("claim")?.as_str()?.to_string())),
         "verdicts" => return Some(Call::Verdicts(c.get("claim")?.as_str()?.to_string())),
+        "answer" => {
+            return Some(Call::Answer {
+                via: acting(c)?,
+                claim: c.get("claim")?.as_str()?.to_string(),
+                requirement: c.get("requirement")?.as_str()?.to_string(),
+                yes: match c.get("answer")?.as_str()? {
+                    "yes" => true,
+                    "no" => false,
+                    _ => return None,
+                },
+            })
+        }
         "golden" => {
             return Some(Call::Golden {
                 fixture: c.get("fixture")?.as_str()?.to_string(),
@@ -1254,6 +1267,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
                 "layout_text_by_kind" => Planted::LayoutTextByKind,
+                "sweep_audits_samples_only" => Planted::SweepAuditsSamplesOnly,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,

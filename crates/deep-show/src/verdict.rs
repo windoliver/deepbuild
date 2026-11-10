@@ -25,6 +25,13 @@ struct Current<'h> {
     doc: &'h Value,
 }
 
+/// #405: a determinism check's canonical renders' wall time and their pixel hashes', in ms.
+#[derive(Clone, Copy, Debug, Default)]
+struct Timing {
+    render_ms: f64,
+    hash_ms: f64,
+}
+
 /// The core's honest-numbers check kind (canvas primitives: Honest numbers, the check).
 const HONEST: &str = "honest_numbers";
 
@@ -195,6 +202,7 @@ impl<'a> Hub<'a> {
         let read = self.evaluated_reads(c);
         let determinism = self.determinism_runs(c);
         let layout = self.film_layout_runs(c);
+        let audits = self.geometry_audit_runs(claim, c);
         let mut docs: Vec<(String, Current)> = Vec::new();
         let mut missing = false;
         for d in &c.deliverables {
@@ -222,8 +230,18 @@ impl<'a> Hub<'a> {
             .iter()
             .map(|r| {
                 let laid = layout.get(&r.id);
-                let compared = determinism.get(&r.id).or(laid.map(|(i, _)| i));
-                let mut row = self.judge(r, &docs, missing, &read, &c.session, compared);
+                let timed = determinism.get(&r.id);
+                let compared = timed.map(|(i, _)| i).or(laid.map(|(i, _)| i));
+                let mut row = match audits.get(&r.id) {
+                    Some(j) if !missing && !docs.is_empty() => self.judge_audit(r, j),
+                    _ => self.judge(r, &docs, missing, &read, &c.session, compared),
+                };
+                // #405: what hashing adds to the canonical renders, both in ms.
+                if let (Some((_, t)), Some(map)) = (timed, row.as_object_mut()) {
+                    if t.render_ms > 0.0 {
+                        map.insert("timing".into(), json!({"render_ms": t.render_ms, "hash_ms": t.hash_ms}));
+                    }
+                }
                 // #408: film.layout's own time on the requirement.
                 if let (Some((_, ms)), Some(map)) = (laid, row.as_object_mut()) {
                     map.insert("timing".into(), json!({"check_ms": ms}));
@@ -344,7 +362,7 @@ impl<'a> Hub<'a> {
     /// comparison on a 60 Hz display), an error for each time whose GPU pixel hashes differ
     /// (#1897) or that couldn't be drawn; a requirement this machine can't run alone (no GPU, or
     /// a `compare` other than `same_machine`) is BLOCKED instead. Requirement ID → its issues.
-    fn determinism_runs(&mut self, c: &crate::hub::Claim) -> BTreeMap<String, Vec<Value>> {
+    fn determinism_runs(&mut self, c: &crate::hub::Claim) -> BTreeMap<String, (Vec<Value>, Timing)> {
         let mut out = BTreeMap::new();
         for r in c.requirements.iter().filter(|r| r.check["kind"] == DETERMINISM) {
             let at_times: Option<Vec<i64>> = r.check["at_times"].as_array().map(|ts| {
@@ -353,6 +371,7 @@ impl<'a> Hub<'a> {
                     .collect()
             });
             let mut issues = Vec::new();
+            let mut timing = Timing::default();
             match r.check["compare"].as_str() {
                 None | Some("same_machine") => {}
                 Some("shards") => {
@@ -366,14 +385,14 @@ impl<'a> Hub<'a> {
                                 "ids": [], "doc": doc, "what": format!("the revision couldn't be exported: {}", compared["code"])})),
                         }
                     }
-                    out.insert(r.id.clone(), issues);
+                    out.insert(r.id.clone(), (issues, timing));
                     continue;
                 }
                 Some(other) => {
                     // Another machine's record: nothing this hub runs alone.
                     issues.push(json!({"code": "not_run", "blocked": true, "kind": DETERMINISM, "compare": other,
                         "ask": "make this document's record on the other CPU architecture and compare it with determinism's against"}));
-                    out.insert(r.id.clone(), issues);
+                    out.insert(r.id.clone(), (issues, timing));
                     continue;
                 }
             }
@@ -397,6 +416,11 @@ impl<'a> Hub<'a> {
                     continue;
                 };
                 for f in frames {
+                    // #405: the canonical renders' and their pixel hashes' wall time, summed.
+                    for side in [&f["play"], &f["seek"]] {
+                        timing.render_ms += side["timing"]["render_ms"].as_f64().unwrap_or(0.0);
+                        timing.hash_ms += side["timing"]["hash_ms"].as_f64().unwrap_or(0.0);
+                    }
                     let (play, seek) = (&f["play"]["pixel_hash"], &f["seek"]["pixel_hash"]);
                     if play.is_null() || play != seek {
                         issues.push(json!({"check": DETERMINISM, "code": "seek_differs", "severity": "error",
@@ -405,9 +429,56 @@ impl<'a> Hub<'a> {
                     }
                 }
             }
-            out.insert(r.id.clone(), issues);
+            out.insert(r.id.clone(), (issues, timing));
         }
         out
+    }
+
+    /// #405: a geometry audit's row: FAIL on any failure; BLOCKED where a state wasn't run or a
+    /// range was only sampled; INCONCLUSIVE, asking once, where only the document's own exception
+    /// lets a failure go; else PASS.
+    fn judge_audit(&self, r: &Requirement, j: &crate::geometry_audit::Judged) -> Value {
+        let mut row = Map::new();
+        row.insert("id".into(), json!(r.id));
+        row.insert("kind".into(), json!(crate::geometry_audit::GEOMETRY_AUDIT));
+        row.insert("machines".into(), json!("any"));
+        row.insert("determinism".into(), json!("exact"));
+        row.insert("issues".into(), json!(j.issues));
+        row.insert("timing".into(), json!({"check_ms": j.ms}));
+        if !j.estimates.is_empty() {
+            row.insert("estimates".into(), json!(j.estimates));
+        }
+        if !j.issues.is_empty() {
+            return done(row, "FAIL", Vec::new());
+        }
+        // Refused at check: a range a sweep could only sample decides nothing (Control sweep).
+        if !j.refused.is_empty() {
+            return done(row, "INVALID", j.refused.clone());
+        }
+        if !j.blocked.is_empty() {
+            return done(row, "BLOCKED", j.blocked.clone());
+        }
+        if !j.pending.is_empty() {
+            let asks: Vec<Value> = j
+                .pending
+                .iter()
+                .filter(|(_, _, fresh)| *fresh)
+                .map(|(id, x, _)| json!({
+                    "kind": "approval", "id": id, "requirement": r.id,
+                    "exception": match x.split_once('~') {
+                        Some((a, b)) => json!({"contact": [a, b]}),
+                        None => json!({"floating": x}),
+                    },
+                    "why": format!("`{x}` is excused only by the document's own checks (floating, or an allowed contact), which narrow its writer's own checks: approve it for this requirement?"),
+                }))
+                .collect();
+            if !asks.is_empty() {
+                row.insert("asks".into(), Value::Array(asks));
+            }
+            row.insert("pending".into(), json!(j.pending.iter().map(|(id, _, _)| id).collect::<Vec<_>>()));
+            return done(row, "INCONCLUSIVE", Vec::new());
+        }
+        done(row, "PASS", Vec::new())
     }
 
     /// One requirement's row: its check input's kind run on every deliverable, with the machines
