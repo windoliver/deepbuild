@@ -1520,6 +1520,42 @@
     }
   },
   {
+    "source": "job.paid",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Run upper-paid@1.0.0 for test.upper once, at $0.02 a run?",
+        "options": [
+          {
+            "id": "run",
+            "label": "Run it once",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't run it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "e3b98a4da31a127d4bde6e43c84baa82f4b3d8b8a5b2a5c8f1a2b3c4d5e6f708",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "e3b98a4da31a127d4bde6e43c84baa82f4b3d8b8a5b2a5c8f1a2b3c4d5e6f708"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
     "source": "library.unblock",
     "kind": "unblock",
     "fixture": {
