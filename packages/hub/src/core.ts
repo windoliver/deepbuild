@@ -1161,7 +1161,9 @@ export class Core {
       root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
       keep: async (bytes, source) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
       has: async (sha) => (await this.store.get(sha)) !== undefined,
-      raise: (ask, plan) => this.asks.raise(this.connection('core'), 'job.paid', ask, plan),
+      read: (sha) => this.store.read(sha),
+      send: (request, boundary) => this.store.send(request, boundary),
+      raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
     });
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,

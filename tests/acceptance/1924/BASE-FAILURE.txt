@@ -1,0 +1,231 @@
+Base commit: d51be2c3 (Merge pull request #2108), the brief's base; #1922's job API is there, no implementation of #1924.
+Built first: npm ci; npm run build --workspaces; cargo build --locked -p deep-hook (toolchain 1.99.1), each through scripts/lease.
+Command: NO_COLOR=1 scripts/lease npx vitest run tests/acceptance/1924 --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-10  Machine: macOS (Apple silicon)  Node: v24.22.0  vitest 5.0.5. Paths below: <repo> is the worktree.
+Result: Test Files 2 failed (2); Tests 6 failed (6); about 22 s. Short on purpose: the surfaces don't exist.
+
+No test passed at the base. Every unplanted hub started (deep hub run, ready), the agent stand-in's session was
+acknowledged through its hooks, its deep mcp answered initialize, and test/hosted-kind (the kind test.hosted through
+#1922's deep.registerJob) installed; each failure is an expect in this folder, at the first missing surface:
+
+  AC1, the clean hub (hosted.test.ts): expect(failures).toEqual([]) fails with one failure, the setup's:
+    "setup: test/hosted-a (the tool hosted-a@1.0.0, run {url} on the test host 127.0.0.1:<port>, through
+    deep.registerJobTool) must install: exit 1, ... REFUSED: hosted-a@1.0.0 names its files as run {dir, entry}
+    inside its package, so test/hosted-a@1.0.0 isn't installed"
+    (no tool can run on a host at the base).
+  AC2, the clean hub (weights.test.ts): the same expect, at the same refusal for test/open-model 1.0.0's open-a@1.0.0,
+    which declares model.safetensors and tokenizer.json by hash and needs fp16.
+  The 4 planted hubs (job-host-asks-again, job-host-sends-early, job-weights-call-anyway, job-weights-not-keyed):
+    helpers.ts startHub's expect "the hub starts with DEEP_HUB_PLANT=<plant>, a planted program this suite names
+    (README, Plants)" fails: the hub exits with "DEEP_HUB_PLANT=<plant> names no planted program".
+
+Checked once by hand after this run, with a throwaway test deleted before the commit (not part of the suite): in an
+unplanted world the agent's deep_evidence of notes.txt stores it with origin agent (redaction unknown, license
+session), evidence.read of the seeded render reads origin deepbuild, kind render, redaction complete, the test host
+answers GET /report, and deep_job naming an input by sha256 is refused at the base by deep_job's strict schema
+("unlisted_field ... Leave out sha256: the schema lists only name, path"). After this run, helpers.ts's afterAll
+removes the temp folders with retries (a hub's children may still write there as it ends); nothing else changed.
+
+The run's output follows.
+------------------------------------------------------------------------------------------------------------------------
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run tests/acceptance/1924 --testTimeout=600000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <repo>
+
+stderr | tests/acceptance/1924/hosted.test.ts
+vitest-setup: stopping 3 process(es) this file left running:
+  42079 (node)
+  42087 (node)
+  42111 (node)
+
+ ❯ tests/acceptance/1924/hosted.test.ts (3 tests | 3 failed) 6619ms
+   ❯ #1924.a5540bf8 A hosted test job tool given a file an agent attached raises one ask naming the file's hash and the tool's host and sends nothing before your answer; after your yes a second job with the same file and host asks nothing, the same file to another host asks again, a render DeepBuild made goes without that ask, a job whose input names a path is refused before any file is read, and each receipt lists the files it sent; a hub that asks again for the approved pair, or sends the agent's file before the answer, fails, naming the job (3)
+     × the agent's file waits on one ask naming its hash and host; after your yes the pair asks nothing, another host asks again, the render needs no ask, a path is refused unread, and every receipt lists what it sent 4584ms
+     × a hub that asks again for the approved pair fails, naming the job 420ms
+     × a hub that sends the agent's file before the answer fails, naming the job 1054ms
+stderr | tests/acceptance/1924/weights.test.ts
+vitest-setup: stopping 5 process(es) this file left running:
+  44913 (node)
+  44927 (node)
+  44938 (node)
+  44984 (node)
+  44990 (node)
+
+ ❯ tests/acceptance/1924/weights.test.ts (3 tests | 3 failed) 10696ms
+   ❯ #1924.05593ee1 A test job tool for an open model on a test host declares two weight files by hash and one capability its call needs; with both present the job runs and its key holds the weight hashes; with one weight file swapped under the same name, or the capability missing, the job is BLOCKED before the call with an unblock ask naming the file or the capability; a tool whose declaration gives a new hash for one file under the same version misses the cache of its earlier runs; a planted runner that calls anyway, or that keys without the weight hashes, fails, naming the job (3)
+     × both present, the job runs keyed by the weight hashes; a swapped file or a missing capability is BLOCKED before the call with an unblock ask naming it; a new hash under the same version misses 7764ms
+     × a planted runner that calls anyway fails, naming the job 707ms
+     × a planted runner that keys without the weight hashes fails, naming the job 1251ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1924/hosted.test.ts > #1924.a5540bf8 A hosted test job tool given a file an agent attached raises one ask naming the file's hash and the tool's host and sends nothing before your answer; after your yes a second job with the same file and host asks nothing, the same file to another host asks again, a render DeepBuild made goes without that ask, a job whose input names a path is refused before any file is read, and each receipt lists the files it sent; a hub that asks again for the approved pair, or sends the agent's file before the answer, fails, naming the job > the agent's file waits on one ask naming its hash and host; after your yes the pair asks nothing, another host asks again, the render needs no ask, a path is refused unread, and every receipt lists what it sent
+AssertionError: the hosted tool keeps the agent's file to its one ask per hash and host, sends only by hash and lists every file it sent: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "setup: test/hosted-a (the tool hosted-a@1.0.0, run {url} on the test host 127.0.0.1:62867, through deep.registerJobTool) must install: exit 1, stdout \"Source: /private/tmp/dh1924-ILC13O/a\\n  test/hosted-a@1.0.0, digest d1:49499debacc13573d36ae85eb773544d9a2219178fe0f16f5e6ff108ccad330a, unsigned\\nPermissions:\\n  access: none\\n  notices: none\\n  actions: none\\n  check kinds: none\\n  provides: none\\n  uses: none\\n  replaces: none\\n  conflicts with: none\\n  runs on: none\\n  hosts: none\\n\", stderr \"REFUSED: hosted-a@1.0.0 names its files as run {dir, entry} inside its package, so test/hosted-a@1.0.0 isn't installed\\n\"",
++ ]
+
+ ❯ tests/acceptance/1924/hosted.test.ts:30:147
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/acceptance/1924/hosted.test.ts > #1924.a5540bf8 A hosted test job tool given a file an agent attached raises one ask naming the file's hash and the tool's host and sends nothing before your answer; after your yes a second job with the same file and host asks nothing, the same file to another host asks again, a render DeepBuild made goes without that ask, a job whose input names a path is refused before any file is read, and each receipt lists the files it sent; a hub that asks again for the approved pair, or sends the agent's file before the answer, fails, naming the job > a hub that asks again for the approved pair fails, naming the job
+AssertionError: the hub starts with DEEP_HUB_PLANT=job-host-asks-again, a planted program this suite names (README, Plants):  file://<repo>/packages/hub/dist/plant.js:101
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=job-host-asks-again names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:101:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1575:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:322:30
+
+Node.js v24.22.0
+: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ startHub tests/acceptance/1924/helpers.ts:212:184
+    210|   });
+    211|   const plant = env.DEEP_HUB_PLANT;
+    212|   expect(ready?.ready, `the hub starts${plant ? ` with DEEP_HUB_PLANT=…
+       |                                                                                                                                                                                        ^
+    213|   return { pid: child.pid!, socket: typeof ready!.socket === 'string' …
+    214| }
+ ❯ openWorld tests/acceptance/1924/helpers.ts:418:15
+ ❯ judged tests/acceptance/1924/hosted.test.ts:20:13
+ ❯ tests/acceptance/1924/hosted.test.ts:34:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/acceptance/1924/hosted.test.ts > #1924.a5540bf8 A hosted test job tool given a file an agent attached raises one ask naming the file's hash and the tool's host and sends nothing before your answer; after your yes a second job with the same file and host asks nothing, the same file to another host asks again, a render DeepBuild made goes without that ask, a job whose input names a path is refused before any file is read, and each receipt lists the files it sent; a hub that asks again for the approved pair, or sends the agent's file before the answer, fails, naming the job > a hub that sends the agent's file before the answer fails, naming the job
+AssertionError: the hub starts with DEEP_HUB_PLANT=job-host-sends-early, a planted program this suite names (README, Plants):  file://<repo>/packages/hub/dist/plant.js:101
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=job-host-sends-early names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:101:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1575:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:322:30
+
+Node.js v24.22.0
+: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ startHub tests/acceptance/1924/helpers.ts:212:184
+    210|   });
+    211|   const plant = env.DEEP_HUB_PLANT;
+    212|   expect(ready?.ready, `the hub starts${plant ? ` with DEEP_HUB_PLANT=…
+       |                                                                                                                                                                                        ^
+    213|   return { pid: child.pid!, socket: typeof ready!.socket === 'string' …
+    214| }
+ ❯ openWorld tests/acceptance/1924/helpers.ts:418:15
+ ❯ judged tests/acceptance/1924/hosted.test.ts:20:13
+ ❯ tests/acceptance/1924/hosted.test.ts:42:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/1924/weights.test.ts > #1924.05593ee1 A test job tool for an open model on a test host declares two weight files by hash and one capability its call needs; with both present the job runs and its key holds the weight hashes; with one weight file swapped under the same name, or the capability missing, the job is BLOCKED before the call with an unblock ask naming the file or the capability; a tool whose declaration gives a new hash for one file under the same version misses the cache of its earlier runs; a planted runner that calls anyway, or that keys without the weight hashes, fails, naming the job > both present, the job runs keyed by the weight hashes; a swapped file or a missing capability is BLOCKED before the call with an unblock ask naming it; a new hash under the same version misses
+AssertionError: the open model's weights and capability are checked on its host before each call and its weight hashes enter the job key: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "setup: test/open-model 1.0.0 (the tool open-a@1.0.0 on the test host 127.0.0.1:62889, declaring model.safetensors e8fb502ae03200521418276253cf63d53ad5f9c2c61f8f0451340dbd0fe373c7 and tokenizer.json 4636ba8d89b09b2555d9179c22cb0bf5432bd0df3e9b46f5717ef7f20827cbd3 and needing fp16) must install: exit 1, stdout \"Source: /private/tmp/dh1924-MHYR0U/open-1\\n  test/open-model@1.0.0, digest d1:af3926e1d990cfe922de972dfe34c48f3956924d9c115c148a8e1cf5ee9e7e30, unsigned\\nPermissions:\\n  access: none\\n  notices: none\\n  actions: none\\n  check kinds: none\\n  provides: none\\n  uses: none\\n  replaces: none\\n  conflicts with: none\\n  runs on: none\\n  hosts: none\\n\", stderr \"REFUSED: open-a@1.0.0 names its files as run {dir, entry} inside its package, so test/open-model@1.0.0 isn't installed\\n\"",
++ ]
+
+ ❯ tests/acceptance/1924/weights.test.ts:29:147
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/1924/weights.test.ts > #1924.05593ee1 A test job tool for an open model on a test host declares two weight files by hash and one capability its call needs; with both present the job runs and its key holds the weight hashes; with one weight file swapped under the same name, or the capability missing, the job is BLOCKED before the call with an unblock ask naming the file or the capability; a tool whose declaration gives a new hash for one file under the same version misses the cache of its earlier runs; a planted runner that calls anyway, or that keys without the weight hashes, fails, naming the job > a planted runner that calls anyway fails, naming the job
+AssertionError: the hub starts with DEEP_HUB_PLANT=job-weights-call-anyway, a planted program this suite names (README, Plants):  file://<repo>/packages/hub/dist/plant.js:101
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=job-weights-call-anyway names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:101:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1575:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:322:30
+
+Node.js v24.22.0
+: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ startHub tests/acceptance/1924/helpers.ts:212:184
+    210|   });
+    211|   const plant = env.DEEP_HUB_PLANT;
+    212|   expect(ready?.ready, `the hub starts${plant ? ` with DEEP_HUB_PLANT=…
+       |                                                                                                                                                                                        ^
+    213|   return { pid: child.pid!, socket: typeof ready!.socket === 'string' …
+    214| }
+ ❯ openWorld tests/acceptance/1924/helpers.ts:418:15
+ ❯ judged tests/acceptance/1924/weights.test.ts:19:13
+ ❯ tests/acceptance/1924/weights.test.ts:33:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/acceptance/1924/weights.test.ts > #1924.05593ee1 A test job tool for an open model on a test host declares two weight files by hash and one capability its call needs; with both present the job runs and its key holds the weight hashes; with one weight file swapped under the same name, or the capability missing, the job is BLOCKED before the call with an unblock ask naming the file or the capability; a tool whose declaration gives a new hash for one file under the same version misses the cache of its earlier runs; a planted runner that calls anyway, or that keys without the weight hashes, fails, naming the job > a planted runner that keys without the weight hashes fails, naming the job
+AssertionError: the hub starts with DEEP_HUB_PLANT=job-weights-not-keyed, a planted program this suite names (README, Plants):  file://<repo>/packages/hub/dist/plant.js:101
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=job-weights-not-keyed names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:101:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1575:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:322:30
+
+Node.js v24.22.0
+: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ startHub tests/acceptance/1924/helpers.ts:212:184
+    210|   });
+    211|   const plant = env.DEEP_HUB_PLANT;
+    212|   expect(ready?.ready, `the hub starts${plant ? ` with DEEP_HUB_PLANT=…
+       |                                                                                                                                                                                        ^
+    213|   return { pid: child.pid!, socket: typeof ready!.socket === 'string' …
+    214| }
+ ❯ openWorld tests/acceptance/1924/helpers.ts:418:15
+ ❯ judged tests/acceptance/1924/weights.test.ts:19:13
+ ❯ tests/acceptance/1924/weights.test.ts:43:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  6 failed (6)
+   Start at  02:14:56
+   Duration  21.53s (tests 83%, transform 12%, import 5%, setup 1%)
+
