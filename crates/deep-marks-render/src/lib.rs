@@ -707,12 +707,15 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     }
     // #399 AC7's wrong router, which `geometry` takes.
     let straight = input.get("planted").and_then(Value::as_str) == Some("straight_router");
+    // #1653 AC4's square layout of an isometric grid, which `geometry` takes.
+    let square = input.get("planted").and_then(Value::as_str) == Some("isometric_as_square_grid");
     if command == "check" || command == "geometry" {
         if input.get("planted").is_some()
             && skips == Twin::Honest
             && !near
             && !(unwrapped && command == "check")
             && !(straight && command == "geometry")
+            && !(square && command == "geometry")
             && formula_plant.is_none()
         {
             return None;
@@ -770,7 +773,14 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     item,
                     t,
                     &vectors,
-                    router,
+                    (
+                        router,
+                        if square {
+                            Planted::AtlasSquareLayout
+                        } else {
+                            Planted::None
+                        },
+                    ),
                     (look, timing),
                     (&ctx, color_at.as_deref()),
                 )
@@ -861,6 +871,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             }
             Some(Value::String(p)) if p == "decimate_min_max" => {
                 (Planted::DecimateMinMax, false, false)
+            }
+            Some(Value::String(p)) if p == "tiles_in_row_order" => {
+                (Planted::AtlasRowOrder, false, false)
             }
             Some(Value::String(p))
                 if p == "write_fades_fills_from_start"
