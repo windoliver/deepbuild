@@ -19,6 +19,8 @@ pub mod answer;
 pub mod arming;
 pub mod bound;
 pub mod canvas;
+#[cfg(feature = "canvas-fixture")]
+pub mod canvas_fixture;
 pub mod card;
 pub mod cells;
 pub mod chrome;

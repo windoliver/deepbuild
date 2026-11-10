@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir, hostname, tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -231,6 +231,9 @@ timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
 alone.push('tests/acceptance/1436/');
 byHand.push('tests/acceptance/1436/ac2-still.live.test.ts', 'tests/acceptance/1436/ac9-budgets.live.test.ts');
 timed.push('tests/acceptance/1436/ac9-budgets.live.test.ts');
+// #1485's files build deep-canvas-render and the app, and its AC3 file opens the app's window and times its frames.
+alone.push('tests/acceptance/1485/');
+timed.push('tests/acceptance/1485/panel.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 
@@ -290,11 +293,21 @@ alone.push('tests/acceptance/1924/');
 // #1923's files each start a hub and a provider on 127.0.0.1, kill and restart the hub mid-call, and count the
 // provider's submissions around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1923/');
+// #1942's files each start a hub that runs on this Mac's Lima VMs over SSH, through a relay that stalls and drops its
+// connections; its facts refresh and output lag are read against the lane's timing rule.
+alone.push('tests/acceptance/1942/');
+timed.push('tests/acceptance/1942/budgets.test.ts', 'tests/acceptance/1942/stall.test.ts');
+// #1983's files run the x86_64 lane, which builds deep-logic in linux/amd64 and linux/arm64 containers under emulation,
+// and read the container runtime's image list, which another file's container run could change.
+alone.push('tests/acceptance/1983/');
 // #1462's files build deep-drive plain, with test-confirm and with each of fourteen plants, and its real and shown files
 // open the real app's window on a real hub with Accessibility and Screen Recording; the shown file waits on your taste
 // call, so it runs by hand.
 alone.push('tests/acceptance/1462/', 'tests/acceptance/1462-redraft-ac2/');
 byHand.push('tests/acceptance/1462/shown.test.ts');
+// #1901's files build deep-show; build-digest.test.ts builds it three times, one with a canvas module's source changed
+// for that build and restored after it, so nothing else may build in the checkout while it runs.
+alone.push('tests/acceptance/1901/');
 // #1925's files each start a hub that runs an 80 s encode through the supervisor and read its row to the 2 s batch,
 // and its reopen file starts deep-drive twice: one file at a time.
 alone.push('tests/acceptance/1925/');
@@ -709,6 +722,19 @@ export function exactTree(cwd) {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+/**
+ * A tree's lane records merged as remote lanes merge (parallel-proof §8): the worst state among them stands, so a lane's
+ * FAIL wins over another's pass, and `lanes` names each lane whose own state is that state.
+ */
+export function mergeRecords(tree) {
+  const folder = join(homedir(), '.deepbuild', 'lanes');
+  const records = (existsSync(folder) ? readdirSync(folder) : [])
+    .filter((name) => name.startsWith(`${tree}-`) && name.endsWith('.json'))
+    .map((name) => JSON.parse(readFileSync(join(folder, name), 'utf8')));
+  const state = worst(records.map((r) => r.state)) ?? 'PASS';
+  return { tree, state, lanes: records.filter((r) => r.state === state).map((r) => r.lane) };
 }
 
 /** A lane's evidence record, which T7 and T8 read: its state, where it ran, on what tree, and each test's state. */
