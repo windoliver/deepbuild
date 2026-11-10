@@ -1,10 +1,12 @@
-// Criterion 2 (README: Criterion 2): a fixture session going quiet, on the virtual clock with no input, updates its row
-// by the next minute. The fixture's quiet session was last seen 90 s before the clock's now, so its sidebar row reads
-// "last seen 1 min ago" at launch and must read 2, 3 and 4 min from 30 s, 90 s and 150 s of the replica's clock. The run
-// sends no input at all: only clock steps and `see`, which reads the last frame the window drew and draws none. A planted
-// app with the timer removed (DEEP_HUB_PLANT=no-age-timer) fails, naming the row.
+// Criterion 2 of #1546 (../README.md: Criterion 2), redrafted blind for #1458's "One way to write a time" (README.md
+// here): a fixture session going quiet, on the virtual clock with no input, updates its row by the next minute. The
+// fixture's quiet session was last seen 90 s before the clock's now, so its sidebar row reads "last seen 1 min" at launch
+// and must read "last seen 2 min", "3 min" and "4 min" from 30 s, 90 s and 150 s of the replica's clock. A length reads
+// with a space and no "ago" (#1458): a row still reading "... min ago" fails, naming the string. The run sends no input:
+// only clock steps and `see`, which reads the last frame the window drew and draws none. A planted app with the timer
+// removed (DEEP_HUB_PLANT=no-age-timer) fails, naming the row.
 import { afterAll, describe, expect, it } from 'vitest';
-import { FLICKS, FRAME, PLANT, Replica, buildDrive, cleanup, minuteAt, quietRow, requireMacos, said, stepOf, type Frames } from './helpers.ts';
+import { FLICKS, FRAME, PLANT, Replica, buildDrive, cleanup, minuteAt, quietRow, requireMacos, said, stepOf, type Frames } from '../helpers.ts';
 
 afterAll(cleanup, 60_000);
 const LONG = 1_900_000;
@@ -37,15 +39,20 @@ async function quiet(hub?: string): Promise<{ readings: Reading[]; frames: Frame
   }
 }
 
-/** The judge, the same for the app and for the planted one: each reading the row got wrong, naming the row. */
-const wrong = (readings: Reading[]): string[] => readings
-  .filter((r) => !r.row.includes(`last seen ${r.minutes} min ago`))
-  .map((r) => `at ${(r.t / FLICKS).toFixed(3)} s of the clock the row "${r.row}" should read "last seen ${r.minutes} min ago"`);
+/** "last seen N min", as a length is written (#1458): the number, a space and "min" as a whole word. */
+const lastSeen = (minutes: number): RegExp => new RegExp(`\\blast seen ${minutes} min\\b`);
+/** A length written as a time since: "ago" anywhere in the row. */
+const AGO = /\bago\b/;
 
-describe('#1546 AC2 a quiet session\'s row updates its age by the next minute, on the virtual clock, with no input', () => {
-  it('the row reads 1, 2, 3 then 4 min, each from its minute on, drawn by the window itself', async () => {
+/** The judge, the same for the app and for the planted one: each reading the row got wrong, naming the row's string. */
+const wrong = (readings: Reading[]): string[] => readings
+  .filter((r) => !lastSeen(r.minutes).test(r.row) || AGO.test(r.row))
+  .map((r) => `at ${(r.t / FLICKS).toFixed(3)} s of the clock the row "${r.row}" should read "last seen ${r.minutes} min"${AGO.test(r.row) ? ', with no "ago"' : ''}`);
+
+describe('#1546 AC2 (redraft for #1458) a quiet session\'s row updates its age by the next minute, on the virtual clock, with no input, written with no "ago"', () => {
+  it('the row reads "last seen 1 min", then 2, 3 and 4 min, each from its minute on, with no "ago", drawn by the window itself', async () => {
     const { readings, frames } = await quiet();
-    expect(wrong(readings), 'the drawn row reads the age at each minute').toEqual([]);
+    expect(wrong(readings), 'the drawn row reads "last seen N min", with no "ago", at each minute').toEqual([]);
     for (const r of readings.filter((r) => r.t === minuteAt(r.minutes) + 2 * FRAME)) {
       expect(stepOf(frames, r.step).drawn, `the clock step to ${r.minutes} min made the window draw by itself`).toBeGreaterThanOrEqual(1);
     }
@@ -58,13 +65,14 @@ describe('#1546 AC2 a quiet session\'s row updates its age by the next minute, o
     const { readings, frames } = await quiet(PLANT.noAgeTimer);
     const problems = wrong(readings);
     expect(problems.length, `the judge fails the planted app: ${problems.join('; ')}`).toBeGreaterThan(0);
-    expect(problems[0], 'naming the quiet session\'s row, at the first minute it missed').toMatch(/the row "[^"]*quiet · last seen 1 min ago" should read "last seen 2 min ago"/);
+    expect(problems[0], 'naming the quiet session\'s row, at the first minute it missed').toMatch(/the row "[^"]*quiet · last seen 1 min" should read "last seen 2 min"$/);
     expect(frames.claim, 'the check fails').toBe('FAIL');
     const missed = readings.find((r) => r.minutes === 2)!;
     const at = frames.findings.find((f) => f.step === missed.step);
     expect(at, `a finding at the clock step that crossed 2 min (step ${missed.step}): ${frames.findings.map(said).join('; ')}`).toBeTruthy();
     expect(at!.view, 'in the sidebar').toMatch(/(^|\/)sidebar$/);
-    expect({ forced: at!.node.name, drawn: at!.drawn?.name }, `naming the row: ${said(at!)}`).toEqual({ forced: expect.stringContaining('last seen 2 min ago'), drawn: expect.stringContaining('last seen 1 min ago') });
+    expect({ forced: String(at!.node.name), drawn: String(at!.drawn?.name) }, `naming the row: ${said(at!)}`).toEqual({ forced: expect.stringMatching(lastSeen(2)), drawn: expect.stringMatching(lastSeen(1)) });
+    expect(AGO.test(String(at!.node.name)) || AGO.test(String(at!.drawn?.name)), `neither frame writes the row with "ago": ${said(at!)}`).toBe(false);
     expect(String(at!.node.name), 'the same row in both').toBe(String(at!.drawn?.name).replace('1 min', '2 min'));
   }, LONG);
 });

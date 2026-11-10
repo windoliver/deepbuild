@@ -12,6 +12,7 @@
 
 use std::ops::Range;
 
+use crate::chrome::sizes;
 use deep_canvas_cells::emulator::{Cell, Terminal, G};
 use deep_canvas_cells::palette::{resolve_in, ANSI};
 use deep_text_gpui::{Label, Role};
@@ -22,6 +23,11 @@ use crate::canvas::record;
 
 /// A cell's size at a 13 px mono face.
 pub const CELL: [f32; 2] = [8., 16.];
+
+/// `cols` by `rows` cells, in points.
+fn grid(cols: f32, rows: f32) -> Size<Pixels> {
+    size(px(CELL[0] * cols), px(CELL[1] * rows)) // size-literal-exception: a terminal cell, the mono face's advance and line at 13 pt (#1003); review 2027-04-30
+}
 
 /// One row of the screen: its text, and its runs of one foreground color by grapheme.
 #[derive(Clone)]
@@ -175,8 +181,7 @@ fn label(text: &str) -> Label {
 /// The grid as a canvas element: `screen` painted in its bounds from the top left.
 pub fn cells(id: &str, screen: Screen) -> Canvas<()> {
     let id = id.to_owned();
-    let width = px(CELL[0] * f32::from(screen.cols));
-    let height = px(CELL[1] * screen.rows.len() as f32);
+    let Size { width, height } = grid(f32::from(screen.cols), screen.rows.len() as f32);
     canvas(
         // Every row's glyphs placed before any is painted, so a page goes up once a frame.
         {
@@ -191,10 +196,10 @@ pub fn cells(id: &str, screen: Screen) -> Canvas<()> {
             window.paint_quad(fill(bounds, color(screen.bg)));
             let mut sprites = 0;
             for (y, r) in screen.rows.iter().enumerate() {
-                let top = bounds.origin.y + px(CELL[1] * y as f32);
+                let top = bounds.origin.y + grid(0., y as f32).height;
                 for (from, to, b) in &r.fills {
-                    let at = point(bounds.origin.x + px(CELL[0] * *from as f32), top);
-                    let size = size(px(CELL[0] * (to - from) as f32), px(CELL[1]));
+                    let at = point(bounds.origin.x + grid(*from as f32, 0.).width, top);
+                    let size = grid((to - from) as f32, 1.);
                     window.paint_quad(fill(Bounds { origin: at, size }, color(*b)));
                 }
                 if r.text.is_empty() {
@@ -258,7 +263,7 @@ pub fn look_colors_page(dark: bool) -> Div {
     let screen = look_colors(dark);
     div()
         .size_full()
-        .p(px(16.))
+        .p(sizes().space(3))
         .bg(color(screen.bg))
         .child(cells("terminal-colors", screen))
 }
@@ -293,12 +298,12 @@ pub fn terminal(
             let cols = text.chars().map(width).sum::<usize>() as f32;
             div()
                 .absolute()
-                .left(px(CELL[0] * f32::from(x)))
-                .top(px(CELL[1] * f32::from(y)))
-                .w(px(CELL[0] * cols))
-                .h(px(CELL[1]))
+                .left(grid(f32::from(x), 0.).width)
+                .top(grid(0., f32::from(y)).height)
+                .w(grid(cols, 0.).width)
+                .h(grid(0., 1.).height)
                 .bg(color(fg))
-                .border_b_1()
+                .border_b(sizes().hairline)
                 .border_color(color(bg))
                 .child(
                     canvas(

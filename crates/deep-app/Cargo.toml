@@ -84,6 +84,8 @@ serde_json = "1"
 # builds its headless context on the platform's text system, so this crate stays outside the
 # canvas text lint's scope: its canvas text goes through deep-text-gpui, which is in it.
 deep-text-gpui = { path = "../deep-text-gpui" }
+# Issue #1458: the chrome's code face is a bundled one, so GPUI's text system is given its bytes.
+deep-text = { path = "../deep-text" }
 # Issue #380: the session line is a stroke of the canvas's marks, painted by deep-marks-gpui.
 deep-marks-gpui = { path = "../deep-marks-gpui" }
 # Issue #326: the look's status map, which every surface draws a state with.

@@ -1994,6 +1994,7 @@ dependencies = [
  "deep-effects-render",
  "deep-gpu",
  "deep-marks-gpui",
+ "deep-text",
  "deep-text-gpui",
  "ed25519-dalek",
  "gpui-kit",

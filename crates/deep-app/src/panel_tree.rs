@@ -223,7 +223,7 @@ pub fn color(args: &str) -> Option<u32> {
     u32::from_str_radix(digits, 16).ok()
 }
 
-/// The first string in a call's arguments, as `Str("#f8f8f8")` writes it.
+/// The first string in a call's arguments, as `Str("#rrggbb")` writes it.
 pub fn text_arg(args: &str) -> Option<String> {
     string(args.strip_prefix("Str(")?)
         .ok()
@@ -236,17 +236,21 @@ mod tests {
 
     #[test]
     fn a_tree_reads_back_with_its_calls_text_and_nesting() {
-        let tree = parse(
-            "v_flex .size_full .w[Number(90.0)] .bg[Str(\"#f8f8f8\")] :on_click(fn)\n  text \"a \\\"b\\\" .w[1]\\n\"\n  button \"go\" .px[Number(1.0)]\n    text \"x\"\n  div\n",
-        )
+        // The sample color is the look's raised role, as a script's `color.*` writes it.
+        let [r, g, b] = deep_canvas_marks::modules::clean().light["raised"];
+        let value = u32::from_be_bytes([0, r, g, b]);
+        let hex = format!("#{value:06x}");
+        let tree = parse(&format!(
+            "v_flex .size_full .w[Number(90.0)] .bg[Str(\"{hex}\")] :on_click(fn)\n  text \"a \\\"b\\\" .w[1]\\n\"\n  button \"go\" .px[Number(1.0)]\n    text \"x\"\n  div\n",
+        ))
         .unwrap();
         assert_eq!(tree.kind, "v_flex");
         assert_eq!(tree.count(), 5);
         assert_eq!(number(&tree.ops[1].args), Some(90.));
-        assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some("#f8f8f8"));
+        assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some(hex.as_str()));
         assert_eq!(tree.ops[3].name, "on_click");
         assert!(tree.ops[0].style && !tree.ops[3].style);
-        assert_eq!(color(&tree.ops[2].args), Some(0xf8f8f8));
+        assert_eq!(color(&tree.ops[2].args), Some(value));
         for bad in ["Str(\"red\")", "Str(\"#ffffff80\")", "Number(1.0)", ""] {
             assert_eq!(color(bad), None, "{bad}");
         }

@@ -1364,7 +1364,7 @@ Nine are trusted: slab, lathe, extrude, tube, ball, coil, plate, display and sur
 
 **What it is, and its shape:** One asset: palette, a status map with an automatic legend, line and fill styles, ground, bundled fonts, finishing effects, time feel and a signature transition. It's either physically based or a drawing. Tone mapping is none, filmic, AgX or neutral, the last two as analytic curves with no LUT asset. Ambient occlusion comes from a depth and normal prepass and darkens only ambient, probe and environment light in shading, with multi-bounce and specular occlusion; it keeps no history. Physical looks deband by default. Drawing looks add a light (a key, rims, line weight by light, cast shadows and a backlit screen), paper with tooth and age anchored to the world, line profiles, separations with registration, drawn fills (ink, wash, spatter, an offset, hatching by tone) and print finishes (print wear, a tone curve, a screen); pixel looks draw natively on an indexed basis; captions take the look's design. Status colors keep their distance from data colors wherever status can show. Status marks are drawn after tone mapping, so their color is exact.
 
-**It can never:** Recolor status without a legend, or use a system font that can't ship
+**It can never:** Recolor status without a legend, or set the canvas's text in a system font that can't ship (chrome's text is the system face, named in the clean look)
 
 **Lands:** R1 roles, status map and fonts; R2 the data distance; R6 the rest
 

@@ -13,10 +13,8 @@ use super::runs::RunCache;
 use super::{sort, text, Buf, Rows};
 use crate::chrome;
 
-/// The uniform row height and a cell's text size and padding.
+/// The uniform row height; a cell's text is the look's body role, a step of space in from its edge (#1458).
 pub const ROW: f64 = 32.;
-const TEXT: f32 = 13.;
-const PAD: f32 = 8.;
 /// A stacked row's lines: the first line's top and each line's height.
 pub const LINE_TOP: f32 = 4.;
 pub const LINE: f32 = 20.;
@@ -321,7 +319,7 @@ impl Render for TableView {
                 }
             }))
             .on_scroll_wheel(cx.listener(|this, e: &ScrollWheelEvent, _, cx| {
-                let dy = f64::from(f32::from(e.delta.pixel_delta(px(ROW as f32)).y));
+                let dy = f64::from(f32::from(e.delta.pixel_delta(px(ROW as f32)).y)); // size-literal-exception: the table's row and lines, which #1477's suite reads; review 2027-04-30
                 this.scroll(-dy);
                 cx.notify();
             }))
@@ -437,6 +435,7 @@ impl Element for TableElement {
         let colors = *chrome::of(window);
         let scale = window.scale_factor();
         let font = window.text_style().font();
+        let s = crate::chrome::sizes();
         let run = TextRun {
             len: 0,
             font,
@@ -470,8 +469,8 @@ impl Element for TableElement {
                     }
                     window.paint_quad(fill(
                         Bounds::new(
-                            point(bounds.left(), y + h - px(1.)),
-                            size(bounds.size.width, px(1.)),
+                            point(bounds.left(), y + h - s.hairline),
+                            size(bounds.size.width, s.hairline),
                         ),
                         colors.divider,
                     ));
@@ -481,12 +480,14 @@ impl Element for TableElement {
                         let w = if stacked {
                             bounds.size.width
                         } else {
-                            px(v.widths.get(c).copied().unwrap_or(120.))
+                            px(v.widths.get(c).copied().unwrap_or(120.)) // size-literal-exception: a column the table's caller gives no width (#1477); review 2027-04-30
                         };
+                        let line_top = px(LINE_TOP + LINE * c as f32); // size-literal-exception: the table's row and lines, which #1477's suite reads; review 2027-04-30
+                        let row = px(ROW as f32); // size-literal-exception: the table's row and lines, which #1477's suite reads; review 2027-04-30
                         let origin = if stacked {
-                            point(bounds.left() + px(PAD), y + px(LINE_TOP + LINE * c as f32))
+                            point(bounds.left() + s.space(1), y + line_top)
                         } else {
-                            point(x + px(PAD), y + (px(ROW as f32) - px(TEXT * 1.3)) / 2.)
+                            point(x + s.space(1), y + (row - s.body.line) / 2.)
                         };
                         if v.rows.rich(r, c) {
                             if let Some(rich) = v.rich.clone() {
@@ -520,10 +521,10 @@ impl Element for TableElement {
                             {
                                 let t = text(&value, &mut buf);
                                 if !t.is_empty() {
-                                    let line = v.cache.line(t, 0, px(TEXT), &run, window);
+                                    let line = v.cache.line(t, 0, s.body.size, &run, window);
                                     let _ = line.paint(
                                         origin,
-                                        px(TEXT * 1.3),
+                                        s.body.line,
                                         TextAlign::Left,
                                         None,
                                         window,

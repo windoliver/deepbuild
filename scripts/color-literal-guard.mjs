@@ -7,6 +7,14 @@
 // literal only with a trailing `// color-literal-exception: <reason>; review <YYYY-MM-DD>`, until that date.
 // `--root <dir>` checks the app's source under another checkout, against that checkout's look. scripts/app-inventory.mjs
 // imports LITERAL to list the literals each panel has left.
+//
+// Sizes are roles of the same look (#1458): its `type`, `space`, `radius` and `shell`, read through crate::chrome's
+// sizes(). So no line of crates/deep-app/src names a size or a distance of its own either: a number or a size
+// constant inside `px(...)` or `rems(...)`, or a named spacing, size, text-size, radius or border utility
+// (`.gap_6()`, `.w_64()`, `.text_sm()`, `.rounded_md()`, `.border_1()`). One `FAIL size literal: <path>:<line>: ...`
+// line each, or one `PASS size literal` line. A line keeps one only with a trailing
+// `// size-literal-exception: <reason>; review <YYYY-MM-DD>`, until that date. The numbers themselves live in the
+// look, which the guard doesn't read as source.
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +25,30 @@ const LOOK = 'crates/deep-canvas-marks/looks/clean.json';
 export const LITERAL = /\b(?:rgba?|hsla?)\(\s*(?:0x|[\d.])|\b0x[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b|"#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?"|\b(?:black|white|red|green|blue|yellow)\(\)/;
 const EXCEPTION = /\/\/ color-literal-exception: (\S[^;]*?)(?:; review (\d{4}-\d{2}-\d{2}))?\s*$/;
 const HOW = 'read it from crate::chrome (a panel script: the theme\'s color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>';
+// A size: a number other than 0, or a size constant, anywhere inside `px(...)` or `rems(...)`, or a named utility but
+// its `_0`.
+const CALL = /(?<!\.)\b(?:px|rems?)\(/g;
+const SIZED = /(?<![\w.[])(?:0*[1-9]|0*\.0*[1-9])|\b(?:[a-z_]+::)*[A-Z][A-Z0-9_]*\b/;
+const UTILITY = new RegExp([
+  /\.(?:gap(?:_[xy])?|[pm][xytrbl]?|size|[wh]|min_[wh]|max_[wh]|top|left|right|bottom|inset)_(?:neg_)?(?:0*[1-9]\d*(?:p\d+)?|0p\d+)\(\)/.source,
+  /\.text_(?:xs|sm|base|lg|xl|[2-9]xl)\(\)/.source,
+  /\.rounded(?:_[a-z0-9]+)+\(\)/.source,
+  /\.border(?:_[trblxy])?_[1-9]\d*\(\)/.source,
+].join('|'));
+
+/** The first size a line of code names: a `px(...)` or `rems(...)` call holding one, or a named utility. */
+function sizeIn(code) {
+  for (const call of code.matchAll(CALL)) {
+    let depth = 1;
+    let end = call.index + call[0].length;
+    for (; end < code.length && depth; end += 1) depth += code[end] === '(' ? 1 : code[end] === ')' ? -1 : 0;
+    const args = code.slice(call.index + call[0].length, end - 1);
+    if (SIZED.test(args)) return code.slice(call.index, end);
+  }
+  return UTILITY.exec(code)?.[0];
+}
+const SIZE_EXCEPTION = /\/\/ size-literal-exception: (\S[^;]*?)(?:; review (\d{4}-\d{2}-\d{2}))?\s*$/;
+const SIZE_HOW = `read it from the look's type, space, radius or shell (${LOOK}) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>`;
 
 
 /** sRGB bytes in OKLab. */
@@ -84,6 +116,19 @@ function main() {
   const ROLES = roles(root);
   const today = new Date().toISOString().slice(0, 10);
   const findings = [];
+  const sizes = [];
+  for (const file of files(join(root, SOURCE), '.rs')) {
+    const path = relative(root, file).replaceAll('\\', '/');
+    readFileSync(file, 'utf8').split('\n').forEach((text, i) => {
+      if (/^\s*\/\//.test(text)) return;
+      const exception = SIZE_EXCEPTION.exec(text);
+      const code = (exception ? text.slice(0, exception.index) : text).replace(/\/\/.*$/, '');
+      const size = sizeIn(code.replace(/"(?:[^"\\]|\\.)*"/g, '""'));
+      if (!size || exception?.[2] >= today) return;
+      const why = !exception ? '' : exception[2] ? `; its exception's review date ${exception[2]} has passed` : '; its exception names no review date';
+      sizes.push(`FAIL size literal: ${path}:${i + 1}: \`${size}\` names a size${why}; ${SIZE_HOW}`);
+    });
+  }
   for (const file of [...files(join(root, SOURCE), '.rs'), ...files(join(root, PANELS), '.js')]) {
     const path = relative(root, file).replaceAll('\\', '/');
     readFileSync(file, 'utf8').split('\n').forEach((text, i) => {
@@ -101,7 +146,9 @@ function main() {
   }
   for (const line of findings) console.log(line);
   if (!findings.length) console.log(`PASS color literal: ${SOURCE} and ${PANELS} read every color from the look's roles`);
-  process.exitCode = findings.length ? 1 : 0;
+  for (const line of sizes) console.log(line);
+  if (!sizes.length) console.log(`PASS size literal: ${SOURCE} reads every size from the look's roles`);
+  process.exitCode = findings.length || sizes.length ? 1 : 0;
 }
 
 if (process.argv[1] && realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))) main();

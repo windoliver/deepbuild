@@ -241,7 +241,7 @@ impl Model {
                 |option| option.label.clone(),
             );
         let deadline = states::deadline(events, ask).unwrap_or(now);
-        let applies = format!("in {}", states::span_until(deadline, now));
+        let applies = states::moment(deadline, now);
         let mut fields = Vec::new();
         let mut steps = Vec::new();
         let mut plan_hash = None;
@@ -1348,7 +1348,7 @@ mod tests {
         );
         assert_eq!(
             Model::read(&undone, "ask:B", 0).unwrap().applies,
-            "in 2 h",
+            states::moment(7_200_000, 0),
             "its default applies at the undo's deadline"
         );
     }

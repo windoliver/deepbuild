@@ -233,7 +233,10 @@ fn main() {
         // The window draws its own title bar, with the mark, so it owns the bar's drag.
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(
-                size(px(views::OPENING.0), px(views::OPENING.1)),
+                size(
+                    deep_app::chrome::sizes().window.0,
+                    deep_app::chrome::sizes().window.1,
+                ),
                 cx,
             )),
             ..gpui_kit::component::TitleBar::window_options()

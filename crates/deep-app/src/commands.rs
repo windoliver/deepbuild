@@ -7,6 +7,7 @@
 
 use std::{path::PathBuf, rc::Rc};
 
+use crate::chrome::{sizes, Typed as _};
 use gpui_kit::base::input::{Input, InputEvent, InputState};
 use gpui_kit::*;
 use serde_json::{json, Value};
@@ -15,9 +16,6 @@ use crate::address::{Address, Place};
 use crate::chrome;
 
 actions!(deepbuild, [OpenCommands, Back, Forward]);
-
-/// How tall ⌘K's list grows before it scrolls.
-const LIST_HEIGHT: f32 = 320.;
 
 /// ⌘K opens the list wherever focus is in the app. ⌘[ and ⌘] walk the addresses you opened (#1460), except while a
 /// text field or a terminal has the keys, which keep them.
@@ -364,7 +362,7 @@ impl Render for Palette {
         div()
             .id("commands")
             .absolute()
-            .top(px(64.))
+            .top(relative(0.1))
             .left_0()
             .right_0()
             .flex()
@@ -386,24 +384,31 @@ impl Render for Palette {
             }))
             .child(
                 div()
-                    .w(px(480.))
+                    .w(relative(0.5))
                     .flex_none()
-                    .p_2()
+                    .typed(sizes().body)
+                    .p(sizes().space(1))
                     .flex()
                     .flex_col()
-                    .gap_1()
+                    .gap(sizes().space(0))
                     .bg(chrome.raised)
-                    .border_1()
+                    .border(sizes().hairline)
                     .border_color(chrome.divider)
-                    .rounded_md()
+                    .rounded(sizes().radius)
                     .text_color(chrome.ink_primary)
-                    .child(div().flex_none().h(px(32.)).child(Input::new(&self.query)))
+                    .child(
+                        div()
+                            .flex_none()
+                            .h(sizes().title.line + sizes().space(2))
+                            .child(Input::new(&self.query)),
+                    )
                     .child(
                         crate::views::observed("command-list")
                             .role(Role::ListBox)
                             .aria_label("Commands and pages")
                             .flex_none()
-                            .max_h(px(LIST_HEIGHT))
+                            // Half the window it opens at, before it scrolls.
+                            .max_h(sizes().window.1 / 2.)
                             .overflow_y_scroll()
                             .flex()
                             .flex_col()
@@ -412,11 +417,11 @@ impl Render for Palette {
                                 crate::views::observed(("command", at))
                                     .role(Role::ListBoxOption)
                                     .aria_label(name.clone())
-                                    .h(px(24.))
-                                    .px_2()
+                                    .h(sizes().space(4))
+                                    .px(sizes().space(1))
                                     .flex()
                                     .items_center()
-                                    .rounded_sm()
+                                    .rounded(sizes().radius)
                                     .hover(|style| style.bg(chrome.hover))
                                     .child(name)
                                     .on_click(cx.listener(move |this, _, window, cx| {

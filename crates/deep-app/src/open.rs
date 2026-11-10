@@ -533,7 +533,14 @@ pub fn walk(back: bool, window: &mut Window, cx: &mut App) {
 /// takes it back when that window closes. Opening the address again focuses that window.
 pub fn pop_out(address: Address, kind: Kind, cx: &mut App) {
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::centered(size(px(640.), px(640.)), cx)),
+        // A square as tall as the window the app opens at (#1458).
+        window_bounds: Some(WindowBounds::centered(
+            size(
+                crate::chrome::sizes().window.1,
+                crate::chrome::sizes().window.1,
+            ),
+            cx,
+        )),
         ..Default::default()
     };
     let opened = gpui_kit::open_window(options, cx, move |window, cx| {

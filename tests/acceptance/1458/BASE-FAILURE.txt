@@ -1,0 +1,207 @@
+#1458's acceptance suite at its base, 2721ca7b (main), on this Mac (macOS, Apple silicon, load average 30 to 70, the
+screen locked). Home paths are shown as ~.
+
+Commands (README, How to run):
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1458 --no-file-parallelism --testTimeout=600000
+    full run 2026-11-10 06:48-06:53 UTC: 4 files, 13 tests, 13 failed, 0 passed.
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1458 --no-file-parallelism --testTimeout=600000 contrast guard
+    rerun at 06:58 UTC of the two files changed after the full run, and only them: AC3's plant had set dark
+    ink_tertiary to a color the guard refused for its status distance (to idle) rather than for contrast, so it now
+    keeps the clean look's dark secondary ink and leaves the light pair alone to fail; and the guard's runner no longer
+    lets a child that exits before reading its input raise EPIPE. 2 files, 4 tests, 4 failed. Their lines below are
+    the rerun's.
+
+Summary, by criterion:
+  AC1  FAIL  no `runs` list in the snapshot (Pinned 1); the 17 pt plant isn't caught.
+  AC2  FAIL  the unplanted copy fails the guard on main's three color lines; the guard doesn't name px(37.) at
+             views.rs:2274; 37 in the look "fails" only through those three lines.
+  AC3  FAIL  light ink_tertiary is 3.50:1 on the ground, down to 3.22:1 on selected over raised; the look's guard
+             accepts the planted ink_tertiary at 3.5:1 (its floor is 3.0).
+  AC4  FAIL  no `runs` or `views` in the snapshot; the 600 pt plant isn't caught.
+  AC5  FAIL  the guard fails this checkout on panel_check.rs:196 and panel_tree.rs:246 and :249.
+  AC6  FAIL  the guard doesn't name .gap_6() or .text_sm() at views.rs:2274.
+  AC7  FAIL  the clean look has no chrome_fonts.
+  AC8  FAIL  no `runs` list; at the base the row draws one string, "Checkout page · quiet · last seen…" (seen in the
+             snapshot's text_run nodes while drafting), so no "9 s" of its own.
+  AC9  FAIL  no kit tooltip shows after hovering 33 controls across the five pages.
+  AC10 FAIL  in the replica a click on "Header layout"'s row opens no page at the base (nothing under
+             view:deepbuild/session is painted; a click on Agents opens none either), so the page change the criterion
+             needs can't be recorded yet; the 250 ms plant isn't caught.
+  AC11 FAIL  every page shows "Checkout page · quiet · last seen 9 s ago" and the card "applies in 4 h"; the ask's row
+             and its card name no moment (its notification says "at 12:00"); the plants aren't caught.
+  AC12 FAIL  each step on the batched card is a button with no value and "· on" or "· off" in its label.
+  AC13 BLOCKED  the screen was locked (CGSSessionScreenIsLocked=Yes in the console session), so #1454's probe, which
+             had Accessibility and Screen Recording, listed no window for the real app in 180 s; no picture was taken.
+             With an unlocked screen it would stop at a page the real app can't open (deepbuild/home has no node to
+             press at the base); with every picture taken it reads INCONCLUSIVE on TASTE.json's null verdict.
+
+Every failure is an assertion with its message, or BLOCKED naming why; nothing failed to load.
+
+The failing assertions, as vitest printed them (the clean half of each plant test is expect.soft, so both halves show):
+
+FAIL pictures.test.ts > AC13 #1458.f1c33792
+  Error: BLOCKED: deep-app showed no window in 180000 ms: first-frame-ms 244.0
+
+FAIL replica.test.ts > AC1 #1458.dd02bb24
+  AssertionError: every string drawn is one of the three sizes: expected [ …(6) ] to deeply equal []
+    +   "deepbuild/needs-you: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+    +   "deepbuild/home: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+    +   "deepbuild/session: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+    +   "deepbuild/welcome: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+    +   "deepbuild/agents: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+    +   "question card: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+
+FAIL replica.test.ts > AC1 #1458.dd02bb24
+  AssertionError: the planted 17 pt title on deepbuild/session wasn't caught: ["deepbuild/session: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)"]: expected false to be true // Object.is equality
+
+FAIL replica.test.ts > AC4 #1458.a98be9c0
+  AssertionError: every page at 960×640: expected [ …(6) ] to deeply equal []
+    +   "deepbuild/needs-you: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+    +   "deepbuild/home: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+    +   "deepbuild/session: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+    +   "deepbuild/welcome: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+    +   "deepbuild/agents: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+    +   "question card: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+
+FAIL replica.test.ts > AC4 #1458.a98be9c0
+  AssertionError: the planted 600 pt element wasn't caught: ["deepbuild/needs-you: the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)"]: expected false to be true // Object.is equality
+
+FAIL replica.test.ts > AC7 #1458.0c2959d0
+  AssertionError: the clean look names the chrome's faces as chrome_fonts {text, code} (README, Pinned 5); its keys: id, format, basis, license, description, palette, roles, themes, status, status_treatment, min_distance, attention_treatment, legend, lines, fills, ground, fonts, fallback, time, finish: expected undefined to be type of 'object'
+
+FAIL replica.test.ts > AC8 #1458.52c35293
+  AssertionError: "Checkout page"'s row as its time ticks: expected [ Array(1) ] to deeply equal []
+    +   "the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)",
+
+FAIL replica.test.ts > AC8 #1458.52c35293
+  AssertionError: the planted row whose time pushes its neighbours wasn't caught: ["the snapshot has no `runs` list, each string drawn with its size, face and whether its clip cut it (README, Pinned 1)"]: expected false to be true // Object.is equality
+
+FAIL replica.test.ts > AC9 #1458.a3834e1a
+  AssertionError: a kit tooltip shows on some shipped page after hovering 33 of their controls: expected 0 to be greater than 0
+
+FAIL replica.test.ts > AC10 #1458.889098b6
+  AssertionError: opening "Header layout"'s page from the list snaps: expected [ Array(1) ] to deeply equal []
+    +   "the click on \"Header layout\"'s row opened no session's page: nothing under that view was painted after it",
+
+FAIL replica.test.ts > AC10 #1458.889098b6
+  AssertionError: the planted 250 ms fade on deepbuild/session wasn't caught: ["the click on \"Header layout\"'s row opened no session's page: nothing under that view was painted after it"]: expected false to be true // Object.is equality
+
+FAIL replica.test.ts > AC11 #1458.5350b8ad
+  AssertionError: no string reads a time as "… ago" or "in …": expected [ …(7) ] to deeply equal []
+    +   "deepbuild/needs-you: \"○ Checkout page · quiet · last seen 9 s ago\" reads a time as \"… ago\"",
+    +   "deepbuild/home: \"○ Checkout page · quiet · last seen 9 s ago\" reads a time as \"… ago\"",
+    +   "deepbuild/session: \"○ Checkout page · quiet · last seen 9 s ago\" reads a time as \"… ago\"",
+    +   "deepbuild/welcome: \"○ Checkout page · quiet · last seen 9 s ago\" reads a time as \"… ago\"",
+    +   "deepbuild/agents: \"○ Checkout page · quiet · last seen 9 s ago\" reads a time as \"… ago\"",
+    +   "question card: \"○ Checkout page · quiet · last seen 9 s ago\" reads a time as \"… ago\"",
+    +   "question card: \"Default: Keep it · applies in 4 h\" reads a time as \"in …\"",
+
+FAIL replica.test.ts > AC11 #1458.5350b8ad
+  AssertionError: the ask's row, card and notification show one moment in one form: expected [ …(2) ] to deeply equal []
+    +   "the ask's row names no moment, not 12:00 alone, in \"Keep the old logo in the header?\"",
+    +   "the ask's card names no moment, not 12:00 alone, in \" · Pick one · Keep the old logo in the header? · Keep it (recommended) · Drop it · Default: Keep it · applies in 4 h · Answering saves it for this task · Send\"",
+
+FAIL replica.test.ts > AC11 #1458.5350b8ad
+  AssertionError: the planted row reading "2 min ago" wasn't caught: ["deepbuild/needs-you: \"○ Checkout page · quiet · last seen 9 s ago\" reads a time as \"… ago\""]: expected false to be true // Object.is equality
+
+FAIL replica.test.ts > AC11 #1458.5350b8ad
+  AssertionError: the planted row reading "in 4 h" wasn't caught: ["deepbuild/needs-you: \"○ Checkout page · quiet · last seen 9 s ago\" reads a time as \"… ago\""]: expected false to be true // Object.is equality
+
+FAIL replica.test.ts > AC12 #1458.be1a2dad
+  AssertionError: the steps on "Push feat/cart to origin?"'s card: expected [ …(12) ] to deeply equal []
+    +   "the step \"git push origin feat/cart\"'s control \"git push origin feat/cart · can be undone · on\" has the role button, not switch",
+    +   "the step \"git push origin feat/cart\"'s switch \"git push origin feat/cart · can be undone · on\" carries no state as its value",
+    +   "the step \"git push origin feat/cart\"'s switch \"git push origin feat/cart · can be undone · on\" says its state as a word in its label",
+    +   "the step \"gh pr merge 42 --squash\"'s control \"gh pr merge 42 --squash · can be undone · on\" has the role button, not switch",
+    +   "the step \"gh pr merge 42 --squash\"'s switch \"gh pr merge 42 --squash · can be undone · on\" carries no state as its value",
+    +   "the step \"gh pr merge 42 --squash\"'s switch \"gh pr merge 42 --squash · can be undone · on\" says its state as a word in its label",
+    +   "the step \"git push origin --delete old/spike\"'s control \"git push origin --delete old/spike · can't be undone · off\" has the role button, not switch",
+    +   "the step \"git push origin --delete old/spike\"'s switch \"git push origin --delete old/spike · can't be undone · off\" carries no state as its value",
+    +   "the step \"git push origin --delete old/spike\"'s switch \"git push origin --delete old/spike · can't be undone · off\" says its state as a word in its label",
+    +   "the step \"mail team@shop.example the notes\"'s control \"mail team@shop.example the notes · can be undone · on\" has the role button, not switch",
+    +   "the step \"mail team@shop.example the notes\"'s switch \"mail team@shop.example the notes · can be undone · on\" carries no state as its value",
+    +   "the step \"mail team@shop.example the notes\"'s switch \"mail team@shop.example the notes · can be undone · on\" says its state as a word in its label",
+  Error: write EPIPE
+
+FAIL contrast.test.ts > AC3 #1458.50054406
+  AssertionError: every ink role but ink_disabled on every fill, light and dark: expected [ …(6) ] to deeply equal []
+    +   "light ink_tertiary on ground: 3.50:1, under 4.5:1",
+    +   "light ink_tertiary on raised: 3.43:1, under 4.5:1",
+    +   "light ink_tertiary on hover over ground: 3.39:1, under 4.5:1",
+    +   "light ink_tertiary on hover over raised: 3.31:1, under 4.5:1",
+    +   "light ink_tertiary on selected over ground: 3.31:1, under 4.5:1",
+    +   "light ink_tertiary on selected over raised: 3.22:1, under 4.5:1",
+
+FAIL contrast.test.ts > AC3 #1458.50054406
+  AssertionError: the look's guard refuses ink_tertiary at 3.5:1: {"ok":true,"look":{"id":"clean","format":1,"basis":"drawing","license":"Apache-2.0","description":"The clean pipeline look: flat ground and exact lines for the line, Needs you and receipts, one status map with a glyph and a word for each state, an automatic legend, the app's chrome roles in light and dark with a focus ring, sixteen terminal colors per theme, and bundled faces for text, code, math : expected true to be false // Object.is equality
+
+FAIL guard.test.ts > AC2 #1458.6aab01b3
+  AssertionError: the guard passes the unplanted copy of the checkout: expected [ …(3) ] to deeply equal []
+    +   "FAIL color literal: crates/deep-app/src/panel_check.rs:196: `div().size_full().bg(rgb(0xffffff)).child(panel)` names a color; use the look's role ground (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-l
+    +   "FAIL color literal: crates/deep-app/src/panel_tree.rs:246: `assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some(\"#f8f8f8\"));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the
+    +   "FAIL color literal: crates/deep-app/src/panel_tree.rs:249: `assert_eq!(color(&tree.ops[2].args), Some(0xf8f8f8));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // col
+
+FAIL guard.test.ts > AC2 #1458.6aab01b3
+  AssertionError: the guard names crates/deep-app/src/views.rs:2274: exit 1, stdout "FAIL color literal: crates/deep-app/src/panel_check.rs:196: `div().size_full().bg(rgb(0xffffff)).child(panel)` names a color; use the look's role ground (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>\nFAIL color literal: crates/deep-app/src/panel_tree.rs:246: `assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some(\"#f8f8f8\"));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme'
+
+FAIL guard.test.ts > AC2 #1458.6aab01b3
+  AssertionError: the guard passes 37 in the look: exit 1, stdout "FAIL color literal: crates/deep-app/src/panel_check.rs:196: `div().size_full().bg(rgb(0xffffff)).child(panel)` names a color; use the look's role ground (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>\nFAIL color literal: crates/deep-app/src/panel_tree.rs:246: `assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some(\"#f8f8f8\"));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end
+
+FAIL guard.test.ts > AC6 #1458.3326ddd5
+  AssertionError: the guard names crates/deep-app/src/views.rs:2274 for .gap_6(): exit 1, stdout "FAIL color literal: crates/deep-app/src/panel_check.rs:196: `div().size_full().bg(rgb(0xffffff)).child(panel)` names a color; use the look's role ground (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>\nFAIL color literal: crates/deep-app/src/panel_tree.rs:246: `assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some(\"#f8f8f8\"));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel scrip
+
+FAIL guard.test.ts > AC6 #1458.3326ddd5
+  AssertionError: the guard names crates/deep-app/src/views.rs:2274 for .text_sm(): exit 1, stdout "FAIL color literal: crates/deep-app/src/panel_check.rs:196: `div().size_full().bg(rgb(0xffffff)).child(panel)` names a color; use the look's role ground (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>\nFAIL color literal: crates/deep-app/src/panel_tree.rs:246: `assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some(\"#f8f8f8\"));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel scr
+
+FAIL guard.test.ts > AC5 #1458.c735b2b1
+  AssertionError: the guard passes this checkout, panel_check.rs and panel_tree.rs included: exit 1, stdout "FAIL color literal: crates/deep-app/src/panel_check.rs:196: `div().size_full().bg(rgb(0xffffff)).child(panel)` names a color; use the look's role ground (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>\nFAIL color literal: crates/deep-app/src/panel_tree.rs:246: `assert_eq!(text_arg(&tree.ops[2].args).as_deref(), Some(\"#f8f8f8\"));` names a color; use the look's role raised (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a 
+
+AC3 contrast table at the base (printed by contrast.test.ts):
+light  ink             ground                16.86:1
+light  ink             raised                15.48:1
+light  ink             hover over ground     15.06:1
+light  ink             hover over raised     13.78:1
+light  ink             selected over ground  13.76:1
+light  ink             selected over raised  12.66:1
+light  ink_primary     ground                16.86:1
+light  ink_primary     raised                15.48:1
+light  ink_primary     hover over ground     15.06:1
+light  ink_primary     hover over raised     13.78:1
+light  ink_primary     selected over ground  13.76:1
+light  ink_primary     selected over raised  12.66:1
+light  ink_secondary   ground                10.18:1
+light  ink_secondary   raised                9.53:1
+light  ink_secondary   hover over ground     9.39:1
+light  ink_secondary   hover over raised     8.76:1
+light  ink_secondary   selected over ground  8.75:1
+light  ink_secondary   selected over raised  8.26:1
+light  ink_tertiary    ground                3.50:1
+light  ink_tertiary    raised                3.43:1
+light  ink_tertiary    hover over ground     3.39:1
+light  ink_tertiary    hover over raised     3.31:1
+light  ink_tertiary    selected over ground  3.31:1
+light  ink_tertiary    selected over raised  3.22:1
+dark   ink             ground                17.62:1
+dark   ink             raised                17.39:1
+dark   ink             hover over ground     17.15:1
+dark   ink             hover over raised     16.88:1
+dark   ink             selected over ground  16.74:1
+dark   ink             selected over raised  16.46:1
+dark   ink_primary     ground                17.62:1
+dark   ink_primary     raised                17.39:1
+dark   ink_primary     hover over ground     17.15:1
+dark   ink_primary     hover over raised     16.88:1
+dark   ink_primary     selected over ground  16.74:1
+dark   ink_primary     selected over raised  16.46:1
+dark   ink_secondary   ground                12.43:1
+dark   ink_secondary   raised                12.26:1
+dark   ink_secondary   hover over ground     12.21:1
+dark   ink_secondary   hover over raised     12.02:1
+dark   ink_secondary   selected over ground  11.92:1
+dark   ink_secondary   selected over raised  11.72:1
+dark   ink_tertiary    ground                5.23:1
+dark   ink_tertiary    raised                5.23:1
+dark   ink_tertiary    hover over ground     5.22:1
+dark   ink_tertiary    hover over raised     5.21:1
+dark   ink_tertiary    selected over ground  5.24:1
+dark   ink_tertiary    selected over raised  5.22:1
