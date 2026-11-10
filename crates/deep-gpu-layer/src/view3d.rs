@@ -67,6 +67,8 @@ struct Args {
     cull_on_cpu: bool,
     /// Each captured frame reports what each culled list kept (#484).
     cull_report: bool,
+    /// `occlusion: "off"`: the camera's lists culled by the frustum alone (#1637).
+    occlusion_off: bool,
     /// `(after, to)`: right after frame `after` draws, the session jumps to frame `to` (#484).
     seeks: Vec<(u64, u64)>,
     window: Option<Window3>,
@@ -435,6 +437,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
             Some(_) => return Err(refused("bad_input", "cull is \"cpu\" when it's given")),
         },
         cull_report: call["cull_report"].as_bool().unwrap_or(false),
+        occlusion_off: match call["occlusion"].as_str() {
+            None => false,
+            Some("off") => true,
+            Some(_) => return Err(refused("bad_input", "occlusion is \"off\" when it's given")),
+        },
         seeks: call["seeks"]
             .as_array()
             .into_iter()
@@ -969,6 +976,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if args.cull_on_cpu {
         session3::cull_on_cpu(app);
     }
+    session3::set_occlusion(app, !args.occlusion_off);
     // The core targets the document's operators read, built only then (#431); the planted core
     // builds both for every frame.
     let builds_all = app.planted == Some(Planted::BuildsUnreadTargets);
@@ -1933,6 +1941,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     }));
                 }
                 frame.insert("cull".into(), json!(rows));
+                // #1637: the whole items each pass drew.
+                let mut items = Vec::new();
+                for (view, kept) in session3::kept_items(app) {
+                    let file =
+                        write_named(out, &serde_json::to_vec(&kept).unwrap_or_default(), "json")?;
+                    items.push(json!({"view": view, "count": kept.len(), "kept": file}));
+                }
+                frame.insert("kept_items".into(), json!(items));
             }
             if args.light_cut {
                 frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));
@@ -1994,6 +2010,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
                 frame.insert("cpu_ms".into(), json!(cpu_ms));
                 frame.insert("passes_ms".into(), json!(passes));
+                let declared: serde_json::Map<String, Value> = drawn
+                    .declared
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), json!(v)))
+                    .collect();
+                frame.insert("declared_ms".into(), Value::Object(declared));
             }
             if !clicks.is_empty() {
                 let ids = drawn.targets.as_ref().map(|(_, ids)| ids.as_slice());

@@ -1,0 +1,44 @@
+{
+  "first": {
+    "status": "held",
+    "ask": "ask:01M724R39HPGNXAE52GPJG15FQ"
+  },
+  "second": {
+    "status": "held",
+    "ask": "ask:01M724R39HPGNXAE52GPJG15FQ"
+  },
+  "asks": [
+    {
+      "handle": "ask:01M724R39HPGNXAE52GPJG15FQ",
+      "kind": "authority",
+      "text": "{\"kind\":\"authority\",\"question\":\"Run upper-paid@1.0.0 for test.upper once, at $0.02 a run?\",\"options\":[{\"id\":\"run\",\"label\":\"Run it once\",\"decision\":\"allow\"},{\"id\":\"decline\",\"label\":\"Don't run it\",\"decision\":\"deny\"}],\"recommended\":null,\"deadline\":1794381080880,\"fallback\":\"you\",\"default\":\"decline\",\"provisional\":false,\"owner\":\"you\",\"key\":\"0ee8c560c6ecd1456129c70a9f23fcb8426fc24f1c0ee9838a72fca103f3db65\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"0ee8c560c6ecd1456129c70a9f23fcb8426fc24f1c0ee9838a72fca103f3db65\"}}",
+      "data": {
+        "kind": "authority",
+        "question": "Run upper-paid@1.0.0 for test.upper once, at $0.02 a run?",
+        "options": [
+          {
+            "id": "run",
+            "label": "Run it once",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't run it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1794381080880,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "0ee8c560c6ecd1456129c70a9f23fcb8426fc24f1c0ee9838a72fca103f3db65",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "0ee8c560c6ecd1456129c70a9f23fcb8426fc24f1c0ee9838a72fca103f3db65"
+        }
+      }
+    }
+  ]
+}

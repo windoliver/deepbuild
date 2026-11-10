@@ -1,0 +1,13 @@
+[
+  {
+    "kind": "test.upper",
+    "plugin": "test/upper-kind",
+    "tools": [
+      {
+        "tool": "upper-a@1.0.0",
+        "plugin": "test/upper-kind",
+        "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876"
+      }
+    ]
+  }
+]

@@ -505,20 +505,30 @@ impl Replica {
                         cx,
                     )),
                 });
-            if let Some(view) = view {
-                let _ = window.update(cx, |_, window, cx| {
-                    let palette = cx.new(|cx| {
-                        deep_app::commands::Palette::new(
-                            &[view],
-                            recency(plant),
-                            opener(plant),
-                            window,
-                            cx,
-                        )
-                    });
-                    shell.update(cx, |shell, cx| shell.set_commands(palette, window, cx));
+            // ⌘K lists a registered view's entries and the preferences, which open the box (#1998).
+            let _ = window.update(cx, |_, window, cx| {
+                let views: Vec<_> = view.into_iter().collect();
+                let palette = cx.new(|cx| {
+                    let mut palette = deep_app::commands::Palette::new(
+                        &[],
+                        recency(plant),
+                        opener(plant),
+                        window,
+                        cx,
+                    );
+                    let mut entries = deep_app::commands::entries(&views);
+                    entries.extend(deep_app::words::preference_entries());
+                    palette.set_entries(entries, cx);
+                    palette
                 });
-            }
+                let words = cx.new(|cx| {
+                    deep_app::words::WordsBox::new(deep_app::words::hub_say(), window, cx)
+                });
+                shell.update(cx, |shell, cx| {
+                    shell.set_commands(palette, window, cx);
+                    shell.set_box(words, cx);
+                });
+            });
             window
         });
         let (runtime, script) = mounted
@@ -706,7 +716,9 @@ impl Replica {
     fn notify(&mut self) {
         let now = self.now + self.clock.t * 1000 / FLICKS;
         let notifier = &mut self.notifier;
-        let due = deep_app::record::with_view(|view| notifier.due(view, now, None, true));
+        // Sounds off in the box's words (#1998) leave the question unsounded, as in the app.
+        let sounds = deep_app::hub::sounds_on();
+        let due = deep_app::record::with_view(|view| notifier.due(view, now, None, sounds));
         for posted in due.unwrap_or_default() {
             #[cfg(target_os = "macos")]
             if self.plant == Some(Plant::StartsSound) && posted.sound.is_some() {
@@ -1501,6 +1513,9 @@ fn opener(plant: Option<Plant>) -> deep_app::commands::Open {
     // Each page's runtime lives as long as ⌘K does, as the panel's does.
     let runtimes = RefCell::new(Vec::new());
     Rc::new(move |entry, window, cx| {
+        if let deep_app::commands::Entry::Preference { name, .. } = entry {
+            return deep_app::words::open_preference(name, window, cx);
+        }
         let (Some(mut page), deep_app::commands::Entry::Page { panel, .. }) =
             (entry.page_props(), entry)
         else {

@@ -38,6 +38,10 @@ export const API = Object.freeze([
   { method: 'deep.notices.send', needs: 'notices' },
   // #350: actions, outside calls the host makes for the package, and the outputs pieces provide and use.
   { method: 'deep.registerAction', needs: null },
+  // #1922: an offline job kind, and a tool that joins one once it passes the kind's qualification; both are data, and
+  // the hub runs the tool's own files as a process of their own.
+  { method: 'deep.registerJob', needs: null },
+  { method: 'deep.registerJobTool', needs: null },
   { method: 'deep.fetch', needs: 'hosts' },
   { method: 'deep.provide', needs: null },
   { method: 'deep.use', needs: null },
