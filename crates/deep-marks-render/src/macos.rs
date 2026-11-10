@@ -34,7 +34,9 @@ use deep_canvas_marks::dirty::{Class, Dirty};
 use deep_canvas_marks::key::{sha256_hex, ContentKey, KeyBuilder};
 use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::{self, Mesh};
-use deep_canvas_marks::scene::{self, Drawn, Fill, ImageSampling, Mark, Record, Rgb, StatusMark};
+use deep_canvas_marks::scene::{
+    self, AtlasCell, Drawn, Fill, ImageSampling, Mark, Record, Rgb, StatusMark,
+};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::{Program, State};
 use deep_marks_gpui::Strip;
@@ -318,9 +320,16 @@ struct Session {
     run_start: Option<Instant>,
 }
 
-fn image_key(asset: &str, crop: Option<[f64; 4]>, opacity: f64) -> ImageKey {
+fn image_key(
+    asset: &str,
+    crop: Option<[f64; 4]>,
+    opacity: f64,
+    tile: Option<&AtlasCell>,
+) -> ImageKey {
     let crop_bits = crop.map_or([u64::MAX; 4], |c| c.map(f64::to_bits));
-    (asset.to_string(), crop_bits, opacity.to_bits())
+    // #1653: an atlas row's cell is its own image.
+    let asset = tile.map_or_else(|| asset.to_string(), |t| format!("{asset}:{t:?}"));
+    (asset, crop_bits, opacity.to_bits())
 }
 
 /// Reads, checks and decodes an image once per session: its bytes by hash from the store, the
@@ -332,13 +341,17 @@ fn image_of(
     crop: Option<[f64; 4]>,
     opacity: f64,
     item: &str,
+    tile: Option<&AtlasCell>,
 ) -> Result<Decoded, Value> {
-    let key = image_key(asset, crop, opacity);
+    let key = image_key(asset, crop, opacity, tile);
     if let Some(found) = session.images.get(&key) {
         return Ok(found.clone());
     }
     let path = format!("items/{item}/params/asset");
-    let rgba = crate::asset::decoded(session.store.as_deref(), asset, crop, item)?;
+    let mut rgba = crate::asset::decoded(session.store.as_deref(), asset, crop, item)?;
+    if let Some(tile) = tile {
+        rgba = crate::asset::cell(&rgba, tile, item)?;
+    }
     let (w, h) = rgba.dimensions();
     let mut bgra = rgba.into_raw();
     for px in bgra.as_chunks_mut::<4>().0 {
@@ -1173,6 +1186,7 @@ impl Renderer {
                     sampling,
                     crop,
                     opacity,
+                    tile,
                     ..
                 } => {
                     // #499: a video item draws its player's frame through the live shader.
@@ -1184,14 +1198,19 @@ impl Renderer {
                         });
                         continue;
                     }
-                    let (image, size) = image_of(session, asset, *crop, *opacity, item)?;
+                    let (image, size) =
+                        image_of(session, asset, *crop, *opacity, item, tile.as_ref())?;
                     let to = fit.fitted(*bounds, size);
                     let (image, image_bounds) = if *sampling == ImageSampling::Linear {
                         (image, to)
                     } else {
                         // The sprite sampler is linear, so the copy is drawn 1:1 on whole pixels.
-                        let (key, at) =
-                            resample_at(image_key(asset, *crop, *opacity), *sampling, to, zoom);
+                        let (key, at) = resample_at(
+                            image_key(asset, *crop, *opacity, tile.as_ref()),
+                            *sampling,
+                            to,
+                            zoom,
+                        );
                         (resampled(session, &key, &image, size, item)?, at)
                     };
                     push(Draw::Picture {
@@ -1361,13 +1380,14 @@ impl Renderer {
                 sampling,
                 crop,
                 opacity,
+                tile,
                 ..
             } = &drawn.mark
             {
                 if *sampling != ImageSampling::Linear && !session.players.contains_key(item) {
-                    let (_, size) = image_of(session, asset, *crop, *opacity, item)?;
+                    let (_, size) = image_of(session, asset, *crop, *opacity, item, tile.as_ref())?;
                     let to = fit.fitted(*bounds, size);
-                    let key = image_key(asset, *crop, *opacity);
+                    let key = image_key(asset, *crop, *opacity, tile.as_ref());
                     copies.push(resample_at(key, *sampling, to, view.zoom).0);
                 }
             }
@@ -1540,9 +1560,11 @@ impl Renderer {
                         asset,
                         crop,
                         opacity,
+                        tile,
                         ..
                     } if !session.players.contains_key(item) => {
-                        let (image, _) = image_of(session, asset, *crop, *opacity, item)?;
+                        let (image, _) =
+                            image_of(session, asset, *crop, *opacity, item, tile.as_ref())?;
                         let pixels = image.as_bytes(0).unwrap_or_default();
                         read.images
                             .push((item.clone(), Entry::of(drawn.mark.key(bucket), pixels)));

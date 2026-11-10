@@ -333,6 +333,8 @@ pub(crate) struct Painter<'a, C> {
     texts: Map<String, Value>,
     /// The text mark sets whose rows `texts` reports.
     text_sets: Vec<String>,
+    /// #1653: each atlas decoded once per drawing, by its sha256.
+    atlases: std::collections::HashMap<String, Arc<image::RgbaImage>>,
 }
 
 /// The planted run: each span the runs cut the text into shaped on its own, the pieces set side
@@ -393,6 +395,7 @@ impl<C: Glyphs> Painter<'_, C> {
             spans_apart: false,
             texts: Map::new(),
             text_sets: Vec::new(),
+            atlases: Default::default(),
         }
     }
 
@@ -706,8 +709,23 @@ impl<C: Glyphs> Painter<'_, C> {
                 crop,
                 opacity,
                 adjust,
+                tile,
             } => {
-                let source = asset::decoded(self.store, hash, *crop, item)?;
+                let source = match tile {
+                    // #1653: an atlas row's cell, from the atlas decoded once.
+                    Some(tile) => {
+                        let atlas = match self.atlases.get(hash) {
+                            Some(a) => a.clone(),
+                            None => {
+                                let a = Arc::new(asset::decoded(self.store, hash, None, item)?);
+                                self.atlases.insert(hash.clone(), a.clone());
+                                a
+                            }
+                        };
+                        asset::cell(&atlas, tile, item)?
+                    }
+                    None => asset::decoded(self.store, hash, *crop, item)?,
+                };
                 let (w, h) = source.dimensions();
                 let (Ok(pw), Ok(ph)) = (u16::try_from(w), u16::try_from(h)) else {
                     return Err(refused(
@@ -1055,6 +1073,7 @@ fn draw(req: &Request) -> Result<Value, Value> {
         scopes: Scopes::new(req.encoded_luma),
         zoom,
         spans_apart: req.spans_apart,
+        atlases: Default::default(),
         texts: Map::new(),
         text_sets: req
             .doc
@@ -1474,7 +1493,7 @@ pub fn geometry(
     item: &str,
     t: i64,
     vectors: &crate::Vectors,
-    router: deep_canvas_graph::view::Router,
+    (router, planted): (deep_canvas_graph::view::Router, scene::Planted),
     (look, timing): (Option<&Look>, bool),
     (ctx, color_at): (&crate::formulas::Ctx, Option<&[f64]>),
 ) -> Value {
@@ -1592,7 +1611,7 @@ pub fn geometry(
             match found["kind"].as_str() {
                 Some("marks@1") => {
                     answer["rows"] =
-                        data::rows_report(item, found, &items, &palette).map_err(story)?;
+                        data::rows_report(item, found, &items, &palette, planted).map_err(story)?;
                     if timing {
                         answer["timing"] = json!({"mix_ms": mix_ms(item, found).map_err(story)?});
                     }

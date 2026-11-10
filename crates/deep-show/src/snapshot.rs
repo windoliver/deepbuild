@@ -752,10 +752,16 @@ impl Renderer {
                 opacity,
                 adjust,
                 crop,
+                tile,
                 ..
             } => {
                 let Some(pixmap) = drawn.images.get(asset) else {
                     return;
+                };
+                // #1653: an atlas row shows its cell (its flip bits aren't drawn here yet).
+                let crop = match tile {
+                    Some(t) => t.rect([u32::from(pixmap.width()), u32::from(pixmap.height())]),
+                    None => *crop,
                 };
                 // An item's adjust (#373) reaches every pixel of its image.
                 let adjusted;

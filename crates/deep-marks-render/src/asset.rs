@@ -65,6 +65,34 @@ pub fn tables(doc: &mut Map<String, Value>, evidence: Option<&Path>) -> Result<(
     deep_marks_vello::tables::tables(doc, evidence).map_err(|r| refused(r.code, &r.path))
 }
 
+/// #1653: an atlas row's cell of `atlas`, turned by its flip bits (transpose, then h, then v). A
+/// cell past the atlas is refused, naming the set's tile column.
+pub fn cell(
+    atlas: &RgbaImage,
+    tile: &deep_canvas_marks::scene::AtlasCell,
+    item: &str,
+) -> Result<RgbaImage, Value> {
+    let set = item.split('#').next().unwrap_or(item);
+    let Some([x, y, w, h]) = tile.rect([atlas.width(), atlas.height()]) else {
+        return Err(refused(
+            "out_of_range",
+            &format!("items/{set}/params/columns/tile"),
+        ));
+    };
+    let mut out =
+        image::imageops::crop_imm(atlas, x as u32, y as u32, w as u32, h as u32).to_image();
+    if tile.flip & 4 != 0 {
+        out = image::imageops::flip_horizontal(&image::imageops::rotate90(&out));
+    }
+    if tile.flip & 1 != 0 {
+        out = image::imageops::flip_horizontal(&out);
+    }
+    if tile.flip & 2 != 0 {
+        out = image::imageops::flip_vertical(&out);
+    }
+    Ok(out)
+}
+
 /// The asset's pixels, straight RGBA, cropped to `crop` (`[x, y, w, h]` in image pixels).
 pub fn decoded(
     store: Option<&Path>,

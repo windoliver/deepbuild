@@ -12,6 +12,7 @@
 //! own check ([`check`]).
 
 pub mod animator;
+pub mod atlas;
 pub mod check;
 pub mod code;
 pub mod data;
