@@ -34,6 +34,7 @@ import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
 import { basename, dirname, isAbsolute, join } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
@@ -48,7 +49,7 @@ import { after, badDeadline, type Cleanup, type Host as RunHost, type Supervisor
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type ProvideRow, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
-import { buildOf, kindOf, paramsOf, toolOf, type BuildPlant, type HeldJobs, type JobKind, type JobTool } from './job-kinds.js';
+import { buildOf, counterOf, kindOf, paramsOf, toolOf, type BuildPlant, type HeldJobs, type JobCounter, type JobKind, type JobTool } from './job-kinds.js';
 import { answered, jobPrompt, jobRequest, type Answer } from './jobs.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
 import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings, type Verdict } from './schedules.js';
@@ -338,8 +339,11 @@ export interface ExtensionHost {
   jobs(): JobListing[];
   /** A kind's params made canonical, every default written out (#1922); an Error names what doesn't hold. */
   jobParams(kind: string, value: unknown): Record<string, JsonValue>;
-  /** One run of a qualified tool as a process of its own outside the hub (#1922): its outputs' bytes by name. */
-  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>>;
+  /**
+   * One run of a qualified tool as a process of its own outside the hub (#1922): its outputs' bytes by name. `watch`
+   * hears each counter the tool reports as it runs (#1925).
+   */
+  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>>;
   /** One search or fetch of a loaded library source (#1731), its calls the hub's; `noAnswer` when one got none. */
   libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }>;
   /** A file a library's fetch named, downloaded through its source by the hub (#1731); `status` null when its host gave no answer. */
@@ -436,6 +440,8 @@ const CALL_MS = 10_000;
 /** How long one run of a job tool may take (#1922), and the most it may write on stdout. */
 const JOB_MS = 120_000;
 const JOB_OUT = 16 * 1024 * 1024;
+/** The longest stderr line read for a counter (#1925); a counter's line is far shorter. */
+const COUNTER_LINE = 4096;
 /** The target triple a tool's build is held for (#1922): this machine's CPU architecture and OS. */
 const TRIPLE = `${process.arch}-${process.platform}`;
 /** How long a channel's send or read may take (#65): its provider calls are the hub's, each bounded by the hub. */
@@ -1037,11 +1043,11 @@ class Host implements ExtensionHost {
     if (!held) throw Error(`no installed package registers the job kind ${kind}`);
     return paramsOf(held.descriptor.schema.params, value);
   }
-  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>> {
+  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
     const owner = Object.values(this.entries).find((e) => e.jobs?.tools.some((t) => t.kind === kind && t.tool === tool));
     const held = owner?.jobs!.tools.find((t) => t.kind === kind && t.tool === tool);
     if (!owner || !held) throw Error(`${tool} isn't a qualified tool of ${kind}`);
-    return this.runTool(owner.folder, held.descriptor, params, inputs);
+    return this.runTool(owner.folder, held.descriptor, params, inputs, watch);
   }
   /** The library sources loaded packages registered (#1731), asset.library@1's fills: each one's name and package. */
   libraries(): { name: string; extension: string }[] {
@@ -2168,20 +2174,33 @@ class Host implements ExtensionHost {
   /**
    * One run of a job tool (#1922): `node <its dir>/<its entry>` through the supervisor, in the platform sandbox with only
    * its own files and Node to read, given `{params, inputs}` (each input's bytes in base64) on stdin and writing
-   * `{outputs}` the same way on stdout. It reads no path, name or time of an input: only the bytes it is given.
+   * `{outputs}` the same way on stdout. It reads no path, name or time of an input: only the bytes it is given. Its
+   * counters come as lines on stderr while it runs (`counterOf`), each handed to `watch` (#1925); its other text is its own.
    */
-  private async runTool(folder: string, tool: JobTool, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>> {
+  private async runTool(folder: string, tool: JobTool, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
     const { supervisor } = this.options;
     const dir = join(folder, tool.run.dir);
     const run = `run:${ulid(this.options.now())}`;
     const out: Buffer[] = [];
     let size = 0;
+    const text = new StringDecoder('utf8');
+    let line = '';
+    const counters = (chunk: Buffer) => {
+      const lines = (line + text.write(chunk)).split('\n');
+      line = lines.pop()!;
+      // A line longer than any counter's is the tool's own text, so it isn't kept to the end.
+      if (line.length > COUNTER_LINE) line = '';
+      for (const l of lines) {
+        const counter = counterOf(l);
+        if (counter) watch!(counter);
+      }
+    };
     const input = Buffer.from(JSON.stringify({ params, inputs: Object.fromEntries(Object.entries(inputs).map(([n, b]) => [n, Buffer.from(b).toString('base64')])) }));
     const started = await supervisor.start({
       run, argv: [process.execPath, join(dir, tool.run.entry)], cwd: dir, inherit: false, input,
       env: { PATH: '/usr/bin:/bin', HOME: dir, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
       grant: { read: [NODE_HOME, ...NODE_LIBS, dir] },
-      output: { stdout: (chunk: Buffer) => { size += chunk.length; if (size <= JOB_OUT) out.push(chunk); }, stderr: () => undefined },
+      output: { stdout: (chunk: Buffer) => { size += chunk.length; if (size <= JOB_OUT) out.push(chunk); }, stderr: watch ? counters : () => undefined },
     });
     if (started.status !== 'started') throw Error(`the sandbox held ${tool.tool}: BLOCKED on ${started.kind}`);
     try {

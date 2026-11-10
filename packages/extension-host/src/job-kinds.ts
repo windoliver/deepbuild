@@ -21,6 +21,23 @@ export interface JobTool { tool: string; params: Schema; run: { dir: string; ent
 export interface HeldJobs { kinds: Record<string, JobKind>; tools: { kind: string; tool: string; build: string; descriptor: JobTool }[] }
 /** The planted hosts of #1922 AC6 and AC7, each a build that isn't the digest of the tool's files as installed. */
 export type BuildPlant = 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes';
+/** A running tool's own counter (#1925): done of a total, such as frames written or steps of a span, or a provider's percent. */
+export type JobCounter = { done: number; total: number } | { percent: number };
+
+/**
+ * The counter one line of a tool's stderr reports (#1925): `{"progress": {"done": n, "total": n}}`, whole numbers with
+ * done at most the total, or `{"progress": {"percent": n}}` from 0 to 100. Any other line is the tool's own text.
+ */
+export function counterOf(line: string): JobCounter | undefined {
+  let v: unknown;
+  try { v = JSON.parse(line); } catch { return undefined; }
+  const p = isPlain(v) ? v.progress : undefined;
+  if (!isPlain(p)) return undefined;
+  const whole = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0;
+  if (whole(p.done) && whole(p.total) && p.total > 0 && p.done <= p.total) return { done: p.done, total: p.total };
+  if (typeof p.percent === 'number' && p.percent >= 0 && p.percent <= 100) return { percent: p.percent };
+  return undefined;
+}
 
 export const TOOL = /^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/;
 const isPlain = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
