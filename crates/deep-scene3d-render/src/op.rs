@@ -82,7 +82,7 @@ impl MatOp {
 
     /// Makes its glass pipeline, or its share pipeline with `share`, unless it has it; whether
     /// it made one.
-    pub fn make(&mut self, d: &wgpu::Device, samples: u32, forward_z: bool, share: bool) -> bool {
+    pub fn make(&mut self, d: &deep_gpu::counted::Wgpu, samples: u32, forward_z: bool, share: bool) -> bool {
         if share && self.share.is_none() {
             self.share = Some(crate::sss::share_pipeline(
                 d,
@@ -191,7 +191,7 @@ pub(crate) fn seed(doc_seed: u64, id: &str) -> u32 {
 /// operator check refuses it, it reads a texture or storage (which land with the 3D frame's
 /// targets), or the device rejects its pipeline.
 pub(crate) fn compile(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     scene: &str,
     groups: [&wgpu::BindGroupLayout; 3],
     forward_z: bool,
@@ -345,8 +345,7 @@ pub(crate) fn compile(
         return Err(format!("the device rejects its pipeline: {e}"));
     }
     let values = interp::inputs(&checked, &BTreeMap::new(), &BTreeMap::new());
-    let buffer = wgpu::util::DeviceExt::create_buffer_init(
-        d,
+    let buffer = d.create_buffer_init(
         &wgpu::util::BufferInitDescriptor {
             label: Some("scene3d material operator inputs"),
             contents: &emit::input_bytes(&checked, &values),

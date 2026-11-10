@@ -57,6 +57,8 @@ pub struct Mesh {
     /// The quads the mesh had before its stack's first `subdivide`, as a `cage` mesh-edge line
     /// draws them, each edge by its two ends.
     pub cage: Option<Vec<[V3; 2]>>,
+    /// Its GPU sway (#2016): the params and weights the vertex move reads at each frame.
+    pub sway: Option<crate::stack::Sway>,
 }
 
 /// What a mesh-edge line draws.
@@ -128,6 +130,7 @@ impl Canonical for Mesh {
         let faces: Vec<(&String, &Vec<f64>)> = self.face_attributes.iter().collect();
         faces.encode(out);
         self.cage.encode(out);
+        self.sway.encode(out);
     }
 }
 
@@ -414,6 +417,13 @@ impl Mesh {
             }
         }
         b
+    }
+
+    /// Its bounds with room for its sway (#2016): a swaying vertex moves up to `amount` m.
+    pub fn reach(&self) -> [V3; 2] {
+        let [lo, hi] = self.bounds();
+        let a = self.sway.as_ref().map_or(0.0, |s| s.amount.abs());
+        [lo.map(|x| x - a), hi.map(|x| x + a)]
     }
 
     /// The mesh's edges as a mesh-edge line draws them (Marks in 3D: mesh edges), each by its

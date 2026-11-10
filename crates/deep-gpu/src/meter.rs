@@ -533,7 +533,8 @@ impl AppMeter {
 }
 
 /// A live 3D view's GPU memory estimated from its formats before it shows (GPU surface: "the
-/// check's memory estimate counts the slots, the HDR slots and frame history"), in bytes.
+/// check's memory estimate counts the slots, the HDR slots and frame history"), in bytes: what
+/// the view allocates, each part from the formats it's made in (#2189).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Estimate {
     pub scale: f64,
@@ -541,7 +542,9 @@ pub struct Estimate {
     pub history: u32,
     pub slots: u64,
     pub hdr_slots: u64,
-    /// The linear, object-ID and depth targets at the internal scale.
+    /// The copy path's read-back buffer of each slot.
+    pub read_back: u64,
+    /// The renderer's targets at the internal scale, [`Shape::per_px`] each pixel.
     pub targets: u64,
     /// Below scale 1: the internal-size output and the full-size target between the upscale's
     /// two passes.
@@ -549,16 +552,20 @@ pub struct Estimate {
     pub frame_history: u64,
     /// Effect targets at the internal scale.
     pub effects: u64,
+    /// What the renderer holds whatever the internal scale, [`Shape::fixed`].
+    pub scene: u64,
 }
 
 impl Estimate {
     pub fn bytes(&self) -> u64 {
         self.slots
             + self.hdr_slots
+            + self.read_back
             + self.targets
             + self.upscale
             + self.frame_history
             + self.effects
+            + self.scene
     }
 }
 
@@ -570,6 +577,14 @@ pub struct Shape {
     /// HDR output's slots (an XDR display); headless, none.
     pub hdr: bool,
     pub effects: bool,
+    /// The copy path: each slot is read back through a buffer of its own.
+    pub read_back: bool,
+    /// The renderer's bytes for each pixel at the internal size: its targets, their stored
+    /// samples and the cull's prepass depth and pyramid.
+    pub per_px: f64,
+    /// The renderer's bytes whatever the internal size: its glyph atlas, shadow maps, env cubes
+    /// and a mirror's own renderer.
+    pub fixed: u64,
 }
 
 /// The lowest internal scale and history window a live view may take.
@@ -592,7 +607,14 @@ pub fn estimate(view: &Shape, scale: f64, history: u32) -> Estimate {
         } else {
             0
         },
-        targets: internal * (8 + 4 + 4),
+        read_back: if view.read_back {
+            u64::from(view.slots)
+                * u64::from(crate::surface::padded_row(view.size[0]))
+                * u64::from(view.size[1])
+        } else {
+            0
+        },
+        targets: (internal as f64 * view.per_px).round() as u64,
         upscale: if scale != 1.0 {
             internal * 4 + full * 4
         } else {
@@ -600,6 +622,7 @@ pub fn estimate(view: &Shape, scale: f64, history: u32) -> Estimate {
         },
         frame_history: u64::from(history) * internal * 8,
         effects: if view.effects { internal * 8 } else { 0 },
+        scene: view.fixed,
     }
 }
 
@@ -655,6 +678,9 @@ mod tests {
             slots: 3,
             hdr: false,
             effects: false,
+            read_back: false,
+            per_px: 16.0,
+            fixed: 0,
         };
         let cap = Class::Showpiece.limits().gpu_bytes;
         let e = fit(&view([3456, 2234]), 0.5, 8, cap).unwrap();

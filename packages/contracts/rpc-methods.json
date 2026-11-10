@@ -222,6 +222,18 @@
     "called_by": "deep install"
   },
   {
+    "method": "pack.rule",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1820"
+  },
+  {
+    "method": "canvas.export",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1820"
+  },
+  {
     "method": "guard.add",
     "since": "R1",
     "stability": "stable",
