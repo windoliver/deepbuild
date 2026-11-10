@@ -21,7 +21,7 @@ mod motion;
 mod plant;
 
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     path::{Path, PathBuf},
     rc::Rc,
     sync::Arc,
@@ -188,6 +188,9 @@ struct Replica {
     hub: Option<(PathBuf, String)>,
     /// The last target acted on with a locator, which keys and words go to.
     focus: Option<Target>,
+    /// Where the pointer is: where the last act put it, and outside the window until one does (#1461). The headless
+    /// window reports its pointer at its top-left corner, over the list, whenever GPUI asks it again.
+    pointer: Rc<Cell<Point<Pixels>>>,
     device: Option<Device>,
     pasted: Option<String>,
     shots: u64,
@@ -470,6 +473,7 @@ impl Replica {
         // Issue #1462: a registered view whose panel doesn't load launches anyway, as the app does, naming it in a notice.
         let failing = view.as_ref().map(|view| view.name.clone());
         // Every call the app makes of its hub reaches the replica's copy of it.
+        let kept_pointer = Rc::new(Cell::new(point(px(-1.), px(-1.))));
         let hub_copy = hubcopy::HubCopy::new(&events);
         let taker = hub_copy.clone();
         deep_app::hub::set_local(Some(Arc::new(move |method, params| {
@@ -553,8 +557,16 @@ impl Replica {
             let into = mounted.clone();
             let replacing = !replaces.is_empty();
             let failing = failing.clone();
-            let (window, shell) =
-                open_shell_with(options, &layout, cx, move |window, cx| match panel {
+            let resting = kept_pointer.get();
+            let (window, shell) = open_shell_with(options, &layout, cx, move |window, cx| {
+                // The pointer starts where the replica has it, before the window's first frame.
+                let at = MouseMoveEvent {
+                    position: resting,
+                    pressed_button: None,
+                    modifiers: Modifiers::default(),
+                };
+                window.dispatch_event(at.to_platform_input(), cx);
+                match panel {
                     Some(dir) => {
                         let runtime = deep_app::new_runtime();
                         let loaded = runtime.map_err(|e| e.to_string()).and_then(|runtime| {
@@ -591,7 +603,8 @@ impl Replica {
                         deep_app::views::shipped(Kind::Sidebar, cx),
                         cx,
                     ),
-                });
+                }
+            });
             // ⌘K lists what the app's lists: the shipped pages and the preferences, which open the box (#1998), then a
             // registered view's entries (#1462).
             let _ = window.update(cx, |_, window, cx| {
@@ -615,6 +628,21 @@ impl Replica {
                 shell.update(cx, |shell, cx| {
                     shell.set_commands(palette, window, cx);
                     shell.set_box(words, cx);
+                    // GPUI asks the window where the pointer is when it activates or moves, and the headless one
+                    // answers its top-left corner: the pointer goes back where the replica has it.
+                    let pointer = kept_pointer.clone();
+                    cx.observe_window_bounds(window, move |_, window, cx| {
+                        let at = pointer.get();
+                        if window.mouse_position() != at {
+                            let event = MouseMoveEvent {
+                                position: at,
+                                pressed_button: None,
+                                modifiers: Modifiers::default(),
+                            };
+                            window.dispatch_event(event.to_platform_input(), cx);
+                        }
+                    })
+                    .detach();
                 });
             });
             window
@@ -668,6 +696,7 @@ impl Replica {
             script,
             dirty: None,
             hub_copy,
+            pointer: kept_pointer,
         };
         replica.draw();
         replica.draw();
@@ -742,7 +771,17 @@ impl Replica {
     fn draw(&mut self) {
         let glyphs = self.glyphs.clone();
         let recording = self.motion.is_some();
+        let pointer = self.pointer.get();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
+            // The pointer stays where the last act put it, though the window asked its platform again.
+            if window.mouse_position() != pointer {
+                let at = MouseMoveEvent {
+                    position: pointer,
+                    pressed_button: None,
+                    modifiers: Modifiers::default(),
+                };
+                window.dispatch_event(at.to_platform_input(), cx);
+            }
             // A frame redraws every view, so the canvas items it lists are this frame's alone.
             deep_app::canvas::clear_items();
             // While motion is recorded every view paints each step, cached or not, so each is sampled.
@@ -879,6 +918,12 @@ impl Replica {
     }
 
     fn input(&mut self, event: PlatformInput) {
+        match &event {
+            PlatformInput::MouseMove(e) => self.pointer.set(e.position),
+            PlatformInput::MouseDown(e) => self.pointer.set(e.position),
+            PlatformInput::MouseUp(e) => self.pointer.set(e.position),
+            _ => {}
+        }
         // In the dirty mode the window draws what the input changed at its next frame, as a real one does (#1546).
         let forced = self.dirty.is_none();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
