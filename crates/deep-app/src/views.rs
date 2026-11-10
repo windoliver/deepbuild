@@ -241,6 +241,8 @@ pub struct Shipped {
     _agents_poll: Option<Task<()>>,
     /// When the soonest age the view shows next reads differently, and the timer that draws it then (#1546).
     age_tick: Option<(u64, Task<()>)>,
+    /// What you typed in the list, and when the last key came: typing moves to the first row it starts (#1462).
+    typed: (String, u64),
 }
 
 /// The sidebar's open session, drawn in the selected fill with a bar at its leading edge, and the one keyboard focus
@@ -321,7 +323,61 @@ impl Shipped {
             reviewing: None,
             _agents_poll: poll,
             age_tick: None,
+            typed: (String::new(), 0),
         }
+    }
+
+    /// A key while the list holds the keyboard (#1462): the arrows move along it, Return opens the row, and a letter
+    /// or digit moves to the first row whose title or project starts with what you typed, hiding nothing.
+    fn list_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let stroke = &event.keystroke;
+        let m = stroke.modifiers;
+        if m.platform || m.control || m.alt || m.function {
+            return;
+        }
+        let rows = list_rows(cx);
+        let ids: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
+        let key = stroke.key.as_str();
+        match key {
+            "up" | "down" => {
+                self.rows.key(key, &ids);
+            }
+            "enter" | "space" => {
+                let Some(row) = rows
+                    .iter()
+                    .find(|row| Some(&row.id) == self.rows.focused.as_ref())
+                else {
+                    return;
+                };
+                if let Some(session) = row.id.strip_prefix("session:") {
+                    self.rows.selected = Some(session.to_owned());
+                }
+                let address = row.address.clone();
+                crate::open::open(&address, window, cx).ok();
+            }
+            "escape" => {
+                CONTEXT.with(|context| *context.borrow_mut() = None);
+            }
+            typed if typed.chars().count() == 1 && typed.chars().all(|c| c.is_alphanumeric()) => {
+                let now = now();
+                let (words, at) = &mut self.typed;
+                if now.saturating_sub(*at) > 1000 {
+                    words.clear();
+                }
+                words.push_str(&typed.to_lowercase());
+                *at = now;
+                let words = words.clone();
+                if let Some(row) = rows.iter().find(|row| {
+                    row.title.to_lowercase().starts_with(&words)
+                        || row.project.to_lowercase().starts_with(&words)
+                }) {
+                    self.rows.focused = Some(row.id.clone());
+                }
+            }
+            _ => return,
+        }
+        cx.stop_propagation();
+        cx.notify();
     }
 
     /// Sets the view's next tick at the moment the soonest age it drew, as of `now`, reads differently; the view
@@ -636,10 +692,11 @@ thread_local! {
     static TERMINAL_KEYS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
 }
 
-/// The `id` of what holds the keyboard (#1459): the question card while it shows, else the sidebar's ringed row.
+/// The `id` of what holds the keyboard (#1459, #1462): the card's focused control while the card has it, the terminal,
+/// the box, else the list's ringed row.
 pub fn focus_id(window: &Window) -> Option<String> {
-    if crate::card::focused(window) {
-        return Some(crate::card::CARD_ID.to_owned());
+    if let Some(id) = crate::card::focus_id(window) {
+        return Some(id);
     }
     if TERMINAL_KEYS.with(|keys| {
         keys.borrow()
@@ -648,7 +705,234 @@ pub fn focus_id(window: &Window) -> Option<String> {
     }) {
         return Some("terminal".to_owned());
     }
-    RING.with(|ring| ring.borrow().clone())
+    if crate::words::focused(window) {
+        return Some("box-draft".to_owned());
+    }
+    list_focused(window)
+}
+
+/// One row of the list as the keyboard walks it (#1462): its id, what typing matches (its title and project), and
+/// the address Return opens.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ListRow {
+    pub id: String,
+    pub title: String,
+    pub project: String,
+    pub address: Address,
+}
+
+thread_local! {
+    /// The list's keys: the sidebar's, which holds them for the whole list, and the sidebar itself.
+    static LIST_KEYS: RefCell<Option<(FocusHandle, WeakEntity<Shipped>)>> = const { RefCell::new(None) };
+    /// The page's keys, the page region's view's.
+    static PAGE_KEYS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
+    /// Whether the center shows Needs you before anything was opened: the layout's first page.
+    static NEEDS_YOU_FIRST: Cell<bool> = const { Cell::new(true) };
+    /// The list's rows as last drawn, which focus follows a row that leaves by.
+    static LAST_ROWS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// The ask row the pointer is over, for #1462's planted hover-only control.
+    static HOVERED: RefCell<Option<String>> = const { RefCell::new(None) };
+    /// The row a secondary click opened the actions of, and where (#1462).
+    static CONTEXT: RefCell<Option<(String, Point<Pixels>)>> = const { RefCell::new(None) };
+}
+
+/// The row the list's keyboard is on, while the list holds the keyboard.
+pub fn list_focused(window: &Window) -> Option<String> {
+    let keys = LIST_KEYS.with(|keys| keys.borrow().as_ref().map(|(keys, _)| keys.clone()))?;
+    keys.is_focused(window)
+        .then(|| RING.with(|ring| ring.borrow().clone()))
+        .flatten()
+}
+
+/// Whether Needs you's rows are drawn: the page region shows it, or nothing was opened and the center starts on it.
+fn needs_you_shown(cx: &App) -> bool {
+    match crate::open::shown_region(cx) {
+        Some(region) => region == crate::open::Region::Shipped(Kind::NeedsYou),
+        None => NEEDS_YOU_FIRST.with(Cell::get),
+    }
+}
+
+/// The open asks in the order Needs you draws them, each with its question: open ones oldest first, then those put
+/// off till later (#1462).
+pub fn open_asks() -> Vec<(String, String)> {
+    record(Kind::NeedsYou, None)
+        .open
+        .into_iter()
+        .map(|(handle, _, question, ..)| (handle, question))
+        .collect()
+}
+
+/// The asks' handles in Needs you's order: what the next-ask key walks.
+pub fn needs_you_order() -> Vec<String> {
+    open_asks().into_iter().map(|(handle, _)| handle).collect()
+}
+
+/// The list's rows, in the order the window draws them: each project's heading and its sessions, then, while Needs
+/// you shows, its asks.
+pub fn list_rows(cx: &App) -> Vec<ListRow> {
+    let opened = crate::open::opened_session(cx);
+    let record = record(Kind::Sidebar, opened.as_deref());
+    let project_of = |session: &str| {
+        crate::record::with_view(|view| view.table().project(session)).unwrap_or_default()
+    };
+    let mut rows = Vec::new();
+    for (project, sessions) in grouped(&record.sessions, &project_of) {
+        if !project.is_empty() {
+            rows.push(ListRow {
+                id: format!("project:{project}"),
+                title: project.clone(),
+                project: project.clone(),
+                address: Address::new(crate::address::Place::Project, &project),
+            });
+        }
+        for (session, task, _) in sessions {
+            rows.push(ListRow {
+                id: format!("session:{session}"),
+                title: task.clone(),
+                project: project.clone(),
+                address: Address::session(session),
+            });
+        }
+    }
+    if needs_you_shown(cx) {
+        for (handle, session, question, ..) in &record.open {
+            rows.push(ListRow {
+                id: handle.clone(),
+                title: question.clone(),
+                project: project_of(session),
+                address: Address::ask(handle),
+            });
+        }
+    }
+    rows
+}
+
+/// A session as the list draws it: its ID, its task's title and its state.
+type SessionRow = (String, String, states::State);
+
+/// Sessions under their project, each project where its first session is, in that session's place.
+fn grouped<'a>(
+    sessions: &'a [SessionRow],
+    project_of: &dyn Fn(&str) -> String,
+) -> Vec<(String, Vec<&'a SessionRow>)> {
+    let mut groups: Vec<(String, Vec<&SessionRow>)> = Vec::new();
+    for row in sessions {
+        let project = project_of(&row.0);
+        match groups.iter_mut().find(|(p, _)| *p == project) {
+            Some((_, rows)) => rows.push(row),
+            None => groups.push((project, vec![row])),
+        }
+    }
+    groups
+}
+
+/// Gives the list the keyboard (Esc, F6), on the row it was on, else the open page's row, else its first.
+pub fn focus_list(window: &mut Window, cx: &mut App) {
+    crate::card::let_go();
+    let Some((keys, list)) = LIST_KEYS.with(|keys| keys.borrow().clone()) else {
+        return;
+    };
+    let rows = list_rows(cx);
+    let here = crate::open::current(cx).map(|address| address.to_string());
+    if let Some(list) = list.upgrade() {
+        list.update(cx, |list, cx| {
+            let on = list.rows.focused.clone();
+            if on.is_none_or(|on| !rows.iter().any(|row| row.id == on)) {
+                list.rows.focused = rows
+                    .iter()
+                    .find(|row| Some(row.address.to_string()) == here)
+                    .or(rows.first())
+                    .map(|row| row.id.clone());
+            }
+            cx.notify();
+        });
+    }
+    window.focus(&keys, cx);
+}
+
+/// F6: the keyboard moves from the list to the page, to the box, and back to the list.
+pub fn next_area(window: &mut Window, cx: &mut App) {
+    let on_page = crate::card::focused(window)
+        || PAGE_KEYS.with(|keys| keys.borrow().as_ref().is_some_and(|k| k.is_focused(window)));
+    if list_focused(window).is_some() {
+        if !crate::card::focus(window, cx) {
+            match PAGE_KEYS.with(|keys| keys.borrow().clone()) {
+                Some(keys) => window.focus(&keys, cx),
+                None => crate::words::focus(window, cx),
+            }
+        }
+    } else if on_page {
+        crate::card::let_go();
+        crate::words::focus(window, cx);
+    } else {
+        focus_list(window, cx);
+    }
+}
+
+/// The row's actions, opened by a secondary click on it: the Session menu's, in its order (#886).
+fn open_context(row: String, at: Point<Pixels>, window: &mut Window, cx: &mut App) {
+    CONTEXT.with(|context| *context.borrow_mut() = Some((row.clone(), at)));
+    if let Some((keys, list)) = LIST_KEYS.with(|keys| keys.borrow().clone()) {
+        if let Some(list) = list.upgrade() {
+            list.update(cx, |list, _| list.rows.focused = Some(row));
+        }
+        crate::card::let_go();
+        window.focus(&keys, cx);
+    }
+    window.refresh();
+}
+
+/// The context menu's items: the Session menu's, and the planted menu's one more.
+fn context_items() -> Vec<&'static str> {
+    let mut items = crate::actions::session_items();
+    if cfg!(feature = "plant-context-only-action") {
+        items.push("Reveal in Finder");
+    }
+    items
+}
+
+/// The open context menu, drawn over the window where the click was.
+fn context_menu(window: &Window) -> Option<AnyElement> {
+    let (_, at) = CONTEXT.with(|context| context.borrow().clone())?;
+    let chrome = chrome::of(window);
+    Some(
+        observed("context-menu")
+            .role(Role::Menu)
+            .aria_label("Actions")
+            .absolute()
+            .left(at.x)
+            .top(at.y)
+            .flex()
+            .flex_col()
+            .p(sizes().space(0))
+            .rounded(sizes().radius)
+            .bg(chrome.raised)
+            .border(sizes().hairline)
+            .border_color(chrome.divider)
+            .shadow_lg()
+            .occlude()
+            .on_mouse_down_out(|_, window, _| {
+                CONTEXT.with(|context| *context.borrow_mut() = None);
+                window.refresh();
+            })
+            .children(context_items().into_iter().map(|name| {
+                observed(ElementId::Name(format!("context:{name}").into()))
+                    .role(Role::MenuItem)
+                    .aria_label(name)
+                    .px(sizes().space(1))
+                    .h(sizes().space(4))
+                    .flex()
+                    .items_center()
+                    .rounded(sizes().radius)
+                    .hover(|style| style.bg(chrome.hover))
+                    .child(name)
+                    .on_click(move |_, window, cx| {
+                        CONTEXT.with(|context| *context.borrow_mut() = None);
+                        crate::actions::run(name, window, cx);
+                    })
+            }))
+            .into_any_element(),
+    )
 }
 
 /// A line of text that is one accessibility node: a label named by its text, in the body role (#1458).
@@ -870,6 +1154,25 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
             })
             .collect()
     };
+    // Put off with Later, an ask goes below the open ones until it comes back, an hour before its default applies
+    // (#1462): the list reads when by its clock.
+    let clock = now();
+    let until = |handle: &str| {
+        view.inbox
+            .iter()
+            .find(|row| row["ask"] == handle)
+            .and_then(|row| row["until"].as_u64())
+    };
+    let mut open = open;
+    for (handle, _, _, status, _) in &mut open {
+        match until(handle) {
+            Some(until) if status == "later" && until <= clock => *status = "shown".to_owned(),
+            // The view draws again when it comes back.
+            Some(until) if status == "later" => states::changes_after(until - clock),
+            _ => {}
+        }
+    }
+    open.sort_by_key(|(_, _, _, status, _)| status == "later");
     // A session's page and its line draw the first session, or the one named "" when the record has none.
     let sessions: Vec<(String, String, states::State)> = match kind {
         Kind::Sidebar if table.listed() => listed
@@ -1190,8 +1493,43 @@ impl Render for Shipped {
         let now = now();
         let open = record.open.len();
         let name = self.kind.name();
+        // A page in the center takes the keys F6 gives it (#1462): Esc gives them back to the list, and a printable key
+        // goes to the box.
+        let is_page = !matches!(self.kind, Kind::Sidebar | Kind::Line) && !self.popped;
+        if is_page {
+            let region = crate::open::shown_region(cx);
+            let shows = match region {
+                Some(region) => region == crate::open::Region::Shipped(self.kind),
+                None => self.kind == Kind::NeedsYou && NEEDS_YOU_FIRST.with(Cell::get),
+            };
+            if shows {
+                PAGE_KEYS.with(|keys| *keys.borrow_mut() = Some(self.focus_handle.clone()));
+            }
+        }
         let page = div()
             .id(ElementId::Name(format!("view:{name}").into()))
+            .when(is_page, |page| {
+                page.track_focus(&self.focus_handle).on_key_down(
+                    |event: &KeyDownEvent, window, cx| {
+                        let stroke = &event.keystroke;
+                        let m = stroke.modifiers;
+                        if m.platform || m.control || m.alt || m.function {
+                            return;
+                        }
+                        if stroke.key == "escape" {
+                            focus_list(window, cx);
+                            cx.stop_propagation();
+                        } else if let Some(typed) = stroke
+                            .key_char
+                            .clone()
+                            .filter(|c| !c.is_empty() && c.chars().all(|c| !c.is_control()))
+                        {
+                            crate::words::type_in(&typed, window, cx);
+                            cx.stop_propagation();
+                        }
+                    },
+                )
+            })
             .size_full()
             .relative()
             .flex()
@@ -1213,37 +1551,71 @@ impl Render for Shipped {
                     let id = |at: Option<usize>| at.and_then(|i| ids.get(i).cloned());
                     self.rows = SidebarRows {
                         selected: id(selected),
-                        focused: id(focused),
+                        focused: id(focused).map(|s| format!("session:{s}")),
                     };
                     if self.rows.focused.is_some() {
                         window.focus(&self.focus_handle, cx);
                     }
                 }
-                // The ring shows only while keys reach the sidebar, so it never points where they don't go.
+                // The sidebar holds the keys for the whole list (#1462): its rows, Needs you's and the headings.
+                LIST_KEYS.with(|keys| {
+                    *keys.borrow_mut() = Some((self.focus_handle.clone(), cx.entity().downgrade()))
+                });
+                let rows = list_rows(cx);
+                // Focus follows a row that leaves: to the row now in its place, else the last (#1462).
+                if let Some(on) = self.rows.focused.clone() {
+                    if !rows.iter().any(|row| row.id == on) {
+                        let at =
+                            LAST_ROWS.with(|last| last.borrow().iter().position(|id| *id == on));
+                        self.rows.focused = at
+                            .and_then(|at| rows.get(at.min(rows.len().saturating_sub(1))))
+                            .or(rows.last())
+                            .map(|row| row.id.clone());
+                    }
+                }
+                LAST_ROWS.with(|last| {
+                    *last.borrow_mut() = rows.iter().map(|row| row.id.clone()).collect()
+                });
+                // The ring shows only while keys reach the list, so it never points where they don't go.
                 let focused = (self.focus_handle.is_focused(window))
                     .then(|| self.rows.focused.clone())
                     .flatten();
-                RING.with(|ring| {
-                    *ring.borrow_mut() = focused.as_ref().map(|s| format!("session:{s}"))
-                });
+                RING.with(|ring| *ring.borrow_mut() = focused.clone());
+                let focused = focused.and_then(|id| id.strip_prefix("session:").map(str::to_owned));
+                let heading_ring = RING.with(|ring| ring.borrow().clone());
                 // The open session's row, else the row the replica started on (#1003).
                 let selected = opened.clone().or_else(|| self.rows.selected.clone());
+                // #1462's planted list hides the rows that don't match what you typed.
+                let typed = self.typed.0.clone();
+                let hidden = |task: &str| {
+                    cfg!(feature = "plant-list-hides-row")
+                        && !typed.is_empty()
+                        && !task.to_lowercase().starts_with(&typed)
+                };
+                let project_of = |session: &str| {
+                    crate::record::with_view(|view| view.table().project(session))
+                        .unwrap_or_default()
+                };
+                let groups = grouped(&record.sessions, &project_of);
+                // Sessions drawn under their project's heading, in the list's order.
+                let order: Vec<usize> = groups
+                    .iter()
+                    .flat_map(|(_, rows)| rows.iter())
+                    .filter_map(|row| record.sessions.iter().position(|s| s.0 == row.0))
+                    .filter(|&index| index < record.rows.len())
+                    .collect();
+                let heads: HashMap<String, String> = groups
+                    .into_iter()
+                    .filter(|(project, _)| !project.is_empty())
+                    .filter_map(|(project, rows)| Some((rows.first()?.0.clone(), project)))
+                    .collect();
                 page.bg(chrome.raised)
+                    // A node of its own, so the row the list's keys are on is what an assistive client reads as focused.
+                    .role(Role::List)
+                    .aria_label("Tasks")
                     .track_focus(&self.focus_handle)
-                    .on_key_down(cx.listener(move |this, event: &KeyDownEvent, window, cx| {
-                        let was = this.rows.selected.clone();
-                        if this.rows.key(&event.keystroke.key, &ids) {
-                            // Return or space opens the focused session, as a click on its row does.
-                            if let Some(session) = this
-                                .rows
-                                .selected
-                                .clone()
-                                .filter(|s| Some(s) != was.as_ref())
-                            {
-                                crate::open::open(&Address::session(&session), window, cx).ok();
-                            }
-                            cx.notify();
-                        }
+                    .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                        this.list_key(event, window, cx)
                     }))
                     .child(title("sidebar-title", "Tasks"))
                     // #1458's planted list draws an element wider than itself.
@@ -1279,114 +1651,159 @@ impl Render for Shipped {
                             }),
                     )
                     .children(placed("sidebar").into_iter().enumerate().map(placed_box))
-                    .children(record.sessions.iter().zip(&record.rows).enumerate().map(
-                        |(index, ((session, task, _), (words, entry)))| {
-                            let text = format!("{task} · {words}");
-                            // Its readings beside it (#990), a line each under the row, quieter than its state.
-                            let readings = record.readings.get(index).cloned().unwrap_or_default();
-                            // Its problem in plain words (#1348), a line under the row, each line its own node.
-                            let problem: Vec<String> = record
-                                .problems
-                                .get(index)
-                                .cloned()
-                                .flatten()
-                                .map(|problem| {
-                                    problem
-                                        .lines()
-                                        .take(PROBLEM_LINES)
-                                        .map(str::to_owned)
-                                        .collect()
-                                })
-                                .unwrap_or_default();
-                            // The ring is always laid out, so focus moving never shifts a row; it shows on the
-                            // focused row alone.
-                            let ring = if focused.as_ref() == Some(session) {
-                                chrome.focus
-                            } else {
-                                chrome.focus.opacity(0.)
-                            };
-                            // Keyed by the session's ID, never its place, so a row keeps its identity as rows come and go (#1427).
-                            let id = ElementId::Name(format!("session:{session}").into());
-                            let whole: SharedString = text.clone().into();
-                            let row = marked(id, entry, text)
-                                .role(Role::Button)
-                                // The whole row, for when it's cut short, after a rest as long as macOS's own tooltips
-                                // wait, so a click that opens the row's page doesn't bring it up as the page opens.
-                                .tooltip(move |_, cx| cx.new(|_| RowTip(whole.clone())).into())
-                                .tooltip_show_delay(ROW_TIP_DELAY)
-                                // The planted row is named by its task's title alone.
-                                .when(cfg!(feature = "plant-row-title-only"), |row| {
-                                    row.aria_label(task.clone())
-                                })
-                                // The ringed row is the one keys reach, so an assistive client reads it as focused.
-                                .when(focused.as_ref() == Some(session), |row| {
-                                    row.aria_active_descendant()
-                                })
-                                .h(sizes().space(4))
-                                // Every row leaves room for the bar and a gap after it, so opening one moves no text.
-                                .pl(sizes().space(2))
-                                .pr(sizes().space(0))
-                                .rounded(sizes().radius)
-                                .border(sizes().ring)
-                                .border_color(ring)
-                                .hover(|style| style.bg(chrome.hover))
-                                // The open session: the selected fill, and a bar of the primary ink the row's full
-                                // height at its leading edge, since in dark the fill can only be faint while status
-                                // keeps 3:1 on it.
-                                .when(selected.as_ref() == Some(session), |row| {
-                                    row.relative().bg(chrome.selected).child(
-                                        div()
-                                            .absolute()
-                                            .left_0()
-                                            .top_0()
-                                            .bottom_0()
-                                            .w(sizes().bar)
-                                            .bg(chrome.ink_primary),
-                                    )
-                                })
-                                .on_click(cx.listener({
-                                    let session = session.clone();
-                                    // A click opens the row and gives the sidebar the keys, so the ring
-                                    // goes on from there.
-                                    move |this, _, window, cx| {
-                                        this.rows = SidebarRows {
-                                            selected: Some(session.clone()),
-                                            focused: Some(session.clone()),
-                                        };
-                                        window.focus(&this.focus_handle, cx);
-                                        #[cfg(feature = "plant-row-skips-open")]
-                                        crate::open::skip_open(&session, window, cx);
-                                        #[cfg(not(feature = "plant-row-skips-open"))]
-                                        crate::open::open(&Address::session(&session), window, cx)
+                    .children(
+                        order
+                            .iter()
+                            .map(|&index| (index, (&record.sessions[index], &record.rows[index])))
+                            .filter(|(_, ((_, task, _), _))| !hidden(task))
+                            .map(|(index, ((session, task, _), (words, entry)))| {
+                                // Each project's heading is a row too, before its first session (#1462).
+                                let heading = heads.get(session).map(|project| {
+                                    let id = format!("project:{project}");
+                                    let ringed = heading_ring.as_deref() == Some(id.as_str());
+                                    let address =
+                                        Address::new(crate::address::Place::Project, project);
+                                    heading(ElementId::Name(id.clone().into()), project.clone())
+                                        .role(Role::Button)
+                                        .pl(sizes().space(1))
+                                        .rounded(sizes().radius)
+                                        .border(sizes().ring)
+                                        .border_color(if ringed {
+                                            chrome.focus
+                                        } else {
+                                            chrome.focus.opacity(0.)
+                                        })
+                                        .when(ringed, |row| row.aria_active_descendant())
+                                        .on_click(cx.listener(move |this, _, window, cx| {
+                                            this.rows.focused = Some(id.clone());
+                                            window.focus(&this.focus_handle, cx);
+                                            crate::open::open(&address, window, cx).ok();
+                                            cx.notify();
+                                        }))
+                                });
+                                let text = format!("{task} · {words}");
+                                // Its readings beside it (#990), a line each under the row, quieter than its state.
+                                let readings =
+                                    record.readings.get(index).cloned().unwrap_or_default();
+                                // Its problem in plain words (#1348), a line under the row, each line its own node.
+                                let problem: Vec<String> = record
+                                    .problems
+                                    .get(index)
+                                    .cloned()
+                                    .flatten()
+                                    .map(|problem| {
+                                        problem
+                                            .lines()
+                                            .take(PROBLEM_LINES)
+                                            .map(str::to_owned)
+                                            .collect()
+                                    })
+                                    .unwrap_or_default();
+                                // The ring is always laid out, so focus moving never shifts a row; it shows on the
+                                // focused row alone.
+                                let ring = if focused.as_ref() == Some(session) {
+                                    chrome.focus
+                                } else {
+                                    chrome.focus.opacity(0.)
+                                };
+                                // Keyed by the session's ID, never its place, so a row keeps its identity as rows come and go (#1427).
+                                let id = ElementId::Name(format!("session:{session}").into());
+                                let whole: SharedString = text.clone().into();
+                                let row = marked(id, entry, text)
+                                    .role(Role::Button)
+                                    // The whole row, for when it's cut short, after a rest as long as macOS's own tooltips
+                                    // wait, so a click that opens the row's page doesn't bring it up as the page opens.
+                                    .tooltip(move |_, cx| cx.new(|_| RowTip(whole.clone())).into())
+                                    .tooltip_show_delay(ROW_TIP_DELAY)
+                                    // The planted row is named by its task's title alone.
+                                    .when(cfg!(feature = "plant-row-title-only"), |row| {
+                                        row.aria_label(task.clone())
+                                    })
+                                    // The ringed row is the one keys reach, so an assistive client reads it as focused.
+                                    .when(focused.as_ref() == Some(session), |row| {
+                                        row.aria_active_descendant()
+                                    })
+                                    .h(sizes().space(4))
+                                    // Every row leaves room for the bar and a gap after it, so opening one moves no text.
+                                    .pl(sizes().space(2))
+                                    .pr(sizes().space(0))
+                                    .rounded(sizes().radius)
+                                    .border(sizes().ring)
+                                    .border_color(ring)
+                                    .hover(|style| style.bg(chrome.hover))
+                                    // The open session: the selected fill, and a bar of the primary ink the row's full
+                                    // height at its leading edge, since in dark the fill can only be faint while status
+                                    // keeps 3:1 on it.
+                                    .when(selected.as_ref() == Some(session), |row| {
+                                        row.relative().bg(chrome.selected).child(
+                                            div()
+                                                .absolute()
+                                                .left_0()
+                                                .top_0()
+                                                .bottom_0()
+                                                .w(sizes().bar)
+                                                .bg(chrome.ink_primary),
+                                        )
+                                    })
+                                    .on_mouse_down(MouseButton::Right, {
+                                        let row = format!("session:{session}");
+                                        move |event: &MouseDownEvent, window, cx| {
+                                            open_context(row.clone(), event.position, window, cx)
+                                        }
+                                    })
+                                    .on_click(cx.listener({
+                                        let session = session.clone();
+                                        // A click opens the row and gives the sidebar the keys, so the ring
+                                        // goes on from there.
+                                        move |this, _, window, cx| {
+                                            this.rows = SidebarRows {
+                                                selected: Some(session.clone()),
+                                                focused: Some(format!("session:{session}")),
+                                            };
+                                            window.focus(&this.focus_handle, cx);
+                                            #[cfg(feature = "plant-row-skips-open")]
+                                            crate::open::skip_open(&session, window, cx);
+                                            #[cfg(not(feature = "plant-row-skips-open"))]
+                                            crate::open::open(
+                                                &Address::session(&session),
+                                                window,
+                                                cx,
+                                            )
                                             .ok();
-                                        cx.notify();
-                                    }
-                                }));
-                            div()
-                                .flex()
-                                .flex_col()
-                                .child(row)
-                                .children(problem.into_iter().enumerate().map(|(n, line)| {
-                                    label(("sidebar-problem", index * PROBLEM_LINES + n), line)
-                                        .h_auto()
-                                        .pl(sizes().space(3))
-                                        .text_color(chrome.ink_secondary)
-                                }))
-                                .children(readings.into_iter().enumerate().map(|(n, reading)| {
-                                    // A reading wider than the sidebar ends in an ellipsis; its
-                                    // accessibility label keeps the whole of it. A block, not the
-                                    // label's flex row, so the text is laid out to the row's width
-                                    // and can truncate; its line height centers it in the row.
-                                    label(("sidebar-reading", index * READINGS + n), reading)
-                                        .block()
-                                        .typed(sizes().small)
-                                        .h(sizes().small.line)
-                                        .pl(sizes().space(3))
-                                        .text_color(chrome.ink_secondary)
-                                        .truncate()
-                                }))
-                        },
-                    ))
+                                            cx.notify();
+                                        }
+                                    }));
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .children(heading)
+                                    .child(row)
+                                    .children(problem.into_iter().enumerate().map(|(n, line)| {
+                                        label(("sidebar-problem", index * PROBLEM_LINES + n), line)
+                                            .h_auto()
+                                            .pl(sizes().space(3))
+                                            .text_color(chrome.ink_secondary)
+                                    }))
+                                    .children(readings.into_iter().enumerate().map(
+                                        |(n, reading)| {
+                                            // A reading wider than the sidebar ends in an ellipsis; its
+                                            // accessibility label keeps the whole of it. A block, not the
+                                            // label's flex row, so the text is laid out to the row's width
+                                            // and can truncate; its line height centers it in the row.
+                                            label(
+                                                ("sidebar-reading", index * READINGS + n),
+                                                reading,
+                                            )
+                                            .block()
+                                            .typed(sizes().small)
+                                            .h(sizes().small.line)
+                                            .pl(sizes().space(3))
+                                            .text_color(chrome.ink_secondary)
+                                            .truncate()
+                                        },
+                                    ))
+                            }),
+                    )
                     // Each running job's row (#1925), after the sessions as the list orders it: its mark, its kind and
                     // its count from its tool's own counter, its time at the right edge, and why under it, quieter.
                     // A job has no page, so the row opens nothing.
@@ -1413,7 +1830,7 @@ impl Render for Shipped {
             }
             Kind::Home => match unfinished {
                 Some(count) => page
-                    .child(title("home-title", "Home"))
+                    .child(title("home-title", home_title(cx)))
                     .child(label("home-needs-you", count))
                     .children(self.set_up.is_none().then(|| {
                         match self.setting_up {
@@ -1433,7 +1850,7 @@ impl Render for Shipped {
                             .map(|line| label("set-up-reason", line).h_auto().py(sizes().space(0))),
                     ),
                 None => page
-                    .child(title("home-title", "Home"))
+                    .child(title("home-title", home_title(cx)))
                     .child(label(
                         "home-needs-you",
                         reach.count(if crate::plain::planted("count-one-asks") {
@@ -1461,6 +1878,10 @@ impl Render for Shipped {
                     .children(record.open.iter().enumerate().map(
                         |(index, (handle, _, question, status, applies))| {
                             let ask = handle.clone();
+                            // The list's keyboard on this ask: its ring, which an assistive client reads as focused.
+                            let ringed =
+                                RING.with(|ring| ring.borrow().as_deref() == Some(handle.as_str()));
+                            let later = status == "later";
                             // The planted row shows the handle.
                             let text = if cfg!(feature = "plant-handle-rows") {
                                 handle
@@ -1472,6 +1893,7 @@ impl Render for Shipped {
                             } else {
                                 text.clone()
                             };
+
                             // The row reads as its question, on the screen and to a screen reader; its handle is nowhere
                             // drawn (#1172) and is its id (#1459), so it holds when the words change or a row above closes.
                             // The planted row is keyed by its place.
@@ -1503,6 +1925,14 @@ impl Render for Shipped {
                                 .gap(sizes().space(1))
                                 .pl(sizes().space(1))
                                 .text_color(chrome.ink_secondary)
+                                // Put off with Later, it says so until it comes back (#1462).
+                                .children(later.then(|| {
+                                    label(
+                                        ElementId::Name(format!("{id}:later").into()),
+                                        "set for later",
+                                    )
+                                    .flex_none()
+                                }))
                                 .children(default)
                                 .when(record.listed, |trailing| {
                                     trailing.child(states::State::NeedsYou.word())
@@ -1514,7 +1944,35 @@ impl Render for Shipped {
                                 .role(Role::Button)
                                 .aria_value(states::State::NeedsYou.entry())
                                 .rounded(sizes().radius)
+                                .border(sizes().ring)
+                                .border_color(if ringed {
+                                    chrome.focus
+                                } else {
+                                    chrome.focus.opacity(0.)
+                                })
                                 .hover(|style| style.bg(chrome.hover))
+                                // #1462's planted row draws a control only while the pointer is over it.
+                                .when(cfg!(feature = "plant-hover-only-control"), |row| {
+                                    let over = HOVERED
+                                        .with(|h| h.borrow().as_deref() == Some(handle.as_str()));
+                                    let id = ElementId::Name(format!("{handle}:later").into());
+                                    let hovered = handle.clone();
+                                    row.on_hover(move |on, window, _| {
+                                        HOVERED.with(|h| {
+                                            *h.borrow_mut() = on.then(|| hovered.clone())
+                                        });
+                                        window.refresh();
+                                    })
+                                    .when(over, |row| {
+                                        row.child(control(id, Control::Plain, "Later", chrome))
+                                    })
+                                })
+                                .on_mouse_down(MouseButton::Right, {
+                                    let row = handle.clone();
+                                    move |event: &MouseDownEvent, window, cx| {
+                                        open_context(row.clone(), event.position, window, cx)
+                                    }
+                                })
                                 .on_click(move |_, window, cx| {
                                     crate::open::open(&Address::ask(&ask), window, cx).ok();
                                 })
@@ -1897,6 +2355,18 @@ impl Render for Shipped {
                 .into_any_element();
         }
         drawn
+    }
+}
+
+/// Home's title: a project's name when its heading opened the page (#1462), else Home.
+fn home_title(cx: &App) -> String {
+    match crate::open::current(cx) {
+        Some(Address {
+            place: crate::address::Place::Project,
+            id,
+            ..
+        }) => id,
+        _ => "Home".to_owned(),
     }
 }
 
@@ -2418,6 +2888,9 @@ impl Shell {
         dock.update(cx, |dock, cx| dock.load(layout.state(), window, cx))
             .expect("the layout loads");
         crate::open::set_shell(&dock, window.window_handle(), cx);
+        NEEDS_YOU_FIRST.with(|first| {
+            first.set(layout.center.get(layout.active).map(String::as_str) == Some(NEEDS_YOU))
+        });
         Self {
             dock,
             commands: None,
@@ -2455,25 +2928,13 @@ impl Shell {
 }
 
 impl Render for Shell {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
         div()
             .size_full()
             .relative()
             .key_context("Shell")
             .track_focus(&self.focus_handle)
-            .on_action(|_: &crate::commands::Back, window, cx| crate::open::walk(true, window, cx))
-            .on_action(|_: &crate::commands::Forward, window, cx| {
-                crate::open::walk(false, window, cx)
-            })
-            .on_action(
-                cx.listener(|this, _: &crate::commands::OpenCommands, window, cx| {
-                    if let Some(palette) = &this.commands {
-                        let back = this.focus_handle.clone();
-                        palette.update(cx, |palette, cx| palette.show(back, window, cx));
-                    }
-                }),
-            )
             .flex()
             .flex_col()
             .bg(chrome.ground)
@@ -2484,6 +2945,8 @@ impl Render for Shell {
             .children(self.title_bar.then(|| title_bar(window)))
             .child(div().flex_1().min_h_0().w_full().child(self.dock.clone()))
             .children(self.words.clone())
+            .child(crate::notice::notices(window))
+            .children(context_menu(window))
             .children(self.commands.clone())
     }
 }

@@ -754,6 +754,17 @@ fn warm_up(
     Ok(warm)
 }
 
+/// Whether a check issue is #486's refusal of a lobe output its material lacks.
+fn missing_lobe(code: &str, path: &str) -> bool {
+    let output = path.split_once("/params/outputs/").map(|(_, o)| o);
+    code == "operator_kind_rule"
+        && output.is_some_and(|o| {
+            deep_canvas_scene3d::gpu::OUTPUTS
+                .iter()
+                .any(|(n, _, lobe)| *n == o && lobe.is_some())
+        })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn admit(
     payload: Value,
@@ -764,6 +775,7 @@ pub(crate) fn admit(
     history: u32,
     labels: &mut Labels,
     warm: Option<(&Value, &Plants)>,
+    planted: Option<Planted>,
 ) -> Result<Admitted, Vec<Value>> {
     let w = writer_of(writer).ok_or_else(|| {
         vec![issue(
@@ -781,10 +793,13 @@ pub(crate) fn admit(
         let program = s.spawn(|| Frames::compile(&doc));
         (check_in(&doc, sealed()), program.join())
     });
+    // The planted missing_lobe_turned_on (#486): the check admits a lobe output its material lacks.
+    let turned_on = planted == Some(Planted::MissingLobeTurnedOn);
     let errors: Vec<Value> = checked
         .issues
         .iter()
         .filter(|i| i.severity == "error")
+        .filter(|i| !(turned_on && missing_lobe(i.code, &i.path)))
         .map(|i| i.to_json())
         .collect();
     // The check's lowered copy of the document is freed off the admission path: a 10,000-item
@@ -1306,6 +1321,7 @@ impl Live {
             self.args.history,
             &mut self.labels,
             (!input).then_some((&raw, &self.plants)),
+            self.plants.planted,
         );
         let ses = &mut self.sessions[s];
         ses.checks
@@ -3032,6 +3048,7 @@ pub fn canonical(app: &mut App, out: &str, call: &Value) -> Value {
                 &look,
                 0,
                 &mut labels,
+                None,
                 None,
             )
         });

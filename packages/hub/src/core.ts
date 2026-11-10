@@ -118,6 +118,8 @@ const DAY = 24 * HOUR;
 const sql = (text: string): string => text.replace(/'/g, "''");
 /** A session ID as a handle holds it: letters and digits only. */
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
+/** How long before its default a later ask comes back (#1462): an hour, drafted. */
+const LATER_BEFORE_MS = 60 * 60 * 1000;
 /** A rules block as pieces, one per line under its head: a rule you typed must reach the model inline (#1296). */
 const rulePieces = (head: string, rules: readonly (readonly [string, string])[]): Piece[] =>
   [{ text: `${head}:`, keep: true }, ...rules.map(([handle, text]) => ({ text: `- ${text}`, ids: [handle], ...(handle.startsWith('rule:typed') ? { keep: true } : {}) }))];
@@ -5812,6 +5814,9 @@ export class Core {
       case 'ask.confirm': return this.confirmCard(params);
       case 'views.installed': return { views: this.extensions?.installedViews() ?? [] };
       case 'command.run': return this.runCommand(params);
+      // The app's action table (#1462): Later on an ask, and Pause on a session's row.
+      case 'ask.later': return this.putOff(params);
+      case 'session.pause': return this.pauseSession(params);
       // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
       case 'status.read':
         this.replayLate();
@@ -6550,6 +6555,31 @@ export class Core {
   }
 
   /** A view's ⌘K command, chosen in the app (#1454): the action its manifest declares, called as you. */
+  /**
+   * Later on an ask, from the app's action table (#1462): it goes below the open asks and comes back an hour before
+   * its default applies. The hour is drafted. The asks core checks it against every deadline it could hide.
+   */
+  private async putOff(params: Obj): Promise<Obj> {
+    const { ask } = params;
+    if (typeof ask !== 'string' || !ask.startsWith('ask:')) throw refuse('type', '/params/ask', 'Name the ask by its handle, ask:<id>.', ask);
+    try {
+      await this.asks.laterBefore(this.connection('app'), ask, LATER_BEFORE_MS);
+    } catch (error) {
+      if (error instanceof AskRefused) throw refuse('refused', '/params/ask', error.message, ask);
+      throw error;
+    }
+    return { ask };
+  }
+
+  /** Pause on a session's row, from the app (#1462): recorded as the core, the session its subject as every session event names it. */
+  private async pauseSession(params: Obj): Promise<Obj> {
+    const { session } = params;
+    if (typeof session !== 'string' || !letters(session)) throw refuse('type', '/params/session', 'Name the session by its ID.', session);
+    const ts = this.now();
+    await this.append(this.connection('core', { session }), { v: 1, id: ulid(ts), kind: 'session.paused', ts, subject: `session:${letters(session)}`, data: {} });
+    return { session, paused: true };
+  }
+
   private async runCommand(params: Obj): Promise<Obj> {
     const { action } = params;
     const view = this.extensions?.installedViews().find((v) => v.commands.some((c) => c.action === action));

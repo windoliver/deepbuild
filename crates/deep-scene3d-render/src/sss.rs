@@ -189,6 +189,8 @@ struct SpreadUniform {
 }
 
 /// One share-pass draw: a solid set's mesh, its records and their count, its maps' bind group.
+/// A share draw: its mesh, its records, and its group 3; a part with a material operator draws
+/// through that operator's share pipeline (#486).
 pub(crate) type ShareDraw = (
     wgpu::Buffer,
     wgpu::Buffer,
@@ -196,7 +198,44 @@ pub(crate) type ShareDraw = (
     wgpu::Buffer,
     u32,
     wgpu::BindGroup,
+    Option<wgpu::RenderPipeline>,
 );
+
+/// The share pass's pipeline with `fs` as its fragment stage: `sss_fs`, or a material operator's
+/// `op_sss_fs` (#486).
+pub(crate) fn share_pipeline(
+    d: &wgpu::Device,
+    samples: u32,
+    layout: &wgpu::PipelineLayout,
+    module: &wgpu::ShaderModule,
+    fs: &str,
+) -> wgpu::RenderPipeline {
+    let buffers = crate::mesh_buffers();
+    culled(
+        d,
+        samples,
+        SHARE_PASS,
+        Some(layout),
+        module,
+        ("mesh_vs", &buffers),
+        Some((
+            fs,
+            &[
+                crate::target(SHARE, None),
+                crate::target(PROFILE, None),
+                crate::target(SIZE, None),
+            ],
+        )),
+        Some(wgpu::DepthStencilState {
+            format: DEPTH,
+            depth_write_enabled: Some(false),
+            depth_compare: Some(wgpu::CompareFunction::Equal),
+            stencil: Default::default(),
+            bias: Default::default(),
+        }),
+        None,
+    )
+}
 
 /// A share-pass target: drawn at the geometry's sample count into `drawn`, resolved into
 /// `resolved` (one view for both at one sample).
@@ -296,31 +335,7 @@ impl Subsurface {
             .create_view(&Default::default())
         });
         let ids_ms = stand_in.as_ref().unwrap_or(i.ids_ms);
-        let buffers = crate::mesh_buffers();
-        let share_pipeline = culled(
-            d,
-            i.samples,
-            SHARE_PASS,
-            Some(i.layout),
-            i.module,
-            ("mesh_vs", &buffers),
-            Some((
-                "sss_fs",
-                &[
-                    crate::target(SHARE, None),
-                    crate::target(PROFILE, None),
-                    crate::target(SIZE, None),
-                ],
-            )),
-            Some(wgpu::DepthStencilState {
-                format: DEPTH,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::Equal),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            None,
-        );
+        let share_pipeline = share_pipeline(d, i.samples, i.layout, i.module, "sss_fs");
         let spread_group = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(SPREAD_PASS),
             entries: &[
@@ -453,11 +468,11 @@ impl Subsurface {
                     timestamp_writes,
                     ..Default::default()
                 });
-                pass.set_pipeline(&self.share_pipeline);
                 for (i, b) in binds.iter().enumerate() {
                     pass.set_bind_group(i as u32, b, &[]);
                 }
-                for (vertices, indices, count, instances, n, maps) in draws {
+                for (vertices, indices, count, instances, n, maps, own) in draws {
+                    pass.set_pipeline(own.as_ref().unwrap_or(&self.share_pipeline));
                     pass.set_bind_group(3, maps, &[]);
                     pass.set_vertex_buffer(0, vertices.slice(..));
                     pass.set_vertex_buffer(1, instances.slice(..));

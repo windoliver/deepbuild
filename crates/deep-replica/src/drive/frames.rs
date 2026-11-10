@@ -157,6 +157,7 @@ impl Replica {
         event.insert("ts".into(), json!(ts));
         let event = Value::Object(event);
         self.notifier.saw(&event, ts);
+        self.hub_copy.saw(&event);
         self.events.push(event.clone());
         self.cx.update(|cx| deep_app::record::deliver(event, cx));
         self.tick();
