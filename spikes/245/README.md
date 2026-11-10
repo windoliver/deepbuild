@@ -9,13 +9,33 @@ page-fault overhead stays under 0.3 ms a step. Otherwise the app runs `one_insta
 
 ## The answer
 
-**Not decided yet.** The reference-Mac run hasn't been made, so there is no `record.json` and no verdict. Until there is
-one, the rule gives `one_instance` (nothing missing passes), so the app runs one instance and every class's logic
-threads read 1. The run is queued on the Mac runner (MacBook Air, Mac15,12) with the command below.
+**`one_instance`.** The app runs a step's blocks one after another in one instance, every class's logic threads read
+1, and nothing in a document changes. `copy_on_write` misses both thresholds:
 
-What the Spark shows, which is not evidence for the verdict: with Linux's 4 KiB pages, `copy_on_write` touches 819
-pages a step, and mapping and first touches cost about 1.9 ms a step at p50, far past the 0.3 ms threshold. macOS's
-16 KiB pages need a quarter of the touches, so the Mac's reading may differ.
+| On Mac15,12 (M3, 8 cores, macOS 14.7.7, mains power, Low Power Mode off, thermal nominal) | one_instance | copy_on_write | Rule |
+|---|---|---|---|
+| Step wall time p50 | 4.230 ms | 3.473 ms (0.82×) | at most 0.5× |
+| Step wall time p95 | 6.136 ms | 4.540 ms (0.74×) | at most 0.5× |
+| Overhead p50 / p95 | 0.098 / 0.129 ms (restoring S) | 2.067 / 3.420 ms (mapping and page faults) | under 0.3 ms |
+| of which mapping p50 / first touches p50 | none | 0.723 / 1.227 ms (239 16 KiB pages a step) | |
+| Write check p50 (both forms, not overhead) | 1.151 ms | 1.980 ms (on 4 threads) | |
+
+The overhead decides it. Without its overhead, `copy_on_write`'s p50 would be about 1.4 ms, a third of one instance,
+but mapping S into 8 instances and faulting in the pages each block touches costs about 2 ms a step, nearly 7 times the
+threshold. The run is `record.json` (3,600 steps per form after 120 of warm-up, at c8d5d7f0). Both forms ended in the
+same full-state hash, `86bb805a…`, the Spark's too. The Mac runner's own log and timestamps are in `mac/`: one try,
+exit 0, load 3.3 at the end and 7.5 at the start on 8 cores, within record.mjs's gate.
+
+**The memory file on macOS.** The log line `memory file: no private mapping: Invalid argument (os error 22)` is macOS
+refusing a private mapping of a POSIX shm object, so the harness fell back to an unlinked file in the temp folder
+(`memory_file: "tmpfile"` in the record): S is a shared mapping of that file, each block a private mapping of it. That
+is a real copy-on-write mapping, and the only POSIX one macOS offers. Mach's `mach_vm_remap` with copy (a copy-on-write
+copy of anonymous memory) wasn't tried. It might map and fault more cheaply, but it would have to cut the 2 ms of
+overhead by more than 85% to get under 0.3 ms. A later issue that wants to revisit the form would start there, with
+this harness.
+
+On the Spark (Linux, 4 KiB pages, not evidence for the verdict), `copy_on_write` touched 819 pages a step, and
+mapping and first touches cost about 1.9 ms a step at p50: the same order.
 
 ## What is here
 
@@ -26,6 +46,7 @@ pages a step, and mapping and first touches cost about 1.9 ms a step at p50, far
 | `record.mjs` | Builds the harness, runs both forms, reads the host through `scripts/benchmark.mjs`'s `fingerprint()` and stores `record.json` with the verdict from `rule.mjs`. It stores nothing when the 1-minute load is above the core count. |
 | `rule.mjs` | The rule as a pure function `verdict(record)`: what the logic module's build reads (#212). |
 | `record.json` | The reference Mac's run: host, fixture hash, every step's wall time and overhead in both forms, and the verdict. |
+| `mac/` | The Mac runner's log of that run (`run.txt`), its timestamps and exit code (`exits.txt`) and its environment (`run1-env.txt`). |
 | `spark-linux.json` | The same harness on the Spark (Linux arm64) without per-step samples: a reading for fuel and bits, never for timing. |
 
 Run it on a reference Mac (Mac15,7, Mac15,12 or Mac17,10), on mains power, Low Power Mode off:
