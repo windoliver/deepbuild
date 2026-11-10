@@ -24,10 +24,12 @@ pub const PER_STEP: usize = 16;
 pub const SLOT: u32 = 8 + PER_STEP as u32 * 16;
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 10] = [
-    "fires", "links", "clock", "due", "emits", "preview", "pages", "parallel", "services",
-    "mirrors",
+const LATER: [&str; 9] = [
+    "fires", "links", "clock", "due", "preview", "pages", "parallel", "services", "mirrors",
 ];
+/// A row's own columns: no declared field can take one of these names, so a reader can name each
+/// field beside them.
+const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
 
 /// A refusal as `check` answers it.
 #[derive(Debug)]
@@ -176,6 +178,38 @@ pub struct Write {
     pub count: u32,
 }
 
+/// A kind of occurrence an item emits (Logic: occurrences): its numeric fields in declaration
+/// order and its cap per step.
+#[derive(Clone, Debug)]
+pub struct Emit {
+    pub kind: String,
+    pub fields: Vec<(String, Ty)>,
+    pub max: u32,
+}
+
+impl Emit {
+    /// A row's bytes: a and b as u32s, then each field at its type's size.
+    pub fn row(&self) -> u32 {
+        8 + self.fields.iter().map(|(_, t)| t.size()).sum::<u32>()
+    }
+    /// The kind's part of the emit region: a u32 count, then `max` rows.
+    pub fn size(&self) -> u32 {
+        4 + self.max * self.row()
+    }
+    /// A row as the occurrence list holds it: its kind, a, b and its fields by name.
+    pub fn value(&self, row: &[u8]) -> Value {
+        let u = |i: usize| u32::from_le_bytes(row[i..i + 4].try_into().expect("4 bytes"));
+        let mut fields = Map::new();
+        let mut at = 8;
+        for (name, ty) in &self.fields {
+            let n = ty.size() as usize;
+            fields.insert(name.clone(), ty.value(&row[at..at + n]));
+            at += n;
+        }
+        json!({"kind": self.kind, "a": u(0), "b": u(4), "fields": fields})
+    }
+}
+
 /// A checked logic item: everything a step needs.
 #[derive(Clone, Debug)]
 pub struct Item {
@@ -201,6 +235,9 @@ pub struct Item {
     /// The data assets it names, in order, by hash, and where they're copied: `assets_at`.
     pub assets: Vec<(String, Vec<u8>)>,
     pub assets_at: u32,
+    /// The kinds it emits, in declaration order, and where its emit region starts: `emits_at`.
+    pub emits: Vec<Emit>,
+    pub emits_at: u32,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
@@ -353,8 +390,57 @@ struct Declared {
     every: i64,
     ring: u64,
     assets: Vec<String>,
+    emits: Vec<Emit>,
     /// The item's fields as given, for its bake key.
     given: String,
+}
+
+/// The kinds an item declares in `emits`, in declaration order, or the refusals naming each wrong
+/// one: at most 64 kinds, 8 numeric fields each, none named as a row's own column, and
+/// `max_per_step` at most 1,024.
+fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
+    let what = |kind: &str, w: String| refusal("emits", w, json!({"field": "emits", "kind": kind}));
+    let kinds = match v {
+        None => return Ok(Vec::new()),
+        Some(Value::Object(k)) => k,
+        Some(_) => return Err(vec![what("", "emits maps each kind to its fields and max_per_step".into())]),
+    };
+    let mut out = Vec::new();
+    let mut refused = Vec::new();
+    if kinds.len() > 64 {
+        refused.push(what("", format!("emits declares {} kinds, past 64", kinds.len())));
+    }
+    for (kind, e) in kinds {
+        let other = e.as_object().and_then(|o| o.keys().find(|k| !["fields", "max_per_step"].contains(&k.as_str())));
+        if let Some(k) = other {
+            refused.push(what(kind, format!("{kind}: an emitted kind has no field {k}")));
+            continue;
+        }
+        let max = e.get("max_per_step").map_or(Some(16), Value::as_u64).filter(|n| *n <= 1024);
+        let fields: Option<Vec<(String, Ty)>> = match e.get("fields") {
+            None => Some(Vec::new()),
+            Some(Value::Object(f)) => f
+                .iter()
+                .map(|(n, t)| Some((n.clone(), t.as_str().and_then(Ty::named).filter(|t| *t != Ty::Quat)?)))
+                .collect(),
+            Some(_) => None,
+        };
+        match (fields, max) {
+            (Some(f), _) if f.len() > 8 => refused.push(what(kind, format!("{kind} declares {} fields, past 8", f.len()))),
+            (Some(f), _) if f.iter().any(|(n, _)| ROW_COLUMNS.contains(&n.as_str())) => refused.push(what(
+                kind,
+                format!("{kind}: a field can't be named step, t, kind, a or b, a row's own columns"),
+            )),
+            (Some(fields), Some(max)) => out.push(Emit { kind: kind.clone(), fields, max: max as u32 }),
+            (None, _) => refused.push(what(kind, format!("{kind}: each field is bool, i32, f64, vec2 or vec3"))),
+            (_, None) => refused.push(what(kind, format!("{kind}: max_per_step is at most 1,024"))),
+        }
+    }
+    if refused.is_empty() {
+        Ok(out)
+    } else {
+        Err(refused)
+    }
 }
 
 fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> {
@@ -374,6 +460,7 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             "budget",
             "checkpoint",
             "assets",
+            "emits",
         ]
         .contains(&k.as_str())
         {
@@ -459,6 +546,17 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             json!({}),
         ));
     }
+    let emits = emits_of(params.get("emits")).unwrap_or_else(|r| {
+        refused.extend(r);
+        Vec::new()
+    });
+    if !emits.is_empty() && writes.iter().any(|w| w.name == "occurrences") {
+        refused.push(refusal(
+            "write",
+            "an item that emits can't write an array named occurrences: <logic ID>.occurrences is its occurrence list".into(),
+            json!({"write": "occurrences"}),
+        ));
+    }
     if !refused.is_empty() {
         return Err(logic_refused(id, refused));
     }
@@ -519,12 +617,29 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         every,
         ring,
         assets,
+        emits,
         given: Value::Object(params.clone()).to_string(),
     })
 }
 
 /// Checks every item of a piece in order: the first refusal answers.
 pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<Piece, Refused> {
+    let assets = piece
+        .get("assets")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    check_in(piece, planted, history, &|sha| B64.decode(assets.get(sha)?.as_str()?).ok())
+}
+
+/// [`check`], each asset's bytes read by `stored` (a document's from the evidence store, #544)
+/// rather than from the piece's `assets`; bytes that don't hash to their ID are none.
+pub fn check_in(
+    piece: &Value,
+    planted: &Planted,
+    history: &mut History,
+    stored: &dyn Fn(&str) -> Option<Vec<u8>>,
+) -> Result<Piece, Refused> {
     let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
     let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
     let controls: BTreeSet<String> = piece
@@ -532,13 +647,8 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         .and_then(Value::as_object)
         .map(|c| c.keys().cloned().collect())
         .unwrap_or_default();
-    let assets = piece
-        .get("assets")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
     let asset = |sha: &str| -> Option<Vec<u8>> {
-        let bytes = B64.decode(assets.get(sha)?.as_str()?).ok()?;
+        let bytes = stored(sha)?;
         (hash(&bytes) == sha).then_some(bytes)
     };
     let items_in = piece
@@ -751,6 +861,41 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
                 json!({"region": "writes"}),
             ));
         }
+        let mut regions = vec![
+            ("the read region", reads_at, layout.size("reads")),
+            ("the write region", writes_at, layout.size("writes")),
+        ];
+        // The emit region: each kind's count and max_per_step rows, in declaration order.
+        let emits_at = global_at(&given, "emits_at");
+        if !d.emits.is_empty() {
+            let size: u64 = d.emits.iter().map(|e| u64::from(e.size())).sum();
+            match emits_at {
+                None => refused.push(refusal(
+                    "region",
+                    "an item that emits exports emits_at, an immutable i32 global holding an address".into(),
+                    json!({"field": "emits"}),
+                )),
+                Some(at) => {
+                    let (start, end) = (u64::from(at), u64::from(at) + size);
+                    let why = if end > memory {
+                        Some(format!("passes the end of memory at {memory}"))
+                    } else {
+                        regions
+                            .iter()
+                            .find(|(_, r, n)| *n > 0 && start < u64::from(*r) + u64::from(*n) && u64::from(*r) < end)
+                            .map(|(name, r, n)| format!("overlaps {name}, {n} bytes at {r}"))
+                    };
+                    if let Some(why) = why {
+                        refused.push(refusal(
+                            "region",
+                            format!("the emit region, {size} bytes at {at}, {why}"),
+                            json!({"region": "emits"}),
+                        ));
+                    }
+                    regions.push(("the emit region", at, size as u32));
+                }
+            }
+        }
         let assets_at = global_at(&given, "assets_at");
         let mut assets = Vec::new();
         for sha in &d.assets {
@@ -764,10 +909,6 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
                     json!({"field": "assets"}),
                 )),
                 Some(at) => {
-                    let regions = [
-                        ("the read region", reads_at, layout.size("reads")),
-                        ("the write region", writes_at, layout.size("writes")),
-                    ];
                     refused.extend(placed(&assets, at, memory, &regions, &data_segments(&given)));
                 }
             }
@@ -812,6 +953,8 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
             content,
             assets,
             assets_at: assets_at.unwrap_or(0),
+            emits: d.emits.clone(),
+            emits_at: emits_at.unwrap_or(0),
         });
     }
     Ok(Piece {
@@ -956,6 +1099,28 @@ mod tests {
         for (ty, count) in [("quat", 134_217_728u64), ("f64", 536_870_913)] {
             let items = json!({"e": {"writes": {"a": {"type": ty, "count": count}}}});
             assert_eq!(refusals(items), json!(["e", "write"]), "{ty} x {count}");
+        }
+    }
+
+    /// #544: emits within its limits passes to the region check (the empty program exports no
+    /// emits_at); past any of them, or with a type or field name it can't have, it is refused.
+    #[test]
+    fn emits_past_its_limits_are_refused() {
+        let named = |n: usize, v: Value| Value::Object((0..n).map(|i| (format!("x{i}"), v.clone())).collect());
+        let within = [named(64, json!({})), json!({"shot": {"fields": named(8, json!("vec3")), "max_per_step": 1024}})];
+        let past = [
+            named(65, json!({})),
+            json!({"shot": {"fields": named(9, json!("f64"))}}),
+            json!({"shot": {"max_per_step": 1025}}),
+            json!({"shot": {"fields": {"p": "quat"}}}),
+            json!({"shot": {"fields": {"t": "f64"}}}),
+            json!({"shot": {"offset": true}}),
+        ];
+        for emits in within {
+            assert_eq!(refusals(json!({"e": {"emits": emits}})), json!(["e", "region"]));
+        }
+        for emits in past {
+            assert_eq!(refusals(json!({"e": {"emits": emits.clone()}})), json!(["e", "emits"]), "{emits}");
         }
     }
 
