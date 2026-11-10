@@ -2,7 +2,7 @@
 //! within N code values on P% of pixels, a ceiling no pixel may pass, and a bound on the pixels
 //! off in any small window, so a small defect in one place, such as a wrong status dot or a
 //! missing glyph, can't hide inside the share. A pixel is off when any channel differs by more
-//! than `within`. (Skia Gold's fuzzy and sample-area matchers check the same two bounds.)
+//! than `within`.
 
 use std::path::Path;
 
