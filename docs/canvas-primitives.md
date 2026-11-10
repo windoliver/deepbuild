@@ -7399,7 +7399,7 @@ For: a score's stems and a foley preset's variants played as strips; a tape stop
 - `out: bus = master`; `layout = stereo`
 - `loudness_target: LUFS` (optional)
 
-**Semantics:** Mixed per block in topological order as a plain sum, with no normalizing. Any cycle is refused. The master ends in the limiter.
+**Semantics:** Mixed per block in topological order as a plain sum, with no normalizing. Any cycle is refused, through sends and a compressor's key as well as `out`. A send taps its bus after its processors and before its gain, pan and mute (`pre`) or after them (`post`), and adds its gain's worth into its bus in the same block. Each bus delays its inputs to the latest of their latencies, and the master's latency is taken back by rendering ahead, so a strip at t is heard at t. The master ends, after its gain and pan, in a true-peak limiter with the limiter's defaults: ceiling −1 dBTP, lookahead 5 ms, release 0.1 s, 8× oversampling. `loudness_target` reads as written, and missing on a bus without one, never 0.
 
 **Cost:** O(inputs × block) adds, plus processors
 
@@ -7413,8 +7413,8 @@ For: a score's stems and a foley preset's variants played as strips; a tape stop
 
 - `kind`, one of:
 - `eq {bands: [{type: lowpass | highpass | bandpass | lowshelf | highshelf | peaking | notch | allpass, freq: Hz = 350, q = 1, gain: dB = 0}]}`
-- `compressor {threshold: dB = −24, knee: dB = 30, ratio = 12, attack: s = 0.003, release: s = 0.25, makeup: dB | auto, key: bus}`
-- `limiter {ceiling: dBTP, lookahead: s = 0.005, release: s = 0.1, oversample: 4 | 8 = 8}`
+- `compressor {threshold: dB = −24, knee: dB = 30, ratio = 12, attack: s = 0.003, release: s = 0.25, makeup: dB | auto = 0, key: bus}`
+- `limiter {ceiling: dBTP = −1, lookahead: s = 0.005, release: s = 0.1, oversample: 4 | 8 = 8}`
 - `delay {time: s ≤ 2, feedback: [0, 1), mix}`
 - `reverb {ir: asset | {decay: s, size, damping}, mix}`
 - `pitch {semitones, window: s = 0.1}`
@@ -7422,7 +7422,14 @@ For: a score's stems and a foley preset's variants played as strips; a tape stop
 - Derived: `tail: flick`; `latency: samples`
 - `checkpoint_every: s = 1`
 
-**Semantics:** Biquads follow the Audio EQ Cookbook formulas; the compressor and limiter laws are ours, written down. State is checkpointed on a fixed grid, `checkpoint_every` apart until the ring passes its byte budget and the spacing doubles, so a seek restores a checkpoint and renders forward, and seek equals play bit for bit on the same build and architecture. The tail says how long a bus keeps rendering after its input stops, and latency is compensated across parallel paths.
+**Semantics:** Biquads follow the Audio EQ Cookbook formulas; the compressor and limiter laws are ours, written down here.
+
+- **Compressor:** its detector reads p, the largest |x| over its channels (its key bus's, when it names one), as r = max(p, a_r·r′ + (1 − a_r)·p) and then ℓ = a_a·ℓ′ + (1 − a_a)·r, where r′ and ℓ′ are the previous sample's and a = e^(−1 ÷ (seconds × rate)) for the release and the attack. Its static curve takes the level L = 20·log₁₀ ℓ in dBFS (a full-scale sine reads 0) to L below T − W ÷ 2, to L + (1 ÷ R − 1)·(L − T + W ÷ 2)² ÷ (2W) within W ÷ 2 of T, and to T + (L − T) ÷ R above T + W ÷ 2, for threshold T, knee W and ratio R. Every channel is scaled by the curve less L, plus the makeup; `auto` makeup is minus the curve at 0 dBFS. Latency 0, tail 0.
+- **Limiter:** a sample's peak is the largest |x| over its channels at the sample and at the oversample − 1 points the loudness bake's true-peak interpolator places between it and the sample before. Each sample needs the gain min(1, c ÷ peak), where c is the ceiling taken 0.05 dB low, the spread between true-peak meters' interpolators. With W the lookahead in samples less the interpolator's reach of 8 (at least 1), the gain is the least need within the next W samples, released toward it by a_r as the compressor's is but never above it, then averaged over the last W samples; the output is the input times that gain, W + 8 samples late. Latency W + 8 samples, tail the same.
+- **Delay:** the wet line is w(n) = x(n − T) + feedback·w(n − T), T the time in samples, and the output (1 − mix)·x + mix·w. Latency 0; the tail lasts until feedback's repeats fall below −120 dB.
+- **Pitch:** two taps read a delay line a window long, half a window apart, each sliding at 1 − 2^(semitones ÷ 12) samples a sample and wrapping, faded by a Hann window so the two sum to one. Latency half the window, tail the window.
+
+State is checkpointed on a fixed grid, `checkpoint_every` apart until the ring passes its byte budget and the spacing doubles, so a seek restores a checkpoint and renders forward, and seek equals play bit for bit on the same build and architecture. The tail says how long a bus keeps rendering after its input stops, and latency is compensated across parallel paths.
 
 **Cost:** A biquad about 5 multiply-adds per sample per band; convolution by partitioned FFT, priced per instance; a checkpoint is mostly delay lines (a 2 s stereo reverb at 48 kHz is about 0.77 MB)
 

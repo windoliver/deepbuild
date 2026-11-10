@@ -11,7 +11,7 @@ use std::sync::Arc;
 use deep_canvas_marks::key::sha256_hex;
 use deep_canvas_marks::paint::Adjust;
 use image::{ImageError, ImageReader, RgbaImage};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use vello_cpu::Pixmap;
 
 use crate::refused;

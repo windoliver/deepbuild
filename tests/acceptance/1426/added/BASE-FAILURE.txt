@@ -44,4 +44,4 @@ no scripts/vendor-rebase.mjs, no lint lane running it, and no carried-patch tabl
 
 == node --test tests/acceptance/1426/added/wrong.test.mjs  (exit 0; 29 tests, 29 pass, 0 fail; 40 s)
 
-<repo> is /Users/taofeng/dev/claude-worktrees/github-issue-1426-c1c7e4/agent-a9ab1cfb20bea2756.
+<repo> is ~/dev/claude-worktrees/github-issue-1426-c1c7e4/agent-a9ab1cfb20bea2756.

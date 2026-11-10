@@ -70,14 +70,14 @@ pub struct Plants {
     canonical_climbs: bool,
     /// #429's: the emitter's and the check's planted programs; a render-back that draws
     /// live-only operators; a core that calls a frame drawn with a fallback settled.
-    ops: (
+    pub(crate) ops: (
         deep_canvas_effects::emit::Options,
         deep_canvas_effects::check::CheckOptions,
     ),
     render_back_live_only: bool,
     settles_with_fallback: bool,
     /// #431's: a core that builds the velocity and emission targets for every frame.
-    builds_unread_targets: bool,
+    pub(crate) builds_unread_targets: bool,
     /// #1173's: scene3d's sample count (session3::msaa_planted) and the claimed one.
     planted: Option<Planted>,
 }
@@ -259,7 +259,7 @@ struct Args {
     calibration: bool,
 }
 
-fn pair(v: &Value) -> Option<[u32; 2]> {
+pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
     let a = v.as_array().filter(|a| a.len() == 2)?;
     Some([
         u32::try_from(a[0].as_u64()?).ok().filter(|n| *n > 0)?,
@@ -675,11 +675,11 @@ fn issue(code: &str, path: &str, actual: Value, what: &str) -> Value {
 }
 
 /// A revision that passed admission.
-struct Admitted {
-    doc: Value,
+pub(crate) struct Admitted {
+    pub(crate) doc: Value,
     frames: Content,
     class: Option<Class>,
-    limits: Limits,
+    pub(crate) limits: Limits,
     fit: Estimate,
     size: [u32; 2],
     /// The climb rungs that don't fit its memory cap (#425).
@@ -690,7 +690,7 @@ struct Admitted {
 /// A writer's payload checked as its session's next revision, before it shows: stamped by the
 /// core, checked in the build's sealed set, compiled for its frames and fitted to the window's
 /// GPU memory.
-fn read_payload(path: &PathBuf) -> Result<Value, Vec<Value>> {
+pub(crate) fn read_payload(path: &PathBuf) -> Result<Value, Vec<Value>> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| vec![issue("out_of_range", "doc", json!(path), &e.to_string())])?;
     serde_json::from_str(&text)
@@ -747,7 +747,7 @@ fn warm_up(
     }
     warm.apart = crate::warm::apart(&warm.docs);
     match plants.planted {
-        Some(Planted::WarmsInUseAtT0) => warm.docs.truncate(0),
+        Some(Planted::WarmsInUseAtT0) => warm.docs.clear(),
         Some(Planted::FusesDefaultOptions) => warm.docs.truncate(1),
         _ => {}
     }
@@ -755,7 +755,7 @@ fn warm_up(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn admit(
+pub(crate) fn admit(
     payload: Value,
     writer: &str,
     doc_id: &str,

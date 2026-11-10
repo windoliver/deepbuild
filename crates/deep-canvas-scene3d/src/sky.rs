@@ -152,7 +152,7 @@ pub fn parse(
     id: &str,
     params: &Value,
     look: &Look3,
-    assets: Option<&dyn Fn(&str) -> Option<Vec<u8>>>,
+    assets: Option<crate::scene::Assets<'_>>,
 ) -> Result<Sky, Refused> {
     let path = format!("items/{id}/params");
     let bad = |k: &str| Refused {

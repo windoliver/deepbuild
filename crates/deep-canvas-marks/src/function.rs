@@ -754,7 +754,9 @@ pub fn derivative_misses(d: &Form, f: &Form, y: &Lin) -> Option<f64> {
     xs.into_iter().find(|&x| {
         let slope = f.probe(x).map_or(f64::NAN, |p| p.1);
         let mine = d.y_at(x).unwrap_or(f64::NAN);
-        !((y.map(mine) - y.map(slope)).abs() <= TOLERANCE)
+        // A gap that is not a number is off the curve too.
+        let gap = (y.map(mine) - y.map(slope)).abs();
+        gap.is_nan() || gap > TOLERANCE
     })
 }
 

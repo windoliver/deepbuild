@@ -322,6 +322,47 @@ fn now_ms() -> u128 {
 }
 
 #[test]
+fn a_line_nested_deeper_than_the_stack_holds_is_denied_as_unread() {
+    // No hub is there, and the line's first command meets no entry: what it nests past the reader's reach does.
+    let home = short_home("nest");
+    let mut wrong = Vec::new();
+    for open in ["$(", "${a:-", "<(", "(", "{ ", "if ", "function "] {
+        let command = format!("echo ok\\n{}", open.repeat(200_000));
+        let (code, _, _) = pre_tool_use(&home, &command);
+        if code != Some(2) {
+            wrong.push(format!("{open:?} nested: exit code {code:?}"));
+        }
+    }
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        wrong,
+        Vec::<String>::new(),
+        "each is denied, none ends by a signal"
+    );
+}
+
+#[test]
+fn a_line_denied_for_its_nested_syntax_names_that_bound() {
+    // One shell, with a substitution nested 200 levels deep in it: past the 64 levels of syntax, not the 12 shells.
+    let home = short_home("names");
+    let payload = format!(
+        r#"{{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"echo ok\n{}"}}}}"#,
+        "$(".repeat(200)
+    );
+    let mut child = hook(&home, "PreToolUse");
+    feed(&mut child, payload.as_bytes());
+    let stderr = stderr_of(&mut child);
+    let status = child.wait().unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(status.code(), Some(2), "the line is denied: {stderr}");
+    let said = stderr.split("it nests past what the reader reads").nth(1);
+    assert!(
+        said.is_some_and(|said| said.contains("64")),
+        "the denial names the 64 levels of syntax the line nests past: {stderr}"
+    );
+}
+
+#[test]
 fn a_call_whose_acknowledged_hold_runs_out_is_still_spooled() {
     let home = short_home("hold");
     // A hub that acknowledges with a hold 300 ms ahead and never replies.
