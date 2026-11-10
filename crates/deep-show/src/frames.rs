@@ -468,19 +468,9 @@ impl<'a> Hub<'a> {
         deep_canvas_marks::finish::read_tone_map(def.get("tone_map")).ok()
     }
 
-    /// [`Hub::canonical_png`] of a document with 3D writer layers: its 3D frame at `t` on the GPU,
-    /// the 2D items drawn over it with no ground of their own, as render-back draws it (#1162).
-    pub(crate) fn canonical_png3d(
-        &mut self,
-        doc: &Value,
-        t: i64,
-        drawing: &Painted,
-    ) -> Result<String, Unfit> {
-        let (rgba, size) = self.rgba3d(doc, t, drawing, None)?;
-        self.put_png(rgba, size)
-    }
-
-    /// #501: the raster [`Hub::canonical_png3d`] stores, at `size` when given.
+    /// The raster of a document with 3D writer layers: its 3D frame at `t` on the GPU, the 2D
+    /// items drawn over it with no ground of their own, as render-back draws it (#1162), at
+    /// `size` when given (#501).
     pub(crate) fn rgba3d(
         &mut self,
         doc: &Value,

@@ -111,6 +111,41 @@ impl From<io::Error> for HubError {
     }
 }
 
+/// What a refusal says, in the hub's own words where it gave some.
+pub fn why(error: &HubError) -> String {
+    match error {
+        HubError::Refused(refusal) => refusal["message"]
+            .as_str()
+            .map_or_else(|| refusal.to_string(), str::to_owned),
+        other => format!("{other:?}"),
+    }
+}
+
+/// Issue #1462: a replica's own copy of the hub, which takes every call the app makes of it in place of a socket.
+pub type Local = std::sync::Arc<dyn Fn(&str, &Value) -> Result<Value, HubError> + Send + Sync>;
+
+static LOCAL: std::sync::Mutex<Option<Local>> = std::sync::Mutex::new(None);
+
+/// Sends the app's calls to `local` from now on: the replica's door, in no shipped build.
+#[cfg(feature = "fixtures")]
+pub fn set_local(local: Option<Local>) {
+    *LOCAL.lock().unwrap_or_else(|e| e.into_inner()) = local;
+}
+
+/// The replica's copy of the hub, when one takes the app's calls.
+pub fn local() -> Option<Local> {
+    LOCAL.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// One call the app makes of its hub on a connection of its own: a write a control asks for. Blocks, so a view runs
+/// it off the main thread.
+pub fn call_app(method: &str, params: Value) -> Result<Value, HubError> {
+    match local() {
+        Some(local) => local(method, &params),
+        None => HubClient::app()?.call(method, params),
+    }
+}
+
 /// One connection to the hub, after its hello.
 pub struct HubClient {
     reader: BufReader<UnixStream>,

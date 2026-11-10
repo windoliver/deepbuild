@@ -47,9 +47,12 @@ pub struct Material {
 /// for, off while [`Lobes::on`] is false. Colors are linear, already times their weight.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Lobes {
-    /// The cloth lobe's color (times its weight) and roughness.
+    /// The cloth lobe's color (times its weight) and roughness; its weight and its color alone,
+    /// which a material operator that writes one of them reads (#486).
     pub sheen: Vec3,
     pub sheen_roughness: f64,
+    pub sheen_weight: f64,
+    pub sheen_color: Vec3,
     /// The highlight's stretch along uv0's u direction, −1 to 1, turned by `rotation` (rad).
     pub anisotropy: f64,
     pub anisotropy_rotation: f64,
@@ -631,6 +634,8 @@ fn lobes(p: &serde_json::Map<String, Value>, base: Vec3) -> Result<Lobes, &'stat
     Ok(Lobes {
         sheen: scaled(color("sheen").ok_or("sheen/color")?, sheen_w),
         sheen_roughness: at("sheen", "roughness", 0.5).clamp(0.0, 1.0),
+        sheen_weight: sheen_w,
+        sheen_color: color("sheen").ok_or("sheen/color")?,
         anisotropy,
         anisotropy_rotation: at("anisotropy", "rotation", 0.0).to_radians(),
         translucency: color("translucency").ok_or("translucency/color")?,

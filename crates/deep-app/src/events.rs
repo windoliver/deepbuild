@@ -126,9 +126,14 @@ pub struct Inbox {
 }
 
 impl Inbox {
-    /// The rows Needs you lists: every open ask's handle, oldest first.
+    /// The rows Needs you lists: every open ask's handle, oldest first, those put off with Later after them (#1462).
     pub fn rows(&self) -> Vec<String> {
-        self.open.iter().map(|ask| ask.handle.clone()).collect()
+        let (now, later): (Vec<&Ask>, Vec<&Ask>) =
+            self.open.iter().partition(|ask| ask.later_until.is_none());
+        now.into_iter()
+            .chain(later)
+            .map(|ask| ask.handle.clone())
+            .collect()
     }
 }
 
