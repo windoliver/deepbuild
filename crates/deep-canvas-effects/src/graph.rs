@@ -979,6 +979,11 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
 /// Reads an operator. Refuses shader text in a field of its own (`operator_source`), unknown
 /// fields and malformed parts (`operator_type`) before any later check runs.
 pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
+    // A call to a step function scene3d ships, such as core.bump@1, is inlined first (#486), on
+    // every path that reads an operator.
+    if calls_shipped(&v["steps"]) {
+        return read(&inline_functions(v, &Functions::new(), true)?);
+    }
     let mut issues = Vec::new();
     let Some(o) = v.as_object() else {
         return Err(vec![Issue::new(
@@ -1429,6 +1434,29 @@ pub type Functions = BTreeMap<String, Value>;
 /// How deep step functions may call each other.
 const USE_DEPTH: usize = 4;
 
+/// The step functions canvas modules ship (#486: scene3d's `core.bump@1`), which any operator
+/// calls by name as it calls a pack's.
+fn shipped() -> &'static Functions {
+    static SHIPPED: std::sync::OnceLock<Functions> = std::sync::OnceLock::new();
+    SHIPPED.get_or_init(|| deep_canvas_scene3d::gpu::functions().into_iter().collect())
+}
+
+/// The step function `name`: a pack's, else a shipped one.
+fn function<'a>(functions: &'a Functions, name: &str) -> Option<&'a Value> {
+    functions.get(name).or_else(|| shipped().get(name))
+}
+
+/// Whether `steps`, or a repeat's body among them, calls a shipped step function.
+fn calls_shipped(steps: &Value) -> bool {
+    steps.as_object().into_iter().flatten().any(|(_, s)| {
+        (s["op"] == "use@1"
+            && s["args"]["name"]
+                .as_str()
+                .is_some_and(|n| shipped().contains_key(n)))
+            || calls_shipped(&s["args"]["body"])
+    })
+}
+
 /// Whether a step function's body takes implicit derivatives, its own or through a function it
 /// calls: `ddx`, `ddy`, `fwidth`, `triplanar` or a `sample` with no `lod`.
 fn holds_derivative(f: &Value, functions: &Functions, depth: usize) -> bool {
@@ -1441,7 +1469,7 @@ fn holds_derivative(f: &Value, functions: &Functions, depth: usize) -> bool {
                     && depth < USE_DEPTH
                     && s["args"]["name"]
                         .as_str()
-                        .and_then(|n| functions.get(n))
+                        .and_then(|n| function(functions, n))
                         .is_some_and(|g| holds_derivative(g, functions, depth + 1)))
                 || s["args"]["body"]
                     .as_object()
@@ -1499,7 +1527,7 @@ pub fn inline_functions(
                 _ => continue,
             }
             let name = step["args"]["name"].as_str().unwrap_or("");
-            let Some(f) = functions.get(name).filter(|_| depth < USE_DEPTH) else {
+            let Some(f) = function(functions, name).filter(|_| depth < USE_DEPTH) else {
                 issues.push(Issue::at_step(
                     "operator_unknown_op",
                     &id,

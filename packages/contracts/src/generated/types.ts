@@ -7413,6 +7413,23 @@ export interface SessionNeverStarted {
   evidence?: Array<string>;
 }
 
+/** session.paused@1 */
+export interface SessionPaused {
+  v: 1;
+  id: string;
+  kind: "session.paused";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+  };
+  evidence?: Array<string>;
+}
+
 /** session.pushed@1 */
 export interface SessionPushed {
   v: 1;
