@@ -282,6 +282,9 @@ timed.push('tests/acceptance/501/budgets.test.ts');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
+// #1925's files each start a hub that runs an 80 s encode through the supervisor and read its row to the 2 s batch,
+// and its reopen file starts deep-drive twice: one file at a time.
+alone.push('tests/acceptance/1925/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
