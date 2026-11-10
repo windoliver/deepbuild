@@ -1,0 +1,204 @@
+{
+ "golden_step_hashes": 241,
+ "replays": {
+  "macos": {
+   "ok": true,
+   "verdict": "PASS",
+   "bake_key": "c1f0ba005e21d30a83b3ab7b024791eb404cc8869397d1cd0948edb4aeef9925",
+   "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+   "machine": {
+    "os": "macos",
+    "arch": "aarch64",
+    "cpu": "Apple M5 Max",
+    "target": "aarch64-apple-darwin"
+   },
+   "target": "aarch64-apple-darwin",
+   "machines": "same",
+   "report": null,
+   "failure": null,
+   "step_hashes": {
+    "count": 241,
+    "first_differing_step": -1
+   }
+  },
+  "wasm32": {
+   "ok": true,
+   "verdict": "PASS",
+   "bake_key": "c1f0ba005e21d30a83b3ab7b024791eb404cc8869397d1cd0948edb4aeef9925",
+   "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+   "machine": {
+    "os": "",
+    "arch": "wasm32",
+    "cpu": "wasm32",
+    "target": "wasm32-unknown-unknown"
+   },
+   "target": "wasm32-unknown-unknown",
+   "machines": "different",
+   "report": null,
+   "failure": null,
+   "step_hashes": {
+    "count": 241,
+    "first_differing_step": -1
+   }
+  },
+  "linux-x86_64": {
+   "ok": true,
+   "verdict": "PASS",
+   "bake_key": "c1f0ba005e21d30a83b3ab7b024791eb404cc8869397d1cd0948edb4aeef9925",
+   "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+   "machine": {
+    "os": "linux",
+    "arch": "x86_64",
+    "cpu": "x86_64",
+    "target": "x86_64-unknown-linux-gnu"
+   },
+   "target": "x86_64-unknown-linux-gnu",
+   "machines": "different",
+   "report": null,
+   "failure": null,
+   "step_hashes": {
+    "count": 241,
+    "first_differing_step": -1
+   }
+  },
+  "linux-vm-aarch64": {
+   "ok": true,
+   "verdict": "PASS",
+   "bake_key": "c1f0ba005e21d30a83b3ab7b024791eb404cc8869397d1cd0948edb4aeef9925",
+   "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+   "machine": {
+    "os": "linux",
+    "arch": "aarch64",
+    "cpu": "aarch64",
+    "target": "aarch64-unknown-linux-gnu"
+   },
+   "target": "aarch64-unknown-linux-gnu",
+   "machines": "same",
+   "report": null,
+   "failure": null,
+   "step_hashes": {
+    "count": 241,
+    "first_differing_step": -1
+   }
+  }
+ },
+ "shifted_at_120": {
+  "macos": {
+   "ok": true,
+   "verdict": "FAIL",
+   "bake_key": "c1f0ba005e21d30a83b3ab7b024791eb404cc8869397d1cd0948edb4aeef9925",
+   "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+   "machine": {
+    "os": "macos",
+    "arch": "aarch64",
+    "cpu": "Apple M5 Max",
+    "target": "aarch64-apple-darwin"
+   },
+   "target": "aarch64-apple-darwin",
+   "machines": "same",
+   "report": {
+    "first_step": 120,
+    "checkpoint": 120,
+    "field": null
+   },
+   "failure": null,
+   "step_hashes": {
+    "count": 241,
+    "first_differing_step": 120
+   }
+  },
+  "wasm32": {
+   "ok": true,
+   "verdict": "FAIL",
+   "bake_key": "c1f0ba005e21d30a83b3ab7b024791eb404cc8869397d1cd0948edb4aeef9925",
+   "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+   "machine": {
+    "os": "",
+    "arch": "wasm32",
+    "cpu": "wasm32",
+    "target": "wasm32-unknown-unknown"
+   },
+   "target": "wasm32-unknown-unknown",
+   "machines": "different",
+   "report": {
+    "first_step": 120,
+    "checkpoint": 120,
+    "field": null
+   },
+   "failure": null,
+   "step_hashes": {
+    "count": 241,
+    "first_differing_step": 120
+   }
+  },
+  "linux-x86_64": {
+   "ok": true,
+   "verdict": "FAIL",
+   "bake_key": "c1f0ba005e21d30a83b3ab7b024791eb404cc8869397d1cd0948edb4aeef9925",
+   "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+   "machine": {
+    "os": "linux",
+    "arch": "x86_64",
+    "cpu": "x86_64",
+    "target": "x86_64-unknown-linux-gnu"
+   },
+   "target": "x86_64-unknown-linux-gnu",
+   "machines": "different",
+   "report": {
+    "first_step": 120,
+    "checkpoint": 120,
+    "field": null
+   },
+   "failure": null,
+   "step_hashes": {
+    "count": 241,
+    "first_differing_step": 120
+   }
+  },
+  "linux-vm-aarch64": {
+   "ok": true,
+   "verdict": "FAIL",
+   "bake_key": "c1f0ba005e21d30a83b3ab7b024791eb404cc8869397d1cd0948edb4aeef9925",
+   "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+   "machine": {
+    "os": "linux",
+    "arch": "aarch64",
+    "cpu": "aarch64",
+    "target": "aarch64-unknown-linux-gnu"
+   },
+   "target": "aarch64-unknown-linux-gnu",
+   "machines": "same",
+   "report": {
+    "first_step": 120,
+    "checkpoint": 120,
+    "field": null
+   },
+   "failure": null,
+   "step_hashes": {
+    "count": 241,
+    "first_differing_step": 120
+   }
+  }
+ },
+ "planted_document_on_linux_x86_64": {
+  "ok": true,
+  "verdict": "FAIL",
+  "bake_key": "eb8c78f588bfa5e1863c56cac047c5527486a21f6014945b0aca45aafb56a651",
+  "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+  "machine": {
+   "os": "linux",
+   "arch": "x86_64",
+   "cpu": "x86_64",
+   "target": "x86_64-unknown-linux-gnu"
+  },
+  "target": "x86_64-unknown-linux-gnu",
+  "machines": "different",
+  "report": null,
+  "failure": null,
+  "refused": "a golden is never compared under another key or runtime digest: it holds \"c1f0ba005e21d30a83b3ab7b024791eb404cc8869397d1cd0948edb4aeef9925\" and \"f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023\", this run eb8c78f588bfa5e1863c56cac047c5527486a21f6014945b0aca45aafb56a651 and f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+  "step_hashes": {
+   "count": 0,
+   "first_differing_step": -1
+  }
+ }
+}

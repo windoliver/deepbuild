@@ -155,6 +155,8 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     limit: maybe({ type: 'integer', description: 'assets: at most this many rows, up to 50; null for 50.' }),
     library: maybe(str('fetch: the library a row came from, as its from names it.')),
     id: maybe(str('fetch: the row\'s id.')),
+    pack: maybe(str('fetch: an installed pack pinned as owner/name@version, instead of library.')),
+    asset: maybe(str('fetch: one path in the pinned pack\'s assets list.')),
     example: maybe(str('read: an example, by the hash a listing or a hit gave.', '^[0-9a-f]{64}$')),
     guide: maybe(str('read: a guide, by the name a hit gave.')),
     offset: maybe({ type: 'integer', description: 'read of a guide: the next a page gave; null for its start.' }),

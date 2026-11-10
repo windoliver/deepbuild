@@ -89,6 +89,10 @@ pub fn decide(app: &mut App, call: &Value) -> Value {
     if call["via"] != "you" {
         return json!({"outcome": "refused", "code": "not_your_decision", "reason": "only your decision blesses a golden"});
     }
+    // #1903: your limits for the envelope's calibration metrics.
+    if call["decision"].get("limits").is_some() {
+        return crate::envelope::decide_limits(call);
+    }
     // A bless names a PNG, or an operator output's bytes (`state`, #252).
     let bless = &call["decision"]["bless"];
     let snapshot = bless["png"].as_str().map(|p| (p, false)).or(bless["state"].as_str().map(|p| (p, true)));

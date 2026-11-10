@@ -1,0 +1,16 @@
+running 1 test
+test live::tests::the_check_refuses_the_full_screen_every_pass_scene_naming_what_the_device_held ... FAILED
+
+failures:
+
+---- live::tests::the_check_refuses_the_full_screen_every_pass_scene_naming_what_the_device_held stdout ----
+
+thread 'live::tests::the_check_refuses_the_full_screen_every_pass_scene_naming_what_the_device_held' (104018730) panicked at crates/deep-gpu-layer/src/live.rs:3137:10:
+the scene is refused at check: Estimate { scale: 0.5, history: 0, slots: 92648448, hdr_slots: 0, read_back: 0, targets: 30882816, upscale: 38603520, frame_history: 0, effects: 0, scene: 0 }
+
+
+failures:
+    live::tests::the_check_refuses_the_full_screen_every_pass_scene_naming_what_the_device_held
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.04s
+

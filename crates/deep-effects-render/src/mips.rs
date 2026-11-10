@@ -19,7 +19,7 @@ pub struct Chain {
 }
 
 impl Mips {
-    pub fn new(d: &wgpu::Device) -> Mips {
+    pub fn new(d: &deep_gpu::counted::Wgpu) -> Mips {
         let pipe = |format: &str| {
             let source = include_str!("mips.wgsl").replace("FORMAT", format);
             let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -42,7 +42,7 @@ impl Mips {
     }
 
     /// The chain of `tex`, whose levels must have STORAGE_BINDING and TEXTURE_BINDING usage.
-    pub fn chain(&self, d: &wgpu::Device, tex: &wgpu::Texture) -> Chain {
+    pub fn chain(&self, d: &deep_gpu::counted::Wgpu, tex: &wgpu::Texture) -> Chain {
         let pipeline = match tex.format() {
             wgpu::TextureFormat::Rgba16Float => &self.rgba16f,
             _ => &self.rgba8,
@@ -111,7 +111,7 @@ pub struct Fill {
 }
 
 impl Fills {
-    pub fn new(d: &wgpu::Device) -> Fills {
+    pub fn new(d: &deep_gpu::counted::Wgpu) -> Fills {
         let mut pipes = std::collections::BTreeMap::new();
         for format in ["r32uint", "r32float", "rgba16float", "rgba8unorm"] {
             for dim3 in [false, true] {
@@ -143,8 +143,7 @@ impl Fills {
     }
 
     /// The fill of level 0 of `tex` (a texture output of `format`) with `v`.
-    pub fn fill(&self, d: &wgpu::Device, tex: &wgpu::Texture, format: &str, v: [f32; 4]) -> Fill {
-        use wgpu::util::DeviceExt as _;
+    pub fn fill(&self, d: &deep_gpu::counted::Wgpu, tex: &wgpu::Texture, format: &str, v: [f32; 4]) -> Fill {
         let dim3 = tex.dimension() == wgpu::TextureDimension::D3;
         let pipeline = self.pipes[&(format.to_string(), dim3)].clone();
         let buf = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {

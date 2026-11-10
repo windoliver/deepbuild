@@ -7,7 +7,6 @@
 use deep_canvas_scene3d::flare::{Flare, Source, MAX_SOURCES};
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
-use wgpu::util::DeviceExt;
 
 use crate::{FLARE_PASS, LINEAR};
 
