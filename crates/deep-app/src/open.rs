@@ -50,6 +50,16 @@ pub fn opened_session(cx: &App) -> Option<String> {
         .map(|address| address.id)
 }
 
+/// The shell's window, which the menu bar's items and the table's keys act in (#1462).
+pub fn window(cx: &App) -> Option<AnyWindowHandle> {
+    cx.try_global::<Selection>()?.window
+}
+
+/// Where the page region draws, once an address was opened (#1462).
+pub fn shown_region(cx: &App) -> Option<Region> {
+    cx.try_global::<Selection>()?.shown.region
+}
+
 /// The shipped page popped out into a window of its own.
 pub fn popped(cx: &App) -> Option<Kind> {
     cx.try_global::<Selection>()?
@@ -200,6 +210,18 @@ fn session_of(id: &str) -> Option<String> {
     .flatten()
 }
 
+/// Whether some session of the record is in project `id`.
+fn project_known(id: &str) -> bool {
+    record::with_view(|view| {
+        let table = view.table();
+        table
+            .sessions()
+            .iter()
+            .any(|session| table.project(session) == id)
+    })
+    .unwrap_or(false)
+}
+
 /// Whether the record removed the session: its `session.archived`.
 fn archived(id: &str) -> bool {
     let subject = format!("session:{id}");
@@ -294,6 +316,8 @@ fn resolve(address: &Address, window: &mut Window, cx: &mut App) -> (Target, Add
                     .map_or_else(|| Target::Gone(no_match(&text)), Target::Page)
             }
         },
+        // A project's page (#1462): the project's sessions, from its heading in the list.
+        Place::Project if project_known(&address.id) => Target::Shipped(Kind::Home),
         Place::Project => Target::Gone(format!("No page for \"{text}\" yet")),
     };
     (target, full)

@@ -176,7 +176,17 @@ fn the_question_card_is_valued_by_its_arming_state_and_holds_the_keyboard() {
         card[0]["value"], "presented",
         "a card just shown isn't armed"
     );
-    assert_eq!(shown["focus"], "question-card");
+    // The card holds the keyboard: focus is the id of the card's control the keys are on (#1462), a node inside it.
+    let focus = shown["focus"].as_str().unwrap_or_default();
+    let controls: Vec<&str> = nodes(card[0])
+        .into_iter()
+        .filter_map(|n| n["id"].as_str())
+        .filter(|id| id.starts_with("card-"))
+        .collect();
+    assert!(
+        controls.contains(&focus),
+        "focus {focus:?} isn't one of the card's controls {controls:?}"
+    );
     let armed = drive.call(json!({
         "call": "expect", "locator": {"id": "question-card"},
         "expect": {"name": "the card arms", "assert": "value", "value": "armed"}, "timeout": 2000,
