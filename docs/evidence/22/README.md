@@ -97,9 +97,10 @@ run** (`--timed`; #319's budgets are the Mac's) and **44 slow files were not run
 line names a file this change touches.
 
 The same 200 failing test files at main's tip 2721ca7b, in a built worktree on the same box: 341 of the head's 357 test
-failures fail there too. The 17 that didn't, run again on both sides: 11 passed at head; the other three files
-(codex-hub's measured hold, #340's terminal, #348's sandbox places) fail at the tip as well across three alternating
-runs each. No failure is this change's.
+failures fail there too. The 17 that didn't, in 14 files, run again on both sides: 7 files pass at head; #1097's depth,
+#344's reach and #806's replay fail the same at the tip; #824's planted test prints no result on either side; and
+codex-hub's measured hold, #340's terminal and #348's sandbox places fail on both sides across three alternating runs
+each (codex-hub's hold passed all three on both). No failure is this change's.
 
 ## The Mac, at f0b4db39: answering an ask was over its budget
 
