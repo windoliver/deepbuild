@@ -2829,13 +2829,17 @@ mod tests {
     #[test]
     fn every_level_counts_against_the_nesting_cap() {
         let cap = "the cap of 64 levels";
-        // A unary plus, the conditional's first branch and a power's exponent each nest too, and
-        // a minus inside a paren or an exponent adds its own level: (open, close, levels each).
+        // Unary plus and not, both branches of the conditional, a power's exponent and a call's
+        // arguments each nest, and a minus inside a paren or an exponent adds its own level:
+        // (open, close, levels each).
         let forms = [
             ("+", "", 1),
             ("1 ? ", " : 1", 1),
             ("2^-", "", 2),
             ("(-", ")", 2),
+            ("!", "", 1),
+            ("1 ? 1 : ", "", 1),
+            ("abs(", ")", 1),
         ];
         for (open, close, levels) in forms {
             let at = |n: usize| format!("{}1{}", open.repeat(n), close.repeat(n));
@@ -2903,6 +2907,20 @@ mod tests {
         assert!(over(format!("table(p.t, {})", sum(511))));
         assert!(!over(format!("table(p.t + {})", sum(509))));
         assert!(over(format!("table(p.t + {})", sum(510))));
+        // A name read whole never ends on a dot.
+        let e = Expr::compile("table(p.t., 1)", &Nothing, 512).unwrap_err();
+        assert_eq!(e.why, "a `.` names no component");
+        // Every other node counts too: the first term past the bound tips each of these chains.
+        for (unit, k) in [
+            ("1*", 512),
+            ("-1+", 342),
+            ("!1+", 342),
+            ("2^1+", 256),
+            ("(1?1:1)+", 205),
+        ] {
+            let chain = |k: usize| format!("{}1", unit.repeat(k));
+            assert!(!over(chain(k - 1)) && over(chain(k)), "{unit}");
+        }
     }
 
     struct OneTable;
