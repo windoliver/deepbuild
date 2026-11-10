@@ -776,7 +776,7 @@ struct SegmentRecord {
 /// 0 below the smallest normal half, which `unpack2x16float` reads back.
 fn half_bits(x: f64) -> u32 {
     let x = x as f32;
-    if !(x >= 6.103_515_6e-5) {
+    if x.is_nan() || x < 6.103_515_6e-5 {
         return 0;
     }
     let b = x.min(65504.0).to_bits();
@@ -2009,8 +2009,8 @@ fn contour(
         .collect();
     let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
     let mut faces_by_edge: BTreeMap<(u32, u32), Vec<bool>> = BTreeMap::new();
-    for t in mesh.indices.chunks_exact(3) {
-        let [a, b, c] = [t[0], t[1], t[2]].map(|i| ids[i as usize]);
+    for t in mesh.indices.as_chunks::<3>().0 {
+        let [a, b, c] = t.map(|i| ids[i as usize]);
         let [pa, pb, pc] = [a, b, c].map(|i| world[i as usize]);
         let (u, v) = (sub(pb, pa), sub(pc, pa));
         let n = [
@@ -2047,8 +2047,10 @@ fn contour(
     };
     let flat: Vec<[[f64; 2]; 3]> = mesh
         .indices
-        .chunks_exact(3)
-        .map(|t| [t[0], t[1], t[2]].map(|i| proj(world[ids[i as usize] as usize])))
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|t| t.map(|i| proj(world[ids[i as usize] as usize])))
         .collect();
     let covered = |q: [f64; 2]| {
         flat.iter().any(|[a, b, c]| {
@@ -2166,6 +2168,7 @@ fn instance(
 /// forward Z).
 /// The lights' bind group: the lights, the DFG table, the key sun's cascades and the
 /// environment's cubes.
+#[allow(clippy::too_many_arguments)]
 fn lights_bind(
     d: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
@@ -3506,7 +3509,7 @@ impl Renderer {
         let view = match &layer {
             Some(l) => {
                 // Every pixel the layer draws over or one of its boxes owns, grown a pixel.
-                let mut alpha: Vec<u8> = l.rgba.chunks_exact(4).map(|p| p[3]).collect();
+                let mut alpha: Vec<u8> = l.rgba.as_chunks::<4>().0.iter().map(|p| p[3]).collect();
                 let [w, h] = l.size.map(f64::from);
                 for b in &l.covers {
                     let x0 = (b[0] - 1.0).floor().clamp(0.0, w) as usize;
@@ -4497,7 +4500,7 @@ impl Renderer {
         // #465: the mirror's view at t, drawn whole each frame.
         self.mirroring = match &scene.mirror {
             Some(m) => {
-                let planted = self.planted.clone();
+                let planted = self.planted;
                 let mirrorer = self
                     .mirrorer
                     .get_or_insert_with(|| Box::new(mirror::Mirrorer::new(device, planted)));
@@ -5469,7 +5472,7 @@ impl Renderer {
                 BLEND
             }
         };
-        for k in 0..6 {
+        for (k, &name) in CLEAR_NAMES.iter().enumerate() {
             let of_kind = |s: &&Solid| {
                 clear(s) && usize::from(kind_of(s)) == if k == 3 { usize::from(FADE) } else { k }
             };
@@ -5477,7 +5480,7 @@ impl Renderer {
             if wanted && self.clear_pipelines[k].is_none() {
                 let items: Vec<String> = layer.solids.iter().filter(of_kind).map(|s| created::item_of(&s.id).to_string()).collect();
                 let set = layer.solids.iter().find(of_kind).map(created::feature_set).unwrap_or_default();
-                self.made_for.insert(CLEAR_NAMES[k], (items, set, "view".into()));
+                self.made_for.insert(name, (items, set, "view".into()));
                 self.clear_pipelines[k] = Some(clear_pipeline(
                     &device.device,
                     self.families.samples,
@@ -5488,7 +5491,7 @@ impl Renderer {
                     k == usize::from(GLASS) || k == usize::from(PER_PIXEL),
                 ));
                 self.compiled += 1;
-                self.names.push(CLEAR_NAMES[k]);
+                self.names.push(name);
             }
         }
         // Blend and add parts draw after the opaque copy whenever there is one: for glass, or
@@ -7583,8 +7586,8 @@ impl Renderer {
         let empty = self.clear_depth() as f32;
         let [w, h] = t.size.map(f64::from);
         let mut out = Vec::with_capacity(raw.len());
-        for (k, z) in raw.chunks_exact(4).enumerate() {
-            let z = f32::from_le_bytes([z[0], z[1], z[2], z[3]]);
+        for (k, z) in raw.as_chunks::<4>().0.iter().enumerate() {
+            let z = f32::from_le_bytes(*z);
             let d = if z == empty {
                 f32::INFINITY
             } else {

@@ -1204,6 +1204,10 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
     let r = |k: usize, d: f64| range.and_then(|a| a.get(k)).and_then(Value::as_f64).unwrap_or(d);
     let top = if behavior == Behavior::Turn { 360.0 } else { 1.0 };
     let (min, max) = (r(0, 0.0), r(1, top));
+    // A value is clamped into the range, which panics on a range that runs high to low.
+    if min > max {
+        return Err(refused("out_of_range", format!("controls/{id}/range")));
+    }
     let options: Vec<String> = c
         .get("options")
         .and_then(Value::as_array)
@@ -1356,4 +1360,29 @@ fn project(points: &[[f64; 2]], p: [f64; 2]) -> (f64, [f64; 2]) {
     }
     let f = if total > 0.0 { best.1 / total } else { 0.0 };
     (f, best.2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_range_written_high_to_low_is_refused() {
+        let doc = json!({"controls": {"gain": {"kind": "slider", "range": [1, 0]}}});
+        let key = json!({"op": "key", "control": "gain", "key": "ArrowRight", "t": 0});
+        let refusal = Session::new(
+            &doc,
+            [640.0, 360.0],
+            (60, 1),
+            false,
+            Planted::default(),
+            &[],
+        )
+        .and_then(|mut s| s.op(key.as_object().expect("an op")))
+        .err();
+        assert_eq!(
+            refusal,
+            Some(refused("out_of_range", "controls/gain/range"))
+        );
+    }
 }

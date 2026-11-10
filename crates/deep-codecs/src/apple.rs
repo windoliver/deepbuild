@@ -830,7 +830,7 @@ pub fn encode_h264(
                 flags: VALID,
                 epoch: 0,
             };
-            let keyed = gop.is_some_and(|g| i as u32 % g.max(1) == 0);
+            let keyed = gop.is_some_and(|g| (i as u32).is_multiple_of(g.max(1)));
             let st = VTCompressionSessionEncodeFrame(
                 session.0,
                 pb.0,

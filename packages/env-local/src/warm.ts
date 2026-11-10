@@ -9,7 +9,7 @@ import { constants, cpSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, re
 import { readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import type { Grant, Host } from '@deepbuild/supervisor';
+import type { Grant, Host, Supervisor } from '@deepbuild/supervisor';
 import { parse } from 'yaml';
 import {
   composeRefusal, composed, daemon, dockerEnv, downStack, get, isObj, newRun, quote, readEnvironment, seedRecordAt, sleep, stackValues, step,
@@ -174,6 +174,8 @@ export class WarmStack {
     mkdirSync(join(o.compose.dir, 'warm'), { recursive: true });
     this.dir = realpathSync(mkdtempSync(join(o.compose.dir, 'warm', 'stack-')));
     this.data = realpathSync(mkdtempSync(join(tmpdir(), 'deep-warm-')));
+    // Their removal is its take-down's, whether or not it opens; a compose stack's waits for its shell to go.
+    composed.set(this.id, { work: this.data, judged: this.dir });
   }
 
   /** Each per-session key, leased once: the stack holds it across its runs. */
@@ -209,8 +211,6 @@ export class WarmStack {
     this.project = started.leases.find((l) => l.kind === 'compose')?.key;
     const ports = started.leases.filter((l) => l.kind === 'port');
     this.ports = Object.fromEntries(env.ports.map((name, i) => [name, Number(ports[i]!.key)]));
-    // Its removal is the compose kind's, once the shell has gone.
-    composed.set(this.id, { work: this.data, judged: this.dir });
     return undefined;
   }
 
@@ -593,7 +593,8 @@ export class WarmStack {
     const deadline = Date.now() + env.ready.within * 1000;
     for (let answer = await get(url); answer.status !== 200; answer = await get(url)) {
       if (ended !== undefined || Date.now() > deadline) {
-        if (app) await downStack(this.o.host, app);
+        // The app's run is cleaned up here: the hub is handed no handle to a run that never served.
+        if (app) { await downStack(this.o.host, app); await (this.o.host as Partial<Supervisor>).cleanup?.(app)?.catch(() => undefined); }
         return { cause: ended !== undefined ? `the app's command ended (${ended}) before ${url} answered 200` : `${url} didn't answer 200 within ${env.ready.within} s` };
       }
       await sleep(50);

@@ -73,4 +73,4 @@ LICENSE equal to their releases, and counted 20 hunks and files over budget agai
 quickjs-jit tarball failed with an HTTP/2 stream error before curl's retries took in every error; the judge read it as
 INCONCLUSIVE, naming the tree.
 
-<repo> is /Users/taofeng/dev/claude-worktrees/github-issue-1426-c1c7e4/agent-a339c86084aeca296.
+<repo> is ~/dev/claude-worktrees/github-issue-1426-c1c7e4/agent-a339c86084aeca296.

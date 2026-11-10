@@ -1801,7 +1801,8 @@ class Host implements ExtensionHost {
       const held = validate(type!, e.data);
       if (!held.ok) return failed(`event ${e.seq} isn't ${type}: ${held.issues[0]!.path || '/'} ${held.issues[0]!.code}`);
     }
-    this.save('cursors.json', { ...cursors, [name]: p!.cursor });
+    // Read again: another stream's read may have saved its cursor while this one waited.
+    this.save('cursors.json', { ...this.read<string | null>('cursors.json'), [name]: p!.cursor });
     return { status: 'events', source: name, events };
   }
   async tick(): Promise<void> {
@@ -2756,13 +2757,23 @@ class Host implements ExtensionHost {
         if (run && !run.decl.declares.stores.includes(kind as string)) throw Error(`${method}: ${run.decl.name} doesn't declare ${String(kind)} among the stores it writes`);
         const held = await this.store(kind as string);
         const bytes = Buffer.byteLength(JSON.stringify(value) ?? 'null');
-        const total = held.bytes - (held.items.get(key)?.bytes ?? 0) + bytes;
+        const was = held.items.get(key)?.bytes ?? 0;
+        const total = held.bytes - was + bytes;
         if (store.quota !== null && total > store.quota) throw Error(`${method}: ${String(kind)} would hold ${total} bytes with the item for ${key}, past its quota of ${store.quota}`);
+        // Its growth counts from the check on: two puts under way can't both fit a quota that one fills.
+        const reserved = Math.max(0, bytes - was);
+        held.bytes += reserved;
         const now = this.options.now();
         const call = scope === undefined ? null : ext.callOf.get(scope) ?? null;
-        await this.options.record.append(connection, { v: 1, id: ulid(now), kind: kind as string, ts: now, data: { key, generation: store.generation, value: value as JsonValue, call } });
+        try {
+          await this.options.record.append(connection, { v: 1, id: ulid(now), kind: kind as string, ts: now, data: { key, generation: store.generation, value: value as JsonValue, call } });
+        } catch (e) {
+          held.bytes -= reserved;
+          throw e;
+        }
+        // Against what the key holds now: another put of it may have landed while this one was appended.
+        held.bytes += bytes - (held.items.get(key)?.bytes ?? 0) - reserved;
         held.items.set(key, { value: structuredClone(value), generation: store.generation, bytes });
-        held.bytes = total;
         run?.changes.push(`${String(kind)}:${key}`);
         return null;
       }

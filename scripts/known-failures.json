@@ -19,8 +19,6 @@
     "canvas-lint: crates/deep-text/src/cache.rs the pointer width (size_of), 32 on wasm32 and 64 on the reference Macs": 3,
     "canvas-lint: crates/deep-text/src/cache.rs use of a disallowed method `std::collections::HashMap::iter` (clippy::disallowed_methods)": 1,
     "canvas-lint: crates/deep-text/src/cache.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)": 2,
-    "canvas-lint: crates/deep-text/src/worker.rs a static item, state a check could carry between runs": 1,
-    "canvas-lint: crates/deep-text/src/worker.rs the thread module, ambient input a check never reads": 2,
     "clippy: tests/acceptance/327/ac3_redraft.rs needlessly taken reference of both operands": 1,
     "clippy: tests/acceptance/327/card.rs this `map_or` can be simplified": 4,
     "clippy: tests/acceptance/327/card.rs unused import: `Phase`": 1,

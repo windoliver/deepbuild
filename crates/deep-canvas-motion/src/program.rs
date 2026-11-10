@@ -2297,6 +2297,10 @@ impl Program {
                         });
                     };
                     let (lo, hi) = (lo.as_f64().unwrap_or(0.0), hi.as_f64().unwrap_or(0.0));
+                    // A range written high to low holds no value.
+                    if lo > hi {
+                        return Err(Refused { code: "out_of_range", path: format!("controls/{id}/range"), detail: None });
+                    }
                     scope.maxes.insert(name.clone(), hi);
                     let mut track: Vec<&Entry> = self.options.input.iter().filter(|e| e.control == *id).collect();
                     track.sort_by_key(|e| e.key());

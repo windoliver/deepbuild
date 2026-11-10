@@ -747,7 +747,7 @@ fn warm_up(
     }
     warm.apart = crate::warm::apart(&warm.docs);
     match plants.planted {
-        Some(Planted::WarmsInUseAtT0) => warm.docs.truncate(0),
+        Some(Planted::WarmsInUseAtT0) => warm.docs.clear(),
         Some(Planted::FusesDefaultOptions) => warm.docs.truncate(1),
         _ => {}
     }

@@ -2613,11 +2613,22 @@ enum Expr {
 
 /// The most terms a bounded sum adds (The closed function list: bounded sums).
 const MAX_SUM: f64 = 256.0;
+/// The most tokens an expression has, and the deepest its parentheses, indexes, arguments,
+/// branches and signs nest: the parser and the tree's readers recurse, so both bound the stack.
+const MAX_TOKENS: usize = 1024;
+const MAX_NESTING: usize = 64;
 
 impl Expr {
     fn parse(text: &str) -> Result<Expr, String> {
         let tokens = tokenize(text)?;
-        let mut p = Parser { tokens, at: 0 };
+        if tokens.len() > MAX_TOKENS {
+            return Err(format!("an expression has at most {MAX_TOKENS} tokens"));
+        }
+        let mut p = Parser {
+            tokens,
+            at: 0,
+            depth: 0,
+        };
         let e = p.cond()?;
         if p.at != p.tokens.len() {
             return Err(format!("unexpected `{}`", p.tokens[p.at]));
@@ -2680,7 +2691,13 @@ impl Expr {
 
     /// Its value: a number, or what a name, index or member reads.
     fn value(&self, scope: &[(String, Value)]) -> Result<Value, String> {
-        let n = |x: f64| -> Result<Value, String> { Ok(number(x)) };
+        let n = |x: f64| -> Result<Value, String> {
+            if x.is_finite() {
+                Ok(number(x))
+            } else {
+                Err(format!("the result is {x}, not a finite number"))
+            }
+        };
         match self {
             Expr::Num(x) => n(*x),
             Expr::Name(name) => scope
@@ -2779,12 +2796,12 @@ impl Expr {
                 }
                 let mut inner = scope.to_vec();
                 let mut total = 0.0;
-                let mut i = a;
-                while i <= b {
-                    inner.push((k.clone(), number(i)));
+                // Counted, not stepped: past 2^53 `i + 1.0` is `i`, and a stepped loop never ends.
+                let terms = (b - a + 1.0).max(0.0) as u64;
+                for j in 0..terms {
+                    inner.push((k.clone(), number(a + j as f64)));
                     total += args[3].eval(&inner)?;
                     inner.pop();
-                    i += 1.0;
                 }
                 n(total)
             }
@@ -2870,6 +2887,8 @@ fn tokenize(text: &str) -> Result<Vec<String>, String> {
 struct Parser {
     tokens: Vec<String>,
     at: usize,
+    /// How deep the expression being read nests.
+    depth: usize,
 }
 
 impl Parser {
@@ -2883,7 +2902,23 @@ impl Parser {
         t
     }
 
+    /// `parse`, one level deeper: refused past the deepest an expression nests.
+    fn nested(&mut self, parse: fn(&mut Self) -> Result<Expr, String>) -> Result<Expr, String> {
+        if self.depth == MAX_NESTING {
+            return Err(format!("an expression nests at most {MAX_NESTING} deep"));
+        }
+        self.depth += 1;
+        let e = parse(self);
+        self.depth -= 1;
+        e
+    }
+
     fn cond(&mut self) -> Result<Expr, String> {
+        self.nested(Self::choice)
+    }
+
+    /// `c ? a : b`, or what stands alone.
+    fn choice(&mut self) -> Result<Expr, String> {
         let c = self.or()?;
         if self.peek() != Some("?") {
             return Ok(c);
@@ -2956,11 +2991,11 @@ impl Parser {
         match self.peek() {
             Some("-") => {
                 self.at += 1;
-                Ok(Expr::Neg(Box::new(self.unary()?)))
+                Ok(Expr::Neg(Box::new(self.nested(Self::unary)?)))
             }
             Some("!") => {
                 self.at += 1;
-                Ok(Expr::Not(Box::new(self.unary()?)))
+                Ok(Expr::Not(Box::new(self.nested(Self::unary)?)))
             }
             _ => self.postfix(),
         }
@@ -3113,12 +3148,44 @@ mod tests {
         assert_eq!(e("7 % 3"), 1.0);
         assert!(Expr::parse("i +").is_err());
         assert!(Expr::parse("x").unwrap().eval(&scope()).is_err());
+        // A result that is not a finite number is an error, never a null.
+        for t in ["sqrt(0 - 1)", "pow(10, 400)"] {
+            let value = Expr::parse(t).unwrap().value(&scope());
+            assert!(value.is_err(), "{t}: {value:?}");
+        }
         let eval = |v: &Value, s: &[(String, Value)]| Template::of(v).eval(s);
         assert_eq!(eval(&json!("i * 2"), &scope()).unwrap(), json!(4));
         assert_eq!(
             eval(&json!(["i", 1.5, "ink", {"role": "muted"}]), &scope()).unwrap(),
             json!([2, 1.5, "ink", {"role": "muted"}])
         );
+    }
+
+    #[test]
+    fn a_sum_ends_where_adding_one_changes_nothing() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let sum = Expr::parse("sum(k, 9007199254740992, 9007199254740992, 1)").unwrap();
+            tx.send(sum.eval(&scope())).ok();
+        });
+        let got = rx.recv_timeout(std::time::Duration::from_secs(10));
+        assert_eq!(got, Ok(Ok(1.0)), "the sum of one term");
+        let e = |t: &str| Expr::parse(t).unwrap().eval(&scope()).unwrap();
+        assert_eq!(e("sum(k, 1, 4, k)"), 10.0);
+        assert_eq!(e("sum(k, 4, 1, k)"), 0.0);
+    }
+
+    #[test]
+    fn an_expression_past_the_parser_bounds_is_refused() {
+        assert!(Expr::parse(&"(".repeat(100_000)).is_err());
+        assert!(Expr::parse(&"-".repeat(100_000)).is_err());
+        assert!(Expr::parse(&vec!["1"; 100_000].join("+")).is_err());
+        let nested = |n: usize| format!("{}1{}", "(".repeat(n), ")".repeat(n));
+        assert!(Expr::parse(&nested(MAX_NESTING)).is_err());
+        // The deepest nesting and the longest chain the bounds admit still evaluate.
+        let e = |t: &str| Expr::parse(t).unwrap().eval(&scope()).unwrap();
+        assert_eq!(e(&nested(MAX_NESTING - 1)), 1.0);
+        assert_eq!(e(&vec!["1"; MAX_TOKENS / 2].join("+")), 512.0);
     }
 
     #[test]
@@ -3615,6 +3682,17 @@ mod tests {
             "{:?}",
             over.issues
         );
+        // A cap that is no whole number at or above 0 is refused, never read as no cap.
+        for cap in [json!(-1), json!(2.5), json!("2")] {
+            let budget = json!({"budget": {"lights": cap}});
+            let bad = checked(recipes.clone(), "nest.lamps@1", budget);
+            let issue = bad.issues.iter().find(|i| i.path == "budget/lights");
+            assert!(
+                issue.is_some_and(|i| i.code == "out_of_range"),
+                "{:?}",
+                bad.issues
+            );
+        }
         let fits = checked(recipes, "nest.lamps@1", json!({"budget": {"lights": 3}}));
         assert!(
             !fits.issues.iter().any(|i| i.path == "budget/lights"),

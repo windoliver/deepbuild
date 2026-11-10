@@ -1566,9 +1566,9 @@ impl Sealed {
                 return self.left_out_kinds.get(full).cloned();
             }
         }
-        // A core kind (`text@1`, `rect@1`) has no family to name a module by; the one bare
-        // name a module's kind keeps, `cells@1` (canvas primitives: Cell grid `cells@1`), is
-        // the cells module's.
+        // A core kind (`text@1`, `rect@1`) has no family to name a module by; a bare name
+        // the design gives a module's kind (`BARE_MODULE_KINDS`, such as `cells@1`) is that
+        // module's.
         let family = match full.split_once('.') {
             Some((f, _)) => f,
             None => match BARE_MODULE_KINDS.iter().find(|(k, _)| *k == full) {
@@ -1698,13 +1698,13 @@ impl Registry {
         }
     }
 
-    /// A registry the core declares in this build beside its own (#200).
     /// Lets `module` keep the bare kind name `kind`: a test build's fixture only (#412).
     pub fn allows_bare(mut self, module: &str, kind: &str) -> Registry {
         self.bare.push((module.into(), kind.into()));
         self
     }
 
+    /// A registry the core declares in this build beside its own (#200).
     pub fn declares(mut self, def: lists::RegistryDef) -> Registry {
         self.declared.push(def);
         self
@@ -2181,7 +2181,7 @@ impl Registry {
                 }
                 // A bare name is the core's (a core kind has no family); a module's kind
                 // carries its family, so no module takes `rect` or `text` from the compositor.
-                // The one module kind the design names bare, `cells@1`, is the cells module's.
+                // The module kinds the design names bare (`BARE_MODULE_KINDS`) are their modules'.
                 let bare = BARE_MODULE_KINDS
                     .iter()
                     .any(|(kind, module)| *kind == k.entry.name && *module == name)

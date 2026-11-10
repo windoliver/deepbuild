@@ -258,8 +258,9 @@ impl Call {
         // the line computes, and only its start.
         let what = match run.unread {
             Some(Unread::Depth) => format!(
-                "it nests past what the reader reads, a depth of {} shells, substitutions or evals",
-                shell::DEPTH
+                "it nests past what the reader reads, {} shells, substitutions or evals deep or {} levels of syntax",
+                shell::DEPTH,
+                shell::NESTING
             ),
             unread => {
                 let line = self.command.as_deref().unwrap_or_default();
@@ -1105,11 +1106,12 @@ fn creates_cloud(run: &Run) -> bool {
     let plain = plain(&words);
     let op = |k: usize| plain.get(k).copied().unwrap_or("");
     if run.is("aws") {
-        let o = op(1);
+        // aws takes its global options before the service and before the operation too.
+        let [service, o] = first_two(&words, AWS_VALUED);
         return ["create-", "run-", "allocate-", "request-", "import-"]
             .iter()
             .any(|p| o.starts_with(p))
-            || (op(0) == "s3" && o == "mb")
+            || (service == "s3" && o == "mb")
             || matches!(o, "deploy" | "create");
     }
     if run.is("gcloud") || run.is("az") || run.is("doctl") || run.is("eksctl") {
@@ -1297,9 +1299,8 @@ fn graphql_value(query: &str, fields: &[(String, String)], name: &str) -> Option
 }
 
 fn gh(run: &Run, subs: &[&[&str]]) -> bool {
-    let words = run.words();
-    let plain = plain(&words);
-    run.is("gh") && subs.iter().any(|s| plain.len() >= 2 && plain[..2] == **s)
+    let two = first_two(&run.words(), GH_VALUED);
+    run.is("gh") && subs.iter().any(|s| two[..] == **s)
 }
 
 /// Where a `gh api` call's words past `api` start, gh's own options before it skipped; none for another call.
@@ -1357,7 +1358,12 @@ fn merge_read(run: &Run) -> String {
     } else if sub_name == "glab" {
         (plain(&rest).get(2).map(|p| p.to_string()), value("--sha").map(str::to_string), false)
     } else {
-        let pr = plain(&words).get(2).map(|p| p.to_string());
+        // The repository `-R` names is no pull request.
+        let named: Vec<&str> = (0..words.len())
+            .filter(|&k| k == 0 || !GH_VALUED.contains(&words[k - 1]))
+            .map(|k| words[k])
+            .collect();
+        let pr = plain(&named).get(2).map(|p| p.to_string());
         (pr, value("--match-head-commit").map(str::to_string), false)
     };
     if gt_merge(run) || town(run, &["ship"]) {
@@ -1401,9 +1407,11 @@ fn starts_service(run: &Run) -> bool {
     let words = run.words();
     let plain = plain(&words);
     let op = |k: usize| plain.get(k).copied().unwrap_or("");
+    // docker takes its options before the command, and compose its own before `up`.
+    let [first, second] = first_two(&words, DOCKER_VALUED);
     ((run.is("docker") || run.is("podman"))
-        && (op(0) == "run" || (op(0) == "compose" && op(1) == "up")))
-        || (run.is("docker-compose") && op(0) == "up")
+        && (first == "run" || (first == "compose" && second == "up")))
+        || (run.is("docker-compose") && first == "up")
         || (run.is("brew") && op(0) == "services" && op(1) == "start")
         || (run.is("systemctl") && matches!(op(0), "start" | "enable"))
         || (run.is("launchctl") && matches!(op(0), "load" | "bootstrap"))
@@ -1676,6 +1684,58 @@ fn past<'a>(words: &[&'a str], valued: &[&str]) -> Vec<&'a str> {
         k += if valued.contains(&words[k]) { 2 } else { 1 };
     }
     words[k.min(words.len())..].to_vec()
+}
+
+/// aws's global options that take a value.
+const AWS_VALUED: &[&str] = &[
+    "--profile",
+    "--region",
+    "--endpoint-url",
+    "--output",
+    "--query",
+    "--color",
+    "--ca-bundle",
+    "--cli-read-timeout",
+    "--cli-connect-timeout",
+    "--cli-binary-format",
+];
+
+/// docker's global options and compose's own that take a value.
+const DOCKER_VALUED: &[&str] = &[
+    "--config",
+    "-c",
+    "--context",
+    "-H",
+    "--host",
+    "-l",
+    "--log-level",
+    "--tlscacert",
+    "--tlscert",
+    "--tlskey",
+    "-f",
+    "--file",
+    "-p",
+    "--project-name",
+    "--profile",
+    "--project-directory",
+    "--env-file",
+    "--ansi",
+    "--parallel",
+    "--progress",
+];
+
+/// gh's option that takes a value before a subcommand.
+const GH_VALUED: &[&str] = &["-R", "--repo"];
+
+/// A run's first two words that aren't options, past the value of each option in `valued` before them; an empty
+/// string for one it lacks.
+fn first_two<'a>(words: &[&'a str], valued: &[&str]) -> [&'a str; 2] {
+    let first = past(words, valued);
+    let second = past(first.get(1..).unwrap_or(&[]), valued);
+    [
+        first.first().copied().unwrap_or(""),
+        second.first().copied().unwrap_or(""),
+    ]
 }
 
 /// git's subcommand and what follows it, past its global options.
@@ -2143,6 +2203,61 @@ mod tests {
         assert!(bash("rm -rf out")
             .matches("effect:unknown-reach-delete")
             .is_none());
+    }
+
+    #[test]
+    fn an_options_value_is_not_read_as_the_subcommand() {
+        let has =
+            |line: &str, class: &str| bash(line).matches(&format!("effect:{class}")).is_some();
+        for (line, class) in [
+            ("aws kms create-key --profile shop-prod", "cloud-resource"),
+            ("aws --profile shop-prod kms create-key", "cloud-resource"),
+            (
+                "aws --region us-east-1 ec2 run-instances --image-id ami-1",
+                "cloud-resource",
+            ),
+            ("aws --region us-east-1 s3 mb s3://bucket", "cloud-resource"),
+            (
+                "aws s3 --profile shop-prod mb s3://bucket",
+                "cloud-resource",
+            ),
+            (
+                "aws --profile \"$P\" --output json kms create-key",
+                "cloud-resource",
+            ),
+            ("docker compose -f docker-compose.dev.yml up -d", "service"),
+            ("docker compose -p shop --env-file .env up", "service"),
+            ("docker --context prod compose up", "service"),
+            ("docker --context prod run -d nginx", "service"),
+            ("docker run -p 80:80 nginx", "service"),
+            ("docker-compose -f docker-compose.yml up -d", "service"),
+            ("gh pr -R acme/shop merge 12", "merge"),
+            ("gh pr --repo acme/shop create --fill", "pr"),
+            ("gh issue -R acme/shop comment 3 --body hi", "send"),
+            ("gh release -R acme/shop delete v1", "delete"),
+        ] {
+            assert!(has(line, class), "{line} as {class}");
+        }
+        for (line, class) in [
+            ("aws s3 --profile create-prod ls", "cloud-resource"),
+            ("aws --profile shop-prod kms list-keys", "cloud-resource"),
+            ("docker compose --profile up ps", "service"),
+            ("docker compose -f docker-compose.dev.yml ps", "service"),
+            ("docker --context run ps", "service"),
+            ("gh pr -R acme/shop view 12", "merge"),
+        ] {
+            assert!(!has(line, class), "{line} as {class}");
+        }
+        let read = |line: &str| bash(line).matches("effect:merge").unwrap().detail.unwrap();
+        assert_eq!(read("gh pr -R acme/shop merge 12"), "merge pr=12");
+        assert_eq!(
+            read("gh pr merge --repo acme/shop 12 --auto"),
+            "merge pr=12 auto"
+        );
+        assert_eq!(
+            read("gh pr merge 12 --match-head-commit abc1234"),
+            "merge pr=12 head=abc1234"
+        );
     }
 
     #[test]
