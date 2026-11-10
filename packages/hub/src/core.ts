@@ -677,6 +677,7 @@ export class Core {
   private readonly answers: Answers;
   /** paseo's plugin (#55): the token each agent's DeepBuild MCP server binds by, to the agent's own session. */
   private readonly binds = new Map<string, string>();
+  private readonly tokenBound = new Set<string>();
   /** The sessions paseo runs that another adapter gates: a permission prompt there shows in paseo, not a terminal. */
   private readonly inPaseo = new Set<string>();
   /** The ask each permission request paseo's plugin sent became, by session and request ID. */
@@ -4029,7 +4030,7 @@ export class Core {
    */
   paseoOwner(meta: HookMeta): Promise<string | null> {
     return this.queue(async () => {
-      if (meta.paseo?.bind && meta.session) this.binds.set(meta.paseo.bind, meta.session);
+      if (meta.paseo?.bind && meta.session) { this.binds.set(meta.paseo.bind, meta.session); this.tokenBound.add(meta.session); }
       const session = this.sessions.get(meta.session);
       const owner = session && session.agent !== 'paseo' ? session.agent : null;
       if (owner) this.inPaseo.add(meta.session);
@@ -6481,7 +6482,7 @@ export class Core {
       await (this.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       // A deep_show bound to no session is refused by the canvas side with no_session, as its reply (#806).
-      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'find_actions'));
+      const session = await this.queue(async () => this.bind(tool, sent, await this.rebound(context), tool !== 'deep_status' && tool !== 'deep_search' && tool !== 'deep_show' && tool !== 'deep_kinds' && tool !== 'find_actions'));
       switch (tool) {
         case 'find_actions': return await this.findActions(args.query as string | null);
         case 'call_action': return await this.callPluginAction(session!, args);
@@ -6512,6 +6513,28 @@ export class Core {
     if (plant === 'errors-without-actual') delete out.actual;
     return new Refused(out as Refusal);
   }
+  /** Whether a paseo plugin's token ever named this session (#55): a deep mcp bound by it is bound by no process. */
+  private byToken(session: string): boolean {
+    return this.tokenBound.has(session);
+  }
+  /**
+   * A deep mcp whose session `/clear` rotated in its own process (#1632): another session of the same process, by PID and
+   * start time, is live on its thread, which only a rotation joins it to. Its start says so whether the old ID's
+   * SessionEnd came yet or was recorded unverified. Two live on one thread in one process bind no call to either but by
+   * its stamp. Its calls then bind one by one by their own stamps, as an unbound
+   * connection's do, so each acts for the new ID and none for the old. A session that ended with no successor in its
+   * process keeps its binding, and its calls are refused naming it.
+   */
+  private async rebound(context: CallContext): Promise<CallContext> {
+    const { session: id, parent } = context;
+    if (!id || !parent || this.byToken(id)) return context;
+    const was = this.sessions.get(id);
+    // Forgotten past ENDED_KEPT (#824): the record keeps its thread.
+    const [row] = was ? [] : (await this.record.raw(`SELECT thread_id FROM sessions WHERE id = ?`, [id])) as { thread_id: string | null }[];
+    const thread = was ? was.thread : row?.thread_id ?? id;
+    const rotated = [...this.sessions.values()].some((s) => !s.ended && s.id !== id && s.thread === thread && s.pid === parent.pid && s.start === parent.start);
+    return rotated ? { ...context, session: null } : context;
+  }
   /**
    * The session a deep_* call acts for: its deep mcp's own, or the one unspent PreToolUse stamped for this very call,
    * by its tool and the digest of its arguments as sent. A call more than one unspent stamp matches binds to none.
@@ -6520,9 +6543,12 @@ export class Core {
   private bind(tool: string, args: Obj, context: CallContext, required: boolean): string | undefined {
     const live = (id: string) => { const s = this.sessions.get(id); return s && !s.ended ? s : undefined; };
     if (context.session) {
-      if (live(context.session)) return context.session;
+      const own = live(context.session);
+      // A session resumed in another process since its deep mcp's hello is that process's now (#1632).
+      const elsewhere = own && context.parent && !this.byToken(own.id) && (own.pid !== context.parent.pid || own.start !== context.parent.start);
+      if (own && !elsewhere) return context.session;
       if (!required) return undefined;
-      throw refuse('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
+      throw refuse('unbound', '/params/tool', elsewhere ? `Session ${context.session} runs in another process now; this deep mcp acts for no session.` : `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
     }
     const parent = context.parent;
     const digest = sha256Hex(canonicalize(args as JsonValue));
