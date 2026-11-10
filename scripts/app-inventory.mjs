@@ -3,7 +3,7 @@
 // color literal left in it, written to crates/deep-app/inventory.json. `--check` writes nothing and fails, one
 // `FAIL inventory: <panel> ...` line each, for every panel whose committed row differs from a fresh one, is missing
 // or is extra; regenerate with `node scripts/app-inventory.mjs`. `--root <dir>` reads another checkout's app.
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LITERAL } from './color-literal-guard.mjs';
