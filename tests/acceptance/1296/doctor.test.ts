@@ -64,16 +64,16 @@ describe(`${AC1} a repo's statusLine in .claude/settings.json or .claude/setting
 
   it(`${AC1} a repo whose .claude/settings.json sets statusLine.command: a warning claude.statusline_shadowed naming the file and statusLine, exit non-zero`, async () => {
     const w = await theWorld();
-    await shadowed(w, fixtureRepo(w, 'shared'), 'settings.json');
+    await shadowed(w, fixtureRepo(w, 'shared', 'settings.json'), 'settings.json');
   }, 600_000);
 
   it(`${AC1} a repo whose .claude/settings.local.json sets statusLine.command is reported the same way`, async () => {
     const w = await theWorld();
-    await shadowed(w, fixtureRepo(w, 'local'), 'settings.local.json');
+    await shadowed(w, fixtureRepo(w, 'local', 'settings.local.json'), 'settings.local.json');
   }, 600_000);
 
   it(`${AC1} (wrong program) a doctor that reads only your user settings (statusline-user-settings-only) reports OK in the first repo and fails this test`, async () => {
     const w = await theWorld();
-    await expect(shadowed(w, fixtureRepo(w, 'planted'), 'settings.json', 'statusline-user-settings-only')).rejects.toThrow(/AC1 deep doctor must warn claude\.statusline_shadowed in /);
+    await expect(shadowed(w, fixtureRepo(w, 'planted', 'settings.json'), 'settings.json', 'statusline-user-settings-only')).rejects.toThrow(/AC1 deep doctor must warn claude\.statusline_shadowed in /);
   }, 600_000);
 });
