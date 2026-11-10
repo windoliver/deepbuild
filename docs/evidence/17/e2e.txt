@@ -31,6 +31,27 @@ UserPromptSubmit exit=0 ms=14
 # this fix:      20/30 passes lost nothing, 131 of 6000 lost, each one logged "could not spool ... within the hook's 50 ms"
 #                (a write the swapping disk stalled past the hook's budget); none lost silently
 
-## D. A real Claude Code session with tool calls on the Mac (2.1.318): not run
-# It stopped at Claude Code's folder-trust prompt for the new work folder before any prompt was typed. The runner
-# accepts no approval prompt, so no hook ran: there is no spool, ledger or screenshot. It needs the folder trusted by hand.
+## D. A real Claude Code turn with tool calls (2.1.317, Linux, 2026-11-10), hub stopped, binary built from 81de2652
+# claude -p --settings <settings> --allowedTools Bash, from an untouched work folder; prompt: run `ls /tmp/dh17-e2e`,
+# then `pkill -f 'dh17[-]nomatch'`, one Bash call each. Hook wrapper log (event, exit, ms including the wrapper):
+SessionStart exit=0 ms=7
+UserPromptSubmit exit=0 ms=6
+PreToolUse exit=0 ms=17
+PostToolUse exit=0 ms=7
+PreToolUse exit=2 ms=18
+Stop exit=0 ms=7
+# The session's own record (stream-json), cut:
+TOOL_USE toolu_015RA2zZrzmLJ6NPbRXbG7LM {"command":"ls /tmp/dh17-e2e"}  -> RESULT ok "b\nb1\ncorpus-runs.txt\nhome\n..."
+TOOL_USE toolu_01V45EAuRazmQ1TPh4Qcoi6E {"command":"pkill -f 'dh17[-]nomatch'"}  -> RESULT error "PreToolUse:Bash hook error: [<wrapper> PreToolUse]: DeepBuild blocked this: Never kill processes by name. Stop the process by its PID. (guard no-kill-by-name, which holds while the hub doesn't answer)"
+TEXT Only the first command ran. ...
+# The spool grew by 6 lines, one per hook. `deep hub run` on that home then drained it (the spool folder emptied), and
+# the ledger holds the turn in hook order (hook ns|kind|id|session|data, cut):
+1794297795916929007|session.start|01M727Q5ACF4YV4HNS37MWBDYW|98a90304-a399-40d3-b8e1-b06972a99273|{"agent":"claude-code","worktree":"/tmp/dh17-e2e/b/work",...
+1794297795976999613|user.ask|01M727Q5C8A5RMP750XQYNT597|98a90304-...|{"msg":0,"text":"Run these two shell commands with the Bash tool, ...
+1794297806395635633|tool.before|01M727QFHVCXSCVAMXEHMAHZX7|98a90304-...|{"kind":"shell","command":"ls /tmp/dh17-e2e","call":"toolu_015RA2zZrzmLJ6NPbRXbG7LM","matched":["listing-noted"]}
+1794297806466322114|tool.after|01M727QFM278VMMEZJY7QQB5TC|98a90304-...|{"kind":"shell","command":"ls /tmp/dh17-e2e","call":"toolu_015RA2zZrzmLJ6NPbRXbG7LM","outcome":"ok"}
+1794297808621026131|tool.before|01M727QHQD9XWFX3Z6731P54ZA|98a90304-...|{"kind":"shell","command":"pkill -f 'dh17[-]nomatch'","call":"toolu_01V45EAuRazmQ1TPh4Qcoi6E","matched":["no-kill-by-name"]}
+1794297815929709433|agent.stop|01M727QRVS3DZDRRFFQ4VRX64D|98a90304-...|{"turn":1,"did_work":true,"claim":true,"outcome":"finished",...}
+# The hub was stopped by its PID. (A first run the same night was identical, but its wrapper sent deep-hook's stderr
+# only to a log, so Claude Code showed "No stderr output" for the denial; the wrapper now passes it through.)
+# On the Mac the same check stopped at Claude Code's folder-trust prompt for a new work folder; no hook ran there.
