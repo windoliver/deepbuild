@@ -62,6 +62,10 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
     // the programs and data the sandbox module runs at the pack check.
     if let Some(Value::Array(assets)) = fields.get_mut("assets") {
         for (i, a) in assets.iter_mut().enumerate() {
+            // Network assets are fetched and admitted by the hub on first use, never at pack check.
+            if a.get("url").and_then(Value::as_str).is_some() {
+                continue;
+            }
             let path = a
                 .get("path")
                 .and_then(Value::as_str)

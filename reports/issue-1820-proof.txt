@@ -1,0 +1,53 @@
+#1820 local proof summary (paths redacted; full local logs in /tmp/deepbuild-1820-proof)
+Base: 7c5e1cc8dcbe33b1f9ad077fa6a7380006597eee
+
+PASS build: npm run build --workspaces
+PASS build: cargo build --locked -p deep-show -p deep-hook
+PASS typecheck: tests/acceptance/1820/tsconfig.json
+PASS typecheck: issue regression files (external noEmit config)
+
+Before implementation: the blind suites fail at deep install of a URL-listed data pack:
+  pack folder has no readable deepbuild.json
+Before export integration: actual deep export fails for fetched assets:
+  deep export: the canvas core drew no still: code ref_unresolved, path items/dot/params/asset
+Before output-error correction:
+  expected uncaught node:fs stack to match /^deep export: .*ENOENT/m
+
+Current scoped run, node scripts/affected.mjs (pr-final-affected.log):
+  81 passed; 2 behavioral test failures, both in the first export draft
+  88 other new-to-baseline findings; 11 already failing on main
+  no WIDE or INCONCLUSIVE lines
+  overall FAIL; never PASS
+
+Export blind redraft, unchanged (pr-export-redraft-check.log):
+  PASS each pinned version exports its own bytes: v1 red, v2 blue
+  PASS upstream changed and offline: v1 re-exports byte-identically twice, no request/ask
+  PASS uninstalled pack version: nonzero, no PNG, names the pack
+  PASS two unfetched offline exports: BLOCKED, no PNG, one unblock ask, no authority ask
+  4 passed; overall affected remains FAIL on repository lints
+
+First export draft, unchanged (pr-final-affected.log):
+  FAIL fetchOnce: one ask: expected 0 to be 1
+    before counts all asks; newAsks filters to authority before slice(before)
+    an earlier unblock ask means the genuine authority ask is sliced away
+  FAIL subsequent re-export: held on the authority ask the failed test never answered
+  No production special case, test edit, skip or deletion was made for either failure.
+
+Required wrong programs on actual production code (mutant-*.log):
+  retains-mismatch: FAIL mismatch-removal assertion; served bytes remain under downloads/*.part
+  wrong-pack-rule: FAIL wrong-pack assertion; acme/voices fetched under acme/sounds' rule
+  offline-per-asset: FAIL one-unblock assertion; expected 1 ask, got 2
+  Source files restored after each mutation; acceptance files unchanged.
+  Restored-program selection (pr-mutants-restored.log): 6 passed.
+
+Additional final check (pr-export-write-check.log):
+  PASS pack export reports unwritable output as one CLI error, not an uncaught stack
+  1 passed; no WIDE or INCONCLUSIVE lines
+
+Staged whitespace check: one EOF blank line in the verbatim upstream CC-BY-4.0 legal text.
+Both shipped legal texts were confirmed byte-identical to their canonical upstream URLs.
+
+Not run: full preflight, all import-graph-selected suites, platform matrix, live providers,
+release budgets and interface preflight. Linux Secret Service was INCONCLUSIVE on macOS
+in the earlier Source regression run. See reports/issue-1820.md for exact caveats and
+acceptance-dispute disposition required before using Closes #1820.
