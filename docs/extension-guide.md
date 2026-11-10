@@ -43,7 +43,7 @@ A panel imports only `@deepbuild/panel`, DeepBuild's own module, by name: `impor
 - `Button`: A button: Button.new(id) with its label as a child and .on_click(handler), styled like a div.
 - `Input`: A text field: Input.new(state) over an InputState.
 - `InputState`: The text an Input holds, kept across renders: InputState.new({ placeholder }).
-- `needs_you`, `quotes`: the data the app serves a panel, as plain values.
+- `needs_you`, `sessions`, `quotes`: the data the app serves a panel, as plain values. `sessions` lists each session in the sidebar's order as `{id, title, words, entry}`: its row's id is `session:<id>`, and it draws its title and its state's words, never an id.
 
 Its components, each with its props:
 

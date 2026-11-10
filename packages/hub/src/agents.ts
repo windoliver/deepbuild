@@ -15,7 +15,7 @@
 // session's own evidence: a session started before a sync gets a reading saying it runs the older set.
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,7 +28,7 @@ import { tomlTables } from './codex-settings.js';
 import { ownHome } from './keychain.js';
 import { lastingNode } from './paths.js';
 import type { Plant } from './plant.js';
-import type { Durable } from './vfs.js';
+import { syncPath, type Durable } from './vfs.js';
 import { refuse } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -119,17 +119,13 @@ interface AgentsOptions {
 
 const read = (path: string): Buffer | null => { try { return readFileSync(target(path)); } catch { return null; } };
 const digestOf = (bytes: Buffer | null): string | null => (bytes === null ? null : sha(bytes));
-function fsyncFile(path: string): void {
-  const fd = openSync(path, 'r');
-  try { fsyncSync(fd); } finally { closeSync(fd); }
-}
 function writeSyncedFile(path: string, bytes: Buffer | string, mode = 0o600): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const tmp = `${path}.tmp`;
   writeFileSync(tmp, bytes, { mode });
-  fsyncFile(tmp);
+  syncPath(tmp);
   renameSync(tmp, path);
-  fsyncFile(dirname(path));
+  syncPath(dirname(path));
 }
 /** A line diff of one file: what goes and what comes, between the lines both keep. */
 function lineDiff(path: string, before: Buffer | null, after: Buffer): string {
@@ -714,12 +710,12 @@ export class Agents {
     rmSync(tmp, { force: true });
     writeFileSync(tmp, bytes, { mode: keep });
     chmodSync(tmp, keep);
-    fsyncFile(tmp);
+    syncPath(tmp);
     renameSync(tmp, real);
     this.o.durable.point('sync_replace', { path: real });
     // The rename survives a power cut once its folder is flushed; the planted wrong program never flushes it.
     if (this.o.plant !== 'no-folder-flush') {
-      fsyncFile(dirname(real));
+      syncPath(dirname(real));
       this.o.durable.point('sync_flush', { path: dirname(real) });
     }
     return made;

@@ -33,7 +33,7 @@ function panelModule() {
     `A panel imports only \`${catalog.module}\`, DeepBuild's own module, by name: \`import { View, div, v_flex } from "${catalog.module}"\`, as \`panel/main.js\` does. It never names the toolkit under it, so a change of toolkit breaks no plug-in. A panel that imports the toolkit, or a name off the list below, is refused at install and again at load, naming the file and line, and for a name off the list the closest name on it. The list is checked in at \`crates/deep-app/panel-catalog.json\`, with every component the toolkit has that isn't offered and why.`,
     '',
     ...catalog.core.map((c) => `- \`${c.name}\`: ${c.what}`),
-    '- `needs_you`, `quotes`: the data the app serves a panel, as plain values.',
+    '- `needs_you`, `sessions`, `quotes`: the data the app serves a panel, as plain values. `sessions` lists each session in the sidebar\'s order as `{id, title, words, entry}`: its row\'s id is `session:<id>`, and it draws its title and its state\'s words, never an id.',
     '',
     'Its components, each with its props:',
     '',
