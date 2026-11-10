@@ -501,11 +501,21 @@ fn unobserved() -> bool {
 
 /// A view observes the record: it draws again whenever [`sync`] finds the record or the bound values moved.
 pub fn observe<V: 'static>(cx: &mut gpui_kit::Context<V>) {
+    on_move(cx, |_, cx| cx.notify());
+}
+
+/// Runs `moved` whenever [`sync`] finds the record or the bound values moved, so a view can compare what it would
+/// draw with what it drew before it draws again (#2117).
+pub fn on_move<V: 'static>(
+    cx: &mut gpui_kit::Context<V>,
+    mut moved: impl FnMut(&mut V, &mut gpui_kit::Context<V>) + 'static,
+) {
     if unobserved() {
         return;
     }
     let live = live(cx);
-    cx.observe(&live, |_, _, cx| cx.notify()).detach();
+    cx.observe(&live, move |view, _, cx| moved(view, cx))
+        .detach();
 }
 
 /// Tells the views where the record and the bound values stand: those that observe them draw again if either moved.
