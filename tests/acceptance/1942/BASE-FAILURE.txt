@@ -1,0 +1,77 @@
+Base commit: d51be2c3 (Merge pull request #2108), the brief's base; no implementation of #1942 exists there.
+Built first (by the caller): npm ci; npm run build --workspaces; cargo build -p deep-hook (target/debug/deep-hook).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1942 --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-10 (02:13 local)  Machine: Mac17,10 (Apple silicon), 18 cores, load average 201 (1-minute) at the start
+Node: v24.22.0  vitest 5.0.5. Hosts: the Lima VMs deep-ubuntu (Ubuntu 26.04.1, kernel 7.0.0-42) and deep-fedora
+(Fedora 45), both reached over SSH by the harness. Paths: <repo> is the worktree, ~ the home; the VM user is redacted.
+Result: Test Files 5 failed (5); Tests 9 failed (9); about 29 s. Short on purpose: the surfaces don't exist.
+
+No test passed at the base. Every unplanted hub started (deep hub run, ready), and every world reached its VM over the
+harness's own SSH link and made its folder there; the failures come at the first missing surface:
+
+  budgets.test.ts (AC3 #1942.b3fd8575)
+    x the perf lane has a #1942 task: benchmarks/budgets.json has no task whose initialReason names #1942
+      ("expected [] to not deeply equal []").
+    x facts refresh under 5 s: "the hub serves no host.facts (README, the surface): host.facts {"host":"dh-ubuntu",
+      "refresh":true} was refused: {"code":"unknown_method", ... "The hub serves no method host.facts."}".
+    x output lag under 500 ms: "run:<id> started on "local", not on the host dh-ubuntu it names: the hub ran it where
+      it is, not as a remote run" (run.start ignores `host`; the run's folder doesn't exist on this Mac).
+  survives.test.ts (AC2 #1942.dd9b1b61)
+    x the agent's deep_claim and deep_run of model-download (done.yaml `host: dh-fedora`) are answered, but
+      "run:<id> started on "local", not on the host dh-fedora it names" (deep_run ignores `host:`).
+  unnamed.test.ts (AC1 #1942.4fd41df2)
+    x "the hub serves no host.list (README, the surface): host.list {} was refused: {"code":"unknown_method", ...}".
+  stall.test.ts (AC4 #1942.a60bd93f)
+    x judgeStall: "run:<id> started on "local", not on the host dh-ubuntu it names".
+    x planted host-link-drops-every-connection: "BLOCKED: the hub didn't start (deep hub run with
+      DEEP_HUB_PLANT=host-link-drops-every-connection): ... DEEP_HUB_PLANT=host-link-drops-every-connection names no
+      planted program".
+  once.test.ts (AC5 #1942.be821b2d)
+    x judgeOnce: "the run never started on dh-fedora (no line in once.starts), so no start was sent to drop: the
+      record says run:<id> started on "local", not on dh-fedora".
+    x planted host-link-resends-on-reconnect: "BLOCKED: the hub didn't start (deep hub run with
+      DEEP_HUB_PLANT=host-link-resends-on-reconnect): ... names no planted program".
+
+Behind those, also missing at the base (from reading the code): `deep run follow` (the CLI answers `deep run` with
+"Usage: deep run --result <run.finished event file>", exit 2), any read of a host's facts or SSH config, and runs on a
+host other than local (run.started@3 always says `host: "local"`).
+
+Checked of the harness at the base, by hand in a throwaway test not kept in the suite, on deep-ubuntu:
+  - The world's ~/.ssh/config reaches the VM through the relay with `ssh -F` (it printed the VM's kernel release; the
+    relay counted the connection). Stalling that connection at the relay stopped its stream for 2 s (0 lines), and
+    releasing it let the held lines through; holding bytes from the host back and cutting every connection ended the
+    ssh with exit 255.
+  - The harness's own link read the host's clock with a 5 ms round trip (offset -1.5 ms); its folder watcher saw a
+    file land; a user unit `deep-<token>.service` made with `systemd-run --user` was found by its token, and the
+    file's cleanup stopped it and removed the folder (a second link found neither).
+  - A session played through deep-hook with its own deep mcp: deep_claim made claim:<id>, deep_run of a local check
+    ran it (run.finished passed, evidence the SHA-256 of "hello\n" and of the empty stderr), SessionEnd recorded
+    session.end. The first deep mcp call on a loaded Mac can be answered "unreachable ... nothing was recorded"
+    (deep mcp waits 1 s for the hub's hello); the session calls again, as that answer says to.
+  - Two harness bugs were fixed before this run: the facts test's listener command backgrounded its whole `cd && ...`
+    line, holding its SSH session open for 60 s (the leftover listener was stopped on the VM by its PID), and AC5's
+    host-side watcher outlived its file (stopped by its PID; it now also ends once the folder is gone). After this run
+    no ~/dh1942-* folder, process or deep-* user unit is left on either VM, and no /tmp/dh1942-* folder here.
+  - Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/1942/tsconfig.json passes (exit 0).
+
+The run's test list follows (each test's time as the run printed it).
+----------------------------------------------------------------------------------------------------------------
+
+ ❯ tests/acceptance/1942/budgets.test.ts (3 tests | 3 failed) 7377ms
+     × the perf lane has a #1942 task, a first measurement, valid by the lane's rule 84ms
+     × on the reference Mac, a host's facts refresh over SSH in under 5 s, each fact read during the call, kept with its age 2370ms
+     × on the reference Mac, a remote run's output reaches `deep run follow` within 500 ms of the host writing it 2297ms
+ ❯ tests/acceptance/1942/stall.test.ts (2 tests | 2 failed)
+     × stalling run A's connection for 60 s: run B stays on its connection within its 500 ms lag, and A alone reconnects 3574ms
+     × the planted host link that drops every connection to the host on one stall fails the judge, naming the run it reconnected 942ms
+ ❯ tests/acceptance/1942/survives.test.ts (1 test | 1 failed)
+     × a download an agent starts on a host runs on as a user service named by its token after the session ends; its claim gets no verdict, nor the run an end, until the download ends there 2550ms
+ ❯ tests/acceptance/1942/once.test.ts (2 tests | 2 failed)
+     × a remote start whose link drops right after it is sent runs once on the host, read back by its token, and ends as it ran 3771ms
+     × the planted host link that resends on reconnect starts the run twice and fails the judge, naming the token 780ms
+ ❯ tests/acceptance/1942/unnamed.test.ts (1 test | 1 failed)
+     × the hub lists and reads only the host your SSH config names; a name it doesn't name, in any form, is refused and never contacted 2366ms
+
+ Test Files  5 failed (5)
+      Tests  9 failed (9)
+   Duration  29.27s (tests 99%)

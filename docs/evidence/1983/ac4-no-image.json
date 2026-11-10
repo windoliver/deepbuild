@@ -1,0 +1,44 @@
+{
+  "lane": "BLOCKED x86_64: no linux/amd64 image of the pinned digest",
+  "record": {
+    "lane": "x86_64",
+    "state": "BLOCKED",
+    "host": "<host>",
+    "platform": "darwin-arm64",
+    "tree": "d45c0fe7ec9c105ad18158cc992a44f99fdb124f",
+    "tests": [
+      {
+        "id": "golden_verify",
+        "state": "BLOCKED"
+      }
+    ],
+    "recording_machine": {
+      "os": "macos",
+      "arch": "aarch64",
+      "cpu": "Apple M5 Max"
+    },
+    "lane_arch": null,
+    "host_arch": "arm64",
+    "emulated": null,
+    "image_digest": null,
+    "network": null,
+    "bake_key": {
+      "tally": "d73638bf0dd389d9cdfc8621895acdc4e863214f4d4b39e8ae95d6ea5678dfff"
+    },
+    "report": null,
+    "ask": "Docker has no linux/amd64 image of the pinned rust:1.99.1-slim-bookworm@sha256:f2c004e3d2d8b547e8cf7ffbc29205385f4e71d23e53e4e383065db5e9f822cd here, and a check never pulls one: run docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm@sha256:f2c004e3d2d8b547e8cf7ffbc29205385f4e71d23e53e4e383065db5e9f822cd",
+    "error": null,
+    "readings": []
+  },
+  "cross_machine": {
+    "ok": true,
+    "kind": "logic.determinism",
+    "compare": "cross_machine",
+    "verdict": "BLOCKED",
+    "failures": [],
+    "machines": null,
+    "refusals": [],
+    "ask": "Docker has no linux/amd64 image of the pinned rust:1.99.1-slim-bookworm@sha256:f2c004e3d2d8b547e8cf7ffbc29205385f4e71d23e53e4e383065db5e9f822cd here, and a check never pulls one: run docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm@sha256:f2c004e3d2d8b547e8cf7ffbc29205385f4e71d23e53e4e383065db5e9f822cd"
+  },
+  "image_list_unchanged": true
+}

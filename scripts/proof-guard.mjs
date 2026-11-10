@@ -15,8 +15,8 @@ const DECISIONS = {
 // budget window and benchmark.mjs's judges, which decide when a budget counts, affected.mjs, which decides which tests a change runs, the bays and the shards, which decide what
 // a proof's build reuses: once main holds the lanes, the change runs its own copy of them, so an edit of them is an
 // edit of the checks. So is an edit of a test runner's config (RUNNER_CONFIG), which can stub the code under test
-// only where it finds the change.
-const LANES_CODE = /^scripts\/(?:proof[^/]*|lanes|throttle|perf|budget-window|benchmark|affected|bays|shards)\.mjs$/;
+// only where it finds the change. The x86_64 lane and its image pin decide which replay counts as another machine.
+const LANES_CODE = /^scripts\/(?:(?:proof[^/]*|lanes|throttle|perf|budget-window|benchmark|affected|bays|shards|lane-x86)\.mjs|lane-x86\.json)$/;
 // The skips the lanes let stand are a decision of the same weight, so that key is guarded. Only that key: affected.mjs
 // --record rewrites the rest of the file on main.
 const SKIPS_FILE = 'scripts/known-failures.json';
