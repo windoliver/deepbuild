@@ -14,6 +14,8 @@ use deep_canvas::time::{self as clock, Rate, CHECKPOINT_EVERY};
 use deep_canvas_motion::doc::{read as read_motion, Motion};
 use serde_json::{json, Map, Value};
 
+use crate::determinism::{Compare, Raster2d};
+use crate::frames::Painted;
 use crate::hub::{Call, EvalTime, Hub, Planted};
 use crate::optional;
 
@@ -45,12 +47,18 @@ pub enum PlayPath {
     Cold,
 }
 
+/// What [`Hub::evaluate`] leaves: the last frame's drawing, its nodes' results, and each video
+/// image item's frame.
+pub(crate) type Evaluated = (Painted, Vec<Value>, Map<String, Value>);
+
 /// A `determinism` call.
 pub struct Determinism {
     pub doc: String,
     pub display_hz: u32,
     pub play: PlayPath,
     pub at_times: Option<Vec<i64>>,
+    /// #1897: on this machine by the GPU pixel hash, or a cross-machine record.
+    pub compare: Compare,
 }
 
 /// One of this issue's calls, parsed; `None` is `bad_input`.
@@ -132,11 +140,21 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
                         .collect::<Option<Vec<_>>>()?,
                 ),
             };
+            let compare = match c.get("compare").map(Value::as_str) {
+                None | Some(Some("same_machine")) => Compare::SameMachine,
+                Some(Some("cross_machine")) => Compare::CrossMachine {
+                    raster_2d: Raster2d::parse(c.get("raster_2d"))?,
+                    against: c.get("against").cloned(),
+                },
+                Some(Some("shards")) => Compare::Shards,
+                Some(_) => return None,
+            };
             Some(Call::Determinism(Determinism {
                 doc: doc()?,
                 display_hz: whole(c.get("display_hz")?)?,
                 play,
                 at_times,
+                compare,
             }))
         }
         _ => None,
@@ -520,6 +538,13 @@ impl Hub<'_> {
                 default_times(&document, motion.as_ref())
             }
         };
+        match &d.compare {
+            Compare::SameMachine => {}
+            Compare::CrossMachine { raster_2d, against } => {
+                return self.cross_machine_check(&document, &at_times, *raster_2d, against.as_ref())
+            }
+            Compare::Shards => return self.shards_check(&d.doc),
+        }
         let view = default_view(&document);
         let mut frames = Vec::with_capacity(at_times.len());
         for &t in &at_times {
@@ -547,16 +572,15 @@ impl Hub<'_> {
         json!({"outcome": "compared", "at_times": at_times, "frames": frames})
     }
 
-    /// One side of a comparison: a fresh scheduler and session framed at `times` in order, its
-    /// last frame's canonical render (the SHA-256 of its PNG, in the evidence store) and its
-    /// nodes' results.
-    fn side(
+    /// A fresh scheduler and session framed at `times` in order: what its last frame draws, its
+    /// nodes' results, and each video image item's frame at the last time.
+    pub(crate) fn evaluate(
         &mut self,
         doc: &Value,
         view: &[Value; 6],
         times: &[i64],
         seek: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Evaluated, String> {
         let mut sched = Scheduler::new(&self.startup.sealed, self.options());
         let mut session: DocSession = self.new_session();
         session.load(&mut sched, doc);
@@ -570,15 +594,6 @@ impl Hub<'_> {
         }
         let drawing =
             crate::frames::drawing_of(&sched, &session).ok_or_else(|| "no_drawing".to_string())?;
-        let sha = if deep_canvas_scene3d::scene::has_3d(doc) {
-            // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
-            self.canonical_png3d(doc, times.last().copied().unwrap_or(0), &drawing)
-                .map_err(|u| u.code.to_string())?
-        } else {
-            self.canonical_png(&drawing, None)
-                .map_err(|u| u.code.to_string())?
-                .0
-        };
         let nodes: Vec<Value> = session
             .nodes(&sched)
             .into_iter()
@@ -586,7 +601,33 @@ impl Hub<'_> {
                 json!({"operator": n.operator, "module": n.module, "item": n.item, "result": n.result})
             })
             .collect();
-        let mut side = json!({"pixels": sha, "nodes": nodes});
+        Ok((drawing, nodes, video))
+    }
+
+    /// One side of a comparison: [`Hub::evaluate`]'s last frame as its canonical render (the
+    /// SHA-256 of its PNG, in the evidence store, and its GPU pixel hash, #1897) and its nodes'
+    /// results.
+    fn side(
+        &mut self,
+        doc: &Value,
+        view: &[Value; 6],
+        times: &[i64],
+        seek: bool,
+    ) -> Result<Value, String> {
+        let (drawing, nodes, video) = self.evaluate(doc, view, times, seek)?;
+        let (rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
+            // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
+            self.rgba3d(doc, times.last().copied().unwrap_or(0), &drawing, None)
+                .map_err(|u| u.code.to_string())?
+        } else {
+            let (rgba, _, size) = self
+                .canonical_rgba(&drawing, None, true)
+                .map_err(|u| u.code.to_string())?;
+            (rgba, size)
+        };
+        let pixel_hash = self.render_hash(&rgba, size)?;
+        let sha = self.put_png(rgba, size).map_err(|u| u.code.to_string())?;
+        let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash});
         if !video.is_empty() {
             side["video"] = Value::Object(video);
         }

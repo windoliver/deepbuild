@@ -21,6 +21,7 @@ export const inboxCommand = async (args: Args): Promise<number> => (await import
 export const raceCommand = async (args: Args): Promise<number> => (await import('./inbox.js')).raceCommand(args);
 export const startCommand = async (args: Args): Promise<number> => (await import('./start-command.js')).startCommand(args);
 export const secretCommand = async (args: string[]): Promise<number> => (await import('./secret-command.js')).secretCommand(args);
+export const followCommand = async (run: string): Promise<number> => (await import('./hosts.js')).followCommand(run);
 export const workspaceCommand = async (args: Args): Promise<number> => (await import('./workspace-command.js')).workspaceCommand(args);
 export const fixCommand = async (args: Args): Promise<number> => (await import('./fix-command.js')).fixCommand(args);
 export const installCommand = async (args: Args): Promise<number> => (await import('./install.js')).installCommand(args);

@@ -95,6 +95,7 @@ import { plantedReload, plantedSessionEnd, plantedStop, type Plant } from './pla
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
 import { LogReads } from './log-reads.js';
+import { Hosts } from './hosts.js';
 import { Jobs } from './jobs.js';
 import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts, type AssetKind } from './libraries.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
@@ -430,6 +431,8 @@ export class Core {
   private libraries?: Libraries;
   /** The job kinds' runs (#1922): the cache by key, your standing rules for paid tools, and the asks they wait on. */
   private jobKinds?: Jobs;
+  /** Hosts your SSH config names, their facts and the runs on them (#1942). */
+  private readonly hosts: Hosts;
   /** What the app last said of macOS and its notifications (#994). */
   private notifications: string | null = null;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
@@ -888,7 +891,9 @@ export class Core {
       },
       learn: async () => { await this.wikiBuild.build(); await syncRejected(this.raw, this.root.dir); },
     });
+    this.hosts = new Hosts({ root: this.root.dir, now: this.now, plant: options.plant, raise: async (ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), 'host.change', ask, plan); } });
     this.runs = new Runs({
+      hosts: () => this.hosts,
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
       raw: (query, params) => this.record.raw(query, params), sync: () => this.record.sync(), appendAsCore: (input) => this.append(this.connection('core'), input as EventInput),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), stored: (put, what) => this.stored(put, what),
@@ -3144,6 +3149,8 @@ export class Core {
     if (this.libraries?.answered(delivery.ask, delivery.decision)) return;
     // Your answer to a paid job call's authority ask (#1922): a yes lets that call run once.
     if (this.jobKinds?.answered(delivery.ask, delivery.decision)) return;
+    // Your answer to a host's ask for changes as you there (#1942): a yes lets its runs start, now and later.
+    if (this.hosts.answered(delivery.ask, delivery.decision)) return;
     this.tasks.answered(delivery);
     this.acceptance?.answered(delivery);
     this.delivery(delivery);
@@ -5782,6 +5789,9 @@ export class Core {
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);
+      case 'run.output': return this.runs.output(params);
+      case 'host.list': return { hosts: this.hosts.names().map((name) => ({ name })) };
+      case 'host.facts': return this.hosts.facts(params.host, params.refresh === true);
       case 'start.approve': return this.sessionStarts.approve(params, context);
       case 'start.session':
         if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
@@ -7080,13 +7090,13 @@ export class Core {
     return [...this.sessions.values()].map((s) => s.cwd).find((cwd) => cwd === real || isUnder(real, cwd));
   }
   /** The checks a worktree's spec names, by name, with the command each runs and its deadline as the spec writes it, where it gives one. */
-  private checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string }> {
+  private checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string }> {
     let spec: unknown;
     try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
-      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(typeof c.type === 'string' ? { type: c.type } : {}) }] as const];
+      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
     }));
   }
   private unknownCheck(worktree: string, check: unknown): Refused {
@@ -7314,7 +7324,10 @@ export class Core {
     const [claim] = (await this.record.raw(`SELECT id, data FROM events WHERE session_id = ? AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; data: string }[];
     if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
     const commit = String((JSON.parse(claim.data) as Obj).commit);
-    const { run } = await this.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], cwd }, deadline);
+    // A check that names a host runs there, from your home on it (#1942).
+    const { run } = await this.runs.start({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', check.run], ...(check.host === undefined ? { cwd } : { host: check.host }) }, deadline);
+    // A run on a host is long work, such as a model download: it answers once started there, and the claim waits for it.
+    if (check.host !== undefined) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
     const until = Date.now() + this.askWait(session);
     for (;;) {
@@ -7998,6 +8011,8 @@ export class Core {
     this.canvasCore?.close();
     await this.replicas.close();
     this.runs.stopAll();
+    // Runs on hosts go on there; only this hub's followers of them stop, and the next hub follows them again (#1942).
+    this.hosts.close();
     // Each worktree's stack goes down with the hub, through the supervisor.
     await this.stacks.close();
     // Each running job is stopped through the supervisor; one still stopping is reaped on the next start.

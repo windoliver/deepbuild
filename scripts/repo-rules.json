@@ -1073,6 +1073,12 @@
       }
     },
     "crates/deep-show/Cargo.toml": {
+      "build-dependencies": {
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #1901: the build script's digest of the sources the binary is built from, which the machine fingerprint names. Already in the workspace tree."
+        }
+      },
       "dependencies": {
         "deep-canvas-cells": {
           "spec": "* path=../deep-canvas-cells",

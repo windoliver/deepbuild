@@ -285,6 +285,9 @@ pub enum Planted {
     SpanRoundsStart,
     /// #501: the GPU BLAKE3 joins each parent's two children in the wrong order.
     ChunkTreeWrongOrder,
+    /// #1897: the GPU pixel hash and its CPU twin XOR each pixel's words with no term for where
+    /// it is, so no swap moves it.
+    HashXorsWithoutPosition,
     /// #501: a range's timecode starts at the job's start label, not at its first frame's.
     RangeRestartsTimecode,
     /// #501: the export skips its readiness gate, starts and stops at the missing asset's first
@@ -352,6 +355,10 @@ pub enum Planted {
     WakerIgnoresScheduleFrame,
     /// #1551: a restarted link sits out a full refresh before its first callback.
     LinkRestartsARefreshLate,
+    /// #1901: the fingerprint kept output is keyed by leaves out the source digest.
+    FingerprintWithoutSources,
+    /// #1901: `padded_key` keys the fixture by its memory, padding and all.
+    KeyHashesRawBytes,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -382,6 +389,8 @@ pub struct Startup {
     /// #415: a planted wrong first-party layout: pages@1 under a pack's cap, or nav.graph's
     /// validators trusting the header's link count.
     pub layouts: deep_canvas_sandbox::layouts::Planted,
+    /// #1901: the folder kept output lives in across processes (`--cache <dir>`).
+    pub cache: Option<std::path::PathBuf>,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
@@ -567,6 +576,19 @@ pub enum Call {
         doc: String,
         runs: usize,
     },
+    /// #1901: the machine fingerprint kept output is keyed by.
+    Fingerprint,
+    /// #1901: a document's frame, capture or final at a time, through the kept-output cache.
+    Draw {
+        doc: String,
+        t: EvalTime,
+        output: &'static str,
+    },
+    /// #1901: the padded key input built twice, its padding from two seeds, and its keys.
+    PaddedKey {
+        fields: u64,
+        seeds: [u64; 2],
+    },
     Show(Box<Show>),
     Patch(Box<PatchCall>),
     Read {
@@ -640,6 +662,8 @@ pub enum Call {
     FrameHash { frames: Vec<([u32; 2], String)>, software: bool },
     /// #501: the cross-machine audio check on two float WAVs.
     CrossMachine([String; 2]),
+    /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
+    PixelHash(Vec<([u32; 2], deep_gpu::pixel_hash::Format, String)>),
     /// A document's session played on a virtual display to `to` (#488).
     Play {
         doc: String,
@@ -1650,6 +1674,9 @@ impl<'a> Hub<'a> {
             Call::RelayClient(c) => crate::seams::relay_client(c, self.startup.network),
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
+            Call::Fingerprint => self.fingerprint_reply(),
+            Call::Draw { doc, t, output } => self.draw_reply(doc, t, output),
+            Call::PaddedKey { fields, seeds } => self.padded_key_reply(*fields, *seeds),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
@@ -1660,6 +1687,7 @@ impl<'a> Hub<'a> {
             Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
             Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
             Call::CrossMachine(wavs) => self.cross_machine(wavs),
+            Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
                 doc,
                 display_hz,

@@ -293,6 +293,10 @@ alone.push('tests/acceptance/1924/');
 // #1923's files each start a hub and a provider on 127.0.0.1, kill and restart the hub mid-call, and count the
 // provider's submissions around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1923/');
+// #1942's files each start a hub that runs on this Mac's Lima VMs over SSH, through a relay that stalls and drops its
+// connections; its facts refresh and output lag are read against the lane's timing rule.
+alone.push('tests/acceptance/1942/');
+timed.push('tests/acceptance/1942/budgets.test.ts', 'tests/acceptance/1942/stall.test.ts');
 // #1983's files run the x86_64 lane, which builds deep-logic in linux/amd64 and linux/arm64 containers under emulation,
 // and read the container runtime's image list, which another file's container run could change.
 alone.push('tests/acceptance/1983/');
@@ -301,6 +305,9 @@ alone.push('tests/acceptance/1983/');
 // call, so it runs by hand.
 alone.push('tests/acceptance/1462/', 'tests/acceptance/1462-redraft-ac2/');
 byHand.push('tests/acceptance/1462/shown.test.ts');
+// #1901's files build deep-show; build-digest.test.ts builds it three times, one with a canvas module's source changed
+// for that build and restored after it, so nothing else may build in the checkout while it runs.
+alone.push('tests/acceptance/1901/');
 // #408's files each build deep-show (module-label.test.ts with test-glyph-label). Criterion 5 runs from its redraft,
 // which also builds it in release and for Linux x86_64 in a local image with a C++ toolchain and libclang, and times
 // film.layout against the lane's rule; the original criterion-5 file, whose image can't build deep-show, runs by hand.

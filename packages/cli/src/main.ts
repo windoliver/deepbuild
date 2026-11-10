@@ -182,6 +182,7 @@ const usage = [
   'deep off | on   every gate watch-only, or back, once the OS confirms you',
   'deep explain <recorded session folder> [--json]',
   'deep run --result <run.finished event file>',
+  'deep run follow <run>   a run\'s output from its start, then as it comes, until it ends',
   'deep hub run | start | status [--root <folder>]',
   'deep hub stop [--root <folder>]',
   'deep hub use --root <folder>   this worktree\'s sessions to a dev hub, once the OS confirms you',
@@ -423,8 +424,11 @@ if (help) {
   process.exitCode = await debugBundle();
 } else if (args[0] === 'run' && args[1] === '--result' && args[2] && args.length === 3) {
   process.exitCode = await run(args[2]);
+} else if (args[0] === 'run' && args[1] === 'follow' && args[2] && args.length === 3) {
+  const { followCommand } = await import('@deepbuild/hub');
+  process.exitCode = await followCommand(args[2]);
 } else if (args[0] === 'run') {
-  console.error('Usage: deep run --result <run.finished event file>');
+  console.error('Usage: deep run --result <run.finished event file>\n       deep run follow <run>');
   process.exitCode = 2;
 } else {
   unsupported(args[0]!);
