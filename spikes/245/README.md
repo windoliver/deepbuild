@@ -16,13 +16,15 @@ page-fault overhead stays under 0.3 ms a step. Otherwise the app runs `one_insta
 |---|---|---|---|
 | Step wall time p50 | 4.230 ms | 3.473 ms (0.82×) | at most 0.5× |
 | Step wall time p95 | 6.136 ms | 4.540 ms (0.74×) | at most 0.5× |
-| Overhead p50 / p95 | 0.098 / 0.129 ms (restoring S) | 2.067 / 3.420 ms (mapping and page faults) | under 0.3 ms |
+| Overhead p50 / p95 | 0.098 / 0.129 ms (restoring S) | 2.067 / 3.420 ms (mapping and page faults, summed over the 8 blocks) | under 0.3 ms |
 | of which mapping p50 / first touches p50 | none | 0.723 / 1.227 ms (239 16 KiB pages a step) | |
-| Write check p50 (both forms, not overhead) | 1.151 ms | 1.980 ms (on 4 threads) | |
+| Write check p50 (both forms, not overhead) | 1.151 ms | 1.980 ms (summed over the 8 blocks) | |
 
-The overhead decides it. Without its overhead, `copy_on_write`'s p50 would be about 1.4 ms, a third of one instance,
-but mapping S into 8 instances and faulting in the pages each block touches costs about 2 ms a step, nearly 7 times the
-threshold. The run is `record.json` (3,600 steps per form after 120 of warm-up, at c8d5d7f0). Both forms ended in the
+Each test fails on its own. The wall-time ratio misses 0.5× at both p50 and p95, and the overhead is 11 times the
+threshold at p95. The overhead is summed over the 8 blocks, the way the rule reads it. The blocks run 2 to a thread, so
+only about a quarter of that sum, plus the main thread dropping the mappings, lands on the step's wall time. Even
+counted that way it is near 0.85 ms at p95, still past 0.3 ms, so no reading of "a step's overhead" changes the verdict.
+Nor can the overhead be subtracted from the wall time to see what a cheaper mapping would reach. The run is `record.json` (3,600 steps per form after 120 of warm-up, at c8d5d7f0). Both forms ended in the
 same full-state hash, `86bb805a…`, the Spark's too. The Mac runner's own log and timestamps are in `mac/`: one try,
 exit 0, load 3.3 at the end and 7.5 at the start on 8 cores, within record.mjs's gate.
 
@@ -30,8 +32,8 @@ exit 0, load 3.3 at the end and 7.5 at the start on 8 cores, within record.mjs's
 refusing a private mapping of a POSIX shm object, so the harness fell back to an unlinked file in the temp folder
 (`memory_file: "tmpfile"` in the record): S is a shared mapping of that file, each block a private mapping of it. That
 is a real copy-on-write mapping, and the only POSIX one macOS offers. Mach's `mach_vm_remap` with copy (a copy-on-write
-copy of anonymous memory) wasn't tried. It might map and fault more cheaply, but it would have to cut the 2 ms of
-overhead by more than 85% to get under 0.3 ms. A later issue that wants to revisit the form would start there, with
+copy of anonymous memory) wasn't tried. It might map and fault more cheaply, but it would have to cut the overhead by
+more than 90% at p95, and the wall-time ratio would still have to reach 0.5×. A later issue that wants to revisit the form would start there, with
 this harness.
 
 On the Spark (Linux, 4 KiB pages, not evidence for the verdict), `copy_on_write` touched 819 pages a step, and
@@ -113,5 +115,11 @@ the 2 × 2 cells within reach of radius 8, which bounds the step.
   against the fixture's exported layout globals at start. A block that reads more would fault inside its run: the
   Linux check catches that, but macOS can't count faults per thread, so it relies on the same fixture and layout.
 - Where `one_instance` kept no copy of S, it names a stray write by its page's first offset, not the exact byte.
+- `rule.mjs` doesn't check that the forms ended in the same bits, since the blind suite's planted records carry no
+  hashes. The bits are checked where a record is made and kept: `record.mjs` stores nothing when they differ, and AC1
+  asserts the stored forms' `deep_hash` values are equal. The rule doesn't pin `fixture.sha256` either; AC1 checks it
+  against `steer.wat`.
+- `record.mjs` takes `base_commit` from HEAD without checking the tree is clean. The Mac run's was (`mac/exits.txt`:
+  `status []`).
 - The Spark's timings are INCONCLUSIVE (load 25–41 on 20 cores, not a reference Mac). They show one thing worth
   knowing: with 4 KiB pages, mapping and first touches cost about 1.9 ms a step at p50 (819 pages touched per step).
