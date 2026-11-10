@@ -10,6 +10,7 @@
 
 pub mod budget;
 pub mod checks;
+pub mod lane;
 pub mod lines;
 pub mod live;
 pub mod piece;
@@ -47,6 +48,8 @@ pub struct Planted {
     pub save_drops_globals: bool,
     pub save_drops_input_position: bool,
     pub open_reapplies_segments: bool,
+    pub replay_changes_step_37: bool,
+    pub budget_counts_lane_reading: bool,
 }
 
 impl Planted {
@@ -68,6 +71,8 @@ impl Planted {
             "digest_compares_total_sizes" => p.digest_total_sizes = true,
             "mapper_ignores_fuel_shift" => p.mapper_ignores_shift = true,
             "budget_charges_function_first_line" => p.budget_first_line = true,
+            "replay_changes_step_37" => p.replay_changes_step_37 = true,
+            "budget_counts_lane_reading" => p.budget_counts_lane_reading = true,
             _ => return None,
         }
         Some(self)
@@ -107,6 +112,18 @@ pub fn bake_key(piece: &Piece, i: usize, entries: &[Entry]) -> String {
     h.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Every item's bake key, by item ID.
+fn keys(piece: &Piece, entries: &[Entry]) -> Map<String, Value> {
+    (0..piece.items.len())
+        .map(|i| {
+            (
+                piece.items[i].id.clone(),
+                json!(bake_key(piece, i, entries)),
+            )
+        })
+        .collect()
+}
+
 /// This machine's CPU, as its OS names it.
 fn cpu() -> String {
     let named = if cfg!(target_os = "macos") {
@@ -126,6 +143,19 @@ fn cpu() -> String {
     named
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| std::env::consts::ARCH.to_string())
+}
+
+/// How many representable f64 values lie between a and b.
+fn ulps(a: f64, b: f64) -> u64 {
+    let ordered = |x: f64| {
+        let i = x.to_bits() as i64;
+        if i < 0 {
+            i64::MIN - i
+        } else {
+            i
+        }
+    };
+    ordered(a).abs_diff(ordered(b))
 }
 
 const F: i64 = 705_600_000;
@@ -513,14 +543,7 @@ impl Logic {
         let saves = saves::written(&mut world)?;
         let frames = frames(&piece, line.get("frames"), &rec, None)?;
         let budgets = self.budgets(&piece, &entries, &rec)?;
-        let keys: Map<String, Value> = (0..piece.items.len())
-            .map(|i| {
-                (
-                    piece.items[i].id.clone(),
-                    json!(bake_key(&piece, i, &entries)),
-                )
-            })
-            .collect();
+        let keys = keys(&piece, &entries);
         Ok(json!({
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "checkpoints": rec.checkpoints,
             "traps": rec.traps, "budgets": budgets, "saves": saves, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
@@ -550,6 +573,14 @@ impl Logic {
             .get("compare")
             .and_then(Value::as_str)
             .unwrap_or("same_machine");
+        if compare == "cross_machine" {
+            let tree = line
+                .get("tree")
+                .and_then(Value::as_str)
+                .ok_or_else(|| bad("tree"))?;
+            let record = lane::record(tree, &keys(&piece, &entries));
+            return Ok(lane::cross(record.as_ref(), tree));
+        }
         if compare != "same_machine" {
             return Ok(
                 json!({"ok": true, "kind": "logic.determinism", "verdict": "BLOCKED", "failures": [],
@@ -571,6 +602,11 @@ impl Logic {
     /// A golden of the piece's bake recorded on this host (Golden): the bake keys, the runtime
     /// digest, this machine, every step's hash and every checkpoint's full-state hash.
     fn golden(&mut self, line: &Value) -> Result<Value, Value> {
+        self.recorded(line).map(|(golden, _)| golden)
+    }
+
+    /// The golden of the piece's bake on this host, and the bake's record.
+    fn recorded(&mut self, line: &Value) -> Result<(Value, Record), Value> {
         let (piece, entries, steps) = self.baked(line)?;
         let mut rec = Record::default();
         World::new(
@@ -582,14 +618,7 @@ impl Logic {
             None,
         )?
         .run(steps, &mut rec, &mut |_, _| {});
-        let keys: Map<String, Value> = (0..piece.items.len())
-            .map(|i| {
-                (
-                    piece.items[i].id.clone(),
-                    json!(bake_key(&piece, i, &entries)),
-                )
-            })
-            .collect();
+        let keys = keys(&piece, &entries);
         let mut digest = format!("{VERSION}\nwasmtime {}\n", deep_sandbox_wasmtime::WASMTIME);
         for i in &piece.items {
             digest += &format!("{} {}\n", i.id, i.hash);
@@ -600,21 +629,23 @@ impl Logic {
         } else {
             "linux-x86_64"
         };
-        Ok(json!({
+        let golden = json!({
             "bake_key": keys, "runtime_digest": format!("{:016x}", piece::h64(digest.as_bytes())),
             "machine": {"os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu()},
-            "step_hashes": hashes(&piece, &rec), "checkpoint_hashes": rec.checkpoints, "occurrences_hash": null,
+            "step_hashes": hashes(&piece, &rec), "checkpoint_hashes": rec.checkpoints.clone(), "occurrences_hash": null,
             "record_on": host, "verify_on": [other, "web"],
-        }))
+        });
+        Ok((golden, rec))
     }
 
     /// Replays the golden's bake on this host: PASS only when the bake keys match and every step
     /// hash and checkpoint hash equals the golden's; `first_step` names the first step whose hash
-    /// differs.
+    /// differs, and `report` its item and, given the recording bake's `steps` as `recording`, the
+    /// first array element that differs there (Golden: Report).
     fn golden_verify(&mut self, line: &Value) -> Result<Value, Value> {
         let golden = line.get("golden").cloned().ok_or_else(|| bad("golden"))?;
-        let mine = self.golden(line)?;
-        let first_step = mine["step_hashes"]
+        let (mine, rec) = self.recorded(line)?;
+        let first = mine["step_hashes"]
             .as_object()
             .into_iter()
             .flatten()
@@ -623,8 +654,32 @@ impl Logic {
                 let list = list.as_array()?;
                 (0..list.len().max(theirs.map_or(0, Vec::len)))
                     .find(|&k| list.get(k) != theirs.and_then(|t| t.get(k)))
+                    .map(|k| (k, id.clone()))
             })
             .min();
+        let first_step = first.as_ref().map(|(k, _)| *k);
+        let report = first.map(|(k, id)| {
+            let k = rec.rows().keys().nth(k).copied().unwrap_or(k as i64);
+            let row = line
+                .get("recording")
+                .and_then(Value::as_array)
+                .and_then(|r| r.iter().find(|s| s["step"] == json!(k)));
+            let Some(row) = row else {
+                return json!({"first_step": k, "item": id, "field": null,
+                    "note": "the recording bake is absent, so the step and item alone"});
+            };
+            let mine = rec.rows().get(&k).map(|(_, a)| a);
+            let field = mine.into_iter().flatten().find_map(|(name, values)| {
+                let array = name.strip_prefix(&format!("{id}."))?;
+                let theirs = row["arrays"].get(name)?.as_array()?;
+                let values = values.as_array()?;
+                let n = (0..theirs.len().max(values.len())).find(|&n| theirs.get(n) != values.get(n))?;
+                let (a, b) = (theirs.get(n).cloned(), values.get(n).cloned());
+                let ulp = a.as_ref().and_then(Value::as_f64).zip(b.as_ref().and_then(Value::as_f64)).map(|(a, b)| ulps(a, b));
+                Some(json!({"id": id, "field": array, "index": n, "values": [a, b], "ulp_distance": ulp}))
+            });
+            json!({"first_step": k, "item": id, "field": field})
+        });
         let same = mine["bake_key"] == golden["bake_key"]
             && mine["checkpoint_hashes"] == golden["checkpoint_hashes"]
             && first_step.is_none();
@@ -635,7 +690,7 @@ impl Logic {
         };
         Ok(
             json!({"ok": true, "verdict": if same { "PASS" } else { "FAIL" }, "machines": machines, "first_step": first_step,
-            "keys_match": mine["bake_key"] == golden["bake_key"]}),
+            "report": report, "keys_match": mine["bake_key"] == golden["bake_key"]}),
         )
     }
 
@@ -671,7 +726,24 @@ impl Logic {
             None,
         )?
         .run(steps, &mut rec, &mut |_, _| {});
-        Ok(budget::budget(&piece, &rec, share, &on, self.planted))
+        let mut reply = budget::budget(&piece, &rec, share, &on, self.planted);
+        // A lane's readings for this bake, with the tree: each refused, none counted (#1983).
+        if let Some(tree) = line.get("tree") {
+            let tree = tree.as_str().ok_or_else(|| bad("tree"))?;
+            let record = lane::record(tree, &keys(&piece, &entries)).unwrap_or(Value::Null);
+            if self.planted.budget_counts_lane_reading {
+                let counted = lane::counted(&record, budget::FRAME_NS);
+                if !counted.is_empty() {
+                    reply["verdict"] = json!("FAIL");
+                }
+                if let Some(f) = reply["failures"].as_array_mut() {
+                    f.extend(counted);
+                }
+            } else {
+                reply["refusals"] = json!(lane::refusals(&record));
+            }
+        }
+        Ok(reply)
     }
 
     /// logic.budget per item: its worst step and that step's fuel, and with a sidecar the three

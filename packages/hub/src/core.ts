@@ -116,6 +116,8 @@ const DAY = 24 * HOUR;
 const sql = (text: string): string => text.replace(/'/g, "''");
 /** A session ID as a handle holds it: letters and digits only. */
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
+/** How long before its default a later ask comes back (#1462): an hour, drafted. */
+const LATER_BEFORE_MS = 60 * 60 * 1000;
 /** A rules block as pieces, one per line under its head: a rule you typed must reach the model inline (#1296). */
 const rulePieces = (head: string, rules: readonly (readonly [string, string])[]): Piece[] =>
   [{ text: `${head}:`, keep: true }, ...rules.map(([handle, text]) => ({ text: `- ${text}`, ids: [handle], ...(handle.startsWith('rule:typed') ? { keep: true } : {}) }))];
@@ -206,7 +208,7 @@ const isUnder = (path: string, dir: string) => {
  * What a connection brings to a call: its role, the session it is bound to, for deep mcp the process it serves, and
  * for the app or the CLI the process its hello named as its own.
  */
-export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string }; waiter?: number }
+export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string }; waiter?: number; /** A deep mcp call's `<connection>:<call ID>`, which a cancel names (#1923). */ call?: string }
 /** The asks core's refusal as the socket's error@3, with the code that fits what it names. */
 const asRefused = (error: unknown): unknown => {
   if (!(error instanceof AskRefused)) return error;
@@ -5032,6 +5034,10 @@ export class Core {
     // The notices it carried wait for the session's next hook (#352).
     this.siblings.gone(id);
   }
+  /** A deep mcp call cancelled, or its connection closed (#1923): it leaves the job it waits on, which stops only once no caller is left. */
+  callGone(call: string): void {
+    this.jobKinds?.gone(call);
+  }
   /** A waiter whose connection closed: Claude Code stopped it, or it exited. */
   waiterGone(key: number): void {
     if (this.options.plant === 'delivered-to-dead-waiter') return;
@@ -5761,6 +5767,9 @@ export class Core {
       case 'ask.confirm': return this.confirmCard(params);
       case 'views.installed': return { views: this.extensions?.installedViews() ?? [] };
       case 'command.run': return this.runCommand(params);
+      // The app's action table (#1462): Later on an ask, and Pause on a session's row.
+      case 'ask.later': return this.putOff(params);
+      case 'session.pause': return this.pauseSession(params);
       // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
       case 'status.read':
         this.replayLate();
@@ -6499,6 +6508,31 @@ export class Core {
   }
 
   /** A view's ⌘K command, chosen in the app (#1454): the action its manifest declares, called as you. */
+  /**
+   * Later on an ask, from the app's action table (#1462): it goes below the open asks and comes back an hour before
+   * its default applies. The hour is drafted. The asks core checks it against every deadline it could hide.
+   */
+  private async putOff(params: Obj): Promise<Obj> {
+    const { ask } = params;
+    if (typeof ask !== 'string' || !ask.startsWith('ask:')) throw refuse('type', '/params/ask', 'Name the ask by its handle, ask:<id>.', ask);
+    try {
+      await this.asks.laterBefore(this.connection('app'), ask, LATER_BEFORE_MS);
+    } catch (error) {
+      if (error instanceof AskRefused) throw refuse('refused', '/params/ask', error.message, ask);
+      throw error;
+    }
+    return { ask };
+  }
+
+  /** Pause on a session's row, from the app (#1462): recorded as the core, the session its subject as every session event names it. */
+  private async pauseSession(params: Obj): Promise<Obj> {
+    const { session } = params;
+    if (typeof session !== 'string' || !letters(session)) throw refuse('type', '/params/session', 'Name the session by its ID.', session);
+    const ts = this.now();
+    await this.append(this.connection('core', { session }), { v: 1, id: ulid(ts), kind: 'session.paused', ts, subject: `session:${letters(session)}`, data: {} });
+    return { session, paused: true };
+  }
+
   private async runCommand(params: Obj): Promise<Obj> {
     const { action } = params;
     const view = this.extensions?.installedViews().find((v) => v.commands.some((c) => c.action === action));
@@ -6614,7 +6648,7 @@ export class Core {
         case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_kinds': return await this.kinds(args);
-        case 'deep_job': return await this.job(args);
+        case 'deep_job': return await this.job(args, context.call);
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
         case 'deep_ask': return await this.askFor(session!, args);
@@ -6816,9 +6850,9 @@ export class Core {
    * deep_job (#1922): the job kinds and their qualified tools, or one run of a kind on a pinned tool, outside the hub's
    * process. It changes no document and needs no session; its result is a reading with a receipt, never a verdict.
    */
-  private async job(args: Obj): Promise<Obj> {
+  private async job(args: Obj, caller: string | undefined): Promise<Obj> {
     if (!this.jobKinds) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_job', true);
-    return args.op === 'list' ? this.jobKinds.list() : this.jobKinds.run(args);
+    return args.op === 'list' ? this.jobKinds.list() : this.jobKinds.run(args, caller);
   }
   /** `job.rule` (#1922): your standing rule for a paid tool, from your own terminal once the OS confirms you: the most a run may cost with no ask. */
   private async jobRule(params: Obj, context: CallContext): Promise<Obj> {

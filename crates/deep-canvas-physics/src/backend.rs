@@ -1,7 +1,7 @@
 //! The backend interface (World and backend): what the physics module asks of a backend, in this
-//! crate's own types only, so no engine type crosses it. `occurrences`, `query`, `move_character`,
-//! `drive_vehicle` and `hash` join it with the issues that run them (#1918, #1919, #182, #251,
-//! #2010).
+//! crate's own types only, so no engine type crosses it. `occurrences`, `query`, `move_character`
+//! and `drive_vehicle` join it with the issues that run them (#1918, #1919, #182, #251); the hash
+//! reads `canonical` (golden.rs).
 
 use serde_json::Value;
 
@@ -39,6 +39,32 @@ pub struct State {
     pub bodies: Vec<BodyState>,
 }
 
+/// The fields of a body's canonical state, in canonical order: pose, then velocity (Checkpoint
+/// ring: `hash`). `rot` is the quaternion, `angular` rad/s.
+pub const FIELDS: [&str; 13] = [
+    "pos.x",
+    "pos.y",
+    "pos.z",
+    "rot.x",
+    "rot.y",
+    "rot.z",
+    "rot.w",
+    "linear.x",
+    "linear.y",
+    "linear.z",
+    "angular.x",
+    "angular.y",
+    "angular.z",
+];
+
+/// One body's canonical state: the backend's own f32 value of each of `FIELDS`, never converted,
+/// so a hash of it reads exactly what the backend steps.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Canonical {
+    pub id: String,
+    pub values: [f32; 13],
+}
+
 /// A deep checkpoint: the backend's whole-world state as its own bytes, stamped with the backend
 /// and the version that wrote them, which no other version loads (Checkpoint ring).
 #[derive(Clone, Debug, PartialEq)]
@@ -59,6 +85,8 @@ pub trait Backend {
     /// One step with the inputs stamped for it, or the refusal of an input it can't apply.
     fn step(&mut self, inputs: &[Input]) -> Result<(), Box<Refusal>>;
     fn read(&self) -> State;
+    /// Every body's canonical state, in canonical (ID) order.
+    fn canonical(&self) -> Vec<Canonical>;
     fn checkpoint(&self) -> Checkpoint;
     /// Loads `checkpoint`, or refuses one another backend or version wrote, naming both, and
     /// loads nothing.

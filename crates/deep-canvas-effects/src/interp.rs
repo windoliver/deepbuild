@@ -1174,6 +1174,20 @@ impl<'a> Prog<'a> {
                 let n3 = self.normal_at.unwrap_or(self.env.normals[k]);
                 V::N(Sc::F32, L::of(&n3))
             }
+            // The material harness's surface (#486): uv0 is the screen's uv, the position the
+            // plane z = 0 from −1 to 1 across it, and the tangent +x with handedness +1.
+            "uv0" | "position" => {
+                let uv = [
+                    pos[0] / f64::from(self.size[0]),
+                    pos[1] / f64::from(self.size[1]),
+                ];
+                if name == "uv0" {
+                    V::N(Sc::F32, L::of(&uv))
+                } else {
+                    V::N(Sc::F32, L::of(&[uv[0] * 2.0 - 1.0, uv[1] * 2.0 - 1.0, 0.0]))
+                }
+            }
+            "tangent" => V::N(Sc::F32, L::of(&[1.0, 0.0, 0.0, 1.0])),
             "blend" => {
                 let (b, s) = (as_l(g("base"), Sc::F32, 3).v, as_l(g("over"), Sc::F32, 3).v);
                 let mode = p.s.fields.get("mode").and_then(Value::as_str);

@@ -1,0 +1,118 @@
+The #2010 Oracle lane run once at base commit d51be2c3 (no implementation of #2010; #2009's deep-physics is there),
+on macOS arm64 (Apple M5 Max, rustup 1.99.1, Node 24.22.2, vitest 5.0.5), with
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/2010-oracle --testTimeout=600000 --no-file-parallelism`
+(the checkout's path redacted to `<checkout>`).
+
+4 of 4 tests fail, each at an assertion because the surface is absent, none in the harness: every one fails on
+"step_hashes is an array, got undefined", since the base's bake answers states and checkpoints but no step hashes. Each
+reads step hashes before anything else; the base already gives equal positions across runs and orders.
+The type-check, `npx tsc -p tests/acceptance/2010-oracle/tsconfig.json`, exits 0.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2010-oracle
+
+ ❯ snapshot-roundtrip-rapier.test.ts (2 tests | 2 failed) 4170ms
+   ❯ #2010.fa073c97 Rapier's snapshot_roundtrip, on deep-physics's output: a restored checkpoint steps on exactly as the uninterrupted run (2)
+     × #2010.fa073c97 awake_pile and sleeping_pile: 192 boxes, awake and settling to sleep, restored at step 100 1734ms
+     × #2010.fa073c97 ccd_bodies and joints_and_sensor: CCD balls at 100 m/s, and a ball-jointed chain swinging through a sensor, restored at step 100 1438ms
+ ❯ creation-order-chaos.test.ts (1 test | 1 failed) 1791ms
+   ❯ #2010.fa073c97 Chaos's DeterministicSim_DifferentCreationOrder rule, on deep-physics's output (1)
+     × #2010.fa073c97 fifty boxes written in reverse order end 20 steps later with zero position and rotation error, and the same step hashes 212ms
+ ❯ same-machine-determinism-rapier.test.ts (1 test | 1 failed) 2826ms
+   ❯ #2010.fa073c97 Rapier's issue_868_same_machine_determinism, on deep-physics's output (1)
+     × #2010.fa073c97 same_machine_runs_are_bitwise_identical: eight balls dropped twice, 200 steps each, end with the same position bits and the same step hashes 403ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  creation-order-chaos.test.ts > #2010.fa073c97 Chaos's DeterministicSim_DifferentCreationOrder rule, on deep-physics's output > #2010.fa073c97 fifty boxes written in reverse order end 20 steps later with zero position and rotation error, and the same step hashes
+AssertionError: the reverse-order run: step_hashes is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ stepHashes ../2010/helpers.ts:101:18
+ ❯ creation-order-chaos.test.ts:47:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  same-machine-determinism-rapier.test.ts > #2010.fa073c97 Rapier's issue_868_same_machine_determinism, on deep-physics's output > #2010.fa073c97 same_machine_runs_are_bitwise_identical: eight balls dropped twice, 200 steps each, end with the same position bits and the same step hashes
+AssertionError: the second run: step_hashes is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ stepHashes ../2010/helpers.ts:101:18
+ ❯ same-machine-determinism-rapier.test.ts:42:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  snapshot-roundtrip-rapier.test.ts > #2010.fa073c97 Rapier's snapshot_roundtrip, on deep-physics's output: a restored checkpoint steps on exactly as the uninterrupted run > #2010.fa073c97 awake_pile and sleeping_pile: 192 boxes, awake and settling to sleep, restored at step 100
+AssertionError: awake pile: the straight run: step_hashes is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ stepHashes ../2010/helpers.ts:101:18
+ ❯ roundtripFailures snapshot-roundtrip-rapier.test.ts:31:18
+ ❯ snapshot-roundtrip-rapier.test.ts:54:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  snapshot-roundtrip-rapier.test.ts > #2010.fa073c97 Rapier's snapshot_roundtrip, on deep-physics's output: a restored checkpoint steps on exactly as the uninterrupted run > #2010.fa073c97 ccd_bodies and joints_and_sensor: CCD balls at 100 m/s, and a ball-jointed chain swinging through a sensor, restored at step 100
+AssertionError: ccd: the straight run: step_hashes is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../2009/helpers.ts:52:67
+     50| }
+     51| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     52|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     53|   return v as JsonValue[];
+     54| }
+ ❯ stepHashes ../2010/helpers.ts:101:18
+ ❯ roundtripFailures snapshot-roundtrip-rapier.test.ts:31:18
+ ❯ snapshot-roundtrip-rapier.test.ts:61:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  4 failed (4)
+   Start at  02:23:28
+   Duration  9.28s (tests 99%)
+

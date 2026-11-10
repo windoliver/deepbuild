@@ -1,0 +1,44 @@
+{
+  "lane": "BLOCKED x86_64: the container runtime is unreachable",
+  "record": {
+    "lane": "x86_64",
+    "state": "BLOCKED",
+    "host": "<host>",
+    "platform": "darwin-arm64",
+    "tree": "a07953ba246ef7f94c672f75b8971ed58eeafe7c",
+    "tests": [
+      {
+        "id": "golden_verify",
+        "state": "BLOCKED"
+      }
+    ],
+    "recording_machine": {
+      "os": "macos",
+      "arch": "aarch64",
+      "cpu": "Apple M5 Max"
+    },
+    "lane_arch": null,
+    "host_arch": "arm64",
+    "emulated": null,
+    "image_digest": null,
+    "network": null,
+    "bake_key": {
+      "tally": "e255804359a278b17b18c24332717bd97f1737ca13dbc92b2f0f63cae7315821"
+    },
+    "report": null,
+    "ask": "docker is unreachable (docker info: failed to connect to the docker API at unix:///nonexistent/no-docker.sock; check if the path is correct and if the daemon is running: dial unix /nonexistent/no-docker.sock: connect: no such file or directory); the x86_64 lane runs in this Mac's container runtime: start it (colima start), then run node scripts/lane-x86.mjs again",
+    "error": null,
+    "readings": []
+  },
+  "cross_machine": {
+    "ok": true,
+    "kind": "logic.determinism",
+    "compare": "cross_machine",
+    "verdict": "BLOCKED",
+    "failures": [],
+    "machines": null,
+    "refusals": [],
+    "ask": "docker is unreachable (docker info: failed to connect to the docker API at unix:///nonexistent/no-docker.sock; check if the path is correct and if the daemon is running: dial unix /nonexistent/no-docker.sock: connect: no such file or directory); the x86_64 lane runs in this Mac's container runtime: start it (colima start), then run node scripts/lane-x86.mjs again"
+  },
+  "image_list_unchanged": true
+}

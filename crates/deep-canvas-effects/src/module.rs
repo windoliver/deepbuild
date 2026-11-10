@@ -242,8 +242,9 @@ fn operator_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
 
 /// #431: `backdrop` reads the opaque scene's copy, which only a see-through part's material
 /// (alpha_mode blend or transmission above 0) has, and `shadow_filter` runs only in a see-through
-/// part's shadow passes under `shadow: colored`; each material that names the operator elsewhere
-/// is refused, naming the step or the output and the material.
+/// part's shadow passes under `shadow: colored`; #486: a lobe output only on a material that has
+/// its lobe. Each material that names the operator elsewhere is refused, naming the step or the
+/// output and the material.
 fn binding_rules(doc: &Value, id: &str, op: &graph::Operator) -> Vec<Raised> {
     let mut out = Vec::new();
     if op.kind != Kind::Material {
@@ -272,6 +273,21 @@ fn binding_rules(doc: &Value, id: &str, op: &graph::Operator) -> Vec<Raised> {
                 at("outputs/shadow_filter"),
                 format!("{id}'s output shadow_filter runs only in a see-through part's shadow passes under shadow: colored, and material {mid} isn't one"),
             ));
+        }
+        // #486: a lobe output replaces a lobe the material has; it never turns one on.
+        for name in op.outputs.keys() {
+            if let Some(field) = deep_canvas_scene3d::gpu::lacks(doc, mid, name) {
+                let off = if field == "specular_color" {
+                    "white"
+                } else {
+                    "0"
+                };
+                out.push(raised(
+                    "operator_kind_rule",
+                    at(&format!("outputs/{name}")),
+                    format!("{id}'s output {name} replaces a lobe material {mid} lacks: its {field} is {off}, and no channel, driver, control or variant moves it"),
+                ));
+            }
         }
     }
     out

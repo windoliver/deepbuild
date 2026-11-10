@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "id": "01KB1462PA0000000000000001",
+  "kind": "session.paused",
+  "subject": "session:7c4d5e601462422283334444555514",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1800000000000,
+  "data": {}
+}
