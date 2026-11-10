@@ -86,17 +86,22 @@ pub fn order(nodes: &[Node], whole_items: bool) -> Result<Vec<usize>, Vec<usize>
     // Kahn's algorithm, the lowest ready node first, so the order is the same however the
     // document lists its entries' members.
     let mut waiting: Vec<usize> = after.iter().map(BTreeSet::len).collect();
+    // Each node's dependents, found once: asking every node whether it waits on the one
+    // just placed made the order quadratic in the nodes.
+    let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for (j, set) in after.iter().enumerate() {
+        for &i in set {
+            dependents[i].push(j);
+        }
+    }
     let mut ready: BTreeSet<usize> = (0..n).filter(|&i| waiting[i] == 0).collect();
     let mut out = Vec::with_capacity(n);
-    while let Some(&i) = ready.iter().next() {
-        ready.remove(&i);
+    while let Some(i) = ready.pop_first() {
         out.push(i);
-        for j in 0..n {
-            if after[j].contains(&i) {
-                waiting[j] -= 1;
-                if waiting[j] == 0 {
-                    ready.insert(j);
-                }
+        for &j in &dependents[i] {
+            waiting[j] -= 1;
+            if waiting[j] == 0 {
+                ready.insert(j);
             }
         }
     }

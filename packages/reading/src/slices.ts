@@ -216,12 +216,13 @@ export async function openSlicer(root: string): Promise<Slicer> {
       if (!needle.trim() && !file) throw new NotFound('deep find needs words to look for');
       const from = cursor === undefined ? 0 : Number(/^h(\d+)$/.exec(cursor)?.[1] ?? NaN);
       if (!Number.isInteger(from)) throw new NotFound(`deep find ${query}: no slice at ${cursor}`);
-      // The hit test and the context's place read the text the same way, character by character.
-      const holds = (text: string): boolean => matchAt(text, needle) >= 0;
+      // Where the needle is in a text, or -1. The whole text lowercased at once holds the needle exactly when the
+      // text lowercased a character at a time does (a final sigma folded in both), so only a text that holds it is
+      // read character by character, for the place its context starts.
+      const placeOf = (text: string): number => (text.toLowerCase().replace(/\u03C2/g, '\u03C3').includes(needle) ? matchAt(text, needle) : -1);
       const hits: Found['hits'] = [];
-      const context = (text: string): string => {
+      const context = (text: string, at: number): string => {
         // At most CONTEXT characters, however long the query, so every hit fits within the cap.
-        const at = Math.max(0, matchAt(text, needle));
         // Its ends move out of a surrogate pair, so the context is whole characters.
         const start = Math.max(0, at - 80);
         const end = Math.min(text.length, at + needle.length + 80);
@@ -236,17 +237,24 @@ export async function openSlicer(root: string): Promise<Slicer> {
         ids = sessions ? ids.filter((id) => by.has(id)) : [...by].filter((id) => SESSION.test(`session:${id}`));
         if (!needle.trim()) for (const id of ids) hits.push({ handle: `session:${id}`, context: `touched ${touched.filter((t) => t.session === id).map((t) => t.path).join(', ')}`.slice(0, CONTEXT) });
       }
-      if (needle.trim()) for (const m of await record.findMessages([[needle]], ids)) if (holds(m.text)) hits.push({ handle: `session:${m.session}#${m.id}`, context: context(m.text) });
+      if (needle.trim()) {
+        for (const m of await record.findMessages([[needle]], ids)) {
+          const found = placeOf(m.text);
+          if (found >= 0) hits.push({ handle: `session:${m.session}#${m.id}`, context: context(m.text, found) });
+        }
+      }
       if (!sessions && !file) {
         for (const handle of await record.findable()) {
           const text = (await record.resolve(handle))?.text;
           // Bytes that are not UTF-8 text decode with U+FFFD or hold NUL: not text to show.
-          if (text && !/[\u0000\uFFFD]/.test(text) && holds(text)) hits.push({ handle, context: context(text) });
+          const found = text && !/[\u0000\uFFFD]/.test(text) ? placeOf(text) : -1;
+          if (text && found >= 0) hits.push({ handle, context: context(text, found) });
         }
         for (const page of existsSync(join(root, 'wiki')) ? pagesUnder(join(root, 'wiki'), '') : []) {
           for (const line of readFileSync(join(root, 'wiki', `${page}.md`), 'utf8').split('\n')) {
             const parsed = parseClaimLine(line);
-            if (parsed && typeof parsed.record.id === 'string' && holds(parsed.text)) hits.push({ handle: `wiki:${page}#${parsed.record.id}`, context: context(parsed.text) });
+            const found = parsed && typeof parsed.record.id === 'string' ? placeOf(parsed.text) : -1;
+            if (parsed && found >= 0) hits.push({ handle: `wiki:${page}#${parsed.record.id}`, context: context(parsed.text, found) });
           }
         }
       }

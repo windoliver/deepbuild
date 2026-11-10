@@ -102,6 +102,8 @@ pub struct Effects {
     runners: BTreeMap<String, Arc<Runner>>,
     /// The chain's targets by index, with their sizes.
     targets: Vec<([u32; 2], wgpu::TextureView)>,
+    /// How many of the targets the frame being planned has asked for: the rest are released.
+    used: usize,
     sparks: Option<SparkDraw>,
     /// The half-resolution puffs' half-size target, with the full size it was made for (#1173).
     half: Option<([u32; 2], wgpu::TextureView)>,
@@ -167,6 +169,7 @@ impl Effects {
             profiler: None,
             runners: BTreeMap::new(),
             targets: Vec::new(),
+            used: 0,
             sparks: None,
             half: None,
             dirt: None,
@@ -214,6 +217,7 @@ impl Effects {
     }
 
     fn target(&mut self, device: &Device, i: usize, size: [u32; 2]) -> wgpu::TextureView {
+        self.used = self.used.max(i + 1);
         while self.targets.len() <= i {
             self.targets.push(([0, 0], make(device, [1, 1])));
         }
@@ -627,6 +631,7 @@ impl Post for Effects {
         let mut jobs: Vec<(String, Job)> = Vec::new();
         let mut cur = frame.linear.clone();
         let mut next = 1usize;
+        self.used = 0;
         if let Some(grid) = &s.grid {
             let out = self.target(device, next, size);
             next += 1;
@@ -818,6 +823,9 @@ impl Post for Effects {
                 }),
             ));
         }
+        // A target no pass of this frame asked for is released: a pass switched off no longer
+        // holds its full-size targets for the view's life. Each job keeps its own views.
+        self.targets.truncate(self.used);
         (jobs, Some(cur))
     }
 }

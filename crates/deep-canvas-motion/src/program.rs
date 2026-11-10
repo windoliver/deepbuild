@@ -2167,7 +2167,11 @@ impl Program {
         // The order by item and stage: an item's transform composes before its first
         // constraint, or after its last write when it has none.
         let mut names: Vec<String> = Vec::new();
-        let last_of = |item: &str| order.iter().rposition(|&i| nodes[i].item == item);
+        // Each item's last place in the order, found in one pass.
+        let mut last: std::collections::BTreeMap<&str, usize> = Default::default();
+        for (at, &i) in order.iter().enumerate() {
+            last.insert(nodes[i].item.as_str(), at);
+        }
         let mut composed = std::collections::BTreeSet::new();
         for (at, &i) in order.iter().enumerate() {
             let node = &nodes[i];
@@ -2175,7 +2179,7 @@ impl Program {
                 names.push(format!("{}.transform", node.item));
             }
             names.push(format!("{}.{}", node.item, node.stage.name()));
-            if last_of(&node.item) == Some(at) && composed.insert(node.item.clone()) {
+            if last.get(node.item.as_str()) == Some(&at) && composed.insert(node.item.clone()) {
                 names.push(format!("{}.transform", node.item));
             }
         }
