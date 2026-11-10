@@ -1,0 +1,13 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "session.end",
+  "subject": "session:019a1b2c3d4e7f80a1b2c3d4e5f60718",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013452123,
+  "data": {
+    "reason": "process_exited"
+  }
+}

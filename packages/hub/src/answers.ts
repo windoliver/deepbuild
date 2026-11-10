@@ -53,7 +53,8 @@ export class Answers {
 
   /** An ended Codex session's answer waits on its task; only the same thread's resume hears it (#39). */
   async waitsOnTask(delivery: Delivery): Promise<void> {
-    const [last] = (await this.o.raw(`SELECT e.kind, s.agent FROM events e JOIN sessions s ON s.id = e.session_id WHERE e.session_id = '${sql(delivery.session)}' AND e.kind IN ('session.start', 'session.end') ORDER BY e.log_pos DESC LIMIT 1`)) as { kind: string; agent: string }[];
+    // The end's own agent: a session whose start never reached the record has none on its row (#1023).
+    const [last] = (await this.o.raw(`SELECT kind, agent FROM events WHERE session_id = '${sql(delivery.session)}' AND kind IN ('session.start', 'session.end') ORDER BY log_pos DESC LIMIT 1`)) as { kind: string; agent: string | null }[];
     if (last?.kind === 'session.end' && last.agent === 'codex') await this.outcome(delivery.ask.replace(/^ask:/, ''), 'on_task', 'waiting');
   }
 }

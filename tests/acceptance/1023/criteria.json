@@ -1,0 +1,17 @@
+[
+ {
+  "n": 1,
+  "id": "#1023.f4fb4c83",
+  "text": "From three recorded Ctrl-C ends of a Codex CLI session, each is read as the session's end: one `session.end` per session, with its reason from the payload, or, where Codex fired no SessionEnd, the session is closed by the hub from the daemon's exit as the design's process-ownership rules allow, recorded with a reading saying so"
+ },
+ {
+  "n": 2,
+  "id": "#1023.6b9c173d",
+  "text": "A session Codex ended without a SessionEnd shows closed in `deep hub status` within one minute of its process ending, and an answer waiting for it goes by its task, not by a resume"
+ },
+ {
+  "n": 3,
+  "id": "#1023.88d3d827",
+  "text": "A planted adapter that leaves the session open fails the test, naming the session"
+ }
+]
