@@ -191,6 +191,8 @@ pub enum Planted {
     TransitionRestarts,
     /// #490: a table's interval form from 8 samples between its range's ends.
     TableFormSamples8,
+    /// #1646: cells takes its seed with the time, so a still point's outputs move.
+    CellsSeededFromT,
     /// #490: a pulse that leaves 1e-6 at its end.
     PulseLeavesResidue,
     /// #490: out_back with its fixed 1.70158, ignoring `overshoot`.
@@ -2331,6 +2333,12 @@ impl Program {
         }
         if self.options.planted == Planted::TableFormSamples8 {
             scope.planted = Some(deep_canvas::expr::Planted::TableFormSamples8);
+        }
+        if self.options.planted == Planted::CellsSeededFromT {
+            scope.planted = Some(deep_canvas::expr::Planted::CellsSeededFromT);
+            if !inputs_of.iter().any(|(n, _)| *n == "t") {
+                inputs_of.push(("t", CoreInput::Time));
+            }
         }
         let expr = Expr::compile(&text, &scope, DRIVER_OPS).map_err(|r| Refused {
             code: "bad_doc",

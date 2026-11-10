@@ -103,7 +103,12 @@ describe('the one automatic continue, counted per session since its last normal 
 const S2 = '3e4aad63-a071-4f99-b6a2-f1b7a25aae65';
 const hook2: Connection = { writer: 'hook', ...who, session: S2, agent: 'claude-code' };
 describe('a resume on a shared task', () => {
-  it('skips a session you stopped after its stop, and records why', async () => {
+  // Its SessionEnd, or the core's end for a Codex process that exited without one (#1023).
+  const ends: [string, () => Promise<unknown>][] = [
+    ['its SessionEnd', () => record.append(hook2, { v: 1, id: ulid(now), kind: 'session.end', subject: `session:${S2.replace(/[^0-9A-Za-z]/g, '')}`, ts: now, seq: seq(now), data: { reason: 'prompt_input_exit' } })],
+    ["the core's end at its process's exit", () => record.append({ writer: 'core', ...who, session: S2, agent: 'codex' }, { v: 2, id: ulid(now), kind: 'session.end', subject: `session:${S2.replace(/[^0-9A-Za-z]/g, '')}`, ts: now, data: { reason: 'process_exited' } })],
+  ];
+  it.each(ends)('skips a session you stopped after its stop, and records why: %s', async (_, end) => {
     await record.append(hook2, { v: 1, id: ulid(now), kind: 'session.start', ts: now, seq: seq(now), data: { agent: 'claude-code', worktree: join(dir, 'w2'), branch: 'main', thread: S2 } });
     for (const [conn, s] of [[hook, S1], [hook2, S2]] as const) {
       now += 1000;
@@ -117,7 +122,7 @@ describe('a resume on a shared task', () => {
     const proves = (created!.data as Obj).proves as string;
     // You stop S2 while the task is open.
     now += 1000;
-    await record.append(hook2, { v: 1, id: ulid(now), kind: 'session.end', subject: `session:${S2.replace(/[^0-9A-Za-z]/g, '')}`, ts: now, seq: seq(now), data: { reason: 'prompt_input_exit' } });
+    await end();
     // The task's check passes: S1 resumes; S2, which ended, is skipped, and the record says why.
     now += 1000;
     const claim = `claim:${ulid(now)}`;

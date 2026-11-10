@@ -332,6 +332,9 @@ impl Default for Paint {
 pub struct Laid {
     pub glyphs: Vec<Placed>,
     pub coverage: Vec<Vec<f64>>,
+    /// #1646: a reveal's units' reveal times (flicks), and each unit's afterglow at t under a CRT.
+    pub reveal: Vec<i64>,
+    pub afterglow: Vec<f64>,
 }
 
 /// What laying out a text reads besides its run.
@@ -350,6 +353,63 @@ pub struct Input<'a> {
     /// A counter, a bound value or a template: a number, whose glyphs never shift.
     pub bound: bool,
     pub plant: Plant,
+    /// #1646: each reveal unit's reveal time (flicks), compiled from the progress channel by the
+    /// caller ([`reveal_levels`] gives the progress each one is at), and the look's CRT afterglow,
+    /// the phosphor's decay time in flicks.
+    pub reveal_times: &'a [i64],
+    pub afterglow: Option<i64>,
+}
+
+/// #1646: a text's `reveal: {mode: fade, order: reading, progress}` (Text text@1). Units are
+/// graphemes and overlap by `lag = min(4 ÷ n, 0.2)`: unit u of n reveals over the progress from
+/// u·lag·w to that plus w, w = 1 ÷ (1 + (n − 1)·lag), so the last ends at 1.
+fn reveal_of(params: &Map<String, Value>, id: &str) -> Result<Option<f64>, Refused> {
+    let Some(r) = params.get("reveal").filter(|r| !r.is_null()) else {
+        return Ok(None);
+    };
+    let path = format!("items/{id}/params/reveal");
+    let Value::Object(r) = r else {
+        return Err(bad(path));
+    };
+    for (field, built) in [("mode", "fade"), ("order", "reading")] {
+        match r.get(field).and_then(Value::as_str) {
+            None => {}
+            Some(v) if v == built => {}
+            Some(_) => {
+                return Err(Refused {
+                    code: "unsupported",
+                    path: format!("{path}/{field}"),
+                })
+            }
+        }
+    }
+    if r.get("emits") == Some(&Value::Bool(true)) {
+        return Err(Refused {
+            code: "unsupported",
+            path: format!("{path}/emits"),
+        });
+    }
+    Ok(Some(num(r.get("progress")).unwrap_or(0.0).clamp(0.0, 1.0)))
+}
+
+fn reveal_span(n: usize) -> (f64, f64) {
+    let lag = (4.0 / n.max(1) as f64).min(0.2);
+    (lag, 1.0 / (1.0 + (n.max(1) - 1) as f64 * lag))
+}
+
+/// #1646: the progress at which each of a revealed text's units passes half its reveal, which is
+/// its reveal time; `None` when the text has no reveal.
+pub fn reveal_levels(
+    params: &Map<String, Value>,
+    run: &Shaped,
+    id: &str,
+) -> Result<Option<Vec<f64>>, Refused> {
+    if reveal_of(params, id)?.is_none() {
+        return Ok(None);
+    }
+    let n = deep_text::unicode::grapheme_starts(&run.shown).len();
+    let (lag, w) = reveal_span(n);
+    Ok(Some((0..n).map(|u| (u as f64 * lag + 0.5) * w).collect()))
 }
 
 /// What laying out may ask its caller for: a text shaped in the item's own style (a glyph
@@ -1249,6 +1309,33 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
         }
         coverage.push(amounts);
     }
+    // #1646: a reveal fades each unit in over its share of the progress, and a CRT's afterglow
+    // lights it from its own reveal time, never from an earlier frame.
+    let mut afterglow = Vec::new();
+    let mut reveal = Vec::new();
+    if let Some(progress) = reveal_of(input.params, id)? {
+        let (units, n) = units_of("grapheme", run, &format!("items/{id}/params/reveal"))?;
+        let (lag, w) = reveal_span(n);
+        if let Some(tau) = input.afterglow {
+            afterglow = (0..n)
+                .map(|u| match input.reveal_times.get(u) {
+                    Some(&r) if input.t >= r => {
+                        deep_canvas::ops::exp(-((input.t - r) as f64) / tau as f64)
+                    }
+                    _ => 0.0,
+                })
+                .collect();
+        }
+        for (g, unit) in units.iter().enumerate() {
+            let Some(u) = *unit else { continue };
+            let x = &mut acc[g];
+            x.opacity *= ((progress - u as f64 * lag * w) / w).clamp(0.0, 1.0);
+            if let Some(a) = afterglow.get(u) {
+                x.paint.brightness *= 1.0 + a;
+            }
+        }
+        reveal = input.reveal_times.to_vec();
+    }
     // The run's own place: along a path, or at its origin.
     let curve = match input.params.get("on_curve") {
         None => None,
@@ -1460,7 +1547,12 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
             }
         }
     }
-    Ok(Laid { glyphs, coverage })
+    Ok(Laid {
+        glyphs,
+        coverage,
+        reveal,
+        afterglow,
+    })
 }
 
 /// One animator's amount per grapheme of `run` at `t` flicks (0 for a grapheme no unit holds):
@@ -1539,6 +1631,7 @@ pub fn animated(params: &Map<String, Value>) -> bool {
         .and_then(Value::as_array)
         .is_some_and(|a| !a.is_empty())
         || params.contains_key("on_curve")
+        || params.contains_key("reveal")
         || params
             .get("text")
             .and_then(|t| t.get("counter"))
@@ -1615,6 +1708,8 @@ mod tests {
             items: &Map::new(),
             bound: false,
             plant: Plant::None,
+            reveal_times: &[],
+            afterglow: None,
         };
         lay_out(&input, &mut host)
     }

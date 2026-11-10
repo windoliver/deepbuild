@@ -7,6 +7,7 @@ The one conformance runner and its kits (#313, #314, #349): the adapter kit with
 ## Where new code goes
 
 - `src/index.ts`: the public entry; export only what callers need.
+- `src/findings.ts`: the `./findings` entry, so a check kind's runner and kit take `fail`, `Finding` and `runProbe` without loading the kits, the runner and the generator into the hub that only runs its checks.
 - `src/slots/<slot>.ts`: a new hub slot's kit, listed in `src/slots/kits.ts`. Shared kit helpers go in `src/slots/shared.ts`.
 - `src/kit.ts`, `src/runner.ts`, `src/fake-agent.ts`, `src/shipped.ts`: the adapter kit (adapter@1).
 - `src/result.ts`, `src/probe.ts`: the check.kind@1 wire result's shape check, and the one run of a check kind's probe under its deadline that `checks-numbers` and `checks-work` share.

@@ -2,7 +2,7 @@
 //! from the item's ID, that the GPU layer lays its coverage through (Look `look@1`: drawn fills;
 //! light; Paint: noise fill).
 
-use crate::spec::{Hatch, Ink, Noise, Spatter, Wash};
+use crate::spec::{Dither, Hatch, Ink, Noise, Spatter, Wash};
 
 /// A lamp as evaluated: where it stands in u and its color, 0..1 sRGB-encoded.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -30,6 +30,8 @@ pub enum Kind {
     Hatch(Hatch),
     /// A noise field through its ramp, 16 stops in OKLab order as sRGB-encoded colors.
     Noise(Noise, Vec<[f64; 3]>),
+    /// An ordered dither between its stops, each as an sRGB-encoded color.
+    Dither(Dither, Vec<[f64; 3]>),
     Strokes(Dabs),
     /// A collection on a backlit screen: each lamp's light by its transmission.
     Lit {
@@ -50,6 +52,7 @@ impl Kind {
             Kind::Noise(..) => 5,
             Kind::Strokes(_) => 6,
             Kind::Lit { .. } => 7,
+            Kind::Dither(..) => 9,
         }
     }
 }
@@ -154,6 +157,17 @@ pub fn words(m: &Medium) -> ([[f32; 4]; 4], Vec<[f32; 4]>) {
                 }),
             ];
             list.extend(ramp.iter().map(|c| [f(c[0]), f(c[1]), f(c[2]), 1.0]));
+        }
+        // The world-to-u transform goes in w[0] beside the page (the GPU layer writes it); w[1] the
+        // matrix's side, the stop count and the flags.
+        Kind::Dither(d, stops) => {
+            w[1] = [
+                d.matrix as f32,
+                stops.len() as f32,
+                f32::from(u8::from(d.by_tone)),
+                f32::from(u8::from(d.frame_anchored)),
+            ];
+            list.extend(stops.iter().map(|c| [f(c[0]), f(c[1]), f(c[2]), 1.0]));
         }
         Kind::Strokes(d) => {
             w[0] = [f(d.density), f(d.size.0), f(d.size.1), d.layers as f32];

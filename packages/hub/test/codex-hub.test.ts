@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  allEvents, answer, childEnv, FIXTURES, NODE, own, asksOf, begin, call, choice, cleanup, codexHook, control, Daemon, deep, doctor, editStopTimeout, finished, git, hookShown, hubWithSetup, inSlowLane, makeHome, MINUTE, newThread, ofSession, patch, rowOf, shown, SLOW_ASK, slowRepo, startHub, stopHub, tag, waitFor, type Home, type Line, type Thread,
+  allEvents, answer, childEnv, FIXTURES, NODE, own, asksOf, begin, call, choice, cleanup, codexHook, control, Daemon, deep, doctor, editStopTimeout, finished, git, hookShown, hubWithSetup, inSlowLane, makeHome, MINUTE, newThread, ofSession, patch, rowOf, shown, SLOW_ASK, slowRepo, startHub, stopHub, tag, waitFor, PAST_FACTS, type Home, type Line, type Thread,
 } from '../../../tests/acceptance/39/helpers.ts';
 
 afterEach(cleanup, 60_000);
@@ -476,5 +476,22 @@ describe('a subagent\'s stop', () => {
     const tools = mine.filter((e) => JSON.stringify(e.data).includes('call_child'));
     expect(tools.length).toBeGreaterThan(0);
     expect(tools.every((e) => e.verified === false)).toBe(true);
+  }, 120_000);
+});
+
+describe('deep hub status for a Codex version past its facts', () => {
+  // Live on Codex 0.167 (#1023): everything such a session sends is recorded unverified, its own SessionEnd included, so a
+  // status that counts only verified ends listed every one of them open for good.
+  it('shows the session open until its SessionEnd, then closed', async () => {
+    const h = makeHome();
+    const hub = await hubWithSetup(h);
+    const t = newThread(h, { version: PAST_FACTS });
+    await begin(h, t);
+    const closed = async () => ((await control(hub, 'health')) as { sessions: { id: string; closed: boolean }[] }).sessions.find((s) => s.id === t.id)?.closed;
+    expect(await waitFor(async () => (await closed()) === false || undefined, 30_000, 'the session listed open')).toBe(true);
+    await codexHook(h, t, 'SessionEnd', { reason: 'other' });
+    const end = await waitFor(async () => ofSession(await allEvents(hub), t.id, 'session.end')[0], 30_000, 'its SessionEnd');
+    expect(end.verified, 'the end is recorded unverified, so this proves something').toBe(false);
+    expect(await waitFor(async () => (await closed()) || undefined, 30_000, 'the session listed closed')).toBe(true);
   }, 120_000);
 });

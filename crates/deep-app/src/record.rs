@@ -511,12 +511,18 @@ pub fn sync(cx: &mut gpui_kit::App) {
         return;
     }
     let at = standing();
-    live(cx).update(cx, |shown, cx| {
-        if shown.at != at {
+    let moved = live(cx).update(cx, |shown, cx| {
+        let moved = shown.at != at;
+        if moved {
             shown.at = at;
             cx.notify();
         }
+        moved
     });
+    // A panel's script reads the record through `deepbuild.needs_you`, so it renders again too (#1459).
+    if moved {
+        crate::refresh_panels(cx);
+    }
 }
 
 /// Tells the views something they draw beside the record moved, such as what the app can reach (#994).

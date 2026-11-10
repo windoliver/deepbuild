@@ -8,7 +8,7 @@ use gpui_kit::{base::test_support::snapshots, point, px, ElementId, HitboxBehavi
 use serde_json::{json, Value};
 
 use super::glyphs::{Glyphs, Run};
-use crate::snapshot::role_name;
+use crate::snapshot::{author_id, role_name};
 
 /// The roles of a form control, the things `{label}` names.
 pub const CONTROLS: &[&str] = &[
@@ -132,8 +132,9 @@ impl Frame {
                 })
                 .cloned()
                 .collect(),
-            Form::Handle(handle) => visible
-                .filter(|e| e.name.as_deref() == Some(handle))
+            // A row's id is its record's, so an ask's handle names its row by id and never by a word drawn (#1459).
+            Form::Id(id) | Form::Handle(id) => visible
+                .filter(|e| author_id(&e.path).as_deref() == Some(id))
                 .cloned()
                 .collect(),
             Form::Text(text) => self
@@ -312,12 +313,14 @@ pub fn string(run: &Run) -> Target {
 enum Form<'a> {
     Role(Option<&'a str>, Option<&'a str>),
     Item(&'a str),
+    Id(&'a str),
     Handle(&'a str),
     Text(&'a str),
     Label(&'a str),
 }
 
-/// A locator's one form: `{role, name}` (either may be null, not both), `{item}`, `{handle}`, `{text}` or `{label}`.
+/// A locator's one form: `{role, name}` (either may be null, not both), `{item}`, `{id}`, `{handle}`, `{text}` or
+/// `{label}`.
 fn form(locator: &Value) -> Result<Form<'_>, String> {
     let Some(fields) = locator.as_object() else {
         return Err(format!("a locator is an object, not {locator}"));
@@ -334,11 +337,12 @@ fn form(locator: &Value) -> Result<Form<'_>, String> {
     match keys.as_slice() {
         ["role"] | ["name"] | ["name", "role"] | ["role", "name"] => Ok(Form::Role(text("role")?, text("name")?)),
         ["item"] => Ok(Form::Item(text("item")?.unwrap_or_default())),
+        ["id"] => Ok(Form::Id(text("id")?.unwrap_or_default())),
         ["handle"] => Ok(Form::Handle(text("handle")?.unwrap_or_default())),
         ["text"] => Ok(Form::Text(text("text")?.unwrap_or_default())),
         ["label"] => Ok(Form::Label(text("label")?.unwrap_or_default())),
         _ => Err(format!(
-            "a locator has one form, {{role, name}}, {{item}}, {{handle}}, {{text}} or {{label}}; this one has {keys:?}"
+            "a locator has one form, {{role, name}}, {{item}}, {{id}}, {{handle}}, {{text}} or {{label}}; this one has {keys:?}"
         )),
     }
 }

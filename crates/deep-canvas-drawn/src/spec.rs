@@ -1000,6 +1000,68 @@ pub fn noise(n: &Map<String, Value>, path: &str) -> Result<Noise, Refused> {
     })
 }
 
+/// `dither {…}`, a fill kind of Paint (Paint: dither fill): an ordered threshold between
+/// adjacent stops, never a function of time.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Dither {
+    pub stops: Vec<String>,
+    /// The Bayer matrix's side, 4 or 8.
+    pub matrix: u32,
+    /// By the item's tone rather than its box's west-to-east gradient.
+    pub by_tone: bool,
+    pub frame_anchored: bool,
+}
+
+/// The most stops a dither fill takes.
+pub const MAX_DITHER_STOPS: usize = 4;
+
+/// A paint's `dither` at `path`.
+pub fn dither(n: &Map<String, Value>, path: &str) -> Result<Dither, Refused> {
+    let mut stops = Vec::new();
+    for (i, s) in n
+        .get("stops")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        let Value::String(r) = s else {
+            return bad(format!("{path}/stops/{i}"));
+        };
+        if is_status_role(r) {
+            return Err(Refused {
+                code: "status_role",
+                path: format!("{path}/stops/{i}: {r}"),
+            });
+        }
+        stops.push(r.clone());
+    }
+    if stops.len() < 2 || stops.len() > MAX_DITHER_STOPS {
+        return Err(Refused {
+            code: "out_of_range",
+            path: format!("{path}/stops"),
+        });
+    }
+    Ok(Dither {
+        stops,
+        matrix: match n.get("matrix") {
+            None | Some(Value::Null) => 4,
+            Some(v) => match v.as_u64() {
+                Some(m @ (4 | 8)) => m as u32,
+                _ => return bad(format!("{path}/matrix")),
+            },
+        },
+        by_tone: choice(n, "by", false, &[("gradient", false), ("tone", true)], path)?,
+        frame_anchored: choice(
+            n,
+            "anchor",
+            false,
+            &[("world", false), ("frame", true)],
+            path,
+        )?,
+    })
+}
+
 /// A look's drawn fields as read for one document size: what a frame's marks take from it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Look {
