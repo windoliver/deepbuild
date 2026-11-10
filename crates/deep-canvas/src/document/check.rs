@@ -209,6 +209,7 @@ fn check_by(
                 pack_declared: &pack_declared,
                 derived: &derived,
                 sealed,
+                kinds,
                 facts: &facts,
             };
             // Each item checks on its own, so a big document's items check in chunks across the
@@ -1215,6 +1216,7 @@ struct ItemContext<'a> {
     /// The IDs expansion wrote.
     derived: &'a BTreeSet<&'a str>,
     sealed: &'a Sealed,
+    kinds: &'a Registry,
     /// What the build says about each kind text the lowered items write.
     facts: &'a BTreeMap<String, KindFacts<'a>>,
 }
@@ -1532,6 +1534,7 @@ fn check_item(
             version,
             required_minor,
             ctx.sealed,
+            ctx.kinds,
             issues,
             notices,
         );
@@ -1790,6 +1793,7 @@ fn check_params(
     version: &Version,
     required_minor: Option<u32>,
     sealed: &Sealed,
+    kinds: &Registry,
     issues: &mut Vec<Issue>,
     notices: &mut Vec<Notice>,
 ) {
@@ -1816,8 +1820,22 @@ fn check_params(
                 });
                 dropped.push(name.clone());
             } else {
+                // A field another kind defines names that kind after any rename, in the close
+                // names, and first in the fix when no rename comes before it (#1970).
+                let owners = super::close::owners(name, entry, kinds, sealed.close_fault);
+                let close =
+                    super::close::field_names(name, entry, version, &owners, sealed.close_fault);
+                let fix = if close.first().is_some_and(|c| c.get("defines").is_some()) {
+                    format!(
+                        "`{name}` is a field of {}: give the item that kind, or remove the field.",
+                        owners.join(" or ")
+                    )
+                } else {
+                    super::fix_for("unknown_field")
+                };
                 issues.push(Issue {
-                    close: super::close::field_names(name, entry, version, sealed.close_fault),
+                    close,
+                    fix,
                     ..Issue::error(
                         "unknown_field",
                         key,
