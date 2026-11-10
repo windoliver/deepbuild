@@ -2392,6 +2392,7 @@ dependencies = [
  "deep-canvas-physics",
  "rapier3d",
  "serde_json",
+ "simba",
 ]
 
 [[package]]

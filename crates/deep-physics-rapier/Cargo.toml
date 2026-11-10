@@ -16,10 +16,25 @@ base64 = "0.22"
 bincode = "1"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 
+[dev-dependencies]
+# Issue #2012: Rapier's own tests/simd_backend_parity.rs names simba's SIMD types; the version and
+# feature are the ones rapier3d 0.36.1 resolves, so it adds nothing to the build.
+simba = { version = "=0.10.2", default-features = false, features = ["wide"] }
+
 [features]
+# Issue #2012: Rapier's own tests in tests/ are gated, as upstream, by `#![cfg(feature = ...)]` on
+# the package they build in; these name the rapier3d features the dependency above already turns on.
+default = ["serde-serialize", "enhanced-determinism"]
+serde-serialize = ["rapier3d/serde-serialize"]
+enhanced-determinism = ["rapier3d/enhanced-determinism"]
 # The planted twin of criterion 4 (tests/acceptance/2009): a public re-export and a public function
 # that name Rapier types, which the public-API check must catch.
 test-leaks-rapier = []
+
+# Issue #2012: Rapier's own tests gate on `not(feature = "simd8")`, a feature this crate never has
+# (scripts/physics-build.mjs refuses rapier3d's), so the name is declared for the cfg check only.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("simd8"))'] }
 
 [[bin]]
 name = "deep-physics"
