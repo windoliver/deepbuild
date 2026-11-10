@@ -8,7 +8,7 @@ use std::process::Command;
 use serde_json::Value;
 
 fn kit(panel: &str) -> (i32, Value) {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../deep-app/panels/").to_owned() + panel;
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/").to_owned() + panel;
     let out = Command::new(env!("CARGO_BIN_EXE_deep-replica"))
         .args(["--view-kit", "session.row@1", &dir])
         .output()
