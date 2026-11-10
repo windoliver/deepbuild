@@ -2394,6 +2394,21 @@ fn shadow_fs(in: MeshOut) {
     }
 }
 
+// The occlusion prepass (#1637): an occluder's depth, for the camera's pyramid. It writes depth
+// only where the opaque pass surely does, so the pyramid never holds a nearer depth than the
+// frame: whatever a cutaway touches, a mask-alpha part and what a band's mask leaves out write
+// none, and a material's back faces none, as the opaque pass discards them.
+@fragment
+fn occluder_fs(in: MeshOut, @builtin(front_facing) front: bool) {
+    let material = (in.flags & MATERIAL) != 0u;
+    if (in.flags & CUT) != 0u
+        || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x)
+        || (material && ((in.flags >> 7u) & 3u) == MASK)
+        || (material && front == ((in.flags & MIRRORED) != 0u) && (in.flags & DOUBLE_SIDED) == 0u) {
+        discard;
+    }
+}
+
 // A mask-alpha caster's fragment stage (#432: a caster kind of its own): what its alpha test
 // removes in the view casts nothing either.
 @fragment
