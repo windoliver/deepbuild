@@ -263,9 +263,6 @@ type Decoded = (Arc<RenderImage>, [u32; 2]);
 /// drawn size in device pixels (GPUI's sprite sampler is linear and can't change per draw).
 type ResampleKey = (ImageKey, ImageSampling, [u32; 2]);
 
-/// The most a document holds decoded, resampled copies included (Image `image@1`: cost).
-const DECODED_CAP: u64 = 64 << 20;
-
 /// A document session: its windows, its caches and the frame on screen.
 struct Session {
     main: Option<Surface>,
@@ -307,6 +304,8 @@ struct Session {
     /// The resampled copies the frame on screen draws, and how many the session has made.
     resampled: HashMap<ResampleKey, Arc<RenderImage>>,
     resamples: u64,
+    /// #1485's wrong program on the images' decode, cap or upload.
+    plant: crate::asset::Plant,
     /// Each text@1 item's shown string and glyph run on the presented frame, as `raster`
     /// reports them (#140: the app and headless shape the same runs).
     texts: Map<String, Value>,
@@ -325,7 +324,8 @@ fn image_key(asset: &str, crop: Option<[f64; 4]>, opacity: f64) -> ImageKey {
 
 /// Reads, checks and decodes an image once per session: its bytes by hash from the store, the
 /// crop in image pixels, and the mark's opacity carried in its alpha, since GPUI's sprite takes
-/// straight alpha.
+/// straight alpha. The decodings and copies the session holds count against `asset::CAP`, so an
+/// image past what is left is refused by its header before it is decoded.
 fn image_of(
     session: &mut Session,
     asset: &str,
@@ -338,7 +338,15 @@ fn image_of(
         return Ok(found.clone());
     }
     let path = format!("items/{item}/params/asset");
-    let rgba = crate::asset::decoded(session.store.as_deref(), asset, crop, item)?;
+    let remaining = crate::asset::CAP.saturating_sub(held(session));
+    let rgba = crate::asset::decoded(
+        session.store.as_deref(),
+        asset,
+        crop,
+        item,
+        remaining,
+        session.plant,
+    )?;
     let (w, h) = rgba.dimensions();
     let mut bgra = rgba.into_raw();
     for px in bgra.as_chunks_mut::<4>().0 {
@@ -373,8 +381,34 @@ fn resample_at(
     )
 }
 
+/// The images the process has read from a store and decoded, and those Vello GPU's renderer has
+/// uploaded, so far (#1485).
+fn image_counts(vello: &Option<(Arc<deep_gpu::device::Gpu>, crate::gpu::Vello2d)>) -> [u64; 3] {
+    use std::sync::atomic::Ordering::Relaxed;
+    [
+        crate::asset::READS.load(Relaxed),
+        crate::asset::DECODES.load(Relaxed),
+        vello.as_ref().map_or(0, |(_, v)| v.uploads()),
+    ]
+}
+
+/// The bytes of a `[w, h]` RGBA picture.
+fn bytes([w, h]: [u32; 2]) -> u64 {
+    u64::from(w) * u64::from(h) * 4
+}
+
+/// What the session holds decoded, its images and their resampled copies; #1485 AC2's wrong
+/// program counts only the copies.
+fn held(session: &Session) -> u64 {
+    let images = match session.plant {
+        crate::asset::Plant::CapCountsCopiesOnly => 0,
+        _ => session.images.values().map(|(_, s)| bytes(*s)).sum::<u64>(),
+    };
+    images + session.resampled.keys().map(|k| bytes(k.2)).sum::<u64>()
+}
+
 /// An image's copy resampled to its drawn size, made once and then reused. The copies and the
-/// decodings hold at most `DECODED_CAP`: a copy past it is refused, naming the image's asset.
+/// decodings hold at most `asset::CAP`: a copy past it is refused, naming the image's asset.
 fn resampled(
     session: &mut Session,
     key: &ResampleKey,
@@ -387,11 +421,8 @@ fn resampled(
     }
     // Named as a missing asset is: the field and the asset's hash.
     let path = format!("items/{item}/params/asset: {}", key.0 .0);
-    let bytes = |[w, h]: [u32; 2]| u64::from(w) * u64::from(h) * 4;
-    let held: u64 = session.images.values().map(|(_, s)| bytes(*s)).sum::<u64>()
-        + session.resampled.keys().map(|k| bytes(k.2)).sum::<u64>();
     let to = key.2;
-    if held + bytes(to) > DECODED_CAP {
+    if held(session) + bytes(to) > crate::asset::CAP {
         return Err(refused("over_budget", &path));
     }
     let narrow = |[w, h]: [u32; 2]| Some([u16::try_from(w).ok()?, u16::try_from(h).ok()?]);
@@ -773,6 +804,7 @@ impl Renderer {
                 replay,
                 captures,
                 arms_only_on_readings,
+                image_plant,
             } => self.frames(
                 &doc,
                 &look,
@@ -786,7 +818,7 @@ impl Renderer {
                     arms_only_on_readings,
                 },
                 &captures,
-                store,
+                (store, image_plant),
             ),
             Request::Session {
                 look,
@@ -825,6 +857,7 @@ impl Renderer {
                 drops_glyph,
                 store,
                 stock_fragment,
+                image_plant,
             } => {
                 use gpui_apple::metal_renderer::gpu_surfaces::{plant, Planted};
                 if stock_fragment {
@@ -838,7 +871,7 @@ impl Renderer {
                     t,
                     record,
                     (gpui_oklab, drops_glyph),
-                    store,
+                    (store, image_plant),
                 );
                 plant(Planted::None);
                 answer
@@ -944,12 +977,14 @@ impl Renderer {
     }
 
     /// A writer layer's marks drawn by Vello GPU at `zoom` over transparent black, as the BGRA
-    /// picture GPUI paints, on a device opened the first time a layer needs it.
+    /// picture GPUI paints, on a device opened the first time a layer needs it; its images are
+    /// read from `store`, with #1485's wrong program if planted.
     fn vello_picture(
         &mut self,
         marks: &[&Drawn],
         size: [f64; 2],
         zoom: f64,
+        (store, plant): (Option<PathBuf>, crate::asset::Plant),
     ) -> Result<Arc<RenderImage>, Value> {
         if self.vello.is_none() {
             let gpu = deep_gpu::device::Gpu::open(deep_gpu::device::Backend::Gpu)
@@ -959,6 +994,7 @@ impl Renderer {
             self.vello = Some((gpu, vello));
         }
         let (gpu, vello) = self.vello.as_mut().expect("opened above");
+        vello.set_store(store);
         let device = gpu.device();
         let px = [
             (size[0] * zoom).round() as u32,
@@ -966,6 +1002,7 @@ impl Renderer {
         ];
         let options = crate::gpu::Options {
             zoom,
+            plant,
             ..Default::default()
         };
         let mut picture = vello.picture(&device.device, &device.queue, marks, px, options)?;
@@ -1305,7 +1342,14 @@ impl Renderer {
             if let Some(r) = crate::gpu::refusal(marks.iter().copied()) {
                 return Err(r);
             }
-            pictures.push(Some(self.vello_picture(&marks, frame.size, view.zoom)?));
+            let images = (session.store.clone(), session.plant);
+            pictures.push(Some(
+                self.vello_picture(&marks, frame.size, view.zoom, images)?,
+            ));
+        }
+        // The images and pixmaps no Vello GPU layer of this frame painted are let go.
+        if let Some((_, vello)) = self.vello.as_mut() {
+            vello.frame_ended();
         }
         let shown =
             scene::bound_texts(doc, &items, record).map_err(|r| refused(r.code, &r.path))?;
@@ -1349,10 +1393,28 @@ impl Renderer {
             return Err(refused("no_window", ""));
         }
         let bucket = path::bucket(view.zoom);
-        // A resampled copy lives while the frame on screen draws it, so a zoom or a resize frees
-        // the copies of the size it left before the cap counts them.
+        // A decoding and a resampled copy live while the frame on screen draws them, so a new
+        // revision, a zoom or a resize frees what it left before the cap counts them. An image on
+        // a layer Vello GPU draws is Vello GPU's to decode, not GPUI's.
+        let gpui_marks = || {
+            (frame.layers.iter().zip(&pictures))
+                .filter(|(_, picture)| picture.is_none())
+                .flat_map(|(l, _)| l.marks.iter())
+        };
+        let images: BTreeSet<ImageKey> = gpui_marks()
+            .filter_map(|d| match &d.mark {
+                Mark::Image {
+                    asset,
+                    crop,
+                    opacity,
+                    ..
+                } => Some(image_key(asset, *crop, *opacity)),
+                _ => None,
+            })
+            .collect();
+        session.images.retain(|k, _| images.contains(k));
         let mut copies = Vec::new();
-        for drawn in frame.layers.iter().flat_map(|l| l.marks.iter()) {
+        for drawn in gpui_marks() {
             if let Mark::Image {
                 item,
                 asset,
@@ -1496,8 +1558,9 @@ impl Renderer {
         );
 
         // What the frame reads: every visible path's tessellation and text's shaped run, those a
-        // cached picture was drawn from included, since they are its read set.
-        for layer in &frame.layers {
+        // cached picture was drawn from included, since they are its read set, and each image
+        // GPUI draws.
+        for (layer, picture) in frame.layers.iter().zip(&pictures) {
             for drawn in &layer.marks {
                 match &drawn.mark {
                     Mark::Path {
@@ -1541,7 +1604,7 @@ impl Renderer {
                         crop,
                         opacity,
                         ..
-                    } if !session.players.contains_key(item) => {
+                    } if !session.players.contains_key(item) && picture.is_none() => {
                         let (image, _) = image_of(session, asset, *crop, *opacity, item)?;
                         let pixels = image.as_bytes(0).unwrap_or_default();
                         read.images
@@ -1724,6 +1787,7 @@ impl Renderer {
             images: HashMap::new(),
             resampled: HashMap::new(),
             resamples: 0,
+            plant: crate::asset::Plant::None,
             compiled: None,
             last_layers: BTreeMap::new(),
             texts: Map::new(),
@@ -1913,10 +1977,11 @@ impl Renderer {
         mut record: Record,
         clock: Clock,
         captures: &[(u32, String)],
-        store: Option<PathBuf>,
+        (store, image_plant): (Option<PathBuf>, crate::asset::Plant),
     ) -> Value {
         let mut session = Self::new_session();
         session.store = store;
+        session.plant = image_plant;
         let period = 705_600_000 / clock.hz;
         // Each frame is pinned to the host time live, or to the mapped record time in a replay.
         let pinned_at_0 = clock.replay.unwrap_or(clock.start);
@@ -1932,18 +1997,23 @@ impl Renderer {
                 let stale = !clock.arms_only_on_readings
                     && session.stale_at.is_some_and(|s| s <= record.pinned);
                 let armed = k == 0 || session.valid_until.is_some_and(|v| v <= t) || stale;
-                // Everything the vsync cost on the GPU, a layer picture it made included.
+                // Everything the vsync cost on the GPU, a layer picture it made included, and the
+                // images it read, decoded and uploaded (#1485).
                 let before = settled();
+                let counted = image_counts(&self.vello);
                 if armed {
                     self.present(&mut session, doc, look, view, &record, t, false, k > 0)?;
                 }
                 let after = settled();
+                let now = image_counts(&self.vello);
+                let [reads, decodes, uploads] = std::array::from_fn(|i| now[i] - counted[i]);
                 out.push(json!({
                     "t": t,
                     "presented": armed,
                     "command_buffers": after.committed - before.committed,
                     "gpu_ns": after.gpu_ns - before.gpu_ns,
                     "bound": session.bound,
+                    "images": {"reads": reads, "decodes": decodes, "uploads": uploads},
                 }));
                 for (_, path) in captures.iter().filter(|(v, _)| i64::from(*v) == k) {
                     self.capture(&session, path)?;
@@ -2052,10 +2122,11 @@ impl Renderer {
         t: i64,
         mut record: Record,
         (gpui_oklab, drops_glyph): (bool, bool),
-        store: Option<PathBuf>,
+        (store, image_plant): (Option<PathBuf>, crate::asset::Plant),
     ) -> Value {
         let mut session = Self::new_session();
         session.store = store;
+        session.plant = image_plant;
         record.pinned = t;
         // #1479: the frame report counts the glyphs the atlas rasterized and those drawn from its
         // largest raster for want of an outline, prepaint included.

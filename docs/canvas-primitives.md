@@ -7156,7 +7156,7 @@ For: a relay you run, or one you choose, that every copy, in the app or the web 
 
 **Cost:** Probe O(container index); a proxy costs about one encode
 
-**It can never:** Ship without a license that fits how it's shared; be decoded outside the worker; assume a color space it wasn't tagged with
+**It can never:** Ship without a license that fits how it's shared; be decoded outside the worker, except a still image, which decodes in process, in Rust, once its header fits the decode caps and the document's budget (Image `image@1`); assume a color space it wasn't tagged with
 
 **Lands:** R1 journey videos; R6
 
