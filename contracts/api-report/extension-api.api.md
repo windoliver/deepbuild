@@ -162,6 +162,41 @@ export interface Deep {
     registerIndex(params: {
         name: string;
     }): Promise<unknown>;
+    registerJob(params: {
+        kind: string;
+        job: {
+            schema: {
+                params: { [key: string]: unknown };
+                inputs: { [key: string]: unknown };
+            };
+            outputs: { [key: string]: unknown };
+            key: Array<"tool" | "params" | "inputs">;
+            output_checks: Array<string>;
+            qualification: {
+                fixtures: Array<{
+                    name: string;
+                    params: { [key: string]: unknown };
+                    inputs: { [key: string]: unknown };
+                    expect: { [key: string]: unknown };
+                }>;
+            };
+        };
+    }): Promise<unknown>;
+    registerJobTool(params: {
+        kind: string;
+        tool: {
+            tool: string;
+            params: { [key: string]: unknown };
+            run: {
+                dir: string;
+                entry: string;
+            };
+            qualification: { [key: string]: unknown };
+            cost?: {
+                usd: number;
+            };
+        };
+    }): Promise<unknown>;
     registerResolver(params: {
     }): Promise<unknown>;
     registerRoute(params: {

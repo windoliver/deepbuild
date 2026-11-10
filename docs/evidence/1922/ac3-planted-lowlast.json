@@ -1,0 +1,20 @@
+{
+  "install": {
+    "code": 1,
+    "stdout": "Source: /private/tmp/dh1922-R5MgPb/lowlast\n  test/upper-lowlast@1.0.0, digest d1:38abdc9f2bd909391933879061f72beba52aacc4d4f404a2c051de92db329e6d, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: none\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\n",
+    "stderr": "REFUSED: test/upper-lowlast's tool upper-lowlast@1.0.0 fails test.upper's qualification at the fixture fx-greeting: it wrote \"HELLo\" for text, where the fixture expects \"HELLO\", and it doesn't join test.upper, so test/upper-lowlast@1.0.0 isn't installed\n"
+  },
+  "kinds": [
+    {
+      "kind": "test.upper",
+      "plugin": "test/upper-kind",
+      "tools": [
+        {
+          "tool": "upper-a@1.0.0",
+          "plugin": "test/upper-kind",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876"
+        }
+      ]
+    }
+  ]
+}
