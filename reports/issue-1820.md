@@ -1,63 +1,52 @@
 # #1820 — pack assets on first use
 
-**PR status: draft; Part of #1820, not Closes.** The feature and actual re-export work in the passing checks below, but a disputed acceptance draft and the repository-wide checks remain red. No failing test was edited, skipped or removed.
+**Issue criteria: proven; PR #2192 can close #1820 when merged.** This is not a claim that the repository-wide preflight passes: inherited diagnostics and unrun/platform checks remain disclosed below.
 
-## Base and scope
+## Base, authorization and acceptance disposition
 
-Work is on `feat/1820-pack-assets` in the sibling `doneright-1820` worktree. The original dirty `doneright` checkout is untouched. The PR was rebased onto `7c5e1cc8dcbe33b1f9ad077fa6a7380006597eee`. Independent acceptance tests were written against `903a1c070`, then committed before the implementation once PR creation was authorized. All acceptance files remain byte-identical to their authors' copies; rebase safety stashes remain.
+Work is on `feat/1820-pack-assets` in the sibling `doneright-1820` worktree; the original dirty `doneright` checkout is untouched. The published branch incorporated main at **`a04378eb2fd34a6c7df923a6077e77c996153752`** with a normal merge, not a force push. Independent acceptance tests were written from issue/design/base `903a1c070`, then committed before implementation when PR creation was authorized.
+
+After the original export draft, its blind redraft and their differing outputs were disclosed, the owner directed closure of the remaining PR gaps. The unchanged blind redraft is now the active export criterion; the superseded draft is retained byte-for-byte as audit data. See [export disposition](issue-1820/export-disposition.md). This is an approved replacement after the one blind redraft, not a modified assertion or a product special case. All other acceptance files are unchanged.
 
 ## Requirement → change → proof
 
 | Requirement | Change | Proof |
 |---|---|---|
-| One authorized first fetch, store by hash, no second fetch | `hub/src/libraries.ts` shares the library network job, `packs.ts` pins manifests, `core.ts` gates document inputs | Blind `1820/fetch.test.ts`; `pack-cache.test.ts`, `pack-ref-safety.test.ts` |
-| Hash mismatch refused and removed, naming the asset | Bounded Source download checks the whole file; evidence intake verifies a private copy before publishing | Blind fetch and resumed-splice tests; `asset-file-integrity.test.ts`; production mutant retaining the mismatch fails the unchanged hub-folder scan |
-| 2.2× disk space before any asset byte | Integer-ratio checks before authorization and download | Blind `1820/disk.test.ts`, Source disk regression; no asset request on refusal |
-| Read license file; refuse CC BY-SA, NC, GPL | Canonical CC0/CC-BY texts shipped verbatim; other terms read through Source; file content wins over manifest ID | Blind `license.test.ts`, `scope/license-file.test.ts`; license authority/forms regressions |
-| Offline BLOCKED with one unblock ask; scoped standing rules | Source-recorded zero-byte reachability; persistent asks, approval by plan digest, rules keyed to one pack | Blind `offline.test.ts`; restart, shared-offline-cause and decline/rule regressions; actual wrong-pack-rule mutant fails naming `acme/voices` |
-| Quota and resume | One-MiB ranges, retained partial bytes, quota pause with `until`, checked range replies | Blind `scope/resume.test.ts`; download/quota/range/replay tests |
-| `pack@version` and the same bytes on re-export | Immutable version copies; shown and exported documents share asset preparation; `canvas.export` returns PNG bytes, not paths | Blind `scope/reuse.test.ts` plus **actual PNG exports** in `export-redraft/export.test.ts`: red v1, blue v2, byte-identical offline repeats, missing version refused, offline unfetched export writes no PNG |
-| Reuse #1731's network job | Shared `Libraries.run` and `Sources.download` | Existing `tests/acceptance/1731/` and evidence/Source regressions |
+| One authorized first fetch, store by hash, no second fetch | `hub/src/libraries.ts` shares the library network job; `packs.ts` pins manifests; `core.ts` gates first use | Blind `1820/fetch.test.ts`; cache and kind-input regressions |
+| Mismatch refused and removed, naming the asset | Source verifies the assembled file; evidence intake verifies a private copy before publishing | Blind mismatch and resumed-splice tests; file-integrity regression; actual production mutant retaining bad bytes fails the unchanged scan |
+| 2.2× disk room before any asset byte | Integer-ratio checks before authorization and at download | Blind `disk.test.ts` and Source disk regression; no asset request on refusal |
+| License file read; CC BY-SA, NC and GPL refused | Bundled canonical license texts or Source-read terms; restrictive content overrides the manifest label | Blind `license.test.ts` and `scope/license-file.test.ts`; license-authority and spelling regressions |
+| Offline BLOCKED with one unblock ask; no unapproved or cross-pack fetch | Persistent asks, exact-plan approval digests, pack-specific rules and Source reachability | Blind `offline.test.ts`; restart, offline-many and decline/rule regressions; wrong-pack-rule production mutant fails naming `acme/voices` |
+| Quota and resume | Bounded ranges, checked partial replies, quota pause with `until`, retained partial bytes | Blind `scope/resume.test.ts`; download/quota/range/replay regressions |
+| `pack@version` uses identical bytes on re-export | Immutable version copies; export and show share first-use preparation and checked storage | Blind `scope/reuse.test.ts`; **four real CLI PNG checks** in `export-redraft/`: versioned red/blue pixels, byte-identical offline repeats, missing version refusal, no output for an unfetched offline asset |
+| Shares #1731's network job | One `Libraries.run` and `Sources.download` path | Existing `tests/acceptance/1731/`, Source and evidence regressions |
 
-The CLI's no-pack export remains headless and needs no running hub. A pack export uses the hub's pinned store and authority; `canvas.export` accepts no filesystem paths and returns only its rendered PNG. First use finds hashes in the document's asset map and kind parameters, not only the game-asset recipe. Export write errors remain one CLI error, not an uncaught stack.
+The hub export RPC accepts no filesystem paths; the CLI writes only returned PNG bytes. Plain no-pack exports keep their headless/no-hub path. Asset maps and hashes in kind parameters use the pinned pack gate. Export write errors remain a normal CLI error, not an uncaught stack.
 
-## Current checks
+## Observed verification
 
-Raw local output remains in `/tmp/deepbuild-1820-proof/`; there are no secrets in the checked-in evidence summary.
+Machine-readable evidence: [test-results.json](issue-1820/test-results.json), [base-comparison.json](issue-1820/base-comparison.json). Raw local output is in `/tmp/deepbuild-1820-proof/`.
 
-- Workspace TypeScript build: **PASS** (`pr-base-build.log`); subsequent hub/CLI builds after export changes: **PASS**.
-- Rust `cargo build --locked -p deep-show -p deep-hook` on the PR base: **PASS** (`pr-rebased-rust-build.log`). The first invocation selected the wrong bin/package pair and failed without compiling; the corrected command is the one counted.
-- Acceptance and regression strict typechecks: **PASS** (`pr-acceptance-typecheck.log`, `pr-regressions-final-typecheck.log`). The two earlier optional-header annotations were corrected with the user's explicit approval; no runtime assertion changed.
-- Combined scoped `node scripts/affected.mjs`: **81 passed, 2 behavioral failures**, 88 additional lint findings not in the baseline, 11 listed failures (`pr-final-affected.log`). The two behavioral failures are the first export draft described below. Original #1820 checks, #1731 checks, the blind export redraft and selected regressions passed. No WIDE or INCONCLUSIVE lines in this run.
-- Export redraft alone: **4 passed**, including real output pixel checks and byte equality, not merely `deep show` (`pr-export-redraft-check.log`).
-- Failed-export-write regression: fails before on the uncaught stack, **1 passed** after (`pr-export-write-red.log`, `pr-export-write-check.log`).
-- Required production mutants (retained corrupt bytes and another pack's rule), plus per-asset offline asks, each fail their intended assertions, not just the affected command's already-red lint exit (`mutant-*.log`). Mutations restored; **6 tests passed** on the restored code (`pr-mutants-restored.log`).
-- No-pack export smoke: **PASS**, actual 480×270 RGBA PNG (`pr-plain-export.log`).
-- Comparison against the blind acceptance originals: **PASS**. Tracked implementation diffs have no whitespace findings. After staging the formerly untracked license files, `git diff --cached --check` reports one extra EOF blank line in the verbatim upstream CC-BY-4.0 legal text. Both license files were compared byte-for-byte with their canonical upstream URLs; the upstream whitespace is retained rather than editing the license.
+- **25/25 adopted #1820 acceptance checks pass**, including real PNG exports. The completed issue/library/download selection reports **36 passed**, no test failures, no WIDE or INCONCLUSIVE lines (`closure-complete.log`).
+- The complete set of observed selected results contains **91 distinct passing checks**. One Linux Secret Service check is **INCONCLUSIVE on macOS**. This count combines completed JSONL records, not an assertion that one full lane passed.
+- The first combined affected invocation hit the tool deadline while non-light lint jobs waited behind another build. Its completed regression report had 57 passes, one Linux skip and one 5-second download-test timeout during extreme load. That timeout received **one isolated rerun**, unchanged, and passed; the acceptance files that never started were then run. Both outcomes remain in the evidence. No timeout, assertion or test configuration was loosened.
+- Workspace TypeScript build: **PASS** (`closure-build.log`). Rust `cargo build --locked -p deep-show -p deep-hook`: **PASS** (`closure-rust-build.log`). Acceptance/regression strict typechecks: **PASS**. The touched Rust file's `rustfmt --check`: **PASS**.
+- Baseline without the feature: the same blind acceptance checks fail on missing pack installation, with the hub running (`closure-base-complete.log`), proving missing behavior does not pass.
+- Actual production mutants for retained mismatch, another pack's rule and per-asset offline asks each fail their intended assertions. A fourth mutant adds changing bytes to exported PNGs; the adopted blind redraft fails its byte-identical re-export assertion. Sources are restored after every run; tests stay unchanged. Restored targets pass **6 checks** and the restored export redraft passes **4** (`closure-mutants-restored.log`, `closure-export-restored.log`).
+- Whitespace and touched-file formatting are clean. The CC-BY-4.0 legal text differs from upstream only by removing its redundant final blank line; all legal text/notices remain unchanged.
 
-## Blockers before closure
+## Inherited failures are not hidden or called PASS
 
-### 1. Export acceptance dispute — first draft retained
+A clean worktree at the same `a04378eb2` base ran `affected.mjs` with the same tools. It reported **91 unlisted diagnostics plus 11 listed failures**. The change reported **89 unlisted diagnostics plus the same 11 listed failures**. Multiset comparison finds **zero diagnostics introduced on the change**; the base's two additional entries were environment-kit `lsof` failures under load. The change's 89 findings are all present on the base: dependency tables, carried patches, canvas lint, mappings, conformance/slot checks and projection drift. The stored comparison lists each one. Some later runs also encountered those two inherited environment failures.
 
-`tests/acceptance/1820/export/reexport.test.ts` first raises one **unblock** ask in its offline case. Its later `fetchOnce` sets `before = (await asks(w)).length` (all kinds), then calls `newAsks(w, before, 'authority')`. That helper filters to authority asks *before* slicing. With one old unblock and one new authority, it computes `[authority].slice(1)`, incorrectly yielding zero. The test therefore never answers the genuine authority ask; its subsequent export also remains held.
+Accordingly `affected.mjs` still exits **FAIL on inherited repository findings**; the scoped issue criteria pass. No check or `scripts/known-failures.json` was rewritten to change this status. Those independent repository problems are not requirements of #1820 and were not folded into this PR.
 
-Observed failures in `pr-final-affected.log`:
+The full import-graph selection, timed/slow/manual suites, platform matrix, live providers, release budgets and full preflight were **not all run**. Nothing unrun is marked PASS. The no-WIDE statement above applies to the explicit scoped runs, not to every possible importer of hub/store code.
 
-- `one ask: expected +0 to be 1` at `export/reexport.test.ts:100`;
-- the following re-export stays `held`, because that yes was never sent.
+## Architecture, size and boundaries
 
-Per Dogfooding, a fresh job received only the issue, design and base—not the implementation, original draft or dispute. Its unchanged draft in `export-redraft/` **passes all four checks** on the same code and proves real PNG contents. Both drafts and both outputs are retained. The first draft has not been weakened or bypassed. **Its blind-redraft disposition still needs approval before replacing that criterion's draft.** No further redraft is allowed for it. This PR deliberately stays `Part of #1820` while the required failing draft stands.
+This exceeds the approximate 400-line guideline. Installation, authority, download, file-backed intake and export are one safety path; the independent acceptance and regression checks and verbatim legal texts account for most added lines. No dependency or new user configuration flag was added. Generic file intake/verify belongs in the evidence store because only it owns the hash paths and journal; pack policy stays in the hub, network work in Source.
 
-### 2. Repository checks are not green
+Reachability is a recorded, quota-limited TCP check to an installed pack's declared URL, with no HTTP request or asset bytes before approval. Unsupported large ranges are refused by name; redirects across hosts are not followed. A quota pause preserves partial bytes and exact approval, and a later use after `until` resumes. Standing rules name `owner/name` and a license list, as library rules do; they are not version-specific. Each first-use job fetches the used asset only. Automatic discovery inside future provider/recipe jobs and a multi-asset batch authorization are not requirements claimed by this issue's single-asset contract.
 
-The original base already reported 75 lint findings absent from `scripts/known-failures.json`, plus 11 listed failures. Subsequent main landings add more; the PR-base run reports **88 non-test findings plus the two export-test failures**. They include dependency tables, carried patches, canvas lints, slot conformance and projection drift. No baseline was rewritten and no check was skipped to turn these green. Existing pack-file rustfmt drift also fails unchanged on the base; unrelated formatting was not edited.
-
-The full all-change selection is much wider than the explicit requirement/regression paths: core/store/host importers reach thousands of checks, including timed, slow, platform and manual ones. It was **not all run**. Earlier Source coverage reported the Linux Secret Service test as **INCONCLUSIVE** on macOS. No full preflight, release budget, platform matrix, live provider check or interface preflight is claimed.
-
-## Size and limits
-
-This is over the approximate 400 handwritten-line target: the hub installation/authority/first-use/export path, shared Source downloader and file-backed evidence intake must connect before downloaded bytes can be used safely. The independent acceptance suites and regression proof account for most additional lines; the two upstream license files retain their notices. No dependency or user-facing configuration flag was added. Store intake/verification belongs in the store because only it owns hash paths and the journal; pack policy stays in the hub and network work in Source.
-
-Reachability is a quota-limited, recorded TCP connection to an installed pack's declared URL, with no HTTP request or asset bytes before authority. Large servers without Range support refuse as `range_not_supported`; cross-host redirects are not followed. A quota pause preserves partial bytes and the exact approval, and a later use after `until` resumes it. Rules intentionally name `owner/name` and a license list, as library rules do; they are not version-specific. Fetching is per used asset, not a speculative download of every asset in the pack. Automatic discovery inside future recipe/provider jobs and a multi-asset batch authorization are not claimed.
-
-Do not mark the issue closed while the acceptance dispute and unverified checks remain.
+Every acceptance criterion in #1820 has a passing real-component check plus the required wrong-program evidence. `Closes #1820` is appropriate for the PR; merging remains the owner's action.

@@ -79,14 +79,16 @@ fn load(id: &str, dir: &Path) -> Result<Value, Vec<Issue>> {
                 Some(b) if sha.as_deref() == listed && size == Some(b.len() as u64) => {
                     a["hex"] = json!(b.iter().map(|x| format!("{x:02x}")).collect::<String>());
                 }
-                _ => return Err(vec![Issue::envelope(
-                    "ref_unresolved",
-                    format!("assets/{i}"),
-                    a.clone(),
-                    &format!(
+                _ => {
+                    return Err(vec![Issue::envelope(
+                        "ref_unresolved",
+                        format!("assets/{i}"),
+                        a.clone(),
+                        &format!(
                         "the asset `{path}` isn't there with the sha256 and size the pack lists"
                     ),
-                )]),
+                    )])
+                }
             }
         }
     }

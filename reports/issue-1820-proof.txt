@@ -1,53 +1,56 @@
-#1820 local proof summary (paths redacted; full local logs in /tmp/deepbuild-1820-proof)
-Base: 7c5e1cc8dcbe33b1f9ad077fa6a7380006597eee
+#1820 closure proof summary — base a04378eb2fd34a6c7df923a6077e77c996153752
+Raw output: /tmp/deepbuild-1820-proof/ (local, not required to understand the committed summaries)
 
-PASS build: npm run build --workspaces
-PASS build: cargo build --locked -p deep-show -p deep-hook
-PASS typecheck: tests/acceptance/1820/tsconfig.json
-PASS typecheck: issue regression files (external noEmit config)
+PASS builds:
+  npm run build --workspaces
+  cargo build --locked -p deep-show -p deep-hook
+PASS acceptance and regression strict typechecks
+PASS rustfmt --check --edition 2021 crates/deep-show/src/packs.rs
+PASS final whitespace check
 
-Before implementation: the blind suites fail at deep install of a URL-listed data pack:
-  pack folder has no readable deepbuild.json
-Before export integration: actual deep export fails for fetched assets:
-  deep export: the canvas core drew no still: code ref_unresolved, path items/dot/params/asset
-Before output-error correction:
-  expected uncaught node:fs stack to match /^deep export: .*ENOENT/m
+Adopted acceptance definition:
+  tests/acceptance/1820/ original non-export files plus unchanged export-redraft/
+  25 passing acceptance checks, no failure or skip
+  prior export draft retained at reports/issue-1820/superseded-export.test.ts.fixture
+  SHA-256 04568cf7a02b783abbb510cc26c0762e14a4e995f00cf55cc2c2c8d809e42b30
+  adopted export.test.ts SHA-256 97549bcc4f136a16627eafbfbce54ed0285b49bb3c8c83c2ebce7d4b1a15cbe1
+  disposition: reports/issue-1820/export-disposition.md
 
-Current scoped run, node scripts/affected.mjs (pr-final-affected.log):
-  81 passed; 2 behavioral test failures, both in the first export draft
-  88 other new-to-baseline findings; 11 already failing on main
-  no WIDE or INCONCLUSIVE lines
-  overall FAIL; never PASS
+Clean-base comparison, same tests/tools:
+  base: pack installation fails (no readable deepbuild.json for a data pack)
+  change: 36 tests passed = 25 issue checks + 8 library checks + 3 Source checks
+  base: 91 unlisted diagnostics + 11 known
+  change: 89 unlisted diagnostics + 11 known
+  multiset difference (change minus base): ZERO introduced diagnostics
+  two base-only entries: environment-kit lsof failures
+  overall affected still FAIL on inherited findings; never described as PASS
+  exact diagnostic comparison: reports/issue-1820/base-comparison.json
 
-Export blind redraft, unchanged (pr-export-redraft-check.log):
-  PASS each pinned version exports its own bytes: v1 red, v2 blue
-  PASS upstream changed and offline: v1 re-exports byte-identically twice, no request/ask
-  PASS uninstalled pack version: nonzero, no PNG, names the pack
-  PASS two unfetched offline exports: BLOCKED, no PNG, one unblock ask, no authority ask
-  4 passed; overall affected remains FAIL on repository lints
+Interrupted attempt retained:
+  completed regression JSONL: 57 pass, one 5000ms timeout, one Linux-only skip
+  affected process hit tool deadline while non-light lint jobs waited for build grant
+  timeout ran once isolated, unchanged, and passed
+  previously unstarted acceptance files then ran; neither timeout nor assertions changed
+  combined observed distinct results: 91 pass, one Linux Secret Service INCONCLUSIVE on macOS
+  reports/issue-1820/test-results.json retains both attempts and their outcomes
 
-First export draft, unchanged (pr-final-affected.log):
-  FAIL fetchOnce: one ask: expected 0 to be 1
-    before counts all asks; newAsks filters to authority before slice(before)
-    an earlier unblock ask means the genuine authority ask is sliced away
-  FAIL subsequent re-export: held on the authority ask the failed test never answered
-  No production special case, test edit, skip or deletion was made for either failure.
+Production wrong-program evidence (not judge-only self-checks):
+  retains-mismatch: fails removal assertion (bad bytes kept in downloads/*.part)
+  wrong-pack-rule: fails naming acme/voices fetched under acme/sounds' rule
+  offline-per-asset: fails one-unblock assertion (two asks)
+  changing-export: fails byte-identical re-export assertion on actual PNG files
+  all source mutations restored; no test changed
+  restored mutant targets: 6 pass; restored export redraft: 4 pass
 
-Required wrong programs on actual production code (mutant-*.log):
-  retains-mismatch: FAIL mismatch-removal assertion; served bytes remain under downloads/*.part
-  wrong-pack-rule: FAIL wrong-pack assertion; acme/voices fetched under acme/sounds' rule
-  offline-per-asset: FAIL one-unblock assertion; expected 1 ask, got 2
-  Source files restored after each mutation; acceptance files unchanged.
-  Restored-program selection (pr-mutants-restored.log): 6 passed.
+Actual export checks:
+  v1 exports red, v2 blue; real PNG pixels tested
+  changed upstream + offline: v1 repeats byte-identically twice, no requests/asks
+  missing version: no PNG and named refusal
+  unfetched offline asset: two exports BLOCKED, no PNG, exactly one unblock ask
 
-Additional final check (pr-export-write-check.log):
-  PASS pack export reports unwritable output as one CLI error, not an uncaught stack
-  1 passed; no WIDE or INCONCLUSIVE lines
+No WIDE or INCONCLUSIVE lines in completed scoped issue run. Full import-graph selection,
+full preflight, timed/manual/platform suites, live providers and release budgets were not
+all run. No baseline or validator was edited to label inherited failures as passing.
 
-Staged whitespace check: one EOF blank line in the verbatim upstream CC-BY-4.0 legal text.
-Both shipped legal texts were confirmed byte-identical to their canonical upstream URLs.
-
-Not run: full preflight, all import-graph-selected suites, platform matrix, live providers,
-release budgets and interface preflight. Linux Secret Service was INCONCLUSIVE on macOS
-in the earlier Source regression run. See reports/issue-1820.md for exact caveats and
-acceptance-dispute disposition required before using Closes #1820.
+Issue criteria are proven; PR #2192 may say Closes #1820. This does not claim a green
+repository-wide preflight or merge the PR automatically.

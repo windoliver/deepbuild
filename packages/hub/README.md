@@ -30,7 +30,7 @@ The top of the TypeScript stack under the CLI: the core packages and the first-p
 
 ## Deviations
 
-- `licenses/`: verbatim CC0 1.0 and CC BY 4.0 legal texts from Creative Commons' canonical `legalcode.txt` URLs. These two canonical terms URLs read their shipped files without network access; any other terms URL is read through the Source block after authorization. Their notices are retained.
+- `licenses/`: CC0 1.0 and CC BY 4.0 legal texts from Creative Commons' canonical `legalcode.txt` URLs, unchanged except one redundant EOF blank line removed from CC BY. These two canonical terms URLs read their shipped files without network access; any other terms URL is read through the Source block after authorization. All legal text and notices are retained.
 - `native/dev.deepbuild.confirm.policy`: the polkit action the hub asks on Linux (#70): your own password each time, never kept. Root installs it; `deep doctor` says so while it's missing.
 - `native/deep-confirm.swift`: a Swift helper, built into `dist/` on macOS only by `native/build.mjs`, through which the hub asks the OS to confirm you (#24).
 - `src/plant.ts`: every planted wrong program the tests select with `DEEP_HUB_PLANT`, in one module so a proof lane's twin can lay a wrong program over this file alone.
