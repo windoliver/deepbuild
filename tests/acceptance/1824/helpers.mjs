@@ -21,7 +21,6 @@ export const LOCK = 'scripts/fetch-lock.json';
 export const CACHE = ['.deepbuild', 'fetched'];
 /** The one variable that allows the network. */
 export const NETWORK = 'DEEP_FETCH_NETWORK';
-export const twin = (name) => join(HERE, 'twins', `${name}.mjs`);
 export const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 /** A pinned commit: 40 hex characters. */

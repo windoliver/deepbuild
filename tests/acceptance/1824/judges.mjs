@@ -1,6 +1,6 @@
 // #1824's judges: each runs a fetcher script as a process, as a lane would, in a sandbox, and answers its failures, one
-// line each. An empty list means the script met the criterion. The tests hold the real script (scripts/fetch-lock.mjs)
-// to an empty list, and each planted twin to the failure its criterion names.
+// line each. An empty list means the script met the criterion. The tests hold the checkout's script (scripts/fetch-lock.mjs)
+// to an empty list; the before lane lays each planted twin (twins/<name>/) over that path, where the same tests fail.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { clip, FILES, HERE, NETWORK, sandbox, sha256, UNLISTED } from './helpers.mjs';
