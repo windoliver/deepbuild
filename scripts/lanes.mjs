@@ -351,6 +351,8 @@ byHand.push('tests/acceptance/405/budgets.test.ts');
 alone.push('tests/acceptance/544/');
 // #2015's file builds deep-show in the full set and runs it on a plate and a recipe pack.
 alone.push('tests/acceptance/2015/');
+// #1976's file builds deep-gpu and clicks 200 seeded rays through seven views of a plane and a sphere.
+alone.push('tests/acceptance/1976/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
