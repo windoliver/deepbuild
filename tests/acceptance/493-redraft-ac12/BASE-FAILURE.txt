@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-493-929fac/agent-ae355f500511b416f/tests/acceptance/493-redraft-ac12
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-493-929fac/agent-ae355f500511b416f/tests/acceptance/493-redraft-ac12
 
  ❯ place.test.ts (4 tests | 4 failed) 1259ms
    ❯ AC12: a shot's framing puts the kept items' center at its place (4)

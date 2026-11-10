@@ -423,6 +423,14 @@ impl Scale {
             };
             let periods = &compiled.periods;
             let domains: Vec<[f64; 2]> = periods.domains(values).into_iter().map(shape).collect();
+            // A set with no rows has no period to follow.
+            if domains.is_empty() {
+                return refuse("bad_scale", format!("{path}/domain"));
+            }
+            // A log scale holds no value at or below 0.
+            if kind == ScaleKind::Log && domains.iter().any(|d| d[0] <= 0.0) {
+                return refuse("out_of_range", format!("{path}/domain"));
+            }
             let (period, fraction) = periods.span_at(at);
             let (a, b) = (
                 domains[period],
@@ -463,7 +471,8 @@ impl Scale {
                 None => return refuse("bad_scale", format!("{path}/domain")),
             },
         };
-        if domain[1] <= domain[0] {
+        // A log scale holds no value at or below 0.
+        if domain[1] <= domain[0] || (kind == ScaleKind::Log && domain[0] <= 0.0) {
             return refuse("out_of_range", format!("{path}/domain"));
         }
         let step = step_of(kind, domain);
@@ -1517,7 +1526,7 @@ fn series_window(p: &Map<String, Value>, t: &[f64], path: &str) -> Result<(f64, 
             [a, b] => (a.as_f64().unwrap_or(0.0), b.as_f64().unwrap_or(0.0)),
             _ => return refuse("bad_doc", format!("{path}/window")),
         },
-        Some(Value::Object(w)) => {
+        Some(Value::Object(w)) if n > 0 => {
             let last = w.get("last").and_then(Value::as_u64).unwrap_or(n as u64) as usize;
             (t[n.saturating_sub(last.max(1))], t[n - 1])
         }
@@ -2427,5 +2436,75 @@ mod tests {
                 "{category}'s swatch is its line, dashed as it is: {legend:?}"
             );
         }
+    }
+
+    #[test]
+    fn an_empty_series_with_a_last_window_keeps_no_rows() {
+        let empty = |dtype: &str| json!({"dtype": dtype, "len": 0, "data": ""});
+        let series = json!({"params": {"t": empty("i64"), "v": empty("f32"),
+            "window": {"last": 5}, "box": [0, 0, 3, 60]}});
+        let d = decimated("s", &series, Decimate::M4).unwrap();
+        assert_eq!(d.rows(), Vec::<usize>::new());
+        assert_eq!(d.window, (0.0, 0.0));
+    }
+
+    #[test]
+    fn a_log_scale_whose_domain_reaches_zero_is_refused() {
+        for domain in [[0, 100], [-5, 100]] {
+            let scale = json!({"params": {"type": "log", "domain": domain, "range": [0, 300]}});
+            let r = scale_of("s", &scale).expect_err("a log scale holds no value at or below 0");
+            assert_eq!(
+                (r.code, r.path.as_str()),
+                ("out_of_range", "items/s/params/domain")
+            );
+        }
+    }
+
+    /// A log scale `ys` and a bar set of two years through it, whose bars start at zero.
+    fn bars_on_a_log_scale(domain: Value, n: usize) -> Value {
+        let i32s = |v: &[i32]| {
+            let bytes: Vec<u8> = v.iter().flat_map(|x| x.to_le_bytes()).collect();
+            json!({"dtype": "i32", "len": v.len(), "data": deep_canvas::base64::encode(&bytes)})
+        };
+        let mut ys = json!({"kind": "scale@1", "params": {"type": "log", "range": [180, 20]}});
+        if !domain.is_null() {
+            ys["params"]["domain"] = domain;
+        }
+        json!({
+            "ys": ys,
+            "bars": {"kind": "marks@1", "params": {
+                "mark": "bar", "n": n, "key": "key",
+                "columns": {"year": i32s(&[2000, 2001][..n]),
+                            "key": {"dtype": "str", "len": n, "data": vec!["a"; n]},
+                            "value": i32s(&[10, 40][..n])},
+                "transforms": [{"periods": {"by": "year", "at": 2000}}],
+                "encode": {"x": 0, "y": {"column": "value", "scale": "ys"}}}},
+        })
+    }
+
+    #[test]
+    fn a_log_scale_a_bar_widens_to_zero_is_refused() {
+        for domain in [Value::Null, json!("periods")] {
+            let items = bars_on_a_log_scale(domain.clone(), 2);
+            let items = items.as_object().unwrap();
+            let r = Scale::read("ys", &items["ys"], items).expect_err("a bar starts at zero");
+            let found = (r.code, r.path.as_str());
+            assert_eq!(
+                found,
+                ("out_of_range", "items/ys/params/domain"),
+                "{domain}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_scale_that_follows_the_periods_of_a_set_with_no_rows_is_refused() {
+        let items = bars_on_a_log_scale(json!("periods"), 0);
+        let items = items.as_object().unwrap();
+        let r = Scale::read("ys", &items["ys"], items).expect_err("no period gives a domain");
+        assert_eq!(
+            (r.code, r.path.as_str()),
+            ("bad_scale", "items/ys/params/domain")
+        );
     }
 }

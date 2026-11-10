@@ -267,7 +267,9 @@ export class Acceptance {
   }
   /** In the background; whatever stops its judging is its result, never a job left judged by no one. */
   private judging(e: Entry): void {
-    void this.judge(e).catch((error: unknown) => this.end(e, 'refused', `its judging failed: ${error instanceof Error ? error.message : String(error)}`));
+    void this.judge(e).catch((error: unknown) => this.end(e, 'refused', `its judging failed: ${error instanceof Error ? error.message : String(error)}`))
+      // Left with no result, it is judged again at the next start.
+      .catch((error: unknown) => process.stderr.write(`deep hub: ${e.issue}'s blind job result wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
   }
   private settling(e: Entry, d: Dispute): void {
     void this.settle(e, d).catch((error: unknown) => this.ask(e, d, `its judging failed: ${error instanceof Error ? error.message : String(error)}`)).catch(() => undefined);

@@ -254,7 +254,7 @@ impl Flarer {
             ];
         }
         let w = f64::from(size[0]);
-        let spikes = if flare.blades % 2 == 0 {
+        let spikes = if flare.blades.is_multiple_of(2) {
             flare.blades
         } else {
             2 * flare.blades

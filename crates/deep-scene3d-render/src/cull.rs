@@ -651,7 +651,9 @@ impl Culled {
             }
         });
         let test = if occluded {
-            self.views[k].as_mut().map(|v| v.key = None);
+            if let Some(v) = self.views[k].as_mut() {
+                v.key = None;
+            }
             match (&self.tests[k], &self.views[k]) {
                 (Some(t), Some(v)) => Some(Occlude {
                     pipeline: kernels.occlude.clone(),

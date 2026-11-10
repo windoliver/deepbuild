@@ -737,7 +737,6 @@ impl Drawn {
         into: &wgpu::Texture,
         rect: [u32; 4],
     ) {
-        let f = |v: f64| v as f32;
         let flags = Self::tooth_flag(page) | if linear { 4 } else { 0 };
         let w = self.medium_words(page, m, flags);
         let tile = self.tile_or_grain(device, page);

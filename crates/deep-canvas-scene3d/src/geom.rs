@@ -532,7 +532,8 @@ impl Mesh {
     ) -> (std::sync::Arc<Vec<[V3; 2]>>, bool) {
         use std::collections::HashMap;
         use std::sync::{Arc, Mutex, OnceLock};
-        static MADE: OnceLock<Mutex<HashMap<[u8; 16], Arc<Vec<[V3; 2]>>>>> = OnceLock::new();
+        type Made = HashMap<[u8; 16], Arc<Vec<[V3; 2]>>>;
+        static MADE: OnceLock<Mutex<Made>> = OnceLock::new();
         let below = planted == Some("crease_below_angle");
         let mut h = deep_canvas::schedule::Hasher::new("scene3d.creases");
         h.bytes(&(&self.positions, &self.indices).canonical_bytes())

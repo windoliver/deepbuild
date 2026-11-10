@@ -202,7 +202,12 @@ pub const VISIBLE_ROWS: usize = 200;
 /// covers some of it, as `{id, box: [x, y, w, h]}`, sorted by ID, at most [`VISIBLE_ROWS`].
 /// `top` (straight-alpha RGBA) drawn over `base` (RGBA) in place, source over.
 pub fn over(base: &mut [u8], top: &[u8]) {
-    for (b, t) in base.chunks_exact_mut(4).zip(top.chunks_exact(4)) {
+    for (b, t) in base
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(top.as_chunks::<4>().0)
+    {
         let a = u32::from(t[3]);
         if a == 0 {
             continue;

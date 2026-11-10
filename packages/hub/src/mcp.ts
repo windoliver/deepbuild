@@ -82,16 +82,28 @@ class Hub {
 
   /** The client's own name, from its initialize. */
   client: unknown;
+  /** The hub's ID of each call in flight, by the client's request ID (#1923). */
+  private readonly inFlight = new Map<string, string>();
   /** One deep_* call through the hub: its result, or the refusal or unreachability as error@2. */
-  async call(tool: string, args: unknown): Promise<{ ok: boolean; value: unknown }> {
+  async call(tool: string, args: unknown, request?: unknown): Promise<{ ok: boolean; value: unknown }> {
     if (!(await this.connect()) || !this.sock) return { ok: false, value: unreachable('no answer on its socket') };
     const id = `mcp#${++this.ids}`;
+    const mine = JSON.stringify(request ?? null);
+    this.inFlight.set(mine, id);
     const reply = await new Promise<Obj>((resolve) => {
       const timer = setTimeout(() => { this.waiting.delete(id); resolve({ error: unreachable('it did not answer in time') }); }, answerWaitMs(this.client));
       this.waiting.set(id, (message) => { clearTimeout(timer); resolve(message); });
       this.sock!.write(line({ id, method: 'mcp.call', params: { tool, arguments: args ?? {} } }));
-    });
+    }).finally(() => { if (this.inFlight.get(mine) === id) this.inFlight.delete(mine); });
     return 'error' in reply ? { ok: false, value: reply.error } : { ok: true, value: reply.result };
+  }
+  /** The client cancelled a request (#1923): the hub is told that call's caller is gone, and its reply is never sent. */
+  cancel(request: unknown): boolean {
+    const id = this.inFlight.get(JSON.stringify(request ?? null));
+    if (id === undefined || !this.sock) return false;
+    this.inFlight.delete(JSON.stringify(request ?? null));
+    this.sock.write(line({ id: `${id}:cancel`, method: 'mcp.cancel', params: { call: id } }));
+    return true;
   }
 }
 
@@ -108,6 +120,7 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
   const send = (message: Obj) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
   const lines = createInterface({ input: process.stdin });
   const calls: Promise<void>[] = [];
+  const cancelled = new Set<string>();
   for await (const raw of lines) {
     let request: Obj;
     try {
@@ -118,6 +131,11 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
     }
     const { id, method } = request;
     const params = (request.params ?? {}) as Obj;
+    // A cancelled request gets no reply, and the hub drops it as one of its job's callers (#1923).
+    if (id === undefined && method === 'notifications/cancelled') {
+      if (hub.cancel(params.requestId)) cancelled.add(JSON.stringify(params.requestId ?? null));
+      continue;
+    }
     if (id === undefined) continue; // a notification
     switch (method) {
       case 'initialize':
@@ -148,7 +166,8 @@ export async function runMcp(server: 'deep' | 'deep-actions' = 'deep'): Promise<
           break;
         }
         // A call that waits, such as deep_wait, holds up no other call.
-        calls.push(hub.call(name, params.arguments).then(({ ok, value }) => {
+        calls.push(hub.call(name, params.arguments, id).then(({ ok, value }) => {
+          if (cancelled.delete(JSON.stringify(id))) return;
           // A plug-in action that started and failed is an error the agent sees, with its report (#363).
           const failed = ok && server === 'deep-actions' && (value as { status?: unknown } | null)?.status === 'failed';
           send({ id, result: { content: [{ type: 'text', text: JSON.stringify(value) }], isError: !ok || failed, ...(ok ? { structuredContent: value } : {}) } });
