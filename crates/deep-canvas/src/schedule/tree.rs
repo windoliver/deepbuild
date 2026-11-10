@@ -35,9 +35,14 @@ struct Block {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Levels(Vec<Vec<Key>>);
 
+/// The hash of at most [`CHUNK`] keys, gathered on the stack.
 fn chunk(keys: &[Key]) -> Key {
-    let bytes: Vec<u8> = keys.iter().flat_map(|k| k.0).collect();
-    Hasher::of(HashVersion::V2, "chunk").bytes(&bytes).finish()
+    let mut bytes = [0u8; CHUNK * 16];
+    let used = &mut bytes[..keys.len() * 16];
+    for (slot, k) in used.as_chunks_mut::<16>().0.iter_mut().zip(keys) {
+        *slot = k.0;
+    }
+    Hasher::of(HashVersion::V2, "chunk").bytes(used).finish()
 }
 
 fn pair(a: &Key, b: &Key) -> Key {

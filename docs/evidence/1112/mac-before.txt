@@ -50,7 +50,7 @@ $ top CPU
 69807   8.8 132528 /Applications/Claude.app/Contents/MacOS/Claude
 45270   8.5  14320 /usr/libexec/coreduetd
 45203   7.3  96528 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/153.0.8010.53/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)
-68762   4.5 101424 openclaw-gateway
+68762   4.5 101424 <another app's gateway>
  1349   4.1  25984 /Applications/Utilities/Adobe Sync/CoreSync/Core Sync.app/Contents/MacOS/Core Sync
 39549   3.6  78336 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/153.0.8010.53/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)
 

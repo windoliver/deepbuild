@@ -29,7 +29,7 @@
         { "mark": "DeepBuild", "owner": "Creatr (getcreatr.com)", "status": "unregistered; claimed as a trademark in the company's terms of use", "classes": [9, 42], "similarity": "identical", "note": "An AI agent product that builds web apps. No registration was found in TMview. The closest use to DeepBuild's own: identical name, software, AI agents." },
         { "mark": "DeepBuild", "owner": "DeepBuild (deepbuild.tech)", "status": "unregistered; in use", "classes": [42], "similarity": "identical", "note": "An agentic-AI services company in India." },
         { "mark": "DeepBuild", "owner": "DeepBuild (deepbuild.co.uk)", "status": "unregistered; in use", "classes": [9, 42], "similarity": "identical", "note": "A UK firm describing a containment layer for autonomous AI agents." },
-        { "mark": "deepbuild", "owner": "martinbowling/deepbuild (GitHub)", "status": "unregistered; an open-source project", "classes": [9], "similarity": "identical", "note": "A DeepSeek-powered coding assistant." }
+        { "mark": "deepbuild", "owner": "martinbowling/deepbuild (GitHub)", "status": "unregistered; an open-source project", "classes": [9], "similarity": "identical", "note": "A coding assistant built on an outside model." }
       ]
     }
   ],

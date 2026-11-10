@@ -397,8 +397,9 @@ struct Text {
     /// #1479: glyphs above [`OUTLINE_ABOVE`] device px drawn from the atlas's largest raster,
     /// since their face holds no outline.
     from_largest: u64,
-    /// The runs the frame since [`begin_frame`] drew from, each once.
-    frame: HashSet<ShapeKey>,
+    /// The runs the frame since [`begin_frame`] drew from, each once; `None` until a caller
+    /// starts counting, so an app that never asks keeps no set of every text it ever shaped.
+    frame: Option<HashSet<ShapeKey>>,
     /// Per window (each has its own sprite atlas), the generation of each page it holds, so a
     /// changed page is uploaded again, once, and the page it replaces is let go.
     uploaded: HashMap<WindowId, HashMap<u32, Held>>,
@@ -416,7 +417,7 @@ impl Text {
             shaped: HashMap::new(),
             outlines: HashMap::new(),
             from_largest: 0,
-            frame: HashSet::new(),
+            frame: None,
             uploaded: HashMap::new(),
             new_glyphs: None,
             whole_page: false,
@@ -427,7 +428,11 @@ impl Text {
     /// emptied whole at 4,096 runs, so a frame of more than that shapes some of them again.
     fn shape(&mut self, label: &Label) -> Arc<Shaped> {
         let key = ShapeKey::of(label);
-        self.frame.insert(key.clone());
+        if let Some(frame) = &mut self.frame {
+            if !frame.contains(&key) {
+                frame.insert(key.clone());
+            }
+        }
         if let Some(shaped) = self.shaped.get(&key) {
             return shaped.clone();
         }
@@ -597,13 +602,16 @@ pub fn from_largest() -> u64 {
 
 /// Starts counting the distinct runs a frame draws from; see [`frame_runs`].
 pub fn begin_frame() {
-    TEXT.with(|text| text.borrow_mut().frame.clear());
+    TEXT.with(|text| match &mut text.borrow_mut().frame {
+        Some(frame) => frame.clear(),
+        unwatched => *unwatched = Some(HashSet::new()),
+    });
 }
 
 /// How many distinct runs the labels since [`begin_frame`] were shaped as: two labels with one
 /// text, font, size and weight are one run.
 pub fn frame_runs() -> usize {
-    TEXT.with(|text| text.borrow().frame.len())
+    TEXT.with(|text| text.borrow().frame.as_ref().map_or(0, HashSet::len))
 }
 
 /// Lets GPUI drop a page it holds at the next frame, never in this one: sprites already queued

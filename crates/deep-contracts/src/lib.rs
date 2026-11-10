@@ -181,6 +181,16 @@ impl Parser<'_> {
         self.expect(b'"')?;
         let mut out = Vec::new();
         loop {
+            // The run up to the next quote, escape or control character goes over in one copy.
+            let start = self.at;
+            while self
+                .bytes
+                .get(self.at)
+                .is_some_and(|b| !matches!(b, b'"' | b'\\' | 0x00..=0x1f))
+            {
+                self.at += 1;
+            }
+            out.extend_from_slice(&self.bytes[start..self.at]);
             let byte = self
                 .peek()
                 .ok_or_else(|| self.error("an unterminated string"))?;
@@ -221,8 +231,7 @@ impl Parser<'_> {
                     let mut buffer = [0; 4];
                     out.extend_from_slice(c.encode_utf8(&mut buffer).as_bytes());
                 }
-                0x00..=0x1f => return Err(self.error("a control character in a string")),
-                _ => out.push(byte),
+                _ => return Err(self.error("a control character in a string")),
             }
         }
         String::from_utf8(out).map_err(|e| e.to_string())
@@ -252,9 +261,12 @@ impl Parser<'_> {
     }
 
     fn object(&mut self, depth: usize) -> Result<Value, String> {
+        /// The most members an object's keys are scanned for a repeat, before a table holds them.
+        const SCANNED: usize = 16;
         self.expect(b'{')?;
         let mut members: Vec<(String, Value)> = Vec::new();
-        let mut index: HashMap<String, usize> = HashMap::new();
+        // A table of the keys only once a scan of them would cost more: most objects are small.
+        let mut index: Option<HashMap<String, usize>> = None;
         self.space();
         if self.peek() == Some(b'}') {
             self.at += 1;
@@ -268,11 +280,26 @@ impl Parser<'_> {
             self.space();
             let value = self.value(depth + 1)?;
             // As JSON.parse does, a repeated key keeps its last value.
-            match index.get(&key) {
-                Some(&i) => members[i].1 = value,
+            let at = match &index {
+                Some(index) => index.get(&key).copied(),
+                None => members.iter().position(|(k, _)| *k == key),
+            };
+            match at {
+                Some(i) => members[i].1 = value,
                 None => {
-                    index.insert(key.clone(), members.len());
+                    if let Some(index) = &mut index {
+                        index.insert(key.clone(), members.len());
+                    }
                     members.push((key, value));
+                    if index.is_none() && members.len() > SCANNED {
+                        index = Some(
+                            members
+                                .iter()
+                                .enumerate()
+                                .map(|(i, (k, _))| (k.clone(), i))
+                                .collect(),
+                        );
+                    }
                 }
             }
             self.space();

@@ -250,7 +250,11 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
     // A pack's name is a kind family of its own: one a canvas module registers, or a module's
     // name, would capture that module's kinds.
     if sealed.module(&id.name).is_some()
-        || sealed.kinds().entries().iter().any(|e| e.family == id.name)
+        || sealed
+            .kinds_ref()
+            .entries()
+            .iter()
+            .any(|e| e.family == id.name)
     {
         issues.push(bad(
             "name",

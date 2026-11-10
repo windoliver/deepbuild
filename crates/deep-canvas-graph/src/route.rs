@@ -81,12 +81,14 @@ fn port(rect: [f64; 4], side: Side, slot: usize, slots: usize) -> (f64, f64) {
     }
 }
 
-fn inside(rect: &[f64; 4], c: f64, p: (f64, f64)) -> bool {
+/// Whether `v` is strictly inside the span from `lo` over `len`, grown by the clearance `c`.
+fn within(lo: f64, len: f64, c: f64, v: f64) -> bool {
     const EPS: f64 = 1e-9;
-    p.0 > rect[0] - c + EPS
-        && p.0 < rect[0] + rect[2] + c - EPS
-        && p.1 > rect[1] - c + EPS
-        && p.1 < rect[1] + rect[3] + c - EPS
+    v > lo - c + EPS && v < lo + len + c - EPS
+}
+
+fn inside(rect: &[f64; 4], c: f64, p: (f64, f64)) -> bool {
+    within(rect[0], rect[2], c, p.0) && within(rect[1], rect[3], c, p.1)
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -196,9 +198,22 @@ fn search(
     let (nx, ny) = (xs.len(), ys.len());
     let at = |i: usize, j: usize| j * nx + i;
     let free = |p: (f64, f64)| !rects.iter().any(|r| inside(r, c, p));
-    let ok: Vec<bool> = (0..nx * ny)
-        .map(|k| free((xs[k % nx], ys[k / nx])))
-        .collect();
+    // A box blocks the lanes inside its two spans: each box marks its own cells, where
+    // asking every cell about every box was cubic in the boxes.
+    let mut ok = vec![true; nx * ny];
+    let mut columns: Vec<usize> = Vec::new();
+    for r in &rects {
+        columns.clear();
+        columns.extend((0..nx).filter(|&i| within(r[0], r[2], c, xs[i])));
+        if columns.is_empty() {
+            continue;
+        }
+        for j in (0..ny).filter(|&j| within(r[1], r[3], c, ys[j])) {
+            for &i in &columns {
+                ok[at(i, j)] = false;
+            }
+        }
+    }
     let find = |v: &[f64], x: f64| v.iter().position(|&p| (p - x).abs() < 1e-9);
     let start = at(find(&xs, from.0)?, find(&ys, from.1)?);
     let goal = at(find(&xs, to.0)?, find(&ys, to.1)?);

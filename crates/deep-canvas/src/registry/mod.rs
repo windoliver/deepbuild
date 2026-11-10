@@ -1301,6 +1301,8 @@ pub struct Sealed {
     left_out: BTreeMap<String, String>,
     /// `family.name` → the missing optional module whose array the kind needs.
     left_out_kinds: BTreeMap<String, String>,
+    /// The core's kinds plus every kind the sealed modules register, built once at the seal.
+    kinds: crate::kinds::Registry,
     /// A d1 digest over the sorted modules' names, versions and digests.
     pub set_digest: String,
     /// Each canvas interface, by name, with its digest and the implementation the build chose.
@@ -1529,13 +1531,12 @@ impl Sealed {
 
     /// The core's kinds plus every kind the sealed modules register.
     pub fn kinds(&self) -> crate::kinds::Registry {
-        let mut out = crate::kinds::registry();
-        out.extend(
-            self.modules
-                .iter()
-                .flat_map(|m| m.shapes.kinds.iter().map(|k| k.entry.clone())),
-        );
-        out
+        self.kinds.clone()
+    }
+
+    /// [`Sealed::kinds`], lent: what each check and each patch's recheck reads.
+    pub(crate) fn kinds_ref(&self) -> &crate::kinds::Registry {
+        &self.kinds
     }
 
     /// `(deprecated_since, replaced_by)` of the kind `family.name`, once a module deprecated it.
@@ -2997,6 +2998,12 @@ impl Registry {
                 .collect(),
         ))
         .map_err(|e| SealError::new("bad_shape", &[], &[], e.to_string()))?;
+        let mut kinds = crate::kinds::registry();
+        kinds.extend(
+            modules
+                .iter()
+                .flat_map(|m| m.shapes.kinds.iter().map(|k| k.entry.clone())),
+        );
         Ok(Sealed {
             build_set: self.build_set,
             modules,
@@ -3008,6 +3015,7 @@ impl Registry {
             fixtures,
             left_out,
             left_out_kinds,
+            kinds,
             set_digest,
             interfaces,
             interface_ns,

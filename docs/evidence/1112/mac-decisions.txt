@@ -119,8 +119,8 @@ part that names them; the before/after files cut them at 160-200 columns):
   11727, 23319, 38896, 41806, 56407, 64508, 67390, 76534   parent 1, codex app-server-broker.mjs serve, 06-20:12 to 13-07:11
   58001     1    07:39:21  21.4 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT
   58701 58001    07:39:08  16.8 .../Codex Computer Use.app/Contents/MacOS/SkyComputerUseService
-  68762     1 07-19:13:39   5.1 openclaw-gateway
-At 01:50Z (mac-after.txt) every one of these PIDs except openclaw-gateway (68762, which is only in the
+  68762     1 07-19:13:39   5.1 <another app's gateway>
+At 01:50Z (mac-after.txt) every one of these PIDs except another app's gateway (68762, which is only in the
 before file's top-CPU list) and the db39A hub 40417 (in neither file) is still listed: swap 37,237 of
 37,888 MiB (98%), load 34.7.
 
