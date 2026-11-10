@@ -1,0 +1,51 @@
+Acceptance tests for #1432 on the base de304b9ff (no ratchet), run on 2026-11-10 with cargo on PATH:
+
+  node --test --test-reporter=tap 'tests/acceptance/1432/*.test.mjs'
+
+Trimmed to one failure reason per test; the lane's command list is shortened with …. No local
+path appears below; <checkout> would be this checkout and <tmp> the system temporary folder.
+
+# tests 7
+# pass 1
+# fail 6
+# cancelled 0
+# skipped 0
+# todo 0
+
+not ok 1 - AC4: the size ratchet adds under 2 s to the lint lane on this checkout
+    the lint lane runs no scripts/size-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs","scripts/vendor-rebase.mjs check","scripts/canvas-lint.mjs", … ,"scripts/known-failures-check.mjs"]
+ok 2 - AC3: a planted Instant::now in a deep-canvas crate fails the canvas lint, naming its line; the clean twin passes
+    Expected on the base: AC3 is a regression check on the canvas lint, which already passes the twin and
+    fails the planted call. A separate run of the same source printed
+    FAIL canvas-lint: deep-canvas-fixture/src/lib.rs:5:16 use of a disallowed method `std::time::Instant::now` (clippy::disallowed_methods)
+not ok 3 - AC3: an Instant::now under an \#[allow] with no reason still fails the canvas lint; the clean twin passes
+    the canvas lint's exit for a finding is 1 (2 is cargo couldn't run)
+    exit 2
+    stdout:
+    BLOCKED canvas-lint: deep-canvas-fixture/src/lib.rs:3:37 allow(clippy::disallowed_types) incompatible with previous forbid (E0453)
+    BLOCKED canvas-lint: deep-canvas-fixture/src/lib.rs:3:37 allow(clippy::disallowed_types) incompatible with previous forbid (E0453)
+    BLOCKED canvas-lint: deep-canvas-fixture/src/lib.rs:3:9 allow(clippy::disallowed_methods) incompatible with previous forbid (E0453)
+    BLOCKED canvas-lint: deep-canvas-fixture/src/lib.rs:3:9 allow(clippy::disallowed_methods) incompatible with previous forbid (E0453)
+      Fix: Install Rust with Cargo and clippy, which preflight already needs, and make the workspace build.
+    2 !== 1
+    The canvas lint refuses the allow, but as BLOCKED with the missing-toolchain fix, so the lint lane
+    reads BLOCKED, not FAIL (README: On the base). Its clean twin passed before the plant ran.
+not ok 4 - the lint lane runs scripts/size-ratchet.mjs as a command of its own, beside the canvas lint
+    the lint lane runs no scripts/size-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/known-failures-check.mjs"]
+not ok 5 - AC1: a line planted in a file at its ceiling fails the lint lane, naming the file, its size and its ceiling; at its ceiling it passes
+    the lint lane runs no scripts/size-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/known-failures-check.mjs"]
+not ok 6 - AC2: a file shrunk under an unchanged ceiling fails, naming its size and ceiling, until the ceiling is lowered to its size
+    the lint lane runs no scripts/size-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/known-failures-check.mjs"]
+not ok 7 - on this checkout the ratchet passes without changing git status, and the checked-in ceilings are the checkout's own
+    the lint lane runs no scripts/size-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/known-failures-check.mjs"]
+
+Checked before committing, in a throwaway copy outside this checkout (never committed): a reference
+ratchet in the lint lane passes tests 1, 4, 5, 6 and 7 (median 0.71 s at load 307.6 on 18 cores), and
+each of five wrong ratchets fails the test that names its fault:
+  - no shrink check: AC2 fails (PASS printed for a file under its ceiling);
+  - a FAIL line without the numbers: AC1 fails;
+  - sizes read from HEAD, not the work tree: AC1 and AC2 fail;
+  - no PASS line: AC1, AC2 and the checkout test fail;
+  - exit 0 on a FAIL: AC1 and AC2 fail.
+The canvas lint with an allow of its lints read as FAIL passes both AC3 tests, and one run with -D in
+place of -F (so an #[allow] is honoured) fails test 3 with "PASS canvas-lint: 1 crate in scope".
