@@ -42,6 +42,8 @@ function get(url, from) {
 async function service() {
   // No request sent shows nothing about the endpoint: the run ran nothing, never a pass.
   if (!(Number.isInteger(spec.requests) && spec.requests > 0)) return done(0, 'ran_nothing');
+  // A floor lacking a number is never crossed: nothing would be held to it.
+  if (!Number.isFinite(spec.floor?.latency_ms) || !Number.isFinite(spec.floor?.throughput_rps)) return done(0, 'ran_nothing');
   const answers = [];
   const started = performance.now();
   for (let i = 0; i < spec.requests; i++) {

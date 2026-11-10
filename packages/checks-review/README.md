@@ -10,6 +10,7 @@ The review check plug-in (#87): check kind `review`, where a second model reads 
 - `src/models.ts`: whether a review counts, and a review job's run; `src/outcomes.ts`: fixed or left; `src/post-close.ts`: the post-close passes; `src/replay.ts`: the replay over `replay/`.
 - `src/kit.ts`: the `check.kind@1` kit; `src/types.ts`: the shapes.
 - `replay/`: the replay's cases, each a diff with the second model's recorded answer, made from `tests/acceptance/87/review/fixtures`.
+- Regression tests go in `test/`; the acceptance suite is `tests/acceptance/87/review` (never edited).
 
 ## What it may import
 

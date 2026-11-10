@@ -92,7 +92,8 @@ function checkSecrets(secrets: unknown): ContractIssue[] {
 }
 /**
  * The job kinds a package registers through `deep.registerJob` and the tools it adds through `deep.registerJobTool`
- * (#1922): a kind's name, one slot each under the one-slot rule, and each tool's kind and pinned name@version.
+ * (#1922): a kind's name, one slot each under the one-slot rule, and each tool's kind and pinned name@version; a tool
+ * that runs off the machine names the one host its calls go to (#1924), as a library source does.
  */
 const JOB_KIND = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
 const JOB_TOOL = /^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/;
@@ -105,10 +106,11 @@ function checkJobs(jobs: unknown, tools: unknown): ContractIssue[] {
   if (tools !== undefined) {
     if (!Array.isArray(tools)) found.push(issue('type', '/job_tools', tools));
     else tools.forEach((t, i) => {
-      const { kind, tool, ...rest } = (typeof t === 'object' && t !== null ? t : {}) as Record<string, unknown>;
+      const { kind, tool, host, ...rest } = (typeof t === 'object' && t !== null ? t : {}) as Record<string, unknown>;
       if (typeof t !== 'object' || t === null || Object.keys(rest).length) return void found.push(issue('type', `/job_tools/${i}`, t));
       if (typeof kind !== 'string' || !JOB_KIND.test(kind)) found.push(issue('pattern', `/job_tools/${i}/kind`, kind));
       if (typeof tool !== 'string' || !JOB_TOOL.test(tool)) found.push(issue('pattern', `/job_tools/${i}/tool`, tool));
+      if (host !== undefined && (typeof host !== 'string' || !host)) found.push(issue('type', `/job_tools/${i}/host`, host));
     });
   }
   return found;

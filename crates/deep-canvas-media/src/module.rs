@@ -221,7 +221,7 @@ fn step(state: &mut Value, input: &StepInput<'_>) {
     }
     let first = (input.step - 1) * BLOCK;
     let mut block = vec![0f32; 2 * BLOCK as usize];
-    for (i, f) in block.chunks_exact_mut(2).enumerate() {
+    for (i, f) in block.as_chunks_mut::<2>().0.iter_mut().enumerate() {
         if (first + i as i64) % (RATE / 10) == 0 {
             f[0] = 0.5;
             f[1] = 0.5;

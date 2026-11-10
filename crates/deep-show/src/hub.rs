@@ -988,7 +988,7 @@ pub struct Hub<'a> {
     pub look_def: Option<Value>,
     pub display_only: BTreeSet<String>,
     /// #427's planted `mode_ids_by_count`: each document's mode visible table, by item count.
-    pub mode_ids: BTreeMap<String, (usize, Vec<(String, [f64; 4])>)>,
+    pub mode_ids: BTreeMap<String, ModeIds>,
     pub renderer: Renderer,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
@@ -1048,6 +1048,9 @@ pub struct Hub<'a> {
     /// The sandbox module's check-time work (#238).
     pub sandbox: crate::sandbox::Host,
 }
+
+/// A document's item count, and its mode visible table as first seen at that count.
+pub type ModeIds = (usize, Vec<(String, [f64; 4])>);
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
 pub type Raster = (Vec<u8>, [u16; 2], Vec<(String, [f64; 4])>);
