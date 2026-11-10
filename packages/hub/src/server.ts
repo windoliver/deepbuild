@@ -20,7 +20,7 @@ import { isPrCreate, isPrEdit } from './forge.js';
 import { registry } from './hookmap.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
-import { cachedRuleFiles, callPaths, handleOf as ruleHandle, isRuleFile, noticesFor, noticeText, readHeld, repoRoot, RULE_EDITS, rulesInFile, rulesOf, type RuleFile, type RuleFileBefore } from './rules.js';
+import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
 import { dropTestSettings, installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { heavyDenial } from './heavy.js';
@@ -29,7 +29,7 @@ import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Rest
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
-import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
+import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -266,13 +266,13 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
   };
 }
 
-function parserPool(given: readonly string[], plant: Plant | undefined): Parsers {
+function parserPool(given: readonly string[], plant: Plant | undefined, dir: string): Parsers {
   // The pool's own list: each scrub's values join it, so a parser started later begins with all its elder was sent.
   const held = [...given];
   const pending = new Map<number, (parsed: Parsed) => void>();
   let n = 0;
   const make = () => {
-    const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
+    const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, dir, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
     worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
       pending.get(id)?.(parsed);
       pending.delete(id);
@@ -299,7 +299,7 @@ function parserPool(given: readonly string[], plant: Plant | undefined): Parsers
   };
 }
 /** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
-async function parserInline(held: string[], plant: Plant): Promise<Parsers> {
+async function parserInline(held: string[], plant: Plant, dir: string): Promise<Parsers> {
   const { parseLine } = await import('./hookmap.js');
   const { scrubText } = await import('@deepbuild/evidence');
   return {
@@ -308,7 +308,8 @@ async function parserInline(held: string[], plant: Plant): Promise<Parsers> {
       const parsed = parseLine(line, first, held, plant);
       // A hook line is scrubbed whole, as a hub that scrubs what it reads before keeping any field would.
       if (parsed.kind === 'hook') scrubText(line.toString('utf8'), { held });
-      return parsed;
+      const scoped = parsed.kind === 'hook' ? scopedAt(parsed.meta, dir) : undefined;
+      return scoped ? { ...parsed, scoped } : parsed;
     },
     scrub(values) { held.push(...values); },
     close: async () => undefined,
@@ -463,7 +464,7 @@ class Hub {
     const contract = this.plant === 'contract-major-ahead' ? `${Number(CONTRACT.split('.')[0]) + 1}.0` : CONTRACT;
     this.helloLine = line({ hello: 'deep-hub', start: this.start, contract, features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
     this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub) : coreWorker(options, frame, fatal, asking, acking, scrub);
-    this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant) : parserPool(held, this.plant);
+    this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant, this.root.dir) : parserPool(held, this.plant, this.root.dir);
     this.server.on('connection', (sock) => this.accept(sock));
     // Out of descriptors, the accept loop keeps going: libuv sheds the connections it can't take, and the next one is served.
     this.server.on('error', (error: NodeJS.ErrnoException) => {
@@ -761,7 +762,7 @@ class Hub {
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     let ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
     // A rule you scoped to paths, at the session's first call inside its scope (#344): its words ride this reply.
-    const notice = meta.watchOnly ? undefined : this.rulesAt(meta, ruled);
+    const notice = meta.watchOnly ? undefined : this.rulesAt(meta, parsed.scoped, ruled);
     if (notice) ruled = withWaits(ruled, meta.event, { context: notice });
     // The long waits (#120): each hook shows the waits its call's start or end, and takes the lines waiting for it.
     if (!meta.watchOnly) {
@@ -955,36 +956,24 @@ class Hub {
 
   /** The scoped rules each session heard since its start, compaction or resume, by rule ID (#344). */
   private rulesHeard = new Map<string, Set<string>>();
-  private ruleFiles = new Map<string, { at: number; files: RuleFile[] }>();
   /**
-   * Your rules at a hook, read here so no call waits on the core (#344): a session's start, compaction or resume lets
+   * Your rules at a hook, said here so no call waits on the core (#344): a session's start, compaction or resume lets
    * each scoped rule be heard once more; a PreToolUse inside a rule's scope carries it once, and an Edit or Write of a
-   * rule file has the file's rules read before it runs. Both go to the core on the hook's meta, to record.
+   * rule file has the file's rules read before it runs. The parser read both (`scoped`); they go to the core on the
+   * hook's meta, to record.
    */
-  private rulesAt(meta: HookMeta, ruled: string): string | undefined {
+  private rulesAt(meta: HookMeta, scoped: Scoped | undefined, ruled: string): string | undefined {
     if (!meta.session || !['claude-code', 'claude', 'codex'].includes(meta.agent)) return undefined;
     if (meta.event === 'SessionStart' || meta.event === 'SessionEnd') { this.rulesHeard.delete(meta.session); return undefined; }
-    if (meta.event !== 'PreToolUse' || !meta.call) return undefined;
-    const repo = repoRoot(meta.cwd);
-    const paths = repo ? callPaths(meta.call.input, meta.cwd, repo) : [];
-    if (!repo || !paths.length) return undefined;
-    try {
-      const files = cachedRuleFiles(this.ruleFiles, repo);
-      const before: RuleFileBefore[] = RULE_EDITS.has(meta.call.tool)
-        ? paths.filter(isRuleFile).map((file) => ({ file, scope: files.find((f) => f.file === file)?.scope ?? 'all', rules: rulesInFile(join(repo, file)) }))
-        : [];
-      if (before.length) this.ruleFiles.delete(repo);
-      // A call blocked before it runs hears nothing.
-      const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
-      const heard = this.rulesHeard.get(meta.session) ?? new Set<string>();
-      this.rulesHeard.set(meta.session, heard);
-      const notices = blocked ? [] : noticesFor(rulesOf({ files, typed: [], held: readHeld(this.root.dir), guards: [] }), paths, meta.agent, heard);
-      if (notices.length || before.length) meta.rules = { notices: notices.map(ruleHandle), ...(before.length ? { before } : {}) };
-      return notices.length ? noticeText(notices) : undefined;
-    } catch (error) {
-      process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`);
-      return undefined;
-    }
+    if (!scoped) return undefined;
+    // A call blocked before it runs hears nothing.
+    const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
+    const heard = this.rulesHeard.get(meta.session) ?? new Set<string>();
+    this.rulesHeard.set(meta.session, heard);
+    const notices = blocked ? [] : scoped.rules.filter((r) => !heard.has(r.id));
+    for (const r of notices) heard.add(r.id);
+    if (notices.length || scoped.before.length) meta.rules = { notices: notices.map(ruleHandle), ...(scoped.before.length ? { before: scoped.before } : {}) };
+    return notices.length ? noticeText(notices) : undefined;
   }
 
   /**

@@ -191,10 +191,15 @@ export interface Gated {
  * so the stage or the ask comes before the agent runs the call anyway. The seconds ceiling is held below it.
  */
 export const STAGE_HOLD_MS = 45_000;
+/**
+ * What a PreToolUse's paths meet of your rules (#344), read on the parser's thread: the scoped rules that cover them,
+ * and an edited rule file's rules before the call runs.
+ */
+export interface Scoped { rules: { id: string; scope: string; file: string; text: string }[]; before: { file: string; scope: string; rules: string[] }[] }
 /** A parser's answer for one line. */
 export type Parsed =
   | { kind: 'control'; value: Record<string, unknown> }
-  | { kind: 'hook'; drafts: Draft[]; meta: HookMeta }
+  | { kind: 'hook'; drafts: Draft[]; meta: HookMeta; scoped?: Scoped }
   | { kind: 'refused'; id: string | null; error: Refusal };
 
 import type { Plant } from './plant.js';

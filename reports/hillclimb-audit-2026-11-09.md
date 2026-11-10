@@ -137,13 +137,13 @@ Each line names the finding in its write-up. "Needs a decision" means the fix ch
 
 ### Hub and record: [01-hub-hot.md](hillclimb-audit-2026-11-09/01-hub-hot.md), [02-hub-rest.md](hillclimb-audit-2026-11-09/02-hub-rest.md)
 
-- **The event loop walks the repo's folder tree inside the hook handler** (01 F3): 3,371 `readdirSync` calls per 3 s refresh in this repo, before the ack on a PreToolUse with a path. It breaks the Hot path row of the design, and #16's AC14 test sends only `Bash`, so nothing catches it. The fix moves the read into the parser worker: about 80 lines and an issue of its own.
+- **The event loop walks the repo's folder tree inside the hook handler** (01 F3): 3,371 `readdirSync` calls per 3 s refresh in this repo, before the ack on a PreToolUse with a path. It breaks the Hot path row of the design, and #16's AC14 test sends only `Bash`, so nothing catches it. **Applied after this report, in this PR, with 01 F4**: the parser worker does the read and builds the rules once per file list, and `packages/hub/test/rules-hot-path.test.ts` fails on the code before it. Over 100 `Read` hooks the hub's main thread made 3,414 `readdirSync` and 2,100 `createHash` calls before and none after. Still open: the one small-line parser does the walk, so another session's hook that arrives during a refresh is parsed after it. It has no issue of its own yet.
 - A partial index on `session.start`/`session.end` (01 F2): `askingNow` stepped 61,003 event rows on a synthetic record, 1,003 with the index. One line of DDL, added to every record.
 - An unchanged-tree stop builds a full checkout, carries every check, then deletes it (02 F3). Stop-path change.
 - The asks core decodes every event of every kind at start and on each sync (02 F4).
 - Every claim reads and splits the whole transcript to find one line (02 F5).
 - The gate runner keeps every run's full stdout and stderr; only the last 2,000 characters are read (02 F6). Not applied: the records also flow into `claimVerdict`, and that path was not traced to its end.
-- `rulesAt` rebuilds every rule and re-reads the held file per call (01 F4); session IDs inlined into eight queries per state pass (01 F5, needs a decision on one unit test); the minute state pass reads all history (01 F7); `turn_events` feeds only a reader nothing calls (01 F8, owner's call).
+- Session IDs inlined into eight queries per state pass (01 F5, needs a decision on one unit test); the minute state pass reads all history (01 F7); `turn_events` feeds only a reader nothing calls (01 F8, owner's call).
 - Needs-you runs up to three git spawns per card (02 F8); `ownChanges` recompiles its regexes per changed file (02 F10); `modified()` does 24 reads where 2 do (02 F11); kept keys hold path lists twice (02 F7).
 - Modularity: two seams in `core.ts` qualify, Your rules (#344, about 195 lines with its own state) and transcript reading (`readTranscript` and `endTurn` could be free functions today). The last audit's two no longer hold: spool replay is already out, and evidence attachment is 45 stateless lines.
 
