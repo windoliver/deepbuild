@@ -59,6 +59,8 @@ CREATE INDEX IF NOT EXISTS events_session_bounds ON events (session_id, log_pos)
 
 ## F3 — The event loop walks the repo's folder tree inside the hook handler — problem CONFIRMED, fix PLAUSIBLE
 
+**Applied after this write-up, in this PR, with F4.** The read is `scopedAt` in `rules.ts`, called from `parser.ts` outside `parseLine`, so `hookmap.ts` and `spool.ts` are untouched and a hook replayed from the spool file does no read. `packages/hub/test/rules-hot-path.test.ts` fails on the code before it (6 `fs.readdirSync` from `Hub.rulesAt`). One claim below is wrong: other sessions' acknowledgements still wait, since the one small-line parser does the walk and their lines are parsed after it. What no longer waits is the rest of the event loop.
+
 **Where**: `packages/hub/src/server.ts:764` (called before the acknowledgement at `:803-804`), `:964-988` (`rulesAt`); `packages/hub/src/rules.ts:225-231` (`cachedRuleFiles`, 3 s), `:134-151` (`readRuleFiles`), `:107-126` (`repoFiles`: recursive `readdirSync`, up to 50,000 entries), `:70-76` (`repoRoot`), `:241` (`readHeld`).
 
 **What**: on every `PreToolUse` of a Claude Code or Codex session whose input names `file_path`, `notebook_path` or `path` inside a git repo (Read, Edit, Write, Grep, Glob, NotebookEdit), `rulesAt` runs on the hub's main thread. When the repo's rule-file list is older than 3 s it re-walks the tree synchronously, then reads each rule file. In this checkout one refresh is **3,371 `readdirSync` calls over 13,083 entries** plus 2 file reads (`walk01.mjs`, same skip rules as `repoFiles`). Every other session's hook waits behind it, and deep-hook gives up on an acknowledgement after about 20 ms.
@@ -81,6 +83,8 @@ This breaks two things the design states: the Hot path row (`docs/technical-desi
 ---
 
 ## F4 — `rulesAt` rebuilds every rule (one SHA-256 each) and re-reads the held file on each call — CONFIRMED
+
+**Applied after this write-up, in this PR, with F3**: the memo lives in the parser worker (`scopedAt`), keyed by the cached file list and the held file's inode, size and time. Over 100 `Read` hooks: 2,100 `createHash` calls on the main thread before, none after, and 21 per refresh in the worker.
 
 **Where**: `packages/hub/src/server.ts:981`; `packages/hub/src/rules.ts:154-183` (`rulesOf`), `:44` (`ruleId`: `sha256`), `:47-48` (`tokensOf`), `:51-65` (`globMatches`: `new RegExp` per glob part per call), `:241` (`readHeld`).
 
