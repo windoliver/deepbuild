@@ -2869,6 +2869,11 @@ mod tests {
         assert_eq!(e.why, "unexpected `$`");
         let e = Expr::compile("1 2", &Nothing, 512).unwrap_err();
         assert_eq!(e.why, "trailing text after the expression");
+        // At every nesting site the cap refuses before the char past it is read.
+        for open in ["-", "!", "+", "abs(", "1 ? ", "1 ? 1 : ", "2^", "("] {
+            let e = Expr::compile(&format!("{}$", open.repeat(65)), &Nothing, 512).unwrap_err();
+            assert_eq!(e.why, "nests past the cap of 64 levels", "{open}");
+        }
         // A bad number moves the lexer on, and the char after it never replaces its refusal.
         let e = Expr::compile("f(1..2 $)", &Nothing, 512).unwrap_err();
         assert!(e.why.contains("is not a number"), "{e}");
@@ -2920,6 +2925,32 @@ mod tests {
         ] {
             let chain = |k: usize| format!("{}1", unit.repeat(k));
             assert!(!over(chain(k - 1)) && over(chain(k)), "{unit}");
+        }
+    }
+
+    #[test]
+    fn the_lazy_lexer_reads_every_token_form_and_a_refusal_names_its_own_text() {
+        let value = |t: &str| Expr::compile(t, &Nothing, 512).map(|e| e.eval_num(&[]));
+        let forms = [
+            ("1e5 + 1E+5 + 1e−2 * 100", 200_001.0),
+            (".5 + 2 ÷ 4", 1.0),
+            ("(1 == 1) + (1 != 2) + (1 <= 1) + (2 >= 1)", 4.0),
+            ("(1 && 1) + (0 || 1) + (1 ≤ 2) + (2 ≥ 1) + (1 ≠ 2)", 5.0),
+            ("2 × 3\t+\n1\u{a0}+ 1", 8.0),
+        ];
+        for (text, want) in forms {
+            assert_eq!(value(text).ok(), Some(want), "{text}");
+        }
+        for (text, call) in [
+            ("factorial(2.5) + 1", "factorial(2.5)"),
+            ("é + factorial(2.5) + 1", "factorial(2.5)"),
+            ("1 + 1..2", "1..2"),
+        ] {
+            assert_eq!(
+                Expr::compile(text, &Nothing, 512).unwrap_err().call,
+                call,
+                "{text}"
+            );
         }
     }
 
