@@ -9,6 +9,7 @@
 
 pub mod budget;
 pub mod checks;
+pub mod judder;
 pub mod lane;
 pub mod lines;
 pub mod live;
@@ -45,6 +46,12 @@ pub struct Planted {
     pub simulate_runs_all_steps: bool,
     pub replay_changes_step_37: bool,
     pub budget_counts_lane_reading: bool,
+    pub turn_runs_at_frame_boundary: bool,
+    pub turn_ignores_due: bool,
+    pub linear_blends_forward: bool,
+    pub seek_restores_arrays_only: bool,
+    pub open_span_reads_zero: bool,
+    pub judder_checks_shots_only: bool,
 }
 
 impl Planted {
@@ -65,6 +72,12 @@ impl Planted {
             "budget_charges_function_first_line" => p.budget_first_line = true,
             "replay_changes_step_37" => p.replay_changes_step_37 = true,
             "budget_counts_lane_reading" => p.budget_counts_lane_reading = true,
+            "turn_runs_at_frame_boundary" => p.turn_runs_at_frame_boundary = true,
+            "turn_ignores_due" => p.turn_ignores_due = true,
+            "linear_blends_forward" => p.linear_blends_forward = true,
+            "seek_restores_arrays_only" => p.seek_restores_arrays_only = true,
+            "open_span_reads_zero" => p.open_span_reads_zero = true,
+            "judder_checks_shots_only" => p.judder_checks_shots_only = true,
             _ => return None,
         }
         Some(self)
@@ -429,7 +442,10 @@ impl Logic {
                 "arch": std::env::consts::ARCH, "os": std::env::consts::OS,
             }),
             Some("check") => match self.check(line) {
-                Ok(p) => json!({"ok": true, "items": items(&p)}),
+                Ok(p) => {
+                    let issues = judder::issues(&p, &line["piece"], &self.planted);
+                    json!({"ok": true, "items": items(&p), "issues": issues})
+                }
                 Err(r) => r,
             },
             Some("bake") => self.bake(line).unwrap_or_else(|e| e),
@@ -532,7 +548,7 @@ impl Logic {
         let budgets = self.budgets(&piece, &entries, &rec)?;
         let keys = keys(&piece, &entries);
         Ok(json!({
-            "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "checkpoints": rec.checkpoints,
+            "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges,
             "traps": rec.traps, "budgets": budgets, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
         }))
@@ -644,9 +660,11 @@ impl Logic {
                     .map(|k| (k, id.clone()))
             })
             .min();
-        let first_step = first.as_ref().map(|(k, _)| *k);
+        // The list holds the steps that ran, so a turn clock's n-th hash is the n-th row's step.
+        let step_of = |k: usize| rec.rows().keys().nth(k).copied().unwrap_or(k as i64);
+        let first_step = first.as_ref().map(|(k, _)| step_of(*k));
         let report = first.map(|(k, id)| {
-            let k = rec.rows().keys().nth(k).copied().unwrap_or(k as i64);
+            let k = step_of(k);
             let row = line
                 .get("recording")
                 .and_then(Value::as_array)
@@ -801,6 +819,13 @@ impl Logic {
     /// rate and budgets, and the input track; the browser checks and rewrites nothing.
     fn web_plan(&mut self, line: &Value) -> Result<Value, Value> {
         let piece = self.check(line)?;
+        // The web runner steps every step: a turn clock would bake wrong hashes there.
+        if let Some(i) = piece.items.iter().find(|i| i.turn) {
+            return Err(
+                json!({"ok": false, "code": "logic_refused", "item": i.id, "refusals": [{"rule": "field", "field": "clock",
+                "what": "clock: on_input isn't built in the web player's runtime yet"}]}),
+            );
+        }
         let steps = line
             .get("steps")
             .and_then(Value::as_i64)
@@ -849,21 +874,29 @@ impl Logic {
         Ok(json!({"ok": true, "request": request}))
     }
 
-    /// A live view of the piece at time 0 with no bake, for `span` seconds.
+    /// A live view of the piece at time 0 with no bake, for `span` seconds, or with `span:
+    /// "open"` for live play with no end (Transport).
     fn view(&mut self, line: &Value) -> Result<Value, Value> {
-        let span = line
-            .get("span")
-            .and_then(Value::as_f64)
-            .filter(|s| *s >= 0.0)
-            .ok_or_else(|| bad("span"))?;
-        let (view, first) = live::View::open(line.clone(), flicks(span), self.planted)?;
+        let span = match line.get("span") {
+            Some(Value::String(s)) if s == "open" => {
+                (self.planted.open_span_reads_zero).then_some(0)
+            }
+            s => Some(flicks(
+                s.and_then(Value::as_f64)
+                    .filter(|s| *s >= 0.0)
+                    .ok_or_else(|| bad("span"))?,
+            )),
+        };
+        let (view, first) = live::View::open(line.clone(), span, self.planted)?;
         let session = format!("v{}", self.views.len() + 1);
         self.views.insert(session.clone(), view);
         Ok(json!({"ok": true, "session": session, "items": first["items"]}))
     }
 
     /// One live frame: the UI thread latches `seek` (the paused playhead, in seconds, within the
-    /// span) and `set` (a change of a control there), and the render worker simulates.
+    /// span, or with an open span within what has been played), `play` (live play: the playhead
+    /// moves on by that many seconds, at most to a finite span's end) and `set` (a change of a
+    /// control there), and the render worker simulates.
     fn frame(&mut self, line: &Value) -> Result<Value, Value> {
         let ui = budget::cpu_ns();
         let session = line
@@ -871,12 +904,20 @@ impl Logic {
             .and_then(Value::as_str)
             .ok_or_else(|| bad("session"))?;
         let v = self.views.get_mut(session).ok_or_else(|| bad("session"))?;
-        if let Some(t) = line.get("seek") {
-            let t = t
-                .as_f64()
-                .filter(|t| *t >= 0.0)
-                .ok_or_else(|| bad("seek"))?;
-            v.t = flicks(t).min(v.span);
+        let secs = |k: &str| {
+            line.get(k).map(|t| {
+                t.as_f64()
+                    .filter(|t| *t >= 0.0)
+                    .map(flicks)
+                    .ok_or_else(|| bad(k))
+            })
+        };
+        if let Some(t) = secs("seek").transpose()? {
+            v.t = t.min(v.span.unwrap_or(v.played));
+        }
+        if let Some(d) = secs("play").transpose()? {
+            v.t = v.t.saturating_add(d).min(v.span.unwrap_or(i64::MAX));
+            v.played = v.played.max(v.t);
         }
         let set = match line.get("set") {
             None => None,
