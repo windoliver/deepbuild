@@ -305,6 +305,9 @@ alone.push('tests/acceptance/1983/');
 // call, so it runs by hand.
 alone.push('tests/acceptance/1462/', 'tests/acceptance/1462-redraft-ac2/');
 byHand.push('tests/acceptance/1462/shown.test.ts');
+// #1901's files build deep-show; build-digest.test.ts builds it three times, one with a canvas module's source changed
+// for that build and restored after it, so nothing else may build in the checkout while it runs.
+alone.push('tests/acceptance/1901/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

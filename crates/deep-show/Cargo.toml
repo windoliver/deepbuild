@@ -263,6 +263,11 @@ vello_cpu = { version = "0.3", default-features = false, features = ["std", "tex
 # Issue #138: the kit's headless backend (wgpu's noop) and its GPU backend.
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop"] }
 
+# Issue #1901: the build script's digest of the sources this binary is built from; already in the
+# lockfile.
+[build-dependencies]
+sha2 = "0.10"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "metal"] }
 deep-replica = { path = "../deep-replica" }
