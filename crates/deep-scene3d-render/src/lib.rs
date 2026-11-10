@@ -5660,6 +5660,12 @@ impl Renderer {
         let scores = light::scores(&scene.lights, &scene.camera);
         let shadowed = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores);
         self.prepare_locals(device, scene, &frame, &shadowed.kept);
+        // A warm-up's prepare (#432) records no pass, so its maps stay undrawn: keyed as drawn,
+        // the frame after it would sample empty maps (#2186). The next frame draws them.
+        if self.log.warming {
+            self.cascaded.keys = [None; 4];
+            self.locals.forget();
+        }
         let mut dropped = shadowed.dropped;
         dropped.sort();
         if self.ies.upload(device, &scene.distributions) {

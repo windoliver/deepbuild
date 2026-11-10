@@ -309,6 +309,11 @@ impl Locals {
             .collect()
     }
 
+    /// Forgets what each slot's layers were made from, so the next frame draws every map.
+    pub fn forget(&mut self) {
+        self.keys = [None; SLOTS];
+    }
+
     /// The map a slot's layer holds, for a test against a clean render.
     pub fn view_of(&self, layer: usize) -> Option<&wgpu::TextureView> {
         self.texture.as_ref().and_then(|(_, v)| v.get(layer))

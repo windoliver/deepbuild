@@ -1,0 +1,8 @@
+{
+  "code": "unknown_analyzer",
+  "analyzer": "charsiu-aligner@1.0.1",
+  "have": "charsiu-aligner@1.0.0",
+  "record": "b7ace2d9929b554ff74f7aee122014dc8c89931a53eb7aa1e6e5a1e8174fc8c4",
+  "core": "core@0.0.0",
+  "set_digest": "90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"
+}

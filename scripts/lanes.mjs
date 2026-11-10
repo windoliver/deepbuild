@@ -234,6 +234,14 @@ timed.push('tests/acceptance/1436/ac9-budgets.live.test.ts');
 // #1485's files build deep-canvas-render and the app, and its AC3 file opens the app's window and times its frames.
 alone.push('tests/acceptance/1485/');
 timed.push('tests/acceptance/1485/panel.test.ts');
+// #1486's files build deep-canvas-render in release; grid.test.ts times the first screen and the UI thread's frames.
+alone.push('tests/acceptance/1486/');
+timed.push('tests/acceptance/1486/grid.test.ts');
+// #1485's first AC2 draft is kept as written, by hand only: it draws its five pictures in 20 u boxes and needs the
+// fifth refused, where image@1's budget now counts the levels a frame draws (#1486); its blind redraft,
+// 1485-redraft-ac2/, draws them at full size and runs in its place.
+alone.push('tests/acceptance/1485-redraft-ac2/');
+byHand.push('tests/acceptance/1485/cap.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 
@@ -326,6 +334,9 @@ alone.push('tests/acceptance/1925/');
 alone.push('tests/acceptance/408/crossing.test.ts', 'tests/acceptance/408/overlap-covered.test.ts', 'tests/acceptance/408/cut.test.ts', 'tests/acceptance/408/module-label.test.ts');
 alone.push('tests/acceptance/408-redraft-ac5/');
 timed.push('tests/acceptance/408-redraft-ac5/machines.test.ts');
+// #1819's files each build deep-show, start a hub and the bakes plug-in's model host on its fixed port 8719, and run
+// pinned open models on CPU: one file at a time.
+alone.push('tests/acceptance/1819/');
 byHand.push('tests/acceptance/408/machines.test.ts');
 // #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
 // that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the

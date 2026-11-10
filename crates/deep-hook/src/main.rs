@@ -102,10 +102,14 @@ fn home() -> PathBuf {
     PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".deepbuild")
 }
 
+/// ~/.deepbuild/config.json, when it is there and reads as JSON.
+fn config() -> Option<Value> {
+    parse(&fs::read_to_string(home().join("config.json")).ok()?).ok()
+}
+
 /// The setting `section.key` in ~/.deepbuild/config.json.
 fn setting(section: &str, key: &str) -> Option<Value> {
-    let config = parse(&fs::read_to_string(home().join("config.json")).ok()?).ok()?;
-    member(member(&config, section)?, key).cloned()
+    member(member(&config()?, section)?, key).cloned()
 }
 
 /// The hook's working folder, once its payload is read: a worktree `deep hub use --root` sent to a dev hub.
@@ -115,10 +119,12 @@ static CWD: OnceLock<PathBuf> = OnceLock::new();
 /// A worktree named in `hub.use`, `{<worktree>: "unix:<path>"}`, which `deep hub use --root` writes once the OS
 /// confirms you, sends its sessions to that dev hub instead; the longest worktree that holds the folder wins.
 fn address() -> PathBuf {
-    if let Some(path) = worktree_hub() {
+    let config = config();
+    let hub = |key: &str| member(member(config.as_ref()?, "hub")?, key);
+    if let Some(path) = worktree_hub(hub("use")) {
         return path;
     }
-    match setting("hub", "address") {
+    match hub("address") {
         Some(Value::String(address)) if address.starts_with("unix:") => {
             PathBuf::from(&address[5..])
         }
@@ -126,9 +132,10 @@ fn address() -> PathBuf {
     }
 }
 
-/// The dev hub `deep hub use --root` sent this worktree to, the longest such worktree winning.
-fn worktree_hub() -> Option<PathBuf> {
-    let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), setting("hub", "use")) else {
+/// The dev hub `deep hub use --root` sent this worktree to in `uses`, the `hub.use` setting, the longest such
+/// worktree winning.
+fn worktree_hub(uses: Option<&Value>) -> Option<PathBuf> {
+    let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), uses) else {
         return None;
     };
     let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());

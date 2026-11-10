@@ -254,7 +254,22 @@ pub fn same_name(path: &str) -> String {
 /// `path` with `..` and every link it passes through resolved, as far as the path exists, and lexically past
 /// that: the file a write to it would change.
 pub fn real(path: &Path) -> PathBuf {
-    let mut done = PathBuf::new();
+    if path.is_absolute() {
+        if let Ok(whole) = fs::canonicalize(path) {
+            return whole;
+        }
+        if let (Some(folder), Some(name)) = (path.parent(), path.file_name()) {
+            if let Ok(folder) = fs::canonicalize(folder) {
+                return walk(folder, Path::new(name));
+            }
+        }
+    }
+    walk(PathBuf::new(), path)
+}
+
+/// `path` under `done`, a name at a time: each name resolved while the path is there, and the names past that as
+/// written.
+fn walk(mut done: PathBuf, path: &Path) -> PathBuf {
     for part in path.components() {
         match part {
             Component::RootDir => done.push("/"),
@@ -265,12 +280,15 @@ pub fn real(path: &Path) -> PathBuf {
             }
             Component::Normal(name) => {
                 done.push(name);
+                if fs::symlink_metadata(&done).is_err() {
+                    continue;
+                }
                 if let Ok(resolved) = fs::canonicalize(&done) {
                     done = resolved;
                 } else if let Ok(target) = fs::read_link(&done) {
                     // A link to a file that doesn't exist yet: the write makes its target.
                     let parent = done.parent().map(Path::to_path_buf).unwrap_or_default();
-                    done = real(&parent.join(target));
+                    done = walk(PathBuf::new(), &parent.join(target));
                 }
             }
         }
@@ -634,7 +652,10 @@ impl Lexer {
                     parts.push(Part::Sub(sub));
                 }
                 _ => {
-                    parts.push(Part::Lit(c.to_string(), true));
+                    match parts.last_mut() {
+                        Some(Part::Lit(text, true)) => text.push(c),
+                        _ => parts.push(Part::Lit(c.to_string(), true)),
+                    }
                     self.i += 1;
                 }
             }
@@ -2476,6 +2497,62 @@ mod tests {
         assert!(glob(b"pk[i]ll", b"pkill"));
         assert!(glob(b"p*", b"pkill"));
         assert!(!glob(b"pk[!i]ll", b"pkill"));
+    }
+
+    #[test]
+    fn a_path_resolved_in_one_call_reads_as_the_walk_reads_it() {
+        use std::os::unix::fs::symlink;
+        let at = std::env::temp_dir().join(format!("dh-real-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&at);
+        fs::create_dir_all(at.join("dir/sub")).unwrap();
+        fs::write(at.join("dir/sub/file"), "").unwrap();
+        symlink(at.join("dir"), at.join("to-dir")).unwrap();
+        symlink("dir/sub", at.join("to-sub")).unwrap();
+        symlink("dir/sub/file", at.join("to-file")).unwrap();
+        symlink("gone/new", at.join("to-gone")).unwrap();
+        symlink("..", at.join("dir/up")).unwrap();
+        let root = fs::canonicalize(&at).unwrap();
+        for (written, read) in [
+            ("to-dir/sub/file", "dir/sub/file"),
+            ("to-file", "dir/sub/file"),
+            ("to-sub/../new", "dir/new"),
+            ("dir/up/to-sub/new", "dir/sub/new"),
+            ("to-dir/new/deeper", "dir/new/deeper"),
+            ("to-gone", "gone/new"),
+            ("dir/sub/file/..", "dir/sub"),
+        ] {
+            assert_eq!(real(&at.join(written)), root.join(read), "{written}");
+        }
+        let names = [
+            "dir", "sub", "file", "to-dir", "to-sub", "to-file", "to-gone", "up", "..", ".",
+            "gone", "DIR",
+        ];
+        let mut spelled = vec![at.display().to_string()];
+        for _ in 0..3 {
+            spelled = spelled
+                .iter()
+                .flat_map(|head| names.iter().map(move |name| format!("{head}/{name}")))
+                .collect();
+            for path in spelled.iter().map(Path::new) {
+                assert_eq!(real(path), walk(PathBuf::new(), path), "{}", path.display());
+            }
+        }
+        let here = std::env::current_dir().unwrap();
+        let around = Path::new("..").join(here.file_name().unwrap()).join("src");
+        assert!(here.join(&around).is_dir());
+        for relative in [
+            around.as_path(),
+            Path::new("src/../Cargo.toml"),
+            Path::new(".."),
+        ] {
+            assert_eq!(
+                real(relative),
+                walk(PathBuf::new(), relative),
+                "{}",
+                relative.display()
+            );
+        }
+        fs::remove_dir_all(&at).unwrap();
     }
 
     #[test]

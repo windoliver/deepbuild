@@ -1,0 +1,14 @@
+{
+  "plant": "activity_level_threshold",
+  "spans": [
+    {
+      "start": 0,
+      "end": 6231859200
+    }
+  ],
+  "failures": [
+    "span 1 of 1 (0.000 s to 8.832 s): speech span 1 of the fixture runs 1.000 s to 2.529 s; this one's start is -1000 ms and its end 6303 ms from it (50 ms allowed)",
+    "speech span 2 of the fixture (3.529 s to 5.353 s) has no span in the bake",
+    "speech span 3 of the fixture (6.353 s to 7.810 s) has no span in the bake"
+  ]
+}

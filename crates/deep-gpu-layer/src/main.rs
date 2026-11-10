@@ -25,6 +25,7 @@ mod effects;
 mod envelope;
 #[cfg(feature = "test-faults")]
 mod faults;
+mod fix;
 mod film;
 mod fixtures;
 mod flat;
@@ -366,6 +367,8 @@ pub enum Planted {
     WarmsPerItem,
     TimesOnlyScene,
     WaitClockAfterWarmup,
+    /// #1937's wrong chooser (tests/acceptance/1937/README.md: Planted programs).
+    PicksLargestGain,
 }
 
 impl Planted {
@@ -590,6 +593,7 @@ impl Planted {
             "warms_per_item" => Planted::WarmsPerItem,
             "times_only_scene" => Planted::TimesOnlyScene,
             "wait_clock_after_warmup" => Planted::WaitClockAfterWarmup,
+            "picks_largest_gain" => Planted::PicksLargestGain,
             _ => return None,
         })
     }
@@ -852,6 +856,7 @@ impl App {
             Some("envelope") => envelope::call(self, out, call),
             Some("envelope_counts") => envelope::counts(self, call),
             Some("envelope_opens") => envelope::opens(self, call),
+            Some("budget_fix") => fix::call(self, out, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
             #[cfg(feature = "test-meter")]

@@ -11,6 +11,7 @@ pub mod frame_budget;
 pub mod guard;
 pub mod memory;
 pub mod meter;
+pub mod over_class;
 pub mod pixel_hash;
 pub mod render;
 pub mod ring;
