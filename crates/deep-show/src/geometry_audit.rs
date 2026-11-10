@@ -456,6 +456,17 @@ impl Audit<'_> {
             }
         };
         let assemblies = doc.get("assemblies").and_then(Value::as_object).is_some_and(|a| !a.is_empty());
+        // What this build doesn't audit yet is never passed over: combining sweeps by corners or
+        // a grid, the widest display strings, and a sweep taken apart, which needs assemblies.
+        if let Some(c) = self.input.get("combine").and_then(Value::as_str).filter(|c| *c != "each") {
+            out.not_run.push(format!("combine: {c}"));
+        }
+        if self.input.get("displays").is_some_and(|d| !d.is_null()) {
+            out.not_run.push("displays".into());
+        }
+        if self.input.get("at").and_then(Value::as_str) == Some("apart") && assemblies {
+            out.not_run.push("at: apart".into());
+        }
         let mut issues: Vec<Value> = Vec::new();
         let mut seen: BTreeSet<(String, Vec<String>)> = BTreeSet::new();
         let mut push = |f: &Fault, state: &str, t: i64, sweep: Option<(&str, f64)>, issues: &mut Vec<Value>| {
