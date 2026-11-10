@@ -113,6 +113,15 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
     // The most CPU one step (with its checkpoint) has taken: what the next one may take.
     let mut step_ns = 0u64;
     for Latched { t, set } in inbox {
+        // A piece without logic gains no work per frame: nothing steps, nothing is timed.
+        if world.lives.is_empty() {
+            let reply = json!({"want": t / len + 1, "at": t / len + 1, "stale": false, "steps": 0, "eval_ns": 0,
+                "deep_hash": {}, "stamped": null, "fork_at": null});
+            if outbox.send(reply).is_err() {
+                return;
+            }
+            continue;
+        }
         let at = world.at().unwrap_or(0);
         let mut stamped = Value::Null;
         if let Some((control, value)) = set {

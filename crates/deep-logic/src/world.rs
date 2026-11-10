@@ -17,6 +17,7 @@ use serde_json::{json, Map, Value};
 use wasmparser::{ExternalKind, Parser, Payload, ValType};
 use wasmtime::Val;
 
+use crate::budget::cpu_ns;
 use crate::piece::{h64, step_seed, Item, Piece, Read, PAGE, PER_STEP};
 use crate::Planted;
 
@@ -160,6 +161,17 @@ impl Record {
                 .map(|(k, (items, arrays))| json!({"step": k, "t": k * len, "items": items, "arrays": arrays}))
                 .collect(),
         )
+    }
+    /// The CPU time item `id`'s last checkpoint took.
+    fn took(&mut self, id: &str, ns: u64) {
+        if let Some(c) = self
+            .checkpoints
+            .get_mut(id)
+            .and_then(Value::as_array_mut)
+            .and_then(|a| a.last_mut())
+        {
+            c["ns"] = json!(ns);
+        }
     }
     pub(crate) fn checkpoint(&mut self, id: &str, step: i64, deep: u64) {
         let list = self
@@ -310,13 +322,15 @@ impl Live {
     }
     /// The full state's hash: the step reached on the input track, memory, globals and arrays.
     pub(crate) fn deep_hash(&mut self) -> u64 {
-        let mut b = self.next.to_le_bytes().to_vec();
+        use sha2::Digest as _;
         let pending: usize = self.pending.values().map(VecDeque::len).sum();
-        b.extend((pending as u32).to_le_bytes());
-        b.extend(self.encoded());
-        b.extend(&self.arrays.clone());
-        b.extend(self.memory().to_vec());
-        h64(&b)
+        let mut h = sha2::Sha256::new();
+        h.update(self.next.to_le_bytes());
+        h.update((pending as u32).to_le_bytes());
+        h.update(self.encoded());
+        h.update(&self.arrays);
+        h.update(self.memory());
+        u64::from_be_bytes(h.finalize()[..8].try_into().expect("8 bytes"))
     }
 }
 
@@ -336,6 +350,9 @@ pub struct World {
     /// The folder the piece's saves are kept in, and what each save written leaves (Logic: saves).
     pub saves_dir: Option<std::path::PathBuf>,
     pub saved: Vec<Value>,
+    /// The steps the piece's same-machine counters have seen, and the adapter this run is on.
+    pub(crate) seen: u64,
+    pub adapter: String,
 }
 
 pub type Failed = Value;
@@ -419,6 +436,8 @@ impl World {
             planted,
             saves_dir: None,
             saved: Vec::new(),
+            seen: 0,
+            adapter: String::new(),
         })
     }
 
@@ -441,10 +460,20 @@ impl World {
     /// Each item's deep hash now.
     pub fn deep_hashes(&mut self) -> Map<String, Value> {
         let ids: Vec<String> = self.piece.items.iter().map(|i| i.id.clone()).collect();
-        ids.into_iter()
+        let mut out: Map<String, Value> = ids
+            .into_iter()
             .zip(self.lives.iter_mut())
             .map(|(id, l)| (id, json!(format!("{:016x}", l.deep_hash()))))
-            .collect()
+            .collect();
+        for id in &self.piece.machine {
+            out.insert(id.clone(), json!(format!("{:016x}", self.seen_hash())));
+        }
+        out
+    }
+
+    /// A same-machine counter's full-state hash.
+    pub(crate) fn seen_hash(&self) -> u64 {
+        h64(&self.seen.to_le_bytes())
     }
 
     /// Whether every item's ring holds a checkpoint at step `k`.
@@ -481,16 +510,27 @@ impl World {
         }
         l.checked = Some(l.next);
         let deep = l.deep_hash();
+        // The CPU time storing it; the full-state hash beside it is the record's evidence.
+        let t = cpu_ns();
         rec.checkpoint(&id, l.next, deep);
+        let next = l.next;
+        if i == 0 {
+            let seen = self.seen_hash();
+            for m in &self.piece.machine {
+                rec.checkpoint(m, next, seen);
+            }
+        }
+        let l = &mut self.lives[i];
         // A seek back replays steps whose checkpoints the ring already holds.
         if !store || l.stored.iter().any(|s| s.step == l.next) {
+            rec.took(&id, cpu_ns() - t);
             return;
         }
         let memory = if l.stored.len().is_multiple_of(8) {
             Memory::Whole(l.memory().to_vec())
         } else {
             let dirty: Vec<u32> = l.dirty.iter().copied().collect();
-            let m = l.memory().to_vec();
+            let m = l.memory();
             Memory::Pages(
                 dirty
                     .into_iter()
@@ -514,6 +554,7 @@ impl World {
         l.stored.push(stored);
         l.dirty.clear();
         l.thin(ring);
+        rec.took(&id, cpu_ns() - t);
     }
 
     /// Runs every item's steps below `until`, in time order; at one time, items in piece order,
@@ -543,6 +584,7 @@ impl World {
                 })
                 .collect();
             let snapshot = self.published.clone();
+            self.seen += 1;
             for i in group {
                 self.step(i, &snapshot, rec);
                 self.published[i] = self.lives[i].arrays.clone();
@@ -787,16 +829,24 @@ impl World {
             live.pending = s.pending.clone();
             lives.push(live);
         }
+        // A run from step 0 has seen c steps at step c.
         Ok(World::of(
             self.piece.clone(),
             self.track.clone(),
             lives,
             self.planted,
+            c as u64,
         ))
     }
 
     /// A world of the piece's items in these states, as a seek or an opened save starts.
-    pub(crate) fn of(piece: Rc<Piece>, track: Track, lives: Vec<Live>, planted: Planted) -> World {
+    pub(crate) fn of(
+        piece: Rc<Piece>,
+        track: Track,
+        lives: Vec<Live>,
+        planted: Planted,
+        seen: u64,
+    ) -> World {
         let published = lives.iter().map(|l| l.arrays.clone()).collect();
         World {
             piece,
@@ -807,6 +857,8 @@ impl World {
             planted,
             saves_dir: None,
             saved: Vec::new(),
+            seen,
+            adapter: String::new(),
         }
     }
 
@@ -884,6 +936,8 @@ impl World {
             planted: self.planted,
             saves_dir: None,
             saved: Vec::new(),
+            seen: self.seen,
+            adapter: self.adapter.clone(),
         })
     }
 
@@ -920,15 +974,22 @@ fn report(
 ) {
     let (items, arrays) = rec.steps.entry(k).or_default();
     items.insert(item.id.clone(), json!({"hash": hash.map(|h| format!("{h:016x}")), "fuel": fuel, "failed": l.failed, "pages": pages}));
-    for w in &item.writes {
-        let e = item.write(&w.name).expect("a write entry");
-        let bytes = &l.arrays[e.offset as usize..(e.offset + e.size) as usize];
-        let values: Vec<Value> = bytes
-            .chunks(w.ty.size() as usize)
-            .map(|b| w.ty.value(b))
-            .collect();
-        arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
-    }
+    arrays.append(&mut arrays_json(item, &l.arrays));
+}
+
+/// An item's arrays by `<item ID>.<name>`, each value as its type reads.
+pub(crate) fn arrays_json(item: &Item, bytes: &[u8]) -> Map<String, Value> {
+    item.writes
+        .iter()
+        .map(|w| {
+            let e = item.write(&w.name).expect("a write entry");
+            let values: Vec<Value> = bytes[e.offset as usize..(e.offset + e.size) as usize]
+                .chunks(w.ty.size() as usize)
+                .map(|b| w.ty.value(b))
+                .collect();
+            (format!("{}.{}", item.id, w.name), Value::Array(values))
+        })
+        .collect()
 }
 
 /// A trap's source line, through the item's sidecar: the instruction's offset in the program as

@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Instant;
 
+use sha2::Digest as _;
+
 use deep_canvas_sandbox::rewrite::{hash, START};
 use deep_sandbox_wasmtime::service::trap_json;
 use deep_sandbox_wasmtime::{Call, Faults, Runner};
@@ -22,7 +24,7 @@ use serde_json::{json, Value};
 use wasmtime::Val;
 
 use crate::piece::{memory_bytes, migration_fuel, segments, Piece, MAX_MEMORY, PAGE};
-use crate::world::{names, track_of, Entry, Failed, Live, Record, World};
+use crate::world::{arrays_json, names, track_of, Entry, Failed, Live, Record, World};
 use crate::{Planted, VERSION};
 
 /// One item's carried state, as a save holds it.
@@ -71,6 +73,14 @@ fn program(piece: &Piece) -> String {
     }
 }
 
+/// A save file's sha256, which names it.
+fn file_hash(bytes: &[u8]) -> String {
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 fn put(out: &mut Vec<u8>, b: &[u8]) {
     out.extend((b.len() as u32).to_le_bytes());
     out.extend(b);
@@ -95,11 +105,12 @@ fn val(ty: &str, x: u64) -> Val {
     }
 }
 
-/// Every item's state in piece order: its ID, its memory's length and the pages that hold a
-/// nonzero byte, its mutable globals as 8 bytes each, its arrays and its waiting entries.
+/// Every logic item's state in piece order (a u32 count, then each one's ID, its memory's length
+/// and the pages that hold a nonzero byte, its mutable globals as 8 bytes each, its arrays and its
+/// waiting entries), then each same-machine counter's ID and the steps it has seen.
 fn encode(w: &mut World) -> Vec<u8> {
     let planted = w.planted;
-    let mut out = Vec::new();
+    let mut out = (w.lives.len() as u32).to_le_bytes().to_vec();
     for (item, l) in w.piece.clone().items.iter().zip(w.lives.iter_mut()) {
         put(&mut out, item.id.as_bytes());
         let memory = l.memory().to_vec();
@@ -134,11 +145,18 @@ fn encode(w: &mut World) -> Vec<u8> {
         };
         put(&mut out, json!(pending).to_string().as_bytes());
     }
+    for id in &w.piece.machine {
+        put(&mut out, id.as_bytes());
+        out.extend(w.seen.to_le_bytes());
+    }
     out
 }
 
+/// A save's state: each logic item's by ID, then each same-machine counter's steps seen.
+type Decoded = (Vec<(String, State)>, Vec<(String, u64)>);
+
 /// The state's items by ID, or None when it doesn't decode.
-fn decode(mut b: &[u8]) -> Option<Vec<(String, State)>> {
+fn decode(mut b: &[u8]) -> Option<Decoded> {
     fn take<'a>(b: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
         let (head, rest) = (b.get(..n)?, b.get(n..)?);
         *b = rest;
@@ -152,7 +170,7 @@ fn decode(mut b: &[u8]) -> Option<Vec<(String, State)>> {
         take(b, n)
     }
     let mut out = Vec::new();
-    while !b.is_empty() {
+    for _ in 0..u32_of(&mut b)? {
         let id = String::from_utf8(sized(&mut b)?.to_vec()).ok()?;
         let mut memory = vec![0; Some(u32_of(&mut b)?).filter(|n| *n as u64 <= MAX_MEMORY)?];
         for _ in 0..u32_of(&mut b)? {
@@ -180,7 +198,12 @@ fn decode(mut b: &[u8]) -> Option<Vec<(String, State)>> {
             },
         ));
     }
-    Some(out)
+    let mut machine = Vec::new();
+    while !b.is_empty() {
+        let id = String::from_utf8(sized(&mut b)?.to_vec()).ok()?;
+        machine.push((id, u64::from_le_bytes(take(&mut b, 8)?.try_into().ok()?)));
+    }
+    Some((out, machine))
 }
 
 /// A save in the folder: its name's hash and its header.
@@ -193,7 +216,9 @@ struct Listed {
 impl Listed {
     /// Its bytes, when they still have the hash it's named by.
     fn whole(&self) -> Option<Vec<u8>> {
-        fs::read(&self.path).ok().filter(|b| hash(b) == self.hash)
+        fs::read(&self.path)
+            .ok()
+            .filter(|b| file_hash(b) == self.hash)
     }
 }
 
@@ -280,19 +305,19 @@ fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathB
         "slot": slot, "layout": layout, "content": content, "modules": modules,
         "runtime": hash(format!("{VERSION}\nwasmtime {}\n", deep_sandbox_wasmtime::WASMTIME).as_bytes()),
         "document": piece.document, "program": program(&piece), "step": k, "input_at": input_at, "track": track,
-        "ended": ended, "fingerprint": null, "segments": changed, "seq": seq,
+        "ended": ended, "fingerprint": fingerprint(w), "segments": changed, "seq": seq,
     });
     let mut bytes = header.to_string().into_bytes();
     bytes.push(b'\n');
     bytes.extend(encode(w));
-    let sha = hash(&bytes);
+    let sha = file_hash(&bytes);
     let tmp = dir.join(format!("{sha}.tmp"));
     let io = |e: std::io::Error| format!("{}: {e}", dir.display());
     let mut f = fs::File::create(&tmp).map_err(io)?;
     f.write_all(&bytes)
         .and_then(|()| f.sync_all())
         .map_err(io)?;
-    if fs::read(&tmp).map(|b| hash(&b)).map_err(io)? != sha {
+    if fs::read(&tmp).map(|b| file_hash(&b)).map_err(io)? != sha {
         let _ = fs::remove_file(&tmp);
         return Err(format!("the save of slot {slot} didn't read back whole"));
     }
@@ -307,6 +332,15 @@ fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathB
         fs::remove_file(&old.path).map_err(io)?;
     }
     Ok((sha, path))
+}
+
+/// The adapter fingerprint a save that holds same-machine state binds, or null when it holds none.
+fn fingerprint(w: &World) -> Value {
+    if w.piece.machine.is_empty() {
+        Value::Null
+    } else {
+        json!(w.adapter)
+    }
 }
 
 /// The saves the steps before step `k` asked for, written now that every item is at step k. A
@@ -328,10 +362,13 @@ pub(crate) fn due(w: &mut World, k: i64) {
         }
         let t = Instant::now();
         let out = match write(w, k, slot, ended) {
-            Ok((hash, file)) => json!({
-                "item": w.piece.items[i].id, "slot": slot, "step": k, "hash": hash, "file": file, "ended": ended,
-                "deep_hash": w.deep_hashes(), "write_ns": t.elapsed().as_nanos() as u64, "on_ui_thread": false,
-            }),
+            Ok((hash, file)) => {
+                let write_ns = t.elapsed().as_nanos() as u64;
+                json!({
+                    "item": w.piece.items[i].id, "slot": slot, "step": k, "hash": hash, "file": file, "ended": ended,
+                    "deep_hash": w.deep_hashes(), "write_ns": write_ns, "on_ui_thread": false,
+                })
+            }
             Err(e) => {
                 json!({"ok": false, "code": "save_failed", "item": w.piece.items[i].id, "slot": slot, "step": k, "what": e})
             }
@@ -359,6 +396,7 @@ fn opened(
     planted: Planted,
     k: i64,
     states: Vec<State>,
+    seen: u64,
 ) -> Result<World, Failed> {
     let track = track_of(track);
     let mut lives = Vec::new();
@@ -399,11 +437,12 @@ fn opened(
             .collect();
         lives.push(live);
     }
-    Ok(World::of(piece.clone(), track, lives, planted))
+    Ok(World::of(piece.clone(), track, lives, planted, seen))
 }
 
 /// Opens slot `slot`'s newest save that reads back whole, straight or through a declared
-/// migration, then plays the track on to step `steps` − 1.
+/// migration, then plays the track on to step `steps` − 1, on `adapter`, giving `frames`.
+#[allow(clippy::too_many_arguments)]
 pub fn open(
     piece: Rc<Piece>,
     dir: &Path,
@@ -411,6 +450,8 @@ pub fn open(
     track: &[Entry],
     steps: i64,
     planted: Planted,
+    adapter: &str,
+    frames: Option<&Value>,
 ) -> Result<Value, Value> {
     let all = listed(dir, slot);
     let mut damaged = Vec::new();
@@ -435,6 +476,8 @@ pub fn open(
         .filter(|(f, v)| h[**f].as_str() != Some(v.as_str()))
         .map(|(f, v)| json!({"what": f, "save": h[*f], "piece": v}))
         .collect();
+    // Same-machine state opens only on the adapter that wrote it; no migration moves it.
+    let other = h["fingerprint"].as_str().filter(|f| *f != adapter);
     let refused = |code: &str, mut extra: Value| {
         let mut out = json!({"ok": false, "code": code, "save": save.hash, "damaged": damaged});
         if let (Some(o), Some(e)) = (out.as_object_mut(), extra.as_object_mut()) {
@@ -454,13 +497,21 @@ pub fn open(
         .position(|b| *b == b'\n')
         .and_then(|n| decode(&bytes[n + 1..]));
     let mut via = json!({"hash": save.hash, "file": save.path, "step": k, "via": "straight"});
+    if let Some(f) = other {
+        let mut differs = differs;
+        differs.push(json!({"what": "fingerprint", "save": f, "piece": adapter}));
+        return Err(refused("save_refused", json!({"differs": differs})));
+    }
+    // Each counter's steps seen; they all count the same steps.
+    let seen = |m: &[(String, u64)]| m.first().map_or(0, |(_, n)| *n);
     let mut w = if differs.is_empty() {
-        let state = state.filter(|s| {
+        let state = state.filter(|(s, m)| {
             s.iter()
                 .map(|(id, _)| id)
                 .eq(piece.items.iter().map(|i| &i.id))
+                && m.iter().map(|(id, _)| id).eq(piece.machine.iter())
         });
-        let Some(state) = state else {
+        let Some((state, machine)) = state else {
             return Err(refused(
                 "save_refused",
                 json!({"differs": [{"what": "state"}]}),
@@ -472,6 +523,7 @@ pub fn open(
             planted,
             k,
             state.into_iter().map(|(_, s)| s).collect(),
+            seen(&machine),
         )
         .map_err(fits)?
     } else {
@@ -495,32 +547,45 @@ pub fn open(
                 json!({"by": m.by, "what": what, "trap": trap}),
             )
         };
-        let ([(_, old)], [item]) = (state.as_deref().unwrap_or(&[]), piece.items.as_slice()) else {
+        let (machine, logic) = state.map_or((Vec::new(), Vec::new()), |(s, m)| (m, s));
+        let ([(_, old)], [item]) = (logic.as_slice(), piece.items.as_slice()) else {
             return Err(failed(
                 "a migration moves one logic item's saved state, and this one doesn't decode",
                 Value::Null,
             ));
         };
         let new = migrate(m, old, item).map_err(|(what, trap)| failed(&what, trap))?;
-        let mut w = opened(&piece, track, planted, k, vec![new]).map_err(fits)?;
+        let mut w = opened(&piece, track, planted, k, vec![new], seen(&machine)).map_err(fits)?;
         w.saves_dir = Some(dir.to_path_buf());
+        w.adapter = adapter.to_string();
         let (hash, file) = write(&mut w, k, slot as i32, ended)
             .map_err(|e| refused("save_failed", json!({"what": e})))?;
         via = json!({"hash": hash, "file": file, "step": k, "via": "migration", "from": save.hash});
         w
     };
     w.saves_dir = Some(dir.to_path_buf());
+    w.adapter = adapter.to_string();
     let deep = w.deep_hashes();
     let mut rec = Record::default();
     for (item, l) in piece.items.iter().zip(w.lives.iter_mut()) {
         rec.checkpoint(&item.id, k, l.deep_hash());
         l.checked = Some(k);
     }
+    for m in &piece.machine {
+        rec.checkpoint(m, k, w.seen_hash());
+    }
+    let at_open: serde_json::Map<String, Value> = piece
+        .items
+        .iter()
+        .zip(&w.published)
+        .flat_map(|(i, a)| arrays_json(i, a))
+        .collect();
     w.run(steps, &mut rec, &mut |_, _| {});
     let saves = written(&mut w)?;
+    let frames = crate::frames(&piece, frames, &rec, Some((k, &at_open)))?;
     Ok(json!({
         "ok": true, "opened": via, "damaged": damaged, "deep_hash": deep, "steps": rec.steps_json(&piece),
-        "checkpoints": rec.checkpoints, "traps": rec.traps, "saves": saves, "frames": [],
+        "checkpoints": rec.checkpoints, "traps": rec.traps, "saves": saves, "frames": frames,
     }))
 }
 

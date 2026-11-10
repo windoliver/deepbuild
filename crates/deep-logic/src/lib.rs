@@ -463,6 +463,7 @@ impl Logic {
             None,
         )?;
         world.saves_dir = saves_dir(line);
+        world.adapter = adapter(line);
         let mut probed: Vec<(usize, Result<Value, Value>)> = Vec::new();
         world.run(steps, &mut rec, &mut |w, k| {
             for (i, p) in probes.iter().enumerate().filter(|(_, p)| p.at == k) {
@@ -509,6 +510,7 @@ impl Logic {
             peeks.push(json!({"item": item, "at": at, "len": len, "hex": hex}));
         }
         let saves = saves::written(&mut world)?;
+        let frames = frames(&piece, line.get("frames"), &rec, None)?;
         let budgets = self.budgets(&piece, &entries, &rec)?;
         let keys: Map<String, Value> = (0..piece.items.len())
             .map(|i| {
@@ -520,7 +522,7 @@ impl Logic {
             .collect();
         Ok(json!({
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "checkpoints": rec.checkpoints,
-            "traps": rec.traps, "budgets": budgets, "saves": saves, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
+            "traps": rec.traps, "budgets": budgets, "saves": saves, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
         }))
     }
@@ -858,6 +860,7 @@ impl Logic {
             None,
         )?;
         world.saves_dir = saves_dir(line);
+        world.adapter = adapter(line);
         let session = format!("s{}", self.sessions.len() + 1);
         self.sessions.insert(session.clone(), world);
         Ok(json!({"ok": true, "session": session, "items": items(&piece)}))
@@ -887,8 +890,102 @@ impl Logic {
             .get("slot")
             .and_then(Value::as_i64)
             .ok_or_else(|| bad("slot"))?;
-        saves::open(piece, &dir, slot, &entries, steps, self.planted)
+        saves::open(
+            piece,
+            &dir,
+            slot,
+            &entries,
+            steps,
+            self.planted,
+            &adapter(line),
+            line.get("frames"),
+        )
     }
+}
+
+/// The adapter fingerprint a call names for its run, or this host's own: what a save of
+/// same-machine state binds.
+fn adapter(line: &Value) -> String {
+    line.get("adapter")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            let host = format!(
+                "{}\n{}\n{}\n",
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+                cpu()
+            );
+            rewrite::hash(host.as_bytes())
+        })
+}
+
+/// Frames (Logic: interpolated writes): per span, `count` frames at 60 Hz from flick `from`, each
+/// reading the named hold arrays as the last step at or before its time left them. `opened` is a
+/// save's step s and its arrays, as step s − 1 left them.
+pub(crate) fn frames(
+    piece: &Piece,
+    spans: Option<&Value>,
+    rec: &Record,
+    opened: Option<(i64, &Map<String, Value>)>,
+) -> Result<Value, Value> {
+    let Some(spans) = spans else {
+        return Ok(json!([]));
+    };
+    let len = piece.items.first().map_or(0, |i| i.step);
+    if len == 0 || !piece.items.windows(2).all(|w| w[0].step == w[1].step) {
+        return Err(bad("frames need every item at one step rate"));
+    }
+    let what = |w: String| json!({"ok": false, "code": "bad_input", "what": w});
+    let mut out = Vec::new();
+    for span in spans.as_array().ok_or_else(|| bad("frames"))? {
+        let (Some(from), Some(count), Some(names)) = (
+            span.get("from").and_then(Value::as_i64),
+            span.get("count")
+                .and_then(Value::as_i64)
+                .filter(|n| *n >= 0),
+            span.get("arrays").and_then(Value::as_array),
+        ) else {
+            return Err(bad("frames"));
+        };
+        let names: Vec<&str> = names
+            .iter()
+            .map(Value::as_str)
+            .collect::<Option<_>>()
+            .ok_or_else(|| bad("frames"))?;
+        let linear = piece.items.iter().flat_map(|i| {
+            i.writes
+                .iter()
+                .filter(|w| w.linear)
+                .map(move |w| format!("{}.{}", i.id, w.name))
+        });
+        if let Some(n) = linear.into_iter().find(|n| names.contains(&n.as_str())) {
+            return Err(what(format!(
+                "{n} is a linear write, whose frames aren't built yet (#545)"
+            )));
+        }
+        let mut list = Vec::new();
+        for j in 0..count {
+            let t = from + j * (F / 60);
+            let k = t.div_euclid(len);
+            let row = match opened {
+                Some((s, arrays)) if k == s - 1 => Some(arrays),
+                _ => rec.rows().get(&k).map(|(_, a)| a),
+            };
+            let arrays: Map<String, Value> = names
+                .iter()
+                .map(|n| Some((n.to_string(), row?.get(*n)?.clone())))
+                .collect::<Option<_>>()
+                .ok_or_else(|| {
+                    what(format!(
+                        "no step this run reports wrote {names:?} at or before flick {t}"
+                    ))
+                })?;
+            list.push(json!({"t": t, "arrays": arrays}));
+        }
+        out.push(Value::Array(list));
+    }
+    Ok(Value::Array(out))
 }
 
 /// The folder a call names for the piece's saves.

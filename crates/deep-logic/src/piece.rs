@@ -176,6 +176,8 @@ pub struct Write {
     pub name: String,
     pub ty: Ty,
     pub count: u32,
+    /// `interpolate: linear`, which draws nothing yet (#545).
+    pub linear: bool,
 }
 
 /// A checked logic item: everything a step needs.
@@ -368,12 +370,17 @@ impl Item {
 }
 
 /// A piece: its seed, controls, tour and checked logic items in order.
+/// The fixture canvas module whose carried state is of the `same_machine` class (#534).
+pub const MACHINE: &str = "same_machine.counter@1";
+
 #[derive(Clone, Debug)]
 pub struct Piece {
     pub seed: i64,
     pub controls: BTreeSet<String>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
+    /// The `same_machine.counter@1` items, by ID.
+    pub machine: Vec<String>,
     /// The document by hash, which a save names but isn't bound to.
     pub document: String,
 }
@@ -574,10 +581,11 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             .filter(|c| *c >= 1 && *c <= u32::MAX as u64);
         let interpolate = w.get("interpolate").map_or(Some("hold"), Value::as_str);
         match (ty, count, interpolate) {
-            (Some(ty), Some(count), Some("hold" | "linear")) => writes.push(Write {
+            (Some(ty), Some(count), Some(i @ ("hold" | "linear"))) => writes.push(Write {
                 name: name.clone(),
                 ty,
                 count: count as u32,
+                linear: i == "linear",
             }),
             _ => refused.push(refusal(
                 "write",
@@ -675,7 +683,17 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         .ok_or_else(bad)?;
     // Every item's declared fields first, so a read can name a later item's array.
     let mut decls = Vec::new();
+    let mut machine = Vec::new();
     for (id, item) in items_in {
+        // The fixture module whose carried state is same-machine: a counter of the steps it's seen.
+        if item.get("kind").and_then(Value::as_str) == Some(MACHINE)
+            && item
+                .get("params")
+                .is_none_or(|p| p.as_object().is_some_and(Map::is_empty))
+        {
+            machine.push(id.clone());
+            continue;
+        }
         if item.get("kind").and_then(Value::as_str) != Some("logic@1") {
             return Err(logic_refused(
                 id,
@@ -967,6 +985,7 @@ pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<
         controls,
         tour: piece.get("tour").cloned(),
         items,
+        machine,
         document: hash(piece.to_string().as_bytes()),
     })
 }
