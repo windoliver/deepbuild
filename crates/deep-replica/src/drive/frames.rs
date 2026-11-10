@@ -157,10 +157,56 @@ impl Replica {
         event.insert("ts".into(), json!(ts));
         let event = Value::Object(event);
         self.notifier.saw(&event, ts);
+        self.hub_copy.saw(&event);
         self.events.push(event.clone());
         self.cx.update(|cx| deep_app::record::deliver(event, cx));
         self.tick();
         Ok(json!({"log_pos": log_pos, "ts": ts}))
+    }
+
+    /// `open`: an address through the app's one open, as a click, ⌘K or `deep open` opens it, or a `deepbuild://` link
+    /// through the function the OS's URL handler calls (#1460); then one frame of the clock. The address the window
+    /// shows, or what became of the one asked for.
+    pub(super) fn open(&mut self, call: &Value) -> Result<Value, Fail> {
+        let open = &call["open"];
+        let said = match (open["address"].as_str(), open["url"].as_str()) {
+            (Some(text), None) => self.cx.update(|cx| deep_app::open::arrive(text, cx)),
+            (None, Some(url)) => self.cx.update(|cx| deep_app::open::link(url, cx)),
+            _ => {
+                return Err(fail(
+                    "refused",
+                    "open takes {address} or {url}: an address, or a deepbuild:// link",
+                ))
+            }
+        };
+        self.tick();
+        Ok(match said {
+            Ok(address) => json!({"address": address}),
+            Err(words) => json!({"address": null, "said": words}),
+        })
+    }
+
+    /// `notification`: a click on the body of the `click`th notification this replica posted, through the function the
+    /// OS's notification-click handler calls (#1460); then one frame of the clock.
+    pub(super) fn notification(&mut self, call: &Value) -> Result<Value, Fail> {
+        let Some(posted) = call["notification"]["click"]
+            .as_u64()
+            .and_then(|n| self.notified.get(n as usize).cloned())
+        else {
+            return Err(fail(
+                "refused",
+                format!(
+                    "notification.click is the index of a notification this replica posted; it posted {}",
+                    self.notified.len()
+                ),
+            ));
+        };
+        let tag = posted["session"].as_str().unwrap_or_default().to_owned();
+        let _ = self.cx.update(|cx| deep_app::open::notification(&tag, cx));
+        self.tick();
+        Ok(json!({"notification": {
+            "t": posted["t"], "ask": posted["ask"], "session": posted["session"], "text": posted["text"],
+        }}))
     }
 
     /// `resize`: the window's content to `[w, h]` points, as the platform resizes it; then one frame of the clock.

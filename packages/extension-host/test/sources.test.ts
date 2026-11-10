@@ -4,6 +4,7 @@
 // is read at run time from a cursor the hub keeps across a restart, each event held to the reading type it names.
 // Each runs a real package through a real host and record; the provider is an HTTP client the test answers.
 import { execFileSync } from 'node:child_process';
+import { constants } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,6 +14,8 @@ import { openAsks } from '@deepbuild/asks';
 import { openRecord, type Event, type RecordStore } from '@deepbuild/record';
 import { openSupervisor } from '@deepbuild/supervisor';
 import { keychainStore, openExtensionHost, secretServiceStore, openTrust, packageDigest, type ExtensionHost, type HttpAnswer, type HttpClient, type HttpRequest, type SecretStore } from '../src/index.js';
+
+import { nodeHttp, Sources } from '../src/sources.js';
 
 const dirs: string[] = [];
 const closing: { close(): Promise<void> }[] = [];
@@ -259,6 +262,32 @@ describe('#364 secrets on the trusted path', () => {
   });
 });
 
+describe('#1731 a library file\'s call', () => {
+  it('records the bytes of the file, not the length of the base64 text that carries them', async () => {
+    const file = Buffer.alloc(1000, 7);
+    const called: unknown[] = [];
+    const sources = new Sources({
+      now: Date.now, secrets: memory(), http: async () => ({ status: 200, headers: {}, body: file.toString('base64') }),
+      append: async (kind, data) => { if (kind === 'source.called') called.push(data.bytes); },
+    });
+    const library = { host: 'shelf.example', secret: null, auth: null, quota: { per_minute: 10, per_day: 10 }, timeout: 5_000 };
+    const answer = await sources.workFetch('test/shelf', 'ext.shelf.library', library, { method: 'GET', path: '/files/a.glb' }, { timeout: library.timeout, encoding: 'base64' });
+    expect(Buffer.from(answer.body, 'base64').equals(file)).toBe(true);
+    expect(called).toEqual([1000]);
+  });
+
+  it('stops a download at a size one base64 string can still hold, not after the whole file is in', async () => {
+    // One byte more than the longest string carries as base64. The chunk only states that size, so nothing is allocated.
+    const size = Math.floor(constants.MAX_STRING_LENGTH / 4) * 3 + 1;
+    const chunk = Object.defineProperty(new Uint8Array(1), 'byteLength', { value: size });
+    const fetched = globalThis.fetch;
+    globalThis.fetch = (async () => ({ status: 200, headers: new Headers(), body: (async function* () { yield chunk; })() })) as never;
+    try {
+      await expect(nodeHttp({ url: 'https://shelf.example/files/a.glb', method: 'GET', headers: {}, encoding: 'base64' }, new AbortController().signal)).rejects.toThrow(/shelf\.example is over \d+ bytes/);
+    } finally { globalThis.fetch = fetched; }
+  });
+});
+
 describe('#364 stream sources at run time', () => {
   // A source no HTTP call feeds: its upstream is its own list of pushes. The kit hands it its own stream at install.
   const pushes = (n: number) => Array.from({ length: n }, (_, i) => ({ seq: i + 1, kind: 'push', data: { commit: String(i + 1).repeat(40).slice(0, 40), pusher: i % 2 ? null : 'maya' } }));
@@ -285,5 +314,18 @@ export default function (deep) {
     for (let i = 0; i < 2; i++) {
       expect(await h.readStream('ext.forge.pushes', 2), 'the bad event stays unread').toMatchObject({ status: 'failed', cause: expect.stringMatching(/event 5 isn't push\.record@1/) });
     }
+  });
+
+  it('keeps each stream\'s cursor when two streams are read at once', async () => {
+    const read = `{ variant: 'stream', read(stream, cursor, limit) { const start = cursor === null ? 0 : Number(cursor); const events = (stream ?? UPSTREAM).events.slice(start, start + limit); return { events, cursor: String(start + events.length) }; } }`;
+    const names = ['ext.forge.pushes', 'ext.forge.tags'];
+    const w = await world(pkgOf('deepbuild/forge', `const UPSTREAM = { events: ${JSON.stringify(pushes(4))} };
+export default function (deep) {
+  deep.registerSource('${names[0]}', ${read});
+  deep.registerSource('${names[1]}', ${read});
+}
+`, { sources: names.map((name) => ({ name, variant: 'stream', reading: 'push.record@1' })), requires: { preview: ['deep.registerSource'] } }), { client: provider(() => status(500)).client, grant: [] });
+    await Promise.all(names.map((name) => w.h.readStream(name, 2)));
+    for (const name of names) expect(await w.h.readStream(name, 2), `${name}'s next page`).toMatchObject({ status: 'events', events: pushes(4).slice(2) });
   });
 });

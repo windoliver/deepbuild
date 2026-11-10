@@ -249,3 +249,59 @@ pub fn i420_to_bgra(planes: &[u8], w: usize, h: usize, matrix: &str, range: &str
     }
     out
 }
+
+/// #501: BGRA8 rows (top-down, no padding) to 8-bit 4:2:0 planes (Y, then Cb, then Cr) by BT.709
+/// in limited range. Alpha is left out; each chroma sample is the mean of the pixels it covers.
+pub fn bgra_to_i420(bgra: &[u8], w: usize, h: usize) -> Vec<u8> {
+    let (kr, kb) = (0.2126, 0.0722);
+    let (cw, ch) = (w.div_ceil(2), h.div_ceil(2));
+    let mut out = vec![0u8; w * h + 2 * cw * ch];
+    let q = |v: f64| v.round().clamp(0.0, 255.0) as u8;
+    let rgb = |row: usize, col: usize| {
+        let p = &bgra[(row * w + col) * 4..];
+        [
+            p[2] as f64 / 255.0,
+            p[1] as f64 / 255.0,
+            p[0] as f64 / 255.0,
+        ]
+    };
+    let luma = |c: [f64; 3]| kr * c[0] + (1.0 - kr - kb) * c[1] + kb * c[2];
+    for row in 0..h {
+        for col in 0..w {
+            out[row * w + col] = q(16.0 + 219.0 * luma(rgb(row, col)));
+        }
+    }
+    for row in 0..ch {
+        for col in 0..cw {
+            let mut sum = [0.0; 3];
+            let sites = [(0, 0), (0, 1), (1, 0), (1, 1)]
+                .map(|(dy, dx)| ((row * 2 + dy).min(h - 1), (col * 2 + dx).min(w - 1)));
+            for (y, x) in sites {
+                let c = rgb(y, x);
+                sum = [
+                    sum[0] + c[0] / 4.0,
+                    sum[1] + c[1] / 4.0,
+                    sum[2] + c[2] / 4.0,
+                ];
+            }
+            let y = luma(sum);
+            let at = w * h + row * cw + col;
+            out[at] = q(128.0 + 224.0 * (sum[2] - y) / (2.0 * (1.0 - kb)));
+            out[at + cw * ch] = q(128.0 + 224.0 * (sum[0] - y) / (2.0 * (1.0 - kr)));
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn bgra_becomes_bt709_limited_planes() {
+        // White, black and the red primary, each a 2 x 2 frame: Y four times, then Cb and Cr.
+        let planes = |bgra: [u8; 4]| super::bgra_to_i420(&bgra.repeat(4), 2, 2);
+        assert_eq!(planes([255, 255, 255, 255]), [235, 235, 235, 235, 128, 128]);
+        assert_eq!(planes([0, 0, 0, 255]), [16, 16, 16, 16, 128, 128]);
+        // 16 + 219 * 0.2126 = 62.6; 128 - 224 * 0.2126 / 1.8556 = 102.3; 128 + 224 / 2 = 240.
+        assert_eq!(planes([0, 0, 255, 255]), [63, 63, 63, 63, 102, 240]);
+    }
+}

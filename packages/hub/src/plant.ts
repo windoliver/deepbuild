@@ -80,6 +80,10 @@ export type Plant =
   | 'rule-without-reason' | 'copies-no-standing-rules'
   // #668's: a status that leaves out a session's commits, a doctor that trusts setup's record, and a `deep on` that keeps the gates off.
   | 'status-omits-commit' | 'doctor-misses-hooks' | 'on-stays-off'
+  // #1463's: deep status listing the rows in reverse, naming needs you "need you", flipping every row's unread; deep
+  // counting the open asks a second time itself; deep inbox leaving out each ask's default; and the hub leaking every
+  // session's asks into an agent's deep_status.
+  | 'status-second-order' | 'status-own-word' | 'status-unread-flipped' | 'deep-second-count' | 'inbox-no-default' | 'status-row-leak'
   // #1455's: a doctor that prints a fix under a healthy item.
   | 'doctor-healthy-fix'
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
@@ -205,7 +209,13 @@ export type Plant =
   | 'box-applies-at-once' | 'box-ignores-revision'
   // #1922's: a job key over the params' text as written, one without the tool's version, and a host whose tool build
   // hashes only the entry file, or adds where the files are, or when they were modified.
-  | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes';
+  | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes'
+  // #1924's: a hub that keeps your yes to an agent's file for one job, not for its pair of file and host; one that sends
+  // the file before your answer; and a runner that calls an open model's host whatever it reports, or keys its job
+  // without the weight hashes.
+  | 'job-host-asks-again' | 'job-host-sends-early' | 'job-weights-call-anyway' | 'job-weights-not-keyed'
+  // #1923's: a runner that runs a job's tool again while a job with its key runs, and one that stops the job when a joiner cancels.
+  | 'job-second-call' | 'job-joiner-cancels-job';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -235,6 +245,7 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
+  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'status-row-leak',
   'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
@@ -291,6 +302,8 @@ const PLANTS: readonly string[] = [
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members',
   'job-key-params-text', 'job-key-no-version', 'job-build-entry-only', 'job-build-hashes-paths', 'job-build-hashes-mtimes',
+  'job-host-asks-again', 'job-host-sends-early', 'job-weights-call-anyway', 'job-weights-not-keyed',
+  'job-second-call', 'job-joiner-cancels-job',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

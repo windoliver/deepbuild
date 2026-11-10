@@ -208,6 +208,11 @@ test-leave-out-media = []
 test-probe = ["dep:deep-canvas-test-modules"]
 test-probe-via-media = ["dep:deep-canvas-test-modules"]
 test-media-checkpoint-without-tail = []
+# Issue #501: the test module that fills `export.target@1` with `raw`; its planted twin whose
+# target reads itself back; the planted layout that declares the registry in media's crate.
+test-export-target = ["dep:deep-canvas-test-modules"]
+test-export-target-self-read = ["dep:deep-canvas-test-modules"]
+test-export-target-in-media = []
 # #308: the full set without the input module, and the test control kind test.dial.
 test-leave-out-input = []
 test-control-kind = []

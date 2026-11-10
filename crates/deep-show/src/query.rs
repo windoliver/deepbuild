@@ -323,7 +323,7 @@ impl Hub<'_> {
         let mut sessions: Vec<DocSession> = Vec::new();
         if !q.paths.is_empty() {
             if self.scenario.planted == Some(Planted::RelationFromPreviousBox) {
-                sessions = self.from_previous_boxes(&revision.drawn, &times);
+                sessions = self.solved_from_previous_boxes(&revision.drawn, &times);
             } else {
                 for t in &times {
                     let s = self.evaluated(&revision.drawn, *t);
@@ -502,6 +502,21 @@ impl Hub<'_> {
     /// The evaluated value at `path` in an evaluated session, with the content key of what made
     /// it; `None` for a path the revision doesn't hold.
     fn read_path(&self, s: &DocSession, doc: &Value, path: &str) -> Option<(Value, Key)> {
+        // #1818: a bus's fields in the document's `buses` map read as written, and a field the
+        // bus leaves out, such as its `loudness_target`, reads missing, never a default.
+        if let Some(rest) = path.strip_prefix("buses/") {
+            let value = match held_at(doc, path) {
+                Some(v) => v,
+                None if deep_canvas_media::planted("loudness_target_defaults_to_zero")
+                    && rest.split_once('/').is_some_and(|(bus, f)| f == "loudness_target" && doc["buses"].get(bus).is_some()) =>
+                {
+                    json!(0)
+                }
+                None => return None,
+            };
+            let key = Hasher::of(self.sched.hash(), "deep_query.bus").text(path).text(&value.to_string()).finish();
+            return Some((value, key));
+        }
         let (id, field) = item_path(path)?;
         if field == "bounds" {
             return self.bounds(s, id);
@@ -566,7 +581,7 @@ impl Hub<'_> {
     /// The planted `relation_from_previous_box`: at each time in turn, every `at.place`
     /// relation solved against a stand-in for its target holding the box the previous
     /// evaluation left (the box at time 0 before any), the rest evaluated as shipped.
-    fn from_previous_boxes(&mut self, drawn: &Value, times: &[i64]) -> Vec<DocSession> {
+    fn solved_from_previous_boxes(&mut self, drawn: &Value, times: &[i64]) -> Vec<DocSession> {
         let targets: Vec<String> = drawn
             .get("items")
             .and_then(Value::as_object)

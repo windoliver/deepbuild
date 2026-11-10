@@ -16,7 +16,9 @@ mod costs;
 mod efficiency;
 mod familiar;
 mod evidence;
+mod export;
 mod film;
+mod film_viewer;
 mod frames;
 mod function;
 mod gate;
@@ -228,7 +230,7 @@ fn tame_overflow(line: &str) -> Option<String> {
 }
 
 /// An optional field as `read` takes it: `Some(None)` when it's absent, `None` when `read` refuses it.
-fn optional<T>(value: Option<&Value>, read: impl FnOnce(&Value) -> Option<T>) -> Option<Option<T>> {
+pub(crate) fn optional<T>(value: Option<&Value>, read: impl FnOnce(&Value) -> Option<T>) -> Option<Option<T>> {
     value.map_or(Some(None), |v| read(v).map(Some))
 }
 
@@ -401,6 +403,31 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     };
     match name {
         "revisions" => return Some(Call::Revisions(doc()?)),
+        "session" => {
+            return Some(Call::Session {
+                doc: doc()?,
+                set: c.get("set").cloned().filter(Value::is_object),
+            })
+        }
+        "frame_hash" => {
+            let frames = c.get("frames")?.as_array()?.iter().map(|f| {
+                let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
+                let w = u32::try_from(size[0].as_u64()?).ok()?;
+                let h = u32::try_from(size[1].as_u64()?).ok()?;
+                Some(([w, h], f.get("bytes")?.as_str()?.to_string()))
+            });
+            return Some(Call::FrameHash {
+                frames: frames.collect::<Option<_>>()?,
+                software: match c.get("adapter") {
+                    None => false,
+                    Some(a) => a.as_str()? == "software",
+                },
+            });
+        }
+        "cross_machine" => {
+            let a = c.get("audio")?.as_array().filter(|a| a.len() == 2)?;
+            return Some(Call::CrossMachine([a[0].as_str()?.to_string(), a[1].as_str()?.to_string()]));
+        }
         "input" => {
             return Some(Call::Input {
                 panel: c.get("panel")?.as_str()?.to_string(),
@@ -505,6 +532,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "see" => return Some(Call::See(c.get("panel")?.as_str()?.to_string())),
         "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
+        "viewer" => return Some(Call::Viewer(c.get("panel")?.as_str()?.to_string())),
         "ask" => {
             let pointer = optional(c.get("pointer"), input::point)?;
             return Some(Call::Ask {
@@ -695,7 +723,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 }
                 let bytes = base64(col.get("data")?.as_str()?)?;
                 let len = col.get("len")?.as_u64()? as usize;
-                if bytes.len() != len * 8 {
+                if len.checked_mul(8) != Some(bytes.len()) {
                     return None;
                 }
                 columns.insert(format!("{source}.{name}"), bytes);
@@ -1139,6 +1167,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 *flag = true;
                 None
             }
+            None if export_planted(p).is_some() => export_planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1489,9 +1518,12 @@ fn read_line(line: &str) -> Option<(Map<String, Value>, Scenario)> {
 }
 
 fn answer(command: &str, startup: &Startup, line: &str) -> Value {
-    let Some((input, scenario)) = read_line(line) else {
+    let Some((input, mut scenario)) = read_line(line) else {
         return bad_input();
     };
+    if scenario.planted.is_none() {
+        scenario.planted = startup.run_planted;
+    }
     match command {
         "run" => {
             let replies = jobs::around(&scenario, startup, |background| {
@@ -1856,6 +1888,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::sandbox::prog());
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");
+    // #501's planted layout: media declares export.target@1, which the core then leaves to it.
+    #[cfg(feature = "test-export-target-in-media")]
+    for m in &mut out {
+        if m.manifest.name == "media" {
+            *m = deep_canvas_media::module::declaring_export_targets();
+        }
+    }
     // #499: a build without the media module, and the test module that probes an asset through
     // the decode worker (or, planted, through media).
     #[cfg(feature = "test-leave-out-media")]
@@ -2173,6 +2212,11 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             }
         }
     }
+    if planted == Some(StartPlanted::Run(Planted::TargetReaderIsWriter)) {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "media") {
+            *m = deep_canvas_media::module::png_reads_itself();
+        }
+    }
     if let Some(StartPlanted::ControlKind(p)) = planted {
         for m in held.iter_mut().filter(|m| m.manifest.name == "input") {
             *m = deep_canvas_input::module::with_test_kind(p);
@@ -2214,6 +2258,9 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     }
     if cfg!(feature = "test-camera-in-scene3d") {
         registry = registry.plant(Fault::CameraInScene3d);
+    }
+    if cfg!(feature = "test-export-target-in-media") {
+        registry = registry.plant(Fault::ExportTargetInMedia);
     }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {
@@ -2271,6 +2318,10 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             Some(StartPlanted::Layouts(l)) => l,
             _ => Default::default(),
         },
+        run_planted: match planted {
+            Some(StartPlanted::Run(p)) => Some(p),
+            _ => None,
+        },
     })
 }
 
@@ -2307,6 +2358,8 @@ enum StartPlanted {
     /// #308: the test control kind test.dial, which the input module fills under
     /// `test-control-kind`, with a planted program.
     ControlKind(&'static str),
+    /// #501: a run's wrong program given at startup, as the scenario's `planted` would give it.
+    Run(Planted),
 }
 
 #[cfg(test)]
@@ -2315,8 +2368,13 @@ mod tests {
 
     /// The core alone, sealed with no faults. `seal()` is not called: the seal-count test counts its runs.
     fn startup() -> Startup {
+        startup_of(deep_canvas::registry::core())
+    }
+
+    /// A startup holding `sealed`, with no faults; for a test in another module, without `seal()`.
+    pub(crate) fn startup_of(sealed: deep_canvas::registry::Sealed) -> Startup {
         Startup {
-            sealed: deep_canvas::registry::core(),
+            sealed,
             seal_ms: 0.0,
             steps_by_name: false,
             admits_frame_json: false,
@@ -2328,6 +2386,7 @@ mod tests {
             listing: None,
             kinds: None,
             layouts: Default::default(),
+            run_planted: None,
         }
     }
 
@@ -2343,6 +2402,101 @@ mod tests {
             .expect("the shipped set seals");
         }
         assert_eq!(hub::SEAL_RUNS.load(Ordering::Relaxed) - before, 2);
+    }
+
+    #[test]
+    fn a_batch_column_whose_length_overflows_is_no_call() {
+        let c = json!({"call": "batch", "doc": "d", "source": "s",
+            "columns": {"x": {"dtype": "f64", "data": "", "len": 1u64 << 61}}});
+        assert!(call(c.as_object().expect("an object")).is_none());
+    }
+
+    /// #138: a golden store that can't be read, or can't be written back, takes no record and no
+    /// decision: each is refused, and a store that can't be read stays as it was.
+    #[test]
+    fn a_golden_store_that_cant_be_read_or_written_refuses_a_record_and_a_decision() {
+        use std::os::unix::fs::PermissionsExt;
+        let startup = startup();
+        let dir = std::env::temp_dir().join(format!("deep-138-store-{}", std::process::id()));
+        let goldens = dir.join("goldens");
+        let store = goldens.join("store.json");
+        std::fs::create_dir_all(&goldens).expect("a folder");
+        let reply = |call: &Value| {
+            let line = json!({"evidence": dir.join("evidence"), "goldens": goldens,
+                "commit": "0123456789abcdef0123456789abcdef01234567", "calls": [call]});
+            answer("run", &startup, &line.to_string())["replies"][0].clone()
+        };
+        // The first fixture this build records on the CPU, and a decision that needs none.
+        let manifest = reply(&json!({"call": "manifest"}));
+        let record = (manifest["fixtures"].as_array().expect("fixtures").iter())
+            .map(|f| json!({"call": "record", "fixture": f["name"], "backend": "vello_cpu"}))
+            .find(|c| reply(c)["outcome"] == "recorded")
+            .expect("a fixture records");
+        let waive =
+            json!({"call": "decide", "decision": {"waive": {"fixture": "f", "reason": "r"}}});
+        let outcomes = || {
+            [&record, &waive].map(|call| {
+                let r = reply(call);
+                let text = |k: &str| r[k].as_str().unwrap_or("").to_string();
+                format!("{} {}", text("outcome"), text("code"))
+            })
+        };
+        std::fs::write(&store, "{").expect("written");
+        let unreadable = outcomes();
+        let kept = std::fs::read_to_string(&store).expect("the store");
+        std::fs::remove_file(&store).expect("removed");
+        let mode = |m| std::fs::set_permissions(&goldens, std::fs::Permissions::from_mode(m));
+        mode(0o555).expect("read-only");
+        let unwritable = outcomes();
+        mode(0o755).expect("writable");
+        let _ = std::fs::remove_dir_all(&dir);
+        let refused = |code: &str| [(); 2].map(|()| format!("refused {code}"));
+        assert_eq!(
+            (unreadable, kept.as_str(), unwritable),
+            (
+                refused("store_unreadable"),
+                "{",
+                refused("store_unwritable")
+            )
+        );
+    }
+
+    /// #138: a kit call that runs nothing passes nothing. A call that matches no module is
+    /// INVALID and leaves the ledger as it was; a module none of whose parts ran is INVALID; and
+    /// a run over some parts only writes no ledger.
+    #[test]
+    fn a_kit_call_that_runs_nothing_is_invalid_and_a_partial_run_writes_no_ledger() {
+        let startup = startup();
+        let dir = std::env::temp_dir().join(format!("deep-138-unrun-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a folder");
+        let kit = |call: Value| {
+            let line = json!({"evidence": dir.join("evidence"), "calls": [call]});
+            answer("run", &startup, &line.to_string())["replies"][0].clone()
+        };
+        let kept = dir.join("kept.json");
+        std::fs::write(&kept, "{\"kept\": true}\n").expect("written");
+        let unmatched = kit(json!({"call": "kit", "modules": ["marks2D"], "ledger": kept}));
+        let kept = std::fs::read_to_string(&kept).expect("the ledger");
+        assert_eq!(
+            (unmatched["verdict"].as_str(), kept.as_str()),
+            (Some("INVALID"), "{\"kept\": true}\n"),
+            "no module matched"
+        );
+        for parts in [json!([]), json!(["sandbox"])] {
+            let r = kit(json!({"call": "kit", "modules": ["core"], "parts": parts}));
+            assert_eq!(
+                [&r["verdict"], &r["modules"][0]["verdict"]],
+                ["INVALID"; 2],
+                "core over the parts {parts}"
+            );
+        }
+        let partial = dir.join("partial.json");
+        let one = json!(["schedule"]);
+        let r = kit(json!({"call": "kit", "modules": ["core"], "parts": one, "ledger": partial}));
+        let written = partial.exists();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(r["modules"][0]["parts"][0]["part"], "schedule", "{r}");
+        assert!(!written, "a run of one part wrote a ledger");
     }
 
     #[test]
@@ -2703,10 +2857,30 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
                 name.to_string().into_boxed_str(),
             )))
         }
+        _ if export_planted(twin).is_some() => export_planted(twin).map(StartPlanted::Run).ok_or(()),
         _ => seams::NetFault::named(twin)
             .map(StartPlanted::Network)
             .ok_or(()),
     }
+}
+
+/// #501's wrong programs, by the names its acceptance suite gives them.
+fn export_planted(name: &str) -> Option<Planted> {
+    Some(match name {
+        "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
+        "span_rounds_start" => Planted::SpanRoundsStart,
+        "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,
+        "range_restarts_timecode" => Planted::RangeRestartsTimecode,
+        "export_starts_then_stops" => Planted::ExportStartsThenStops,
+        "target_exports_selection" => Planted::TargetExportsSelection,
+        "target_writes_baked_channel" => Planted::TargetWritesBakedChannel,
+        "target_reader_is_writer" => Planted::TargetReaderIsWriter,
+        "mixer_linux_one_step" => Planted::MixerLinuxOneStep,
+        "drop_frame_every_tenth_minute" => Planted::DropFrameEveryTenthMinute,
+        "timecode_track_zero" => Planted::TimecodeTrackZero,
+        "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
+        _ => return None,
+    })
 }
 
 /// A hash version by its name: `hash@1` or `hash@2`.
@@ -2829,11 +3003,15 @@ fn main() {
     };
     canvas.world.insert("evidence".into(), json!(""));
     for line in stdin.lock().lines() {
-        let Ok(line) = line else { break };
-        let reply = match command.as_str() {
-            "canvas" => canvas.line(startup, &line),
-            "live" => live(startup, &line),
-            _ => answer(&command, startup, &line),
+        let reply = match line {
+            Ok(line) => match command.as_str() {
+                "canvas" => canvas.line(startup, &line),
+                "live" => live(startup, &line),
+                _ => answer(&command, startup, &line),
+            },
+            // A line that is not UTF-8 was read to its end: it is one that can't be read.
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => bad_input(),
+            Err(_) => break,
         };
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
@@ -2851,3 +3029,5 @@ mod idle;
 mod watch;
 #[cfg(target_os = "macos")]
 mod window;
+// #501: the device gate's live output on the default device, for `soak`.
+mod device;

@@ -215,8 +215,10 @@ impl Bvh {
 }
 
 fn triangles(pos: &[V3], idx: &[u32]) -> Vec<[V3; 3]> {
-    idx.chunks_exact(3)
-        .map(|t| [pos[t[0] as usize], pos[t[1] as usize], pos[t[2] as usize]])
+    idx.as_chunks::<3>()
+        .0
+        .iter()
+        .map(|t| t.map(|i| pos[i as usize]))
         .collect()
 }
 

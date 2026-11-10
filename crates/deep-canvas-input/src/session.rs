@@ -957,6 +957,19 @@ impl Session {
         Ok(json!({"value": value, "appended": 1, "dropped": dropped}))
     }
 
+    /// The controls that take `key` with `mods` held, in the document's order (#501: the film
+    /// viewer's keymap check names them). A hover control reads every key and is not listed.
+    pub fn holders(&self, key: &str, mods: &[&str]) -> Vec<String> {
+        let mods = Mods {
+            shift: mods.contains(&"shift"),
+            cmd: mods.contains(&"cmd"),
+        };
+        // A press with no keys of its own takes Enter and Space, as `key` reads it.
+        let press = |c: &Control| c.behavior == Behavior::Press && c.keys.is_empty() && (key == "Enter" || key == " ");
+        let takes = |(i, c): &(usize, &Control)| press(c) || self.keyed(*i, key, mods).is_some();
+        self.controls.iter().enumerate().filter(takes).map(|(_, c)| c.id.clone()).collect()
+    }
+
     /// The value key `key` gives control `i`: its own `keys` first, then the default keys.
     fn keyed(&self, i: usize, key: &str, mods: Mods) -> Option<Value> {
         let c = &self.controls[i];
@@ -1204,6 +1217,10 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
     let r = |k: usize, d: f64| range.and_then(|a| a.get(k)).and_then(Value::as_f64).unwrap_or(d);
     let top = if behavior == Behavior::Turn { 360.0 } else { 1.0 };
     let (min, max) = (r(0, 0.0), r(1, top));
+    // A value is clamped into the range, which panics on a range that runs high to low.
+    if min > max {
+        return Err(refused("out_of_range", format!("controls/{id}/range")));
+    }
     let options: Vec<String> = c
         .get("options")
         .and_then(Value::as_array)
@@ -1356,4 +1373,43 @@ fn project(points: &[[f64; 2]], p: [f64; 2]) -> (f64, [f64; 2]) {
     }
     let f = if total > 0.0 { best.1 / total } else { 0.0 };
     (f, best.2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_range_written_high_to_low_is_refused() {
+        let doc = json!({"controls": {"gain": {"kind": "slider", "range": [1, 0]}}});
+        let key = json!({"op": "key", "control": "gain", "key": "ArrowRight", "t": 0});
+        let refusal = Session::new(
+            &doc,
+            [640.0, 360.0],
+            (60, 1),
+            false,
+            Planted::default(),
+            &[],
+        )
+        .and_then(|mut s| s.op(key.as_object().expect("an op")))
+        .err();
+        assert_eq!(
+            refusal,
+            Some(refused("out_of_range", "controls/gain/range"))
+        );
+    }
+
+    #[test]
+    fn holders_names_the_controls_a_key_reaches_and_no_other() {
+        let doc = json!({"controls": {
+            "speed": {"kind": "slider"},
+            "sound": {"kind": "toggle", "keys": {"m": "toggle"}},
+            "go": {"kind": "press"},
+        }});
+        let s = Session::new(&doc, [640.0, 360.0], (60, 1), false, Planted::default(), &[]).unwrap();
+        assert_eq!(s.holders("m", &[]), ["sound"]);
+        assert_eq!(s.holders("ArrowRight", &["alt"]), ["speed"]);
+        assert_eq!(s.holders(" ", &[]), ["sound", "go"]);
+        assert_eq!(s.holders("j", &[]), [] as [&str; 0]);
+    }
 }

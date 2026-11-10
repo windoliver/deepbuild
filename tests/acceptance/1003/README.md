@@ -85,3 +85,8 @@ At `e2e6e1cc` every tagged test fails but the true-color one: `deep-canvas-rende
 - **True color** is checked on a session's page and in a panel with colors far from any status color, so the status rule can't move them; a color inside the status distance on a session's page is the status rule's to move (canvas primitives: The status-color rule), which this issue doesn't change. The test passes at the base.
 - **The replica's flags and view** for AC5 are new surfaces I pinned; the issue names no command. Whether the sidebar's first two fixture rows exist, and what the terminal-colors view shows, is the implementer's.
 - **The taste record** is a file the person writes; requiring its hashes to match this run's screens assumes the replica draws the same pixels each run on one Mac.
+
+## Swapped for #1458
+
+#1458 (text sizes and spacing are roles of the look) changes what an ink keeps: 4.5:1 for every ink but ink_disabled, so this suite's fixture, whose ink_tertiary keeps 3.59:1, is refused before a plant is reached. The fixture control, the `#1003.5c4fd8c1` bright black plant and the two `#1003.4b14acdc` focus plants were redrafted blind from this
+issue, #1458, the design and the base `2721ca7b`, and swapped in with the owner's approval: `redraft-1458/look.test.mjs` on `redraft-1458/look-1003-1458.json`, with their wrong programs in `redraft-1458/wrong.test.mjs`.

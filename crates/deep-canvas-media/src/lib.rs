@@ -4,7 +4,9 @@
 
 pub mod analysis;
 pub mod clock;
+pub mod delay;
 pub mod doc;
+pub mod dynamics;
 pub mod emitter;
 pub mod fixtures;
 pub mod eq;
@@ -14,6 +16,7 @@ pub mod mix;
 pub mod reverb;
 pub mod ring;
 pub mod spawn;
+pub mod viewer;
 
 /// One second in flicks.
 pub const FLICKS: i64 = 705_600_000;
@@ -22,8 +25,11 @@ pub const FLICKS: i64 = 705_600_000;
 /// comparing only `start` (the redraft of AC10's test names it `av_link_start_only`); and #500's,
 /// which deep-show's bakes and spawns read: a loudness bake whose true peak is the sample peak, an
 /// envelope bake whose rms is the row's peak, a spawn that ignores its cooldown, one that pans
-/// from the item showing its occurrence's body, and one that starts voices at the child flick.
-pub const PLANTED: [&str; 7] = [
+/// from the item showing its occurrence's body, and one that starts voices at the child flick;
+/// and #1818's, which the mix and deep_query read: a limiter reading sample peaks only, a
+/// hard-knee compressor, a mix without latency compensation, a pitch ignoring its semitones, a
+/// send always tapped post, a delay emptied at a seek, and a missing loudness target read as 0.
+pub const PLANTED: [&str; 14] = [
     "av_link_compares_start_only",
     "av_link_start_only",
     "sample_peak_meter",
@@ -31,6 +37,13 @@ pub const PLANTED: [&str; 7] = [
     "spawn_ignores_cooldown",
     "spawn_pans_from_item_origin",
     "spawn_starts_at_child_flick",
+    "limiter_holds_sample_peaks",
+    "compressor_hard_knee",
+    "mix_without_latency_compensation",
+    "pitch_ignores_semitones",
+    "send_always_post",
+    "delay_empties_line_at_seek",
+    "loudness_target_defaults_to_zero",
 ];
 
 static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);

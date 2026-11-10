@@ -78,7 +78,8 @@ export class Numbers {
       return { id: r.id, kind: r.kind, v: r.v, ts: r.ts, session, subject: r.subject, data };
     });
     this.at = rows.at(-1)!.log_pos;
-    this.events.push(...fresh);
+    // One at a time: a first fold holds every row, more than one call takes as arguments.
+    for (const e of fresh) this.events.push(e);
     this.state = update(this.state, fresh);
   }
   /** Your own typed messages, by the opaque id `deep numbers sample` showed you. */

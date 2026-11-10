@@ -54,7 +54,7 @@ const TOOLS = {
     proves: 'A picture does not prove anything: a snapshot is never evidence for a claim, and only check results are.',
   },
   deep_drive: {
-    use: 'Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease.',
+    use: 'Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, open a page by its address, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease.',
     proves: 'Only assertions count: a drive passes on the assertions that passed, and a screenshot, snapshot or recording proves nothing on its own.',
   },
   deep_kinds: {

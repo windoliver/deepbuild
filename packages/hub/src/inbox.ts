@@ -5,11 +5,14 @@
 import { readFileSync } from 'node:fs';
 import { call, UNDECIDED_CODES, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { asksNeedYou, when } from './list.js';
 import { elapsed } from './promises.js';
+import { activePlant } from './plant.js';
+import type { Row as ListRow } from './rows.js';
 import { visible } from './visible.js';
 import { startOf } from './wire.js';
 
-const USAGE = 'Usage: deep inbox\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>';
+const USAGE = 'Usage: deep inbox [--json]\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>\n       deep inbox save <offer>';
 /** One line of output: an ask's, a plan's or a call's text comes from the record, so it prints through `visible` (#1510). */
 const say = (line: string): void => void process.stdout.write(`${visible(line)}\n`);
 /** Refusals of what you typed: nothing ran. */
@@ -24,8 +27,10 @@ interface Step { does: string; changes: string[]; undo: string; cost: number }
 /** A permission you said yes to in the terminal, offered back as a decision to save (#23). */
 interface Offer { offer: string; session: string; command: string; scope: string }
 
-/** `deep inbox [answer <ask> <option> | undo <ask> | save <offer>]`: exit 0 listed or counted, 2 a usage error, 3 not decided, 1 refused otherwise. */
+/** `deep inbox [--json | answer <ask> <option> | undo <ask> | save <offer>]`: exit 0 listed or counted, 2 a usage error, 3 not decided, 1 refused otherwise. */
 export async function inboxCommand(args: readonly string[]): Promise<number> {
+  const json = args.length === 1 && args[0] === '--json';
+  if (json) args = [];
   const answering = args[0] === 'answer';
   const undoing = args[0] === 'undo';
   const saving = args[0] === 'save';
@@ -59,18 +64,30 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
     return 0;
   }
   if (undoing) {
-    say(`${String(reply.result.ask)} is open again, its default undone; it waits until ${new Date(Number(reply.result.deadline)).toISOString()}`);
+    say(`${String(reply.result.ask)} is open again, its default undone; it now takes its default ${when(Number(reply.result.deadline))}`);
     return 0;
   }
   if (saving) {
     say(`${String(reply.result.offer)} saved as ${String(reply.result.decision)}, a decision for ${String(reply.result.scope)}`);
     return 0;
   }
-  // The hub's inbox holds every ask; the list is the open ones.
-  const rows = (reply.result.asks as Row[]).filter((r) => r.status !== 'closed');
-  if (!rows.length) say('No open asks.');
-  for (const r of rows) {
-    say(`${r.ask}  ${r.kind}  ${r.session}  ${elapsed(r.age)}  ${r.status}  ${r.question}  [${r.options.join(' | ')}]`);
+  // The open asks are the list's ask rows (#1463), in its order: each question first, then its default as the
+  // notification says it, then its handle, last on its line; what the hub's inbox adds of an ask follows it.
+  const asks = (reply.result.rows ?? []) as ListRow[];
+  if (json) {
+    process.stdout.write(`${JSON.stringify({ log_pos: reply.result.log_pos, rows: asks })}\n`);
+    return 0;
+  }
+  const extra = new Map((reply.result.asks as Row[]).map((r) => [r.ask, r]));
+  for (const a of asks) {
+    // The planted wrong program leaves each ask's default out.
+    const fallback = a.default !== undefined && a.default_at !== undefined && activePlant() !== 'inbox-no-default' ? `  If you don't answer: ${a.default}, ${when(a.default_at)}` : '';
+    // Its kind, the session that raised it and its age (#24), between the question and the handle.
+    const kind = extra.get(a.id)?.kind ?? a.why;
+    const age = a.since === null ? '' : `  ${elapsed(Math.max(0, Date.now() - a.since))}`;
+    say(`${a.title}  ${kind}  ${a.project ?? 'no repo'}  ${a.session}${age}${fallback}  ${a.id}`);
+    const r = extra.get(a.id);
+    if (!r) continue;
     // Where a task sends you, from the trusted path alone (#84).
     if (r.opens) say(`    opens ${r.opens.kind === 'secret' ? `the entry field of ${r.opens.name ?? ''}` : r.opens.command ?? ''}`);
     // Before a yes with authority, what will happen: each step, what it changes, its undo and its cost (#69).
@@ -84,6 +101,8 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   }
   // What you said yes to in the terminal, offered back: one click saves it as a decision.
   for (const o of (reply.result.offers ?? []) as Offer[]) say(`${o.offer}  offered  ${o.session}  save \`${o.command}\` as a decision for ${o.scope}  (deep inbox save ${o.offer})`);
+  // The one count, last, as deep and deep status end.
+  say(asks.length ? asksNeedYou(asks.length) : 'No open asks.');
   return 0;
 }
 

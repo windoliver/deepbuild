@@ -334,12 +334,13 @@ fn half(v: f32) -> u16 {
         if exp < -10 {
             0
         } else {
-            ((((frac | 0x80_0000) >> (14 - exp)) + 1) >> 1) as u16
+            ((((frac | 0x80_0000) >> (13 - exp)) + 1) >> 1) as u16
         }
     } else {
-        // Rounded at the bit below the mantissa's, which may carry into the exponent.
+        // Rounded at the bit below the mantissa's, which may carry into the exponent, and no
+        // further than the largest finite value.
         let m = (exp as u32) << 10 | frac >> 13;
-        (m + (frac >> 12 & 1)) as u16
+        (m + (frac >> 12 & 1)).min(0x7bff) as u16
     }
 }
 
@@ -450,6 +451,12 @@ mod tests {
         assert_eq!(half(2.0), 0x4000);
         assert_eq!(half(0.5), 0x3800);
         assert_eq!(half(1e9), 0x7bff);
+    }
+
+    #[test]
+    fn half_floats_keep_values_under_the_smallest_exponent_and_stop_at_the_largest() {
+        let got = [half(2f32.powi(-15)), half(1e-5), half(65530.0)];
+        assert_eq!(got, [0x0200, 0x00a8, 0x7bff]);
     }
 
     #[test]

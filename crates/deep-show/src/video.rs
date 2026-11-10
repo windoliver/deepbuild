@@ -136,7 +136,7 @@ impl Hub<'_> {
             let planes = std::fs::read(out.join(shown["file"].as_str()?)).ok()?;
             let mut rgba =
                 deep_codecs::color::i420_to_bgra(&planes, w, h, &color.matrix, &color.range);
-            for p in rgba.chunks_exact_mut(4) {
+            for p in rgba.as_chunks_mut::<4>().0 {
                 p.swap(0, 2);
             }
             Some(Frame {

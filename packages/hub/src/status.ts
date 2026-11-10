@@ -1,15 +1,12 @@
-// `deep status` (#19): every session from every agent and repo, grouped by repo, with what needs you, what's stuck and
-// what's flagged first and the quiet ones folded into one line a repo, and the hub it read. A session whose turn
-// finished lists that turn's tool calls and commits (#668), and a session with a claim its newest claim's line, the
-// one its chat showed (#669). With the hub up it asks the hub (`status.read`); with the
-// hub down it opens the hub's database read-only and reads the same tables.
+// The one state reading (#992): each session's state from the record's tables, which the core records as
+// `session.state` and builds the list's rows from (rows.ts, #1463), and each session's detail deep status shows under
+// its row: a session whose turn finished, that turn's tool calls, failures and commits (#668), and a session with a
+// claim, its newest claim's line, the one its chat showed (#669). `deep numbers` reads the hub's readings.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { billingMode } from '@deepbuild/readings';
 import { shadowedBy, topLevel } from './claude-settings.js';
 import { call } from './client.js';
-import { StaleHub } from './generations.js';
-import { joinedFor, remoteCall } from './remote.js';
 import { CAN_RUN, CANT_RUN } from './hook-programs.js';
 import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
@@ -17,15 +14,13 @@ import { numbersLines } from './numbers.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
-import { visible } from './visible.js';
 import { startOf } from './wire.js';
 import { claimState, newestClaim } from './verdict-chat.js';
 import { verdictLine } from '@deepbuild/verdicts';
 
 type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
 /** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
-export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; verdict?: string; calls?: string[]; commits?: string[]; readings?: string[] }
-const ORDER: readonly State[] = ['needs you', 'stuck', 'flagged', 'working', 'finished', 'quiet'];
+export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; note?: string; verdict?: string; calls?: string[]; commits?: string[]; readings?: string[]; turn?: { calls: number; failed: number } }
 /** A session with no hook for this long, whatever its last state, reads quiet. */
 const QUIET_MS = 24 * 3_600_000;
 /**
@@ -48,7 +43,8 @@ const CALLS_SHOWN = 20;
  */
 type Cause = 'ask' | 'gone' | 'waiting' | 'stuck' | 'promised' | 'failed' | 'quiet' | 'interrupted' | 'finished' | 'working';
 /** A session's state as the record reads it, with why. */
-interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; note?: string }
+/** `plain` is `why` with no age in it and `since` the time it counts from, so a row built from it changes only with its state (#1463). */
+export interface Reading { id: string; project_id: string | null; agent: string | null; worktree: string | null; state: State; cause: Cause; why: string; plain: string; since: number | null; note?: string }
 
 /**
  * Each session's state, from the record's tables through `query` (the hub's record, or its database read-only): the
@@ -98,22 +94,24 @@ export async function sessionStates(query: (sql: string) => Promise<unknown[]>, 
     const promised = due.get(s.id);
     const note = notes.get(s.id);
     const midTurn = gone.has(s.id) && !['finished', 'failed', 'stuck'].includes(s.status);
-    const [state, cause, why]: [State, Cause, string] = open ? ['needs you', 'ask', `${open.n === 1 ? 'an ask' : `${open.n} asks`} open for ${ago(open.since)}`]
-      : midTurn && !waitingFirst ? ['flagged', 'gone', 'its process is gone mid-turn']
-      : s.status === 'waiting' && now - (s.last_seen ?? 0) <= WAITING_QUIET_MS ? ['needs you', 'waiting', 'a permission prompt waits on you']
+    const seen = s.last_seen;
+    const stopped = stops.get(s.id) ?? s.last_seen;
+    const [state, cause, why, plain, since]: [State, Cause, string, string, number | null] = open ? ['needs you', 'ask', `${open.n === 1 ? 'an ask' : `${open.n} asks`} open for ${ago(open.since)}`, `${open.n === 1 ? 'an ask' : `${open.n} asks`} open`, open.since]
+      : midTurn && !waitingFirst ? ['flagged', 'gone', 'its process is gone mid-turn', 'its process is gone mid-turn', seen]
+      : s.status === 'waiting' && now - (s.last_seen ?? 0) <= WAITING_QUIET_MS ? ['needs you', 'waiting', 'a permission prompt waits on you', 'a permission prompt waits on you', seen]
       // A session whose hooks can't run sends no hook to say so (#993): stuck, never folded away as quiet.
-      : note?.startsWith(CANT_RUN) ? ['stuck', 'stuck', 'BLOCKED: its hooks can\'t run, so its gates are watch-only; run `deep setup`']
-      : s.status === 'stuck' ? ['stuck', 'stuck', `blocked on something only you or a service can clear${s.cause ? ` (${s.cause})` : ''}`]
-      : promised ? ['flagged', 'promised', `a promised check is due since ${clockTime(promised.due)}, waiting for its next prompt or stop: "${promised.quote}"`]
-      : s.status === 'failed' ? ['flagged', 'failed', `its turn ended failed, with no claim${s.cause ? ` (${s.cause})` : ''}`]
-      : midTurn ? ['flagged', 'gone', 'its process is gone mid-turn']
-      : s.status === 'unknown' || s.status === 'waiting' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', 'quiet', `last seen ${ago(s.last_seen)} ago`]
+      : note?.startsWith(CANT_RUN) ? ['stuck', 'stuck', 'BLOCKED: its hooks can\'t run, so its gates are watch-only; run `deep setup`', 'BLOCKED: its hooks can\'t run, so its gates are watch-only; run `deep setup`', seen]
+      : s.status === 'stuck' ? ['stuck', 'stuck', `blocked on something only you or a service can clear${s.cause ? ` (${s.cause})` : ''}`, `blocked on something only you or a service can clear${s.cause ? ` (${s.cause})` : ''}`, seen]
+      : promised ? ['flagged', 'promised', `a promised check is due since ${clockTime(promised.due)}, waiting for its next prompt or stop: "${promised.quote}"`, `a promised check is due, waiting for its next prompt or stop: "${promised.quote}"`, promised.due]
+      : s.status === 'failed' ? ['flagged', 'failed', `its turn ended failed, with no claim${s.cause ? ` (${s.cause})` : ''}`, `its turn ended failed, with no claim${s.cause ? ` (${s.cause})` : ''}`, seen]
+      : midTurn ? ['flagged', 'gone', 'its process is gone mid-turn', 'its process is gone mid-turn', seen]
+      : s.status === 'unknown' || s.status === 'waiting' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', 'quiet', `last seen ${ago(s.last_seen)} ago`, 'no hook since', seen]
       // A session waiting on its monitor (#997) is still at work.
-      : s.status === 'finished' && watching.has(s.id) ? ['working', 'working', watching.get(s.id)!]
-      : s.status === 'finished' && interrupted.has(s.id) ? ['finished', 'interrupted', `its turn was interrupted ${ago(s.last_seen)} ago`]
-      : s.status === 'finished' ? ['finished', 'finished', `its turn stopped ${ago(stops.get(s.id) ?? s.last_seen)} ago`]
-      : ['working', 'working', `last seen ${ago(s.last_seen)} ago`];
-    return { id: s.id, project_id: s.project_id, agent: s.agent, worktree: s.worktree, state, cause, why, ...(note ? { note } : {}) };
+      : s.status === 'finished' && watching.has(s.id) ? ['working', 'working', watching.get(s.id)!, watching.get(s.id)!, seen]
+      : s.status === 'finished' && interrupted.has(s.id) ? ['finished', 'interrupted', `its turn was interrupted ${ago(s.last_seen)} ago`, 'its turn was interrupted', seen]
+      : s.status === 'finished' ? ['finished', 'finished', `its turn stopped ${ago(stopped)} ago`, 'its turn stopped', stopped]
+      : ['working', 'working', `last seen ${ago(s.last_seen)} ago`, 'at work', seen];
+    return { id: s.id, project_id: s.project_id, agent: s.agent, worktree: s.worktree, state, cause, why, plain, since, ...(note ? { note } : {}) };
   });
 }
 
@@ -212,6 +210,8 @@ async function lastTurns(query: (sql: string) => Promise<unknown[]>, rows: Statu
     const shown = [...calls.values()].map(({ before, after }) => callLine(before ?? after!, after, worktrees.get(row.id) ?? ''));
     row.calls = shown.length > CALLS_SHOWN ? [...shown.slice(0, CALLS_SHOWN), `and ${shown.length - CALLS_SHOWN} more tool calls`] : shown;
     row.commits = commits;
+    // What deep status says of the turn on one line (#1463): how many calls, how many failed.
+    row.turn = { calls: calls.size, failed: [...calls.values()].filter((c) => c.after?.outcome === 'failed').length };
   }
 }
 type Obj = Record<string, unknown>;
@@ -234,7 +234,7 @@ function callLine(call: Obj, after: Obj | undefined, worktree: string): string {
  * The repo a session works in, by its working folder: the folder holding its `.git`, and for a linked worktree the
  * repo the worktree belongs to, so every worktree of one repo groups under it.
  */
-function repoOf(worktree: string | null): string | undefined {
+export function repoOf(worktree: string | null): string | undefined {
   if (!worktree || !isAbsolute(worktree)) return undefined;
   for (let dir = worktree; ; dir = dirname(dir)) {
     const git = join(dir, '.git');
@@ -246,46 +246,6 @@ function repoOf(worktree: string | null): string | undefined {
       if (dirname(dir) === dir) return undefined;
     }
   }
-}
-
-/**
- * The listing: every session that needs you, is stuck or is flagged first, under its repo, then the working ones, then
- * one line counting the quiet ones by repo, so no number of working sessions pushes one that needs you down.
- */
-export function render(rows: readonly StatusRow[], from: string): string {
-  const rank = (r: StatusRow) => ORDER.indexOf(r.state);
-  const counts = ORDER.map((s) => [s, rows.filter((r) => r.state === s).length] as const).filter(([, n]) => n).map(([s, n]) => `${n} ${s === 'needs you' ? 'need you' : s === 'quiet' ? 'gone quiet' : s}`);
-  const out = [from, `${rows.length} session${rows.length === 1 ? '' : 's'}${counts.length ? `: ${counts.join(', ')}` : ''}`];
-  // A first run lists nothing: say what makes a session show here.
-  if (!rows.length) out.push('Start a Claude Code or Codex session in a repo and it shows here; deep doctor checks the setup.');
-  const grouped = (shown: StatusRow[]) => {
-    const repos = [...new Set(shown.map((r) => r.repo))].sort((a, b) =>
-      Math.min(...shown.filter((r) => r.repo === a).map(rank)) - Math.min(...shown.filter((r) => r.repo === b).map(rank)) || a.localeCompare(b));
-    for (const repo of repos) {
-      out.push(repo);
-      for (const r of shown.filter((m) => m.repo === repo).sort((a, b) => rank(a) - rank(b))) {
-        out.push(`  ${r.id.slice(0, 8)}  ${r.state.padEnd(9)}  ${r.agent.padEnd(11)}  ${r.why}`);
-        if (r.note) out.push(`      ${r.note}`);
-        if (r.verdict) out.push(`      ${r.verdict}`);
-        for (const reading of r.readings ?? []) out.push(`      ${reading}`);
-        for (const call of r.calls ?? []) out.push(`      ${call}`);
-        // The planted wrong program lists the turn's tool calls and leaves its commits out.
-        if (activePlant() !== 'status-omits-commit') for (const sha of r.commits ?? []) out.push(`      commit ${sha.slice(0, 12)}`);
-      }
-    }
-  };
-  grouped(rows.filter((r) => r.state !== 'working' && r.state !== 'finished' && r.state !== 'quiet'));
-  for (const [state, title] of [['working', 'Working:'], ['finished', 'Finished, with what its last turn did:']] as const) {
-    const these = rows.filter((r) => r.state === state);
-    if (!these.length) continue;
-    out.push(title);
-    grouped(these);
-  }
-  const quiet = rows.filter((r) => r.state === 'quiet');
-  const byRepo = [...new Set(quiet.map((r) => r.repo))].sort().map((repo) => `${repo} ${quiet.filter((r) => r.repo === repo).length}`);
-  if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
-  // Each line names sessions, notes and calls from the record, so each prints through `visible` (#1510).
-  return `${out.map(visible).join('\n')}\n`;
 }
 
 /** `deep numbers`: your readings through the hub, or what changes them; a hub that can't be read shows no numbers at all. */
@@ -318,70 +278,4 @@ export async function numbersCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep numbers: ${error instanceof Error ? error.message : String(error)}; start the hub with deep hub start.\n`);
     return 3;
   }
-}
-
-/** `deep status`: 0 read from the hub; 3 when no hub could be read, after what its database shows, if there is one. */
-export async function statusCommand(args: readonly string[]): Promise<number> {
-  if (args.length) {
-    process.stderr.write('Usage: deep status\n');
-    return 2;
-  }
-  // The planted wrong program exits with a code the exit-code table doesn't list when it can't read a hub.
-  const unread = activePlant() === 'status-exit-unmapped' ? 4 : 3;
-  // A clone of a project this machine joined reads that project's hub over the network (#1338), as its person.
-  const joined = joinedFor(process.cwd());
-  if (joined) {
-    try {
-      const reply = await remoteCall(joined, 'status.read', {});
-      if ('result' in reply) {
-        process.stdout.write(render(reply.result.rows as StatusRow[], `Reading ${joined.project}'s hub at ${joined.address} as ${joined.person}`));
-        return 0;
-      }
-      process.stderr.write(`deep status: the hub at ${joined.address} refused this read: ${reply.error.remediation}\n`);
-    } catch (error) {
-      process.stderr.write(`deep status: ${error instanceof Error ? error.message : String(error)}\n`);
-    }
-    return unread;
-  }
-  let socket: string;
-  try {
-    socket = hubAddress().path;
-  } catch (error) {
-    process.stderr.write(`deep status: ${error instanceof Error ? error.message : String(error)}\n`);
-    return unread;
-  }
-  // A hub's token sits beside its socket; a forwarded socket's hub is read with the installed hub's.
-  const token = [join(dirname(socket), 'control.token'), rootOf(installedRoot()).token].find((p) => existsSync(p));
-  let why: string;
-  try {
-    const held = token ? readFileSync(token, 'utf8').trim() : '';
-    const reply = await call(socket, held, 'status.read', {});
-    if ('result' in reply) {
-      process.stdout.write(render(reply.result.rows as StatusRow[], `Reading the hub at unix:${socket}`));
-      return 0;
-    }
-    why = reply.error.remediation;
-  } catch (error) {
-    // A hub left behind isn't read in any way, its database included (#1338).
-    if (error instanceof StaleHub) {
-      process.stderr.write(`deep status: ${error.message}\n`);
-      return unread;
-    }
-    why = error instanceof Error ? error.message : String(error);
-  }
-  // The hub's own folder holds its database: the socket's, or the installed root.
-  const ledger = [join(dirname(socket), 'ledger.db'), rootOf(installedRoot()).ledger].find((p) => existsSync(p));
-  if (!ledger) {
-    process.stderr.write(`deep status: no hub could be read at unix:${socket} (${why}), and there is no database to read; start it with deep hub start.\n`);
-    return unread;
-  }
-  const { default: Database } = await import('better-sqlite3');
-  const db = new Database(ledger, { readonly: true, fileMustExist: true });
-  try {
-    const rows = await statusRows(async (sql) => db.prepare(sql).all(), Date.now());
-    process.stdout.write(render(rows, `Reading ${ledger} read-only: the hub at unix:${socket} doesn't answer (${why})`));
-  } finally {
-    db.close();
-  }
-  return unread;
 }

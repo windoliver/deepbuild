@@ -8,9 +8,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use deep_canvas_media::emitter::{Cone, Distance, Model};
+use deep_canvas_media::delay::{DelaySpec, PitchSpec};
+use deep_canvas_media::dynamics::{CompressorSpec, LimiterSpec, Makeup};
 use deep_canvas_media::mix::{
-    Bus, Curve, Emit, Gain, Mix, Place, Planted as MixPlanted, Player, Proc, ProcKind, Source,
-    Strip,
+    Bus, BusSend, Curve, Emit, Gain, Mix, Place, Planted as MixPlanted, Player, Proc, ProcKind,
+    Source, Strip,
 };
 use deep_canvas_media::{doc, eq, reverb, FLICKS};
 use deep_codecs::DECODE_WORKER;
@@ -37,6 +39,11 @@ pub enum MixCall {
     },
     /// #500: one analysis bake of one asset.
     Bake(Value),
+    /// #501: a media document played live on the default output for `seconds` of real time.
+    Soak {
+        media: Value,
+        seconds: u64,
+    },
 }
 
 /// One of this issue's mix calls, or `None` for a line that lacks a field it needs.
@@ -60,6 +67,10 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
             panel: c.get("panel")?.as_str()?.to_string(),
             from: t("from")?,
             to: t("to")?,
+        },
+        "soak" => MixCall::Soak {
+            media: c.get("media").filter(|d| d.is_object())?.clone(),
+            seconds: c.get("seconds")?.as_u64().filter(|s| *s > 0)?,
         },
         _ => return None,
     })
@@ -105,6 +116,13 @@ pub fn planted_of(p: Option<Planted>, live: bool) -> MixPlanted {
         holds_gain_per_block: live && p == Some(Planted::MixerHoldsGainPerBlock),
         inverse_only: p == Some(Planted::EmitterAlwaysInverse),
         cone_reversed: p == Some(Planted::ConeSignReversed),
+        // #1818's live in the media module's list, planted for the whole run.
+        limiter_sample_peaks: deep_canvas_media::planted("limiter_holds_sample_peaks"),
+        hard_knee: deep_canvas_media::planted("compressor_hard_knee"),
+        no_latency_compensation: deep_canvas_media::planted("mix_without_latency_compensation"),
+        pitch_ignores_semitones: deep_canvas_media::planted("pitch_ignores_semitones"),
+        sends_tap_post: deep_canvas_media::planted("send_always_post"),
+        delay_empties_at_seek: deep_canvas_media::planted("delay_empties_line_at_seek"),
     }
 }
 
@@ -235,7 +253,23 @@ impl Hub<'_> {
             for p in b.get("processors").and_then(Value::as_array).into_iter().flatten() {
                 let pid = p.as_str().ok_or_else(|| bad(format!("bus {id}: a processor ID")))?;
                 let pv = procs.get(pid).ok_or_else(|| bad(format!("bus {id}: no processor {pid}")))?;
-                processors.push(processor(pid, pv).map_err(bad)?);
+                processors.push(processor(pid, pv, &index).map_err(bad)?);
+            }
+            // #1818: sends, each tapped pre or post (post by default).
+            let mut sends = Vec::new();
+            for (j, sv) in b.get("sends").and_then(Value::as_array).into_iter().flatten().enumerate() {
+                let to = sv.get("to").and_then(Value::as_str).ok_or_else(|| bad(format!("bus {id}: send {j}'s to")))?;
+                let pre = match sv.get("tap").and_then(Value::as_str) {
+                    None | Some("post") => false,
+                    Some("pre") => true,
+                    Some(t) => return Err(bad(format!("bus {id}: send {j}'s tap {t} isn't pre or post"))),
+                };
+                sends.push(BusSend {
+                    id: format!("{id}/sends/{j}"),
+                    to: index(to).ok_or_else(|| bad(format!("bus {id} sends to {to}, which isn't a bus")))?,
+                    gain_db: sv.get("gain").and_then(Value::as_f64).unwrap_or(0.0),
+                    pre,
+                });
             }
             buses.push(Bus {
                 id: id.clone(),
@@ -244,6 +278,7 @@ impl Hub<'_> {
                 mute: b.get("mute").and_then(Value::as_bool).unwrap_or(false),
                 processors,
                 out,
+                sends,
             });
         }
         // Emitters, by the strip they play.
@@ -383,7 +418,13 @@ impl Hub<'_> {
                         Value::Null
                     };
                     player.take_taps();
-                    let (sha, pcm) = read(&mut player, (last - first).max(0), *write);
+                    // #501: the planted mixer whose Linux build is one 16-bit step off.
+                    let step = if cfg!(target_os = "linux") && self.scenario.planted == Some(Planted::MixerLinuxOneStep) {
+                        1.0 / 32_768.0
+                    } else {
+                        0.0
+                    };
+                    let (sha, pcm) = read(&mut player, (last - first).max(0), *write, step);
                     let mut seg = json!({"from": from, "to": to, "first": first, "frames": (last - first).max(0),
                         "channels": 2, "sha256": sha, "seek": seek,
                         "taps": player.take_taps().into_iter().map(|(k, v)| (k, json!(v))).collect::<Map<String, Value>>()});
@@ -428,13 +469,17 @@ impl Hub<'_> {
                 json!({"handed": {"sample_rate": rate, "channels": 2, "first": first, "frames": last - first,
                     "sha256": sha, "wav": w}})
             }
+            MixCall::Soak { media, seconds } => match self.mix_of(media) {
+                Ok(m) => crate::device::soak(Player::new(Arc::new(m), planted_of(self.scenario.planted, true)), *seconds),
+                Err(e) => e,
+            },
         }
     }
 }
 
-/// Reads `frames` from `player`: the SHA-256 of the interleaved f32le samples, and the samples
-/// themselves when `keep`.
-fn read(player: &mut Player, frames: i64, keep: bool) -> (String, Option<Vec<f32>>) {
+/// Reads `frames` from `player`, each sample `step` higher: the SHA-256 of the interleaved f32le
+/// samples, and the samples themselves when `keep`.
+fn read(player: &mut Player, frames: i64, keep: bool, step: f32) -> (String, Option<Vec<f32>>) {
     let mut h = Sha256::new();
     let mut kept = keep.then(Vec::new);
     let mut buf = vec![0f32; 2 * 4096];
@@ -442,6 +487,9 @@ fn read(player: &mut Player, frames: i64, keep: bool) -> (String, Option<Vec<f32
     while left > 0 {
         let n = left.min(4096);
         player.read(&mut buf[..2 * n]);
+        for x in &mut buf[..2 * n] {
+            *x += step;
+        }
         for x in &buf[..2 * n] {
             h.update(x.to_le_bytes());
         }
@@ -453,7 +501,8 @@ fn read(player: &mut Player, frames: i64, keep: bool) -> (String, Option<Vec<f32
     (hex(h.finalize()), kept)
 }
 
-fn processor(id: &str, p: &Value) -> Result<Proc, String> {
+fn processor(id: &str, p: &Value, bus: &dyn Fn(&str) -> Option<usize>) -> Result<Proc, String> {
+    let n = |k: &str| p.get(k).and_then(Value::as_f64);
     let kind = match p.get("kind").and_then(Value::as_str) {
         Some("eq") => ProcKind::Eq(
             p.get("bands")
@@ -481,6 +530,56 @@ fn processor(id: &str, p: &Value) -> Result<Proc, String> {
                 mix: p.get("mix").and_then(Value::as_f64).unwrap_or(0.3),
             })
         }
+        // #1818: the compressor, limiter, delay and pitch, at the Processor row's defaults.
+        Some("compressor") => {
+            let d = CompressorSpec::default();
+            let makeup = match p.get("makeup") {
+                None => d.makeup,
+                Some(Value::String(a)) if a == "auto" => Makeup::Auto,
+                Some(v) => Makeup::Db(v.as_f64().ok_or(format!("processor {id}: makeup is dB or auto"))?),
+            };
+            let key = match p.get("key").and_then(Value::as_str) {
+                None => None,
+                Some(k) => Some(bus(k).ok_or(format!("processor {id}: key {k} isn't a bus"))?),
+            };
+            ProcKind::Compressor(
+                CompressorSpec {
+                    threshold: n("threshold").unwrap_or(d.threshold),
+                    knee: n("knee").unwrap_or(d.knee).max(0.0),
+                    ratio: n("ratio").unwrap_or(d.ratio).max(1.0),
+                    attack: n("attack").unwrap_or(d.attack).max(0.0),
+                    release: n("release").unwrap_or(d.release).max(0.0),
+                    makeup,
+                },
+                key,
+            )
+        }
+        Some("limiter") => {
+            let d = LimiterSpec::default();
+            let oversample = match p.get("oversample").and_then(Value::as_u64) {
+                None => d.oversample,
+                Some(o @ (4 | 8)) => o as u32,
+                Some(o) => return Err(format!("processor {id}: oversample {o} isn't 4 or 8")),
+            };
+            ProcKind::Limiter(LimiterSpec {
+                ceiling: n("ceiling").unwrap_or(d.ceiling),
+                lookahead: n("lookahead").unwrap_or(d.lookahead).max(0.0),
+                release: n("release").unwrap_or(d.release).max(0.0),
+                oversample,
+            })
+        }
+        Some("delay") => {
+            let time = n("time").ok_or(format!("processor {id}: time"))?;
+            let feedback = n("feedback").unwrap_or(0.0);
+            if !(0.0..=2.0).contains(&time) || !(0.0..1.0).contains(&feedback) {
+                return Err(format!("processor {id}: time is 0 to 2 s and feedback in [0, 1)"));
+            }
+            ProcKind::Delay(DelaySpec { time, feedback, mix: n("mix").unwrap_or(1.0).clamp(0.0, 1.0) })
+        }
+        Some("pitch") => ProcKind::Pitch(PitchSpec {
+            semitones: n("semitones").unwrap_or(0.0),
+            window: n("window").unwrap_or(0.1),
+        }),
         k => return Err(format!("processor {id}: kind {k:?} isn't built")),
     };
     Ok(Proc {

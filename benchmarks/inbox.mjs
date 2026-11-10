@@ -62,7 +62,8 @@ try {
     const t0 = performance.now();
     const out = execFileSync(process.execPath, [CLI, 'inbox'], { env, encoding: 'utf8' });
     const ms = performance.now() - t0;
-    const listed = out.split('\n').filter((line) => line.startsWith('ask:')).length;
+    // Each open ask's line ends on its handle (#1463).
+    const listed = out.split('\n').filter((line) => /  ask:[0-9A-Za-z]+$/.test(line)).length;
     if (listed !== open) throw Error(`deep inbox listed ${listed} asks, not the ${open} open ones`);
     // The first run warms the hub's asks core and the file cache; it isn't counted.
     if (i > 0) runs.push(ms);

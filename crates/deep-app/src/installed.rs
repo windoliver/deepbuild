@@ -10,16 +10,21 @@ use gpui_kit::*;
 use gpui_shell::ShellRuntime;
 use serde_json::{json, Value};
 
+use crate::address::Address;
 use crate::commands::{entries, Entry, Open, Palette, View};
 use crate::views;
 
-/// The pages ⌘K always lists, and the preferences it opens the box for (#1998).
+/// The pages ⌘K always lists, which View lists too (#1462), and the preferences it opens the box for (#1998).
 pub fn shipped_pages() -> Vec<Entry> {
-    let pages = [("Home", views::HOME), ("Needs you", views::NEEDS_YOU)].map(|(name, panel)| {
-        Entry::Shipped {
-            name: name.to_owned(),
-            panel,
-        }
+    let pages = [
+        ("Home", "home"),
+        ("Needs you", "needs-you"),
+        ("Agents", "agents"),
+        ("Rules", "rules"),
+    ]
+    .map(|(name, page)| Entry::Open {
+        name: name.to_owned(),
+        address: Address::page(page),
     });
     pages
         .into_iter()
@@ -27,31 +32,59 @@ pub fn shipped_pages() -> Vec<Entry> {
         .collect()
 }
 
+/// A view's command run from ⌘K, off the main thread: it ends in one notice in the window saying it ran or why it
+/// didn't (#1462). The planted opener only logs, as the merge base did.
+pub fn run_command(name: &str, action: &str, cx: &mut App) {
+    let (name, action) = (name.to_owned(), action.to_owned());
+    let ran = cx.background_spawn(async move {
+        crate::hub::call_app("command.run", json!({ "action": action }))
+    });
+    cx.spawn(async move |cx| {
+        let said = match ran.await {
+            Ok(_) => format!("{name} ran."),
+            Err(error) => format!("{name} didn't run: {}", crate::hub::why(&error)),
+        };
+        if cfg!(feature = "plant-opener-only-logs") {
+            eprintln!("deep-app: {said}");
+            return;
+        }
+        cx.update(|cx| crate::notice::show(said, cx));
+    })
+    .detach();
+}
+
+/// An installed view that didn't load ends as a page that won't open does: one notice in the window naming it (#1462).
+/// The planted app writes it to the error stream only, as the merge base did.
+pub fn failed(name: &str, why: &str, cx: &mut App) {
+    eprintln!("deep-app: {name} didn't load: {why}");
+    if !cfg!(feature = "plant-failed-view-silent") {
+        crate::notice::show(format!("{name} didn't load: {why}"), cx);
+    }
+}
+
 /// What opening a ⌘K entry does in the app: a command runs off the main thread, a page mounts in the page region.
 pub fn opener(runtime: Rc<ShellRuntime>) -> Open {
     Rc::new(move |entry, window, cx| match entry {
         Entry::Command { name, action } => {
-            let (name, action) = (name.clone(), action.clone());
-            cx.background_spawn(async move {
-                let ran = crate::hub::HubClient::app()
-                    .and_then(|mut hub| hub.call("command.run", json!({ "action": action })));
-                if let Err(error) = ran {
-                    eprintln!("deep-app: {name} didn't run: {error:?}");
-                }
-            })
-            .detach();
+            run_command(name, action, cx);
+            None
         }
-        Entry::Shipped { panel, .. } => views::show_panel(panel, window, cx),
-        Entry::Preference { name, .. } => crate::words::open_preference(name, window, cx),
+        // ⌘K runs an action of the table and opens an address itself.
+        Entry::Open { .. } | Entry::Action { .. } => None,
+        Entry::Preference { name, .. } => {
+            crate::words::open_preference(name, window, cx);
+            None
+        }
         Entry::Page { panel, .. } => {
-            let Some(page) = entry.page_props() else {
-                return;
-            };
+            let page = entry.page_props()?;
             #[cfg(feature = "plant-page-drops-param")]
             let page = json!({ "name": page["name"] });
             match crate::mount_page(&runtime, panel, &page, window, cx) {
-                Ok(view) => views::open_page(view.into(), window, cx),
-                Err(error) => eprintln!("deep-app: {} didn't open: {error:#}", entry.name()),
+                Ok(view) => Some(view.into()),
+                Err(error) => {
+                    failed(entry.name(), &format!("{error:#}"), cx);
+                    None
+                }
             }
         }
     })
@@ -106,10 +139,7 @@ pub fn load(
     for view in &listed {
         let name = view["name"].as_str().unwrap_or_default();
         if !may_mount(view) {
-            eprintln!(
-                "deep-app: {name} isn't loaded: panel@1 reads {}",
-                view["kit"]
-            );
+            failed(name, &format!("panel@1 reads {}", view["kit"]), cx);
             continue;
         }
         let dir = copy_of(name);
@@ -128,7 +158,7 @@ pub fn load(
                 cx,
             ),
             Err(why) => {
-                eprintln!("deep-app: {name} didn't load: {why}");
+                failed(name, &why, cx);
                 continue;
             }
         }

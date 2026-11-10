@@ -79,10 +79,9 @@ test(`${AC[3]} (proof) in light, the same views draw every chrome color from the
   assert.deepEqual(judgeAppearance('light'), []);
 });
 
-test(`${AC[3]} every ink tier passes its contrast floor on ground, raised and hover, in dark and in light`, () => {
-  const all = lookRoles();
-  assert.deepEqual(all.error ? [all.error] : [...inkProblems('dark', all.dark, FLOORS, contrast), ...inkProblems('light', all.light, FLOORS, contrast)], []);
-});
+// #882.218503b6's ink half is in redraft-1458/replica.test.mjs: under #1458 every ink but ink_disabled keeps 4.5:1 on
+// every fill a row is drawn on, so the case that held ink_tertiary to 3:1 was redrafted blind and swapped in with the
+// owner's approval.
 
 test(`${AC[3]} a build that keeps the light ground in dark fails the dark judge, naming the view`, () => {
   const why = inconclusive();

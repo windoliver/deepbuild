@@ -377,8 +377,10 @@ pub fn capture(w: Wanted, lights: &[Light], around: &Surroundings) -> Probe {
 
 fn read_f32s(data: &[u8], skip: usize) -> Vec<f64> {
     data[skip..]
-        .chunks_exact(4)
-        .map(|b| f64::from(f32::from_le_bytes([b[0], b[1], b[2], b[3]])))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| f64::from(f32::from_le_bytes(*b)))
         .collect()
 }
 

@@ -619,14 +619,21 @@ pub(super) fn seal(
         };
         let name = json!(e.name);
         let Some(reg) = sealed.get_mut(&e.registry) else {
+            // In the planted layout that declares `export.target@1` in the media module (#501),
+            // the refusal names that module, which this build is without.
+            let outside = (fault == Some(Fault::ExportTargetInMedia)
+                && e.registry == "export.target@1")
+                .then_some(super::EXPORT_TARGETS_OUTSIDE_CORE);
+            let why = match outside {
+                Some(owner) => format!("which `{owner}` declares and this build is without"),
+                None => "which this build doesn't declare".to_string(),
+            };
+            let who: Vec<&str> = who.into_iter().chain(outside).collect();
             return Err(SealError::new(
                 "unknown_registry",
                 &who,
                 &[],
-                format!(
-                    "`{filler}` fills `{}` into `{}`, which this build doesn't declare",
-                    e.name, e.registry
-                ),
+                format!("`{filler}` fills `{}` into `{}`, {why}", e.name, e.registry),
             )
             .at(&e.registry, vec![name], &[]));
         };

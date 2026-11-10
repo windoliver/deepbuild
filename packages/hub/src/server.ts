@@ -61,7 +61,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
   ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -77,7 +77,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
-  ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
+  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']],
   // Setup reads your history into the wiki (#356).
   ['wiki.build', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
@@ -101,7 +101,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The pi package holds the same wait on its own connection, and says what became of each answer it took (#40).
   ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
-  ['session.note', ['app']],
+  ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
   // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).
@@ -211,7 +211,7 @@ const versionRefusal = (value: Obj): Refusal =>
 
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'replayed' | 'unsubscribe' | 'waiter-gone' | 'notifier-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'replayed' | 'unsubscribe' | 'waiter-gone' | 'notifier-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' | 'call-gone' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
@@ -271,6 +271,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
       else if (message.op === 'line') void core.line(message.session, message.agent, message.text).catch(() => undefined);
       else if (message.op === 'denied') core.denied(message.session, message.call, { guard: message.guard, label: message.label });
+      else if (message.op === 'call-gone') core.callGone(message.call);
       else core.unsubscribe(message.sub);
     },
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
@@ -354,6 +355,8 @@ class Conn {
   pending: Buffer[] = [];
   size = 0;
   readonly subs = new Set<string>();
+  /** Its deep mcp calls in flight, each `<connection>:<call ID>`: a cancel or the connection's close tells the core their caller is gone (#1923). */
+  readonly calls = new Set<string>();
   constructor(readonly id: number, readonly sock: net.Socket) {}
   write(o: object): void {
     if (!this.done && this.sock.writable) this.sock.write(line(o));
@@ -613,6 +616,7 @@ class Hub {
       this.conns.delete(conn);
       for (const sub of conn.subs) this.unsubscribe(conn, sub);
       if (conn.waiter) this.core.post({ op: 'waiter-gone', key: conn.id });
+      for (const call of conn.calls) this.core.post({ op: 'call-gone', call });
       if (conn === this.notifier) {
         this.notifier = undefined;
         this.core.post({ op: 'notifier-gone' });
@@ -1337,6 +1341,11 @@ class Hub {
           await this.syncNetwork();
           return result;
         }));
+      case 'mcp.cancel': {
+        const call = `${conn.id}:${String(params.call)}`;
+        if (conn.calls.delete(call)) this.core.post({ op: 'call-gone', call });
+        return conn.write({ id, result: {} });
+      }
       case 'session.wait':
         conn.waiter = true;
         return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session } }));
@@ -1351,7 +1360,12 @@ class Hub {
         if (READS.has(method)) {
           return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then((result) => ({ start: this.start, ...(result as Obj) })));
         }
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}) } }));
+        {
+          const call = method === 'mcp.call' ? `${conn.id}:${String(id)}` : undefined;
+          if (call) conn.calls.add(call);
+          const work = this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}), ...(call ? { call } : {}) } });
+          return void reply(call ? work.finally(() => conn.calls.delete(call)) : work);
+        }
     }
   }
 

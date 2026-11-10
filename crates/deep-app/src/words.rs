@@ -10,8 +10,9 @@ use gpui_kit::base::input::{Input, InputEvent, InputState};
 use gpui_kit::*;
 use serde_json::{json, Value};
 
-use crate::chrome;
+use crate::chrome::{self, sizes};
 use crate::views::observed;
+use crate::views::{control, Control};
 
 /// Sends the box's words to the hub (`box.say`): the proposal and its ask, or `unread`, the one line why nothing was drafted.
 pub type Say = Arc<dyn Fn(&str) -> Result<Value, String> + Send + Sync>;
@@ -19,9 +20,8 @@ pub type Say = Arc<dyn Fn(&str) -> Result<Value, String> + Send + Sync>;
 /// `box.say` through the app's own hub connection.
 pub fn hub_say() -> Say {
     Arc::new(|words| {
-        crate::hub::HubClient::app()
-            .and_then(|mut hub| hub.call("box.say", json!({ "words": words })))
-            .map_err(|error| format!("{error:?}"))
+        crate::hub::call_app("box.say", json!({ "words": words }))
+            .map_err(|error| crate::hub::why(&error))
     })
 }
 
@@ -43,6 +43,45 @@ pub struct WordsBox {
 
 thread_local! {
     static BOX: RefCell<Option<WeakEntity<WordsBox>>> = const { RefCell::new(None) };
+    /// The box's input's keys, which a snapshot reads as `box-draft` holding the keyboard (#1462).
+    static KEYS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
+}
+
+/// Puts the keyboard in the box (⌘N, F6): its words stay as they are.
+pub fn focus(window: &mut Window, cx: &mut App) {
+    let Some(entity) = BOX.with(|cell| cell.borrow().as_ref().and_then(WeakEntity::upgrade)) else {
+        return;
+    };
+    crate::card::let_go();
+    entity.update(cx, |this, cx| {
+        this.input.update(cx, |input, cx| input.focus(window, cx));
+        cx.notify();
+    });
+}
+
+/// A printable key typed on a page: the box takes the keyboard and the key's text (#1462).
+pub fn type_in(text: &str, window: &mut Window, cx: &mut App) {
+    let Some(entity) = BOX.with(|cell| cell.borrow().as_ref().and_then(WeakEntity::upgrade)) else {
+        return;
+    };
+    crate::card::let_go();
+    let text = text.to_owned();
+    entity.update(cx, |this, cx| {
+        this.input.update(cx, |input, cx| {
+            input.focus(window, cx);
+            input.insert(text, window, cx);
+        });
+        cx.notify();
+    });
+}
+
+/// Whether the box holds the keyboard in `window`.
+pub fn focused(window: &Window) -> bool {
+    KEYS.with(|keys| {
+        keys.borrow()
+            .as_ref()
+            .is_some_and(|keys| keys.is_focused(window))
+    })
 }
 
 impl WordsBox {
@@ -58,6 +97,8 @@ impl WordsBox {
             },
         );
         BOX.with(|cell| *cell.borrow_mut() = Some(cx.entity().downgrade()));
+        let keys = input.read(cx).focus_handle(cx);
+        KEYS.with(|cell| *cell.borrow_mut() = Some(keys));
         WordsBox {
             input,
             beside: None,
@@ -175,20 +216,16 @@ impl Render for WordsBox {
                 Some(
                     div()
                         .flex()
-                        .gap_2()
+                        .gap(sizes().space(1))
                         .items_center()
                         .child(line("box-said", format!("Drafted: {question}")))
                         .child(
-                            observed("box-open")
-                                .role(Role::Button)
-                                .aria_label("Open its card")
-                                .px_1()
-                                .rounded_sm()
-                                .hover(|style| style.bg(chrome.hover))
-                                .child("Open its card")
-                                .on_click(move |_, window, cx| {
-                                    crate::card::present_ask(&ask, window, cx)
-                                }),
+                            control("box-open", Control::Plain, "Open its card", chrome).on_click(
+                                move |_, window, cx| {
+                                    let ask = crate::address::Address::ask(&ask);
+                                    crate::open::open(&ask, window, cx).ok();
+                                },
+                            ),
                         )
                         .into_any_element(),
                 )
@@ -198,20 +235,28 @@ impl Render for WordsBox {
         observed("box")
             .role(Role::Group)
             .aria_label("Say a change in words")
+            // Escape gives the keyboard back to the list, the words kept (#1462).
+            .capture_key_down(|event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && event.keystroke.modifiers == Modifiers::none()
+                {
+                    crate::views::focus_list(window, cx);
+                    cx.stop_propagation();
+                }
+            })
             .flex_none()
             .w_full()
             .flex()
             .flex_col()
             .items_center()
-            .p_2()
-            .border_t_1()
+            .p(sizes().space(1))
+            .border_t(sizes().hairline)
             .border_color(chrome.divider)
             .child(
                 div()
-                    .w(px(560.))
+                    .w(relative(0.8))
                     .flex()
                     .flex_col()
-                    .gap_1()
+                    .gap(sizes().space(0))
                     .children(
                         self.beside
                             .clone()
@@ -220,7 +265,7 @@ impl Render for WordsBox {
                     .child(
                         div()
                             .flex()
-                            .gap_2()
+                            .gap(sizes().space(1))
                             .items_center()
                             // The drafted change is the input's words, its value (#1459's author id).
                             .child(
@@ -229,20 +274,13 @@ impl Render for WordsBox {
                                     .aria_label("Say a change in words")
                                     .aria_value(draft)
                                     .flex_1()
-                                    .h(px(32.))
+                                    .h(sizes().title.line + sizes().space(2))
                                     .child(Input::new(&self.input)),
                             )
                             .child(
-                                observed("box-send")
-                                    .role(Role::Button)
-                                    .aria_label("Send")
-                                    .px_2()
-                                    .rounded_sm()
-                                    .hover(|style| style.bg(chrome.hover))
-                                    .child("Send")
-                                    .on_click(
-                                        cx.listener(|this, _, window, cx| this.send(window, cx)),
-                                    ),
+                                control("box-send", Control::Plain, "Send", chrome).on_click(
+                                    cx.listener(|this, _, window, cx| this.send(window, cx)),
+                                ),
                             ),
                     )
                     .children(said),

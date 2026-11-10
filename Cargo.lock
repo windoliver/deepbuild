@@ -1985,6 +1985,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 name = "deep-app"
 version = "0.0.0"
 dependencies = [
+ "accesskit_macos",
  "block2 0.6.2",
  "chrono",
  "deep-app",
@@ -1994,6 +1995,7 @@ dependencies = [
  "deep-effects-render",
  "deep-gpu",
  "deep-marks-gpui",
+ "deep-text",
  "deep-text-gpui",
  "ed25519-dalek",
  "gpui-kit",
@@ -2051,6 +2053,7 @@ name = "deep-canvas-effects"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-scene3d",
  "serde_json",
 ]
 
@@ -2223,6 +2226,7 @@ dependencies = [
 name = "deep-gpu"
 version = "0.0.0"
 dependencies = [
+ "blake3",
  "deep-canvas",
  "deep-canvas-seams",
  "objc2-core-foundation",

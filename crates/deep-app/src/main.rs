@@ -195,10 +195,23 @@ fn main() {
             }
         }
     }
-    application().run(move |cx| {
+    // A `deepbuild://` link the OS hands the app waits for the tick, which can open it (#1460).
+    let (links, linked) = std::sync::mpsc::channel::<String>();
+    let app = application();
+    app.on_open_urls(move |urls| {
+        for url in urls {
+            let _ = links.send(url);
+        }
+    });
+    app.run(move |cx| {
         gpui_kit::init(cx);
         init(cx);
         menu_bar::set_dock_icon();
+        cx.on_system_notification_response(|response, cx| {
+            if response.action_id.is_none() {
+                let _ = deep_app::open::notification(&response.tag, cx);
+            }
+        });
         #[cfg(feature = "test-bound")]
         if let Some(path) = std::env::var_os("DEEP_APP_TEST_BOUND") {
             if let Err(why) = deep_app::bound::load(std::path::Path::new(&path)) {
@@ -209,7 +222,7 @@ fn main() {
         // made-up count and no record.
         #[cfg(not(feature = "plant-spike-window"))]
         if mode == Mode::Window {
-            notifications::start(held, cx);
+            notifications::start(held, linked, cx);
         }
         #[cfg(not(feature = "plant-spike-window"))]
         menu_bar::show_title(&menu_bar_line());
@@ -220,7 +233,10 @@ fn main() {
         // The window draws its own title bar, with the mark, so it owns the bar's drag.
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(
-                size(px(views::OPENING.0), px(views::OPENING.1)),
+                size(
+                    deep_app::chrome::sizes().window.0,
+                    deep_app::chrome::sizes().window.1,
+                ),
                 cx,
             )),
             ..gpui_kit::component::TitleBar::window_options()
@@ -278,7 +294,7 @@ fn main() {
             {
                 let layout = views::Layout::app(panel.is_some());
                 if let Some(view) = panel {
-                    views::place_extension(view);
+                    deep_app::open::place_extension(view, cx);
                 }
                 let canvas = cx.new(|_| CanvasPanel::new(deep_app::hub::root().join("evidence")));
                 views::set_canvas(canvas.clone());
@@ -305,6 +321,13 @@ fn main() {
         if opens {
             load_installed(window, palette, mounts, cx);
         }
+        // An assistive client asks the window what is focused; gpui's view knows, so the window asks it (#1462).
+        #[cfg(target_os = "macos")]
+        // SAFETY: gpui registered its window class when it opened the window above, and this executable is never
+        // unloaded, so the method added to the class stays valid.
+        unsafe {
+            accesskit_macos::add_focus_forwarder_to_window_class("GPUIWindow")
+        };
         cx.activate(true);
     });
 }
@@ -478,7 +501,7 @@ mod notifications {
         });
     }
 
-    pub fn start(held: Option<Held>, cx: &mut App) {
+    pub fn start(held: Option<Held>, linked: std::sync::mpsc::Receiver<String>, cx: &mut App) {
         record::install(RecordReader::unopened_folded(
             &hub::address(),
             &hub::root().join("control.token"),
@@ -489,18 +512,30 @@ mod notifications {
             let (mut begun, mut active) = (false, false);
             let notifies = held.is_some();
             let mut shown = deep_app::menu_bar_line();
+            // The status item's menu: a line per session with its state's word and mark (#1462).
+            let mut listed: Vec<String> = Vec::new();
             if notifies {
                 read_setting(&mut notifier);
             }
             loop {
                 cx.background_executor().timer(TICK).await;
-                if held.as_ref().is_some_and(Held::called) {
+                // A later launch brings the app forward; `deep open` and a link open their address (#1460).
+                for call in held.as_ref().map(Held::calls).unwrap_or_default() {
                     eprintln!("deep-app: brought forward");
                     cx.update(|cx| {
                         cx.activate(true);
                         if let Some(window) = cx.windows().first() {
                             let _ = window.update(cx, |_, window, _| window.activate_window());
                         }
+                        if let Some(address) = call.address.clone() {
+                            call.reply(&reply(deep_app::open::arrive(&address, cx)));
+                        }
+                    });
+                }
+                while let Ok(link) = linked.try_recv() {
+                    cx.update(|cx| {
+                        cx.activate(true);
+                        let _ = deep_app::open::link(&link, cx);
                     });
                 }
                 let was_active = std::mem::replace(&mut active, super::menu_bar::app_active());
@@ -537,11 +572,27 @@ mod notifications {
                         super::menu_bar::show_title(&line);
                         shown = line;
                     }
+                    let lines = record::with_view(|view| {
+                        deep_app::states::menu(&view.table(), deep_app::views::now())
+                    })
+                    .unwrap_or_default();
+                    if lines != listed {
+                        super::menu_bar::show_menu(&lines);
+                        listed = lines;
+                    }
                     deep_app::card::tick(now, cx);
                 });
             }
         })
         .detach();
+    }
+
+    /// What `deep open` prints: the address it opened, or what became of it.
+    fn reply(said: Result<String, String>) -> String {
+        match said {
+            Ok(address) => format!("opened {address}"),
+            Err(words) => words,
+        }
     }
 
     /// One tick's work: what the record brought, what came due, what left.
@@ -605,8 +656,8 @@ mod menu_bar {
     use deep_app::brand;
     use objc2::{rc::Retained, AllocAnyThread as _, MainThreadMarker};
     use objc2_app_kit::{
-        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSSound, NSStatusBar,
-        NSStatusItem, NSVariableStatusItemLength,
+        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSMenu, NSMenuItem, NSSound,
+        NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
     };
     use objc2_foundation::{NSData, NSSize, NSString};
 
@@ -659,6 +710,26 @@ mod menu_bar {
         });
     }
 
+    /// The status item's menu under the count (#1462): a line per session, its task's title, its state's word and
+    /// its mark, as `states::menu` writes them and the replica reports them.
+    pub fn show_menu(lines: &[String]) {
+        let mtm = MainThreadMarker::new().expect("the menu bar is set from the main thread");
+        let menu = NSMenu::new(mtm);
+        for line in lines {
+            // SAFETY: a plain item with no action, made and added on the main thread.
+            let item = unsafe {
+                NSMenuItem::initWithTitle_action_keyEquivalent(
+                    mtm.alloc::<NSMenuItem>(),
+                    &NSString::from_str(line),
+                    None,
+                    &NSString::from_str(""),
+                )
+            };
+            menu.addItem(&item);
+        }
+        ITEM.with(|item| item.setMenu(Some(&menu)));
+    }
+
     /// Whether the app is the active one.
     pub fn app_active() -> bool {
         let mtm = MainThreadMarker::new().expect("read from the main thread");
@@ -677,6 +748,7 @@ mod menu_bar {
 mod menu_bar {
     pub fn set_dock_icon() {}
     pub fn show_title(_: &str) {}
+    pub fn show_menu(_: &[String]) {}
     pub fn app_active() -> bool {
         false
     }

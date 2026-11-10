@@ -321,7 +321,8 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
       };
       if (callKind === 'mcp') {
         const server = str(call.server) || 'unknown';
-        const named = str(call.tool) || str(call.name) || tool || 'unknown';
+        // The tool's own name: Codex's call has it as `name` beside the payload's full `tool`, Claude Code's as `tool`.
+        const named = str(call.name) || str(call.tool) || tool || 'unknown';
         Object.assign(data, { server, tool: named });
         if (kind === 'tool.before') Object.assign(data, countMcp(server, named, meta.cwd, plant === 'unknown-tool-read' ? 'read' : 'change', plant === 'trusts-hints'));
       }

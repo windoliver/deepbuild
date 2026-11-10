@@ -1,0 +1,29 @@
+Base commit: 2721ca7b (Merge pull request #2088; crates/deep-app/src/notify.rs's clock_time writes "tomorrow at {time}")
+Command:     cargo test --locked -p deep-replica --test acceptance_883_ac3_redraft
+             (CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, through scripts/lease; Rust 1.99.1; darwin-arm64;
+             with the one [[test]] entry this redraft adds to crates/deep-replica/Cargo.toml)
+Date:        2026-11-09
+Exit code:   1 (the test binary); cargo reports "test failed"
+Result:      one run. The case fails at its judge's first rule, which names the base's form "tomorrow at 16:40" and
+             quotes the notification's text. The judge's planted check passes, as a judge check should at the base.
+             Trimmed: Compiling lines and build warnings are cut (among them a rust-objcopy debug-strip warning from
+             this Mac's toolchain, unrelated to the case); home paths read ~.
+
+    Finished `test` profile [unoptimized] target(s) in 4m 28s
+     Running ../../tests/acceptance/883/redraft-1458/ac3_tomorrow.rs (target/debug/deps/acceptance_883_ac3_redraft-fbc9b91aef66ea1f)
+
+running 2 tests
+
+thread 'main' (92676566) panicked at crates/deep-replica/../../tests/acceptance/883/redraft-1458/ac3_tomorrow.rs:119:13:
+the default's moment reads "tomorrow at 16:40", the form #1458 replaces, not "tomorrow 16:40": "DeepBuild · Cart totals\n! needs you — Push feat/cart to origin? If you don't answer: No, tomorrow at 16:40."
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test ac3_a_default_at_16_40_tomorrow_reads_tomorrow_16_40 ... FAILED
+test planted_ac3_the_judge_fails_each_forbidden_form_and_passes_the_right_one ... ok
+
+test result: FAILED. 1 passed; 1 failed
+error: test failed, to rerun pass `-p deep-replica --test acceptance_883_ac3_redraft`
+
+Caused by:
+  process didn't exit successfully: `~/dev/claude-worktrees/github-issue-1458-3b28b6/agent-a806304147e36c7c3/target/debug/deps/acceptance_883_ac3_redraft-fbc9b91aef66ea1f` (exit status: 1)
+
+Line 119 is `holds`'s panic, which raises the judge's failure text; the failure is the judge's rule 1 (README.md).

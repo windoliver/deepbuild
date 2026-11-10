@@ -81,7 +81,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     rev: maybe({ type: 'integer', description: 'With no document or patch, render back this revision of the document; null for the current one.' }),
   }),
   deep_drive: object({
-    call: { type: 'string', enum: ['launch', 'act', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },
+    call: { type: 'string', enum: ['launch', 'act', 'open', 'notification', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },
     replica: maybe(str('The replica, as launch answered it; null only for launch.', HANDLE('replica'))),
     launch: maybe(object({
       from: oneOf(['fixture', 'record_copy', 'empty'], 'null for fixture.'),
@@ -111,6 +111,11 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
       control: maybe(str()),
       value: maybe(str()),
     })),
+    open: maybe(object({
+      address: maybe(str('A page\'s address, opened as a click, ⌘K or deep open opens it: ask/<id>, session/<id>[/<claim>], project/<id> or page/<name>[/<parameter>]; null with url.')),
+      url: maybe(str('A deepbuild:// link, opened as the OS hands it to the app; null with address.')),
+    })),
+    notification: maybe(object({ click: { ...INT, description: 'The index of a notification this replica posted, clicked on its body.' } })),
     wait_for: maybe(object({
       state: oneOf(['visible', 'hidden', 'enabled', 'text', 'value', 'settled']),
       value: maybe(str()),
@@ -159,7 +164,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     kind: maybe(str('run: the job kind, as the list names it.')),
     tool: maybe(str('run: the tool, pinned by name@version as the list names it.')),
     params: maybe(str('run: the kind\'s params as JSON text; null for its defaults.')),
-    inputs: maybe({ type: 'array', items: object({ name: str('The input, as the kind names it.'), path: str('The file whose bytes it is, by absolute path.') }), description: 'run: each input the kind takes, once.' }),
+    inputs: maybe({ type: 'array', items: object({ name: str('The input, as the kind names it.'), sha256: maybe(str('The file whose bytes it is, by its SHA-256 in the evidence store; a tool that runs off the machine takes files only this way.', '^[0-9a-f]{64}$')), path: maybe(str('The file whose bytes it is, by absolute path, for a tool that runs on this machine; null when sha256 names it.')) }), description: 'run: each input the kind takes, once.' }),
   }),
   deep_env: object({ action:{ type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
   deep_propose: object({

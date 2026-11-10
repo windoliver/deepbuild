@@ -175,6 +175,29 @@ fn highlights_mark_their_regions_beside_the_cell_never_on_it() {
 }
 
 #[test]
+fn a_card_or_a_cell_too_wide_for_a_u32_sum_does_not_fit() {
+    let one = [cell("a", [100, 60], None, vec![])];
+    assert_eq!(
+        place([800, 400], [u32::MAX, 160], &one, None, 8),
+        Err("sheet.does_not_fit")
+    );
+    let wide = [cell("a", [u32::MAX, 60], None, vec![[0, 0, 2, 1]])];
+    assert_eq!(
+        place([800, 400], [100, 100], &wide, None, 8),
+        Err("sheet.does_not_fit")
+    );
+}
+
+#[test]
+fn a_highlight_whose_far_edge_passes_u32_is_outside_its_cell() {
+    let outside = [cell("c", [160, 60], None, vec![[u32::MAX, 0, 2, 1]])];
+    assert_eq!(
+        place([1280, 800], [360, 240], &outside, None, 8),
+        Err("sheet.highlight_outside")
+    );
+}
+
+#[test]
 fn a_sheet_that_mixes_looks_names_each_cells_look() {
     let labels = ["Warm".to_string(), "Cool".to_string()];
     let same = [
