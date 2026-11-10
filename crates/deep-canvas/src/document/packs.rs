@@ -3167,14 +3167,9 @@ mod tests {
 
     #[test]
     fn a_sum_ends_where_adding_one_changes_nothing() {
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let sum = Expr::parse("sum(k, 9007199254740992, 9007199254740992, 1)").unwrap();
-            tx.send(sum.eval(&scope())).ok();
-        });
-        let got = rx.recv_timeout(std::time::Duration::from_secs(10));
-        assert_eq!(got, Ok(Ok(1.0)), "the sum of one term");
         let e = |t: &str| Expr::parse(t).unwrap().eval(&scope()).unwrap();
+        // Past 2^53 adding one changes nothing, so a sum that only counts up never ends here.
+        assert_eq!(e("sum(k, 9007199254740992, 9007199254740992, 1)"), 1.0);
         assert_eq!(e("sum(k, 1, 4, k)"), 10.0);
         assert_eq!(e("sum(k, 4, 1, k)"), 0.0);
     }
