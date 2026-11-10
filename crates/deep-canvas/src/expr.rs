@@ -2865,6 +2865,9 @@ mod tests {
         assert_eq!(e.why, "unexpected `$`");
         let e = Expr::compile("1 2", &Nothing, 512).unwrap_err();
         assert_eq!(e.why, "trailing text after the expression");
+        // A bad number moves the lexer on, and the char after it never replaces its refusal.
+        let e = Expr::compile("f(1..2 $)", &Nothing, 512).unwrap_err();
+        assert!(e.why.contains("is not a number"), "{e}");
     }
 
     #[test]
