@@ -9,6 +9,7 @@ pub mod encode;
 pub mod guard;
 pub mod memory;
 pub mod meter;
+pub mod pixel_hash;
 pub mod render;
 pub mod ring;
 pub mod seam;

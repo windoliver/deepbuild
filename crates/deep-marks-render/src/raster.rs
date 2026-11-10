@@ -23,7 +23,8 @@ use deep_canvas_marks::scene::{Blend, Drawn, Scope};
 use deep_canvas_marks::story;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
-    bez, brush, image, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas, Scopes,
+    bez, brush, image, level_name, rasterizer, rect, sampler, settings, shape, solid, stroke,
+    Canvas, Scopes,
 };
 use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::{Affine, RoundedRect, Shape};
@@ -200,21 +201,6 @@ impl Config {
             },
             ..rasterizer()
         }
-    }
-}
-
-/// A level by its name: `scalar`, `neon`, or the x86 level detected.
-fn level_name(level: Level) -> String {
-    if matches!(level, Level::Fallback(_)) {
-        "scalar".into()
-    } else if level.as_neon().is_some() {
-        "neon".into()
-    } else {
-        format!("{level:?}")
-            .split('(')
-            .next()
-            .unwrap_or("detected")
-            .to_lowercase()
     }
 }
 

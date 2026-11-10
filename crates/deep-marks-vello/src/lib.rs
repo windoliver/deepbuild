@@ -182,6 +182,20 @@ pub fn rasterizer() -> RasterizerSettings {
     }
 }
 
+/// A level by its name: `scalar`, `neon`, or the x86 level detected (#385, #1897), on every
+/// architecture.
+pub fn level_name(level: Level) -> String {
+    if level.is_fallback() {
+        "scalar".into()
+    } else {
+        format!("{level:?}")
+            .split('(')
+            .next()
+            .unwrap_or("detected")
+            .to_lowercase()
+    }
+}
+
 fn rgba(c: [f64; 3], alpha: f64) -> AlphaColor<Srgb> {
     AlphaColor::new([c[0] as f32, c[1] as f32, c[2] as f32, alpha as f32])
 }

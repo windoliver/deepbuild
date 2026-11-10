@@ -398,7 +398,7 @@ impl<'a> Hub<'a> {
     }
 
     /// A PNG of `rgba` in the evidence store, its SHA-256; a store that takes no write is unfit.
-    fn put_png(&self, rgba: Vec<u8>, size: [u16; 2]) -> Result<String, Unfit> {
+    pub(crate) fn put_png(&self, rgba: Vec<u8>, size: [u16; 2]) -> Result<String, Unfit> {
         evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
             code: "evidence_unwritable",
             path: "snapshots".into(),

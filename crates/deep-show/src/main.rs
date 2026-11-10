@@ -13,6 +13,7 @@ mod bake;
 mod ask;
 mod capture;
 mod costs;
+mod determinism;
 mod efficiency;
 mod familiar;
 mod evidence;
@@ -423,6 +424,16 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                     Some(a) => a.as_str()? == "software",
                 },
             });
+        }
+        "pixel_hash" => {
+            let frames = c.get("frames")?.as_array()?.iter().map(|f| {
+                let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
+                let w = u32::try_from(size[0].as_u64()?).ok()?;
+                let h = u32::try_from(size[1].as_u64()?).ok()?;
+                let format = deep_gpu::pixel_hash::Format::named(f.get("format")?.as_str()?)?;
+                Some(([w, h], format, f.get("bytes")?.as_str()?.to_string()))
+            });
+            return Some(Call::PixelHash(frames.collect::<Option<_>>()?));
         }
         "cross_machine" => {
             let a = c.get("audio")?.as_array().filter(|a| a.len() == 2)?;
@@ -2769,9 +2780,10 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
     }
 }
 
-/// #501's wrong programs, by the names its acceptance suite gives them.
+/// #501's wrong programs, and #1897's, by the names their acceptance suites give them.
 fn export_planted(name: &str) -> Option<Planted> {
     Some(match name {
+        "hash_xors_without_position" => Planted::HashXorsWithoutPosition,
         "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
         "span_rounds_start" => Planted::SpanRoundsStart,
         "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,
