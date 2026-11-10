@@ -2817,18 +2817,13 @@ mod tests {
         holds("carg(conj(vec2(x, 0)))", -2.0, -1.0, &[-2.0, -1.5, -1.0]);
     }
 
-    /// `text` compiled at `cap` and evaluated with no vars, on a 1 MB thread.
-    fn on_a_small_stack(text: String, cap: usize) -> Result<f64, String> {
-        std::thread::Builder::new()
-            .stack_size(1 << 20)
-            .spawn(move || {
-                Expr::compile(&text, &Nothing, cap)
-                    .map(|e| e.eval_num(&[]))
-                    .map_err(|r| r.why)
-            })
-            .unwrap()
-            .join()
-            .unwrap()
+    /// `text` compiled at `cap` and evaluated with no vars. The canvas lint keeps threads and
+    /// clocks out of these crates, so a 1 MB stack and the time a refusal takes are the
+    /// acceptance suite's (tests/acceptance/1468, in deep-motion).
+    fn value(text: String, cap: usize) -> Result<f64, String> {
+        Expr::compile(&text, &Nothing, cap)
+            .map(|e| e.eval_num(&[]))
+            .map_err(|r| r.why)
     }
 
     #[test]
@@ -2845,8 +2840,8 @@ mod tests {
         for (open, close, levels) in forms {
             let at = |n: usize| format!("{}1{}", open.repeat(n), close.repeat(n));
             let n = 64 / levels;
-            assert!(on_a_small_stack(at(n), 512).is_ok(), "{open}: {n}");
-            let e = on_a_small_stack(at(n + 1), 512).unwrap_err();
+            assert!(value(at(n), 512).is_ok(), "{open}: {n}");
+            let e = value(at(n + 1), 512).unwrap_err();
             assert!(e.contains(cap), "{open}: {e}");
         }
     }
@@ -2855,8 +2850,8 @@ mod tests {
     fn a_long_chain_is_refused_before_it_binds() {
         // Left-associative chains nest no parse but make a tree as deep as they are long.
         let chain = |n: usize| format!("{}1", "1+".repeat(n));
-        assert_eq!(on_a_small_stack(chain(127), 256), Ok(128.0));
-        let e = on_a_small_stack(chain(100_000), 256).unwrap_err();
+        assert_eq!(value(chain(127), 256), Ok(128.0));
+        let e = value(chain(100_000), 256).unwrap_err();
         assert!(e.contains("twice the cap of 256"), "{e}");
     }
 
@@ -2876,10 +2871,12 @@ mod tests {
     fn a_dotted_name_counts_against_the_nodes_and_the_cap_wins_over_what_follows() {
         // A table's dotted name reads no further than the node bound lets it.
         let long = format!("table({}a + 1)", "a.".repeat(1_000_000));
-        let t = std::time::Instant::now();
         let e = Expr::compile(&long, &Nothing, 512).unwrap_err();
         assert!(e.why.contains("twice the cap of 512"), "{e}");
-        assert!(t.elapsed().as_millis() < 50, "{:?}", t.elapsed());
+        // A name that ends the call is read as one, so only its parts' count refuses it.
+        let name = format!("table({}a)", "a.".repeat(1_000_000));
+        let e = Expr::compile(&name, &Nothing, 512).unwrap_err();
+        assert!(e.why.contains("twice the cap of 512"), "{e}");
         // A refusal for the cap stands, whatever char comes after where it stopped.
         let deep = format!("{}$", "(".repeat(65));
         let e = Expr::compile(&deep, &Nothing, 512).unwrap_err();
