@@ -89,6 +89,18 @@ failures; of the 31 failing only at head, a rerun at load 2 put each on this box
 BLOCKED. The ones that touch asks, #26 `ask`/`binding`, #39 `session` and #120 `start`, give the same result at base and
 head, test by test. The lint lane's NEW FAIL lines (slots' kits, drift, the app's record reader) are main's.
 
+## `node scripts/affected.mjs` on the final commit
+
+On this branch replayed onto the rewritten main (2721ca7b), it read FAIL: 577 new, 19 already failing on main, 574
+inconclusive or blocked, 22 listed skips, 3704 passed, in 12658 s at load 4. INCONCLUSIVE: **86 timed files were not
+run** (`--timed`; #319's budgets are the Mac's) and **44 slow files were not run** (`--slow`). No WIDE line. No lint
+line names a file this change touches.
+
+The same 200 failing test files at main's tip 2721ca7b, in a built worktree on the same box: 341 of the head's 357 test
+failures fail there too. The 17 that didn't, run again on both sides: 11 passed at head; the other three files
+(codex-hub's measured hold, #340's terminal, #348's sandbox places) fail at the tip as well across three alternating
+runs each. No failure is this change's.
+
 ## The Mac, at f0b4db39: answering an ask was over its budget
 
 The owner's Mac runner (Mac15,12, Apple M3, 16 GB, on AC power, Low Power Mode off, no thermal warning:
