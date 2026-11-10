@@ -32,13 +32,16 @@ pub struct View {
     to: Sender<Latched>,
     from: Receiver<Value>,
     pub t: i64,
-    pub span: i64,
+    /// The span's end; None for an open span (Transport), which has none.
+    pub span: Option<i64>,
+    /// The furthest time played: with an open span, as far as a seek reaches.
+    pub played: i64,
     pub frame: u64,
 }
 
 impl View {
     /// Starts the worker for `line`'s piece and track; its first reply is the check's.
-    pub fn open(line: Value, span: i64, planted: Planted) -> Result<(View, Value), Value> {
+    pub fn open(line: Value, span: Option<i64>, planted: Planted) -> Result<(View, Value), Value> {
         let (to, inbox) = channel::<Latched>();
         let (outbox, from) = channel::<Value>();
         std::thread::Builder::new()
@@ -57,6 +60,7 @@ impl View {
                 from,
                 t: 0,
                 span,
+                played: 0,
                 frame: 0,
             },
             first,
@@ -129,7 +133,14 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
             world.fork_track(k, &[e]);
             fork_at = Some(k * len);
         }
-        let want = t / len + 1;
+        // The planted blend draws toward the next step, so it steps one further.
+        let ahead = planted.linear_blends_forward
+            && world
+                .piece
+                .items
+                .iter()
+                .any(|i| i.writes.iter().any(|w| w.linear));
+        let want = t / len + 1 + i64::from(ahead);
         let start = cpu_ns();
         // A seek back, or a checkpoint nearer than stepping on, restores it.
         let at = world.at().unwrap_or(0);
@@ -141,13 +152,15 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
                 }
             }
         }
-        let mut steps = 0;
-        while let Some(k) = world.at().filter(|k| *k < want) {
+        // The steps that run, one at a time within the slice; a turn clock's idle steps cost none.
+        let (mut steps, mut cut) = (0, false);
+        while let Some(k) = world.wake().filter(|k| *k < want) {
             let used = cpu_ns() - start;
             if !planted.simulate_runs_all_steps
                 && steps > 0
                 && (used + step_ns) as f64 > FRAME_NS * SLICE
             {
+                cut = true;
                 break;
             }
             let before = cpu_ns();
@@ -155,14 +168,15 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
             step_ns = step_ns.max(cpu_ns() - before);
             steps += 1;
         }
-        // The state about to run step `want` holds its checkpoint, if one is due there.
-        if world.at() == Some(want) {
+        // On to `want` past steps nothing asks for, and the checkpoint due there, if any.
+        if !cut && world.at().is_some_and(|a| a <= want) {
             world.run(want, &mut Record::default(), &mut |_, _| {});
         }
         let eval_ns = cpu_ns() - start;
         let at = world.at().unwrap_or(0);
         let reply = json!({"want": want, "at": at, "stale": at != want, "steps": steps, "eval_ns": eval_ns,
-            "deep_hash": world.deep_hashes(), "stamped": stamped, "fork_at": fork_at});
+            "deep_hash": world.deep_hashes(), "stamped": stamped, "fork_at": fork_at,
+            "draws": world.drawn(t), "valid_until": if at == want { world.valid_until(t) } else { Some(t + 1) }});
         if outbox.send(reply).is_err() {
             return;
         }

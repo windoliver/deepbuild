@@ -250,6 +250,8 @@ alone.push('tests/acceptance/1348/');
 alone.push('tests/acceptance/1455/');
 // #505's files each build deep-canvas-render (and its formula file deep-show): one file at a time.
 alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
+// #1653's files each build deep-canvas-render and draw with Vello CPU, as #467's do: one file at a time.
+alone.push('tests/acceptance/1653/', 'tests/acceptance/1653-redraft-ac2-flip/');
 // #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.
 alone.push('tests/acceptance/1479/');
 // #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
@@ -262,6 +264,8 @@ timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/v
 alone.push('tests/acceptance/500/', 'tests/acceptance/500-oracle/');
 // #532's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome, and read CPU times per frame and per step.
 alone.push('tests/acceptance/532/');
+// #545's files build deep-logic and drive long-lived views frame by frame; ac04 builds deep-show and exports on the GPU.
+alone.push('tests/acceptance/545/', 'tests/acceptance/545-redraft-ac3/', 'tests/acceptance/545-redraft-ac5/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
 // #1732's files each build deep-show: one file at a time.
@@ -284,6 +288,11 @@ alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
 // #1818's files each build deep-show and mix seconds of audio through the media processors.
 alone.push('tests/acceptance/1818/');
+// #1461's files build deep-drive plain and with env-plants, start real hubs and many replicas; its AC1 and AC14 file and
+// its AC28 file open the real app's window, with Accessibility and Screen Recording, by hand; its AC9 file is timed.
+alone.push('tests/acceptance/1461/');
+byHand.push('tests/acceptance/1461/shell.test.ts', 'tests/acceptance/1461/shown.test.ts');
+timed.push('tests/acceptance/1461/budget.test.ts');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
@@ -321,6 +330,15 @@ timed.push('tests/acceptance/408-redraft-ac5/machines.test.ts');
 // pinned open models on CPU: one file at a time.
 alone.push('tests/acceptance/1819/');
 byHand.push('tests/acceptance/408/machines.test.ts');
+// #405's files each build deep-show. Criterion 4 runs from its redraft, which also builds it in release on a machine
+// that can judge a timing now and times the geometry audit and determinism hashing against the lane's rule; the
+// original criterion-4 file, whose rendered fixture the base refuses (lit solids with no paint), runs by hand.
+alone.push('tests/acceptance/405/broken-fixture.test.ts', 'tests/acceptance/405/floating-exception.test.ts', 'tests/acceptance/405/lid-sweep.test.ts');
+alone.push('tests/acceptance/405-redraft-ac4/');
+timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
+byHand.push('tests/acceptance/405/budgets.test.ts');
+// #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
+alone.push('tests/acceptance/544/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

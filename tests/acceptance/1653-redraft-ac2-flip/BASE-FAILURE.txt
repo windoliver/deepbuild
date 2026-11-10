@@ -1,0 +1,18 @@
+Run once at base d51be2c33e55ee540865ab6ece81aee92e077086 (Nov 10), on macOS arm64, Rust 1.99.1:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/1653-redraft-ac2-flip
+
+(scripts/lease found no `deep` and no built CLI, so the run was unleased.) The binary built; the test failed:
+
+  × AC2 #1653.91f150e7 a row with the h bit draws its atlas cell mirrored left to right, with the v bit top to bottom, in place, and an unflipped row beside it as the atlas holds it
+  AssertionError: raster flip none was drawn, not refused: {"ok":false,"code":"bad_encode","issues":[{"check":"document.validate","code":"bad_encode","severity":"error","ids":["tiles"],"path":"items/tiles/params/encode","actual":null,"what":"marks2d refuses it","fix":"Change the item so the 2D marks module can draw it."}]}
+   ❯ drawn ../467/helpers.ts:166:73
+   ❯ flip.test.ts:100:49
+
+  Test Files  1 failed (1)
+       Tests  1 failed (1)
+
+Why: the base's 2D marks module has no atlas tile set. `raster`'s check refuses a `marks@1` set with `mark: image`,
+`atlas` and `grid` (it asks for `encode`, and reads no `atlas`, `grid`, `cx`, `cy`, `tile` or `flip`), so even the
+unflipped document is refused before anything is drawn. The behaviour is missing; the test ran as written and its
+first assertion, that the plain set draws, is the one that failed. The pixel judgement was not reached at the base.

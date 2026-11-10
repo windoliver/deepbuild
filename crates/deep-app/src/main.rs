@@ -566,7 +566,10 @@ mod notifications {
                     begun = true;
                     post(&mut notifier, now, cx);
                 }
-                let reach = notifier.reach(watch.down());
+                let reach = notify::Reach {
+                    since: watch.since(),
+                    ..notifier.reach(watch.down())
+                };
                 let reached = reach != notify::reach();
                 if reached {
                     notify::publish(reach);
@@ -589,7 +592,7 @@ mod notifications {
                         super::menu_bar::show_menu(&lines);
                         listed = lines;
                     }
-                    deep_app::card::tick(now, cx);
+                    deep_app::views::tick(now, cx);
                 });
             }
         })

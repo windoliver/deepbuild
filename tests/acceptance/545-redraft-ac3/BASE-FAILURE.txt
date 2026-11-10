@@ -1,0 +1,58 @@
+# #545 criterion 3 redraft at HEAD 933d6c9529ce5b1e8c1c2cb405dadfcd877448ba ("Acceptance tests for #545, written blind":
+# base f38d2b398 plus tests/acceptance/545/; nothing else changed but this folder and ../545-redraft-ac5 added).
+# Run 2026-11-10 on macOS arm64, Node v24.22.2, cargo 1.99.1 (rustup).
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/545-redraft-ac3 --testTimeout=600000 --no-file-parallelism
+# Result: 2 of 2 tests fail, both on the missing surface: `frame` takes no `play` at the base, so the playhead stays at
+# 0 s (and its frames have no `draws`). Nothing is BLOCKED. `npx tsc -p tests/acceptance/545-redraft-ac3/tsconfig.json`
+# passes. deep-logic and ../545/wat build. Before the views, test (a)'s bake leg ran at the base and passed: the linear
+# mover stores [k, 0, 0], the 60 Hz reader reads only whole metres (1 m at its step 9), and both items' step records
+# and checkpoints (0 and 60) are equal with linear and with hold. The base drops `interpolate`, so that leg can't fail
+# there. A throwaway probe, since deleted, stood in seeks for `play` at the base: 60 frames of 1/60 s land on
+# i x 11,760,000 flicks, 0.15 s and 0.1 s land on 105,840,000 and 70,560,000, and the mover's full-state hashes there are
+# equal with linear and hold.
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/545-redraft-ac3
+
+ ❯ ac03-linear-writes.test.ts (2 tests | 2 failed) 6890ms
+   ❯ #545.10859a3c a linear write draws one step late, blended toward the stored value, and only drawing reads the blend (2)
+     × #545.10859a3c the 10 Hz item's linear vec3 draws 0.5 m at 0.15 s and 0 m at 0.1 s played and seeked, held it draws 1 m; a reader reads whole metres; step and full-state hashes are equal either way 5832ms
+     × #545.10859a3c a planted blend toward the next step (linear_blends_forward) draws 1.5 m at 0.15 s and fails, naming the time and both values 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac03-linear-writes.test.ts > #545.10859a3c a linear write draws one step late, blended toward the stored value, and only drawing reads the blend > #545.10859a3c the 10 Hz item's linear vec3 draws 0.5 m at 0.15 s and 0 m at 0.1 s played and seeked, held it draws 1 m; a reader reads whole metres; step and full-state hashes are equal either way
+AssertionError: linear: played frame 1 (play 1/60 s a frame from 0 s) lands the playhead at 11,760,000 flicks: expected +0 to be 11760000 // Object.is equality
+
+- Expected
++ Received
+
+- 11760000
++ 0
+
+ ❯ keep ac03-linear-writes.test.ts:49:87
+ ❯ watch ac03-linear-writes.test.ts:55:15
+ ❯ watched ac03-linear-writes.test.ts:92:12
+ ❯ ac03-linear-writes.test.ts:138:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac03-linear-writes.test.ts > #545.10859a3c a linear write draws one step late, blended toward the stored value, and only drawing reads the blend > #545.10859a3c a planted blend toward the next step (linear_blends_forward) draws 1.5 m at 0.15 s and fails, naming the time and both values
+AssertionError: linear: played frame 1 (play 1/60 s a frame from 0 s) lands the playhead at 11,760,000 flicks: expected +0 to be 11760000 // Object.is equality
+
+- Expected
++ Received
+
+- 11760000
++ 0
+
+ ❯ keep ac03-linear-writes.test.ts:49:87
+ ❯ watch ac03-linear-writes.test.ts:55:15
+ ❯ watched ac03-linear-writes.test.ts:92:12
+ ❯ ac03-linear-writes.test.ts:146:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:15:56
+   Duration  7.01s (tests 99%)

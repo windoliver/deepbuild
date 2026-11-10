@@ -833,12 +833,14 @@ pub fn head_place(
 }
 
 /// What `geometry` answers of a mark set at t: each row by key, after the transforms, with its
-/// columns, opacity, place in document u and, through a colormap, its color unrounded.
+/// columns, opacity, place in document u (an atlas row's, its cell's centre) and, through a
+/// colormap, its color unrounded. `planted`: #1653's square layout of an isometric grid.
 pub fn rows_report(
     id: &str,
     item: &Value,
     items: &Map<String, Value>,
     palette: &Palette,
+    planted: crate::scene::Planted,
 ) -> Result<Value, Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
@@ -846,6 +848,15 @@ pub fn rows_report(
     let props = encoded(p, &rows, items, &path)?;
     let pos = crate::scene::item_pos(item);
     let bar = p.get("mark").and_then(Value::as_str) == Some("bar");
+    // #1653: an atlas row's place is its cell's centre.
+    let centres: std::collections::BTreeMap<String, [f64; 2]> = if crate::atlas::is_atlas(p) {
+        crate::atlas::tiles(id, p, &rows, planted)?
+            .into_iter()
+            .map(|t| (t.key, t.centre))
+            .collect()
+    } else {
+        Default::default()
+    };
     let mut out = Map::new();
     for (i, key) in rows.keys.iter().enumerate() {
         let columns: Map<String, Value> = rows
@@ -863,6 +874,10 @@ pub fn rows_report(
             if let Some(v) = at(k).or(base) {
                 place.insert(k.to_string(), json!(v + pos[axis]));
             }
+        }
+        if let Some(c) = centres.get(key) {
+            place.insert("x".into(), json!(c[0] + pos[0]));
+            place.insert("y".into(), json!(c[1] + pos[1]));
         }
         let mut row = json!({"columns": columns, "opacity": rows.opacity_of(i), "place": place});
         // #505: a role column's index into the set's roles.
@@ -1272,6 +1287,7 @@ pub fn mark_set(
                     crop: None,
                     opacity: 1.0,
                     adjust: crate::paint::Adjust::default(),
+                    tile: None,
                 });
             }
             "text" => out.push(Mark::Text {

@@ -2838,6 +2838,18 @@ export class Core {
       if (this.restate) { this.restate = false; this.stateSoon(); }
     });
   }
+  /** Marks the row `id` read, as row.set with `unread: false`, if it's unread; whether it was (#1461). */
+  private async seeRow(id: string): Promise<Obj> {
+    const placed = this.rows.get(id);
+    if (!placed?.row.unread) return { seen: false };
+    const row = { ...placed.row, unread: false };
+    const ts = this.now();
+    const session = row.session;
+    const connection = this.connection('core', { ...(this.projects.get(session) ? { project: this.projects.get(session)! } : {}), ...(this.sessionPeople.get(session) ? { actor: this.sessionPeople.get(session)! } : {}) });
+    await this.append(connection, { v: 1, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
+    this.rows.set(id, { order: placed.order, row });
+    return { seen: true };
+  }
   /** Once no state pass is under way or due, the passes appends since asked for included. */
   private async statesSettled(): Promise<void> {
     while (this.stating) await this.stating;
@@ -5834,6 +5846,11 @@ export class Core {
       case 'rows.read':
         this.replayLate();
         return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.log.reflecting(() => this.rowsSeen(context.role, params.detail === true)));
+      // A row's page was open a second while you were present (#1461): the row reads as read in every reader.
+      case 'row.read':
+        if (context.role !== 'app') throw refuse('role', '/method', 'Only the app says a row was seen.', method);
+        if (typeof params.id !== 'string') throw refuse('type', '/params/id', 'Name the row by its id.', method);
+        return this.statesSettled().then(() => this.queue(() => this.seeRow(String(params.id))));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);

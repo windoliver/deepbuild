@@ -339,6 +339,25 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             r.kind(crate::spec::entry(&spec, "", name), &[], "");
         }
     }
+    // #419's stand-in for the physics module's baked world, which the scene draws body by body
+    // (#405: a document's checks reach it as a kind this module knows).
+    r.kind(
+        Entry {
+            family: "fixture",
+            name: "world",
+            versions: vec![Version {
+                major: 1,
+                minor: 0,
+                params: ["step_hz", "span", "gravity", "floor", "restitution", "bodies", "buoyancy", "inputs", "paint"]
+                    .into_iter()
+                    .map(json_param)
+                    .collect(),
+            }],
+            migrations: Vec::new(),
+        },
+        &[],
+        "",
+    );
     crate::build::register_scene3d(r);
     // A solid's modifier stack, every prefix kept by its content key (Modifier; #411).
     r.array("scene3d.stack", "stack", "item", "geometry", "items");

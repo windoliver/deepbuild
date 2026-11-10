@@ -20,6 +20,7 @@ mod evidence;
 mod export;
 mod film;
 mod film_layout;
+mod geometry_audit;
 mod film_viewer;
 mod frames;
 mod function;
@@ -32,6 +33,7 @@ mod jobs;
 mod kept;
 mod kinds;
 mod kit;
+mod logic;
 mod media;
 mod mixdown;
 mod modes;
@@ -769,6 +771,18 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "catalog" => return Some(Call::Catalog),
         "verdict" => return Some(Call::Verdict(c.get("claim")?.as_str()?.to_string())),
         "verdicts" => return Some(Call::Verdicts(c.get("claim")?.as_str()?.to_string())),
+        "answer" => {
+            return Some(Call::Answer {
+                via: acting(c)?,
+                claim: c.get("claim")?.as_str()?.to_string(),
+                requirement: c.get("requirement")?.as_str()?.to_string(),
+                yes: match c.get("answer")?.as_str()? {
+                    "yes" => true,
+                    "no" => false,
+                    _ => return None,
+                },
+            })
+        }
         "golden" => {
             return Some(Call::Golden {
                 fixture: c.get("fixture")?.as_str()?.to_string(),
@@ -1179,6 +1193,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_media::PLANTED.contains(p)
                 // #1732's wrong programs live in the motion module's arrangement solve.
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
+                || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1206,6 +1221,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "sorts_by_order_key_alone" => Planted::SortsByOrderKeyAlone,
                 "reply_without_digest" => Planted::ReplyWithoutDigest,
                 "reads_wasm_bytes" => Planted::ReadsWasmBytes,
+                "start_on_at_first_frame" => Planted::StartOnAtFirstFrame,
                 "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
                 "diffs_whole_document" => Planted::DiffsWholeDocument,
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
@@ -1254,6 +1270,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
                 "layout_text_by_kind" => Planted::LayoutTextByKind,
+                "sweep_audits_samples_only" => Planted::SweepAuditsSamplesOnly,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
