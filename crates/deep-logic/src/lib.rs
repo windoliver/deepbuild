@@ -910,13 +910,17 @@ fn adapter(line: &Value) -> String {
         .and_then(Value::as_str)
         .map(str::to_string)
         .unwrap_or_else(|| {
-            let host = format!(
-                "{}\n{}\n{}\n",
-                std::env::consts::OS,
-                std::env::consts::ARCH,
-                cpu()
-            );
-            rewrite::hash(host.as_bytes())
+            static HOST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+            HOST.get_or_init(|| {
+                let host = format!(
+                    "{}\n{}\n{}\n",
+                    std::env::consts::OS,
+                    std::env::consts::ARCH,
+                    cpu()
+                );
+                rewrite::hash(host.as_bytes())
+            })
+            .clone()
         })
 }
 
@@ -966,7 +970,10 @@ pub(crate) fn frames(
         }
         let mut list = Vec::new();
         for j in 0..count {
-            let t = from + j * (F / 60);
+            let t = j
+                .checked_mul(F / 60)
+                .and_then(|d| d.checked_add(from))
+                .ok_or_else(|| bad("frames"))?;
             let k = t.div_euclid(len);
             let row = match opened {
                 Some((s, arrays)) if k == s - 1 => Some(arrays),

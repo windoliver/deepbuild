@@ -369,10 +369,10 @@ impl Item {
     }
 }
 
-/// A piece: its seed, controls, tour and checked logic items in order.
 /// The fixture canvas module whose carried state is of the `same_machine` class (#534).
 pub const MACHINE: &str = "same_machine.counter@1";
 
+/// A piece: its seed, controls, tour and checked logic items in order.
 #[derive(Clone, Debug)]
 pub struct Piece {
     pub seed: i64,

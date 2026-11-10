@@ -116,7 +116,7 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
         // A piece without logic gains no work per frame: nothing steps, nothing is timed.
         if world.lives.is_empty() {
             let reply = json!({"want": t / len + 1, "at": t / len + 1, "stale": false, "steps": 0, "eval_ns": 0,
-                "deep_hash": {}, "stamped": null, "fork_at": null});
+                "deep_hash": world.deep_hashes(), "stamped": null, "fork_at": null});
             if outbox.send(reply).is_err() {
                 return;
             }

@@ -514,7 +514,8 @@ impl World {
         let t = cpu_ns();
         rec.checkpoint(&id, l.next, deep);
         let next = l.next;
-        if i == 0 {
+        // The counters checkpoint with the first item that hasn't failed.
+        if self.lives.iter().position(|l| !l.failed) == Some(i) {
             let seen = self.seen_hash();
             for m in &self.piece.machine {
                 rec.checkpoint(m, next, seen);
@@ -750,6 +751,7 @@ impl World {
             *l = r;
         }
         self.published = back.published;
+        self.seen = back.seen;
         Ok(())
     }
 

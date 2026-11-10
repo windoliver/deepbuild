@@ -1,0 +1,12 @@
+# Off-Mac probe of #534's Mac-pinned legs (frames, budgets) on Linux aarch64, load 4.70, head 55ea6907 + review fixes, debug build
+# Readings only: timings here are not budget evidence (the reference Mac judges them).
+PROBE frames [] 601 null {"t":21156240000,"arrays":{"dungeon.floor":[9],"dungeon.health":[1001],"dungeon.inv":[29,34,40,36,43,45,52,57]}} {"t":28212240000,"arrays":{"dungeon.floor":[14],"dungeon.health":[1358],"dungeon.inv":[33,42,46,43,49,55,63,71]}}
+PROBE frames [ 'save_drops_globals' ] 601 {"frame":1,"t":21168000000,"array":"dungeon.floor"} {"t":21156240000,"arrays":{"dungeon.floor":[9],"dungeon.health":[1001],"dungeon.inv":[29,34,40,36,43,45,52,57]}} {"t":28212240000,"arrays":{"dungeon.floor":[600],"dungeon.health":[-1800],"dungeon.inv":[33,42,46,43,49,55,63,71]}}
+PROBE check ms 155.64309300000014 true
+PROBE checkpoint ns 11 1.215904 true
+PROBE save ms 24.937191 false
+PROBE flock ms/step 0.04180480532445924 601
+PROBE empty view {"ok":true,"session":"v1","items":{}}
+PROBE empty frame 0 0
+PROBE empty frame 0 0
+PROBE empty frame 0 0

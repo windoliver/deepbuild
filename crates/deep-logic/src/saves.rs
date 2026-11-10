@@ -52,7 +52,10 @@ fn binding(piece: &Piece) -> [String; 3] {
         .flat_map(|i| &i.assets)
         .map(|(sha, _)| format!("{sha}\n"))
         .collect();
-    let modules = format!("logic@1\n{}\n", deep_canvas_sandbox::module::INTERFACE);
+    let mut modules = format!("logic@1\n{}\n", deep_canvas_sandbox::module::INTERFACE);
+    if !piece.machine.is_empty() {
+        modules.push_str(&format!("{}\n", crate::piece::MACHINE));
+    }
     [
         joined(&|i| i.program.clone()),
         hash(content.as_bytes()),
