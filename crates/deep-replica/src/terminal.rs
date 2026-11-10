@@ -73,6 +73,7 @@ pub fn open(
         center: vec![EXTENSION.into()],
         active: 0,
         line: LINE.into(),
+        needs_you: deep_app::views::NEEDS_YOU.into(),
     };
     let screen = screen_of(spec);
     let preedit = spec["terminal"]["preedit"].as_str().map(str::to_owned);

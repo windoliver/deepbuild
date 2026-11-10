@@ -140,6 +140,31 @@ impl PixelHash {
         size: [u32; 2],
         format: Format,
     ) -> Hashed {
+        self.run(device, queue, bytes, size, format, true)
+    }
+
+    /// [`PixelHash::hash`]'s 16 bytes alone, the copy never read back (#405: what hashing adds to
+    /// a render while checking).
+    pub fn sums(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bytes: &[u8],
+        size: [u32; 2],
+        format: Format,
+    ) -> [u8; 16] {
+        self.run(device, queue, bytes, size, format, false).gpu
+    }
+
+    fn run(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bytes: &[u8],
+        size: [u32; 2],
+        format: Format,
+        keep: bool,
+    ) -> Hashed {
         let count = size[0] * size[1];
         let row = size[0] * format.words() * 4;
         assert!(count > 0, "a frame has a pixel");
@@ -189,7 +214,7 @@ impl PixelHash {
             copied,
             U::STORAGE | U::COPY_DST | U::COPY_SRC,
         );
-        let copy_back = buffer("pixel hash copy back", copied, U::COPY_DST | U::MAP_READ);
+        let copy_back = keep.then(|| buffer("pixel hash copy back", copied, U::COPY_DST | U::MAP_READ));
         let sums_back = buffer("pixel hash sums back", 16, U::COPY_DST | U::MAP_READ);
         let groups = count.div_ceil(GROUP).clamp(1, MOST_GROUPS);
         let mut params = vec![
@@ -243,9 +268,11 @@ impl PixelHash {
             pass.dispatch_workgroups(groups, 1, 1);
         }
         encoder.copy_buffer_to_buffer(&sums, 0, &sums_back, 0, 16);
-        encoder.copy_buffer_to_buffer(&copy, 0, &copy_back, 0, copied);
+        if let Some(back) = &copy_back {
+            encoder.copy_buffer_to_buffer(&copy, 0, back, 0, copied);
+        }
         let sent = queue.submit([encoder.finish()]);
-        for b in [&sums_back, &copy_back] {
+        for b in std::iter::once(&sums_back).chain(copy_back.as_ref()) {
             b.slice(..).map_async(wgpu::MapMode::Read, |_| {});
         }
         let _ = device.poll(wgpu::PollType::Wait {
@@ -263,10 +290,12 @@ impl PixelHash {
             out
         };
         let gpu = read(&sums_back).try_into().expect("the sums are 16 bytes");
-        let readback = read(&copy_back)
-            .chunks_exact(padded as usize)
-            .flat_map(|r| r[..row as usize].to_vec())
-            .collect();
+        let readback = copy_back.as_ref().map_or_else(Vec::new, |b| {
+            read(b)
+                .chunks_exact(padded as usize)
+                .flat_map(|r| r[..row as usize].to_vec())
+                .collect()
+        });
         Hashed { gpu, readback }
     }
 }
@@ -310,6 +339,8 @@ mod tests {
                     cpu(&frame, size, format, Planted::default()),
                     "{size:?} {format:?}"
                 );
+                let sums = honest.sums(&dev.device, &dev.queue, &frame, size, format);
+                assert_eq!(sums, on_gpu.gpu, "{size:?} {format:?}: the sums alone");
                 let xored = xor.hash(&dev.device, &dev.queue, &frame, size, format).gpu;
                 assert_eq!(
                     xored,

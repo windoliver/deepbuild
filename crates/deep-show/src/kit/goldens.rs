@@ -401,7 +401,7 @@ impl<'a> Hub<'a> {
     }
 
     /// Who a decision or a record comes from: the writer, and whether it is you.
-    fn decider(&self, via: Option<&Via>) -> (Value, bool) {
+    pub(crate) fn decider(&self, via: Option<&Via>) -> (Value, bool) {
         let Some(via) = via else {
             return (json!({"kind": "you", "id": "you"}), true);
         };

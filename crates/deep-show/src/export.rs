@@ -147,6 +147,8 @@ pub struct Job {
     pub software: bool,
     /// `readback: true`: each frame's raw BGRA8 bytes kept in the evidence store.
     pub readback: bool,
+    /// #544: the input track the document's logic items read.
+    pub track: Vec<Value>,
 }
 
 impl Job {
@@ -241,6 +243,7 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             Some(a) => a.as_str()? == "software",
         },
         readback: c.get("readback").and_then(Value::as_bool).unwrap_or(false),
+        track: c.get("track").map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
     })
 }
 
@@ -335,6 +338,11 @@ impl Hub<'_> {
         let frames = match &job.range {
             Span::Unbuilt(form) => return Err(json!({"code": "range_unbuilt", "range": form})),
             Span::Whole => {
+                // An open span has no end: an export takes a finite range of its own (Transport).
+                if doc.pointer("/transport/span").and_then(Value::as_str) == Some("open") {
+                    return Err(json!({"code": "span_open", "span": "open",
+                        "why": "span open has no end: give the export a range, such as the recorded track's"}));
+                }
                 let span = doc_span(&doc).ok_or_else(|| refuse("no_span"))?;
                 0..on_grid(span)?
             }
@@ -366,6 +374,7 @@ impl Hub<'_> {
         ));
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
+        self.inline_occurrences(&mut doc, &job.track).map_err(|i| json!({"code": i.code, "issues": [i.to_json()]}))?;
         std::fs::create_dir_all(scratch).map_err(|_| refuse("export_unwritable"))?;
         // The readiness gate: every asset the frames or the mix read, before any frame.
         if let Err(issue) = self.ready(&mut doc) {

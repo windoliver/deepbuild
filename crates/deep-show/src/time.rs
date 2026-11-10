@@ -307,6 +307,7 @@ impl Hub<'_> {
             .ok_or_else(|| refused("no_revision"))?;
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
+        let _ = self.inline_occurrences(&mut doc, &[]);
         Ok(doc)
     }
 
@@ -583,6 +584,12 @@ impl Hub<'_> {
     ) -> Result<Evaluated, String> {
         let mut sched = Scheduler::new(&self.startup.sealed, self.options());
         let mut session: DocSession = self.new_session();
+        // #544's planted start_on: a run starts at the first frame the session evaluates.
+        let mut planted = doc.clone();
+        if self.scenario.planted == Some(Planted::StartOnAtFirstFrame) {
+            crate::logic::from_first_frame(&mut planted, times.first().copied().unwrap_or(0));
+        }
+        let doc = &planted;
         session.load(&mut sched, doc);
         // #499: each video image item's frame, at every time the side frames, the last drawn.
         let mut video = Map::new();
@@ -614,6 +621,7 @@ impl Hub<'_> {
         times: &[i64],
         seek: bool,
     ) -> Result<Value, String> {
+        let started = std::time::Instant::now();
         let (drawing, nodes, video) = self.evaluate(doc, view, times, seek)?;
         let (rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
             // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
@@ -625,9 +633,13 @@ impl Hub<'_> {
                 .map_err(|u| u.code.to_string())?;
             (rgba, size)
         };
+        let rendered = started.elapsed();
         let pixel_hash = self.render_hash(&rgba, size)?;
+        let hashed = started.elapsed() - rendered;
         let sha = self.put_png(rgba, size).map_err(|u| u.code.to_string())?;
-        let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash});
+        // #405: what hashing adds to the render, each in ms.
+        let timing = json!({"render_ms": rendered.as_secs_f64() * 1e3, "hash_ms": hashed.as_secs_f64() * 1e3});
+        let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing});
         if !video.is_empty() {
             side["video"] = Value::Object(video);
         }
