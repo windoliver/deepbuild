@@ -1,0 +1,211 @@
+Acceptance tests for #245 on the base 6042ef5a (it has no spikes/245/), run on 2026-11-09 with Node 24.22.0
+(Linux; these tests read files only, so the host doesn't matter). The suite ran in a scratch tree holding
+the base's spikes/ (git archive 6042ef5a spikes) and this folder, since the worktree may already hold an
+implementation. 10 of 11 fail, each on BLOCKED: no record at spikes/245/record.json (AC1, AC2) or no rule
+module at spikes/245/rule.mjs (AC3). The one pass is the test's own oracle checked against its planted
+table, which needs nothing from the spike. Local paths are replaced by <checkout>.
+
+  node --test --test-reporter=tap 'tests/acceptance/245/*.test.mjs'
+
+TAP version 13
+# Subtest: \#245 AC1 the record was made on a reference Mac under the design's timing conditions
+not ok 1 - \#245 AC1 the record was made on a reference Mac under the design's timing conditions
+  ---
+  duration_ms: 1.143214
+  type: 'test'
+  location: '<checkout>/tests/acceptance/245/ac1-record.test.mjs:11:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the spike left no record at spikes/245/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    loadRecord (file://<checkout>/tests/acceptance/245/helpers.mjs:27:32)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/245/ac1-record.test.mjs:12:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# Subtest: \#245 AC1 the fixture is the 8,000-agent steering program at 60 Hz with 8 blocks, kept in the repo by hash
+not ok 2 - \#245 AC1 the fixture is the 8,000-agent steering program at 60 Hz with 8 blocks, kept in the repo by hash
+  ---
+  duration_ms: 0.256224
+  type: 'test'
+  location: '<checkout>/tests/acceptance/245/ac1-record.test.mjs:23:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the spike left no record at spikes/245/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    loadRecord (file://<checkout>/tests/acceptance/245/helpers.mjs:27:32)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/245/ac1-record.test.mjs:24:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: \#245 AC1 one_instance ran the fixture and recorded step wall time and mapping and page-fault overhead, p50 and p95, from its per-step samples
+not ok 3 - \#245 AC1 one_instance ran the fixture and recorded step wall time and mapping and page-fault overhead, p50 and p95, from its per-step samples
+  ---
+  duration_ms: 0.249311
+  type: 'test'
+  location: '<checkout>/tests/acceptance/245/ac1-record.test.mjs:45:3'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the spike left no record at spikes/245/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    loadRecord (file://<checkout>/tests/acceptance/245/helpers.mjs:27:32)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/245/ac1-record.test.mjs:46:15)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#245 AC1 copy_on_write ran the fixture and recorded step wall time and mapping and page-fault overhead, p50 and p95, from its per-step samples
+not ok 4 - \#245 AC1 copy_on_write ran the fixture and recorded step wall time and mapping and page-fault overhead, p50 and p95, from its per-step samples
+  ---
+  duration_ms: 0.164272
+  type: 'test'
+  location: '<checkout>/tests/acceptance/245/ac1-record.test.mjs:45:3'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the spike left no record at spikes/245/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    loadRecord (file://<checkout>/tests/acceptance/245/helpers.mjs:27:32)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/245/ac1-record.test.mjs:46:15)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#245 AC1 both forms ran the same fixture to the same bits
+not ok 5 - \#245 AC1 both forms ran the same fixture to the same bits
+  ---
+  duration_ms: 0.16824
+  type: 'test'
+  location: '<checkout>/tests/acceptance/245/ac1-record.test.mjs:68:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the spike left no record at spikes/245/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    loadRecord (file://<checkout>/tests/acceptance/245/helpers.mjs:27:32)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/245/ac1-record.test.mjs:69:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#245 AC2 the stored verdict is the issue's rule applied to the stored numbers
+not ok 6 - \#245 AC2 the stored verdict is the issue's rule applied to the stored numbers
+  ---
+  duration_ms: 1.032862
+  type: 'test'
+  location: '<checkout>/tests/acceptance/245/ac2-verdict.test.mjs:6:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the spike left no record at spikes/245/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    loadRecord (file://<checkout>/tests/acceptance/245/helpers.mjs:27:32)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/245/ac2-verdict.test.mjs:7:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.start (node:internal/test_runner/test:1262:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+  ...
+# Subtest: \#245 AC2 the rule reads the stored record's own numbers: moving copy_on_write across a threshold moves its verdict
+not ok 7 - \#245 AC2 the rule reads the stored record's own numbers: moving copy_on_write across a threshold moves its verdict
+  ---
+  duration_ms: 0.257455
+  type: 'test'
+  location: '<checkout>/tests/acceptance/245/ac2-verdict.test.mjs:15:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the spike left no record at spikes/245/record.json'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    loadRecord (file://<checkout>/tests/acceptance/245/helpers.mjs:27:32)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/245/ac2-verdict.test.mjs:16:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: \#245 AC3 the test's own oracle agrees with every planted record's expected verdict
+ok 8 - \#245 AC3 the test's own oracle agrees with every planted record's expected verdict
+  ---
+  duration_ms: 2.724554
+  type: 'test'
+  ...
+# Subtest: \#245 AC3 the rule on the issue's two planted records: 0.6x yields one_instance, 0.4x with 0.2 ms yields copy_on_write
+not ok 9 - \#245 AC3 the rule on the issue's two planted records: 0.6x yields one_instance, 0.4x with 0.2 ms yields copy_on_write
+  ---
+  duration_ms: 0.482367
+  type: 'test'
+  location: '<checkout>/tests/acceptance/245/ac3-planted.test.mjs:76:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the spike left no rule module at spikes/245/rule.mjs'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    loadRule (file://<checkout>/tests/acceptance/245/helpers.mjs:37:32)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/245/ac3-planted.test.mjs:77:25)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+  ...
+# Subtest: \#245 AC3 the rule on planted twins at each threshold and with anything missing
+not ok 10 - \#245 AC3 the rule on planted twins at each threshold and with anything missing
+  ---
+  duration_ms: 0.254864
+  type: 'test'
+  location: '<checkout>/tests/acceptance/245/ac3-planted.test.mjs:82:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the spike left no rule module at spikes/245/rule.mjs'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    loadRule (file://<checkout>/tests/acceptance/245/helpers.mjs:37:32)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/245/ac3-planted.test.mjs:83:25)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+# Subtest: \#245 AC3 the rule never yields copy_on_write for something that isn't a record
+not ok 11 - \#245 AC3 the rule never yields copy_on_write for something that isn't a record
+  ---
+  duration_ms: 0.272223
+  type: 'test'
+  location: '<checkout>/tests/acceptance/245/ac3-planted.test.mjs:97:1'
+  failureType: 'testCodeFailure'
+  error: 'BLOCKED: the spike left no rule module at spikes/245/rule.mjs'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    loadRule (file://<checkout>/tests/acceptance/245/helpers.mjs:37:32)
+    TestContext.<anonymous> (file://<checkout>/tests/acceptance/245/ac3-planted.test.mjs:98:25)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1402:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+    Test.postRun (node:internal/test_runner/test:1542:19)
+    Test.run (node:internal/test_runner/test:1467:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 1
+# fail 10
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 109.586635
