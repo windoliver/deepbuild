@@ -135,8 +135,10 @@ export class Staging {
         const k = next++;
         const to = join(copy, 'files', String(k));
         if (slow) await sleep(Math.min(slow, Math.max(0, deadline - Date.now())));
-        why ??= Date.now() > deadline ? 'late' : await lost[k]!.write(to, deadline);
-        if (!why) digests[k] = await digestOf(to);
+        // Taken first: a copy that ends after another one failed must not clear that failure.
+        const failed = Date.now() > deadline ? 'late' : await lost[k]!.write(to, deadline);
+        if (failed) { why ??= failed; return; }
+        digests[k] = await digestOf(to);
       }
     };
     await Promise.all(Array.from({ length: Math.min(COPIES, lost.length) }, copier));

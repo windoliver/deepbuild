@@ -714,7 +714,6 @@ fn selectors_of(
     a: &Map<String, Value>,
     n: usize,
     path: &str,
-    plant: Plant,
 ) -> Result<Vec<(Selector, Mode)>, Refused> {
     let mode_of = |v: Option<&Value>, at: String| -> Result<Mode, Refused> {
         match v.and_then(Value::as_str) {
@@ -1242,7 +1241,7 @@ pub fn lay_out(input: &Input<'_>, host: &mut dyn Host) -> Result<Laid, Refused> 
             seed,
         )
         .ok_or_else(|| bad(format!("{path}/order")))?;
-        let selectors = selectors_of(a, n, &path, input.plant)?;
+        let selectors = selectors_of(a, n, &path)?;
         let clamp = a.get("clamp").and_then(Value::as_bool).unwrap_or(false);
         let amounts: Vec<f64> = (0..n)
             .map(|u| select(&selectors, order[u], n, t, clamp, input.plant))
@@ -1574,7 +1573,7 @@ pub fn amounts(
         seed,
     )
     .ok_or_else(|| bad(format!("{path}/order")))?;
-    let selectors = selectors_of(a, n, &path, Plant::None)?;
+    let selectors = selectors_of(a, n, &path)?;
     let clamp = a.get("clamp").and_then(Value::as_bool).unwrap_or(false);
     let ts = t as f64 / 705_600_000.0;
     let per_unit: Vec<f64> = (0..n)

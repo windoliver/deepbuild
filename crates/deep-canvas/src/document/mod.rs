@@ -977,6 +977,21 @@ mod tests {
     }
 
     #[test]
+    fn a_control_or_a_time_remap_that_is_not_an_object_is_refused() {
+        for (section, entry) in [("controls", json!(5)), ("time_remaps", json!("reverse"))] {
+            let mut doc = base();
+            doc[section] = json!({"knob": entry});
+            let result = check(&doc);
+            assert!(
+                found(&result, "out_of_range", &format!("{section}/knob")),
+                "{:?}",
+                result.issues
+            );
+            assert!(!result.ok);
+        }
+    }
+
+    #[test]
     fn a_key_outside_the_id_grammar_is_bad_id_in_every_map_keyed_by_id() {
         let mut doc = base();
         doc["layers"]["bad/layer"] = json!({"writer": "agent-b", "title": "B", "order": "a1"});

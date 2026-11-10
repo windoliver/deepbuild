@@ -1398,6 +1398,7 @@ fn mesh_of(
 }
 
 /// A line of the edges of the mesh `edges.of` builds (Marks in 3D: mesh edges).
+#[allow(clippy::too_many_arguments)]
 fn edge_line(
     doc: &Value,
     items: &Items<'_>,
@@ -2010,6 +2011,7 @@ fn asset_has_materials(read: Assets<'_>, params: &Value) -> bool {
 /// picked as `<item>#<node name>` (or its index), placed at the item's `model` × the node's world
 /// matrix, shaded by the `material@1` the import made of its glTF material. Naming one node, it
 /// draws that node's primitives alone, in the node's own space, picked as the item.
+#[allow(clippy::type_complexity)]
 fn asset_scene(
     read: Assets<'_>,
     id: &str,
@@ -2446,7 +2448,7 @@ pub(crate) fn evaluate_compiled(
                             inset: 0.0,
                             cast_shadow: casts(item, &material),
                             receive_shadow: shadows(item, "receive_shadow"),
-                            material: material.clone(),
+                            material,
                             sort_bias: 0.0,
                             alpha: surface.alpha,
                             emission: surface.emission,
@@ -3049,7 +3051,7 @@ fn frame_interval(map: &Map<String, Value>) -> i64 {
         .and_then(deep_canvas::document::frame_rate_of)
         .filter(|(p, q)| *p > 0 && *q > 0)
         .unwrap_or((60, 1));
-    deep_canvas::camera::FLICKS_PER_SECOND as i64 * i64::from(q) / i64::from(p)
+    deep_canvas::camera::FLICKS_PER_SECOND * i64::from(q) / i64::from(p)
 }
 
 /// Item `id`'s world origin at `t`, through the chain its channels and parents give: what a

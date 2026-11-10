@@ -154,8 +154,10 @@ impl Player {
         let mut pts = vec![0u8; n * 8];
         stdout.read_exact(&mut pts).map_err(|e| e.to_string())?;
         let pts = pts
-            .chunks_exact(8)
-            .map(|c| i64::from_le_bytes(c.try_into().unwrap_or([0; 8])))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| i64::from_le_bytes(*c))
             .collect();
         let buffer = pixel_buffer(out.0, out.1, full, matrix)?;
         Ok(Player {

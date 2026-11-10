@@ -310,7 +310,7 @@ impl World {
                 let mut p = [0, 1, 2].map(|k| p[k] + v[k] * dt);
                 if p[1] - b.radius < self.floor {
                     p[1] = 2.0 * (self.floor + b.radius) - p[1];
-                    v[1] = -self.restitution * v[1];
+                    v[1] *= -self.restitution;
                 }
                 (p, v)
             })

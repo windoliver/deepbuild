@@ -69,7 +69,8 @@ const ARCHIVE_WAIT_MS = 2000;
  * so it reads unknown on the card.
  */
 export function pushTargets(line: string): Target[] {
-  const refs = [...line.matchAll(PUSH)].map(([, git, jj, sl, rest]) => {
+  // A backslash at a line's end carries the command on to the next line.
+  const refs = [...line.replace(/\\\n/g, ' ').matchAll(PUSH)].map(([, git, jj, sl, rest]) => {
     const words = (rest ?? '').trim().split(/\s+/).map((w) => w.replace(/^["']|["']$/g, '')).filter(Boolean);
     if (!git && !sl) {
       const at = words.findIndex((w) => w === '--remote' || w.startsWith('--remote='));
@@ -77,6 +78,9 @@ export function pushTargets(line: string): Target[] {
     }
     for (let at = 0; at < words.length; at++) {
       const word = words[at]!;
+      // A comment ends the command, and a redirection is the shell's with its file: neither names a remote.
+      if (word.startsWith('#')) break;
+      if (/^\d*[<>]/.test(word)) { if (/^\d*[<>]+$/.test(word)) at++; continue; }
       if (git && word === '--repo') return words[at + 1] ?? 'origin';
       if (git && word.startsWith('--repo=')) return word.slice('--repo='.length);
       if (VALUED[git ? 'git' : 'sl'].has(word)) at++;
