@@ -282,6 +282,10 @@ timed.push('tests/acceptance/501/budgets.test.ts');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
+// #408's files each build deep-show (module-label.test.ts with test-glyph-label); machines.test.ts also builds it in
+// release and for Linux x86_64 in Docker, and times film.layout against the lane's rule.
+alone.push('tests/acceptance/408/');
+timed.push('tests/acceptance/408/machines.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

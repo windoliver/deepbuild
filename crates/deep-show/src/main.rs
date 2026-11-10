@@ -18,6 +18,7 @@ mod familiar;
 mod evidence;
 mod export;
 mod film;
+mod film_layout;
 mod film_viewer;
 mod frames;
 mod function;
@@ -1223,6 +1224,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
+                "layout_text_by_kind" => Planted::LayoutTextByKind,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
@@ -1776,6 +1778,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-look",
     feature = "test-leave-out-text",
     feature = "test-check-kind",
+    feature = "test-glyph-label",
     feature = "test-leave-out-logic",
     feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
@@ -1970,6 +1973,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::deprecated());
     #[cfg(feature = "test-check-kind")]
     out.push(deep_canvas_test_modules::checks());
+    #[cfg(feature = "test-glyph-label")]
+    out.push(deep_canvas_test_modules::label());
     // Issue #185: test.sim@1's implementations, and test module c.
     #[cfg(feature = "test-sim-a")]
     out.push(deep_canvas_test_modules::sim::a());

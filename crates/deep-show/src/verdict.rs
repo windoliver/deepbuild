@@ -190,6 +190,7 @@ impl<'a> Hub<'a> {
         };
         let read = self.evaluated_reads(c);
         let determinism = self.determinism_runs(c);
+        let layout = self.film_layout_runs(c);
         let mut docs: Vec<(String, Current)> = Vec::new();
         let mut missing = false;
         for d in &c.deliverables {
@@ -215,7 +216,16 @@ impl<'a> Hub<'a> {
         let rows: Vec<Value> = c
             .requirements
             .iter()
-            .map(|r| self.judge(r, &docs, missing, &read, &c.session, determinism.get(&r.id)))
+            .map(|r| {
+                let laid = layout.get(&r.id);
+                let compared = determinism.get(&r.id).or(laid.map(|(i, _)| i));
+                let mut row = self.judge(r, &docs, missing, &read, &c.session, compared);
+                // #408: film.layout's own time on the requirement.
+                if let (Some((_, ms)), Some(map)) = (laid, row.as_object_mut()) {
+                    map.insert("timing".into(), json!({"check_ms": ms}));
+                }
+                row
+            })
             .collect();
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
@@ -416,10 +426,13 @@ impl<'a> Hub<'a> {
             }
             return done(row, "BLOCKED", vec![b]);
         }
-        if let (true, Some(raised)) = (kind == DETERMINISM, compared) {
-            // Run on every deliverable before judging (`determinism_runs`): each time where
-            // playing to it and seeking to it draw different pixels is an error.
-            let result = if raised.is_empty() { "PASS" } else { "FAIL" };
+        let run_first = kind == DETERMINISM || kind == crate::film_layout::FILM_LAYOUT;
+        if let (true, Some(raised)) = (run_first, compared) {
+            // Run on every deliverable before judging (`determinism_runs`, `film_layout_runs`):
+            // each time where playing to it and seeking to it draw different pixels, or a text
+            // cut, overlapping, crossed or covered, is an error; a notice decides nothing (#408).
+            let errors = raised.iter().any(|i| i["severity"] == "error");
+            let result = if errors { "FAIL" } else { "PASS" };
             row.insert("issues".into(), Value::Array(raised.clone()));
             return done(row, result, Vec::new());
         }

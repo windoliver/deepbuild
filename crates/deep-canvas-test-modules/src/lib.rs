@@ -831,3 +831,57 @@ pub fn checks() -> Module {
         register: register_checks,
     }
 }
+
+// ------------------------------------------------------------------------------------------------
+// #408: `test.label`, whose kind's items are text to film.layout only through the core's glyph-box
+// array: each contributes its glyph box, `params.box` (`[x, y, w, h]`, u), to `core.glyphs`, and
+// draws no stroke, fill or shape and names no check kind.
+
+fn label_box(v: &mut View<'_>) -> Result<(), OpError> {
+    let item = v.item()?;
+    let mut b = [0.0; 4];
+    for (k, x) in item["params"]["box"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .take(4)
+    {
+        b[k] = x.as_f64().unwrap_or(0.0);
+    }
+    v.write("test.label.glyphs", Val::typed(vec![b]))
+}
+
+fn register_label(r: &mut Registrar) {
+    let text = Param {
+        name: "text",
+        ty: ParamType::Str,
+        unit: "",
+        default: json!(""),
+        min: None,
+        max: None,
+        minor: 0,
+        module: "",
+        operator: "",
+    };
+    r.kind(kind("test", "label", vec![box_param(), text]), &[], "")
+        .draws(&["glyphs"]);
+    r.contribution(
+        "test.label.glyphs",
+        "list",
+        "item",
+        "geometry",
+        "items",
+        "core.glyphs",
+    );
+    r.operator("glyphs", "items", &["self"], &["test.label.glyphs"])
+        .run(label_box);
+}
+
+/// `test.label` (#408's `test-glyph-label`): the kind `test.label@1`, a glyph box and its text.
+pub fn label() -> Module {
+    Module {
+        manifest: manifest("test.label", &[]),
+        register: register_label,
+    }
+}
