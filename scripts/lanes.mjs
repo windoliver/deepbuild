@@ -298,6 +298,8 @@ alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
 // #1818's files each build deep-show and mix seconds of audio through the media processors.
 alone.push('tests/acceptance/1818/');
+// #1720's files build deep-show and deep-hook, start and restart hubs and lay out an installed tree.
+alone.push('tests/acceptance/1720/');
 // #1461's files build deep-drive plain and with env-plants, start real hubs and many replicas; its AC1 and AC14 file and
 // its AC28 file open the real app's window, with Accessibility and Screen Recording, by hand; its AC9 file is timed.
 alone.push('tests/acceptance/1461/');
