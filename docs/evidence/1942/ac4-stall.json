@@ -1,0 +1,65 @@
+{
+  "failures": [],
+  "seen": {
+    "runs": {
+      "A": "run:01M72J0NH16JGM9WCN91HDTCKG",
+      "B": "run:01M72J0NHM2NTYE8ZWQSXHXTHT"
+    },
+    "rates": [
+      {
+        "conn": 4,
+        "bytes_per_s": 37968
+      },
+      {
+        "conn": 3,
+        "bytes_per_s": 4368
+      }
+    ],
+    "clock": {
+      "before": {
+        "offset": 4,
+        "rtt": 2
+      },
+      "after": {
+        "offset": 5,
+        "rtt": 2
+      }
+    },
+    "stall": {
+      "conn_a": 4,
+      "conn_b": 3,
+      "a_closed_s": 60.213,
+      "b_closed_s": null
+    },
+    "opened_during_stall": [
+      {
+        "id": 5,
+        "opened_s": 5.079,
+        "down": 2390686,
+        "closed_s": null
+      }
+    ],
+    "b_lag": {
+      "lines": 560,
+      "worst_ms": 69,
+      "late": 0,
+      "load": 156.0390625,
+      "cores": 18
+    },
+    "a_back": {
+      "lines": 550,
+      "first_arrived_s": 5.225,
+      "carriers": [
+        5
+      ]
+    }
+  },
+  "answered": [
+    {
+      "ask": "ask:01M72J0ME5ZCHYEGVWMMP2HFWT",
+      "kind": "authority",
+      "option": "allow",
+      "code": 0
+    }
+  ]
+}

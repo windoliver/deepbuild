@@ -1,0 +1,57 @@
+{
+  "failures": [],
+  "token": "-ciazqZE…",
+  "seen": {
+    "dropped": {
+      "connections": 1
+    },
+    "reply": {
+      "v": 1,
+      "id": 1,
+      "result": {
+        "run": "run:01M72J5CNZP3A5WCF55163EBYP"
+      }
+    },
+    "at_drop": {
+      "starts": 1,
+      "units": [
+        {
+          "unit": "deep--ciazqZEtkpogKpDHKDU0MYtus5Yz2uu.service",
+          "active": "active",
+          "sub": "running"
+        }
+      ]
+    },
+    "run": "run:01M72J5CNZP3A5WCF55163EBYP",
+    "starts": [
+      "-ciazqZE"
+    ],
+    "finished": {
+      "run": "run:01M72J5CNZP3A5WCF55163EBYP",
+      "outcome": "passed",
+      "tests_run": 0,
+      "passed": 0,
+      "runs": 1,
+      "evidence": [
+        "a99c0d6ddae7b32c4a0a7fbc20db09d29a8b82cf10ed2c145e9942e4d472436d",
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "check": "once",
+      "assertion": null,
+      "expected": null,
+      "actual": null,
+      "step": null,
+      "points_to": null,
+      "findings": [],
+      "environment": "darwin-arm64"
+    }
+  },
+  "answered": [
+    {
+      "ask": "ask:01M72J5B8346BNYVA8M6TTKRX9",
+      "kind": "authority",
+      "option": "allow",
+      "code": 0
+    }
+  ]
+}

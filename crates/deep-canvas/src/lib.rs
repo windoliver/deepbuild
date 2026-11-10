@@ -16,6 +16,7 @@ pub mod document;
 pub mod draw;
 pub mod ease;
 pub mod expr;
+pub mod film_layout;
 pub mod grammar;
 pub mod interval;
 pub mod kinds;

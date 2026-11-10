@@ -1,0 +1,23 @@
+// The planted tool's plug-in (#1925; README, Plants): it adds encode-guess@1.0.0 to test.encode through
+// deep.registerJobTool. Its program is the same encoder as encode-a's, writing the same frames at the same pace, so it
+// passes the kind's qualification; only its counter file differs: it reports elapsed time over an expected duration,
+// a guess, in place of the frames it has written.
+const PARAMS = {
+  type: 'object',
+  properties: {
+    frames: { type: 'integer', minimum: 1, maximum: 100000 },
+    batch: { type: 'integer', minimum: 1, maximum: 100000 },
+    every_ms: { type: 'integer', minimum: 0, maximum: 60000 },
+  },
+  required: ['frames', 'batch', 'every_ms'],
+  additionalProperties: false,
+};
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerJobTool('test.encode', {
+    tool: 'encode-guess@1.0.0',
+    params: PARAMS,
+    run: { dir: 'encoder', entry: 'encode.mjs' },
+    qualification: { same_bytes: true },
+  });
+}
