@@ -49,6 +49,11 @@ pub enum Planted {
     /// #544: a start_on run on a logic item's occurrences starts at the first frame its session
     /// evaluates at or after the occurrence.
     StartOnAtFirstFrame,
+    /// #535 AC1: the logic module's hand-over to the column view drops each step's last range.
+    HandOverDropsLastRange,
+    /// #535 AC3: a row whose `alive` is false doesn't draw but stays in its set's bounds, the
+    /// spatial index and the scope's hits.
+    DeadRowsHiddenFromDrawingOnly,
     PresentsUnnamedRemoval,
     DiffsItemsOnly,
     InlinesEveryIssue,
@@ -1450,6 +1455,17 @@ impl<'a> Hub<'a> {
         serde_json::from_slice(&bytes).ok()
     }
 
+    /// Mark set columns that read a column source, resolved and narrowed by the core's column
+    /// view at `t` (#397), and those that read a logic array baked for every frame (#535).
+    pub(crate) fn column_view(&self, form: &mut Value, t: i64) -> Vec<Issue> {
+        let entries = self
+            .startup
+            .sealed
+            .registry(deep_canvas::columns::REGISTRY)
+            .map_or(&[][..], |r| r.entries.as_slice());
+        deep_canvas::columns::view(form, entries, t)
+    }
+
     /// Mark set columns that read the agent's table, inlined from the evidence store as
     /// `deep-canvas-render` reads them (#397, #1162): what every frame of a revision draws.
     pub(crate) fn inline_tables(
@@ -2165,14 +2181,7 @@ impl<'a> Hub<'a> {
         // Mark set columns that read a column source, resolved and narrowed by the core's
         // column view at the frame's step (#397).
         if let Some(form) = drawn_form.as_mut() {
-            let entries = self
-                .startup
-                .sealed
-                .registry(deep_canvas::columns::REGISTRY)
-                .map_or(&[][..], |r| r.entries.as_slice());
-            // A step is a 60 fps frame: 11,760,000 flicks.
-            let step = show.t.max(0) as u64 / 11_760_000;
-            issues.extend(deep_canvas::columns::view(form, entries, step));
+            issues.extend(self.column_view(form, show.t));
         }
         if let Some(doc) = stamped
             .as_ref()

@@ -699,6 +699,7 @@ impl<C: Glyphs> Painter<'_, C> {
                 opacity,
                 adjust,
                 tile,
+                turn,
             } => {
                 let looks = (*opacity, adjust);
                 let placed = (*bounds, *fit, self.zoom);
@@ -720,6 +721,12 @@ impl<C: Glyphs> Painter<'_, C> {
                         item,
                     )?,
                 };
+                // #535: a turned image draws turned about its box's centre.
+                let unturned = self.ctx.transform();
+                if *turn != 0.0 {
+                    let t = scene::turn_of(*bounds, *turn);
+                    self.ctx.set_transform(unturned * Affine::new(t));
+                }
                 self.ctx.set_paint(
                     Image {
                         image: ImageSource::Pixmap(pixmap),
@@ -737,6 +744,7 @@ impl<C: Glyphs> Painter<'_, C> {
                     self.ctx.fill_rect(&shown);
                 }
                 self.ctx.reset_paint_transform();
+                self.ctx.set_transform(unturned);
             }
         }
         Ok(())

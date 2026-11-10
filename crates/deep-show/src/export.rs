@@ -375,6 +375,7 @@ impl Hub<'_> {
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
         self.inline_occurrences(&mut doc, &job.track).map_err(|i| json!({"code": i.code, "issues": [i.to_json()]}))?;
+        let _ = self.column_view(&mut doc, 0);
         std::fs::create_dir_all(scratch).map_err(|_| refuse("export_unwritable"))?;
         // The readiness gate: every asset the frames or the mix read, before any frame.
         if let Err(issue) = self.ready(&mut doc) {

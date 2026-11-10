@@ -325,6 +325,9 @@ pub struct Scope {
     last_click: Option<(i64, [f64; 2], Hit)>,
     view: View,
     planted: Planted,
+    /// #535: each mark set row the shown frame draws, `<set>#<key>` with its box in page u, in
+    /// draw order; a press in a flat view meets the topmost before any item.
+    rows: Vec<(String, [f64; 4])>,
 }
 
 fn distance(a: [f64; 2], b: [f64; 2]) -> f64 {
@@ -513,6 +516,7 @@ impl Scope {
             last_click: None,
             view: View::default(),
             planted,
+            rows: Vec::new(),
         })
     }
 
@@ -843,6 +847,11 @@ impl Scope {
 
     /// The topmost item under `p`, or the button over it: in a flat view the last-stacked box
     /// that holds it, in 3D the box whose face under it is nearest.
+    /// #535: the rows the shown frame draws, which the host hands in before a press.
+    pub fn rows(&mut self, rows: Vec<(String, [f64; 4])>) {
+        self.rows = rows;
+    }
+
     fn hit(&self, doc: &Value, p: [f64; 2]) -> Hit {
         if self.button().is_some_and(|b| within(b, p)) {
             return Hit::Button;
@@ -853,6 +862,9 @@ impl Scope {
         let all = self.shown_targets(doc);
         if self.rig.flat {
             let c = self.content(p, &self.offsets);
+            if let Some((row, _)) = self.rows.iter().rev().find(|(_, r)| within(*r, c)) {
+                return Hit::Item(row.clone());
+            }
             return all
                 .into_iter()
                 .rev()

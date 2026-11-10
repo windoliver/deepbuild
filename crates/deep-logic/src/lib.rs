@@ -13,6 +13,7 @@ pub mod judder;
 pub mod lane;
 pub mod lines;
 pub mod live;
+pub mod module;
 pub mod piece;
 pub mod world;
 

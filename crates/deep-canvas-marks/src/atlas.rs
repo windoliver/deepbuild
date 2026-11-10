@@ -118,7 +118,19 @@ fn odd_of(shape: Shape) -> bool {
     matches!(shape, Shape::Hex { odd: true, .. })
 }
 
-/// One row as it draws: its key, its grid cell, its centre and the atlas cell it shows.
+/// #535: `grid.size: [cols, rows]` on an atlas set, which lays row i at cell (i mod cols,
+/// ⌊i ÷ cols⌋); `None` without one or for a size that isn't two whole numbers from 1 to 65,535.
+pub fn size_of(params: &Map<String, Value>) -> Option<[usize; 2]> {
+    let size = params.get("grid")?.get("size")?.as_array()?;
+    let side = |i: usize| {
+        let v = size.get(i)?.as_u64()?;
+        (1..=u64::from(u16::MAX)).contains(&v).then_some(v as usize)
+    };
+    (size.len() == 2 && is_atlas(params)).then_some([side(0)?, side(1)?])
+}
+
+/// One row as it draws: its key, its grid cell (a free row's centre), its centre, the atlas cell
+/// it shows, and its turn (deg) and scale about its centre (#535).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tile {
     pub key: String,
@@ -126,6 +138,8 @@ pub struct Tile {
     pub centre: [f64; 2],
     pub index: u64,
     pub flip: u8,
+    pub angle: f64,
+    pub scale: f64,
 }
 
 fn whole(c: Option<&Column>, i: usize, default: f64, max: f64, path: &str) -> Result<f64, Refused> {
@@ -148,15 +162,22 @@ pub fn tiles(
     planted: Planted,
 ) -> Result<Vec<Tile>, Refused> {
     let path = format!("items/{id}/params");
-    if params
-        .get("place")
-        .and_then(Value::as_str)
-        .is_some_and(|p| p != "cell")
-    {
-        // #535 draws free rows.
-        return Err(refused("module_missing", format!("{path}/place")));
-    }
+    // #535: a free row sits at its own centre (x, y) rather than on a grid cell.
+    let free = match params.get("place") {
+        None | Some(Value::Null) => false,
+        Some(Value::String(p)) if p == "cell" => false,
+        Some(Value::String(p)) if p == "free" => true,
+        Some(_) => return Err(refused("bad_doc", format!("{path}/place"))),
+    };
     let grid = Grid::read(params, &path)?;
+    let size = size_of(params);
+    if let Some([cols, rs]) = size {
+        if rows.keys.len() != cols * rs {
+            return Err(refused("out_of_range", format!("{path}/grid/size")));
+        }
+    } else if params.get("grid").and_then(|g| g.get("size")).is_some() {
+        return Err(refused("out_of_range", format!("{path}/grid/size")));
+    }
     let column = |name: &str| rows.columns.get(name);
     let col = |name: &str| format!("{path}/columns/{name}");
     let mut out = Vec::new();
@@ -164,18 +185,41 @@ pub fn tiles(
         if rows.hidden.contains(&i) {
             continue;
         }
-        let at = |name: &str| -> Result<f64, Refused> {
+        let at = |name: &str, whole: bool| -> Result<f64, Refused> {
             let v = column(name).and_then(|c| c.number(i));
-            v.filter(|v| v.fract() == 0.0)
+            v.filter(|v| v.is_finite() && (!whole || v.fract() == 0.0))
                 .ok_or_else(|| refused("bad_column", col(name)))
         };
-        let cell = [at("cx")?, at("cy")?];
+        let or = |name: &str, default: f64| match column(name) {
+            None => Ok(default),
+            Some(_) => at(name, false),
+        };
+        let (cell, centre) = match size {
+            _ if free => {
+                let c = [at("x", false)?, at("y", false)?];
+                (c, c)
+            }
+            Some([cols, _]) => {
+                let c = [(i % cols) as f64, (i / cols) as f64];
+                (c, grid.centre(c[0], c[1], planted == Planted::AtlasSquareLayout))
+            }
+            None => {
+                let c = [at("cx", true)?, at("cy", true)?];
+                (c, grid.centre(c[0], c[1], planted == Planted::AtlasSquareLayout))
+            }
+        };
+        let scale = or("scale", 1.0)?;
+        if scale <= 0.0 {
+            return Err(refused("out_of_range", col("scale")));
+        }
         out.push(Tile {
             key: key.clone(),
             cell,
-            centre: grid.centre(cell[0], cell[1], planted == Planted::AtlasSquareLayout),
+            centre,
             index: whole(column("tile"), i, 0.0, f64::from(u16::MAX), &col("tile"))? as u64,
             flip: whole(column("flip"), i, 0.0, 7.0, &col("flip"))? as u8,
+            angle: or("angle", 0.0)?,
+            scale,
         });
     }
     if planted != Planted::AtlasRowOrder {
@@ -219,15 +263,23 @@ pub fn marks(
     let [w, h] = Grid::read(params, &format!("items/{id}/params"))?.cell;
     Ok(tiles(id, params, rows, planted)?
         .into_iter()
-        .map(|t| Mark::Image {
+        .map(|t| {
+            let [w, h] = [w * t.scale, h * t.scale];
+            let mut centre = [pos[0] + t.centre[0], pos[1] + t.centre[1]];
+            if planted == Planted::AtlasTurnsAboutCorner {
+                // The planted renderer: the quad turns about its top-left corner.
+                let corner = [centre[0] - w / 2.0, centre[1] - h / 2.0];
+                let (s, c) = crate::scene::sin_cos(t.angle);
+                let d = [w / 2.0, h / 2.0];
+                centre = [corner[0] + c * d[0] - s * d[1], corner[1] + s * d[0] + c * d[1]];
+            }
+            (t, [centre[0] - w / 2.0, centre[1] - h / 2.0, w, h])
+        })
+        .map(|(t, bounds)| Mark::Image {
             item: format!("{id}#{}", t.key),
             asset: asset.to_ascii_lowercase(),
-            bounds: [
-                pos[0] + t.centre[0] - w / 2.0,
-                pos[1] + t.centre[1] - h / 2.0,
-                w,
-                h,
-            ],
+            bounds,
+            turn: t.angle,
             fit: ImageFit::Fill,
             sampling: ImageSampling::Linear,
             crop: None,
@@ -390,5 +442,32 @@ mod tests {
         assert_eq!(g.centre(0.0, 1.0, false), [-16.0, 8.0]);
         assert_eq!(g.centre(2.0, 1.0, false), [16.0, 24.0]);
         assert_eq!(g.centre(1.0, 0.0, true), [32.0, 0.0]);
+    }
+
+    /// #535: a free row scaled 2 about its centre covers twice its cell there, unturned or
+    /// turned; a scale of 0 is refused, naming the column.
+    #[test]
+    fn a_free_row_scales_about_its_centre() {
+        let params = json!({"mark": "image", "place": "free", "grid": {"cell": [4, 2]},
+            "atlas": {"asset": "a".repeat(64), "cell": [8, 4]}});
+        let params = params.as_object().expect("an object");
+        let rows = |scale: f64, angle: f64| Rows {
+            keys: vec!["0".into()],
+            columns: [("x", 10.0), ("y", 3.0), ("scale", scale), ("angle", angle)]
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), Column::Numbers(vec![v])))
+                .collect(),
+            ..Rows::default()
+        };
+        let bounds = |scale, angle| match &marks("s", params, &rows(scale, angle), [0.0, 0.0], Planted::None)
+            .expect("drawn")[0]
+        {
+            Mark::Image { bounds, turn, .. } => (*bounds, *turn),
+            _ => unreachable!("an image"),
+        };
+        assert_eq!(bounds(2.0, 0.0), ([6.0, 1.0, 8.0, 4.0], 0.0));
+        assert_eq!(bounds(2.0, 90.0), ([6.0, 1.0, 8.0, 4.0], 90.0));
+        let refused = tiles("s", params, &rows(0.0, 0.0), Planted::None).expect_err("refused");
+        assert_eq!((refused.code, refused.path.as_str()), ("out_of_range", "items/s/params/columns/scale"));
     }
 }

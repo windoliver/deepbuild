@@ -1,7 +1,8 @@
 //! #544: a document's logic items, baked on an input track over the transport's span, and each
 //! one's occurrence list written into the form its readers read, as `occurrences` holds a baked
 //! list (`<logic ID>.occurrences`): Spawn, `start_on`, mark-set rows and drivers read a logic
-//! item's rows as they read any list, from the bake, so a seek reads what playing does.
+//! item's rows as they read any list, from the bake, so a seek reads what playing does. #535: the
+//! bake's arrays go into the form's `arrays`, which the core's column view reads.
 
 use std::rc::Rc;
 
@@ -102,6 +103,20 @@ impl Hub<'_> {
                 .collect();
             lists[format!("{id}.occurrences")] = Value::Array(flat);
         }
+        // #535: the same bake's arrays, each step's changes with the ranges the logic module hands
+        // the core's column view, as the drawn form's `arrays`.
+        let mut arrays = rec.arrays(&piece);
+        if self.scenario.planted == Some(crate::hub::Planted::HandOverDropsLastRange) {
+            // The planted hand-over: each step's last changed range never reaches the view.
+            for steps in arrays.values_mut().filter_map(|a| a["steps"].as_array_mut()) {
+                for s in steps {
+                    if let Some(c) = s["changed"].as_array_mut() {
+                        c.pop();
+                    }
+                }
+            }
+        }
+        doc.insert("arrays".into(), Value::Object(arrays));
         Ok(())
     }
 }

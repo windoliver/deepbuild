@@ -234,7 +234,13 @@ pub fn instanced(expansions: &[Expansion]) -> BTreeMap<String, (String, String)>
 pub fn batches(drew: &[crate::snapshot::Batch]) -> Value {
     Value::Array(
         drew.iter()
-            .map(|b| json!({"batch": b.key, "items": b.items}))
+            .map(|b| {
+                let mut v = json!({"batch": b.key, "items": b.items});
+                if let Some(n) = b.instances {
+                    v["instances"] = json!(n);
+                }
+                v
+            })
             .collect(),
     )
 }

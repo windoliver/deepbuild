@@ -329,6 +329,15 @@ impl Hub<'_> {
         }
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));
+        // #535: a press meets the mark set rows the panel's document draws now.
+        if matches!(event, Event::Down { .. }) {
+            let drawn = self.panel_doc(panel).and_then(|d| self.sessions.get(&d)?.document().cloned());
+            let t = self.scopes.get(panel).and_then(|s| s.scope.time()).unwrap_or(self.now);
+            let rows = drawn.map(|d| self.row_boxes(&d, t)).unwrap_or_default();
+            if let Some(s) = self.scopes.get_mut(panel) {
+                s.scope.rows(rows);
+            }
+        }
         let done = match self.scopes.get_mut(panel) {
             Some(s) => s.scope.input(&doc, now, serial, event),
             None => return refused("unknown_panel"),

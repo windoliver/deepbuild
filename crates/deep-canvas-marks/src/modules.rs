@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver, TableValue};
-use deep_canvas::schedule::core_ops::{Datum, Edits, Fields, StatusBase, Transform};
+use deep_canvas::schedule::core_ops::{Datum, Edit, Edits, Fields, StatusBase, Transform};
 use deep_canvas::schedule::{canonical, Canonical, Hasher, Key, OpError, Outside, Val, View};
 use deep_text::{Role, Shaped, Shaper};
 use serde_json::{json, Map, Value};
@@ -1096,6 +1096,14 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
     r.operator("decimate", "items", &["core.fields"], &["data.decimated"])
         .applies(is_line_series)
         .run(decimate);
+    // #535 (Mark set: logic columns): each column, and `alive`, that reads an array, mapped at t
+    // from the session's frame before by the ranges the steps since handed over, as edits on the
+    // set's fields.
+    r.contribution("data.columns", "fields", "item", "geometry", "items", "core.fields");
+    r.private_array("data.mapped", "mapped", "item", "geometry", "items");
+    r.operator("columns", "items", &["self", "t"], &["data.columns", "data.mapped"])
+        .applies(reads_array)
+        .run(columns);
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
@@ -1147,6 +1155,79 @@ fn decimated_rows(v: &mut View<'_>, m4: crate::data::Decimate) -> Result<(), OpE
 
 fn decimate(v: &mut View<'_>) -> Result<(), OpError> {
     decimated_rows(v, crate::data::Decimate::M4)
+}
+
+/// The data module's planted narrowing that wraps a value into its column's range.
+pub const NARROWING_WRAPS: &str = "narrowing_wraps";
+/// The data module's planted mapping that keeps its rows across a seek back.
+pub const KEEPS_ROWS_ACROSS_SEEK: &str = "keeps_rows_across_seek";
+/// #535's planted programs in this crate's modules: the data module's two, and marks2d's free
+/// atlas row turned about its quad's corner.
+pub const PLANTED: [&str; 3] = [NARROWING_WRAPS, KEEPS_ROWS_ACROSS_SEEK, "turns_about_corner"];
+
+/// A mark set whose columns or `alive` read an array, which the column view baked.
+fn reads_array(_: &Value, _: &str, item: &Value) -> bool {
+    let p = item.get("params");
+    p.and_then(|p| p.get("alive")).is_some_and(|a| a.get("steps").is_some())
+        || p.and_then(|p| p.get("columns"))
+            .and_then(Value::as_object)
+            .is_some_and(|c| c.values().any(|c| c.get("steps").is_some()))
+}
+
+/// The set's array columns at t (`data.columns`), each as its values and hidden rows, and their
+/// mappings (`data.mapped`), from the session's last frame unless t is before it.
+fn columns(v: &mut View<'_>) -> Result<(), OpError> {
+    let t = v.t()?;
+    let item = v.item()?;
+    let last = v.last("data.mapped");
+    let last = last
+        .as_ref()
+        .and_then(|l| l.as_typed::<BTreeMap<String, deep_canvas::columns::Mapped>>());
+    let planted = v.planted();
+    let wraps = planted == Some(NARROWING_WRAPS);
+    let p = &item["params"];
+    let mut readers: Vec<(Vec<String>, &Value)> = p["columns"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(_, c)| c.get("steps").is_some())
+        .map(|(n, c)| (vec!["params".into(), "columns".into(), n.clone()], c))
+        .collect();
+    if p["alive"].get("steps").is_some() {
+        readers.push((vec!["params".into(), "alive".into()], &p["alive"]));
+    }
+    let mut edits = Vec::new();
+    let mut mapped = BTreeMap::new();
+    for (path, column) in readers {
+        let key = path.join("/");
+        let before = last.as_ref().and_then(|l| l.get(&key)).map(|m| {
+            let mut m = m.clone();
+            if planted == Some(KEEPS_ROWS_ACROSS_SEEK) {
+                // The planted mapping: a seek back keeps the rows the later frame mapped.
+                m.step = m.step.min(t.div_euclid(column["every"].as_i64().unwrap_or(1).max(1)));
+            }
+            m
+        });
+        let Some(m) = deep_canvas::columns::map(column, t, before.as_ref(), wraps) else {
+            continue;
+        };
+        let at = |leaf: &str| [path.clone(), vec![leaf.to_string()]].concat();
+        let alive = path.last().map(String::as_str) == Some("alive");
+        let hide = deep_canvas::columns::hidden_rows(&m, alive);
+        edits.push(Edit {
+            add: false,
+            path: at("data"),
+            value: Datum::Text(deep_canvas::columns::data_of(&m)),
+        });
+        edits.push(Edit {
+            add: false,
+            path: at("hide"),
+            value: Datum::Nums(hide.into_iter().map(|r| r as f64).collect()),
+        });
+        mapped.insert(key, m);
+    }
+    v.write("data.columns", Val::typed(Edits(edits)))?;
+    v.write("data.mapped", Val::typed(mapped))
 }
 
 /// The planted decimation: m4 without each column's last row.
@@ -1902,6 +1983,7 @@ fn check_font(drawn: &scene::Drawn) -> Result<(), OpError> {
 /// The frame's draw list from every item's evaluated fields and transform.
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
+    let planted = scene::Planted::named(v.planted());
     let envelope = envelope_of(doc);
     if let Some(drawing) = replaced(v, envelope)? {
         return v.write("marks2d.frame", Val::typed(drawing));
@@ -1994,7 +2076,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         }
     }
     let (frame, basis) =
-        match scene::frame_prebuilt(doc, &items, &look.palette, 1.0, &bound, &record, &placed)
+        match scene::frame_prebuilt(doc, &items, &look.palette, 1.0, &bound, &record, &placed, planted)
             .map_err(refused)?
         {
             // A list of items that each placed their own marks is one the next frame can
@@ -2009,7 +2091,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
                     .iter()
                     .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
                     .collect();
-                let frame = scene::frame_with(doc, &all, &look.palette, 1.0, &bound, &record)
+                let frame = scene::frame_with(doc, &all, &look.palette, 1.0, &bound, &record, planted)
                     .map_err(refused)?;
                 (frame, None)
             }

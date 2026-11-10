@@ -994,10 +994,10 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
     // nothing measured.
     let mut hidden = std::collections::BTreeSet::new();
     // The rows the column view hid: a value its reader can't narrow to (Array and table: column
-    // view) doesn't draw for as long as it lasts.
-    for c in columns.values() {
+    // view) doesn't draw for as long as it lasts, nor does a row whose `alive` is false (#535).
+    for c in columns.values().chain(p.get("alive")) {
         if let Some(Value::Array(rows)) = c.get("hide") {
-            hidden.extend(rows.iter().filter_map(Value::as_u64).map(|r| r as usize));
+            hidden.extend(rows.iter().filter_map(Value::as_f64).map(|r| r as usize));
         }
     }
     for ((key, column), value) in bound {
@@ -1029,11 +1029,16 @@ pub fn base_rows(id: &str, item: &Value, bound: &BoundRows) -> Result<Rows, Refu
                 .map(|c| (k, c))?,
         ),
     };
+    // #535: on an atlas grid with `size`, a row without a key column is keyed by its cell.
+    let size = crate::atlas::size_of(p);
     let keys: Vec<String> = (0..n)
         .map(|i| {
             key_column
                 .and_then(|(_, k)| k.text(i))
-                .unwrap_or_else(|| i.to_string())
+                .unwrap_or_else(|| match size {
+                    Some([cols, _]) => format!("{},{}", i % cols, i / cols),
+                    None => i.to_string(),
+                })
         })
         .collect();
     let transforms = story::listed(p, &path)?;
@@ -1288,6 +1293,7 @@ pub fn mark_set(
                     opacity: 1.0,
                     adjust: crate::paint::Adjust::default(),
                     tile: None,
+                    turn: 0.0,
                 });
             }
             "text" => out.push(Mark::Text {
