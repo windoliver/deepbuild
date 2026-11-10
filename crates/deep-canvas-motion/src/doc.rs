@@ -1632,10 +1632,14 @@ fn modifier_of(
             }
             ModKind::Quantize { hz, jump: jump_of(body.get("jump"), &format!("{at}/jump"))? }
         }
-        "limits" => ModKind::Limits {
-            min: num("min", f64::MIN)?,
-            max: num("max", f64::MAX)?,
-        },
+        "limits" => {
+            let (min, max) = (num("min", f64::MIN)?, num("max", f64::MAX)?);
+            // Limits written upside down hold no value.
+            if min > max {
+                return refuse("out_of_range", format!("{at}/min"));
+            }
+            ModKind::Limits { min, max }
+        }
         "pulse" => {
             let shape = match body.get("shape") {
                 None => Shape::ThereAndBack,

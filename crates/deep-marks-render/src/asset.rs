@@ -6,7 +6,7 @@ use std::path::Path;
 
 use deep_canvas_marks::key::sha256_hex;
 use image::RgbaImage;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 
 use crate::refused;
 

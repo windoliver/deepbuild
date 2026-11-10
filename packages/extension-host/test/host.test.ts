@@ -953,4 +953,23 @@ describe('#363 record grants and action calls', () => {
     expect((await restarted.callAction({ action: 'ext.acts.bump', target, input: { n: 2 }, caller: YOU, request: 'r1' })).status).toBe('refused');
     expect((await all(record)).filter((e) => e.kind === 'action.entered')).toHaveLength(1);
   }, 60_000);
+
+  it("a store's quota holds for puts under way together: it takes what fits and refuses the rest", async () => {
+    const { h, record } = await world();
+    const code = [
+      'export default async function (deep: any): Promise<void> {',
+      "  await deep.store('ext.crowd.item', { generation: 1, schema: { type: 'object', properties: { pad: { type: 'string' } }, required: ['pad'], additionalProperties: false }, quota: { bytes: 4096 } });",
+      "  deep.registerAction('ext.crowd.fill', { declares: 'change', changes: ['ext.crowd.item'], input: { type: 'object' } }, async () => {",
+      "    const puts = await Promise.allSettled(Array.from({ length: 20 }, (_, n) => deep.store.put('ext.crowd.item', 'k' + n, { pad: 'x'.repeat(1500) })));",
+      "    return { output: { taken: puts.filter((p) => p.status === 'fulfilled').length }, report: { verified: true, checked: 'the puts answered' } };",
+      '  });',
+      "  deep.registerAction('ext.crowd.keys', { declares: 'read', reads: ['ext.crowd.item'], input: { type: 'object' } }, async () => deep.store.list('ext.crowd.item'));",
+      '}',
+      '',
+    ].join('\n');
+    await enable(h, pkgOf('test/crowd', code, { actions: ['ext.crowd.fill', 'ext.crowd.keys'], stores: ['ext.crowd.item'], requires: { preview: ['deep.registerAction', 'deep.store', 'deep.store.list', 'deep.store.put'] } }));
+    // Each item is 1,510 bytes as JSON, so 4,096 bytes hold two.
+    expect(await h.callAction({ action: 'ext.crowd.fill', target: { handle: 'ext:test/crowd', version: '1.0.0' }, input: {}, caller: YOU })).toEqual({ status: 'done', output: { taken: 2 } });
+    expect((await all(record)).filter((e) => e.kind === 'ext.crowd.item')).toHaveLength(2);
+  }, 60_000);
 });

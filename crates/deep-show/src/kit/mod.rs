@@ -429,6 +429,10 @@ impl<'a> Hub<'a> {
             if !module_failures.is_empty() {
                 verdict = Verdict::Fail;
             }
+            // A module none of whose parts ran passes nothing.
+            if parts.is_empty() {
+                verdict = Verdict::Invalid;
+            }
             corpus_files.extend(ctx.corpus.iter().cloned());
             for (k, v) in &ctx.criteria {
                 let e = criteria.entry(k.clone()).or_insert(v);
@@ -455,7 +459,13 @@ impl<'a> Hub<'a> {
             );
             modules.push(m);
         }
-        if let Some(path) = &call.ledger {
+        // A call that matched no module ran nothing: it passes nothing and writes no ledger.
+        if modules.is_empty() {
+            overall = Verdict::Invalid;
+        }
+        // Nor does a run over some parts only: its PASS would seal a module the others never ran on.
+        let whole = !modules.is_empty() && call.parts.is_none();
+        if let Some(path) = call.ledger.as_ref().filter(|_| whole) {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }

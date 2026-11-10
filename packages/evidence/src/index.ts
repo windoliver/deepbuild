@@ -262,7 +262,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         if (backwards) return refuse(`step ${backwards.step} must start at 0 ms or later and end no earlier than it starts`);
         if (request.declares === undefined) return save(peer, request, request.bytes, 'binary', request.redaction);
         const found = detect(request.bytes);
-        if (found !== request.declares) return refuse(`the slot declares ${request.declares}, but the bytes are ${found ?? 'not png, jpeg or mp4'}`);
+        if (found !== request.declares) return refuse(`the slot declares ${request.declares}, but the bytes are ${found ?? 'not png, jpeg, mp4 or webm'}`);
         return save(peer, request, request.bytes, found, request.redaction, missingEnd(found, request.bytes));
       },
       text(request) {

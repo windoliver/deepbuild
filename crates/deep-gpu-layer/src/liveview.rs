@@ -38,7 +38,7 @@ pub const PLACEHOLDER: &str = "surface.placeholder";
 pub fn placeholder_picture(size: [u32; 2]) -> Vec<u8> {
     let (w, h) = (size[0] as usize, size[1] as usize);
     let mut bgra = vec![0; w * h * 4];
-    for (i, px) in bgra.chunks_exact_mut(4).enumerate() {
+    for (i, px) in bgra.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let (x, y) = (i % w, i / w);
         let grey = if (x + y) / 16 % 2 == 0 { 96 } else { 148 };
         px.copy_from_slice(&[grey, grey, grey, 255]);
@@ -51,8 +51,12 @@ const SHADER: &str = include_str!("effects.wgsl");
 /// What every live view on the device shares: the effect shader's layouts and sampler, and the
 /// pipelines every rung has.
 pub struct Kit {
+    /// Read by the test meter's effect pass alone (`testgpu.rs`).
+    #[cfg_attr(not(feature = "test-meter"), allow(dead_code))]
     pub source: wgpu::BindGroupLayout,
     history: wgpu::BindGroupLayout,
+    /// Read by the test meter's effect pass alone (`testgpu.rs`).
+    #[cfg_attr(not(feature = "test-meter"), allow(dead_code))]
     pub sampler: wgpu::Sampler,
     resolve: wgpu::RenderPipeline,
     /// Adds an effect target into the linear target.
@@ -195,6 +199,7 @@ impl Kit {
         }
     }
 
+    #[cfg(feature = "test-meter")]
     pub fn bind_source(&self, device: &Device, view: &wgpu::TextureView) -> wgpu::BindGroup {
         device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("live source"),
@@ -411,6 +416,7 @@ pub fn surface_of(v: Option<&Value>) -> Result<Surface, String> {
 }
 
 /// The frame's internal size at `scale`.
+#[cfg(feature = "test-meter")]
 pub fn scaled(size: [u32; 2], scale: f64) -> [u32; 2] {
     [
         (f64::from(size[0]) * scale).round().max(1.0) as u32,
