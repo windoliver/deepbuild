@@ -324,9 +324,7 @@ impl Render for Palette {
                     .text_color(chrome.ink_primary)
                     .child(div().flex_none().h(px(32.)).child(Input::new(&self.query)))
                     .child(
-                        div()
-                            .id("command-list")
-                            .test_support()
+                        crate::views::observed("command-list")
                             .role(Role::ListBox)
                             .aria_label("Commands and pages")
                             .flex_none()
@@ -336,9 +334,7 @@ impl Render for Palette {
                             .flex_col()
                             .children(ranked.into_iter().enumerate().map(|(at, entry)| {
                                 let name = entry.name().to_owned();
-                                div()
-                                    .id(("command", at))
-                                    .test_support()
+                                crate::views::observed(("command", at))
                                     .role(Role::ListBoxOption)
                                     .aria_label(name.clone())
                                     .h(px(24.))

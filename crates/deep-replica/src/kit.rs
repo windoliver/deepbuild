@@ -1,6 +1,10 @@
 //! `needs-you@1`: a Needs you view's rows equal the inbox projection's list, row for row. A failure
 //! names the ask at the first row that differs: the one the projection lists there, or, past the
-//! projection's end, the one the view listed on its own.
+//! projection's end, the one the view listed on its own. A row is read by its element's id, its
+//! ask's handle, so a view draws its question and never the handle (#1459).
+//!
+//! `session.row@1`: a view replacing the sidebar's session rows draws one row per session, in the sidebar's order, keyed
+//! by `session:<id>`, each drawing its title and its state's words; a failure names the session (#1459).
 //!
 //! Issue #326 adds the notifier's kit and States people see's, below.
 
@@ -38,6 +42,159 @@ pub fn needs_you(rows: &[String], expected: &[String]) -> Verdict {
     let names = expected.get(first).or_else(|| rows.get(first)).cloned();
     Verdict { pass: false, names }
 }
+
+/// `needs-you@1` on the view in `dir`, as `deep install` runs it for a view replacing Needs you: the view mounted in
+/// the shell's center, in a replica over the kit's fixture record, its rows read by element id in the order drawn,
+/// against the inbox projection's list (#1459).
+pub fn needs_you_view(dir: &std::path::Path) -> Verdict {
+    let state = crate::load_state();
+    let expected = state.inbox.rows();
+    deep_app::views::set_state(state);
+    match view_tree(dir, NEEDS_YOU_PANEL) {
+        Ok(tree) => needs_you(&crate::shell::rows_of(&tree), &expected),
+        Err(why) => Verdict {
+            pass: false,
+            names: Some(format!("needs-you@1 refused this view: {why}")),
+        },
+    }
+}
+
+/// `session.row@1` on the view in `dir`, as `deep install` runs it for a view replacing the sidebar's session rows: the
+/// view mounted in the shell's center, in a replica over the kit's fixture record, its rows read by element id in the
+/// order drawn, with the text drawn in each, against the sessions as the sidebar lists them (#1459).
+pub fn session_row_view(dir: &std::path::Path) -> Verdict {
+    deep_app::views::set_state(crate::load_state());
+    let expected: Vec<(String, String, String)> = deep_app::record::with_view(|view| {
+        let table = view.table();
+        table
+            .every_session()
+            .into_iter()
+            .map(|(id, title, _)| {
+                let (words, _) = table.row(&id, deep_app::views::now());
+                (format!("session:{id}"), title, words)
+            })
+            .collect()
+    })
+    .unwrap_or_default();
+    match view_tree(dir, SESSION_ROWS_PANEL) {
+        Ok(tree) => session_rows(&crate::shell::keyed(&tree, "session:"), &expected),
+        Err(why) => Verdict {
+            pass: false,
+            names: Some(format!("session.row@1 refused this view: {why}")),
+        },
+    }
+}
+
+/// Each session's row, by `(id, title, words)`, against the rows drawn, by `(id, text drawn inside)`: the first
+/// session whose row is missing, out of place or drawn without its title or its state's words, or a row of no session.
+pub fn session_rows(rows: &[(String, String)], expected: &[(String, String, String)]) -> Verdict {
+    let fail = |names: String| Verdict {
+        pass: false,
+        names: Some(names),
+    };
+    for index in 0..rows.len().max(expected.len()) {
+        match (rows.get(index), expected.get(index)) {
+            (Some((id, drawn)), Some((session, title, words))) if id == session => {
+                if let Some(missing) = [title, words]
+                    .into_iter()
+                    .find(|word| !drawn.contains(word.as_str()))
+                {
+                    return fail(format!("{session}: its row draws no {missing:?}"));
+                }
+            }
+            (_, Some((session, ..))) => return fail(format!("{session}: no row in its place")),
+            (Some((id, _)), None) => return fail(format!("{id}: a row of no session")),
+            (None, None) => unreachable!("index is below one list's length"),
+        }
+    }
+    Verdict {
+        pass: true,
+        names: None,
+    }
+}
+
+/// The description of the panel `panel` that the view in `dir` registers, mounted in the shell's center over the
+/// state already set, after one frame.
+fn view_tree(dir: &std::path::Path, panel: &str) -> Result<String, String> {
+    use deep_app::views::{Layout, LINE, SIDEBAR};
+    use gpui_kit::test::TestWindowExt as _;
+
+    let mut cx = crate::headless_context();
+    let runtime = deep_app::new_runtime()
+        .map_err(|error| format!("the panel runtime doesn't start: {error:#}"))?;
+    let name = format!("shell:deepbuild-panel/{panel}");
+    let layout = Layout {
+        sidebar: SIDEBAR.into(),
+        center: vec![name.clone()],
+        active: 0,
+        line: LINE.into(),
+    };
+    let mut mounted = Ok(());
+    let (handle, shell) = cx.update(|cx| {
+        crate::shell::open_shell(&layout, cx, |window, cx| {
+            mounted = deep_app::mount_panel(&runtime, dir, window, cx)
+                .map(std::mem::forget)
+                .map_err(|error| format!("it doesn't load: {error:#}"));
+        })
+    });
+    mounted?;
+    let tree = cx
+        .update_window(handle, |_, window, cx| {
+            window.render_frame(cx);
+            let panel = crate::shell::script_panel(shell.read(cx).dock.read(cx), &name, cx)?;
+            Some(crate::shell::script_tree(panel.read(cx).view().read(cx)))
+        })
+        .ok()
+        .flatten();
+    std::mem::forget(runtime);
+    tree.ok_or_else(|| format!("it registers no panel named {panel:?}"))
+}
+
+/// The lint of a stored journey (#1459): a JSON array of `deep_drive` calls, read without running it. A locator that
+/// finds its target by a word a person reads, its `name`, `text` or `label`, fails, naming the first such word, since
+/// rewording the app would break the journey; `{id}`, `{handle}`, `{item}` and `{role}` pass. Locators are read where
+/// a call takes one: its `locator`, an action's `to`, and a screenshot's or recording's `locator`, masks and highlights.
+pub fn journey_lint(file: &std::path::Path) -> Verdict {
+    let fail = |names: String| Verdict {
+        pass: false,
+        names: Some(names),
+    };
+    let calls: Vec<Value> = match std::fs::read_to_string(file)
+        .map_err(|error| error.to_string())
+        .and_then(|text| serde_json::from_str(&text).map_err(|error| error.to_string()))
+    {
+        Ok(Value::Array(calls)) => calls,
+        Ok(_) => return fail(format!("{} is not a JSON array of calls", file.display())),
+        Err(error) => return fail(format!("{} doesn't read: {error}", file.display())),
+    };
+    for call in &calls {
+        let mut locators = vec![&call["locator"], &call["act"]["to"]];
+        for args in [&call["screenshot"], &call["record"]] {
+            locators.push(&args["locator"]);
+            for list in ["mask", "highlight"] {
+                locators.extend(args[list].as_array().into_iter().flatten());
+            }
+        }
+        for locator in locators {
+            if let Some(word) = ["name", "text", "label"]
+                .iter()
+                .find_map(|key| locator[*key].as_str())
+            {
+                return fail(word.to_owned());
+            }
+        }
+    }
+    Verdict {
+        pass: true,
+        names: None,
+    }
+}
+
+/// The panel name a view replacing Needs you registers with `DockArea.register_panel`.
+const NEEDS_YOU_PANEL: &str = "needs-you";
+
+/// The panel name a view replacing the sidebar's session rows registers.
+const SESSION_ROWS_PANEL: &str = "session-rows";
 
 /// The notifier's checks over a replica's run: every notification about an ask came at least `NOTIFY_AFTER` after
 /// it showed, while it was still open, never for the session open in that device's focused window, and once per

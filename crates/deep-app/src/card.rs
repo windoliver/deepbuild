@@ -13,6 +13,7 @@
 
 use std::cell::RefCell;
 
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use crate::arming::{Client, Source};
@@ -84,6 +85,8 @@ pub fn present_question(controller: Controller, window: &mut Window, cx: &mut Ap
 thread_local! {
     /// The card the app's window shows, with its ask.
     static SHOWN: RefCell<Option<(String, Entity<Card>)>> = const { RefCell::new(None) };
+    /// The keyboard focus of the card drawn last, which a snapshot reads without the app.
+    static FOCUS: RefCell<Option<FocusHandle>> = const { RefCell::new(None) };
 }
 
 /// Issue #1172: a Needs you row's click: presents `ask`'s card in the middle of the window, its content read from the
@@ -110,6 +113,16 @@ pub fn present_ask(ask: &str, window: &mut Window, cx: &mut App) {
     };
     let shown = present_question(controller, window, cx);
     SHOWN.with(|cell| *cell.borrow_mut() = Some((ask.to_owned(), shown)));
+}
+
+/// Whether the shown card holds the keyboard in `window`.
+pub fn focused(window: &Window) -> bool {
+    FOCUS.with(|focus| {
+        focus
+            .borrow()
+            .as_ref()
+            .is_some_and(|focus| focus.is_focused(window))
+    })
 }
 
 fn leave(cx: &mut App) {
@@ -309,9 +322,7 @@ impl Card {
             Row::Undo => ("card-undo".into(), Role::Button, Some(Target::Undo)),
         };
         let focused = matches!(row, Row::Option { focused: true, .. });
-        let element = div()
-            .id(id)
-            .test_support()
+        let element = crate::views::observed(id)
             .role(role)
             .aria_label(label.clone())
             // A block, not a flex row, so the text takes the card's width and a long question wraps (#1550).
@@ -358,6 +369,7 @@ impl Render for Card {
         if !self.focus.is_focused(window) {
             window.focus(&self.focus, cx);
         }
+        FOCUS.with(|focus| *focus.borrow_mut() = Some(self.focus.clone()));
         let chrome = crate::chrome::of(window);
         let rows: Vec<AnyElement> = match &self.controller {
             Some(controller) => {
@@ -368,9 +380,7 @@ impl Render for Card {
                     .map(|(index, row)| self.row(index, row, chrome, cx))
                     .collect();
                 drawn.extend(self.failed.clone().map(|line| {
-                    div()
-                        .id("card-failed")
-                        .test_support()
+                    crate::views::observed("card-failed")
                         .role(Role::Label)
                         .aria_label(line.clone())
                         .text_xs()
@@ -430,8 +440,13 @@ impl Render for Card {
                 .top(self.bounds.origin.y)
                 .w(self.bounds.size.width)
                 .child(
-                    div()
-                        .id("question-card")
+                    // One node holding the card's rows, its value the card's arming state, so a snapshot and an
+                    // assistive client read whether a press would count (#1459).
+                    crate::views::observed(CARD_ID)
+                        .role(Role::Group)
+                        .when_some(self.controller.as_ref(), |card, controller| {
+                            card.aria_value(controller.state_name())
+                        })
                         .track_focus(&self.focus)
                         .occlude()
                         .w_full()

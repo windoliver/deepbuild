@@ -90,7 +90,7 @@ fn catalog() -> &'static Catalog {
 /// The data DeepBuild's `deepbuild` host module serves a panel, as plain values.
 fn data() -> Vec<&'static str> {
     #[allow(unused_mut)]
-    let mut names = vec!["needs_you"];
+    let mut names = vec!["needs_you", "sessions"];
     // #337's recorded quotes left the shipped module with the spike (#1454).
     #[cfg(feature = "spike")]
     names.push("quotes");

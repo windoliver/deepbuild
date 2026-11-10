@@ -2169,6 +2169,15 @@ fn check_targets(
                             json!(text),
                             &what,
                         ));
+                    } else if moves_a_dither(doc, &path) {
+                        // Paint: dither fill: it can never vary with time or frame.
+                        issues.push(Issue::error(
+                            "out_of_range",
+                            key,
+                            target_path,
+                            json!(text),
+                            "a dither fill never varies with time, so nothing drives it",
+                        ));
                     } else if let Some((module, missing)) =
                         left_out_param(doc, &path, kinds, sealed)
                     {
@@ -2357,6 +2366,39 @@ fn lacks(name: &str, module: &str, missing: &str) -> String {
         format!("`{name}` is evaluated by the {missing} module, which this build lacks")
     } else {
         format!("`{name}` reads the {missing} module, which this build lacks")
+    }
+}
+
+/// Whether an item target reaches a dither fill or holds one (Paint: dither fill).
+fn moves_a_dither(doc: &Value, path: &Path) -> bool {
+    fn holds(v: &Value) -> bool {
+        match v {
+            Value::Object(map) => {
+                map.get("fill").is_some_and(|f| f.get("dither").is_some())
+                    || map.values().any(holds)
+            }
+            Value::Array(list) => list.iter().any(holds),
+            _ => false,
+        }
+    }
+    if path.section() != Section::Items {
+        return false;
+    }
+    let fields = path.fields();
+    if fields
+        .windows(2)
+        .any(|w| w[0] == "fill" && w[1] == "dither")
+    {
+        return true;
+    }
+    let mut reached = member(doc, "items").and_then(|m| member(m, path.id().as_str()));
+    for field in fields {
+        reached = reached.and_then(|v| v.get(field.as_str()));
+    }
+    match (fields.last().map(String::as_str), reached) {
+        (Some("fill"), Some(v)) => v.get("dither").is_some(),
+        (_, Some(v)) => holds(v),
+        _ => false,
     }
 }
 

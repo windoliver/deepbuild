@@ -16,7 +16,7 @@ class NeedsYou extends View {
       .size_full()
       .p(8)
       .child(div().h(32).font_semibold().child("Needs you"))
-      .children(this.rows().map((handle) => div().h(18).child(handle)));
+      .children(this.rows().map((handle) => div().id(handle).h(18).child(handle)));
   }
 }
 
