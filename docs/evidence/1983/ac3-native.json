@@ -1,0 +1,58 @@
+{
+  "lane": "PASS x86_64: the replay on aarch64 matches the golden recorded on macos aarch64",
+  "record": {
+    "lane": "x86_64",
+    "state": "PASS",
+    "host": "<host>",
+    "platform": "darwin-arm64",
+    "tree": "4d9ebcfa3e04f5b8f06034e2caa3af3efc2f537c",
+    "tests": [
+      {
+        "id": "golden_verify",
+        "state": "PASS"
+      }
+    ],
+    "recording_machine": {
+      "os": "macos",
+      "arch": "aarch64",
+      "cpu": "Apple M5 Max"
+    },
+    "lane_arch": "aarch64",
+    "host_arch": "arm64",
+    "emulated": false,
+    "image_digest": null,
+    "network": "host",
+    "bake_key": {
+      "tally": "3c141abb93ac8642456b2a0557fede7885a707f8bf4c3a1c862c00337460a17e"
+    },
+    "report": null,
+    "ask": null,
+    "error": null,
+    "readings": []
+  },
+  "cross_machine": {
+    "ok": true,
+    "kind": "logic.determinism",
+    "compare": "cross_machine",
+    "verdict": "INVALID",
+    "failures": [],
+    "machines": "same",
+    "refusals": [
+      {
+        "field": "image_digest",
+        "value": null
+      },
+      {
+        "field": "lane_arch",
+        "value": "aarch64",
+        "machines": "same"
+      },
+      {
+        "field": "network",
+        "value": "host"
+      }
+    ],
+    "ask": null
+  },
+  "image_list_unchanged": true
+}

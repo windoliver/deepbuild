@@ -17,7 +17,7 @@ use serde_json::{json, Map, Value};
 use wasmparser::{ExternalKind, Parser, Payload, ValType};
 use wasmtime::Val;
 
-use crate::piece::{h64, step_seed, Item, Piece, Read, PAGE, PER_STEP};
+use crate::piece::{h64, step_seed, Item, Piece, Read, Ty, PAGE, PER_STEP};
 use crate::Planted;
 
 /// An entry on the input track (Input track entries).
@@ -660,7 +660,10 @@ impl World {
         }
         let w = item.writes_at as usize;
         let n = l.arrays.len();
-        let fresh = l.runner.memory("memory").expect("a memory")[w..w + n].to_vec();
+        let mut fresh = l.runner.memory("memory").expect("a memory")[w..w + n].to_vec();
+        if self.planted.replay_changes_step_37 && k == 37 && i == 0 {
+            changed(item, &mut fresh);
+        }
         l.arrays = fresh;
         let h = l.step_hash();
         report(rec, item, k, l, Some(h), fuel, pages);
@@ -861,6 +864,24 @@ impl World {
                 },
             )
             .collect()
+    }
+}
+
+/// The planted replay's change: the first value of the item's first array, an i32 plus one, an
+/// f64 (or a vector's first component) to the next f64 above it, a bool flipped.
+fn changed(item: &Item, arrays: &mut [u8]) {
+    let Some(w) = item.writes.first() else { return };
+    let at = item.write(&w.name).expect("a write entry").offset as usize;
+    match w.ty {
+        Ty::Bool => arrays[at] ^= 1,
+        Ty::I32 => {
+            let v = i32::from_le_bytes(arrays[at..at + 4].try_into().expect("4 bytes"));
+            arrays[at..at + 4].copy_from_slice(&v.wrapping_add(1).to_le_bytes());
+        }
+        _ => {
+            let v = f64::from_le_bytes(arrays[at..at + 8].try_into().expect("8 bytes"));
+            arrays[at..at + 8].copy_from_slice(&v.next_up().to_le_bytes());
+        }
     }
 }
 

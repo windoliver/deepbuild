@@ -1,0 +1,76 @@
+{
+  "lane": "FAIL x86_64: the replay on x86_64 differs from the golden recorded on aarch64: step 37, tally.x",
+  "record": {
+    "lane": "x86_64",
+    "state": "FAIL",
+    "host": "<host>",
+    "platform": "darwin-arm64",
+    "tree": "038128947559911b031715a246ec0f4b060f8e5b",
+    "tests": [
+      {
+        "id": "golden_verify",
+        "state": "FAIL"
+      }
+    ],
+    "recording_machine": {
+      "os": "macos",
+      "arch": "aarch64",
+      "cpu": "Apple M5 Max"
+    },
+    "lane_arch": "x86_64",
+    "host_arch": "arm64",
+    "emulated": true,
+    "image_digest": "sha256:f2c004e3d2d8b547e8cf7ffbc29205385f4e71d23e53e4e383065db5e9f822cd",
+    "network": "none",
+    "bake_key": {
+      "tally": "a2245c65697c78624513514650c7dbde076fbdc7749cc343b4745fc8c4d27010"
+    },
+    "report": {
+      "first_step": 37,
+      "item": "tally",
+      "field": {
+        "id": "tally",
+        "field": "x",
+        "index": 0,
+        "values": [
+          465441.4318600901,
+          465441.4318600902
+        ],
+        "ulp_distance": 1
+      }
+    },
+    "ask": null,
+    "error": null,
+    "readings": []
+  },
+  "cross_machine": {
+    "ok": true,
+    "kind": "logic.determinism",
+    "compare": "cross_machine",
+    "verdict": "FAIL",
+    "failures": [
+      {
+        "item": "tally",
+        "run": "golden",
+        "from": null,
+        "at": null,
+        "checkpoint": null,
+        "step": 37,
+        "field": "array",
+        "array": "tally.x",
+        "control": null,
+        "values": [
+          465441.4318600901,
+          465441.4318600902
+        ],
+        "ulp_distance": 1,
+        "lane": "x86_64",
+        "error": null
+      }
+    ],
+    "machines": "different",
+    "refusals": [],
+    "ask": null
+  },
+  "image_list_unchanged": true
+}

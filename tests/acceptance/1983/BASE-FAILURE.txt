@@ -1,0 +1,284 @@
+# #1983 acceptance suite at the base: this worktree's HEAD d51be2c33e55ee540865ab6ece81aee92e077086 ("Merge pull request
+# #2108 ..."; it holds #531's and #532's merges), clean but for tests/acceptance/1983 added.
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1983 --no-file-parallelism
+# Result: 11 of 11 tests fail (7 of 7 files), every one for the missing surface. None passes and none is BLOCKED: this is
+# the reference Mac (Mac17,10, macOS arm64), colima's Docker answers and holds the linux/amd64 rust:1.99.1-slim-bookworm.
+# Where each stops: scripts/lane-x86.json (the pin) is missing (criteria 1, 2, 3's arm64 run, 4's no-image case, 5, 6);
+# scripts/lane-x86.mjs (the lane) is missing (3's native run and 4's unreachable case, after tally's golden on this Mac);
+# scripts/lanes.mjs exports no mergeRecords (7). So no lane run, Docker build or emulated replay started.
+# What the base's deep-logic answers to this suite's calls, checked by hand at the base (not reached by the run below):
+#   - determinism with compare cross_machine and a tree: its stub, reading nothing:
+#     {"ok":true,"kind":"logic.determinism","verdict":"BLOCKED","failures":[],"ask":"logic.determinism with compare
+#     cross_machine replays the golden on another host; it hasn't run"}
+#   - budget with a tree: PASS with no refusals (the tree is ignored);
+#   - --planted budget_counts_lane_reading and --planted replay_changes_step_37: one {"ok":false,"code":"bad_input"}
+#     line, exit 2.
+# The harness's own parts were checked against real components at the base: tally (hand-encoded) is admitted by the
+# base's check (writes x at 0, n at 16) and bakes 120 steps without a trap; its golden names macos/aarch64; exactTree
+# and the sandbox's HOME work; docker-shim.mjs hides the pinned image from inspect, run and listings, refuses and logs
+# pulls, and passes the rest to the real CLI; the real image list reads before and after.
+# The run's first line named this checkout's absolute path; it is shown as <checkout>.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1983
+
+ ❯ ac03-same-arch.test.ts (2 tests | 2 failed) 3696ms
+   ❯ #1983.10110411 a run on the reference Mac's own architecture never counts as cross_machine (2)
+     × #1983.10110411 a replay in a linux/arm64 container on this Mac is refused as cross_machine, naming aarch64, with machines: same 7ms
+     × #1983.10110411 a native replay on this Mac is refused as cross_machine, naming aarch64, with machines: same 1543ms
+ ❯ ac04-blocked.test.ts (2 tests | 2 failed) 3930ms
+   ❯ #1983.ea54db89 the lane reads BLOCKED, with one ask, without its image or its runtime, and pulls nothing (2)
+     × #1983.ea54db89 with no linux/amd64 image of the pinned digest, cross_machine reads BLOCKED with one ask naming the pull command with that digest, and the image list is unchanged 5ms
+     × #1983.ea54db89 with the container runtime unreachable, cross_machine reads BLOCKED with one ask naming that 1439ms
+ ❯ ac01-golden-pass.test.ts (1 test | 1 failed) 2288ms
+   ❯ #1983.156a4df2 a golden recorded on the reference Mac replays in the x86_64 lane, and cross_machine reads its record (1)
+     × #1983.156a4df2 the lane's replay passes, its record names the recording machine, x86_64, arm64, emulated: true, the image digest and the tree, cross_machine reads PASS, and a record missing any of those is refused naming the field 6ms
+ ❯ ac05-timings.test.ts (2 tests | 2 failed) 3072ms
+   ❯ #1983.bc212c80 a timing or a budget taken in the lane never counts (2)
+     × #1983.bc212c80 logic.budget refuses the lane's step time, frame time and budget reading, as a timing or a budget, naming the lane and emulated: true 80ms
+     × #1983.bc212c80 a planted reader that counts a lane reading toward logic.budget (budget_counts_lane_reading) fails, naming the reading 1ms
+ ❯ ac02-step-37.test.ts (1 test | 1 failed) 3015ms
+   ❯ #1983.ba96b4f2 a replay in the lane that differs at step 37 fails cross_machine (1)
+     × #1983.ba96b4f2 a planted replay that changes one value of tally.x at step 37 makes cross_machine FAIL, naming step 37, tally and x, never PASS 5ms
+ ❯ ac06-network.test.ts (2 tests | 2 failed) 4513ms
+   ❯ #1983.d39b413d the lane's replay has no network, and a replay with one is refused (2)
+     × #1983.d39b413d the lane runs the replay with no network, and its record says so 5ms
+     × #1983.d39b413d a planted lane that runs the replay on the default network (default_network) is refused, naming the network 1ms
+ ❯ ac07-merge.test.ts (1 test | 1 failed) 1018ms
+   ❯ #1983.bcb406af a lane's FAIL wins the merge with the Mac's records (1)
+     × #1983.bcb406af a lane record that FAILs a golden and a Mac record that passes the same tree merge to FAIL, naming the lane 1013ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac01-golden-pass.test.ts > #1983.156a4df2 a golden recorded on the reference Mac replays in the x86_64 lane, and cross_machine reads its record > #1983.156a4df2 the lane's replay passes, its record names the recording machine, x86_64, arm64, emulated: true, the image digest and the tree, cross_machine reads PASS, and a record missing any of those is refused naming the field
+AssertionError: the lane's image pin scripts/lane-x86.json exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ pin helpers.ts:92:85
+     90| /** The pin in the repo: `{image, digest}`, the toolchain image of rus…
+     91| export function pin(): Pin {
+     92|   expect(existsSync(PIN_FILE), `the lane's image pin scripts/lane-x86.…
+       |                                                                                     ^
+     93|   const o = obj(JSON.parse(readFileSync(PIN_FILE, 'utf8')) as JsonValu…
+     94|   const image = str(o['image'], 'the pin\'s image');
+ ❯ ac01-golden-pass.test.ts:23:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  ac02-step-37.test.ts > #1983.ba96b4f2 a replay in the lane that differs at step 37 fails cross_machine > #1983.ba96b4f2 a planted replay that changes one value of tally.x at step 37 makes cross_machine FAIL, naming step 37, tally and x, never PASS
+AssertionError: the lane's image pin scripts/lane-x86.json exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ pin helpers.ts:92:85
+     90| /** The pin in the repo: `{image, digest}`, the toolchain image of rus…
+     91| export function pin(): Pin {
+     92|   expect(existsSync(PIN_FILE), `the lane's image pin scripts/lane-x86.…
+       |                                                                                     ^
+     93|   const o = obj(JSON.parse(readFileSync(PIN_FILE, 'utf8')) as JsonValu…
+     94|   const image = str(o['image'], 'the pin\'s image');
+ ❯ ac02-step-37.test.ts:19:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  ac03-same-arch.test.ts > #1983.10110411 a run on the reference Mac's own architecture never counts as cross_machine > #1983.10110411 a replay in a linux/arm64 container on this Mac is refused as cross_machine, naming aarch64, with machines: same
+AssertionError: the lane's image pin scripts/lane-x86.json exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ pin helpers.ts:92:85
+     90| /** The pin in the repo: `{image, digest}`, the toolchain image of rus…
+     91| export function pin(): Pin {
+     92|   expect(existsSync(PIN_FILE), `the lane's image pin scripts/lane-x86.…
+       |                                                                                     ^
+     93|   const o = obj(JSON.parse(readFileSync(PIN_FILE, 'utf8')) as JsonValu…
+     94|   const image = str(o['image'], 'the pin\'s image');
+ ❯ ac03-same-arch.test.ts:33:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  ac03-same-arch.test.ts > #1983.10110411 a run on the reference Mac's own architecture never counts as cross_machine > #1983.10110411 a native replay on this Mac is refused as cross_machine, naming aarch64, with machines: same
+AssertionError: the lane's entry point scripts/lane-x86.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runLane helpers.ts:211:90
+    209| /** Runs the lane once in the sandbox; with `shim`, `docker` on its PA…
+    210| export function runLane(box: Box, calls: JsonObject[], opts: { planted…
+    211|   expect(existsSync(LANE_SCRIPT), 'the lane\'s entry point scripts/lan…
+       |                                                                                          ^
+    212|   const env: NodeJS.ProcessEnv = { ...box.env, ...opts.env };
+    213|   let log = '';
+ ❯ refusedAsSame ac03-same-arch.test.ts:21:15
+ ❯ ac03-same-arch.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  ac04-blocked.test.ts > #1983.ea54db89 the lane reads BLOCKED, with one ask, without its image or its runtime, and pulls nothing > #1983.ea54db89 with no linux/amd64 image of the pinned digest, cross_machine reads BLOCKED with one ask naming the pull command with that digest, and the image list is unchanged
+AssertionError: the lane's image pin scripts/lane-x86.json exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ pin helpers.ts:92:85
+     90| /** The pin in the repo: `{image, digest}`, the toolchain image of rus…
+     91| export function pin(): Pin {
+     92|   expect(existsSync(PIN_FILE), `the lane's image pin scripts/lane-x86.…
+       |                                                                                     ^
+     93|   const o = obj(JSON.parse(readFileSync(PIN_FILE, 'utf8')) as JsonValu…
+     94|   const image = str(o['image'], 'the pin\'s image');
+ ❯ ac04-blocked.test.ts:22:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  ac04-blocked.test.ts > #1983.ea54db89 the lane reads BLOCKED, with one ask, without its image or its runtime, and pulls nothing > #1983.ea54db89 with the container runtime unreachable, cross_machine reads BLOCKED with one ask naming that
+AssertionError: the lane's entry point scripts/lane-x86.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runLane helpers.ts:211:90
+    209| /** Runs the lane once in the sandbox; with `shim`, `docker` on its PA…
+    210| export function runLane(box: Box, calls: JsonObject[], opts: { planted…
+    211|   expect(existsSync(LANE_SCRIPT), 'the lane\'s entry point scripts/lan…
+       |                                                                                          ^
+    212|   const env: NodeJS.ProcessEnv = { ...box.env, ...opts.env };
+    213|   let log = '';
+ ❯ ac04-blocked.test.ts:52:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  ac05-timings.test.ts > #1983.bc212c80 a timing or a budget taken in the lane never counts > #1983.bc212c80 logic.budget refuses the lane's step time, frame time and budget reading, as a timing or a budget, naming the lane and emulated: true
+AssertionError: the lane's image pin scripts/lane-x86.json exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ pin helpers.ts:92:85
+     90| /** The pin in the repo: `{image, digest}`, the toolchain image of rus…
+     91| export function pin(): Pin {
+     92|   expect(existsSync(PIN_FILE), `the lane's image pin scripts/lane-x86.…
+       |                                                                                     ^
+     93|   const o = obj(JSON.parse(readFileSync(PIN_FILE, 'utf8')) as JsonValu…
+     94|   const image = str(o['image'], 'the pin\'s image');
+ ❯ setup ac05-timings.test.ts:29:13
+ ❯ ac05-timings.test.ts:71:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  ac05-timings.test.ts > #1983.bc212c80 a timing or a budget taken in the lane never counts > #1983.bc212c80 a planted reader that counts a lane reading toward logic.budget (budget_counts_lane_reading) fails, naming the reading
+AssertionError: the lane's image pin scripts/lane-x86.json exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ pin helpers.ts:92:85
+     90| /** The pin in the repo: `{image, digest}`, the toolchain image of rus…
+     91| export function pin(): Pin {
+     92|   expect(existsSync(PIN_FILE), `the lane's image pin scripts/lane-x86.…
+       |                                                                                     ^
+     93|   const o = obj(JSON.parse(readFileSync(PIN_FILE, 'utf8')) as JsonValu…
+     94|   const image = str(o['image'], 'the pin\'s image');
+ ❯ setup ac05-timings.test.ts:29:13
+ ❯ ac05-timings.test.ts:77:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  ac06-network.test.ts > #1983.d39b413d the lane's replay has no network, and a replay with one is refused > #1983.d39b413d the lane runs the replay with no network, and its record says so
+AssertionError: the lane's image pin scripts/lane-x86.json exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ pin helpers.ts:92:85
+     90| /** The pin in the repo: `{image, digest}`, the toolchain image of rus…
+     91| export function pin(): Pin {
+     92|   expect(existsSync(PIN_FILE), `the lane's image pin scripts/lane-x86.…
+       |                                                                                     ^
+     93|   const o = obj(JSON.parse(readFileSync(PIN_FILE, 'utf8')) as JsonValu…
+     94|   const image = str(o['image'], 'the pin\'s image');
+ ❯ ac06-network.test.ts:19:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  ac06-network.test.ts > #1983.d39b413d the lane's replay has no network, and a replay with one is refused > #1983.d39b413d a planted lane that runs the replay on the default network (default_network) is refused, naming the network
+AssertionError: the lane's image pin scripts/lane-x86.json exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ pin helpers.ts:92:85
+     90| /** The pin in the repo: `{image, digest}`, the toolchain image of rus…
+     91| export function pin(): Pin {
+     92|   expect(existsSync(PIN_FILE), `the lane's image pin scripts/lane-x86.…
+       |                                                                                     ^
+     93|   const o = obj(JSON.parse(readFileSync(PIN_FILE, 'utf8')) as JsonValu…
+     94|   const image = str(o['image'], 'the pin\'s image');
+ ❯ ac06-network.test.ts:34:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  ac07-merge.test.ts > #1983.bcb406af a lane's FAIL wins the merge with the Mac's records > #1983.bcb406af a lane record that FAILs a golden and a Mac record that passes the same tree merge to FAIL, naming the lane
+AssertionError: scripts/lanes.mjs exports mergeRecords(tree): expected 'scripts/lanes.mjs exports no mergeRec…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"scripts/lanes.mjs exports no mergeRecords"
+
+ ❯ mergeOf helpers.ts:182:72
+    180| process.stdout.write(JSON.stringify(typeof m.mergeRecords === 'functio…
+    181|   const o = obj(JSON.parse(out) as JsonValue, 'the merge');
+    182|   expect(o['missing'], 'scripts/lanes.mjs exports mergeRecords(tree)')…
+       |                                                                        ^
+    183|   return o['merged'] ?? null;
+    184| }
+ ❯ ac07-merge.test.ts:25:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  11 failed (11)
+   Start at  02:19:14
+   Duration  24.05s (tests 98%, import 1%, transform 1%)
+
+    Isolate  7 workers spawned · ~272ms startup each (spawn + environment, per file)
+             at least ~1.63s faster with isolate: false — reuses workers across files instead of one per file
+
