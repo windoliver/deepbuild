@@ -32,6 +32,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/1172/',
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
+  'tests/acceptance/1463/',
   'tests/acceptance/1002/first-screen-redraft/',
   'tests/acceptance/994/first-screen-redraft/',
   'tests/acceptance/167/', 'tests/acceptance/1328/',
@@ -167,7 +168,7 @@ export const timed = [
   'tests/acceptance/200/budgets.test.ts', 'tests/acceptance/21/replay.test.ts',
   'tests/acceptance/21/sessions.live.test.ts', 'tests/acceptance/23/match/budgets.test.ts',
   'tests/acceptance/236/budgets.test.ts', 'tests/acceptance/237/budgets.test.ts',
-  'tests/acceptance/238/budgets.test.ts', 'tests/acceptance/24/budgets.test.ts',
+  'tests/acceptance/238/budgets.test.ts', 'tests/acceptance/24/budgets.test.ts', 'tests/acceptance/24/redraft-1463/timing.test.ts',
   'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/25/live/budgets.test.ts',
   'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/routes/twenty-minutes.test.ts',
   'tests/acceptance/25/routes/wake.test.ts', 'tests/acceptance/26/budgets.test.ts',
@@ -196,7 +197,7 @@ export const timed = [
   'tests/acceptance/246/lanes.test.mjs', 'tests/acceptance/568/', 'tests/acceptance/583/perf-added-tests.test.mjs',
   'tests/acceptance/724/', 'tests/preflight.test.mjs',
   'tests/acceptance/572/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
-  'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/raised.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts',
+  'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/redraft-1463/raised.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts',
   'tests/acceptance/68/budgets.test.ts', 'tests/acceptance/69/budgets.test.ts',
   'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/wait.test.ts',
   'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts',
@@ -275,6 +276,9 @@ timed.push('tests/acceptance/1637/budgets.test.ts');
 // real app's window on a real hub, with Accessibility and Screen Recording, by hand.
 alone.push('tests/acceptance/1458/');
 byHand.push('tests/acceptance/1458/redraft-ac13/shown.test.ts');
+// #501's files each build deep-show (seal.test.ts three times), export films through the GPU and the encode tool, and run a 600 s soak on the audio output.
+alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
+timed.push('tests/acceptance/501/budgets.test.ts');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');

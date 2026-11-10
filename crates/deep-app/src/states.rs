@@ -39,8 +39,10 @@ pub enum State {
     },
 }
 
-/// The table's rows: the word on every surface, its status-map entry, and the words that never name it.
-pub const TABLE: [(&str, &str, &[&str]); 11] = [
+/// The table's rows: the word on every surface, its status-map entry, and the words that never name it. The last
+/// three are the states the hub's one reading gives a session that no claim names (#992), which the list's rows carry
+/// (#1463).
+pub const TABLE: [(&str, &str, &[&str]); 14] = [
     ("queued", "idle", &[]),
     ("working", "running", &["in progress"]),
     ("says done", "running", &["done"]),
@@ -52,6 +54,9 @@ pub const TABLE: [(&str, &str, &[&str]); 11] = [
     ("needs you", "needs_you", &["waiting on you"]),
     ("stale", "stale", &["pass", "passed", "proven"]),
     ("quiet", "idle", &[]),
+    ("stuck", "blocked", &[]),
+    ("flagged", "fail", &[]),
+    ("finished", "idle", &[]),
 ];
 
 impl State {
@@ -350,6 +355,11 @@ pub struct Table {
     /// the repo, by start; and the session each start became, from its `start.session`.
     starts: HashMap<String, Start>,
     started: HashMap<String, String>,
+    /// The list's rows the hub built (#1463), by ID: each one's place in the list and the row, as its newest
+    /// row.set gives them.
+    rows: HashMap<String, (String, Value)>,
+    /// Whether the record holds any row.set: a record from before the hub built rows keeps the app's own reading.
+    listed: bool,
 }
 
 /// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
@@ -446,6 +456,18 @@ impl Table {
                 self.started.insert(session.to_owned(), run.to_owned());
             }
         }
+        if kind == "row.set" {
+            let data = &event["data"];
+            if let Some(id) = data["id"].as_str() {
+                self.listed = true;
+                if data["listed"] == true {
+                    let order = data["order"].as_str().unwrap_or_default().to_owned();
+                    self.rows.insert(id.to_owned(), (order, data.clone()));
+                } else {
+                    self.rows.remove(id);
+                }
+            }
+        }
         if kind == "task.created" {
             if let Some(thread) = event["data"]["thread"].as_str() {
                 self.titles
@@ -463,6 +485,27 @@ impl Table {
             .entry(session.to_owned())
             .or_default()
             .apply(event, kind);
+    }
+
+    /// Whether the record holds the list's rows (#1463), so every view reads them and not its own reading.
+    pub fn listed(&self) -> bool {
+        self.listed
+    }
+
+    /// The list's rows (#1463), in the list's one order: by each row's order key's bytes, then by ID.
+    pub fn list(&self) -> Vec<&Value> {
+        let mut rows: Vec<(&String, &String, &Value)> = self
+            .rows
+            .iter()
+            .map(|(id, (order, row))| (order, id, row))
+            .collect();
+        rows.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+        rows.into_iter().map(|(.., row)| row).collect()
+    }
+
+    /// The list's row with this ID.
+    pub fn row_of(&self, id: &str) -> Option<&Value> {
+        self.rows.get(id).map(|(_, row)| row)
     }
 
     /// A reading's newest value and the time it is as of, in ms.
@@ -820,7 +863,22 @@ pub fn verdict_line(table: &Table, session: &str, now: u64) -> String {
 
 /// The one count of what needs you: every open ask in the record, the same on every device.
 pub fn count(table: &Table) -> usize {
+    if table.listed() {
+        return table
+            .list()
+            .iter()
+            .filter(|row| row["id"].as_str().is_some_and(|id| id.starts_with("ask:")))
+            .count();
+    }
     table.open_asks(None).len()
+}
+
+/// A status-map entry the hub names, as the table holds it; one the table doesn't name draws as idle.
+pub fn entry_of(entry: &str) -> &'static str {
+    TABLE
+        .iter()
+        .find(|(_, known, _)| *known == entry)
+        .map_or("idle", |(_, known, _)| known)
 }
 
 /// The menu bar's menu under the count: a line per session, its task and its status mark.

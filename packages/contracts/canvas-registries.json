@@ -225,6 +225,45 @@
     }
   },
   {
+    "registry": "export.target@1",
+    "owner": "core",
+    "fill": [
+      "module"
+    ],
+    "resolve": "seal",
+    "since": "R6",
+    "stability": "stable",
+    "entry": {
+      "type": "object",
+      "properties": {
+        "writer": {
+          "type": "string"
+        },
+        "fidelity": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reader": {
+          "type": "string"
+        },
+        "hidden": {
+          "enum": [
+            "left_out",
+            "listed"
+          ]
+        }
+      },
+      "required": [
+        "writer",
+        "fidelity",
+        "reader",
+        "hidden"
+      ]
+    }
+  },
+  {
     "registry": "gpu.function@1",
     "owner": "core",
     "fill": [

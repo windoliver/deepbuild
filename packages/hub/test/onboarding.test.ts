@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { lastingNode } from '../src/paths.js';
 import { buildFailure } from '../src/setup.js';
-import { render } from '../src/status.js';
+import { listText } from '../src/list.js';
 
 const CLI = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
 const made: string[] = [];
@@ -69,12 +69,12 @@ fs.appendFileSync(${JSON.stringify(join(tmp, 'pids'))}, child.pid + '\\n'); chil
 
 describe('deep status with no session yet', () => {
   it('says how a session comes to be listed, beside the count', () => {
-    const text = render([], 'Reading the hub at unix:/x');
-    expect(text).toContain('0 sessions');
+    const text = listText([]);
+    expect(text).toContain('0 asks need you');
     expect(text).toMatch(/Start a Claude Code or Codex session/);
   });
   it('says nothing more once a session is listed', () => {
-    expect(render([{ id: 'abcdefgh', repo: 'r', agent: 'claude', state: 'working', why: '' }], 'from')).not.toMatch(/Start a Claude Code or Codex session/);
+    expect(listText([{ id: 'session:abcdefgh', address: 'session/abcdefgh', title: 'Claude Code', project: 'r', session: 'abcdefgh', agent: 'claude', entry: 'running', word: 'working', why: 'at work', waits_on: 'agent', since: null, actions: [], unread: false }])).not.toMatch(/Start a Claude Code or Codex session/);
   });
 });
 

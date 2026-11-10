@@ -282,6 +282,7 @@ pub fn terminal(
     let (fg, bg) = (screen.fg, screen.bg);
     div()
         .id(SharedString::from(format!("{id}:text")))
+        .key_context("Terminal")
         .track_focus(focus)
         .role(gpui_kit::Role::MultilineTextInput)
         .aria_label("Terminal")

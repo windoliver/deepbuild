@@ -91,7 +91,7 @@ pub struct Media {
     decoder: Option<Helper>,
     encoder: Option<Helper>,
     /// Proxies and exports so far, which name their scratch files.
-    exports: usize,
+    pub(crate) exports: usize,
     /// #499: video assets' probes and decoded frames.
     pub video: crate::video::Cache,
 }
@@ -106,6 +106,8 @@ fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
         Planted::EncodesInDecodeWorker => "encodes_in_decode_worker",
         Planted::ProbeRoundsToFlicks => "probe_rounds_to_flicks",
         Planted::AssumesBt601 => "assumes_bt601",
+        Planted::TimecodeTrackZero => "timecode_track_zero",
+        Planted::PngPremultipliesStraight => "png_premultiplies_straight",
         _ => return None,
     })
 }

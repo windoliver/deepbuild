@@ -20,6 +20,7 @@ mod carried;
 pub mod catalog;
 pub mod compare;
 mod engine;
+mod export;
 mod fixtures;
 mod fuzz;
 pub mod goldens;
@@ -108,6 +109,8 @@ pub struct KitCall {
     pub replay: Option<PathBuf>,
     pub corpus: Option<PathBuf>,
     pub ledger: Option<PathBuf>,
+    /// #501: the registries whose own kit runs instead of the modules' (`export.target@1`).
+    pub registries: Option<Vec<String>>,
 }
 
 impl KitCall {
@@ -125,6 +128,7 @@ impl KitCall {
             "replay",
             "corpus",
             "ledger",
+            "registries",
         ];
         if c.keys().any(|k| !known.contains(&k.as_str())) {
             return None;
@@ -180,6 +184,7 @@ impl KitCall {
             // The committed migration corpus, unless the call names another folder.
             corpus: path("corpus")?.or_else(|| Some(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/kit-corpus")))),
             ledger: path("ledger")?,
+            registries: list("registries")?,
         })
     }
 
@@ -374,6 +379,9 @@ impl<'a> Hub<'a> {
 
     /// `{"call": "kit"}`: every part over every module asked for.
     pub fn kit(&mut self, call: &KitCall) -> Value {
+        if let Some(registries) = &call.registries {
+            return self.registry_kit(registries);
+        }
         let gpu = call.backends.iter().any(|b| b == "gpu");
         let lease = gpu.then(goldens::GpuLease::take);
         let manifest = manifest::Manifest::of(self);

@@ -66,7 +66,7 @@ describe('a turn interrupted by a hub restart', () => {
       expect(await recorded(root, session, 'tool.after', 1)).toBe(1);
       await restart();
       const stopped = await reply(join(root, 'hub.sock'), hookLine(ulid(Date.now()), 'Stop', payload('Stop', { stop_hook_active: false, last_assistant_message: 'Done.' }), { ppid: claude.pid }));
-      expect(stopped.stdout, 'the stop after the restart is judged, and its reply carries the line').toMatch(/"systemMessage":"says done · next: DeepBuild · receipt"/);
+      expect(stopped.stdout, 'the stop after the restart is judged, and its reply carries the line').toMatch(/"systemMessage":"says done · next: DeepBuild · session\/[0-9a-f]{8}\/[0-9A-HJKMNP-TV-Z]{26}"/);
       expect(await recorded(root, session, 'claim.made', 1), 'the turn\'s claim is made at that stop').toBe(1);
     });
   }, 60_000);

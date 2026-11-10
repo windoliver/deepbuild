@@ -181,7 +181,10 @@ impl Render for WordsBox {
                         .child(line("box-said", format!("Drafted: {question}")))
                         .child(
                             control("box-open", Control::Plain, "Open its card", chrome).on_click(
-                                move |_, window, cx| crate::card::present_ask(&ask, window, cx),
+                                move |_, window, cx| {
+                                    let ask = crate::address::Address::ask(&ask);
+                                    crate::open::open(&ask, window, cx).ok();
+                                },
                             ),
                         )
                         .into_any_element(),

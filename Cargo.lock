@@ -2224,6 +2224,7 @@ dependencies = [
 name = "deep-gpu"
 version = "0.0.0"
 dependencies = [
+ "blake3",
  "deep-canvas",
  "deep-canvas-seams",
  "objc2-core-foundation",

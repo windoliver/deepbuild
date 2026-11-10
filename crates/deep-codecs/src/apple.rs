@@ -160,6 +160,11 @@ extern "C" {
     static kCVPixelBufferPixelFormatTypeKey: CFTypeRef;
     static kCVPixelBufferWidthKey: CFTypeRef;
     static kCVPixelBufferHeightKey: CFTypeRef;
+    static kCVImageBufferColorPrimaries_ITU_R_709_2: CFTypeRef;
+    static kCVImageBufferTransferFunction_ITU_R_709_2: CFTypeRef;
+    static kCVImageBufferYCbCrMatrix_ITU_R_709_2: CFTypeRef;
+    fn CVPixelBufferGetBaseAddress(p: CFTypeRef) -> *const u8;
+    fn CVPixelBufferGetBytesPerRow(p: CFTypeRef) -> usize;
     fn CVPixelBufferLockBaseAddress(p: CFTypeRef, flags: u64) -> i32;
     fn CVPixelBufferUnlockBaseAddress(p: CFTypeRef, flags: u64) -> i32;
     fn CVPixelBufferGetPlaneCount(p: CFTypeRef) -> usize;
@@ -185,6 +190,11 @@ extern "C" {
     static kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder: CFTypeRef;
     static kVTCompressionPropertyKey_MaxKeyFrameInterval: CFTypeRef;
     static kVTEncodeFrameOptionKey_ForceKeyFrame: CFTypeRef;
+    static kVTCompressionPropertyKey_AlphaChannelMode: CFTypeRef;
+    static kVTAlphaChannelMode_StraightAlpha: CFTypeRef;
+    static kVTCompressionPropertyKey_ColorPrimaries: CFTypeRef;
+    static kVTCompressionPropertyKey_TransferFunction: CFTypeRef;
+    static kVTCompressionPropertyKey_YCbCrMatrix: CFTypeRef;
     fn VTDecompressionSessionCreate(
         a: CFTypeRef,
         fd: CFTypeRef,
@@ -258,6 +268,18 @@ extern "C" {
         descs: *mut PacketDescription,
     ) -> OSStatus;
     fn AudioConverterDispose(c: *mut c_void) -> OSStatus;
+    fn AudioConverterGetPropertyInfo(
+        c: *mut c_void,
+        id: u32,
+        size: *mut u32,
+        writable: *mut u8,
+    ) -> OSStatus;
+    fn AudioConverterGetProperty(
+        c: *mut c_void,
+        id: u32,
+        size: *mut u32,
+        data: *mut c_void,
+    ) -> OSStatus;
 }
 
 const fn fourcc(s: &[u8; 4]) -> u32 {
@@ -700,7 +722,143 @@ pub fn decode_aac(
     }
 }
 
-/// One encoded frame: its bytes in AVCC form and whether it is a sync sample.
+struct PcmFeed<'a> {
+    f32le: &'a [u8],
+    frame: usize,
+    channels: u32,
+    at: usize,
+}
+
+extern "C" fn feed_pcm(
+    _c: *mut c_void,
+    n: *mut u32,
+    list: *mut BufferList,
+    _descs: *mut *mut PacketDescription,
+    user: *mut c_void,
+) -> OSStatus {
+    let f = unsafe { &mut *(user as *mut PcmFeed) };
+    let rest = &f.f32le[f.at..];
+    let take = (rest.len() / f.frame).min(unsafe { *n } as usize);
+    unsafe {
+        (*list).buffers[0] = Buffer {
+            channels: f.channels,
+            size: (take * f.frame) as u32,
+            data: rest.as_ptr() as *mut c_void,
+        };
+        *n = take as u32;
+    }
+    f.at += take * f.frame;
+    0
+}
+
+/// #501: interleaved little-endian f32 `f32le` at `rate` through AudioToolbox's AAC-LC encoder:
+/// its packets of 1024 frames, its magic cookie (an MPEG-4 ES descriptor) and the frames of
+/// priming before the first input frame.
+pub fn encode_aac(
+    f32le: &[u8],
+    rate: u32,
+    channels: u32,
+) -> Result<(Vec<Vec<u8>>, Vec<u8>, u32), String> {
+    let from = ASBD {
+        sample_rate: rate as f64,
+        format: fourcc(b"lpcm"),
+        flags: 1 | 8,
+        bytes_per_packet: 4 * channels,
+        frames_per_packet: 1,
+        bytes_per_frame: 4 * channels,
+        channels,
+        bits: 32,
+        reserved: 0,
+    };
+    let to = ASBD {
+        sample_rate: rate as f64,
+        format: fourcc(b"aac "),
+        frames_per_packet: 1024,
+        channels,
+        ..ASBD::default()
+    };
+    let mut conv: *mut c_void = null_mut();
+    let st = unsafe { AudioConverterNew(&from, &to, &mut conv) };
+    if st != 0 {
+        return Err(format!("AudioConverterNew: {st}"));
+    }
+    let mut f = PcmFeed {
+        f32le,
+        frame: 4 * channels as usize,
+        channels,
+        at: 0,
+    };
+    let encoded = (|| unsafe {
+        const N: usize = 32;
+        let mut buf = vec![0u8; N * 768 * channels as usize];
+        let mut descs: Vec<PacketDescription> = (0..N)
+            .map(|_| PacketDescription {
+                start: 0,
+                variable_frames: 0,
+                size: 0,
+            })
+            .collect();
+        let mut packets = Vec::new();
+        loop {
+            let mut n = N as u32;
+            let mut list = BufferList {
+                count: 1,
+                buffers: [Buffer {
+                    channels,
+                    size: buf.len() as u32,
+                    data: buf.as_mut_ptr() as *mut c_void,
+                }],
+            };
+            let st = AudioConverterFillComplexBuffer(
+                conv,
+                feed_pcm,
+                &mut f as *mut PcmFeed as *mut c_void,
+                &mut n,
+                &mut list,
+                descs.as_mut_ptr(),
+            );
+            if st != 0 {
+                return Err(format!("AudioConverterFillComplexBuffer: {st}"));
+            }
+            for d in &descs[..n as usize] {
+                packets.push(buf[d.start as usize..][..d.size as usize].to_vec());
+            }
+            if n == 0 {
+                break;
+            }
+        }
+        let mut size = 0u32;
+        let st = AudioConverterGetPropertyInfo(conv, fourcc(b"cmgc"), &mut size, null_mut());
+        if st != 0 {
+            return Err(format!("the encoder's magic cookie: {st}"));
+        }
+        let mut cookie = vec![0u8; size as usize];
+        let st = AudioConverterGetProperty(
+            conv,
+            fourcc(b"cmgc"),
+            &mut size,
+            cookie.as_mut_ptr() as *mut c_void,
+        );
+        cookie.truncate(size as usize);
+        // Leading and trailing frames.
+        let mut prime = [0u32; 2];
+        let mut prime_size = 8u32;
+        let primed = AudioConverterGetProperty(
+            conv,
+            fourcc(b"prim"),
+            &mut prime_size,
+            prime.as_mut_ptr() as *mut c_void,
+        );
+        match (st, primed) {
+            (0, 0) => Ok((packets, cookie, prime[0])),
+            _ => Err(format!("the encoder's cookie or priming: {st}, {primed}")),
+        }
+    })();
+    unsafe { AudioConverterDispose(conv) };
+    encoded
+}
+
+/// One encoded frame: its bytes (H.264 in AVCC form) and whether it is a sync sample.
 pub struct Coded {
     pub bytes: Vec<u8>,
     pub key: bool,
@@ -767,6 +925,62 @@ pub fn encode_h264(
     timescale: i32,
     gop: Option<u32>,
 ) -> Result<(Vec<Coded>, Vec<u8>, bool), String> {
+    let (codec, format) = (fourcc(b"avc1"), fourcc(b"y420"));
+    let (coded, avcc, hardware) = compress(codec, format, &[], frames, w, h, pts, timescale, gop)?;
+    Ok((coded, avcc.ok_or("the encoder gave no avcC")?, hardware))
+}
+
+/// #501: what the platform's ProRes 4444 encoder made of `frames` (BGRA with straight alpha, rows
+/// top-down without padding): each frame, every one a sync sample, and whether it ran on the
+/// hardware. The encoder is told the alpha is straight and the color BT.709; one it can't tell
+/// refuses the encode.
+pub fn encode_prores4444(
+    frames: &[Vec<u8>],
+    w: usize,
+    h: usize,
+    pts: &[i64],
+    timescale: i32,
+) -> Result<(Vec<Coded>, bool), String> {
+    let props = unsafe {
+        [
+            (
+                kVTCompressionPropertyKey_AlphaChannelMode,
+                kVTAlphaChannelMode_StraightAlpha,
+            ),
+            (
+                kVTCompressionPropertyKey_ColorPrimaries,
+                kCVImageBufferColorPrimaries_ITU_R_709_2,
+            ),
+            (
+                kVTCompressionPropertyKey_TransferFunction,
+                kCVImageBufferTransferFunction_ITU_R_709_2,
+            ),
+            (
+                kVTCompressionPropertyKey_YCbCrMatrix,
+                kCVImageBufferYCbCrMatrix_ITU_R_709_2,
+            ),
+        ]
+    };
+    let (codec, format) = (fourcc(b"ap4h"), fourcc(b"BGRA"));
+    let (coded, _, hardware) = compress(codec, format, &props, frames, w, h, pts, timescale, None)?;
+    Ok((coded, hardware))
+}
+
+/// One run of a platform encoder `codec` over `frames` held in pixel buffers of `format`, with
+/// the session's `props` set first: each frame, the stream's `avcC` when it has one, and whether
+/// the encoder ran on the hardware.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn compress(
+    codec: u32,
+    format: u32,
+    props: &[(CFTypeRef, CFTypeRef)],
+    frames: &[Vec<u8>],
+    w: usize,
+    h: usize,
+    pts: &[i64],
+    timescale: i32,
+    gop: Option<u32>,
+) -> Result<(Vec<Coded>, Option<Vec<u8>>, bool), String> {
     unsafe {
         let mut out = Box::new(Encoded {
             frames: Vec::new(),
@@ -778,7 +992,7 @@ pub fn encode_h264(
             null(),
             w as i32,
             h as i32,
-            fourcc(b"avc1"),
+            codec,
             null(),
             null(),
             null(),
@@ -795,6 +1009,12 @@ pub fn encode_h264(
             kVTCompressionPropertyKey_AllowFrameReordering,
             kCFBooleanFalse,
         );
+        for (key, value) in props {
+            let st = VTSessionSetProperty(session.0, *key, *value);
+            if st != 0 {
+                return Err(format!("VTSessionSetProperty: {st}"));
+            }
+        }
         // #499: a proxy's GOP: a key frame every `gop` frames and none between.
         let key_every = gop.map(|g| i32_number(g.max(1) as i32));
         if let Some(n) = &key_every {
@@ -807,17 +1027,30 @@ pub fn encode_h264(
         let force = dict(&[(kVTEncodeFrameOptionKey_ForceKeyFrame, kCFBooleanTrue)]);
         for (i, planes) in frames.iter().enumerate() {
             let mut pb: CFTypeRef = null();
-            if CVPixelBufferCreate(null(), w, h, fourcc(b"y420"), null(), &mut pb) != 0 {
+            if CVPixelBufferCreate(null(), w, h, format, null(), &mut pb) != 0 {
                 return Err("CVPixelBufferCreate failed".into());
             }
             let pb = Cf(pb);
             CVPixelBufferLockBaseAddress(pb.0, 0);
             let mut at = 0usize;
-            for p in 0..CVPixelBufferGetPlaneCount(pb.0) {
-                let base = CVPixelBufferGetBaseAddressOfPlane(pb.0, p) as *mut u8;
-                let stride = CVPixelBufferGetBytesPerRowOfPlane(pb.0, p);
-                let pw = CVPixelBufferGetWidthOfPlane(pb.0, p);
-                for row in 0..CVPixelBufferGetHeightOfPlane(pb.0, p) {
+            let count = CVPixelBufferGetPlaneCount(pb.0);
+            for p in 0..count.max(1) {
+                // #501: a buffer without planes (BGRA) is one run of rows, four bytes a pixel.
+                let (base, stride, pw, rows) = match count {
+                    0 => (
+                        CVPixelBufferGetBaseAddress(pb.0) as *mut u8,
+                        CVPixelBufferGetBytesPerRow(pb.0),
+                        w * 4,
+                        h,
+                    ),
+                    _ => (
+                        CVPixelBufferGetBaseAddressOfPlane(pb.0, p) as *mut u8,
+                        CVPixelBufferGetBytesPerRowOfPlane(pb.0, p),
+                        CVPixelBufferGetWidthOfPlane(pb.0, p),
+                        CVPixelBufferGetHeightOfPlane(pb.0, p),
+                    ),
+                };
+                for row in 0..rows {
                     let src = &planes[at..at + pw];
                     std::ptr::copy_nonoverlapping(src.as_ptr(), base.add(row * stride), pw);
                     at += pw;
@@ -860,8 +1093,7 @@ pub fn encode_h264(
         if let Some(e) = out.error.take() {
             return Err(e);
         }
-        let avcc = out.avcc.take().ok_or("the encoder gave no avcC")?;
-        Ok((std::mem::take(&mut out.frames), avcc, hardware))
+        Ok((std::mem::take(&mut out.frames), out.avcc.take(), hardware))
     }
 }
 

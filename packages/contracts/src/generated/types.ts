@@ -6746,6 +6746,42 @@ export interface ResourceCreated {
   evidence?: Array<string>;
 }
 
+/** row.set@1 */
+export interface RowSet {
+  v: 1;
+  id: string;
+  kind: "row.set";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    id: string;
+    listed: boolean;
+    order?: string;
+    address?: string;
+    title?: string;
+    project?: string | null;
+    session?: string;
+    agent?: string | null;
+    entry?: "idle" | "running" | "pass" | "fail" | "blocked" | "invalid" | "inconclusive" | "needs_you" | "stale";
+    word?: "queued" | "working" | "says done" | "PASS" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "needs you" | "stale" | "quiet" | "stuck" | "flagged" | "finished";
+    why?: string;
+    waits_on?: string | null;
+    since?: number | null;
+    actions?: Array<{
+      answer: string;
+      label: string;
+    }>;
+    unread?: boolean;
+    default?: string;
+    default_at?: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.cleaned@1 */
 export interface RunCleaned {
   v: 1;
