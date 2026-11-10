@@ -58,6 +58,20 @@ pub fn first_field(recorded: &[Canonical], mine: &[Canonical]) -> Option<Value> 
     })
 }
 
+/// Whether a run on `machine` was on the golden's recording architecture (`same`) or another
+/// (`different`), the only thing that makes a run count across machines (Golden: a Linux VM on the
+/// reference Mac reads `machines: same`); `null` when either names no architecture.
+pub fn machines(golden: &Value, machine: &Value) -> Value {
+    match (
+        golden.pointer("/machine/arch").and_then(Value::as_str),
+        machine.get("arch").and_then(Value::as_str),
+    ) {
+        (Some(a), Some(b)) if a == b => json!("same"),
+        (Some(_), Some(_)) => json!("different"),
+        _ => Value::Null,
+    }
+}
+
 /// Where `golden` stands across machines, given the second machines configured (`{name,
 /// target}`) and the `golden_verify` runs made: for each target it verifies on, a run from that
 /// target on another architecture than the recording machine's decides; else a configured machine
