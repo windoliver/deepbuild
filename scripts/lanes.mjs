@@ -318,6 +318,10 @@ alone.push('tests/acceptance/408/crossing.test.ts', 'tests/acceptance/408/overla
 alone.push('tests/acceptance/408-redraft-ac5/');
 timed.push('tests/acceptance/408-redraft-ac5/machines.test.ts');
 byHand.push('tests/acceptance/408/machines.test.ts');
+// #405's files each build deep-show; budgets.test.ts also builds it in release and times the geometry audit and
+// determinism hashing against the reference Mac's rule.
+alone.push('tests/acceptance/405/');
+timed.push('tests/acceptance/405/budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
