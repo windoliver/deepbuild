@@ -266,6 +266,9 @@ alone.push('tests/acceptance/1477/');
 timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts', 'tests/acceptance/1477/redraft/record.test.ts');
 // #1718's files build deep-show and deep-hook, start hubs and lay out an installed tree.
 alone.push('tests/acceptance/1718/');
+// #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
+// counting the record's process starts around each deep_job call: one file at a time.
+alone.push('tests/acceptance/1922/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
