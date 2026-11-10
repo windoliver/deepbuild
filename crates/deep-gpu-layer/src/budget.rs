@@ -224,6 +224,7 @@ pub fn call(app: &mut App, call: &Value) -> Value {
                 Some(args.size),
                 &args.look,
                 0,
+                Path::Copy,
                 &mut labels,
                 None,
                 None,

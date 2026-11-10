@@ -14,6 +14,7 @@ mod diag;
 pub mod env;
 pub mod flare;
 mod glass;
+pub mod held;
 pub mod local;
 pub mod maps;
 mod mesh;
@@ -5284,7 +5285,13 @@ impl Renderer {
         };
         self.occluders.clear();
         if occluding {
-            if let Some(t) = &self.targets {
+            // The prepass depth and pyramid are made only while a list is culled (#2189).
+            let culled = self
+                .order
+                .iter()
+                .filter_map(|id| self.batches.get(id))
+                .any(|b| b.solids.values().chain(b.casters.values()).any(|s| s.cull.is_some()));
+            if let Some(t) = self.targets.as_ref().filter(|_| culled) {
                 let samples = self.families.samples;
                 if self
                     .pyramid
