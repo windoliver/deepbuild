@@ -652,7 +652,8 @@ fn field_of(m: &Mesh, field: &str) -> Option<Vec<f64>> {
             .iter()
             .map(|p| crate::geom::length(*p))
             .collect(),
-        _ => return None,
+        // The geometry measures, read like attributes (#2015).
+        _ => return crate::measures::point(m, field),
     })
 }
 
@@ -1172,6 +1173,10 @@ fn normals(m: Mesh, p: &Value, run: &Run) -> Result<Mesh, String> {
 /// A per-face field, one value per triangle, read at each face's centroid (the mean of its
 /// distinct welded points): `height`, `x`, `y`, `z` or `distance` from the item's origin.
 fn face_field(m: &Mesh, field: &str) -> Option<Vec<f64>> {
+    // The geometry measures, read like attributes (#2015).
+    if let Some(values) = crate::measures::face(m, field) {
+        return Some(values);
+    }
     let w = m.welded();
     let mut points: BTreeMap<u32, BTreeMap<u32, V3>> = BTreeMap::new();
     for t in 0..m.triangles() {

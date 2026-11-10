@@ -22,6 +22,7 @@ pub mod ies;
 pub mod label;
 pub mod light;
 pub mod lod;
+pub mod measures;
 pub mod mirror;
 pub mod look;
 pub mod modifiers;
