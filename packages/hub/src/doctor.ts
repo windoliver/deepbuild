@@ -11,7 +11,7 @@ import { delimiter, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
 import { canvasItems } from './canvas-doctor.js';
-import { claudeSettings, commands, installed, readJson } from './claude-settings.js';
+import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, topLevel } from './claude-settings.js';
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
@@ -176,8 +176,12 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   if (isObj(server) && Array.isArray(server.args) && server.args.includes('mcp')) add('claude.mcp', 'claude-code', 'healthy', 'ok', `DeepBuild's MCP server is registered at user scope in ~/.claude.json (${String(server.command)} ${server.args.join(' ')})`, 'Nothing to do.');
   else add('claude.mcp', 'claude-code', 'mcp_unregistered', 'fail', 'DeepBuild\'s MCP server isn\'t registered in ~/.claude.json, so sessions can\'t ask you or claim done', 'Run `deep setup`.');
   const line = isObj(settings?.statusLine) ? String(settings.statusLine.command) : '';
-  if (/deep-hook\S*'? statusline$/.test(line)) add('claude.statusline', 'claude-code', 'healthy', 'ok', `the status line forwarder runs in ${file}, then your own status line`, 'Nothing to do.');
+  if (FORWARDER.test(line)) add('claude.statusline', 'claude-code', 'healthy', 'ok', `the status line forwarder runs in ${file}, then your own status line`, 'Nothing to do.');
   else add('claude.statusline', 'claude-code', 'statusline_missing', 'warn', `${file}'s statusLine isn't DeepBuild's forwarder, so the plan windows aren't read`, 'Run `deep setup`, which puts the forwarder in front of your own status line.');
+  // A repo's own status line overrides the forwarder there (#1296); setup never writes into the repo's settings.
+  const repo = topLevel(options.cwd);
+  const shadows = plant() === 'statusline-user-settings-only' ? [] : shadowedBy(repo);
+  for (const s of shadows) add('claude.statusline_shadowed', 'claude-code', 'statusline_shadowed', 'warn', `${s.file} sets ${s.key}, which Claude Code runs instead of the forwarder in ${repo}, so no plan window is read there`, `Take ${s.key} out of ${s.file}, or run your status line from statusline.yours in ~/.deepbuild/config.json, which the forwarder runs after it reads the windows.`);
 
   // Each agent's binary, version, sign-in and billing; Claude Code's token lifetime, test prompt and jobs' binary.
   const path = env.PATH ?? '';
@@ -364,12 +368,6 @@ function hooksOff(file: string, settings: Obj | undefined, cwd: string, env: Nod
   if (managed?.disableAllHooks === true) out.push({ evidence: `disableAllHooks is true in Claude Code's managed settings (${managedFile}), so no hook runs`, fix: 'Ask whoever manages this Mac to allow hooks.' });
   return out;
 }
-function topLevel(cwd: string): string {
-  for (let dir = cwd; ; dir = dirname(dir)) {
-    if (existsSync(join(dir, '.git'))) return dir;
-    if (dirname(dir) === dir) return cwd;
-  }
-}
 /** For each hook another tool also has entries on: every entry, in the order Claude Code reads and starts them. */
 function hookOrders(settings: Obj | undefined, ours: Set<string>): string[] {
   const hooks = isObj(settings?.hooks) ? settings.hooks : {};
@@ -439,7 +437,8 @@ export async function doctorCommand(args: readonly string[], also: () => Promise
     console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state} (${i.code})\n  ${i.evidence}${next(i)}`);
   }
   const failed = items.some((i) => i.level === 'fail');
-  const unchecked = items.some((i) => i.code === 'not_checked');
+  // A shadowed status line leaves the plan windows unread, which no item can decide (#1296).
+  const unchecked = items.some((i) => i.code === 'not_checked' || i.code === 'statusline_shadowed');
   if (!json) console.log(summary(items));
   // The planted wrong programs: one exits 0 with an item not checked, one puts not checked before a failure.
   if (plant() === 'not-checked-exits-0') return failed ? 1 : 0;

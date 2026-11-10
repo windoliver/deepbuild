@@ -48,6 +48,7 @@ import { after, badDeadline, type Cleanup, type Host as RunHost, type Supervisor
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type ProvideRow, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
+import { buildOf, kindOf, paramsOf, toolOf, type BuildPlant, type HeldJobs, type JobKind, type JobTool } from './job-kinds.js';
 import { answered, jobPrompt, jobRequest, type Answer } from './jobs.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
 import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings, type Verdict } from './schedules.js';
@@ -66,7 +67,7 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   | 'both-adapters-deliver' | 'first-to-bind-owns' | 'refuses-only-the-ring' | 'trusts-envelope-digest'
   | 'skips-kind-declare' | 'drops-mode' | 'holder-from-arguments' | 'declares-kind-on-first-lease'
   | 'close-stops-every-host' | 'narrower-grant-implies-run-as-you' | 'revoke-keeps-running' | 'revoke-stops-programs-only'
-  | 'input-from-any-writer' | 'piece-writes-input'
+  | 'input-from-any-writer' | 'piece-writes-input' | BuildPlant
   // #139's: a host that lets a stable package call a preview method, and an installer that wires a use to the newest
   // interface its provider has.
   | 'stable-may-call-preview' | 'rewires-to-newest'
@@ -333,6 +334,12 @@ export interface ExtensionHost {
   readSource(name: string): Promise<SourceRead>;
   /** The library sources loaded packages registered (#1731): each one's name and package. */
   libraries(): { name: string; extension: string }[];
+  /** The job kinds installed packages hold (#1922), each with the tools that qualified for it and their builds. */
+  jobs(): JobListing[];
+  /** A kind's params made canonical, every default written out (#1922); an Error names what doesn't hold. */
+  jobParams(kind: string, value: unknown): Record<string, JsonValue>;
+  /** One run of a qualified tool as a process of its own outside the hub (#1922): its outputs' bytes by name. */
+  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>>;
   /** One search or fetch of a loaded library source (#1731), its calls the hub's; `noAnswer` when one got none. */
   libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }>;
   /** A file a library's fetch named, downloaded through its source by the hub (#1731); `status` null when its host gave no answer. */
@@ -426,6 +433,11 @@ const PANEL_KIT = 'panel@1';
 const LOAD_MS = 10_000;
 /** How long a package gets to take a batch of events, or to answer a request on a route. */
 const CALL_MS = 10_000;
+/** How long one run of a job tool may take (#1922), and the most it may write on stdout. */
+const JOB_MS = 120_000;
+const JOB_OUT = 16 * 1024 * 1024;
+/** The target triple a tool's build is held for (#1922): this machine's CPU architecture and OS. */
+const TRIPLE = `${process.arch}-${process.platform}`;
 /** How long a channel's send or read may take (#65): its provider calls are the hub's, each bounded by the hub. */
 const CHANNEL_MS = 30_000;
 /** How long one op of a work source has, and one run of it (#66). */
@@ -522,9 +534,14 @@ interface Manifest {
   sources?: { name: string; variant: string; reading?: string; host?: string }[];
   /** The state sources it registers (#67), each held to state-source@1's kit at install. */
   state_sources?: string[];
+  /** The job kinds it registers and the tools it adds to a kind (#1922), each tool pinned by name@version. */
+  jobs?: string[];
+  job_tools?: { kind: string; tool: string }[];
 }
+/** A job kind as an install holds it (#1922), with the tools that joined it. */
+export interface JobListing { kind: string; plugin: string; descriptor: JobKind; tools: { tool: string; plugin: string; build: string; descriptor: JobTool }[] }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
-interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] }; holds: string[] }
+interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] }; holds: string[]; jobs?: HeldJobs }
 /** A session adapters bound: who bound it in order, who gates it, whether a turn runs, and the answers waiting for a route. */
 interface Bound { bound: string[]; gater: string | null; inTurn: boolean; waiting: Delivery[] }
 type Ask = (method: string, params: unknown) => Promise<unknown>;
@@ -561,6 +578,9 @@ interface Ext {
   kinds: string[];
   /** Environments it registered (#331); at its conformance run, every one it tried. */
   environments: string[];
+  /** The job kinds and tools it registered (#1922), as it declared them; read at its install's run. */
+  jobKinds: Map<string, unknown>;
+  jobTools: { kind: string; tool: unknown }[];
   /** Starts and handles owned by this exact load; removal drains them before dropping its handlers. */
   environmentStarts: Set<Promise<unknown>>;
   environmentStops: Set<() => Promise<void>>;
@@ -861,6 +881,8 @@ class Host implements ExtensionHost {
   private readonly results: Record<string, Conformance>;
   /** The publisher key trusted for each package ID: its first signed install's, or one you trusted since. */
   private keys: Record<string, string>;
+  /** Each job tool's build by its name@version and the target triple it qualified on (#1922), kept past an uninstall. */
+  private builds: Record<string, string>;
   private readonly exts = new Map<string, Ext>();
   /** The content keys each running check's `deep.canvas.read` calls returned, by the package running it (#411). */
   private readonly canvasKeys = new Map<Ext, string[]>();
@@ -925,6 +947,7 @@ class Host implements ExtensionHost {
     for (const e of Object.values(this.entries)) e.holds ??= manifestOf(e.folder).checks ?? [];
     this.results = this.read('checked.json');
     this.keys = this.read('keys.json');
+    this.builds = this.read('job-builds.json');
     this.published = new Map((options.api ?? extensionApi()).map((e) => [e.method, e]));
     this.runAsYou = this.read('run-as-you.json');
     const plant = options.plant;
@@ -1001,6 +1024,24 @@ class Host implements ExtensionHost {
     } finally {
       this.workCalls.delete(call);
     }
+  }
+  jobs(): JobListing[] {
+    const entries = Object.values(this.entries);
+    return entries.flatMap((e) => Object.entries(e.jobs?.kinds ?? {}).map(([kind, descriptor]) => ({
+      kind, plugin: e.id, descriptor,
+      tools: entries.flatMap((t) => (t.jobs?.tools ?? []).filter((x) => x.kind === kind).map((x) => ({ tool: x.tool, plugin: t.id, build: x.build, descriptor: x.descriptor }))),
+    })));
+  }
+  jobParams(kind: string, value: unknown): Record<string, JsonValue> {
+    const held = this.jobs().find((k) => k.kind === kind);
+    if (!held) throw Error(`no installed package registers the job kind ${kind}`);
+    return paramsOf(held.descriptor.schema.params, value);
+  }
+  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>> {
+    const owner = Object.values(this.entries).find((e) => e.jobs?.tools.some((t) => t.kind === kind && t.tool === tool));
+    const held = owner?.jobs!.tools.find((t) => t.kind === kind && t.tool === tool);
+    if (!owner || !held) throw Error(`${tool} isn't a qualified tool of ${kind}`);
+    return this.runTool(owner.folder, held.descriptor, params, inputs);
   }
   /** The library sources loaded packages registered (#1731), asset.library@1's fills: each one's name and package. */
   libraries(): { name: string; extension: string }[] {
@@ -1144,13 +1185,20 @@ class Host implements ExtensionHost {
       };
       // Each slot's kit runs on what it registers first: a FAIL refuses the install, and what was installed stays (#349).
       entry.kits = await this.installKits(entry, manifest as Manifest);
+      // Its job kinds and tools, read from its code, each tool qualified on its kind's fixtures and its build held (#1922).
+      if (manifest.jobs?.length || manifest.job_tools?.length) entry.jobs = await this.jobsAt(entry, manifest as Manifest);
       // A new version, or a replacement, passes its users' contract tests before the version in use stops (#103).
       if ((before || replacing.length) && users.length) await this.contract(entry, manifest as Manifest, users);
       // A kind it replaces is its own from now on, no longer the package's that held it (#351).
-      const replaced = Object.values(this.entries).filter((e) => e.id !== id && e.holds.some((k) => manifest.replaces?.includes(k)))
-        .map((e) => ({ ...e, holds: e.holds.filter((k) => !manifest.replaces!.includes(k)) }));
+      const gone = (k: string): boolean => manifest.replaces?.includes(k) ?? false;
+      const replaced = Object.values(this.entries).filter((e) => e.id !== id && (e.holds.some(gone) || Object.keys(e.jobs?.kinds ?? {}).some(gone)))
+        .map((e) => ({ ...e, holds: e.holds.filter((k) => !gone(k)), ...(e.jobs ? { jobs: { ...e.jobs, kinds: Object.fromEntries(Object.entries(e.jobs.kinds).filter(([k]) => !gone(k))) } } : {}) }));
       this.save('installed.json', { ...this.entries, ...Object.fromEntries(replaced.map((e) => [e.id, e])), [id]: entry });
-      for (const e of replaced) this.entries[e.id]!.holds = e.holds;
+      for (const e of replaced) Object.assign(this.entries[e.id]!, { holds: e.holds, ...(e.jobs ? { jobs: e.jobs } : {}) });
+      if (entry.jobs?.tools.length) {
+        this.builds = { ...this.builds, ...Object.fromEntries(entry.jobs.tools.map((t) => [`${t.tool} ${TRIPLE}`, t.build])) };
+        this.save('job-builds.json', this.builds);
+      }
     } catch (e) {
       rmSync(folder, { recursive: true, force: true });
       throw e;
@@ -1359,6 +1407,11 @@ class Host implements ExtensionHost {
     for (const kind of m.checks ?? []) {
       const holder = others.find((e) => e.holds.includes(kind) && overlaps(e));
       if (holder && !replaces.includes(kind)) throw Error(`${id} registers the check kind ${kind}, which ${holder.id} holds, and doesn't declare that it replaces it`);
+    }
+    // A job kind is one slot too (#1922): a second registration of it is refused unless it says it replaces the first.
+    for (const kind of m.jobs ?? []) {
+      const holder = others.find((e) => e.jobs?.kinds[kind] && overlaps(e));
+      if (holder && !replaces.includes(kind)) throw Error(`${id} registers the job kind ${kind}, which ${holder.id} holds, and doesn't declare that it replaces it, so it isn't installed`);
     }
     const published = frozenDigests();
     for (const contract of m.kernel ?? []) if (!Object.hasOwn(published, contract)) throw Error(`${id} runs on the kernel contract ${contract}, which this kernel doesn't publish`);
@@ -2061,6 +2114,88 @@ class Host implements ExtensionHost {
     this.save('checked.json', this.results);
     return result;
   }
+  /**
+   * An install's job kinds and tools (#1922), read from one run of its code in the platform sandbox. Each tool joins a
+   * kind this install or an installed package holds only once it writes each of the kind's qualification fixtures'
+   * expected bytes, and only as the build its name@version was first qualified as on this target triple. The first
+   * refusal throws, naming the kind, the tool, the fixture or both builds, and nothing is installed.
+   */
+  private async jobsAt(entry: Entry, manifest: Manifest): Promise<HeldJobs> {
+    const { folder, digest } = this.snapshot(entry);
+    const ext = this.ext(entry, folder, manifest, digest, 'sandbox', 'conformance');
+    try {
+      await this.start(ext);
+      await Promise.all(this.calls);
+    } catch (e) {
+      throw Error(`${entry.id}'s code didn't register its job kinds and tools in the platform sandbox: ${message(e)}; it isn't installed`);
+    } finally {
+      await ext.stop?.();
+      rmSync(folder, { recursive: true, force: true });
+    }
+    const refuse = (why: string): never => { throw Error(`${why}, so ${entry.id}@${entry.version} isn't installed`); };
+    const kinds: HeldJobs['kinds'] = {};
+    for (const kind of manifest.jobs ?? []) {
+      if (!ext.jobKinds.has(kind)) refuse(`${entry.id}'s manifest declares the job kind ${kind}, which its code doesn't register`);
+      try { kinds[kind] = kindOf(kind, ext.jobKinds.get(kind)); } catch (e) { refuse(message(e)); }
+    }
+    const tools: HeldJobs['tools'] = [];
+    for (const { kind, tool } of manifest.job_tools ?? []) {
+      const raw = ext.jobTools.find((t) => t.kind === kind && (t.tool as { tool?: unknown } | null)?.tool === tool);
+      if (!raw) return refuse(`${entry.id}'s manifest declares the tool ${tool} of ${kind}, which its code doesn't register`);
+      let descriptor: JobTool;
+      try { descriptor = toolOf(kind, raw.tool, entry.folder); } catch (e) { return refuse(message(e)); }
+      const held = kinds[kind] ?? this.jobs().find((k) => k.kind === kind)?.descriptor;
+      if (!held) return refuse(`${entry.id}'s tool ${tool} joins the job kind ${kind}, which no installed package registers`);
+      const build = buildOf(join(entry.folder, descriptor.run.dir), descriptor.run.entry, this.options.plant);
+      const before = this.builds[`${tool} ${TRIPLE}`];
+      if (before !== undefined && before !== build) refuse(`${entry.id}'s tool ${tool} qualified on ${TRIPLE} as build ${before}, and these files are build ${build}: one name@version is one build, so the changed tool takes a new version`);
+      for (const f of held.qualification.fixtures) {
+        let wrote: Record<string, Uint8Array>;
+        try {
+          wrote = await this.runTool(entry.folder, descriptor, paramsOf(held.schema.params, f.params), Object.fromEntries(Object.entries(f.inputs).map(([n, t]) => [n, Buffer.from(t, 'utf8')])));
+        } catch (e) {
+          return refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification at the fixture ${f.name}: ${message(e)}`);
+        }
+        for (const [name, text] of Object.entries(f.expect)) {
+          const got = wrote[name];
+          if (!got || !Buffer.from(got).equals(Buffer.from(text, 'utf8'))) refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification at the fixture ${f.name}: it wrote ${got ? JSON.stringify(Buffer.from(got).toString('utf8')) : 'nothing'} for ${name}, where the fixture expects ${JSON.stringify(text)}, and it doesn't join ${kind}`);
+        }
+      }
+      tools.push({ kind, tool, build, descriptor });
+    }
+    return { kinds, tools };
+  }
+  /**
+   * One run of a job tool (#1922): `node <its dir>/<its entry>` through the supervisor, in the platform sandbox with only
+   * its own files and Node to read, given `{params, inputs}` (each input's bytes in base64) on stdin and writing
+   * `{outputs}` the same way on stdout. It reads no path, name or time of an input: only the bytes it is given.
+   */
+  private async runTool(folder: string, tool: JobTool, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>> {
+    const { supervisor } = this.options;
+    const dir = join(folder, tool.run.dir);
+    const run = `run:${ulid(this.options.now())}`;
+    const out: Buffer[] = [];
+    let size = 0;
+    const input = Buffer.from(JSON.stringify({ params, inputs: Object.fromEntries(Object.entries(inputs).map(([n, b]) => [n, Buffer.from(b).toString('base64')])) }));
+    const started = await supervisor.start({
+      run, argv: [process.execPath, join(dir, tool.run.entry)], cwd: dir, inherit: false, input,
+      env: { PATH: '/usr/bin:/bin', HOME: dir, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
+      grant: { read: [NODE_HOME, ...NODE_LIBS, dir] },
+      output: { stdout: (chunk: Buffer) => { size += chunk.length; if (size <= JOB_OUT) out.push(chunk); }, stderr: () => undefined },
+    });
+    if (started.status !== 'started') throw Error(`the sandbox held ${tool.tool}: BLOCKED on ${started.kind}`);
+    try {
+      const exit = await within(JOB_MS, `${tool.tool}'s run`, supervisor.wait(run));
+      if (exit.code !== 0) throw Error(`${tool.tool} exited ${exit.code ?? exit.signal}`);
+    } finally {
+      await supervisor.cleanup(run).catch(() => undefined);
+    }
+    if (size > JOB_OUT) throw Error(`${tool.tool} wrote more than ${JOB_OUT} bytes`);
+    let outputs: unknown;
+    try { outputs = (JSON.parse(Buffer.concat(out).toString('utf8')) as { outputs?: unknown }).outputs; } catch { outputs = undefined; }
+    if (typeof outputs !== 'object' || outputs === null || !Object.values(outputs).every((v) => typeof v === 'string')) throw Error(`${tool.tool} wrote no {outputs} on stdout, each output's bytes in base64`);
+    return Object.fromEntries(Object.entries(outputs as Record<string, string>).map(([n, b]) => [n, new Uint8Array(Buffer.from(b, 'base64'))]));
+  }
   /** Conformance's run of the package's code: it registers in the platform sandbox without throwing, and only the check kinds its manifest declares. */
   private async registers(entry: Entry, folder: string, manifest: Manifest, digest: string): Promise<string[]> {
     const ext = this.ext(entry, folder, manifest, digest, 'sandbox', 'conformance');
@@ -2099,7 +2234,7 @@ class Host implements ExtensionHost {
   private ext(entry: Entry, folder: string, manifest: Manifest, digest: string, place: Ext['place'], mode: Ext['mode']): Ext {
     const released = this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
     return {
-      entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
+      entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], jobKinds: new Map(), jobTools: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
       adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), panels: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
       environmentStarts: new Set(), environmentStops: new Set(),
@@ -2547,6 +2682,21 @@ class Host implements ExtensionHost {
         if (reads !== undefined) {
           if (!texts(reads) || (reads as string[]).some((r) => !(ext.manifest.sources ?? []).some((x) => x.name === r))) throw Error(`deep.registerCheck: ${type} declares the readings it reads as sources its manifest lists`);
           ext.checkReads.set(type, [...(reads as string[])]);
+        }
+        return null;
+      }
+      case 'deep.registerJob':
+      case 'deep.registerJobTool': {
+        // Data only (#1922): held to what the manifest declares, and read whole at the install's own run of its code.
+        const [kind, descriptor] = args;
+        if (typeof kind !== 'string') throw Error(`${method} takes the job kind first`);
+        if (method === 'deep.registerJob') {
+          if (!(ext.manifest.jobs ?? []).includes(kind)) throw Error(`${kind} isn't a job kind ${id}'s manifest declares`);
+          ext.jobKinds.set(kind, descriptor);
+        } else {
+          const tool = (descriptor as { tool?: unknown } | null)?.tool;
+          if (!(ext.manifest.job_tools ?? []).some((t) => t.kind === kind && t.tool === tool)) throw Error(`${String(tool)} isn't a tool of ${kind} that ${id}'s manifest declares`);
+          ext.jobTools.push({ kind, tool: descriptor });
         }
         return null;
       }

@@ -61,6 +61,10 @@ const TOOLS = {
     use: 'Look up what this core can draw before you write a document, with the kinds, recipes, packs and registries it has, each with its schema, an example by hash, its stability and whether it is available here; the word another tool uses for one, from a familiar-names pack; and the installed guides and gallery, read in pages.',
     proves: 'A listing does not prove your document is right: only its check and the checks that run on it say so, and an example is read, never run.',
   },
+  deep_job: {
+    use: 'List the job kinds and the tools that qualified for each, and run a kind on one tool pinned by name@version, outside the hub\'s process; a rerun with the same tool, params and input bytes is a cache hit that starts no process.',
+    proves: 'A job\'s outputs are a reading by hash with a receipt, never a verdict: one reaches an item only after the kind\'s output checks pass, and a job changes no document.',
+  },
   deep_env: {
     use: 'Bring your worktree\'s own stack up, on ports leased to that worktree, ready only once its health route answers, or take it down; every process runs through the supervisor.',
     proves: 'A stack that is up does not prove any check passes, and a port leased to your worktree is never another worktree\'s: a child session in its own worktree gets its own.',

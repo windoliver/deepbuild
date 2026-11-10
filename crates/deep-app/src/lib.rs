@@ -57,6 +57,7 @@ pub mod states;
 pub mod table;
 pub mod text;
 pub mod views;
+pub mod words;
 
 use std::{path::Path, rc::Rc, sync::atomic::AtomicU64};
 

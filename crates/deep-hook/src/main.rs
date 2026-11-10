@@ -1609,18 +1609,21 @@ fn statusline() -> ExitCode {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
+        let mut params = vec![
+            ("agent".into(), Value::String("claude-code".into())),
+            ("account".into(), Value::String(account)),
+            ("rate_limits".into(), limits.clone()),
+        ];
+        // The session the reading is of, as its input names it, so it shows on that session's row alone (#1296).
+        if let Some(Value::String(session)) = status.as_ref().and_then(|s| member(s, "session_id"))
+        {
+            params.push(("session".into(), Value::String(session.clone())));
+        }
         let report = Value::Object(vec![
             ("v".into(), Value::Number(1.0)),
             ("id".into(), Value::String(ulid(now.as_millis()))),
             ("method".into(), Value::String("windows.report".into())),
-            (
-                "params".into(),
-                Value::Object(vec![
-                    ("agent".into(), Value::String("claude-code".into())),
-                    ("account".into(), Value::String(account)),
-                    ("rate_limits".into(), limits.clone()),
-                ]),
-            ),
+            ("params".into(), Value::Object(params)),
         ]);
         // A sender of its own, which nothing waits for: it holds none of the status line's output open.
         if let Ok(me) = env::current_exe() {

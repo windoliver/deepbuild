@@ -6,6 +6,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { billingMode } from '@deepbuild/readings';
+import { shadowedBy, topLevel } from './claude-settings.js';
 import { call } from './client.js';
 import { StaleHub } from './generations.js';
 import { joinedFor, remoteCall } from './remote.js';
@@ -35,6 +36,8 @@ const QUIET_MS = 24 * 3_600_000;
 export const WAITING_QUIET_MS = 300_000;
 /** What a session's row says of the MCP servers and skills it loaded (#148): the older set after a sync, until its own evidence shows the current one. */
 export const OLDER_SET = 'Runs the older set:';
+/** A Claude Code session's five-hour window where the repo's own status line shadows the forwarder (#1296). */
+export const UNREAD_WINDOW = '5 h · unknown:';
 export const NEWER_SET = 'Runs the current set:';
 /** The most tool calls a finished turn lists; the rest are counted on one line. */
 const CALLS_SHOWN = 20;
@@ -136,6 +139,15 @@ export async function statusRows(query: (sql: string) => Promise<unknown[]>, now
   }
   const finished = rows.filter((r) => r.state === 'finished');
   if (finished.length) await lastTurns(query, finished, new Map(sessions.map((s) => [s.id, s.worktree])));
+  // A Claude Code session in a repo whose own status line overrides the forwarder has no plan-window reading of its
+  // own: its windows read unknown, naming the file, never 0% or the account's reading from another repo (#1296).
+  const worktrees = new Map(sessions.map((s) => [s.id, s.worktree]));
+  for (const row of rows) {
+    const worktree = worktrees.get(row.id);
+    if ((row.agent !== 'claude-code' && row.agent !== 'claude') || !worktree) continue;
+    const shadow = shadowedBy(topLevel(worktree))[0];
+    if (shadow) row.readings = [`${UNREAD_WINDOW} ${shadow.file} sets ${shadow.key}, which runs instead of DeepBuild's status line forwarder, so this session's plan windows aren't read`];
+  }
   const codex = rows.filter((r) => r.agent === 'codex');
   const readings = await rowReadings(query, codex.map((r) => r.id), now, elapsed);
   for (const row of codex) if (readings.has(row.id)) row.readings = readings.get(row.id)!;

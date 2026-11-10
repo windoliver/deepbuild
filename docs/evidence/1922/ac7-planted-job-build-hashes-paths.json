@@ -1,0 +1,32 @@
+{
+  "failures": [
+    "upper-b@1.0.0's receipt for \"abc\" names the build \"d1:ca89207ae427e651cf79273067feaf367774c24f4dfa44335d59631c1113502f\"; the digest of its files as installed is d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+    "upper-b@1.0.0's same files, installed from a second folder with other modified times, were refused, so the host recorded two builds for one tool: exit 1, stdout \"Source: /private/tmp/dh1922-RBXEBM/elsewhere/deeper/two\\n  test/upper-more@1.0.0, digest d1:1b82a2cfd4ca822307ca04f073e2e6aa8eee312c28a14e49ac28eaa312c376bd, unsigned\\nPermissions:\\n  access: none\\n  notices: none\\n  actions: none\\n  check kinds: none\\n  provides: none\\n  uses: none\\n  replaces: none\\n  conflicts with: none\\n  runs on: none\\n  hosts: none\\n\", stderr \"REFUSED: test/upper-more's tool upper-b@1.0.0 qualified on arm64-darwin as build d1:ca89207ae427e651cf79273067feaf367774c24f4dfa44335d59631c1113502f, and these files are build d1:43be2f633f3f579315f74099ec95a41ecf78803fe67568517682f8f14ad4d096: one name@version is one build, so the changed tool takes a new version, so test/upper-more@1.0.0 isn't installed\\n\""
+  ],
+  "seen": {
+    "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+    "first": {
+      "status": "done",
+      "outputs": {
+        "text": {
+          "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+        }
+      },
+      "receipt": {
+        "kind": "test.upper",
+        "tool": "upper-b@1.0.0",
+        "key": "d7c86b746aa0ddb26edd33011228237b68a0852a4293b1a4b5e8b51834f30acc",
+        "build": "d1:ca89207ae427e651cf79273067feaf367774c24f4dfa44335d59631c1113502f",
+        "cache": "miss",
+        "inputs": {
+          "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        }
+      }
+    },
+    "again": {
+      "code": 1,
+      "stdout": "Source: /private/tmp/dh1922-RBXEBM/elsewhere/deeper/two\n  test/upper-more@1.0.0, digest d1:1b82a2cfd4ca822307ca04f073e2e6aa8eee312c28a14e49ac28eaa312c376bd, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: none\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\n",
+      "stderr": "REFUSED: test/upper-more's tool upper-b@1.0.0 qualified on arm64-darwin as build d1:ca89207ae427e651cf79273067feaf367774c24f4dfa44335d59631c1113502f, and these files are build d1:43be2f633f3f579315f74099ec95a41ecf78803fe67568517682f8f14ad4d096: one name@version is one build, so the changed tool takes a new version, so test/upper-more@1.0.0 isn't installed\n"
+    }
+  }
+}

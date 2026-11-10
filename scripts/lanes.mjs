@@ -46,7 +46,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
   'tests/acceptance/990/',
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
-  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/'];
+  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/'];
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
  * in the worktrees and affected.mjs's node --test reports held on 2026-11-07. affected.mjs runs them with --slow and for
@@ -82,7 +82,7 @@ export const slow = [
   'tests/acceptance/417/state.test.ts', 'tests/acceptance/419/velocity-seek.test.ts',
   'tests/acceptance/42/doctor.test.ts', 'tests/acceptance/422/showpiece-fixture.test.ts',
   'tests/acceptance/424/picks.test.ts', 'tests/acceptance/425/redraft/taste.test.ts',
-  'tests/acceptance/48/harness.test.mjs', 'tests/acceptance/484/forest.test.ts',
+  'tests/acceptance/48/harness.test.mjs', 'tests/acceptance/484/forest.test.ts', 'tests/acceptance/484/redraft-1637/forest.test.ts',
   'tests/acceptance/674/default.test.ts', 'tests/acceptance/674/document.test.ts',
   'tests/acceptance/674/nearest.test.ts', 'tests/acceptance/674/session.test.ts',
   'tests/acceptance/824/cycles.test.ts', 'tests/acceptance/85/hub/network.test.ts',
@@ -254,6 +254,8 @@ alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests
 // players and out-of-view readings are timed.
 alone.push('tests/acceptance/499/');
 timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/video/out-of-view.test.ts');
+// #500's files each build deep-show; the bake folder and the Oracle lane bake about 26 minutes of EBU test audio.
+alone.push('tests/acceptance/500/', 'tests/acceptance/500-oracle/');
 // #532's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome, and read CPU times per frame and per step.
 alone.push('tests/acceptance/532/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
@@ -266,6 +268,12 @@ alone.push('tests/acceptance/1477/');
 timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts', 'tests/acceptance/1477/redraft/record.test.ts');
 // #1718's files build deep-show and deep-hook, start hubs and lay out an installed tree.
 alone.push('tests/acceptance/1718/');
+// #1637's files build deep-gpu and draw a city of 120,000 solids on Metal; its budget runs as a timed file.
+alone.push('tests/acceptance/1637/');
+timed.push('tests/acceptance/1637/budgets.test.ts');
+// #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
+// counting the record's process starts around each deep_job call: one file at a time.
+alone.push('tests/acceptance/1922/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

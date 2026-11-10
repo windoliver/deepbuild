@@ -305,6 +305,10 @@ fn main() {
                     });
                     *made.borrow_mut() = Some(palette.clone());
                     shell.set_commands(palette, window, cx);
+                    let words = cx.new(|cx| {
+                        deep_app::words::WordsBox::new(deep_app::words::hub_say(), window, cx)
+                    });
+                    shell.set_box(words, cx);
                     shell
                 })
             }
@@ -581,8 +585,11 @@ mod notifications {
         for event in record::take_unseen() {
             notifier.saw(&event, now);
         }
-        let posted =
-            record::with_view(|view| notifier.due(view, now, None, true)).unwrap_or_default();
+        let posted = record::with_view(|view| {
+            // Sounds off in the box's words (#1998) leaves the question unsounded.
+            notifier.due(view, now, None, deep_app::hub::sounds_on())
+        })
+        .unwrap_or_default();
         for (ask, session) in notifier.newly_missed() {
             eprintln!(
                 "deep-app: not notified {session} {ask}: {}",

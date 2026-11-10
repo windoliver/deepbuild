@@ -159,7 +159,14 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     guide: maybe(str('read: a guide, by the name a hit gave.')),
     offset: maybe({ type: 'integer', description: 'read of a guide: the next a page gave; null for its start.' }),
   }),
-  deep_env: object({ action: { type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
+  deep_job: object({
+    op: { type: 'string', enum: ['list', 'run'], description: 'list the job kinds, each with its qualified tools and their builds; run a kind on one pinned tool, returning its outputs by hash with a receipt.' },
+    kind: maybe(str('run: the job kind, as the list names it.')),
+    tool: maybe(str('run: the tool, pinned by name@version as the list names it.')),
+    params: maybe(str('run: the kind\'s params as JSON text; null for its defaults.')),
+    inputs: maybe({ type: 'array', items: object({ name: str('The input, as the kind names it.'), path: str('The file whose bytes it is, by absolute path.') }), description: 'run: each input the kind takes, once.' }),
+  }),
+  deep_env: object({ action:{ type: 'string', enum: ['up', 'down'], description: 'up brings your worktree\'s stack up and answers its leased ports; down takes it down.' } }),
   deep_propose: object({
     target: str('What the change is to, such as a wiki claim, wiki:<page>#<claim>, a rule, a check or a spec.'),
     change: str('The change, in your own words.'),

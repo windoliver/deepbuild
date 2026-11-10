@@ -1774,6 +1774,70 @@
         }
       }
     },
+    "crates/deep-canvas-physics/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #2009: the manifest, registrar, kind and step-rate rule the physics module registers and reads through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2009: the world document as read and a refusal's actual value. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-physics-rapier/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #2009: the world reader, the caps and the backend interface this backend implements, with no copy of its own."
+        },
+        "rapier3d": {
+          "spec": "=0.36.1",
+          "why": "Issue #2009: physics.world@1's backend, the version the design pins (World and backend), with enhanced-determinism and serde-serialize and without simd8 or parallel."
+        },
+        "base64": {
+          "spec": "^0.22",
+          "why": "Issue #2009: a checkpoint's state travels as base64 in deep-physics's JSON lines. Already in the workspace tree."
+        },
+        "bincode": {
+          "spec": "^1",
+          "why": "Issue #2009: a deep checkpoint's state as Rapier's own serde bytes, the encoding Rapier's snapshot tests round-trip. Already in the workspace tree at 1.3.3."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2009: deep-physics's JSON lines. Already in the workspace tree."
+        }
+      }
+    },
+    "spikes/245/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-sandbox": {
+          "spec": "* path=../../crates/deep-canvas-sandbox",
+          "why": "Spike #245: the fixture through sandbox@1's check and logic rewrite, as deep-logic runs a program."
+        },
+        "wasmtime": {
+          "spec": "=49.0.2",
+          "why": "Spike #245: the app's engine at the version the design pins, so both forms run what the app would."
+        },
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Spike #245: assembles steer.wat; the version wasmtime 49.0.2 already pulls in."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Spike #245: maps the copy-on-write instances' memory file and reads page faults. Already in the workspace tree."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Spike #245: the run's numbers as JSON for record.mjs. Already in the workspace tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Spike #245: the full-state hash both forms must match. Already in the workspace tree."
+        }
+      }
+    },
     "tests/acceptance/238/wat/Cargo.toml": {
       "dependencies": {
         "wat": {
