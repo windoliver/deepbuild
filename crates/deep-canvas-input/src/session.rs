@@ -957,6 +957,19 @@ impl Session {
         Ok(json!({"value": value, "appended": 1, "dropped": dropped}))
     }
 
+    /// The controls that take `key` with `mods` held, in the document's order (#501: the film
+    /// viewer's keymap check names them). A hover control reads every key and is not listed.
+    pub fn holders(&self, key: &str, mods: &[&str]) -> Vec<String> {
+        let mods = Mods {
+            shift: mods.contains(&"shift"),
+            cmd: mods.contains(&"cmd"),
+        };
+        // A press with no keys of its own takes Enter and Space, as `key` reads it.
+        let press = |c: &Control| c.behavior == Behavior::Press && c.keys.is_empty() && (key == "Enter" || key == " ");
+        let takes = |(i, c): &(usize, &Control)| press(c) || self.keyed(*i, key, mods).is_some();
+        self.controls.iter().enumerate().filter(takes).map(|(_, c)| c.id.clone()).collect()
+    }
+
     /// The value key `key` gives control `i`: its own `keys` first, then the default keys.
     fn keyed(&self, i: usize, key: &str, mods: Mods) -> Option<Value> {
         let c = &self.controls[i];
@@ -1356,4 +1369,23 @@ fn project(points: &[[f64; 2]], p: [f64; 2]) -> (f64, [f64; 2]) {
     }
     let f = if total > 0.0 { best.1 / total } else { 0.0 };
     (f, best.2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn holders_names_the_controls_a_key_reaches_and_no_other() {
+        let doc = json!({"controls": {
+            "speed": {"kind": "slider"},
+            "sound": {"kind": "toggle", "keys": {"m": "toggle"}},
+            "go": {"kind": "press"},
+        }});
+        let s = Session::new(&doc, [640.0, 360.0], (60, 1), false, Planted::default(), &[]).unwrap();
+        assert_eq!(s.holders("m", &[]), ["sound"]);
+        assert_eq!(s.holders("ArrowRight", &["alt"]), ["speed"]);
+        assert_eq!(s.holders(" ", &[]), ["sound", "go"]);
+        assert_eq!(s.holders("j", &[]), [] as [&str; 0]);
+    }
 }

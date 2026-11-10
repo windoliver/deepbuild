@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7Y",
+  "kind": "row.set",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013452123,
+  "data": {
+    "id": "ask:01K74FKZVK8Q2X5R7M3N9P4T7Z",
+    "listed": true,
+    "order": "1|0001760013452000|ask:01K74FKZVK8Q2X5R7M3N9P4T7Z",
+    "address": "ask/01K74FKZVK8Q2X5R7M3N9P4T7Z",
+    "title": "Ship the cart page today?",
+    "project": "shop",
+    "session": "8d3c2f1e-0b4a-4c6e-9f2d-1a2b3c4d5e6f",
+    "agent": "claude-code",
+    "entry": "needs_you",
+    "word": "needs you",
+    "why": "a choice",
+    "waits_on": "you",
+    "since": 1760013452000,
+    "actions": [{ "answer": "yes", "label": "Yes" }, { "answer": "no", "label": "No" }],
+    "unread": true,
+    "default": "No",
+    "default_at": 1760027000000
+  }
+}

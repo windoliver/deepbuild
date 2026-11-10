@@ -272,6 +272,31 @@ pub enum Planted {
     AssumesBt601,
     /// #499: a video frame looked up by ⌊source time × the nominal frame rate⌋.
     LookupFloorsFrameRate,
+    /// #501: the video writer starts the timecode track at frame 0 whatever the start.
+    TimecodeTrackZero,
+    /// #501: the png writer stores premultiplied color under `alpha: straight`.
+    PngPremultipliesStraight,
+    /// #501: each frame's sample count rounded on its own, each span starting where the last ended.
+    SpanRoundsEachFrame,
+    /// #501: a frame's first sample rounded to the nearest instead of floored.
+    SpanRoundsStart,
+    /// #501: the GPU BLAKE3 joins each parent's two children in the wrong order.
+    ChunkTreeWrongOrder,
+    /// #501: a range's timecode starts at the job's start label, not at its first frame's.
+    RangeRestartsTimecode,
+    /// #501: the export skips its readiness gate, starts and stops at the missing asset's first
+    /// frame, leaving its partial file.
+    ExportStartsThenStops,
+    /// #501: the png target's writer exports only the session's selected items.
+    TargetExportsSelection,
+    /// #501: the png target's writer writes a baked channel back into the document.
+    TargetWritesBakedChannel,
+    /// #501: media fills export.target@1's `png` with a reader that is its own writer.
+    TargetReaderIsWriter,
+    /// #501: the mixer's Linux build adds one 16-bit step to every sample.
+    MixerLinuxOneStep,
+    /// #501: the drop-frame labeller drops frame numbers in the tenth minutes too.
+    DropFrameEveryTenthMinute,
     /// #499: a canonical seek decodes its frame from the asset's short-GOP proxy.
     SeekReadsProxy,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
@@ -347,6 +372,8 @@ pub struct Startup {
     pub ignores_unknown_occlusion: bool,
     /// #200: a planted wrong `deep://registries` listing.
     pub listing: Option<crate::registries::Listing>,
+    /// #501: a run's wrong program given at startup (`--planted <name>`).
+    pub run_planted: Option<Planted>,
     /// #412: a planted wrong deep_kinds listing, sheet, dump, diff or gallery.
     pub kinds: Option<crate::kinds::Planted>,
     /// #415: a planted wrong first-party layout: pages@1 under a pack's cap, or nav.graph's
@@ -602,11 +629,21 @@ pub enum Call {
     },
     /// An export of a document's current revision planned at its rates (#488).
     Export(crate::time::Export),
+    /// #501: an export through a sealed `export.target@1` entry.
+    ExportRun(crate::export::Job),
+    /// #501: a document's session state, read or set.
+    Session { doc: String, set: Option<Value> },
+    /// #501: the export's GPU hash pass on given BGRA8 frames.
+    FrameHash { frames: Vec<([u32; 2], String)>, software: bool },
+    /// #501: the cross-machine audio check on two float WAVs.
+    CrossMachine([String; 2]),
     /// A document's session played on a virtual display to `to` (#488).
     Play {
         doc: String,
         display_hz: u32,
         to: i64,
+        /// #501: list each presented frame's display time, time evaluated and hash.
+        presented: bool,
     },
     /// Seeking against playing, on canonical renders (#488).
     Determinism(crate::time::Determinism),
@@ -710,6 +747,8 @@ pub enum Call {
     Rearm(String),
     /// A panel's view drawn: its revision with the view's filters, isolation and lens (#383).
     View(String),
+    /// #501: what a panel's film viewer shows.
+    Viewer(String),
     /// Your words from a panel's ask box to a session, about what you point at (#384).
     Ask {
         panel: String,
@@ -936,6 +975,8 @@ pub struct Hub<'a> {
     pub sched: Scheduler<'a>,
     /// The scenario's background jobs' progress (#857).
     pub background: Vec<crate::jobs::Progress>,
+    /// #501: each document's session state as `session` set it: its selection and view inputs.
+    pub session_state: BTreeMap<String, Value>,
     /// Each document's session.
     pub sessions: BTreeMap<String, DocSession>,
     /// Panels a `panel` call showed or hid.
@@ -1087,6 +1128,7 @@ impl<'a> Hub<'a> {
             look_def: None,
             display_only: BTreeSet::new(),
             mode_ids: BTreeMap::new(),
+            session_state: BTreeMap::new(),
             renderer: Renderer::new(),
             sched,
             sessions: BTreeMap::new(),
@@ -1608,11 +1650,16 @@ impl<'a> Hub<'a> {
             Call::Rate(r) => self.rate_reply(r),
             Call::Time { doc, text } => self.time_reply(doc, text),
             Call::Export(e) => self.export_reply(e),
+            Call::ExportRun(job) => self.export_run(job),
+            Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
+            Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
+            Call::CrossMachine(wavs) => self.cross_machine(wavs),
             Call::Play {
                 doc,
                 display_hz,
                 to,
-            } => self.play(doc, *display_hz, *to),
+                presented,
+            } => self.play(doc, *display_hz, *to, *presented),
             Call::Determinism(d) => self.determinism(d),
             Call::Frames(f) => self.frames(f),
             Call::ShapedRuns(text) => self.shaped_runs(text),
@@ -1697,6 +1744,7 @@ impl<'a> Hub<'a> {
             Call::Rearm(on) => self.rearm(on),
             Call::See(panel) => self.see(panel),
             Call::View(panel) => self.view(panel),
+            Call::Viewer(panel) => self.viewer_reply(panel),
             Call::Ask {
                 panel,
                 session,

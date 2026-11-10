@@ -1283,11 +1283,32 @@ impl Replica {
         }
         keep(&mut snapshot["tree"], &include);
         let hash = sha256(snapshot.to_string().as_bytes());
+        // The list's rows the window draws (#1463), in its order, and the record position they were built at: what
+        // deep status --json holds at that log_pos.
+        let (log_pos, rows) = deep_app::record::with_view(|view| {
+            let rows: Vec<Value> = view
+                .table()
+                .list()
+                .into_iter()
+                .map(|row| {
+                    let mut row = row.clone();
+                    if let Some(fields) = row.as_object_mut() {
+                        fields.remove("listed");
+                        fields.remove("order");
+                    }
+                    row
+                })
+                .collect();
+            (view.log_pos, rows)
+        })
+        .unwrap_or_default();
         // The address the window shows (#1460), beside the snapshot so stored snapshots keep their bytes.
         let address = self
             .cx
             .update(|cx| deep_app::open::current(cx).map(|address| address.to_string()));
-        Ok(json!({"snapshot": snapshot, "sha256": hash, "address": address}))
+        Ok(
+            json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos, "address": address}),
+        )
     }
 
     /// The window's snapshot, written once under `trace/` by its hash: an action's before and after.

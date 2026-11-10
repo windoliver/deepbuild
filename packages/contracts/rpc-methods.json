@@ -144,6 +144,12 @@
     "called_by": "deep status"
   },
   {
+    "method": "rows.read",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "deep, deep status, deep inbox"
+  },
+  {
     "method": "hub.stop",
     "since": "R1",
     "stability": "stable",

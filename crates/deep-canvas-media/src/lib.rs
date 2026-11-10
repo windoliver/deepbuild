@@ -14,6 +14,7 @@ pub mod mix;
 pub mod reverb;
 pub mod ring;
 pub mod spawn;
+pub mod viewer;
 
 /// One second in flicks.
 pub const FLICKS: i64 = 705_600_000;
