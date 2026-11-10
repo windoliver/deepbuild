@@ -1447,29 +1447,30 @@ impl Render for Shipped {
                                     },
                                 )
                                 .flex_none()
-                                // At the right edge, before the state word where the row has one (#1463).
-                                .ml_auto()
-                                .px(sizes().space(1))
-                                .text_color(chrome.ink_secondary)
                             });
+                            // The row's right edge: the moment, then the list's state word (#1463), as a session's row
+                            // says it after its title; the row's name stays the question.
+                            let trailing = div()
+                                .flex()
+                                .flex_none()
+                                .items_center()
+                                .gap(sizes().space(1))
+                                .pl(sizes().space(1))
+                                .text_color(chrome.ink_secondary)
+                                .children(default)
+                                .when(record.listed, |trailing| {
+                                    trailing.child(states::State::NeedsYou.word())
+                                });
                             // An open ask's state is needs you, so its value is that status-map entry.
                             label(ElementId::Name(id.into()), shown)
-                                .children(default)
+                                .justify_between()
+                                .child(trailing)
                                 .role(Role::Button)
                                 .aria_value(states::State::NeedsYou.entry())
                                 .rounded(sizes().radius)
                                 .hover(|style| style.bg(chrome.hover))
                                 .on_click(move |_, window, cx| {
                                     crate::open::open(&Address::ask(&ask), window, cx).ok();
-                                })
-                                // The list's row says its state word at the right edge (#1463), as a session's row
-                                // says it after its title; its name stays the question.
-                                .when(record.listed, |row| {
-                                    row.justify_between().child(
-                                        div()
-                                            .text_color(chrome.ink_secondary)
-                                            .child(states::State::NeedsYou.word()),
-                                    )
                                 })
                                 .when(status == "folded", |row| {
                                     row.pl(sizes().space(3)).text_color(chrome.ink_secondary)
