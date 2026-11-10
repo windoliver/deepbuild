@@ -13,6 +13,7 @@
 #[cfg(all(feature = "env-plants", not(debug_assertions)))]
 compile_error!("the env-plants feature is for test builds only, never a release build");
 
+pub mod address;
 pub mod answer;
 pub mod arming;
 pub mod bound;
@@ -34,6 +35,7 @@ pub mod hub;
 pub mod installed;
 pub mod kinds;
 pub mod notify;
+pub mod open;
 #[cfg(feature = "panel-check")]
 pub mod panel_check;
 #[cfg(feature = "panel-check")]

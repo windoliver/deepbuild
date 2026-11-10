@@ -496,14 +496,14 @@ impl Replica {
                             runtime.map_err(|e| e.to_string()).and_then(|runtime| {
                                 let view = deep_app::mount_panel(&runtime, &dir, window, cx)
                                     .map_err(|e| e.to_string())?;
-                                deep_app::views::place_extension(view.clone().into());
+                                deep_app::open::place_extension(view.clone().into(), cx);
                                 Ok(Some((runtime, view)))
                             });
                     }
-                    None => deep_app::views::place_extension(deep_app::views::shipped(
-                        Kind::Sidebar,
+                    None => deep_app::open::place_extension(
+                        deep_app::views::shipped(Kind::Sidebar, cx),
                         cx,
-                    )),
+                    ),
                 });
             // ⌘K lists a registered view's entries and the preferences, which open the box (#1998).
             let _ = window.update(cx, |_, window, cx| {
@@ -605,6 +605,8 @@ impl Replica {
         let result = match name {
             "act" => self.act(call),
             "feed" => self.feed(call),
+            "open" => self.open(call),
+            "notification" => self.notification(call),
             "resize" => self.resize(call),
             "wait_for" => self.wait_for(call),
             "see" => self.see(call),
@@ -616,7 +618,7 @@ impl Replica {
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, close, ui_check and motion_check"),
+                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();
@@ -1259,11 +1261,20 @@ impl Replica {
             let bounds = bounds_of(&root["bounds"]);
             let mut inside = Vec::new();
             collect_inside(&snapshot["tree"], bounds, &mut inside);
-            inside.retain(|n| {
-                !(n["role"] == root["role"]
-                    && n["name"] == root["name"]
-                    && n["bounds"] == root["bounds"])
-            });
+            // The located node is the root: what it holds stays, under the root (#1460).
+            let inside: Vec<Value> = inside
+                .into_iter()
+                .flat_map(|n| {
+                    if n["role"] == root["role"]
+                        && n["name"] == root["name"]
+                        && n["bounds"] == root["bounds"]
+                    {
+                        n["children"].as_array().cloned().unwrap_or_default()
+                    } else {
+                        vec![n]
+                    }
+                })
+                .collect();
             root["children"] = Value::Array(inside);
             snapshot["tree"] = root;
         }
@@ -1291,7 +1302,13 @@ impl Replica {
             (view.log_pos, rows)
         })
         .unwrap_or_default();
-        Ok(json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos}))
+        // The address the window shows (#1460), beside the snapshot so stored snapshots keep their bytes.
+        let address = self
+            .cx
+            .update(|cx| deep_app::open::current(cx).map(|address| address.to_string()));
+        Ok(
+            json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos, "address": address}),
+        )
     }
 
     /// The window's snapshot, written once under `trace/` by its hash: an action's before and after.
@@ -1514,12 +1531,13 @@ fn opener(plant: Option<Plant>) -> deep_app::commands::Open {
     let runtimes = RefCell::new(Vec::new());
     Rc::new(move |entry, window, cx| {
         if let deep_app::commands::Entry::Preference { name, .. } = entry {
-            return deep_app::words::open_preference(name, window, cx);
+            deep_app::words::open_preference(name, window, cx);
+            return None;
         }
         let (Some(mut page), deep_app::commands::Entry::Page { panel, .. }) =
             (entry.page_props(), entry)
         else {
-            return;
+            return None;
         };
         if plant == Some(Plant::PageDropsParam) {
             page["params"] = json!({});
@@ -1530,10 +1548,11 @@ fn opener(plant: Option<Plant>) -> deep_app::commands::Open {
             Ok(view)
         });
         match mounted {
-            Ok(view) => {
-                deep_app::views::fill_slot(view.into(), cx);
+            Ok(view) => Some(view.into()),
+            Err(e) => {
+                eprintln!("deep-drive: {} didn't open: {e:#}", entry.name());
+                None
             }
-            Err(e) => eprintln!("deep-drive: {} didn't open: {e:#}", entry.name()),
         }
     })
 }

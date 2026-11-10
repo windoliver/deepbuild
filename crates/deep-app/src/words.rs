@@ -187,7 +187,8 @@ impl Render for WordsBox {
                                 .hover(|style| style.bg(chrome.hover))
                                 .child("Open its card")
                                 .on_click(move |_, window, cx| {
-                                    crate::card::present_ask(&ask, window, cx)
+                                    let ask = crate::address::Address::ask(&ask);
+                                    crate::open::open(&ask, window, cx).ok();
                                 }),
                         )
                         .into_any_element(),

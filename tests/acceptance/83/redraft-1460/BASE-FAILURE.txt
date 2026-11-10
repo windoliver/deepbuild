@@ -1,0 +1,43 @@
+Base commit: 96b462a6 (Merge pull request #2051; 0c4a4ec7 before main's history rewrite), no implementation of #1460, with this
+folder added and nothing else. The workspaces built (npm ci --ignore-scripts; npm run build --workspaces), deep-hook built
+(cargo build -p deep-hook --bin deep-hook, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/83/redraft-1460 --no-file-parallelism \
+           --testTimeout=600000
+Node 24.22.2, vitest 5.0.5, darwin-arm64; load average about 100 (other sessions on this Mac).
+Exit code: 1
+Result: 1 file, 8 tests, 6 failed, 2 passed, 7 s.
+
+For comparison, #83's own goldens.test.ts at the same base, the same minute: 5 of its 6 golden tests fail, each because the line
+has a test count (#669) the goldens predate ("PASS 4/4 · 4 tests · next: you · receipt"); its says done passes. See README,
+"Also in dispute".
+
+== Per test, at the base
+
+  ok the goldens cover says done, sent back, PASS, BLOCKED and checks running, and one with a long cause
+      passes: the six goldens, each within 80 columns with a UUID and a ULID filled in
+  x  BLOCKED
+      Expected: "not verified: R1 · BLOCKED 3/4: secret STRIPE_KEY missing · next: you"
+      Received: "not verified: R1 · BLOCKED 3/4: secret STRIPE_K… · 3 tests · next: you · receipt"
+      the bare word receipt (#1460), and the test count that cuts the cause (#669)
+  x  checks running
+      Expected: "says done 2/4 · 2 checks running · about 4 min · next: DeepBuild"
+      Received: "says done 2/4 · 2 tests · 2 checks running · about 4 min · next: DeepBuild"
+      the test count only (#669): the base already drops the receipt here, for width
+  x  long cause
+      fails at "the cause is shortened from its start, so its first words stay": expected to contain "receipt show"
+      Received: "not verified: R2 · sent back 2/3: receipt… · total.ts:42 · 2 tests · next: agent"
+      the test count only (#669), which cuts the cause to its first word
+  x  PASS
+      Expected: "PASS 4/4 · next: you · session/44a68d9e/01M7236A7NB5ACF1033SCT7SBP"
+      Received: "PASS 4/4 · 4 tests · next: you · receipt"
+      the bare word receipt, not the claim's page address (#1460), and the test count (#669)
+  x  says done
+      Expected: "says done · 3 checks running · about 4 min · next: DeepBuild"
+      Received: "says done · 3 checks running · about 4 min · next: DeepBuild · receipt"
+      the bare word receipt alone (#1460)
+  x  sent back
+      Expected: "sent back 1/3: receipt shows $18.00 · total.ts:42 · next: agent"
+      Received: "sent back 1/3: receipt shows $1… · total.ts:42 · 3 tests · next: agent · receipt"
+      the bare word receipt (#1460), and the test count that cuts the cause (#669)
+  ok (wrong program) a line that drops "not verified" to fit the width, or keeps the whole cause past 80 columns, fails
+      passes: a judge of two planted strings, as in #83's file
