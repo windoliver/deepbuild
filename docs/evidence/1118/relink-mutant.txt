@@ -1,0 +1,36 @@
+# merged (ede4b367), Mon Nov  9 09:13:33 PM UTC 2026
+ 13:13:33 up 8 days, 17:26,  3 users,  load average: 2.46, 2.21, 1.82
+✔ undoBuild in a bay keeps its target and node_modules and leaves a file holding the change's bytes untouched (25.342298ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 201.838331
+
+# mutant: (bay && path === 'target')
+210:      if (path === '.git' || (bay && path === 'target')) continue;
+✖ undoBuild in a bay keeps its target and node_modules and leaves a file holding the change's bytes untouched (21.00355ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 181.27555
+
+✖ failing tests:
+
+test at tests/bays.test.mjs:41:1
+✖ undoBuild in a bay keeps its target and node_modules and leaves a file holding the change's bytes untouched (21.00355ms)
+  AssertionError [ERR_ASSERTION]: undoBuild removed the bay's packages
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
