@@ -39,7 +39,7 @@ export function dueOf(words: string, now: number): number | undefined {
   const span = IN_SPAN.exec(words);
   if (span) {
     const count = /^\d/.test(span[1]!) ? Number(span[1]) : COUNTS[span[1]!.toLowerCase().replace(/\s+an?$/, '')] ?? COUNTS[span[1]!.toLowerCase()] ?? 1;
-    const unit = span[2]!.toLowerCase().replace(/s$/, '');
+    const unit = span[2]!.toLowerCase();
     const ms = UNITS[unit] ?? UNITS[unit.replace(/s$/, '')];
     if (ms === undefined) return undefined;
     return now + Math.round(count * ms);
@@ -56,6 +56,8 @@ export function dueOf(words: string, now: number): number | undefined {
   }
   const clock = AT_CLOCK.exec(words);
   if (clock) {
+    // A bare number before a word counts things ("look at 3 files"), unless the word joins or is about the clock.
+    if (!clock[2] && !clock[3] && /^\s*(?!(?:and|then|so|but|o'clock|sharp|today)\b)[a-z]/i.test(words.slice(clock.index + clock[0].length))) return undefined;
     let hour = Number(clock[1]);
     const minute = clock[2] ? Number(clock[2]) : 0;
     const meridiem = clock[3]?.toLowerCase().replace(/\./g, '');

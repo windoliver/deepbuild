@@ -185,7 +185,7 @@ pub fn inverse(m: &[f64; 16]) -> [f64; 16] {
             - e(0, 1) * (e(1, 0) * e(2, 2) - e(1, 2) * e(2, 0))
             + e(0, 2) * (e(1, 0) * e(2, 1) - e(1, 1) * e(2, 0))
     };
-    let sign = |k: usize| if k % 2 == 0 { 1.0 } else { -1.0 };
+    let sign = |k: usize| if k.is_multiple_of(2) { 1.0 } else { -1.0 };
     let det: f64 = (0..4).map(|c| a(0, c) * sign(c) * minor(0, c)).sum();
     let mut inv = [0.0; 16];
     for r in 0..4 {
@@ -449,6 +449,7 @@ impl Waterer {
 
     /// This frame's draws: each water part of `scene` with its waves at t, reading the resolved
     /// `ids` and `depth` the job resolves again.
+    #[allow(clippy::too_many_arguments)]
     pub fn prepare(
         &mut self,
         device: &Device,

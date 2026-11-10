@@ -102,3 +102,36 @@ test.each(variants)("an unfinished run's processes are checked again until gone,
     await record.close();
   }
 }, 60_000);
+
+// A cleanup that failed is asked again by its caller (the runner, each second): it runs again, and a key it had
+// already given back is not given back twice.
+test("a cleanup the record refused once runs again when asked, and ends the run's lease once", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'supervisor-')));
+  dirs.push(dir);
+  const record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+  const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+  let refuse = true;
+  const busyOnce: RecordStore = new Proxy(record, {
+    get: (to, key) => {
+      const value: unknown = Reflect.get(to, key);
+      if (key !== 'append') return typeof value === 'function' ? value.bind(to) : value;
+      return (...args: Parameters<RecordStore['append']>) => {
+        if (args[1].kind !== 'run.cleaned' || !refuse) return to.append(...args);
+        refuse = false;
+        return Promise.reject(Error('the record is busy'));
+      };
+    },
+  });
+  const sup = await openSupervisor({ record: busyOnce, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } }, resources: [{ kind: 'phone', keys: ['+15550100'] }] });
+  try {
+    const started = await sup.start({ run: 'run:AGAIN', argv: ['/usr/bin/true'], cwd: dir, leases: [{ kind: 'phone' }] });
+    expect(started.status).toBe('started');
+    await sup.wait('run:AGAIN');
+    await expect(sup.cleanup('run:AGAIN')).rejects.toThrow('the record is busy');
+    expect(await sup.cleanup('run:AGAIN')).toMatchObject({ outcome: 'clean', left: [] });
+    expect((await events(record, 'lease.released')).filter((e) => e.subject === 'run:AGAIN')).toHaveLength(1);
+  } finally {
+    await sup.close();
+    await record.close();
+  }
+}, 60_000);

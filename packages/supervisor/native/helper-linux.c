@@ -7,8 +7,9 @@
 //                               environment sheds: one line each, "<marker> <pid> <ppid> <pgid>".
 //   helper probe <file> <op> <arg> ...
 //                               the seam suite's sandboxed process: tries each operation and appends one JSON line per
-//                               try to <file>: read <path>, write <path>, tcp <port> (on 127.0.0.1), unix <path>, and
-//                               devices <file>, which runs this helper again, as its child, in `devices` mode.
+//                               try to <file>: read <path>, write <path>, tcp <port> (on 127.0.0.1), tfo <port> (the
+//                               same port, by a send that opens the connection itself, with no connect), unix <path>,
+//                               and devices <file>, which runs this helper again, as its child, in `devices` mode.
 //   helper devices <file>       whether this process can open each device: the camera (/dev/video0), the microphone and
 //                               the audio output (the ALSA control, /dev/snd/controlC0) and a screen capture (the
 //                               display's /dev/dri/card0); one line each, allow or deny.
@@ -148,7 +149,8 @@ static void try_connect(const char *op, const char *target) {
     a.sin_family = AF_INET;
     a.sin_port = htons((unsigned short)atoi(target));
     a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    rc = connect(fd, (struct sockaddr *)&a, sizeof a);
+    if (strcmp(op, "tfo") == 0) rc = sendto(fd, "x", 1, MSG_FASTOPEN, (struct sockaddr *)&a, sizeof a) == 1 ? 0 : -1;
+    else rc = connect(fd, (struct sockaddr *)&a, sizeof a);
   }
   int e = errno;
   close(fd);
@@ -254,10 +256,19 @@ static int carries_guard(const Spec *s, const char *path) {
   for (int g = 0; g < s->guards.n; g++) if (ancestor_or_self(path, s->guards.paths[g])) return 1;
   return 0;
 }
+/** The files agents read their hooks and MCP servers from, wherever they are: no grant reaches them, as on macOS (seatbelt.ts's last rule). */
+static int agent_file(const char *path) {
+  for (const char *c = path; (c = strchr(c, '/'));) {
+    size_t n = strcspn(++c, "/");
+    if ((n == 7 && !strncmp(c, ".claude", 7)) || (n == 6 && !strncmp(c, ".codex", 6))) return 1;
+    if (!c[n] && ((n == 9 && !strncmp(c, ".mcp.json", 9)) || (n == 12 && !strncmp(c, ".claude.json", 12)))) return 1;
+  }
+  return 0;
+}
 /** Whether the grant lets the process change what is at `path`. */
 static int may_write(const Spec *s, const char *path) {
   if (under(path, "/dev") || under(path, "/proc")) return 1;
-  if (guarded(s, path)) return 0;
+  if (guarded(s, path) || agent_file(path)) return 0;
   return s->as_you || s->plant_writes || in_any(&s->write, path);
 }
 
@@ -386,6 +397,8 @@ static void emit(struct sock_filter f) {
 #define AND(k) emit((struct sock_filter)BPF_STMT(BPF_ALU | BPF_AND | BPF_K, (unsigned)(k)))
 #define RET(v) emit((struct sock_filter)BPF_STMT(BPF_RET | BPF_K, (unsigned)(v)))
 #define ERRNO(e) (SECCOMP_RET_ERRNO | ((e) & SECCOMP_RET_DATA))
+/** The open flags that can write or create. O_TMPFILE holds O_DIRECTORY's bit, which alone only opens a folder to read. */
+#define OPEN_WRITES (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | (O_TMPFILE & ~O_DIRECTORY))
 
 /** One syscall with one verdict: "if nr == x return v". */
 static void rule(int nr, unsigned verdict) {
@@ -398,7 +411,7 @@ static void open_rule(int nr, int flags_arg) {
   if (nr < 0) return;
   JEQ(nr, 0, 4);
   LD_ARG(flags_arg);
-  JSET(O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_TMPFILE, 0, 1);
+  JSET(OPEN_WRITES, 0, 1);
   RET(SECCOMP_RET_USER_NOTIF);
   RET(SECCOMP_RET_ALLOW);
   LD_NR;
@@ -481,6 +494,16 @@ static struct sock_fprog build_filter(void) {
   RET(SECCOMP_RET_ALLOW);
   RET(ERRNO(EACCES));
   LD_NR;
+  // A send that would open a connection itself (TCP Fast Open): refused, so every connection is a connect the parent checks.
+  const int sends[][2] = { { __NR_sendto, 3 }, { __NR_sendmsg, 2 }, { __NR_sendmmsg, 3 } };
+  for (size_t i = 0; i < sizeof sends / sizeof *sends; i++) {
+    JEQ(sends[i][0], 0, 4);
+    LD_ARG(sends[i][1]);
+    JSET(MSG_FASTOPEN, 0, 1);
+    RET(ERRNO(EOPNOTSUPP));
+    RET(SECCOMP_RET_ALLOW);
+    LD_NR;
+  }
   // Opens that can write or create: the parent decides and records.
   open_rule(__NR_openat, 2);
   open_rule(__NR_open, 1);
@@ -811,7 +834,7 @@ static void handle(Server *v) {
       size_t size = (size_t)a[3] < sizeof how ? (size_t)a[3] : sizeof how;
       if (read_mem(v->req->pid, a[2], &how, size) != 0) { REFUSE(v, EFAULT); return; }
       flags = (unsigned)how.flags;
-      if (!(flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_TMPFILE))) { CONTINUE(v); return; }
+      if (!(flags & OPEN_WRITES)) { CONTINUE(v); return; }
     }
     const char *operation = flags & O_CREAT ? "file-write-create" : "file-write-data";
     if (write_allowed(v, dirfd, p, (flags & O_NOFOLLOW) != 0, (flags & O_CREAT) != 0, operation)) CONTINUE(v);
@@ -1001,7 +1024,7 @@ int main(int argc, char **argv) {
     const char *op = argv[i], *arg = argv[i + 1];
     if (strcmp(op, "read") == 0) try_read(arg);
     else if (strcmp(op, "write") == 0) try_write(arg);
-    else if (strcmp(op, "tcp") == 0 || strcmp(op, "unix") == 0) try_connect(op, arg);
+    else if (strcmp(op, "tcp") == 0 || strcmp(op, "tfo") == 0 || strcmp(op, "unix") == 0) try_connect(op, arg);
     else if (strcmp(op, "devices") == 0) try_devices(argv[0], arg);
     else { fprintf(stderr, "helper: unknown op %s\n", op); return 2; }
   }

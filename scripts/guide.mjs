@@ -90,7 +90,7 @@ const DOCS = {
   'deep.canvas.read': 'For a check runner: a canvas revision\'s evaluated values by stable ID at the times it names, with their content keys and a coverage block, read only and only for the documents its grant names. A pass built on a read holds only with those keys as its evidence.',
   'deep.registerAction': 'What panels, your words and agents\' MCP tools can do to the plug-in\'s data. It declares read, change or send, and a change or send returns its report.',
   'deep.registerJob': 'An offline job kind, one per name: its params schema, its outputs, its key (hash of the tool\'s name@version, the canonical params and each input\'s hash), the output checks an output passes before any item names it, and the fixtures a tool must qualify on.',
-  'deep.registerJobTool': 'A tool for a registered kind, pinned by name@version, its files the program the hub runs outside its process. It joins the kind once it writes each qualification fixture\'s expected bytes, and stays the build it qualified as.',
+  'deep.registerJobTool': 'A tool for a registered kind, pinned by name@version, its files the program the hub runs outside its process. It joins the kind once it writes each qualification fixture\'s expected bytes, and stays the build it qualified as. A tool that calls a provider names its one host as `provider` in its manifest\'s `job_tools` entry; each run gets `call: {provider, key, journal}` on stdin, and the tool appends `{key, provider}` to the journal before its request leaves and `{key, provider, task}` when the provider answers. A key whose journal holds a call and whose outputs aren\'t kept is never run again: it is BLOCKED with one unblock ask.',
 };
 
 const typeOf = (schema) => {

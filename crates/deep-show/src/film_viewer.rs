@@ -195,7 +195,7 @@ impl Hub<'_> {
             let (mut px, size) = self
                 .export_frame(&mut sched, &mut session, doc, t, None, true)
                 .map_err(|u| json!({"code": u.code, "path": u.path}))?;
-            for p in px.chunks_exact_mut(4) {
+            for p in px.as_chunks_mut::<4>().0 {
                 p.swap(0, 2);
             }
             let f = frames.get_or_insert_with(|| {

@@ -257,7 +257,7 @@ mod tests {
                 let o = k as usize * FLOATS;
                 ([v[o], v[o + 1], v[o + 2]], [v[o + 3], v[o + 4], v[o + 5]])
             };
-            for t in i.chunks_exact(3) {
+            for t in i.as_chunks::<3>().0 {
                 let (a, n) = at(t[0]);
                 let (b, _) = at(t[1]);
                 let (c, _) = at(t[2]);

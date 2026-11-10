@@ -206,7 +206,7 @@ const isUnder = (path: string, dir: string) => {
  * What a connection brings to a call: its role, the session it is bound to, for deep mcp the process it serves, and
  * for the app or the CLI the process its hello named as its own.
  */
-export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string }; waiter?: number }
+export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string }; waiter?: number; /** A deep mcp call's `<connection>:<call ID>`, which a cancel names (#1923). */ call?: string }
 /** The asks core's refusal as the socket's error@3, with the code that fits what it names. */
 const asRefused = (error: unknown): unknown => {
   if (!(error instanceof AskRefused)) return error;
@@ -830,7 +830,7 @@ export class Core {
       checkouts: () => this.checkouts, invalid: (claim, commit, reason, outcome) => this.invalid(claim, commit, reason, outcome), stopping: () => this.stopping,
       stoodIn: (r) => this.tasks.stoodIn(this.connection('core'), r),
       kept: async (evidence) => (await Promise.all(evidence.map((sha) => this.store.get(sha)))).every(Boolean),
-      slots: () => ({ free: Math.max(0, Math.floor(CORES / 2) - this.runs.size) }),
+      slots: () => ({ free: Math.max(0, Math.max(1, Math.floor(CORES / 2)) - this.runs.size) }),
       capped: (session, checks) => void this.backgroundCapped(session, checks).catch(() => undefined), plant: options.plant, load: machineLoad,
       // The design's 10 s fast-lane budget and 60 s hold, proposals until the dogfood week measures them (#43).
       budget_ms: 10_000, hold_ms: STOP_HOLD_MS,
@@ -1161,7 +1161,9 @@ export class Core {
       root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
       keep: async (bytes, source) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
       has: async (sha) => (await this.store.get(sha)) !== undefined,
-      raise: (ask, plan) => this.asks.raise(this.connection('core'), 'job.paid', ask, plan),
+      read: (sha) => this.store.read(sha),
+      send: (request, boundary) => this.store.send(request, boundary),
+      raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
     });
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,
@@ -5030,6 +5032,10 @@ export class Core {
     // The notices it carried wait for the session's next hook (#352).
     this.siblings.gone(id);
   }
+  /** A deep mcp call cancelled, or its connection closed (#1923): it leaves the job it waits on, which stops only once no caller is left. */
+  callGone(call: string): void {
+    this.jobKinds?.gone(call);
+  }
   /** A waiter whose connection closed: Claude Code stopped it, or it exited. */
   waiterGone(key: number): void {
     if (this.options.plant === 'delivered-to-dead-waiter') return;
@@ -6612,7 +6618,7 @@ export class Core {
         case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_kinds': return await this.kinds(args);
-        case 'deep_job': return await this.job(args);
+        case 'deep_job': return await this.job(args, context.call);
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
         case 'deep_ask': return await this.askFor(session!, args);
@@ -6814,9 +6820,9 @@ export class Core {
    * deep_job (#1922): the job kinds and their qualified tools, or one run of a kind on a pinned tool, outside the hub's
    * process. It changes no document and needs no session; its result is a reading with a receipt, never a verdict.
    */
-  private async job(args: Obj): Promise<Obj> {
+  private async job(args: Obj, caller: string | undefined): Promise<Obj> {
     if (!this.jobKinds) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_job', true);
-    return args.op === 'list' ? this.jobKinds.list() : this.jobKinds.run(args);
+    return args.op === 'list' ? this.jobKinds.list() : this.jobKinds.run(args, caller);
   }
   /** `job.rule` (#1922): your standing rule for a paid tool, from your own terminal once the OS confirms you: the most a run may cost with no ask. */
   private async jobRule(params: Obj, context: CallContext): Promise<Obj> {
@@ -7473,7 +7479,12 @@ export class Core {
       return { ...ran, findings };
     })();
     this.lanes.set(r.claim, lane);
-    lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${error instanceof Error ? error.message : String(error)}\n`));
+    // A claim whose checks could not start is INCONCLUSIVE, naming why, as one past its budget is: never left with no verdict.
+    lane.catch((error: unknown) => {
+      const why = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${why}\n`);
+      void this.invalid(r.claim, r.commit, `its checks did not start: ${why}`, 'INCONCLUSIVE').catch((failed: unknown) => process.stderr.write(`deep hub: ${r.claim}'s verdict wasn't recorded: ${failed instanceof Error ? failed.message : String(failed)}\n`));
+    });
   }
   /**
    * The repo's spec checks (#322): each check the spec's `done` claim names (or, with no claims block, every check),
