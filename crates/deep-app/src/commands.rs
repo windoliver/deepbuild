@@ -108,6 +108,11 @@ pub enum Entry {
         param: String,
         value: String,
     },
+    /// A preference ⌘K answers by opening the box with its change drafted (#1998), found by its words too.
+    Preference {
+        name: String,
+        words: &'static [&'static str],
+    },
 }
 
 impl Entry {
@@ -116,7 +121,8 @@ impl Entry {
         match self {
             Entry::Command { name, .. }
             | Entry::Page { name, .. }
-            | Entry::Shipped { name, .. } => name,
+            | Entry::Shipped { name, .. }
+            | Entry::Preference { name, .. } => name,
         }
     }
 
@@ -126,7 +132,7 @@ impl Entry {
             Entry::Page {
                 page, param, value, ..
             } => Some(json!({"name": page, "params": {param: value}})),
-            Entry::Command { .. } | Entry::Shipped { .. } => None,
+            Entry::Command { .. } | Entry::Shipped { .. } | Entry::Preference { .. } => None,
         }
     }
 }
@@ -154,7 +160,8 @@ pub fn entries(views: &[View]) -> Vec<Entry> {
 
 /// The entries matching `query`, in ⌘K's order: the exact name, then names that start with it, then names with a
 /// word that does, then names that hold it, case aside; within each, the most recently used first, then in the order
-/// they registered. Nothing else is read, so the same query on the same state gives the same order.
+/// they registered. A preference whose words hold one starting with the query ranks with the word matches (#1998), so
+/// "mute" finds Sounds. Nothing else is read, so the same query on the same state gives the same order.
 pub fn rank<'a>(query: &str, entries: &'a [Entry], recent: &[String]) -> Vec<&'a Entry> {
     let query = query.trim().to_lowercase();
     let class = |name: &str| -> Option<u8> {
@@ -180,7 +187,16 @@ pub fn rank<'a>(query: &str, entries: &'a [Entry], recent: &[String]) -> Vec<&'a
                 .iter()
                 .position(|r| r == entry.name())
                 .unwrap_or(usize::MAX);
-            class(entry.name()).map(|class| (class, used, at, entry))
+            let by_words = || match entry {
+                Entry::Preference { words, .. } if !query.is_empty() => words
+                    .iter()
+                    .any(|word| word.starts_with(query.as_str()))
+                    .then_some(2),
+                _ => None,
+            };
+            class(entry.name())
+                .or_else(by_words)
+                .map(|class| (class, used, at, entry))
         })
         .collect();
     ranked.sort_by_key(|&(class, used, at, _)| (class, used, at));

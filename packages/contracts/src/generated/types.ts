@@ -99,6 +99,8 @@ export type AdapterFactsTexts = Array<AdapterFactsText>;
 
 export type AdapterFactsVersion = string;
 
+export type AdapterFactsReach = "model" | "user" | "debug" | "none";
+
 export type AdapterFactsTextMap = { [key: string]: AdapterFactsText };
 
 export type AdapterFactsDataTemplate = { [key: string]: AdapterFactsText };
@@ -403,6 +405,21 @@ export interface AdapterFacts {
       since?: AdapterFactsVersion;
       tools?: AdapterFactsTexts;
     }>;
+  };
+  contextOutput?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    capChars: number;
+    previewChars: number;
+    versions: Array<AdapterFactsVersion>;
+    source: AdapterFactsText;
+    events: { [key: string]: {
+      additionalContext: AdapterFactsReach;
+      systemMessage: AdapterFactsReach;
+      stdout: AdapterFactsReach;
+      stderr: AdapterFactsReach;
+      stderrOnBlock: AdapterFactsReach;
+    } };
   };
   classifyStop?: AdapterFactsOperation;
   skills?: AdapterFactsOperation;
@@ -1477,6 +1494,8 @@ export type AdapterFactsV5Texts = Array<AdapterFactsV5Text>;
 
 export type AdapterFactsV5Version = string;
 
+export type AdapterFactsV5Reach = "model" | "user" | "debug" | "none";
+
 export type AdapterFactsV5TextMap = { [key: string]: AdapterFactsV5Text };
 
 export type AdapterFactsV5DataTemplate = { [key: string]: AdapterFactsV5Text };
@@ -1824,6 +1843,21 @@ export interface AdapterFactsV5 {
       since?: AdapterFactsV5Version;
       tools?: AdapterFactsV5Texts;
     }>;
+  };
+  contextOutput?: {
+    readBy: AdapterFactsV5Text;
+    conformance: AdapterFactsV5Text;
+    capChars: number;
+    previewChars: number;
+    versions: Array<AdapterFactsV5Version>;
+    source: AdapterFactsV5Text;
+    events: { [key: string]: {
+      additionalContext: AdapterFactsV5Reach;
+      systemMessage: AdapterFactsV5Reach;
+      stdout: AdapterFactsV5Reach;
+      stderr: AdapterFactsV5Reach;
+      stderrOnBlock: AdapterFactsV5Reach;
+    } };
   };
   classifyStop?: AdapterFactsV5Operation;
   skills?: AdapterFactsV5Operation;
@@ -4985,7 +5019,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -7221,6 +7255,30 @@ export interface SessionChildStarted {
     parent: string;
     child: string;
     task_ref: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.context_fit@1 */
+export interface SessionContextFit {
+  v: 1;
+  id: string;
+  kind: "session.context_fit";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    event: string;
+    cap: number;
+    chars: number;
+    inline: Array<string>;
+    inline_ids: Array<string>;
+    by_handle: Array<string>;
+    handle: string;
   };
   evidence?: Array<string>;
 }

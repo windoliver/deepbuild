@@ -1,0 +1,73 @@
+{
+  "tried": [
+    {
+      "tool": null,
+      "started": 0,
+      "reply": {
+        "status": "refused",
+        "reason": "deep_job runs only a tool of test.upper pinned by name@version as its list names one (upper-a@1.0.0); null isn't one, and nothing ran"
+      }
+    },
+    {
+      "tool": "upper-a",
+      "started": 0,
+      "reply": {
+        "status": "refused",
+        "reason": "deep_job runs only a tool of test.upper pinned by name@version as its list names one (upper-a@1.0.0); \"upper-a\" isn't one, and nothing ran"
+      }
+    },
+    {
+      "tool": "upper-a@1",
+      "started": 0,
+      "reply": {
+        "status": "refused",
+        "reason": "deep_job runs only a tool of test.upper pinned by name@version as its list names one (upper-a@1.0.0); \"upper-a@1\" isn't one, and nothing ran"
+      }
+    },
+    {
+      "tool": "upper-a@^1.0.0",
+      "started": 0,
+      "reply": {
+        "status": "refused",
+        "reason": "deep_job runs only a tool of test.upper pinned by name@version as its list names one (upper-a@1.0.0); \"upper-a@^1.0.0\" isn't one, and nothing ran"
+      }
+    },
+    {
+      "tool": "upper-a@latest",
+      "started": 0,
+      "reply": {
+        "status": "refused",
+        "reason": "deep_job runs only a tool of test.upper pinned by name@version as its list names one (upper-a@1.0.0); \"upper-a@latest\" isn't one, and nothing ran"
+      }
+    },
+    {
+      "tool": "upper-a@2.0.0",
+      "started": 0,
+      "reply": {
+        "status": "refused",
+        "reason": "deep_job runs only a tool of test.upper pinned by name@version as its list names one (upper-a@1.0.0); \"upper-a@2.0.0\" isn't one, and nothing ran"
+      }
+    }
+  ],
+  "pinned": {
+    "started": 1,
+    "reply": {
+      "status": "done",
+      "outputs": {
+        "text": {
+          "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+        }
+      },
+      "receipt": {
+        "kind": "test.upper",
+        "tool": "upper-a@1.0.0",
+        "key": "f4f8dc833dc12676c22858546d5d9bedd998a2e99267ec4327c073d9bdd82819",
+        "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+        "cache": "miss",
+        "inputs": {
+          "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        }
+      }
+    }
+  }
+}
