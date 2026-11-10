@@ -228,6 +228,12 @@
     "called_by": "deep mcp"
   },
   {
+    "method": "mcp.cancel",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1923"
+  },
+  {
     "method": "evidence.paste",
     "since": "R1",
     "stability": "preview",
