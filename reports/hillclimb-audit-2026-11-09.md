@@ -1,6 +1,6 @@
 # Hill-climb audit: speed, memory, GPU, KISS and modularity
 
-Base: `6a6d6b4f` (main, 2026-11-09). 34 npm workspaces, the four channel packages and 38 Rust crates were audited; 42 source files changed, +503 −194, all uncommitted in the worktree.
+Base: `6a6d6b4f` (main, 2026-11-09), merged with main at `87c0292a` before the last checks. 34 npm workspaces, the four channel packages and 38 Rust crates were audited; 43 source files changed, +516 −199, on branch `worktree-code-audit-optimization-12828f`.
 
 Ten read-only audits covered every package and crate and returned about 130 findings, each with its call sites, an exact edit and a proof plan. The 42 with the best gain for the least risk were applied, each re-read against the code first. The rest are listed under [Found and not applied](#found-and-not-applied), with the full write-ups in [hillclimb-audit-2026-11-09/](hillclimb-audit-2026-11-09/).
 
@@ -18,12 +18,12 @@ Wall time was not used: the machine's load average was between 25 and 480 throug
 | `deep-hook` PreToolUse, Bash `git status && git log` | 36.1 M | 32.7 M (−9.5%) | same |
 | `deep-hook` PreToolUse, Edit | 85.8 M | 48.6 M (−43.3%) | same |
 | `deep-hook` PostToolUse, 1 MiB output | 63.5 M, 7.0 MB peak | 46.3 M (−27.1%), 5.9 MB (−15.7%) | same; peak is the memory footprint |
-| Modules the hub's kind table loads | 118 files, 1,136 KB | 90 files, 875 KB | a `load` hook counting files under `packages/` on `hub/dist/kinds.js` |
-| Modules `@deepbuild/checks-numbers` loads | 53 files, 409 KB | 6 files, 17 KB | same |
+| Modules the hub's kind table loads | 118 files, 1,136 KB | 91 files, 873 KB | a `load` hook counting files under `packages/` on `hub/dist/kinds.js`; base at `6a6d6b4f`, change after the merge |
+| Modules `@deepbuild/checks-numbers` loads | 53 files, 409 KB | 7 files, 18 KB | same |
 | `deep find` scan, 2,000 messages of 4 KB | about 8.0 G instructions | about 0.45 G | the scan alone, old and new, on one synthetic archive; the fixed cost of 2.7 G is taken off both |
 | Warm-stack walk, buffers made by its sort | 126,510 | 9,844 | counted on this checkout by the audit |
 
-The hook was built from the shipped default rules with no hub running, so each run takes the fail-open path. Its stdout and exit status were the same on both sides in all 90 pairs.
+The hook figures were taken before the merge, against `6a6d6b4f`. The hook was built from the shipped default rules with no hub running, so each run takes the fail-open path. Its stdout and exit status were the same on both sides in all 90 pairs.
 
 Everything else below is a count from reading the code. Nothing else was measured.
 
@@ -90,32 +90,35 @@ Everything else below is a count from reading the code. Nothing else was measure
 
 ### Modularity
 
-- `@deepbuild/conformance` gains two narrow entries, `/result` and `/slot-types`, each an existing file with no runtime import of a kit. The check kits of checks-numbers, checks-work, checks-review and proof take their three values from them. The hub loaded all eleven slot kits, the fake agent and the generator to reach those three values; it now loads two small files. No behavior changes: `Finding` is the same class by either entry. The package card names the entries.
+- `@deepbuild/conformance` gains two narrow entries, `/probe` and `/slot-types`, each an existing file with no runtime import of a kit. The check kits of checks-numbers, checks-work, checks-review and proof take `fail` and `Finding` from `/slot-types`, and the two probe runners take `runProbe` from `/probe`. The hub loaded all eleven slot kits, the fake agent and the generator to reach those values; it now loads three small files. No behavior changes: `Finding` is the same class by either entry. The package card names the entries. (Before the merge the second entry was `/result`; main's #1775 follow-up moved the probe run into `probe.ts`, so the entry follows it.)
 
 ## Verification
 
+Every row is on the merged tree (main at `87c0292a` merged in) unless it says otherwise.
+
 | Check | Result |
 |---|---|
-| `cargo check --all-targets` on each edited crate | clean; two warnings in files this change does not touch (`deep-canvas-effects/src/fusion.rs:323`, `deep-canvas-marks/src/animator.rs:657`) |
-| `cargo build -p deep-gpu-layer -p deep-show` | builds, so every crate downstream of the edits compiles |
-| `cargo test` deep-canvas, deep-contracts | 264 and 6 pass; deep-canvas again after the clippy fix |
-| `cargo test` deep-canvas-motion, deep-canvas-graph, deep-canvas-marks | 77, 3 and 105 pass |
-| `cargo test` deep-scene3d-render, deep-effects-render | 16 and 3 pass |
-| `cargo test` deep-hook, on the final source | 51 pass |
-| deep-hook matcher, base against change | 38 shipped entries × 394 calls through `deep-hook check`: 14,972 pairs, 193 matches, 0 differ |
 | `tsc --noEmit` on each edited package | clean |
 | `npm run build --workspaces` | builds |
-| Focused vitest, 24 files | 483 pass, 22 fail. All 22 fail the same way on an untouched copy of main (see below) |
-| Second vitest batch and the hook's acceptance suites | PENDING-TS-2 |
-| Canvas and GPU acceptance suites, 47 files | PENDING-RUST-ACCEPTANCE |
-| `cargo clippy --all-targets` on the eight edited crates | no warning on a line this change touches. Main's own findings stay: 57 warnings in files or lines it does not touch, five of which fail `-D warnings` on main too (`deep-canvas/src/registry/core_lists.rs:863`, `deep-canvas-effects/src/fusion.rs:323` and three files of deep-canvas-marks) |
-| `scripts/canvas-lint.mjs` | 38 FAIL lines, the same 38 by file and message on main's copy |
-| `scripts/repo-rules.mjs` | 58 FAIL lines, none in a file this change touches |
+| `cargo build -p deep-gpu-layer -p deep-show` | builds, so every crate downstream of the edits compiles |
+| `cargo test` on the ten edited crates | all pass but one timing case: deep-canvas 264, deep-contracts 6, deep-canvas-motion 80, deep-canvas-graph 3, deep-canvas-marks 105, deep-scene3d-render 16, deep-effects-render 3, deep-text-render 2, deep-hook 50 of 51 |
+| deep-hook `busy_disk` | INCONCLUSIVE by its own words in this run ("the disk wasn't busy enough", so it "proves nothing"). It passed in two of three runs before the merge and reported the same thing in the third. It measures the spool's sync, which this change does not touch |
+| deep-hook, base against change (before the merge) | 38 shipped entries × 394 calls through `deep-hook check`: 14,972 pairs, 193 matches, 0 differ. 103 forwarded calls: the request each side spools (matched entries, heavy field, payload) is byte-identical, and so are exit status, stdout and stderr once the disk-timing notice is left out |
+| TypeScript, hook and kit suites, 60 files | 633 pass, 27 fail. The 27 are the same cases, in the same 8 files, that fail on an untouched copy of main (below) |
+| Canvas and GPU acceptance suites, 47 files | 39 files pass, among them the renderer's and the effects' pixel and golden suites (#378, #380, #484), marks and text (#160, #381), motion order (#489), scope input (#383) and the schedule (#305, #387, #488, #857). 8 files fail, none from this change (below) |
+| `cargo clippy --all-targets` on the edited crates (before the merge) | no warning on a line this change touches. Main's own findings stay: five fail `-D warnings` on main too (`deep-canvas/src/registry/core_lists.rs:863`, `deep-canvas-effects/src/fusion.rs:323` and three files of deep-canvas-marks) |
+| `scripts/canvas-lint.mjs` (before the merge) | 38 FAIL lines, the same 38 by file and message on main's copy |
+| `scripts/repo-rules.mjs` (before the merge) | 58 FAIL lines, none in a file this change touches |
+| `tests/package-deps.test.mjs`, `tests/facts-entry.test.mjs` | 4 of 4 pass |
 | `node scripts/affected.mjs` | not run: see below |
 
-**The 22 focused failures are main's.** A copy of `6a6d6b4f` with its own install and build fails the same tests with the same messages: 18 in `packages/checks-command/test/regressions.test.ts` (three `BLOCKED` for no `pnpm` or `go` on this Mac, the rest pytest and Vitest runs that read `uncounted`), 2 in `packages/contracts/test/events.test.ts` (`build.rolled_back@1` has no read cap on `commit`), `packages/cli/test/cli.test.ts` (`BLOCKED`: no older Node here) and `tests/acceptance/45/hub.test.ts` AC2 (`handbacks_sent_back` names no source). None is in `scripts/known-failures.json`. Main's copy fails one more regressions test than the change does.
+**One mistake was made and caught.** Folding gate-runner's repeated session-name expression onto `sessionOf` also rewrote the helper's own definition, so it called itself. The type checker accepts that; `packages/hub/test/gate-runner.test.ts`, `gate-queue.test.ts` and `gate-stop.test.ts` failed on it (12 cases). The definition was restored, the hub rebuilt, and all three files pass. Every other TypeScript edit was then re-read line by line.
 
-**Not run.** `node scripts/affected.mjs` selects 511 parallel and 604 alone vitest files, 114 node files and `cargo test -p deep-app` for the TypeScript edits alone, plus 76 timed and 46 slow files. With two test slots on the machine, both held for over three hours by other sessions, it could not finish; the focused runs above stand in for it and are not a full affected verdict. No timed budget, no live suite and no preflight ran. `cargo fmt --all --check` was not run workspace-wide: main has formatting drift in five of the edited files, which was left as it is, and the edits themselves are formatted.
+**The 27 TypeScript failures are main's.** A copy of `6a6d6b4f` with its own install and build fails the same cases with the same messages: 18 in `packages/checks-command/test/regressions.test.ts` (three `BLOCKED` for no `pnpm` or `go` on this Mac, the rest pytest and Vitest runs that read `uncounted`), 2 in `packages/contracts/test/events.test.ts` (`build.rolled_back@1` has no read cap on `commit`), `packages/cli/test/cli.test.ts` (`BLOCKED`: no older Node here), `tests/acceptance/45/hub.test.ts` AC2 (`handbacks_sent_back` names no source), `tests/acceptance/1015/claude.test.ts` and `focused.test.ts` (leased commands are not pooled or rewritten), `tests/acceptance/304/defaults.test.ts` and both cases of `modes.test.ts` (an authority ask with no deadline declared). None is in `scripts/known-failures.json`. Two cases failed once under load and pass on a rerun: `tests/acceptance/314/kits.test.ts` (a 5 s timeout) and `tests/acceptance/304/kinds.test.ts` (the hook's 50 ms fail-open).
+
+**The 8 canvas and GPU files are main's too.** Four are budget judges that answer INCONCLUSIVE off a reference Mac and say so: `854/patch`, `854/scene-read`, `896/dirty`, `896/settled`. The other four fail the same 11 cases with main's crates swapped into this tree (main at `7dd8cf19`): `387/perturb` and `855/hash` present every fixture and are refused on `effects/same-machine-check`, the document #429 planted to raise `not_exact`; `399/place-route` is told the build lacks the graph module; `854/idle` draws frames on a still document.
+
+**Not run.** `node scripts/affected.mjs` selects over 1,300 test files for these edits (511 parallel and 604 alone vitest files, 114 node files, `cargo test -p deep-app`, plus 76 timed and 46 slow files). The machine's two test slots were held by other sessions for over four hours, so it could not finish; the suites above stand in for it and are not a full affected verdict. They were run one file at a time, at low priority, through `scripts/lease`, outside the throttle table, once the queue had not moved in 75 minutes. No timed budget, no live suite and no preflight ran. `cargo fmt --all --check` was not run workspace-wide: main has formatting drift in several of the edited files, which was left as it is, and the edits themselves are formatted, except three lines in `deep-effects-render/src/docops.rs`, which follow that file's own unformatted style. Main moved 30 more commits after the merge; it was not merged a second time.
 
 ## Found and not applied
 
