@@ -1,6 +1,6 @@
 # #1923 proof
 
-These are the blind suite's proof files (`tests/acceptance/1923/`, run with `--no-file-parallelism` on macOS arm64, Node 24.22.0). 5 of 5 tests passed. Every hub, plug-in and tool ran under `/tmp/dh1923-*` with a temp `HOME`. The provider was a local HTTP server on 127.0.0.1 that counted every submission. Nothing left 127.0.0.1, and no model was called.
+These are the blind suite's proof files (`tests/acceptance/1923/`, run with `--no-file-parallelism` on macOS arm64, Node 24.22.0) from the run on the merge of main into the branch. 5 of 5 tests passed. Every hub, plug-in and tool ran under `/tmp/dh1923-*` with a temp `HOME`. The provider was a local HTTP server on 127.0.0.1 that counted every submission. Nothing left 127.0.0.1, and no model was called.
 
 | File | What it shows |
 |---|---|

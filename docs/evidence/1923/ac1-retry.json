@@ -2,7 +2,7 @@
   "failures": [],
   "seen": {
     "tool": "hosted-upper@1.0.0",
-    "provider": "127.0.0.1:64523",
+    "provider": "127.0.0.1:50823",
     "answered": {
       "reply": {
         "status": "done",
@@ -36,14 +36,14 @@
       "journal": [
         {
           "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
-          "provider": "127.0.0.1:64523",
-          "file": "/private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+          "provider": "127.0.0.1:50823",
+          "file": "/private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
         },
         {
           "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
-          "provider": "127.0.0.1:64523",
+          "provider": "127.0.0.1:50823",
           "task": "task-2",
-          "file": "/private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+          "file": "/private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
         }
       ]
     },
@@ -52,19 +52,19 @@
       "journal": [
         {
           "key": "3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609",
-          "provider": "127.0.0.1:64523",
-          "file": "/private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl"
+          "provider": "127.0.0.1:50823",
+          "file": "/private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl"
         },
         {
           "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
-          "provider": "127.0.0.1:64523",
-          "file": "/private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+          "provider": "127.0.0.1:50823",
+          "file": "/private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
         },
         {
           "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
-          "provider": "127.0.0.1:64523",
+          "provider": "127.0.0.1:50823",
           "task": "task-2",
-          "file": "/private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+          "file": "/private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
         }
       ],
       "lost": {
@@ -92,43 +92,23 @@
       "replies": [
         {
           "status": "BLOCKED",
-          "cause": "hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:64523 under the submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, and its answer never reached DeepBuild",
-          "ask": "ask:01M72FQ0TM6AE21S6BENK7A0XA",
-          "receipt": {
-            "kind": "test.hosted",
-            "tool": "hosted-upper@1.0.0",
-            "key": "3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609",
-            "build": "d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f",
-            "cache": "miss",
-            "inputs": {
-              "text": "3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282"
-            }
-          }
+          "cause": "hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:50823 under the submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, and its answer never reached DeepBuild, so it isn't made again; nothing was sent",
+          "ask": "ask:01M72GPGCT7HBADM8KY7HCPRKB"
         },
         {
           "status": "BLOCKED",
-          "cause": "hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:64523 under the submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, and its answer never reached DeepBuild",
-          "ask": "ask:01M72FQ0TM6AE21S6BENK7A0XA",
-          "receipt": {
-            "kind": "test.hosted",
-            "tool": "hosted-upper@1.0.0",
-            "key": "3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609",
-            "build": "d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f",
-            "cache": "miss",
-            "inputs": {
-              "text": "3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282"
-            }
-          }
+          "cause": "hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:50823 under the submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, and its answer never reached DeepBuild, so it isn't made again; nothing was sent",
+          "ask": "ask:01M72GPGCT7HBADM8KY7HCPRKB"
         }
       ],
       "asks": [
         {
-          "handle": "ask:01M72FQ0TM6AE21S6BENK7A0XA",
+          "handle": "ask:01M72GPGCT7HBADM8KY7HCPRKB",
           "kind": "unblock",
-          "text": "{\"kind\":\"unblock\",\"question\":\"hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:64523 under the submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, and its answer never reached DeepBuild, so it isn't made again. Find that call at 127.0.0.1:64523?\",\"options\":[{\"id\":\"done\",\"label\":\"I did it\",\"decision\":\"none\"},{\"id\":\"agent\",\"label\":\"The agent can do it\",\"decision\":\"none\"}],\"recommended\":\"done\",\"default\":\"done\",\"deadline\":1794392579920,\"steps\":[\"Find the call at 127.0.0.1:64523 by its submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, which it was sent with as its Idempotency-Key\",\"To pay for it again instead, delete the call journal /private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl and run the job again\"],\"where\":\"127.0.0.1:64523, and this machine's /private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl\",\"why\":\"a paid call is never made twice, and this one may have run\",\"unblocks\":[\"req:ed95da0fba7c366f\"],\"proves\":\"the call journal for 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609 deleted\",\"fallback\":\"you\",\"provisional\":false,\"owner\":\"you\",\"key\":\"ed95da0fba7c366f7cd3b64b316478f895de99d7562a608c9b1d5160ce796621\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"ed95da0fba7c366f7cd3b64b316478f895de99d7562a608c9b1d5160ce796621\"}}",
+          "text": "{\"kind\":\"unblock\",\"question\":\"hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:50823 under the submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, and its outputs never reached DeepBuild, so it isn't made again. Find that call at 127.0.0.1:50823?\",\"options\":[{\"id\":\"done\",\"label\":\"I did it\",\"decision\":\"none\"},{\"id\":\"agent\",\"label\":\"The agent can do it\",\"decision\":\"none\"}],\"recommended\":\"done\",\"default\":\"done\",\"deadline\":1794393611673,\"steps\":[\"Find the call at 127.0.0.1:50823 by its submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, which it was sent with as its Idempotency-Key\",\"To pay for it again instead, delete the call journal /private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl and run the job again\"],\"where\":\"127.0.0.1:50823, and this machine's /private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl\",\"why\":\"a paid call is never made twice, and this one may have run\",\"unblocks\":[\"req:ca300b17b96e11bf\"],\"proves\":\"the call journal for 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609 deleted\",\"fallback\":\"you\",\"provisional\":false,\"owner\":\"you\",\"key\":\"ca300b17b96e11bfeeb197c9066eda1fd1c09fb1cbcfc7b5ebbc903b3106d839\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"ca300b17b96e11bfeeb197c9066eda1fd1c09fb1cbcfc7b5ebbc903b3106d839\"}}",
           "data": {
             "kind": "unblock",
-            "question": "hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:64523 under the submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, and its answer never reached DeepBuild, so it isn't made again. Find that call at 127.0.0.1:64523?",
+            "question": "hosted-upper@1.0.0 sent a paid call for test.hosted to 127.0.0.1:50823 under the submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, and its outputs never reached DeepBuild, so it isn't made again. Find that call at 127.0.0.1:50823?",
             "options": [
               {
                 "id": "done",
@@ -143,24 +123,24 @@
             ],
             "recommended": "done",
             "default": "done",
-            "deadline": 1794392579920,
+            "deadline": 1794393611673,
             "steps": [
-              "Find the call at 127.0.0.1:64523 by its submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, which it was sent with as its Idempotency-Key",
-              "To pay for it again instead, delete the call journal /private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl and run the job again"
+              "Find the call at 127.0.0.1:50823 by its submission key 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609, which it was sent with as its Idempotency-Key",
+              "To pay for it again instead, delete the call journal /private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl and run the job again"
             ],
-            "where": "127.0.0.1:64523, and this machine's /private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl",
+            "where": "127.0.0.1:50823, and this machine's /private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl",
             "why": "a paid call is never made twice, and this one may have run",
             "unblocks": [
-              "req:ed95da0fba7c366f"
+              "req:ca300b17b96e11bf"
             ],
             "proves": "the call journal for 3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609 deleted",
             "fallback": "you",
             "provisional": false,
             "owner": "you",
-            "key": "ed95da0fba7c366f7cd3b64b316478f895de99d7562a608c9b1d5160ce796621",
+            "key": "ca300b17b96e11bfeeb197c9066eda1fd1c09fb1cbcfc7b5ebbc903b3106d839",
             "pinned_to": {
               "kind": "evidence",
-              "ref": "ed95da0fba7c366f7cd3b64b316478f895de99d7562a608c9b1d5160ce796621"
+              "ref": "ca300b17b96e11bfeeb197c9066eda1fd1c09fb1cbcfc7b5ebbc903b3106d839"
             }
           }
         }
@@ -168,19 +148,19 @@
       "journal": [
         {
           "key": "3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609",
-          "provider": "127.0.0.1:64523",
-          "file": "/private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl"
+          "provider": "127.0.0.1:50823",
+          "file": "/private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/3e702cd970db84fce886ab2ab8e0957fc0fa45f80f9ac929d42a089632935609/journal.jsonl"
         },
         {
           "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
-          "provider": "127.0.0.1:64523",
-          "file": "/private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+          "provider": "127.0.0.1:50823",
+          "file": "/private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
         },
         {
           "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
-          "provider": "127.0.0.1:64523",
+          "provider": "127.0.0.1:50823",
           "task": "task-2",
-          "file": "/private/tmp/dh1923-s8x5ot/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+          "file": "/private/tmp/dh1923-zBVxyL/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
         }
       ]
     }
