@@ -28,12 +28,14 @@ pub mod chrome_gallery;
 pub mod commands;
 pub mod confirm;
 pub mod device;
+pub mod empties;
 #[cfg(feature = "fixtures")]
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
 pub mod installed;
 pub mod kinds;
+pub mod list;
 pub mod notify;
 pub mod open;
 #[cfg(feature = "panel-check")]
@@ -68,6 +70,7 @@ use gpui_shell::{
 };
 
 pub mod trusted_input;
+pub mod unread;
 
 pub mod capture;
 

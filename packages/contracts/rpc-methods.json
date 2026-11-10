@@ -150,6 +150,12 @@
     "called_by": "deep, deep status, deep inbox"
   },
   {
+    "method": "row.read",
+    "since": "R1",
+    "stability": "stable",
+    "called_by": "the app"
+  },
+  {
     "method": "hub.stop",
     "since": "R1",
     "stability": "stable",

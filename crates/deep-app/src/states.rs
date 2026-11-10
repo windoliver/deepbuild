@@ -503,6 +503,11 @@ impl Table {
         rows.into_iter().map(|(.., row)| row).collect()
     }
 
+    /// The list's order key of the row with this ID.
+    pub fn order_of(&self, id: &str) -> Option<String> {
+        self.rows.get(id).map(|(order, _)| order.clone())
+    }
+
     /// The list's row with this ID.
     pub fn row_of(&self, id: &str) -> Option<&Value> {
         self.rows.get(id).map(|(_, row)| row)

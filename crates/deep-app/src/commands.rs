@@ -17,6 +17,13 @@ use crate::chrome;
 
 actions!(deepbuild, [OpenCommands, Back, Forward]);
 
+/// Opens a page by its address: the View menu's items (#1461).
+#[derive(Clone, Debug, PartialEq, Eq, gpui_kit::Action)]
+#[action(namespace = deepbuild, no_json)]
+pub struct OpenPage {
+    pub address: String,
+}
+
 /// ⌘K opens the list wherever focus is in the app. ⌘[ and ⌘] walk the addresses you opened (#1460), except while a
 /// text field or a terminal has the keys, which keep them.
 pub fn init(cx: &mut App) {
@@ -296,15 +303,35 @@ impl Palette {
         );
     }
 
-    /// What it lists: the entries it was given, then each session by its task's title.
+    /// What it lists: the entries it was given, then each open ask by its question, each session by its task's title
+    /// and each project by its name (#1461).
     fn listed(&self) -> Vec<Entry> {
-        let sessions = crate::views::sidebar()
-            .into_iter()
-            .map(|(id, task, _)| Entry::Open {
-                name: if task.is_empty() { id.clone() } else { task },
-                address: Address::session(&id),
-            });
-        self.entries.iter().cloned().chain(sessions).collect()
+        let now = crate::views::now();
+        let (asks, sessions) = (*crate::list::read_now(now)).clone();
+        let mut listed: Vec<Entry> = self.entries.clone();
+        listed.extend(asks.iter().map(|ask| Entry::Open {
+            name: ask.question.clone(),
+            address: Address::ask(&ask.handle),
+        }));
+        listed.extend(sessions.iter().map(|s| Entry::Open {
+            name: if s.title.is_empty() {
+                s.id.clone()
+            } else {
+                s.title.clone()
+            },
+            address: Address::session(&s.id),
+        }));
+        let mut projects: Vec<Option<&str>> = Vec::new();
+        for s in &sessions {
+            if !projects.contains(&s.project.as_deref()) {
+                projects.push(s.project.as_deref());
+            }
+        }
+        listed.extend(projects.into_iter().map(|project| Entry::Open {
+            name: project.unwrap_or(crate::list::NO_PROJECT).to_owned(),
+            address: Address::new(Place::Project, &crate::list::project_id(project)),
+        }));
+        listed
     }
 
     /// Shows it with an empty query, its input focused; `back` takes focus again once it hides.

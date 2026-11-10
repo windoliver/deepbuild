@@ -14,16 +14,71 @@ use crate::address::Address;
 use crate::commands::{entries, Entry, Open, Palette, View};
 use crate::views;
 
+/// The pages the View menu and ⌘K list (#1461): Needs you and Home, which open where the window opens, Agents and
+/// Rules, and each view you installed in the `sidebar` area, by its name.
+pub fn pages() -> Vec<(String, Address)> {
+    let shipped = [
+        ("Needs you", "needs-you"),
+        ("Home", "home"),
+        ("Agents", "agents"),
+        ("Rules", "rules"),
+    ]
+    .map(|(name, page)| (name.to_owned(), Address::page(page)));
+    let installed = views::page_names().into_iter().filter_map(|name| {
+        Some((
+            name.clone(),
+            format!("page/{name}").parse::<Address>().ok()?,
+        ))
+    });
+    shipped.into_iter().chain(installed).collect()
+}
+
 /// The pages ⌘K always lists, and the preferences it opens the box for (#1998).
 pub fn shipped_pages() -> Vec<Entry> {
-    let pages = [("Home", "home"), ("Needs you", "needs-you")].map(|(name, page)| Entry::Open {
-        name: name.to_owned(),
-        address: Address::page(page),
-    });
-    pages
+    pages()
         .into_iter()
+        .map(|(name, address)| Entry::Open { name, address })
         .chain(crate::words::preference_entries())
         .collect()
+}
+
+thread_local! {
+    /// The menu bar as last set: each menu's title and its items, each with the address it opens, as text.
+    static MENUS: std::cell::RefCell<Vec<(String, Vec<(String, String)>)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The menu bar as last set, for a replica that reads and picks from it (#1461).
+pub fn menus() -> Vec<(String, Vec<(String, String)>)> {
+    MENUS.with(|menus| menus.borrow().clone())
+}
+
+/// The menu bar's View menu (#1461): every page, opened by its address. The rest of the menu bar is #1462's.
+pub fn set_menus(cx: &mut App) {
+    let listed = pages().into_iter().map(|(name, address)| (name, address.to_string()));
+    MENUS.with(|menus| *menus.borrow_mut() = vec![("View".to_owned(), listed.collect())]);
+    let items = pages()
+        .into_iter()
+        .map(|(name, address)| {
+            MenuItem::action(
+                name,
+                crate::commands::OpenPage {
+                    address: address.to_string(),
+                },
+            )
+        })
+        .collect();
+    cx.set_menus([
+        Menu {
+            name: "DeepBuild".into(),
+            items: Vec::new(),
+            disabled: false,
+        },
+        Menu {
+            name: "View".into(),
+            items,
+            disabled: false,
+        },
+    ]);
 }
 
 /// What opening a ⌘K entry does in the app: a command runs off the main thread, a page mounts in the page region.
@@ -127,6 +182,7 @@ pub fn load(
         match mounted {
             Ok(mounted) => views::place(
                 view["area"].as_str().unwrap_or("tab"),
+                name,
                 mounted.into(),
                 window,
                 cx,
@@ -144,5 +200,6 @@ pub fn load(
     let mut listed = shipped_pages();
     listed.extend(entries(&views_in_commands));
     palette.update(cx, |palette, cx| palette.set_entries(listed, cx));
+    set_menus(cx);
     window.refresh();
 }

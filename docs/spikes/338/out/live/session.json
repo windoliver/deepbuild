@@ -19,213 +19,2499 @@
     ],
     "children": [
       {
-        "role": "label",
+        "role": "group",
         "name": "Tasks",
         "value": null,
-        "id": "sidebar-title",
+        "id": "list",
         "bounds": [
-          16,
-          16,
-          488,
-          64
-        ],
-        "children": []
-      },
-      {
-        "role": "button",
-        "name": "40 asks need you",
-        "value": null,
-        "id": "sidebar-count",
-        "bounds": [
-          16,
-          80,
-          488,
-          48
-        ],
-        "children": []
-      },
-      {
-        "role": "button",
-        "name": "Agents: MCP servers and skills",
-        "value": null,
-        "id": "sidebar-agents",
-        "bounds": [
-          16,
-          128,
-          488,
-          48
-        ],
-        "children": []
-      },
-      {
-        "role": "button",
-        "name": "! Session 01MCBH57 · needs you",
-        "value": "needs_you",
-        "id": "session:01MCBH57D812FQ88XJ33AV9KCE",
-        "bounds": [
-          16,
-          176,
-          488,
-          48
-        ],
-        "children": []
-      },
-      {
-        "role": "button",
-        "name": "! Session 01MCBH58 · needs you",
-        "value": "needs_you",
-        "id": "session:01MCBH58CGAQESGES1C4G0D6KF",
-        "bounds": [
-          16,
-          224,
-          488,
-          48
-        ],
-        "children": []
-      },
-      {
-        "role": "button",
-        "name": "! Session 01MCBH59 · needs you",
-        "value": "needs_you",
-        "id": "session:01MCBH59BR567E65G5ZMQVD50Y",
-        "bounds": [
-          16,
-          272,
-          488,
-          48
-        ],
-        "children": []
-      },
-      {
-        "role": "button",
-        "name": "! Session 01MCBH5A · needs you",
-        "value": "needs_you",
-        "id": "session:01MCBH5AB06WMYG6MC4XXAC1Y8",
-        "bounds": [
-          16,
-          320,
-          488,
-          48
-        ],
-        "children": []
-      },
-      {
-        "role": "button",
-        "name": "! Session 01MCBH5B · needs you",
-        "value": "needs_you",
-        "id": "session:01MCBH5BA8VDDP75ES6BGN4S84",
-        "bounds": [
-          16,
-          368,
-          488,
-          48
-        ],
-        "children": []
-      },
-      {
-        "role": "button",
-        "name": "! Session 01MCBH5C · needs you",
-        "value": "needs_you",
-        "id": "session:01MCBH5C9GCHP932NZK0RVQ19S",
-        "bounds": [
-          16,
-          416,
-          488,
-          48
-        ],
-        "children": []
-      },
-      {
-        "role": "button",
-        "name": "! Session 01MCBH5D · needs you",
-        "value": "needs_you",
-        "id": "session:01MCBH5D8RGQHJD9XH63321Q3Q",
-        "bounds": [
-          16,
-          464,
-          488,
-          48
-        ],
-        "children": []
-      },
-      {
-        "role": "label",
-        "name": "Session 01MCBH57",
-        "value": null,
-        "id": "session-title",
-        "bounds": [
-          536,
-          16,
-          2472,
-          64
-        ],
-        "children": []
-      },
-      {
-        "role": "label",
-        "name": "! Untitled task · needs you",
-        "value": "needs_you",
-        "id": "return-card",
-        "bounds": [
-          536,
-          80,
-          2472,
-          36
-        ],
-        "children": []
-      },
-      {
-        "role": "button",
-        "name": "Terminal",
-        "value": null,
-        "id": "session-terminal",
-        "bounds": [
-          536,
-          116,
-          114,
-          36
-        ],
-        "children": []
-      },
-      {
-        "role": "label",
-        "name": "Asks with a deadline 10",
-        "value": null,
-        "id": "session-chart",
-        "bounds": [
-          536,
-          152,
-          1200,
-          400
+          0,
+          0,
+          518,
+          1964
         ],
         "children": [
           {
-            "role": "image",
-            "name": "Hours to each deadline: 5 h, 6 h, 7 h, 8 h, 4 h, 5 h, 6 h, 7 h, 8 h, 4 h",
-            "value": null,
-            "id": "session-line-figure",
+            "role": "label",
+            "name": "Needs you",
+            "value": "40",
+            "id": "heading:needs-you",
             "bounds": [
-              538,
-              204,
-              1196,
-              346
+              16,
+              32,
+              486,
+              64
             ],
-            "children": []
+            "children": [
+              {
+                "role": "label",
+                "name": "40 asks need you",
+                "value": "nothing",
+                "id": "sidebar-count",
+                "bounds": [
+                  310,
+                  44,
+                  34,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "button",
+                "name": "Pop out Needs you",
+                "value": null,
+                "id": "needs-you-pop-out",
+                "bounds": [
+                  360,
+                  40,
+                  126,
+                  48
+                ],
+                "children": []
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Authority ask 1 in folding: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBHM300GP83QANM5WDCWNNP",
+            "bounds": [
+              16,
+              96,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBHM300GP83QANM5WDCWNNP:mark",
+                "bounds": [
+                  32,
+                  112,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Authority ask 1 in folding: go ahead?",
+                "value": null,
+                "id": "ask:01MCBHM300GP83QANM5WDCWNNP:title",
+                "bounds": [
+                  80,
+                  108,
+                  192,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Approval",
+                "value": null,
+                "id": "ask:01MCBHM300GP83QANM5WDCWNNP:word",
+                "bounds": [
+                  272,
+                  108,
+                  124,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "05:00",
+                "value": null,
+                "id": "ask:01MCBHM300GP83QANM5WDCWNNP:time",
+                "bounds": [
+                  396,
+                  108,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "05:00",
+                    "value": null,
+                    "id": "ask:01MCBHM300GP83QANM5WDCWNNP:applies",
+                    "bounds": [
+                      412,
+                      108,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Unblock ask 2 in folding: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBHNXK01C7MA759TY6A067E",
+            "bounds": [
+              16,
+              160,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBHNXK01C7MA759TY6A067E:mark",
+                "bounds": [
+                  32,
+                  176,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Unblock ask 2 in folding: go ahead?",
+                "value": null,
+                "id": "ask:01MCBHNXK01C7MA759TY6A067E:title",
+                "bounds": [
+                  80,
+                  172,
+                  184,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Your step",
+                "value": null,
+                "id": "ask:01MCBHNXK01C7MA759TY6A067E:word",
+                "bounds": [
+                  264,
+                  172,
+                  132,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "06:00",
+                "value": null,
+                "id": "ask:01MCBHNXK01C7MA759TY6A067E:time",
+                "bounds": [
+                  396,
+                  172,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "06:00",
+                    "value": null,
+                    "id": "ask:01MCBHNXK01C7MA759TY6A067E:applies",
+                    "bounds": [
+                      412,
+                      172,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Taste ask 3 in folding: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBHQR604RSDCGT0XNF4YCAH",
+            "bounds": [
+              16,
+              224,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBHQR604RSDCGT0XNF4YCAH:mark",
+                "bounds": [
+                  32,
+                  240,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Taste ask 3 in folding: go ahead?",
+                "value": null,
+                "id": "ask:01MCBHQR604RSDCGT0XNF4YCAH:title",
+                "bounds": [
+                  80,
+                  236,
+                  152,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "How it looks",
+                "value": null,
+                "id": "ask:01MCBHQR604RSDCGT0XNF4YCAH:word",
+                "bounds": [
+                  232,
+                  236,
+                  164,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "07:00",
+                "value": null,
+                "id": "ask:01MCBHQR604RSDCGT0XNF4YCAH:time",
+                "bounds": [
+                  396,
+                  236,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "07:00",
+                    "value": null,
+                    "id": "ask:01MCBHQR604RSDCGT0XNF4YCAH:applies",
+                    "bounds": [
+                      412,
+                      236,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Exception ask 4 in folding: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBHSJS0JPWS3RM039XYQSNS",
+            "bounds": [
+              16,
+              288,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBHSJS0JPWS3RM039XYQSNS:mark",
+                "bounds": [
+                  32,
+                  304,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Exception ask 4 in folding: go ahead?",
+                "value": null,
+                "id": "ask:01MCBHSJS0JPWS3RM039XYQSNS:title",
+                "bounds": [
+                  80,
+                  300,
+                  198,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Problem",
+                "value": null,
+                "id": "ask:01MCBHSJS0JPWS3RM039XYQSNS:word",
+                "bounds": [
+                  278,
+                  300,
+                  118,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "08:00",
+                "value": null,
+                "id": "ask:01MCBHSJS0JPWS3RM039XYQSNS:time",
+                "bounds": [
+                  396,
+                  300,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "08:00",
+                    "value": null,
+                    "id": "ask:01MCBHSJS0JPWS3RM039XYQSNS:applies",
+                    "bounds": [
+                      412,
+                      300,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Choice ask 5 in folding: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBHVDC0Z4S4BBGH7GFPD952",
+            "bounds": [
+              16,
+              352,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBHVDC0Z4S4BBGH7GFPD952:mark",
+                "bounds": [
+                  32,
+                  368,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Choice ask 5 in folding: go ahead?",
+                "value": null,
+                "id": "ask:01MCBHVDC0Z4S4BBGH7GFPD952:title",
+                "bounds": [
+                  80,
+                  364,
+                  196,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Pick one",
+                "value": null,
+                "id": "ask:01MCBHVDC0Z4S4BBGH7GFPD952:word",
+                "bounds": [
+                  276,
+                  364,
+                  120,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "04:00",
+                "value": null,
+                "id": "ask:01MCBHVDC0Z4S4BBGH7GFPD952:time",
+                "bounds": [
+                  396,
+                  364,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "04:00",
+                    "value": null,
+                    "id": "ask:01MCBHVDC0Z4S4BBGH7GFPD952:applies",
+                    "bounds": [
+                      412,
+                      364,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Definition ask 6 in folding: go ahead?",
+            "value": "folded",
+            "id": "ask:01MCBHX7Z0FNAJRF955NVKMG9M",
+            "bounds": [
+              16,
+              416,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBHX7Z0FNAJRF955NVKMG9M:mark",
+                "bounds": [
+                  32,
+                  432,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Definition ask 6 in folding: go ahead?",
+                "value": null,
+                "id": "ask:01MCBHX7Z0FNAJRF955NVKMG9M:title",
+                "bounds": [
+                  80,
+                  428,
+                  222,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "folded",
+                "value": null,
+                "id": "ask:01MCBHX7Z0FNAJRF955NVKMG9M:word",
+                "bounds": [
+                  302,
+                  428,
+                  94,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "05:00",
+                "value": null,
+                "id": "ask:01MCBHX7Z0FNAJRF955NVKMG9M:time",
+                "bounds": [
+                  396,
+                  428,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "05:00",
+                    "value": null,
+                    "id": "ask:01MCBHX7Z0FNAJRF955NVKMG9M:applies",
+                    "bounds": [
+                      412,
+                      428,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Authority ask 7 in folding: go ahead?",
+            "value": "folded",
+            "id": "ask:01MCBHZ2J04Z23DH6W50XQ2A84",
+            "bounds": [
+              16,
+              480,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBHZ2J04Z23DH6W50XQ2A84:mark",
+                "bounds": [
+                  32,
+                  496,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Authority ask 7 in folding: go ahead?",
+                "value": null,
+                "id": "ask:01MCBHZ2J04Z23DH6W50XQ2A84:title",
+                "bounds": [
+                  80,
+                  492,
+                  222,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "folded",
+                "value": null,
+                "id": "ask:01MCBHZ2J04Z23DH6W50XQ2A84:word",
+                "bounds": [
+                  302,
+                  492,
+                  94,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "06:00",
+                "value": null,
+                "id": "ask:01MCBHZ2J04Z23DH6W50XQ2A84:time",
+                "bounds": [
+                  396,
+                  492,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "06:00",
+                    "value": null,
+                    "id": "ask:01MCBHZ2J04Z23DH6W50XQ2A84:applies",
+                    "bounds": [
+                      412,
+                      492,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Unblock ask 8 in folding: go ahead?",
+            "value": "folded",
+            "id": "ask:01MCBJ0X50EAQCQZ73BR8VEX8J",
+            "bounds": [
+              16,
+              544,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJ0X50EAQCQZ73BR8VEX8J:mark",
+                "bounds": [
+                  32,
+                  560,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Unblock ask 8 in folding: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJ0X50EAQCQZ73BR8VEX8J:title",
+                "bounds": [
+                  80,
+                  556,
+                  222,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "folded",
+                "value": null,
+                "id": "ask:01MCBJ0X50EAQCQZ73BR8VEX8J:word",
+                "bounds": [
+                  302,
+                  556,
+                  94,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "07:00",
+                "value": null,
+                "id": "ask:01MCBJ0X50EAQCQZ73BR8VEX8J:time",
+                "bounds": [
+                  396,
+                  556,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "07:00",
+                    "value": null,
+                    "id": "ask:01MCBJ0X50EAQCQZ73BR8VEX8J:applies",
+                    "bounds": [
+                      412,
+                      556,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Taste ask 9 in folding: go ahead?",
+            "value": "folded",
+            "id": "ask:01MCBJ2QR0QB676VKTSV2XNB40",
+            "bounds": [
+              16,
+              608,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJ2QR0QB676VKTSV2XNB40:mark",
+                "bounds": [
+                  32,
+                  624,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Taste ask 9 in folding: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJ2QR0QB676VKTSV2XNB40:title",
+                "bounds": [
+                  80,
+                  620,
+                  222,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "folded",
+                "value": null,
+                "id": "ask:01MCBJ2QR0QB676VKTSV2XNB40:word",
+                "bounds": [
+                  302,
+                  620,
+                  94,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "08:00",
+                "value": null,
+                "id": "ask:01MCBJ2QR0QB676VKTSV2XNB40:time",
+                "bounds": [
+                  396,
+                  620,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "08:00",
+                    "value": null,
+                    "id": "ask:01MCBJ2QR0QB676VKTSV2XNB40:applies",
+                    "bounds": [
+                      412,
+                      620,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Exception ask 10 in folding: go ahead?",
+            "value": "folded",
+            "id": "ask:01MCBJ4JB0HVWNWEBJSDKJ3455",
+            "bounds": [
+              16,
+              672,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJ4JB0HVWNWEBJSDKJ3455:mark",
+                "bounds": [
+                  32,
+                  688,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Exception ask 10 in folding: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJ4JB0HVWNWEBJSDKJ3455:title",
+                "bounds": [
+                  80,
+                  684,
+                  222,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "folded",
+                "value": null,
+                "id": "ask:01MCBJ4JB0HVWNWEBJSDKJ3455:word",
+                "bounds": [
+                  302,
+                  684,
+                  94,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "04:00",
+                "value": null,
+                "id": "ask:01MCBJ4JB0HVWNWEBJSDKJ3455:time",
+                "bounds": [
+                  396,
+                  684,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "04:00",
+                    "value": null,
+                    "id": "ask:01MCBJ4JB0HVWNWEBJSDKJ3455:applies",
+                    "bounds": [
+                      412,
+                      684,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Definition ask 12 in merge: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBJ87H07MNWWA7Q4AEDZN1C",
+            "bounds": [
+              16,
+              736,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJ87H07MNWWA7Q4AEDZN1C:mark",
+                "bounds": [
+                  32,
+                  752,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Definition ask 12 in merge: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJ87H07MNWWA7Q4AEDZN1C:title",
+                "bounds": [
+                  80,
+                  748,
+                  80,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "What done means",
+                "value": null,
+                "id": "ask:01MCBJ87H07MNWWA7Q4AEDZN1C:word",
+                "bounds": [
+                  160,
+                  748,
+                  236,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "06:00",
+                "value": null,
+                "id": "ask:01MCBJ87H07MNWWA7Q4AEDZN1C:time",
+                "bounds": [
+                  396,
+                  748,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "06:00",
+                    "value": null,
+                    "id": "ask:01MCBJ87H07MNWWA7Q4AEDZN1C:applies",
+                    "bounds": [
+                      412,
+                      748,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Authority ask 13 in merge: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBJA240SW17ZRA9J03NKYSW",
+            "bounds": [
+              16,
+              800,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJA240SW17ZRA9J03NKYSW:mark",
+                "bounds": [
+                  32,
+                  816,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Authority ask 13 in merge: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJA240SW17ZRA9J03NKYSW:title",
+                "bounds": [
+                  80,
+                  812,
+                  192,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Approval",
+                "value": null,
+                "id": "ask:01MCBJA240SW17ZRA9J03NKYSW:word",
+                "bounds": [
+                  272,
+                  812,
+                  124,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "07:00",
+                "value": null,
+                "id": "ask:01MCBJA240SW17ZRA9J03NKYSW:time",
+                "bounds": [
+                  396,
+                  812,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "07:00",
+                    "value": null,
+                    "id": "ask:01MCBJA240SW17ZRA9J03NKYSW:applies",
+                    "bounds": [
+                      412,
+                      812,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Unblock ask 14 in merge: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBJBWQ0PEVQEWK18997336F",
+            "bounds": [
+              16,
+              864,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJBWQ0PEVQEWK18997336F:mark",
+                "bounds": [
+                  32,
+                  880,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Unblock ask 14 in merge: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJBWQ0PEVQEWK18997336F:title",
+                "bounds": [
+                  80,
+                  876,
+                  184,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Your step",
+                "value": null,
+                "id": "ask:01MCBJBWQ0PEVQEWK18997336F:word",
+                "bounds": [
+                  264,
+                  876,
+                  132,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "08:00",
+                "value": null,
+                "id": "ask:01MCBJBWQ0PEVQEWK18997336F:time",
+                "bounds": [
+                  396,
+                  876,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "08:00",
+                    "value": null,
+                    "id": "ask:01MCBJBWQ0PEVQEWK18997336F:applies",
+                    "bounds": [
+                      412,
+                      876,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Taste ask 15 in merge: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBJDQA0AQA7A53MHVBC3EFP",
+            "bounds": [
+              16,
+              928,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJDQA0AQA7A53MHVBC3EFP:mark",
+                "bounds": [
+                  32,
+                  944,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Taste ask 15 in merge: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJDQA0AQA7A53MHVBC3EFP:title",
+                "bounds": [
+                  80,
+                  940,
+                  152,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "How it looks",
+                "value": null,
+                "id": "ask:01MCBJDQA0AQA7A53MHVBC3EFP:word",
+                "bounds": [
+                  232,
+                  940,
+                  164,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "04:00",
+                "value": null,
+                "id": "ask:01MCBJDQA0AQA7A53MHVBC3EFP:time",
+                "bounds": [
+                  396,
+                  940,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "04:00",
+                    "value": null,
+                    "id": "ask:01MCBJDQA0AQA7A53MHVBC3EFP:applies",
+                    "bounds": [
+                      412,
+                      940,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Exception ask 16 in merge: go ahead?",
+            "value": "folded",
+            "id": "ask:01MCBJFHX0HBZPRXE7PB8WSP8Z",
+            "bounds": [
+              16,
+              992,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJFHX0HBZPRXE7PB8WSP8Z:mark",
+                "bounds": [
+                  32,
+                  1008,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Exception ask 16 in merge: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJFHX0HBZPRXE7PB8WSP8Z:title",
+                "bounds": [
+                  80,
+                  1004,
+                  222,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "folded",
+                "value": null,
+                "id": "ask:01MCBJFHX0HBZPRXE7PB8WSP8Z:word",
+                "bounds": [
+                  302,
+                  1004,
+                  94,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "05:00",
+                "value": null,
+                "id": "ask:01MCBJFHX0HBZPRXE7PB8WSP8Z:time",
+                "bounds": [
+                  396,
+                  1004,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "05:00",
+                    "value": null,
+                    "id": "ask:01MCBJFHX0HBZPRXE7PB8WSP8Z:applies",
+                    "bounds": [
+                      412,
+                      1004,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Definition ask 18 in release: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBJN1P00Y2QKCG37JSPXQKY",
+            "bounds": [
+              16,
+              1056,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJN1P00Y2QKCG37JSPXQKY:mark",
+                "bounds": [
+                  32,
+                  1072,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Definition ask 18 in release: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJN1P00Y2QKCG37JSPXQKY:title",
+                "bounds": [
+                  80,
+                  1068,
+                  80,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "What done means",
+                "value": null,
+                "id": "ask:01MCBJN1P00Y2QKCG37JSPXQKY:word",
+                "bounds": [
+                  160,
+                  1068,
+                  236,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "07:00",
+                "value": null,
+                "id": "ask:01MCBJN1P00Y2QKCG37JSPXQKY:time",
+                "bounds": [
+                  396,
+                  1068,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "07:00",
+                    "value": null,
+                    "id": "ask:01MCBJN1P00Y2QKCG37JSPXQKY:applies",
+                    "bounds": [
+                      412,
+                      1068,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Authority ask 19 in release: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBJPW90WFPZM3KB5SC2EGT1",
+            "bounds": [
+              16,
+              1120,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJPW90WFPZM3KB5SC2EGT1:mark",
+                "bounds": [
+                  32,
+                  1136,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Authority ask 19 in release: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJPW90WFPZM3KB5SC2EGT1:title",
+                "bounds": [
+                  80,
+                  1132,
+                  192,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Approval",
+                "value": null,
+                "id": "ask:01MCBJPW90WFPZM3KB5SC2EGT1:word",
+                "bounds": [
+                  272,
+                  1132,
+                  124,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "08:00",
+                "value": null,
+                "id": "ask:01MCBJPW90WFPZM3KB5SC2EGT1:time",
+                "bounds": [
+                  396,
+                  1132,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "08:00",
+                    "value": null,
+                    "id": "ask:01MCBJPW90WFPZM3KB5SC2EGT1:applies",
+                    "bounds": [
+                      412,
+                      1132,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Unblock ask 20 in release: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBJRPW0278W412Z0G9XCRFQ",
+            "bounds": [
+              16,
+              1184,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJRPW0278W412Z0G9XCRFQ:mark",
+                "bounds": [
+                  32,
+                  1200,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Unblock ask 20 in release: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJRPW0278W412Z0G9XCRFQ:title",
+                "bounds": [
+                  80,
+                  1196,
+                  184,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Your step",
+                "value": null,
+                "id": "ask:01MCBJRPW0278W412Z0G9XCRFQ:word",
+                "bounds": [
+                  264,
+                  1196,
+                  132,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "04:00",
+                "value": null,
+                "id": "ask:01MCBJRPW0278W412Z0G9XCRFQ:time",
+                "bounds": [
+                  396,
+                  1196,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "04:00",
+                    "value": null,
+                    "id": "ask:01MCBJRPW0278W412Z0G9XCRFQ:applies",
+                    "bounds": [
+                      412,
+                      1196,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Taste ask 21 in release: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBJTHF0G3F0RX9V9R3RAQQZ",
+            "bounds": [
+              16,
+              1248,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:mark",
+                "bounds": [
+                  32,
+                  1264,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Taste ask 21 in release: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:title",
+                "bounds": [
+                  80,
+                  1260,
+                  152,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "How it looks",
+                "value": null,
+                "id": "ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:word",
+                "bounds": [
+                  232,
+                  1260,
+                  164,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "05:00",
+                "value": null,
+                "id": "ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:time",
+                "bounds": [
+                  396,
+                  1260,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "05:00",
+                    "value": null,
+                    "id": "ask:01MCBJTHF0G3F0RX9V9R3RAQQZ:applies",
+                    "bounds": [
+                      412,
+                      1260,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Exception ask 22 in release: go ahead?",
+            "value": "folded",
+            "id": "ask:01MCBJWC206E670JH89MEG9QWN",
+            "bounds": [
+              16,
+              1312,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBJWC206E670JH89MEG9QWN:mark",
+                "bounds": [
+                  32,
+                  1328,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Exception ask 22 in release: go ahead?",
+                "value": null,
+                "id": "ask:01MCBJWC206E670JH89MEG9QWN:title",
+                "bounds": [
+                  80,
+                  1324,
+                  222,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "folded",
+                "value": null,
+                "id": "ask:01MCBJWC206E670JH89MEG9QWN:word",
+                "bounds": [
+                  302,
+                  1324,
+                  94,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "06:00",
+                "value": null,
+                "id": "ask:01MCBJWC206E670JH89MEG9QWN:time",
+                "bounds": [
+                  396,
+                  1324,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "06:00",
+                    "value": null,
+                    "id": "ask:01MCBJWC206E670JH89MEG9QWN:applies",
+                    "bounds": [
+                      412,
+                      1324,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Choice ask 23 in docs: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBK0180861FYX1QB7D4FH40",
+            "bounds": [
+              16,
+              1376,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBK0180861FYX1QB7D4FH40:mark",
+                "bounds": [
+                  32,
+                  1392,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Choice ask 23 in docs: go ahead?",
+                "value": null,
+                "id": "ask:01MCBK0180861FYX1QB7D4FH40:title",
+                "bounds": [
+                  80,
+                  1388,
+                  196,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Pick one",
+                "value": null,
+                "id": "ask:01MCBK0180861FYX1QB7D4FH40:word",
+                "bounds": [
+                  276,
+                  1388,
+                  120,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "07:00",
+                "value": null,
+                "id": "ask:01MCBK0180861FYX1QB7D4FH40:time",
+                "bounds": [
+                  396,
+                  1388,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "07:00",
+                    "value": null,
+                    "id": "ask:01MCBK0180861FYX1QB7D4FH40:applies",
+                    "bounds": [
+                      412,
+                      1388,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Definition ask 24 in docs: go ahead?",
+            "value": "later",
+            "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC",
+            "bounds": [
+              16,
+              1440,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC:mark",
+                "bounds": [
+                  32,
+                  1456,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Definition ask 24 in docs: go ahead?",
+                "value": null,
+                "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC:title",
+                "bounds": [
+                  80,
+                  1452,
+                  160,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "set for later",
+                "value": null,
+                "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC:word",
+                "bounds": [
+                  240,
+                  1452,
+                  156,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "08:00",
+                "value": null,
+                "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC:time",
+                "bounds": [
+                  396,
+                  1452,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "08:00",
+                    "value": null,
+                    "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC:applies",
+                    "bounds": [
+                      412,
+                      1452,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Authority ask 25 in docs: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH",
+            "bounds": [
+              16,
+              1504,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH:mark",
+                "bounds": [
+                  32,
+                  1520,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Authority ask 25 in docs: go ahead?",
+                "value": null,
+                "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH:title",
+                "bounds": [
+                  80,
+                  1516,
+                  192,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Approval",
+                "value": null,
+                "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH:word",
+                "bounds": [
+                  272,
+                  1516,
+                  124,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "04:00",
+                "value": null,
+                "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH:time",
+                "bounds": [
+                  396,
+                  1516,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "04:00",
+                    "value": null,
+                    "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH:applies",
+                    "bounds": [
+                      412,
+                      1516,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Unblock ask 26 in docs: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3",
+            "bounds": [
+              16,
+              1568,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3:mark",
+                "bounds": [
+                  32,
+                  1584,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Unblock ask 26 in docs: go ahead?",
+                "value": null,
+                "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3:title",
+                "bounds": [
+                  80,
+                  1580,
+                  184,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Your step",
+                "value": null,
+                "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3:word",
+                "bounds": [
+                  264,
+                  1580,
+                  132,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "05:00",
+                "value": null,
+                "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3:time",
+                "bounds": [
+                  396,
+                  1580,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "05:00",
+                    "value": null,
+                    "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3:applies",
+                    "bounds": [
+                      412,
+                      1580,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Taste ask 27 in docs: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA",
+            "bounds": [
+              16,
+              1632,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA:mark",
+                "bounds": [
+                  32,
+                  1648,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Taste ask 27 in docs: go ahead?",
+                "value": null,
+                "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA:title",
+                "bounds": [
+                  80,
+                  1644,
+                  152,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "How it looks",
+                "value": null,
+                "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA:word",
+                "bounds": [
+                  232,
+                  1644,
+                  164,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "06:00",
+                "value": null,
+                "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA:time",
+                "bounds": [
+                  396,
+                  1644,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "06:00",
+                    "value": null,
+                    "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA:applies",
+                    "bounds": [
+                      412,
+                      1644,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Exception ask 28 in review: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R",
+            "bounds": [
+              16,
+              1696,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R:mark",
+                "bounds": [
+                  32,
+                  1712,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Exception ask 28 in review: go ahead?",
+                "value": null,
+                "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R:title",
+                "bounds": [
+                  80,
+                  1708,
+                  198,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Problem",
+                "value": null,
+                "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R:word",
+                "bounds": [
+                  278,
+                  1708,
+                  118,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "07:00",
+                "value": null,
+                "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R:time",
+                "bounds": [
+                  396,
+                  1708,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "07:00",
+                    "value": null,
+                    "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R:applies",
+                    "bounds": [
+                      412,
+                      1708,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Choice ask 29 in review: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2",
+            "bounds": [
+              16,
+              1760,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2:mark",
+                "bounds": [
+                  32,
+                  1776,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Choice ask 29 in review: go ahead?",
+                "value": null,
+                "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2:title",
+                "bounds": [
+                  80,
+                  1772,
+                  196,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Pick one",
+                "value": null,
+                "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2:word",
+                "bounds": [
+                  276,
+                  1772,
+                  120,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "08:00",
+                "value": null,
+                "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2:time",
+                "bounds": [
+                  396,
+                  1772,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "08:00",
+                    "value": null,
+                    "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2:applies",
+                    "bounds": [
+                      412,
+                      1772,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Definition ask 30 in review: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ",
+            "bounds": [
+              16,
+              1824,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ:mark",
+                "bounds": [
+                  32,
+                  1840,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Definition ask 30 in review: go ahead?",
+                "value": null,
+                "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ:title",
+                "bounds": [
+                  80,
+                  1836,
+                  80,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "What done means",
+                "value": null,
+                "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ:word",
+                "bounds": [
+                  160,
+                  1836,
+                  236,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "04:00",
+                "value": null,
+                "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ:time",
+                "bounds": [
+                  396,
+                  1836,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "04:00",
+                    "value": null,
+                    "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ:applies",
+                    "bounds": [
+                      412,
+                      1836,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Authority ask 31 in review: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H",
+            "bounds": [
+              16,
+              1888,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H:mark",
+                "bounds": [
+                  32,
+                  1904,
+                  32,
+                  32
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Authority ask 31 in review: go ahead?",
+                "value": null,
+                "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H:title",
+                "bounds": [
+                  80,
+                  1900,
+                  192,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Approval",
+                "value": null,
+                "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H:word",
+                "bounds": [
+                  272,
+                  1900,
+                  124,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "05:00",
+                "value": null,
+                "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H:time",
+                "bounds": [
+                  396,
+                  1900,
+                  90,
+                  40
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "05:00",
+                    "value": null,
+                    "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H:applies",
+                    "bounds": [
+                      412,
+                      1900,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
           }
         ]
       },
       {
-        "role": "label",
-        "name": "! Session 01MCBH57 · needs you",
-        "value": "needs_you",
-        "id": "line-status",
+        "role": "group",
+        "name": null,
+        "value": null,
+        "id": "session/01MCBH57D812FQ88XJ33AV9KCE",
         "bounds": [
-          536,
-          1740,
-          2472,
-          36
+          520,
+          0,
+          2504,
+          1964
         ],
-        "children": []
+        "children": [
+          {
+            "role": "group",
+            "name": null,
+            "value": null,
+            "id": "lane",
+            "bounds": [
+              1052,
+              0,
+              1440,
+              1964
+            ],
+            "children": [
+              {
+                "role": "group",
+                "name": null,
+                "value": null,
+                "id": "page-title",
+                "bounds": [
+                  1052,
+                  0,
+                  1440,
+                  64
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "Session 01MCBH57",
+                    "value": null,
+                    "id": "session-title",
+                    "bounds": [
+                      1052,
+                      0,
+                      1440,
+                      64
+                    ],
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "role": "label",
+                "name": "! Session 01MCBH57 · needs you",
+                "value": "needs_you",
+                "id": "line-status",
+                "bounds": [
+                  1052,
+                  64,
+                  1440,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "! Untitled task · needs you",
+                "value": "needs_you",
+                "id": "return-card",
+                "bounds": [
+                  1052,
+                  104,
+                  1440,
+                  40
+                ],
+                "children": []
+              },
+              {
+                "role": "button",
+                "name": "Terminal",
+                "value": null,
+                "id": "session-terminal",
+                "bounds": [
+                  1052,
+                  144,
+                  136,
+                  48
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Asks with a deadline 10",
+                "value": null,
+                "id": "session-chart",
+                "bounds": [
+                  1052,
+                  192,
+                  1440,
+                  54
+                ],
+                "children": [
+                  {
+                    "role": "image",
+                    "name": "Hours to each deadline: 5 h, 6 h, 7 h, 8 h, 4 h, 5 h, 6 h, 7 h, 8 h, 4 h",
+                    "value": null,
+                    "id": "session-line-figure",
+                    "bounds": [
+                      1054,
+                      244,
+                      1436,
+                      0
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     ]
   },
@@ -238,8 +2524,8 @@
         "bound": false,
         "widest": null,
         "at": [
-          277.0,
-          81.0
+          535.0,
+          101.0
         ],
         "box": [
           127.0,
@@ -277,8 +2563,8 @@
         "bound": true,
         "widest": "9999",
         "at": [
-          825.0,
-          81.0
+          1203.0,
+          101.0
         ],
         "box": [
           34.0,

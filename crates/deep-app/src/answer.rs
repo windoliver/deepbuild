@@ -13,6 +13,9 @@ use crate::hub::{HubClient, HubError};
 /// Signs `params`, the card's `ask.answer` params, for `ask.answer` on this hub, and sends them. A device the hub no
 /// longer knows, as after a restore, pairs again, once.
 pub fn send(params: &Value) -> Result<Value, HubError> {
+    if crate::hub::stood_in("ask.answer", params) {
+        return Ok(json!({ "answered": true }));
+    }
     let mut client = HubClient::app()?;
     let params = params.as_object().cloned().unwrap_or_default();
     // The hub's ID, as its hello names it: what the signature is for (#1579).

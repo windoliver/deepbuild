@@ -198,6 +198,11 @@ struct Replica {
     evidence: Vec<Value>,
     trace: Vec<Value>,
     notified: Vec<Value>,
+    /// Issue #1461: how the hub the app reads answers (`answering`, `stopped` or `slow`), the app's watch of it, and
+    /// every call the app made to its stand-in, in order.
+    hub_state: String,
+    watch: deep_app::record::HubWatch,
+    hub_calls: Vec<Value>,
     /// Issue #1427: the motion recording while one runs, the launch's reduced motion, and the panel's script view,
     /// whose declared transitions and springs a recording lists.
     motion: Option<motion::Recorder>,
@@ -230,6 +235,22 @@ impl Replica {
             &[NEEDS_YOU, HOME, SESSION, WELCOME, AGENTS],
             NEEDS_YOU,
         )?;
+        // Issue #1461: a machine whose setup hasn't finished, the hub the app reads, and where a panel goes.
+        let setup = word("setup", &["finished", "unfinished"], "finished")?;
+        let hub_state = word("hub", &["answering", "stopped", "slow"], "answering")?;
+        let area = match &args["area"] {
+            Value::Null => None,
+            Value::String(a) if ["sidebar", "home", "line"].contains(&a.as_str()) => {
+                Some(a.clone())
+            }
+            other => {
+                return Err(fail(
+                    "refused",
+                    format!("launch.area is sidebar, home or line, not {other}"),
+                ))
+            }
+        };
+        let replaces = word("replaces", &["needs-you", ""], "")?;
         let theme = word("theme", &["light", "dark"], "light")?;
         let clock = word("clock", &["virtual", "real"], "virtual")?;
         // #1546: "every" draws every view each frame; "dirty" only the frames GPUI says the window needs.
@@ -417,6 +438,23 @@ impl Replica {
             sessions: fixture.sessions(),
             held,
         });
+        if setup == "unfinished" {
+            deep_app::setup::assume_unfinished();
+        }
+        // The replica stands in for the hub: no call that writes leaves it (#1461).
+        deep_app::hub::stand_in();
+        deep_app::record::set_local_hub(match hub_state.as_str() {
+            "stopped" => deep_app::record::LocalHub::Stops,
+            "slow" => deep_app::record::LocalHub::Slow,
+            _ => deep_app::record::LocalHub::Answers,
+        });
+        // Its window is the front one on an awake, unlocked screen; its acts are your input (#1461).
+        deep_app::shown::force_seen(Some(deep_app::shown::Seen {
+            visible: true,
+            minimized: false,
+            display_awake: true,
+            session_locked: false,
+        }));
 
         let glyphs = Glyphs::default();
         let renderer_glyphs = glyphs.clone();
@@ -470,12 +508,30 @@ impl Replica {
                 },
                 ..crate::shell::window_options()
             };
-            // A panel goes in the sidebar's slot, as an installed one would; with none, the shipped sidebar does.
-            let layout = Layout {
-                sidebar: deep_app::views::EXTENSION.into(),
-                center: vec![center],
-                ..Layout::shipped("needs-you")
+            // The window opens where the app opens, unless the launch names a page (#1461). A panel with no area goes in
+            // the list's slot, as before; one registered to an area goes there; one replacing Needs you fills the list's
+            // first section.
+            let base = Layout::shipped("needs-you");
+            let mut layout = if center == NEEDS_YOU {
+                base
+            } else {
+                Layout {
+                    center: vec![center],
+                    active: 0,
+                    ..base
+                }
             };
+            if setup == "unfinished" {
+                layout.center.insert(0, WELCOME.into());
+                layout.active = 0;
+            }
+            if panel.is_some() && area.is_none() && replaces.is_empty() {
+                layout.sidebar = deep_app::views::EXTENSION.into();
+            }
+            if !replaces.is_empty() {
+                layout.needs_you = format!("shell:deepbuild-panel/{replaces}");
+            }
+            let placed_as = view.as_ref().map(|v| v.name.clone());
             // #124's wrong rows exist in an env-plants build only (#1662), as the plant that selects them does.
             #[cfg(feature = "env-plants")]
             deep_app::views::plant_row(match plant {
@@ -488,6 +544,7 @@ impl Replica {
                 std::env::set_var("DEEP_HUB_PLANT", "menu-release-always");
             }
             let into = mounted.clone();
+            let replacing = !replaces.is_empty();
             let (window, shell) =
                 open_shell_with(options, &layout, cx, move |window, cx| match panel {
                     Some(dir) => {
@@ -496,7 +553,19 @@ impl Replica {
                             runtime.map_err(|e| e.to_string()).and_then(|runtime| {
                                 let view = deep_app::mount_panel(&runtime, &dir, window, cx)
                                     .map_err(|e| e.to_string())?;
-                                deep_app::open::place_extension(view.clone().into(), cx);
+                                match (&area, replacing) {
+                                    (Some(area), _) => deep_app::views::place(
+                                        area,
+                                        placed_as.as_deref().unwrap_or("panel"),
+                                        view.clone().into(),
+                                        window,
+                                        cx,
+                                    ),
+                                    (None, true) => {}
+                                    (None, false) => {
+                                        deep_app::open::place_extension(view.clone().into(), cx)
+                                    }
+                                }
                                 Ok(Some((runtime, view)))
                             });
                     }
@@ -517,7 +586,8 @@ impl Replica {
                         cx,
                     );
                     let mut entries = deep_app::commands::entries(&views);
-                    entries.extend(deep_app::words::preference_entries());
+                    // ⌘K lists the app's pages, a view in the sidebar area among them, and the preferences (#1461).
+                    entries.extend(deep_app::installed::shipped_pages());
                     palette.set_entries(entries, cx);
                     palette
                 });
@@ -528,6 +598,7 @@ impl Replica {
                     shell.set_commands(palette, window, cx);
                     shell.set_box(words, cx);
                 });
+                deep_app::installed::set_menus(cx);
             });
             window
         });
@@ -573,6 +644,9 @@ impl Replica {
             evidence: Vec::new(),
             trace: Vec::new(),
             notified: Vec::new(),
+            hub_state,
+            watch: deep_app::record::HubWatch::default(),
+            hub_calls: Vec::new(),
             motion: None,
             reduced,
             script,
@@ -604,6 +678,7 @@ impl Replica {
         self.begin_step();
         let result = match name {
             "act" => self.act(call),
+            "hub" => self.hub(call),
             "feed" => self.feed(call),
             "open" => self.open(call),
             "notification" => self.notification(call),
@@ -682,7 +757,9 @@ impl Replica {
         self.cx.run_until_parked();
         // Time passes for the question card as the app's tick passes it, so it arms once its interval ran (#1459).
         let now = self.now + self.clock.t * 1000 / FLICKS;
-        self.cx.update(|cx| deep_app::card::tick(now, cx));
+        self.watch_hub(now);
+        self.stood_in(now);
+        self.cx.update(|cx| deep_app::views::tick(now, cx));
         if self.motion.is_some() {
             self.sample();
         } else if self.dirty.is_some() {
@@ -804,6 +881,44 @@ impl Replica {
         let timeout_ms = Self::timeout(call);
         let scale = self.scale();
         let at = |p: [i64; 2]| point(px(p[0] as f32 / scale), px(p[1] as f32 / scale));
+        // A press where the pointer is, at a point in device pixels: no locator, no wait for stillness (#1461).
+        if kind == "click" && locator.is_null() {
+            if let Some(p) = act["point"].as_array().filter(|p| p.len() == 2) {
+                let p = [p[0].as_i64().unwrap_or(0), p[1].as_i64().unwrap_or(0)];
+                self.input_at(self.clock.t);
+                self.click(at(p), 1);
+                self.tick();
+                self.tick();
+                return Ok(json!({"point": p, "result": "delivered"}));
+            }
+        }
+        // A menu bar item, picked as a click on it would (#1461).
+        if kind == "menu" {
+            let path: Vec<&str> = act["path"]
+                .as_array()
+                .map(|p| p.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            let menus = deep_app::installed::menus();
+            let item = match path.as_slice() {
+                [menu, item] => menus
+                    .iter()
+                    .find(|(title, _)| title == menu)
+                    .and_then(|(_, items)| items.iter().find(|(title, _)| title == item))
+                    .map(|(_, address)| address.to_string()),
+                _ => None,
+            };
+            let Some(address) = item else {
+                return Err(fail(
+                    "locate.none",
+                    format!("the menu bar has no item {path:?}"),
+                ));
+            };
+            self.input_at(self.clock.t);
+            let _ = self.cx.update(|cx| deep_app::open::arrive(&address, cx));
+            self.tick();
+            self.tick();
+            return Ok(json!({"menu": path, "result": "delivered"}));
+        }
         let (target, waited) = match (&kind[..], locator.is_null()) {
             ("type" | "press", true) => match self.focus.clone() {
                 Some(focus) => (focus, 0),
@@ -1224,7 +1339,7 @@ impl Replica {
             .runs
             .iter()
             .filter(|r| r.visible)
-            .map(|r| json!({"text": r.text, "bounds": r.bounds, "size": r.size, "face": r.face, "cut": r.cut}))
+            .map(|r| json!({"text": r.text, "bounds": r.bounds, "size": r.size, "face": r.face, "cut": r.cut, "weight": r.weight}))
             .collect();
         let scale = frame.scale;
         let device = |v: gpui_kit::Pixels| (f32::from(v) * scale).round() as i64;
@@ -1322,9 +1437,119 @@ impl Replica {
         let address = self
             .cx
             .update(|cx| deep_app::open::current(cx).map(|address| address.to_string()));
+        // The menu bar, as the app set it (#1461).
+        let menus: Vec<Value> = deep_app::installed::menus()
+            .into_iter()
+            .map(|(title, items)| {
+                let items: Vec<Value> = items
+                    .into_iter()
+                    .map(|(title, _)| json!({"title": title, "enabled": true}))
+                    .collect();
+                json!({"title": title, "items": items})
+            })
+            .collect();
         Ok(
-            json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos, "address": address}),
+            json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos, "address": address, "menus": menus}),
         )
+    }
+
+    /// `hub`: how the hub the app reads answers from now on, `answering`, `stopped` or `slow` (#1461); then a frame.
+    fn hub(&mut self, call: &Value) -> Result<Value, Fail> {
+        let state = call["hub"]["state"].as_str().unwrap_or_default();
+        if !["answering", "stopped", "slow"].contains(&state) {
+            return Err(fail(
+                "refused",
+                format!("hub.state is answering, stopped or slow, not {state:?}"),
+            ));
+        }
+        self.hub_state = state.to_owned();
+        deep_app::record::set_local_hub(match state {
+            "stopped" => deep_app::record::LocalHub::Stops,
+            "slow" => deep_app::record::LocalHub::Slow,
+            _ => deep_app::record::LocalHub::Answers,
+        });
+        self.tick();
+        Ok(json!({"hub": state}))
+    }
+
+    /// The app's watch of the hub at `now`, as its tick reads it: a slow hub's reads neither answer nor fail.
+    fn watch_hub(&mut self, now: u64) {
+        if self.hub_state == "slow" {
+            return;
+        }
+        let answering = self.hub_state == "answering";
+        self.watch.tick(now, || answering);
+        let reach = deep_app::notify::Reach {
+            hub_down: self.watch.down(),
+            since: self.watch.since(),
+            ..deep_app::notify::reach()
+        };
+        if reach != deep_app::notify::reach() {
+            deep_app::notify::publish(reach);
+        }
+    }
+
+    /// What the app sent the hub's stand-in since the last frame: kept for the trace and applied to the replica's own
+    /// record as the hub would (#1461): an answer closes its ask and its row leaves the list; a read clears the row's
+    /// unread.
+    fn stood_in(&mut self, now: u64) {
+        for (method, params) in deep_app::hub::take_stood_in() {
+            self.hub_calls
+                .push(json!({"t": now, "method": method, "params": params}));
+            match method.as_str() {
+                "ask.answer" => {
+                    let Some(ask) = params["ask"].as_str().map(str::to_owned) else {
+                        continue;
+                    };
+                    let session = self
+                        .events
+                        .iter()
+                        .find(|e| {
+                            e["kind"] == "ask.created"
+                                && format!("ask:{}", e["id"].as_str().unwrap_or_default()) == ask
+                        })
+                        .and_then(|e| e["session"].as_str().map(str::to_owned))
+                        .unwrap_or_default();
+                    let answered = json!({"v": 1, "id": format!("stood-in-{}", self.hub_calls.len()), "kind": "ask.answered", "writer": "core",
+                        "subject": ask, "data": {"answer": params["option"], "words": params["words"], "via": "card"}});
+                    self.apply(&session, answered, now);
+                    self.apply(&session, json!({"v": 1, "kind": "row.set", "writer": "core", "data": {"id": ask, "listed": false}}), now);
+                }
+                "row.read" => {
+                    let Some(id) = params["id"].as_str() else {
+                        continue;
+                    };
+                    let row = deep_app::record::with_view(|view| {
+                        let table = view.table();
+                        Some((table.row_of(id)?.clone(), table.order_of(id)?))
+                    })
+                    .flatten();
+                    if let Some((mut row, order)) = row {
+                        row["unread"] = json!(false);
+                        row["listed"] = json!(true);
+                        row["order"] = json!(order);
+                        let session = row["session"].as_str().unwrap_or_default().to_owned();
+                        self.apply(
+                            &session,
+                            json!({"v": 1, "kind": "row.set", "writer": "core", "data": row}),
+                            now,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// One event into the replica's own record, as the hub's stream delivers it: the next `log_pos`, at `now`.
+    fn apply(&mut self, session: &str, mut event: Value, now: u64) {
+        let log_pos = deep_app::record::with_view(|view| view.log_pos).unwrap_or(0) + 1;
+        event["session"] = json!(session);
+        event["log_pos"] = json!(log_pos);
+        event["ts"] = json!(now);
+        self.notifier.saw(&event, now);
+        self.events.push(event.clone());
+        self.cx.update(|cx| deep_app::record::deliver(event, cx));
     }
 
     /// The window's snapshot, written once under `trace/` by its hash: an action's before and after.
@@ -1510,6 +1735,7 @@ impl Replica {
         };
         let trace = json!({
             "format": "deep_drive.trace@1", "replica": self.id, "calls": self.trace, "notifications": self.notified,
+            "hub": self.hub_calls,
         });
         let path = self.out.join("trace.json");
         let bytes = trace.to_string();

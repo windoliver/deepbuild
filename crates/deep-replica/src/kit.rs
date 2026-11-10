@@ -128,6 +128,7 @@ fn view_tree(dir: &std::path::Path, panel: &str) -> Result<String, String> {
         center: vec![name.clone()],
         active: 0,
         line: LINE.into(),
+        needs_you: deep_app::views::NEEDS_YOU.into(),
     };
     let mut mounted = Ok(());
     let (handle, shell) = cx.update(|cx| {

@@ -37,6 +37,39 @@ pub fn address() -> PathBuf {
     configured_address().unwrap_or_else(|| root().join("hub.sock"))
 }
 
+/// What a replica's hub stand-in heard (#1461): every call the app makes that writes, in order, kept for the replica
+/// to apply to its own record and to keep in its trace. On only in a replica, which no shipped build has (#1457).
+#[cfg(feature = "fixtures")]
+static STOOD_IN: std::sync::Mutex<Option<Vec<(String, Value)>>> = std::sync::Mutex::new(None);
+
+/// Turns the replica's hub stand-in on: from now on calls that write go to it, never to a hub.
+#[cfg(feature = "fixtures")]
+pub fn stand_in() {
+    *STOOD_IN.lock().expect("stand-in") = Some(Vec::new());
+}
+
+/// The calls the stand-in heard since last taken.
+#[cfg(feature = "fixtures")]
+pub fn take_stood_in() -> Vec<(String, Value)> {
+    STOOD_IN
+        .lock()
+        .expect("stand-in")
+        .as_mut()
+        .map(std::mem::take)
+        .unwrap_or_default()
+}
+
+/// Whether a replica's stand-in took the call `method` with `params` in place of the hub.
+pub fn stood_in(method: &str, params: &Value) -> bool {
+    #[cfg(feature = "fixtures")]
+    if let Some(heard) = STOOD_IN.lock().expect("stand-in").as_mut() {
+        heard.push((method.to_owned(), params.clone()));
+        return true;
+    }
+    let _ = (method, params);
+    false
+}
+
 /// The hub contract the app speaks, "major.minor" (#41): the hub's `CONTRACT` in packages/hub/src/wire.ts.
 pub const CONTRACT: &str = "1.0";
 /// Every hub method the app calls (#41), which the hub's hello must list (`FEATURES` in packages/hub/src/wire.ts).
@@ -47,6 +80,7 @@ pub const NEEDS: &[&str] = &[
     "notifications.report",
     "views.shown",
     "views.hidden",
+    "row.read",
     "canvas.drawn",
     "canvas.user",
 ];

@@ -1,16 +1,22 @@
-//! Issue #1998: the box at the foot of the window. You say a change in words; the hub drafts it as a proposed change,
+//! Issue #1998: the box at the foot of every page (#1461). You say a change in words; the hub drafts it as a proposed change,
 //! approved on its question card in Needs you like any other ask, and the box says it was drafted and opens that card.
 //! ⌘K's preference words open the box with their change drafted beside its current value, so there is no Settings
 //! page to hunt for.
+//!
+//! Issue #1461: one box, at the foot of every page, the lane's width, 2 to 10 lines and then it scrolls. On an ask's
+//! page it's the card's words: it answers that ask by the card's arming and input rules and never starts work, and its
+//! send control says what the press does.
 
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use gpui_kit::base::input::{Input, InputEvent, InputState};
+use gpui_kit::base::input::{InputEvent, Textarea, TextareaState};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use serde_json::{json, Value};
 
-use crate::chrome::{self, sizes};
+use crate::chrome::{self, sizes, Typed as _};
+use crate::question::Target;
 use crate::views::observed;
 use crate::views::{control, Control};
 
@@ -20,6 +26,9 @@ pub type Say = Arc<dyn Fn(&str) -> Result<Value, String> + Send + Sync>;
 /// `box.say` through the app's own hub connection.
 pub fn hub_say() -> Say {
     Arc::new(|words| {
+        if crate::hub::stood_in("box.say", &json!({ "words": words })) {
+            return Ok(json!({ "unread": "Nothing was drafted." }));
+        }
         crate::hub::HubClient::app()
             .and_then(|mut hub| hub.call("box.say", json!({ "words": words })))
             .map_err(|error| format!("{error:?}"))
@@ -35,7 +44,7 @@ enum Said {
 
 /// The box: your words, what a ⌘K preference word drafted them beside, and what came back.
 pub struct WordsBox {
-    input: Entity<InputState>,
+    input: Entity<TextareaState>,
     beside: Option<String>,
     said: Said,
     say: Say,
@@ -48,17 +57,35 @@ thread_local! {
 
 impl WordsBox {
     pub fn new(say: Say, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Say a change in words"));
+        // Return sends, Shift-Return starts a line; on an ask's page Return sends nothing, since no key answers (#1462).
+        let input = cx.new(|cx| {
+            // #1461's planted box grows with its lines past 10.
+            let most = if crate::plain::planted("box-grows-past-10") {
+                100
+            } else {
+                10
+            };
+            TextareaState::new(window, cx)
+                .auto_grow(2, most)
+                .submit_on_enter(true)
+        });
         let entered = cx.subscribe_in(
             &input,
             window,
-            |this: &mut Self, _, event: &InputEvent, window, cx| {
-                if matches!(event, InputEvent::PressEnter { .. }) {
-                    this.send(window, cx);
+            |this: &mut Self, input, event: &InputEvent, window, cx| match event {
+                InputEvent::PressEnter { .. } if answering(cx).is_none() => this.send(window, cx),
+                InputEvent::Change => {
+                    if let Some(card) = answering(cx) {
+                        let words = input.read(cx).value().to_string();
+                        card.update(cx, |card, cx| card.type_words(&words, cx));
+                    }
+                    cx.notify();
                 }
+                _ => {}
             },
         );
         BOX.with(|cell| *cell.borrow_mut() = Some(cx.entity().downgrade()));
+        crate::views::box_keys(gpui_kit::Focusable::focus_handle(input.read(cx), cx));
         WordsBox {
             input,
             beside: None,
@@ -96,6 +123,14 @@ impl WordsBox {
         })
         .detach();
     }
+}
+
+/// The card whose page the box is on (#1461), when an ask's page is shown.
+fn answering(cx: &App) -> Option<Entity<crate::card::Card>> {
+    let address = crate::open::current(cx)?;
+    let (ask, card) = crate::card::shown()?;
+    (address.place == crate::address::Place::Ask && ask == format!("ask:{}", address.id))
+        .then_some(card)
 }
 
 /// The preferences ⌘K lists, each with the words it is found by: there is no Settings page, so each opens the box.
@@ -162,21 +197,29 @@ pub fn draft(words: &str, now: &str, window: &mut Window, cx: &mut App) {
 impl Render for WordsBox {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
+        let s = sizes();
         let line = |id: &'static str, text: String| {
             observed(id)
                 .role(Role::Label)
                 .aria_label(text.clone())
                 .child(text)
         };
-        let said = match &self.said {
-            Said::Nothing => None,
-            Said::Unread(why) => Some(line("box-said", why.clone()).into_any_element()),
-            Said::Drafted { ask, question } => {
+        let card = answering(cx);
+        let draft = self.input.read(cx).value().to_string();
+        // On an ask's page the box is the card's words, and its control says what the press does (#1461).
+        let (send, lines) = match &card {
+            Some(card) => card.read(cx).words_send(),
+            None => ("Send", Vec::new()),
+        };
+        let said = match (&self.said, &card) {
+            (_, Some(_)) | (Said::Nothing, _) => None,
+            (Said::Unread(why), None) => Some(line("box-said", why.clone()).into_any_element()),
+            (Said::Drafted { ask, question }, None) => {
                 let ask = ask.clone();
                 Some(
                     div()
                         .flex()
-                        .gap(sizes().space(1))
+                        .gap(s.space(1))
                         .items_center()
                         .child(line("box-said", format!("Drafted: {question}")))
                         .child(
@@ -191,51 +234,84 @@ impl Render for WordsBox {
                 )
             }
         };
-        let draft = self.input.read(cx).value().to_string();
+        let send_control = control("box-send", Control::Plain, send, chrome).flex_none();
+        // #1461's planted box sends its words as new work on an ask's page too.
+        let starts_work = crate::plain::planted("box-starts-work");
+        let send_control = match card.clone().filter(|_| !starts_work) {
+            // The card's own press: its arming and input rules decide what it does.
+            Some(card) => {
+                let down = card.clone();
+                send_control
+                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                        down.update(cx, |card, _| card.pressing(Target::Send));
+                    })
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        card.update(cx, |card, cx| card.pressed(Target::Send, cx));
+                        this.input
+                            .update(cx, |input, cx| input.set_value("", window, cx));
+                    }))
+            }
+            None => send_control.on_click(cx.listener(|this, _, window, cx| this.send(window, cx))),
+        };
+        // What the box and the card measure together on an ask's page.
+        let on_page = card.is_some();
+        let measure = canvas(
+            move |bounds, _, _| {
+                if on_page {
+                    crate::card::box_measured(f32::from(bounds.size.height).ceil() as i64);
+                }
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_full();
         observed("box")
             .role(Role::Group)
             .aria_label("Say a change in words")
+            .relative()
             .flex_none()
             .w_full()
             .flex()
             .flex_col()
-            .items_center()
-            .p(sizes().space(1))
-            .border_t(sizes().hairline)
-            .border_color(chrome.divider)
-            .child(
-                div()
-                    .w(relative(0.8))
-                    .flex()
-                    .flex_col()
-                    .gap(sizes().space(0))
-                    .children(
-                        self.beside
-                            .clone()
-                            .map(|now| line("box-current", now).text_color(chrome.ink_secondary)),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap(sizes().space(1))
-                            .items_center()
-                            // The drafted change is the input's words, its value (#1459's author id).
-                            .child(
-                                observed("box-draft")
-                                    .role(Role::TextInput)
-                                    .aria_label("Say a change in words")
-                                    .aria_value(draft)
-                                    .flex_1()
-                                    .h(sizes().title.line + sizes().space(2))
-                                    .child(Input::new(&self.input)),
-                            )
-                            .child(
-                                control("box-send", Control::Plain, "Send", chrome).on_click(
-                                    cx.listener(|this, _, window, cx| this.send(window, cx)),
-                                ),
-                            ),
-                    )
-                    .children(said),
+            .gap(s.space(0))
+            .child(measure)
+            .children(
+                self.beside
+                    .clone()
+                    .filter(|_| !on_page)
+                    .map(|now| line("box-current", now).text_color(chrome.ink_secondary)),
             )
+            .children(lines.into_iter().enumerate().map(|(n, text)| {
+                observed(("box-note", n))
+                    .role(Role::Label)
+                    .aria_label(text)
+                    .typed(s.small)
+                    .text_color(chrome.ink_secondary)
+                    .child(text)
+            }))
+            .child(
+                // The lane's width, 12 inside, the one radius, on the raised fill with no border (#1461).
+                div()
+                    .w_full()
+                    .flex()
+                    .items_end()
+                    .gap(s.space(1))
+                    .p(s.space(2))
+                    .rounded(s.radius)
+                    .bg(chrome.raised)
+                    // The words are the input's value (#1459's author id).
+                    .child(
+                        observed("box-draft")
+                            .role(Role::TextInput)
+                            .aria_label("Say a change in words")
+                            .aria_value(draft)
+                            .flex_1()
+                            .min_w_0()
+                            .when(on_page, |d| d.aria_label("Your words"))
+                            .child(Textarea::new(&self.input)),
+                    )
+                    .child(send_control),
+            )
+            .children(said)
     }
 }
