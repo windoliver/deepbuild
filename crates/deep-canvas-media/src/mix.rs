@@ -558,7 +558,7 @@ impl Line {
         if n == 0 {
             return;
         }
-        for f in block.chunks_exact_mut(2) {
+        for f in block.as_chunks_mut::<2>().0 {
             let at = 2 * self.at;
             std::mem::swap(&mut self.buf[at], &mut f[0]);
             std::mem::swap(&mut self.buf[at + 1], &mut f[1]);

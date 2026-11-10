@@ -70,7 +70,7 @@ impl Delay {
         let fb = self.spec.feedback.clamp(0.0, 0.999_999) as f32;
         let (wet, dry) = (self.spec.mix as f32, 1.0 - self.spec.mix as f32);
         let st = &mut self.state;
-        for frame in block.chunks_exact_mut(2) {
+        for frame in block.as_chunks_mut::<2>().0 {
             for (ch, x) in frame.iter_mut().enumerate() {
                 let at = 2 * st.at + ch;
                 let w = st.line[at];
@@ -149,7 +149,7 @@ impl Pitch {
     pub fn process(&mut self, block: &mut [f32]) {
         let len = self.n + 2;
         let n = self.n as f64;
-        for frame in block.chunks_exact_mut(2) {
+        for frame in block.as_chunks_mut::<2>().0 {
             let st = &mut self.state;
             st.at = (st.at + 1) % len;
             st.line[2 * st.at] = frame[0];

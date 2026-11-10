@@ -114,7 +114,7 @@ impl Compressor {
     pub fn process(&mut self, block: &mut [f32], key: Option<&[f32]>) {
         let (aa, ar) = (self.attack, self.release);
         let mut st = self.state;
-        for (i, frame) in block.chunks_exact_mut(2).enumerate() {
+        for (i, frame) in block.as_chunks_mut::<2>().0.iter_mut().enumerate() {
             let src = match key {
                 Some(k) => [k[2 * i], k[2 * i + 1]],
                 None => [frame[0], frame[1]],
@@ -264,7 +264,7 @@ impl Limiter {
     /// the gain.
     pub fn process(&mut self, block: &mut [f32]) {
         let w = self.w as i64;
-        for frame in block.chunks_exact_mut(2) {
+        for frame in block.as_chunks_mut::<2>().0 {
             let st = &mut self.state;
             for (h, x) in st.hist.iter_mut().zip(frame.iter()) {
                 h.pop_front();
