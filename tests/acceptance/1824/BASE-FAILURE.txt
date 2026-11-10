@@ -1,0 +1,131 @@
+#1824 acceptance tests on the base commit f38d2b3983496ca502cb4743fda249bbc2e5b162 (no implementation).
+Command: node --test 'tests/acceptance/1824/*.test.mjs'   (Node v24.22.0; the checkout's path is redacted to <repo>)
+
+Expected on the base: the 5 tests of the real surface fail at their assertion, each naming the missing surface
+("no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist"). The 3 plant tests pass: they run the same judges on the
+twins under twins/, and show each judge passes a right program (twins/control.mjs) and fails each planted wrong one
+in the way its criterion names. No test file crashes.
+
+✖ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again (1.096625ms)
+✖ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask (0.239792ms)
+✔ #1824.a44b9f7f AC2: the planted fetchers that use the flipped file, refetch it when the network is not allowed, or pass there, each fail (1014.726375ms)
+✖ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row (1.273291ms)
+✖ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL (0.2725ms)
+✔ #1824.f985f5df AC3: the planted lints that pass a moving ref or a row without its size or sha256, and the planted fetcher that fetches an unlisted file, each fail (1167.230417ms)
+✖ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests (1.183291ms)
+✔ #1824.512f9fb8 AC1: the planted fetcher that fetches a cached, matching file fails, naming the path (345.952459ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 3
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1231.616875
+
+✖ failing tests:
+
+test at flipped.test.mjs:8:1
+✖ #1824.a44b9f7f AC2: with the network allowed, a cached file with one flipped byte is reported with its path and both hashes and fetched again (1.096625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist (README: The surface)"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<repo>/tests/acceptance/1824/flipped.test.mjs:9:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist (README: The surface)" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at flipped.test.mjs:12:1
+✖ #1824.a44b9f7f AC2: with the network not allowed, the flipped file is not refetched and the fetch is BLOCKED with one unblock ask (0.239792ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist (README: The surface)"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<repo>/tests/acceptance/1824/flipped.test.mjs:13:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist (README: The surface)" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lint.test.mjs:10:1
+✖ #1824.f985f5df AC3: a row whose URL names a branch or a tag, or that has no size or no sha256, fails the lint, naming the row (1.273291ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist (README: The surface)"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<repo>/tests/acceptance/1824/lint.test.mjs:11:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist (README: The surface)" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lint.test.mjs:18:1
+✖ #1824.f985f5df AC3: a planted lane that fetches a file the lock does not list fails, naming the URL (0.2725ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist (README: The surface)"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<repo>/tests/acceptance/1824/lint.test.mjs:19:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist (README: The surface)" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at warm.test.mjs:8:1
+✖ #1824.512f9fb8 AC1: with every file in the lock cached and matching, a fetch makes 0 network requests (1.183291ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   "no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist (README: The surface)"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<repo>/tests/acceptance/1824/warm.test.mjs:9:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ "no fetcher: <repo>/scripts/fetch-lock.mjs doesn't exist (README: The surface)" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
