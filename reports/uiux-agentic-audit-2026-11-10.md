@@ -1,6 +1,6 @@
 # UI/UX and agent-use audit, 2026-11-10
 
-Base: main at `f38d2b39`. Asked for: audit package by package, apply KISS, and hill-climb on a simpler UI/UX and on
+Base: main at `f38d2b39`, then merged with main at `a04378eb`. Asked for: audit package by package, apply KISS, and hill-climb on a simpler UI/UX and on
 how well an agent can use DeepBuild.
 
 ## Outcome
@@ -26,15 +26,18 @@ run, what was only read and what was not looked at.
 
 | Measure | main | this change |
 |---|---|---|
-| Skill, tokens every session loads | 1,830 | 1,486 (−18.8%) |
-| `deep mcp` tool list, tokens | 6,557 | 6,112 (−6.8%) |
-| Both together | 8,387 | 7,598 (−9.4%) |
+| Skill, tokens every session loads | 1,868 | 1,524 (−18.4%) |
+| `deep mcp` tool list, tokens | 6,588 | 6,143 (−6.8%) |
+| Both together | 8,456 | 7,667 (−9.3%) |
 | `deep_drive`'s schema, tokens | 2,333 | 1,888 |
 | Commands whose `--help` leaves out a flag they take, of 7 checked | 7 | 0 |
 | `deep numbers` lines that print `undefined` | 1 | 0 |
 | Command forms that end in a Node stack trace, of 93 | 1 | 0 |
 | #45 AC2's blind test (`tests/acceptance/45/hub.test.ts`) | fails | passes |
 | `deep --help`, words | 792 | 824 (worse by 32) |
+
+The token rows are counted on main at `a04378eb` and on this branch after merging it; the others were measured at
+`f38d2b39`, and the lines they read are unchanged on main since.
 
 Measured and unchanged, with the hub down (43 forms that need it): 21 different first lines; 41 print an errno and the
 socket's path twice; 29 open with the verdict word BLOCKED; 8 name a fix; 4 exit 1 where the rest exit 3.
@@ -61,7 +64,7 @@ making the first screen shorter.
    no open item, so the names `deep_claim`'s predictions and `deep_run` need are learnt from a refusal. Make it the
    orientation call. It changes a design row and #26's suite, so it needs an issue.
 2. **Four canvas tools are 61% of the tool list in every session:** `deep_show`, `deep_drive`, `deep_kinds` and
-   `deep_job` take 3,710 of 6,112 tokens. A session that fixes a test never calls them. `deep-actions` is already a
+   `deep_job` take 3,741 of 6,143 tokens. A session that fixes a test never calls them. `deep-actions` is already a
    second server entry; the canvas tools could be a third, or listed only where the spec uses the canvas.
 3. **Each block's Never cell is loaded twice,** once in the skill and once in each tool's description (1,555 tokens
    of descriptions). #26's criterion 2d751e6d pins both, so this is the owner's call.
@@ -95,26 +98,36 @@ making the first screen shorter.
 
 ### The app
 
-13. **Main still draws the shell #1453 replaces.** The first screen has a bottom band reading "Session · queued"
-    for a session that doesn't exist, and "Agents" sits over the session rows as their heading. Pull request #2167
-    (#1461, one list and one page) removes both and conflicts with main today. No app code was changed here, so
-    nothing more conflicts with it. Landing #2167 is the largest UI simplification available.
+13. **The views drawn here are the shell #1453 replaces.** The first screen had a bottom band reading "Session ·
+    queued" for a session that doesn't exist, and "Agents" sat over the session rows as their heading. Pull request
+    #2167 (#1461, one list and one page) was merged into main the same morning, after the replica used here was
+    built, so these draws are of the shell before it. The app on main's head was not drawn. No app code is changed
+    here.
 
 ### Found on the way
 
 14. `tests/agent-eval.test.mjs` fails on main: it lists eight tools and the skill names fourteen. It fails with the
-    same six reasons before and after this change. `scripts/repo-rules.mjs` fails on main with one line:
-    `accesskit_macos` in `crates/deep-app/Cargo.toml` has no entry in `scripts/repo-rules.json`.
+    same six reasons before and after this change.
+15. `tsc --noEmit` fails on main at `a04378eb` with one error: `packages/hub/test/job-session-close.test.ts` builds
+    a `JobDeps` with no `adopt`, which #1819 added to the type after #1925 wrote the test.
+16. `scripts/repo-rules.mjs` fails on main at `a04378eb` with 14 lines: 12 dependencies with no entry in
+    `scripts/repo-rules.json` and two packages with no card. #2173 and #2178 hold the three oldest.
+17. A test can reach the real service manager. Of the 99 acceptance helpers that run the built `deep`, 90 set no
+    stand-in for it. On the machine this audit ran on, the hub's login-service label was held by a job loaded from
+    a temp home that carries the prefix #667's helper gives its homes.
 
 ## Verification
 
-Run once each, after the last edit:
+Run once each after the last edit, and the first three lines once more after merging main at `a04378eb`:
 
 - `packages/cli/test/cli.test.ts`: 24 of 25 pass. The 25th is BLOCKED as on main: no Node older than 24.22.0 here.
 - `packages/hub/test/numbers.test.ts`, `packages/hub/test/tools.test.ts`, `tests/skill.test.mjs`: all pass.
-- Blind suites, unchanged: `tests/acceptance/45/hub.test.ts`, `tests/acceptance/26/tools.test.ts`,
-  `tests/acceptance/1359/help-table.test.ts`, and #84's replay case that reads the hand-backs reading: all pass.
-- `tsc --noEmit`: passes.
+- Blind suites, unchanged: `tests/acceptance/45/hub.test.ts`, `tests/acceptance/26/tools.test.ts` and
+  `tests/acceptance/1359/help-table.test.ts`: all pass. #84's replay case that reads the hand-backs reading passed
+  before the merge and was not run after it.
+- `tsc --noEmit`: passed before the merge. After it, it fails with main's one error (finding 15) and none in a file
+  this change touches.
+- `scripts/proof-guard.mjs`: exit 0. `scripts/public-text.mjs`: 0 names in the change.
 - #19's contract test reads `deep --help`; the forms it runs are the same 54 before and after.
 
 Not run: `node scripts/affected.mjs`, the preflight, the timed budgets, any Rust test (no Rust changed), the six
