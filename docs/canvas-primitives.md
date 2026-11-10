@@ -985,10 +985,10 @@ An agent drives a headless copy of the app, sees it and records it
 **Fields**
 
 - `launch: {from: fixture handle | record_copy | empty = fixture, size: [px, px] = the reference window, scale: 1 | 2 = 2, theme: light | dark, reduced_motion: bool = false, locale, clock: virtual | real = virtual, packs: [name@version]}` (a record copy is read-only and redacted)
-- `locate: {role, name} | {item: ID[#sub]} | {handle} | {text} | {label}` (strict: exactly one match, or an issue naming the matches)
+- `locate: {role, name} | {item: ID[#sub]} | {id} | {handle} | {text} | {label}` (strict: exactly one match, or an issue naming the matches; `{id}` is a node's `id` in the snapshot, and `{handle}` the row whose `id` is that record handle)
 - `act: click | double_click | type {text} | press {keys} | drag {to: locator | [px, px]} | scroll {dx, dy} | hover | set {control, value}`, each waiting until its target is visible, enabled and stable for two frames
 - `wait_for: {locator, state: visible | hidden | enabled | text | value | settled} | {event: kind} | {t: flick}`; `timeout: ms = 5,000`
-- `see: {scope: window | panel | locator, include: roles | names | values | bounds | items}` → a text tree of roles, names, values and bounds, with canvas items by ID and their evaluated values
+- `see: {scope: window | panel | locator, include: roles | names | values | bounds | items}` → a text tree of roles, names, values and bounds, with canvas items by ID and their evaluated values, the menu bar's title (`menu_bar.title`) and the `id` of what holds the keyboard (`focus`, `null` when nothing does); a node's `id` is its author ID, a state's node is valued by its status-map entry and the question card's by its arming state, and what an agent's panel draws sits under a group named `Written by an agent`
 - `screenshot: {target: window | panel | locator, highlight: [locator], mask: [locator]}` → sha256 (highlights drawn in a strip outside the frame)
 - `record: {fps: 30, marks: per_action}` → video by hash with each action's time; `trace`: every action with its snapshot before and after, the app's log and timings
 - `record` also takes `mask: [locator] = []` and `mask_kind: fill | blur = fill`, and returns the occurrence list `<asset>.actions: [{t, kind, point: [px, px], box: [x, y, w, h], locator}]`
