@@ -1,5 +1,6 @@
 // Issue #338, the fixture panel: a Needs you view written against the registry, one row per
-// open ask in the inbox projection's order. The kit `needs-you@1` passes it.
+// open ask in the inbox projection's order. The kit `needs-you@1` passes it. Each row is keyed
+// by its ask's handle and draws its question, never the handle (#1459).
 import { View, div, DockArea, v_flex, needs_you } from "@deepbuild/panel";
 
 class NeedsYou extends View {
@@ -7,16 +8,12 @@ class NeedsYou extends View {
     this.inbox = needs_you();
   }
 
-  rows() {
-    return this.inbox.rows;
-  }
-
   render() {
     return v_flex()
       .size_full()
       .p(8)
       .child(div().h(32).font_semibold().child("Needs you"))
-      .children(this.rows().map((handle) => div().h(18).child(handle)));
+      .children(this.inbox.asks.map((ask) => div().id(ask.handle).h(18).child(ask.question)));
   }
 }
 

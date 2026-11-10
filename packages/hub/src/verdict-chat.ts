@@ -2,6 +2,7 @@
 // from the record's claims, verdicts and runs tables, never from the agent's words; a status question typed into a
 // session is answered from the same tables and the session's row, with no model call.
 import { verdictLine, type LineRequirement, type LineState, type Outcome, type Result } from '@deepbuild/verdicts';
+import { elapsed } from './promises.js';
 
 type Obj = Record<string, unknown>;
 type Query = (sql: string) => Promise<unknown[]>;
@@ -81,13 +82,6 @@ export async function newestClaim(query: Query, session: string): Promise<string
   return row?.id;
 }
 
-/** `3m`, `45s`, `2h`, `1d`: how long since `ms`. */
-function since(ms: number, now: number): string {
-  const d = Math.max(0, now - ms);
-  for (const [unit, size] of [['d', 86_400_000], ['h', 3_600_000], ['m', 60_000]] as const) if (d >= size) return `${Math.floor(d / size)}${unit}`;
-  return `${Math.floor(d / 1000)}s`;
-}
-
 /**
  * What a status answer reads beside the claim: the session's row and your inbox. `state` is the session's own when
  * no claim stands for its turn: working, waiting, stuck, finished, failed or unknown.
@@ -104,7 +98,7 @@ export function statusAnswer(claim: ClaimState | undefined, f: StatusFacts): str
   const first = claim ? verdictLine(claim.state) : `${state} · next: ${state === 'working' || state === 'unknown' || state === 'failed' ? 'agent' : 'you'}`;
   const resume = f.agent === 'codex' ? `codex resume ${f.session}` : `claude --resume ${f.session}`;
   return [
-    `${first} (for ${since(at, f.now)}) · needs you: ${f.needsYou}`,
+    `${first} (for ${elapsed(f.now - at)}) · needs you: ${f.needsYou}`,
     `work: ${f.worktree} · session ${f.session.slice(0, 8)} (${f.agent}) · resume: ${resume} · deep://sessions/${f.session}`,
   ].join('\n');
 }

@@ -15,7 +15,7 @@ import { closeSync, constants, lstatSync, openSync, readFileSync, readSync, rmSy
 import { availableParallelism, homedir, loadavg, totalmem } from 'node:os';
 import type { Caller, Lease, LeaseTable, Mode, Resource } from '@deepbuild/leases';
 import { call, type Reply } from './client.js';
-import { DISK_FLOOR, freeBytes } from './products.js';
+import { DISK_FLOOR, freeBytes } from './disk.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 

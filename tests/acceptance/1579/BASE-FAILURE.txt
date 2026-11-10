@@ -1,0 +1,311 @@
+# #1579's acceptance suite on the base: main at f1e8736e (merge base), built here with
+#   npm ci --no-audit --no-fund && npm run build --workspaces
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-hook   (the hub won't start without it)
+# Run: NO_COLOR=1 npx vitest run tests/acceptance/1579 --testTimeout=600000 --no-file-parallelism
+# Result: 11 failed, 1 passed (12). Exit 1. The hub's own paths in the output are redacted to <base>.
+#
+# Per test, why it fails at the base (the first failing assertion, below in full):
+#
+# AC1 #1579.cbb8b7e5
+#   - undo signed for ask.undo, then sent on ask.answer: FAIL. The base refuses the design's format at
+#     /params/signature (credential): `signature` must be a string, so the undo itself never counts.
+#   - the merge base's format on ask.answer: FAIL, as the issue says the merge base behaves: the undo's
+#     {ask, device} signature (which opened the ask on the base) passes the base's signature check on
+#     ask.answer, which refuses it only at /params/option. The merge base accepts it.
+# AC2 #1579.f338a953
+#   - 11 minutes old: FAIL, refused at /params/signature, not at .../signed/at (the format isn't read).
+#   - another hub: FAIL, refused at /params/signature, not at .../signed/hub.
+#   - replayed undo: FAIL, the first undo in the design's format doesn't count at the base.
+#   - the merge base's format replayed: FAIL, as the issue says: the same signed undo opened the ask again
+#     after it defaulted a second time (the base replied with a new deadline).
+# AC3 #1579.68360e4a
+#   - new-format approval and taste answer vs their CLI twins: FAIL, the app's approval didn't count
+#     (credential). The twins' cards matched before any answer.
+#   - signed no sent as yes: FAIL, refused at /params/signature, not .../signed/params.
+# AC4 #1579.1d716d86
+#   - signed device.unpair: FAIL, as the issue says the merge base behaves: refused (credential at
+#     /params/signature); unpair strips `device` before the check.
+# AC5 #1579.78fa4f3f
+#   - the threats table row: PASS. The design given to this job already has the row "Signatures used
+#     again" (docs/technical-design.md in this checkout is the issue's design edit, not main's).
+#   - the planted verifier: BLOCKED, the base hub refuses DEEP_HUB_PLANT=signature-skips-time
+#     ("names no planted program") and doesn't start.
+#   - the kit on the hub as shipped: FAIL, every case fails (all refused at /params/signature, the
+#     controls don't count).
+#
+# No implementation of #1579 exists. As a check of the suite itself only, a throwaway patch of the built hub's
+# JavaScript in a scratch copy (deleted after; not an implementation to keep) passed all 12, and three mutants of
+# it each failed the test that names the field: no method check (AC1 named once, not method), once kept in memory
+# (AC2's replay after restart was taken), no params hash (AC3's swapped answer was taken).
+# ---------------------------------------------------------------------------------------------------
+
+ RUN  v5.0.5 <base>
+
+ ❯ tests/acceptance/1579/fields.test.ts (4 tests | 4 failed) 26267ms
+   ❯ AC2 #1579.f338a953 A signature 11 minutes old, one for another hub and one replayed are each refused, naming the field (4)
+     × AC2 #1579.f338a953 an approval signed 11 minutes ago by the hub's clock is refused naming at and answers nothing; one signed 9 minutes ago counts, and so does a fresh one for the refused ask 4855ms
+     × AC2 #1579.f338a953 an approval signed for another hub is refused naming hub and answers nothing; the same approval signed for this hub's ID counts 5939ms
+     × AC2 #1579.f338a953 a signed undo that counted, replayed once its ask defaults again, is refused naming once, before and after the hub restarts, and opens nothing 6057ms
+     × AC2 #1579.f338a953 the merge base's format: a signed undo replayed once its ask defaults again is refused at the signature (the merge base opens the ask again each time) 8260ms
+ ❯ tests/acceptance/1579/answers.test.ts (2 tests | 2 failed) 16684ms
+   ❯ AC3 #1579.68360e4a An app answer signed in the new format counts, and the card's flow is otherwise unchanged (2)
+     × AC3 #1579.68360e4a an approval and a taste answer from the app, signed in the new format, count and are recorded, handed on and carded as their twins from the CLI are 7947ms
+     × AC3 #1579.68360e4a a new-format signature over other params than the answer sent is refused naming params; one by a key never paired, and an unsigned app answer, are refused; none answers 7779ms
+ ❯ tests/acceptance/1579/method.test.ts (2 tests | 2 failed) 19979ms
+   ❯ AC1 #1579.cbb8b7e5 A signature captured on an undo is refused on another method, naming the method. The merge base accepts it (2)
+     × AC1 #1579.cbb8b7e5 the app's undo, signed for ask.undo, counts; sent again on ask.answer it is refused naming method and ask.undo, and answers nothing 8019ms
+     × AC1 #1579.cbb8b7e5 the merge base's format: an undo's signature over {ask, device} alone, sent on ask.answer, is refused at the signature (the merge base takes it and refuses only for the missing option) 10891ms
+ ❯ tests/acceptance/1579/threat.test.ts (3 tests | 2 failed) 19489ms
+   ❯ AC5 #1579.78fa4f3f The threats table has this row, and a planted verifier that skips the time fails its kit (3)
+     × AC5 #1579.78fa4f3f the planted verifier that skips the time fails the kit at its 11-minute-old case, naming the ask that counted, and passes every other case 2820ms
+     × AC5 #1579.78fa4f3f the kit passes on the hub as shipped: it is no wall 14625ms
+ ❯ tests/acceptance/1579/unpair.test.ts (1 test | 1 failed) 13915ms
+   ❯ AC4 #1579.1d716d86 A signed unpair works. The merge base refuses it (1)
+     × AC4 #1579.1d716d86 the app's device.unpair of the paired phone, signed in the new format, unpairs it: the phone's signature then counts for nothing, the app's still counts 13297ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1579/answers.test.ts > AC3 #1579.68360e4a An app answer signed in the new format counts, and the card's flow is otherwise unchanged > AC3 #1579.68360e4a an approval and a taste answer from the app, signed in the new format, count and are recorded, handed on and carded as their twins from the CLI are
+AssertionError: the app's approval in the new format didn't count: {"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}: expected 'the app\'s approval in the new format…' to be null
+
+- Expected:
+null
+
++ Received:
+"the app's approval in the new format didn't count: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}"
+
+ ❯ holds tests/acceptance/1579/helpers.ts:200:34
+    198| /** A judge's verdict holds: null, or the test fails with the judge's …
+    199| export function holds(failure: string | null): void {
+    200|   expect(failure, failure ?? '').toBeNull();
+       |                                  ^
+    201| }
+    202| /** The JSON pointer a refusal names the field by: `/params/signature/…
+ ❯ tests/acceptance/1579/answers.test.ts:43:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  tests/acceptance/1579/answers.test.ts > AC3 #1579.68360e4a An app answer signed in the new format counts, and the card's flow is otherwise unchanged > AC3 #1579.68360e4a a new-format signature over other params than the answer sent is refused naming params; one by a key never paired, and an unsigned app answer, are refused; none answers
+AssertionError: ask:01M6ZH231DYZT4MN6EPXNK67VM's no, sent as a yes was refused, but naming /params/signature, not /params/signature/signed/params: {"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}: expected 'ask:01M6ZH231DYZT4MN6EPXNK67VM\'s no,…' to be null
+
+- Expected:
+null
+
++ Received:
+"ask:01M6ZH231DYZT4MN6EPXNK67VM's no, sent as a yes was refused, but naming /params/signature, not /params/signature/signed/params: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}"
+
+ ❯ holds tests/acceptance/1579/helpers.ts:200:34
+    198| /** A judge's verdict holds: null, or the test fails with the judge's …
+    199| export function holds(failure: string | null): void {
+    200|   expect(failure, failure ?? '').toBeNull();
+       |                                  ^
+    201| }
+    202| /** The JSON pointer a refusal names the field by: `/params/signature/…
+ ❯ tests/acceptance/1579/answers.test.ts:68:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  tests/acceptance/1579/fields.test.ts > AC2 #1579.f338a953 A signature 11 minutes old, one for another hub and one replayed are each refused, naming the field > AC2 #1579.f338a953 an approval signed 11 minutes ago by the hub's clock is refused naming at and answers nothing; one signed 9 minutes ago counts, and so does a fresh one for the refused ask
+AssertionError: an approval of ask:01M6ZH106DQRVRM6BMQ7GSZQZH signed 11 minutes ago was refused, but naming /params/signature, not /params/signature/signed/at: {"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}: expected 'an approval of ask:01M6ZH106DQRVRM6BM…' to be null
+
+- Expected:
+null
+
++ Received:
+"an approval of ask:01M6ZH106DQRVRM6BMQ7GSZQZH signed 11 minutes ago was refused, but naming /params/signature, not /params/signature/signed/at: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}"
+
+ ❯ holds tests/acceptance/1579/helpers.ts:200:34
+    198| /** A judge's verdict holds: null, or the test fails with the judge's …
+    199| export function holds(failure: string | null): void {
+    200|   expect(failure, failure ?? '').toBeNull();
+       |                                  ^
+    201| }
+    202| /** The JSON pointer a refusal names the field by: `/params/signature/…
+ ❯ tests/acceptance/1579/fields.test.ts:15:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  tests/acceptance/1579/fields.test.ts > AC2 #1579.f338a953 A signature 11 minutes old, one for another hub and one replayed are each refused, naming the field > AC2 #1579.f338a953 an approval signed for another hub is refused naming hub and answers nothing; the same approval signed for this hub's ID counts
+AssertionError: an approval of ask:01M6ZH14TNHCXED3GJHKQN7F2Y signed for another hub was refused, but naming /params/signature, not /params/signature/signed/hub: {"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}: expected 'an approval of ask:01M6ZH14TNHCXED3GJ…' to be null
+
+- Expected:
+null
+
++ Received:
+"an approval of ask:01M6ZH14TNHCXED3GJHKQN7F2Y signed for another hub was refused, but naming /params/signature, not /params/signature/signed/hub: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}"
+
+ ❯ holds tests/acceptance/1579/helpers.ts:200:34
+    198| /** A judge's verdict holds: null, or the test fails with the judge's …
+    199| export function holds(failure: string | null): void {
+    200|   expect(failure, failure ?? '').toBeNull();
+       |                                  ^
+    201| }
+    202| /** The JSON pointer a refusal names the field by: `/params/signature/…
+ ❯ tests/acceptance/1579/fields.test.ts:22:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  tests/acceptance/1579/fields.test.ts > AC2 #1579.f338a953 A signature 11 minutes old, one for another hub and one replayed are each refused, naming the field > AC2 #1579.f338a953 a signed undo that counted, replayed once its ask defaults again, is refused naming once, before and after the hub restarts, and opens nothing
+AssertionError: the first undo of ask:01M6ZH1AF745Q821GCSQ31KDBZ didn't count: {"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}: expected 'the first undo of ask:01M6ZH1AF745Q82…' to be null
+
+- Expected:
+null
+
++ Received:
+"the first undo of ask:01M6ZH1AF745Q821GCSQ31KDBZ didn't count: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}"
+
+ ❯ holds tests/acceptance/1579/helpers.ts:200:34
+    198| /** A judge's verdict holds: null, or the test fails with the judge's …
+    199| export function holds(failure: string | null): void {
+    200|   expect(failure, failure ?? '').toBeNull();
+       |                                  ^
+    201| }
+    202| /** The JSON pointer a refusal names the field by: `/params/signature/…
+ ❯ tests/acceptance/1579/fields.test.ts:28:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  tests/acceptance/1579/fields.test.ts > AC2 #1579.f338a953 A signature 11 minutes old, one for another hub and one replayed are each refused, naming the field > AC2 #1579.f338a953 the merge base's format: a signed undo replayed once its ask defaults again is refused at the signature (the merge base opens the ask again each time)
+AssertionError: the merge base's signed undo of ask:01M6ZH1GDKM9K2X0NVGBMP7CAM, replayed was taken: the hub replied {"ask":"ask:01M6ZH1GDKM9K2X0NVGBMP7CAM","deadline":1794207576752}: expected 'the merge base\'s signed undo of ask:…' to be null
+
+- Expected:
+null
+
++ Received:
+"the merge base's signed undo of ask:01M6ZH1GDKM9K2X0NVGBMP7CAM, replayed was taken: the hub replied {\"ask\":\"ask:01M6ZH1GDKM9K2X0NVGBMP7CAM\",\"deadline\":1794207576752}"
+
+ ❯ holds tests/acceptance/1579/helpers.ts:200:34
+    198| /** A judge's verdict holds: null, or the test fails with the judge's …
+    199| export function holds(failure: string | null): void {
+    200|   expect(failure, failure ?? '').toBeNull();
+       |                                  ^
+    201| }
+    202| /** The JSON pointer a refusal names the field by: `/params/signature/…
+ ❯ tests/acceptance/1579/fields.test.ts:43:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  tests/acceptance/1579/method.test.ts > AC1 #1579.cbb8b7e5 A signature captured on an undo is refused on another method, naming the method. The merge base accepts it > AC1 #1579.cbb8b7e5 the app's undo, signed for ask.undo, counts; sent again on ask.answer it is refused naming method and ask.undo, and answers nothing
+AssertionError: the undo of ask:01M6ZH2D27ZY7FGFNP6VVKY1AV signed for ask.undo didn't count: {"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}: expected 'the undo of ask:01M6ZH2D27ZY7FGFNP6VV…' to be null
+
+- Expected:
+null
+
++ Received:
+"the undo of ask:01M6ZH2D27ZY7FGFNP6VVKY1AV signed for ask.undo didn't count: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}"
+
+ ❯ holds tests/acceptance/1579/helpers.ts:200:34
+    198| /** A judge's verdict holds: null, or the test fails with the judge's …
+    199| export function holds(failure: string | null): void {
+    200|   expect(failure, failure ?? '').toBeNull();
+       |                                  ^
+    201| }
+    202| /** The JSON pointer a refusal names the field by: `/params/signature/…
+ ❯ tests/acceptance/1579/method.test.ts:14:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  tests/acceptance/1579/method.test.ts > AC1 #1579.cbb8b7e5 A signature captured on an undo is refused on another method, naming the method. The merge base accepts it > AC1 #1579.cbb8b7e5 the merge base's format: an undo's signature over {ask, device} alone, sent on ask.answer, is refused at the signature (the merge base takes it and refuses only for the missing option)
+AssertionError: the merge base's undo signature for ask:01M6ZH2MWEZGDYWA062S3C5DEG, sent on ask.answer passed the signature check: the hub refused it only at /params/option: {"code":"type","retryable":false,"remediation":"an answer chooses an option or says something","path":"/params/option","actual":"","evidence":[]}: expected 'the merge base\'s undo signature for …' to be null
+
+- Expected:
+null
+
++ Received:
+"the merge base's undo signature for ask:01M6ZH2MWEZGDYWA062S3C5DEG, sent on ask.answer passed the signature check: the hub refused it only at /params/option: {\"code\":\"type\",\"retryable\":false,\"remediation\":\"an answer chooses an option or says something\",\"path\":\"/params/option\",\"actual\":\"\",\"evidence\":[]}"
+
+ ❯ holds tests/acceptance/1579/helpers.ts:200:34
+    198| /** A judge's verdict holds: null, or the test fails with the judge's …
+    199| export function holds(failure: string | null): void {
+    200|   expect(failure, failure ?? '').toBeNull();
+       |                                  ^
+    201| }
+    202| /** The JSON pointer a refusal names the field by: `/params/signature/…
+ ❯ tests/acceptance/1579/method.test.ts:32:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  tests/acceptance/1579/threat.test.ts > AC5 #1579.78fa4f3f The threats table has this row, and a planted verifier that skips the time fails its kit > AC5 #1579.78fa4f3f the planted verifier that skips the time fails the kit at its 11-minute-old case, naming the ask that counted, and passes every other case
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":1,"signal":null}; stderr: file://<base>/packages/hub/dist/plant.js:94
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=signature-skips-time names no planted program
+    at plantOf (file://<base>/packages/hub/dist/plant.js:94:15)
+    at runHub (file://<base>/packages/hub/dist/server.js:1563:19)
+    at hubCommand (file://<base>/packages/hub/dist/hub-command.js:27:28)
+    at file://<base>/packages/cli/dist/main.js:301:30
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/16/helpers.ts:249:11
+
+ ❯ world tests/acceptance/1579/helpers.ts:122:15
+ ❯ signatureKit tests/acceptance/1579/scenarios.ts:113:13
+ ❯ tests/acceptance/1579/threat.test.ts:41:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  tests/acceptance/1579/threat.test.ts > AC5 #1579.78fa4f3f The threats table has this row, and a planted verifier that skips the time fails its kit > AC5 #1579.78fa4f3f the kit passes on the hub as shipped: it is no wall
+AssertionError: expected { …(6) } to deeply equal { at: null, …(5) }
+
+- Expected
++ Received
+
+  {
+-   "at": null,
+-   "fresh after the refusals": null,
+-   "hub": null,
+-   "method": null,
+-   "once": null,
+-   "within the window": null,
++   "at": "an approval of ask:01M6ZH360J3R019ZXSE5CTQ4J1 signed 11 minutes ago was refused, but naming /params/signature, not /params/signature/signed/at: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}",
++   "fresh after the refusals": "a fresh approval of ask:01M6ZH3619SYP56F9AVH3Q01XT didn't count: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}",
++   "hub": "an approval of ask:01M6ZH3619SYP56F9AVH3Q01XT signed for another hub was refused, but naming /params/signature, not /params/signature/signed/hub: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}",
++   "method": "the undo of ask:01M6ZH35Y2Z5KQ2BGZQCEM7RXS signed for ask.undo didn't count: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}",
++   "once": "the first undo of ask:01M6ZH35ZVY7VT0VCECEAGBQ3P didn't count: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}",
++   "within the window": "an approval of ask:01M6ZH361NQCVFYT9FGTXY1E8K signed 9 minutes ago didn't count: {\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}",
+  }
+
+ ❯ tests/acceptance/1579/threat.test.ts:49:20
+     47|   it(`${AC[5]} the kit passes on the hub as shipped: it is no wall`, a…
+     48|     const report = await signatureKit();
+     49|     expect(report).toEqual({ at: null, 'within the window': null, hub:…
+       |                    ^
+     50|   }, 300_000);
+     51| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  tests/acceptance/1579/unpair.test.ts > AC4 #1579.1d716d86 A signed unpair works. The merge base refuses it > AC4 #1579.1d716d86 the app's device.unpair of the paired phone, signed in the new format, unpairs it: the phone's signature then counts for nothing, the app's still counts
+AssertionError: the signed unpair of device:01M6ZH46WBRMK4GBZJA2072251 works: {"code":"credential","retryable":false,"remediation":"Sign the answer with a device you paired, over exactly the params it sends.","path":"/params/signature","actual":"","evidence":[]}: expected { code: 'credential', …(5) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "actual": "",
+  "code": "credential",
+  "evidence": [],
+  "path": "/params/signature",
+  "remediation": "Sign the answer with a device you paired, over exactly the params it sends.",
+  "retryable": false,
+}
+
+ ❯ tests/acceptance/1579/unpair.test.ts:22:99
+     20|
+     21|     const reply = await asApp(w, 'device.unpair', signNew('device.unpa…
+     22|     expect(reply.error, `the signed unpair of ${phone.id} works: ${JSO…
+       |                                                                                                   ^
+     23|     expect(reply.result?.unpaired).toBe(phone.id);
+     24|     holds(control);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  11 failed | 1 passed (12)
+   Start at  22:48:09
+   Duration  109.28s (tests 93%, import 4%, transform 2%, setup 1%)
+

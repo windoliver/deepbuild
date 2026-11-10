@@ -140,9 +140,7 @@ impl Render for Spike {
                             SessionState::Running => "○",
                             SessionState::Done => "✓",
                         };
-                        div()
-                            .id(("session", index))
-                            .test_support()
+                        crate::views::observed(("session", index))
                             .h(px(28.))
                             .px_2()
                             .flex()
@@ -207,17 +205,13 @@ impl Render for Spike {
                                     .flex()
                                     .justify_between()
                                     .child(
-                                        div()
-                                            .id("count")
-                                            .test_support()
+                                        crate::views::observed("count")
                                             // The label is the drawn text, so a test can read the count back.
                                             .aria_label(count.clone())
                                             .child(count),
                                     )
                                     .child(
-                                        div()
-                                            .id("open-report")
-                                            .test_support()
+                                        crate::views::observed("open-report")
                                             .px_2()
                                             .rounded_md()
                                             .bg(chrome.raised)
