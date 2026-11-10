@@ -345,7 +345,7 @@ fn half(v: f32) -> u16 {
 }
 
 impl Tables {
-    pub fn new(d: &wgpu::Device) -> Tables {
+    pub fn new(d: &deep_gpu::counted::Wgpu) -> Tables {
         let stub = d.create_texture(&wgpu::TextureDescriptor {
             label: Some("scene3d ies stub"),
             size: wgpu::Extent3d {

@@ -198,7 +198,7 @@ pub fn mips(size: u32) -> u32 {
 }
 
 impl Prefilter {
-    pub fn new(d: &wgpu::Device) -> Prefilter {
+    pub fn new(d: &deep_gpu::counted::Wgpu) -> Prefilter {
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("scene3d env prefilter"),
             source: wgpu::ShaderSource::Wgsl(SHADER.into()),
@@ -435,7 +435,7 @@ impl Prefilter {
     }
 
     /// A black 1 px cube with one mip, for frames with no environment.
-    pub fn stub(d: &wgpu::Device) -> wgpu::TextureView {
+    pub fn stub(d: &deep_gpu::counted::Wgpu) -> wgpu::TextureView {
         d.create_texture(&wgpu::TextureDescriptor {
             label: Some("scene3d env stub"),
             size: wgpu::Extent3d {

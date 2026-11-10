@@ -553,7 +553,7 @@ fn limit_json(limit: f64, p95s: &[RunP95], runs: Vec<Value>, reference: bool) ->
 }
 
 /// Whether an environment is a reference Mac's in its conditions (scripts/benchmark.mjs).
-fn is_reference(e: &Value) -> bool {
+pub(crate) fn is_reference(e: &Value) -> bool {
     REFERENCES.iter().any(|(model, chip, memory)| {
         e["model"] == *model && e["chip"] == *chip && e["memoryBytes"].as_u64() == Some(*memory)
     }) && e["power"] == "ac"
@@ -563,7 +563,7 @@ fn is_reference(e: &Value) -> bool {
 }
 
 /// This machine's environment, read as scripts/benchmark.mjs's `fingerprint()` reads it.
-fn this_machine() -> Value {
+pub(crate) fn this_machine() -> Value {
     let read = |cmd: &str, args: &[&str]| -> Option<String> {
         let o = Command::new(cmd)
             .args(args)

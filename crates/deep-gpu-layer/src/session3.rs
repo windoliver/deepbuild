@@ -123,6 +123,9 @@ pub(crate) fn msaa_planted(p: Option<Planted>) -> Planted3 {
         ),
         resolve_accumulates: p == Some(Planted::ResolveAccumulatesFrames),
         missing_lobe_turned_on: p == Some(Planted::MissingLobeTurnedOn),
+        bind_group_per_item: p == Some(Planted::BindGroupPerItem),
+        uploads_every_transform: p == Some(Planted::UploadsEveryTransform),
+        warms_per_item: p == Some(Planted::WarmsPerItem),
         ..Default::default()
     }
 }

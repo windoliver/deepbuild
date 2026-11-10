@@ -586,7 +586,7 @@ struct Rev {
     #[cfg(feature = "test-meter")]
     placed: Vec<crate::testgpu::Placed>,
     #[cfg(feature = "test-meter")]
-    loops: Option<u32>,
+    burns: crate::testgpu::Burns,
 }
 
 struct Pending {
@@ -599,8 +599,8 @@ struct Pending {
 /// What a revision's warm-up compiles at check (#432): the scenes it can reach over its span and
 /// its controls, each state's document, and the operators that run apart.
 #[derive(Default)]
-struct Warm {
-    scenes: Vec<deep_canvas_scene3d::scene::Scene>,
+pub(crate) struct Warm {
+    pub(crate) scenes: Vec<deep_canvas_scene3d::scene::Scene>,
     docs: Vec<Value>,
     apart: BTreeSet<String>,
 }
@@ -677,14 +677,21 @@ fn issue(code: &str, path: &str, actual: Value, what: &str) -> Value {
 /// A revision that passed admission.
 pub(crate) struct Admitted {
     pub(crate) doc: Value,
-    frames: Content,
+    pub(crate) frames: Content,
     class: Option<Class>,
     pub(crate) limits: Limits,
-    fit: Estimate,
-    size: [u32; 2],
+    pub(crate) fit: Estimate,
+    pub(crate) size: [u32; 2],
     /// The climb rungs that don't fit its memory cap (#425).
     skips: Vec<Rung>,
-    warm: Warm,
+    pub(crate) warm: Warm,
+}
+
+impl Admitted {
+    /// The revision's frames, for a view that already shows the document.
+    pub(crate) fn into_frames(self) -> Content {
+        self.frames
+    }
 }
 
 /// A writer's payload checked as its session's next revision, before it shows: stamped by the
@@ -1339,7 +1346,7 @@ impl Live {
                 warm,
             }) => {
                 #[cfg(feature = "test-meter")]
-                let (placed, loops) = match crate::testgpu::items(&doc) {
+                let (placed, burns) = match crate::testgpu::items(&doc) {
                     Ok(x) => x,
                     Err(path) => {
                         ses.revisions.push((
@@ -1377,7 +1384,7 @@ impl Live {
                     #[cfg(feature = "test-meter")]
                     placed,
                     #[cfg(feature = "test-meter")]
-                    loops,
+                    burns,
                 });
                 self.next_rev += 1;
             }
@@ -1505,7 +1512,7 @@ impl Live {
                 &self.device,
                 &self.kit,
                 &rev.placed,
-                rev.loops,
+                &rev.burns,
                 &self.results,
             );
         }
@@ -2892,7 +2899,7 @@ fn render_canonical(
     let mut results: Cache<crate::testgpu::Made> = Cache::new(cache::Planted::default());
     #[cfg(feature = "test-meter")]
     {
-        let (placed, loops) = crate::testgpu::items(&doc).unwrap_or_default();
+        let (placed, burns) = crate::testgpu::items(&doc).unwrap_or_default();
         let reader = Reader {
             revision: 0,
             writer: "canonical".into(),
@@ -2904,7 +2911,7 @@ fn render_canonical(
                 return refused("asset_unreadable", e);
             }
         }
-        view.test.set(device, kit, &placed, loops, &results);
+        view.test.set(device, kit, &placed, &burns, &results);
     }
     let (options, planted) = plants.ops;
     view.ops = DocOps::new(device, &doc, options, planted, fail);

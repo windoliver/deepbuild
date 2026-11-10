@@ -7,6 +7,7 @@
 use bytemuck::{Pod, Zeroable};
 use deep_canvas_scene3d::light::Contact;
 use deep_canvas_scene3d::look::Ao;
+use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 
 use crate::{bind_group, buffer_entry, pipeline, target, texture2d, DEPTH};
@@ -55,6 +56,8 @@ pub struct Passes {
     pub shade_layout: wgpu::BindGroupLayout,
     layout: wgpu::BindGroupLayout,
     uniform: wgpu::Buffer,
+    /// What the uniform last uploaded (#1903).
+    written: Written,
     white: wgpu::TextureView,
     off: wgpu::BindGroup,
     pipes: Option<Pipes>,
@@ -176,6 +179,7 @@ impl Passes {
             shade_layout,
             layout,
             uniform: buffer,
+            written: Written::default(),
             white,
             off,
             pipes: None,
@@ -231,9 +235,9 @@ impl Passes {
             }
             self.on = None;
             deep_gpu::alloc::outside(|| {
-                device.queue.write_buffer(
+                device.queue.write_changed(
                     &self.uniform,
-                    0,
+                    &self.written,
                     bytemuck::bytes_of(&AoUniform::zeroed()),
                 )
             });
@@ -325,12 +329,12 @@ impl Passes {
         deep_gpu::alloc::outside(|| {
             device
                 .queue
-                .write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u))
+                .write_changed(&self.uniform, &self.written, bytemuck::bytes_of(&u))
         });
         compiled
     }
 
-    fn targets_at(&self, d: &wgpu::Device, size: [u32; 2]) -> Targets {
+    fn targets_at(&self, d: &deep_gpu::counted::Wgpu, size: [u32; 2]) -> Targets {
         let usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
         let view = |label, format| {
             texture2d(d, label, size, format, usage).create_view(&Default::default())
