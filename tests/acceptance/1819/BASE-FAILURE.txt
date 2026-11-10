@@ -1,0 +1,161 @@
+Base commit: 990d4af8 (990d4af871a73cd47bdc4508117cae570abc535f, "design(#1819): the model kinds of the analysis bake"),
+the brief's base; #500's media_bake, #1922's deep_job and #1924's tools on a host are there, no implementation of #1819.
+Built first: npm ci; npm run build --workspaces; cargo build --locked -p deep-hook; cargo build --locked --bin deep-show
+(rustup's toolchain, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0), each through scripts/lease.
+Command: NO_COLOR=1 scripts/lease npx vitest run tests/acceptance/1819 --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-10  Machine: macOS 27.2 (Apple silicon)  Node: v24.22.2  vitest 5.0.5. Paths below: <repo> is the worktree.
+Result: Test Files 5 failed (5); Tests 5 failed (5); about 97 s. Short on purpose: the surfaces don't exist.
+
+No test passed at the base, and each failed for the expected reason, at the same named assertion: helpers.ts
+mustBlockForPcm's expect "<fixture>, with no record: media_bake with <kind> by <analyzer> and no record is BLOCKED,
+naming <analyzer> and the PCM's hash <hash>". Before it, in every test, the fixture was made (macOS say, Samantha),
+its files went into a temp home's evidence store through @deepbuild/evidence as yours, the hub started (deep hub run,
+ready) and deep mcp answered initialize; deep-show built and answered the scenario ok. The base's media_bake knows only
+<kind>@1 analyzers, so it answered unknown_analyzer:
+
+  AC1 (words.test.ts) and AC4 (visemes.test.ts): the line, kind words, charsiu-aligner@1.0.0:
+    {"code":"unknown_analyzer","analyzer":"charsiu-aligner@1.0.0","have":"words@1",...}
+  AC2 (beats.test.ts): the 100 BPM click track, kind beats, beat-this@1.1.0:
+    {"code":"unknown_analyzer","analyzer":"beat-this@1.1.0","have":"beats@1",...}
+  AC3 (activity.test.ts) and AC5 (blocked.test.ts, its clean world): the phrases under music, kind activity,
+    silero-vad@6.2.3: {"code":"unknown_analyzer","analyzer":"silero-vad@6.2.3","have":"activity@1",...}
+
+Not reached at the base, read from the files instead: each test's next step, helpers.ts withBakes, would fail its
+expect "the first-party plug-in deepbuild/bakes is at packages/jobs/bakes (Analysis bake)" (no
+packages/jobs/bakes/deepbuild.json), before any model host starts; AC5's planted world would fail helpers.ts
+startHub's expect "the hub starts with DEEP_HUB_PLANT=job-host-down-done, a planted program this suite names", the hub
+exiting with "DEEP_HUB_PLANT=job-host-down-done names no planted program"; and the deep-show plants beats_fixed_120,
+activity_level_threshold and visemes_no_lead aren't in the scenario's plant lists, so a scenario naming one isn't
+answered ok (helpers.ts bakes' expect "deep-show run answers the scenario ok").
+
+The PCM hashes above are the fixtures' f32 samples' SHA-256 on this machine (say is deterministic here); the tests
+compute them from the samples each run, so another machine's voice gives other hashes and the same checks.
+
+Checked once by hand, not part of the suite: node node_modules/typescript/bin/tsc -p tests/acceptance/1819/tsconfig.json
+exits 0. The fixtures were also run, outside DeepBuild, through the open models the design pins (README: The
+fixtures): silero-vad 6.2.3 put the three spans' edges 2 to 31 ms from the fixture's, beat-this 1.1.0 read 99.99 and
+95.94 BPM, and Charsiu's en_w2v2_fc_10ms put the 17 words' starts 4 to 38 ms early.
+
+The run's output follows.
+------------------------------------------------------------------------------------------------------------------------
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run tests/acceptance/1819 --testTimeout=600000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <repo>
+
+stderr | tests/acceptance/1819/visemes.test.ts
+vitest-setup: stopping 15 process(es) this file left running:
+  67727 (node)
+  67734 (node)
+  67787 (node)
+  67817 (node)
+  67818 (node)
+  67824 (node)
+  67829 (node)
+  67860 (node)
+  67868 (node)
+  67892 (node)
+  67903 (node)
+  67935 (node)
+  67936 (node)
+  67937 (node)
+  67985 (node)
+
+ ❯ tests/acceptance/1819/visemes.test.ts (1 test | 1 failed) 40063ms
+   ❯ AC4 a visemes bake leads each phoneme by a frame and holds X between lines (1)
+     × AC4 #1819.9d92b582 a visemes bake of two lines from a words bake places each shape one frame before its phoneme and holds X between the lines; the planted bake visemes_no_lead fails, naming the first shape 36359ms
+ ❯ tests/acceptance/1819/words.test.ts (1 test | 1 failed) 31216ms
+   ❯ AC1 the words bake places each word within 50 ms, a rerun hits, and an old record under a new aligner is refused (1)
+     × AC1 #1819.d6311ec9 the words bake of a 10 s line places each of its 17 words' starts within 50 ms; the rerun is a cache hit with the same record; the old record handed over under charsiu-aligner@1.0.1 is refused, naming the analyzer 27719ms
+ ❯ tests/acceptance/1819/activity.test.ts (1 test | 1 failed) 9609ms
+   ❯ AC3 the activity bake finds three speech spans under music within 50 ms (1)
+     × AC3 #1819.78820a4a three phrases between 1 s silences over music give three spans, each edge within 50 ms; the planted bake activity_level_threshold marks the music as speech and fails, naming the span 7543ms
+ ❯ tests/acceptance/1819/blocked.test.ts (1 test | 1 failed) 9379ms
+   ❯ AC5 a model bake whose job can't start is BLOCKED naming the analyzer (1)
+     × AC5 #1819.faf43058 with its model host stopped, the activity bake's job is BLOCKED naming silero-vad@6.2.3 with one unblock ask, and the bake stays BLOCKED, never a pass; the planted hub job-host-down-done fails, naming the analyzer 7924ms
+ ❯ tests/acceptance/1819/beats.test.ts (1 test | 1 failed) 5510ms
+   ❯ AC2 the beats bake reads a click track's tempo within 0.5 BPM (1)
+     × AC2 #1819.1e90e26a click tracks at 100 and 96 BPM read 100 ± 0.5 and 96 ± 0.5 BPM; the planted tracker beats_fixed_120 reads 120 and fails, naming each asset 2729ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1819/activity.test.ts > AC3 the activity bake finds three speech spans under music within 50 ms > AC3 #1819.78820a4a three phrases between 1 s silences over music give three spans, each edge within 50 ms; the planted bake activity_level_threshold marks the music as speech and fails, naming the span
+AssertionError: the phrases under music, with no record: media_bake with activity by silero-vad@6.2.3 and no record is BLOCKED, naming silero-vad@6.2.3 and the PCM's hash c7f3595d578890cc07dcc4a615fe210d19b02156104f9e0219cfa0615cf20cd4; it answered {"code":"unknown_analyzer","analyzer":"silero-vad@6.2.3","have":"activity@1","core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mustBlockForPcm tests/acceptance/1819/helpers.ts:427:252
+
+ ❯ tests/acceptance/1819/activity.test.ts:57:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/1819/beats.test.ts > AC2 the beats bake reads a click track's tempo within 0.5 BPM > AC2 #1819.1e90e26a click tracks at 100 and 96 BPM read 100 ± 0.5 and 96 ± 0.5 BPM; the planted tracker beats_fixed_120 reads 120 and fails, naming each asset
+AssertionError: the 100 BPM click track, with no record: media_bake with beats by beat-this@1.1.0 and no record is BLOCKED, naming beat-this@1.1.0 and the PCM's hash 2379f5134fe6131b939588c972730ae5abf698c2a1a1805715878e0ca428f604; it answered {"code":"unknown_analyzer","analyzer":"beat-this@1.1.0","have":"beats@1","core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mustBlockForPcm tests/acceptance/1819/helpers.ts:427:252
+
+ ❯ tests/acceptance/1819/beats.test.ts:39:39
+ ❯ tests/acceptance/1819/beats.test.ts:39:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/1819/blocked.test.ts > AC5 a model bake whose job can't start is BLOCKED naming the analyzer > AC5 #1819.faf43058 with its model host stopped, the activity bake's job is BLOCKED naming silero-vad@6.2.3 with one unblock ask, and the bake stays BLOCKED, never a pass; the planted hub job-host-down-done fails, naming the analyzer
+AssertionError: the phrases under music, with no record: media_bake with activity by silero-vad@6.2.3 and no record is BLOCKED, naming silero-vad@6.2.3 and the PCM's hash c7f3595d578890cc07dcc4a615fe210d19b02156104f9e0219cfa0615cf20cd4; it answered {"code":"unknown_analyzer","analyzer":"silero-vad@6.2.3","have":"activity@1","core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mustBlockForPcm tests/acceptance/1819/helpers.ts:427:252
+
+ ❯ judgeBlocked tests/acceptance/1819/blocked.test.ts:24:15
+ ❯ tests/acceptance/1819/blocked.test.ts:50:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/1819/visemes.test.ts > AC4 a visemes bake leads each phoneme by a frame and holds X between lines > AC4 #1819.9d92b582 a visemes bake of two lines from a words bake places each shape one frame before its phoneme and holds X between the lines; the planted bake visemes_no_lead fails, naming the first shape
+AssertionError: the line, with no record: media_bake with words by charsiu-aligner@1.0.0 and no record is BLOCKED, naming charsiu-aligner@1.0.0 and the PCM's hash 92881b3e04be5b69251140f765c25b55fe1cb57b66453b9a5f02277a96e1c13f; it answered {"code":"unknown_analyzer","analyzer":"charsiu-aligner@1.0.0","have":"words@1","core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mustBlockForPcm tests/acceptance/1819/helpers.ts:427:252
+
+ ❯ tests/acceptance/1819/visemes.test.ts:91:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/1819/words.test.ts > AC1 the words bake places each word within 50 ms, a rerun hits, and an old record under a new aligner is refused > AC1 #1819.d6311ec9 the words bake of a 10 s line places each of its 17 words' starts within 50 ms; the rerun is a cache hit with the same record; the old record handed over under charsiu-aligner@1.0.1 is refused, naming the analyzer
+AssertionError: the line, with no record: media_bake with words by charsiu-aligner@1.0.0 and no record is BLOCKED, naming charsiu-aligner@1.0.0 and the PCM's hash 92881b3e04be5b69251140f765c25b55fe1cb57b66453b9a5f02277a96e1c13f; it answered {"code":"unknown_analyzer","analyzer":"charsiu-aligner@1.0.0","have":"words@1","core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mustBlockForPcm tests/acceptance/1819/helpers.ts:427:252
+
+ ❯ tests/acceptance/1819/words.test.ts:48:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+ Test Files  5 failed (5)
+      Tests  5 failed (5)
+   Start at  12:25:55
+   Duration  96.66s (tests 100%)

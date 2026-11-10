@@ -31,6 +31,8 @@ pub enum MixCall {
     Mix {
         doc: Value,
         segments: Vec<(i64, i64, bool)>,
+        /// #544: the input track the document's logic items read.
+        track: Vec<Value>,
     },
     Handed {
         panel: String,
@@ -61,6 +63,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<MixCall> {
                     Some((s.get("from")?.as_i64()?, s.get("to")?.as_i64()?, write))
                 })
                 .collect::<Option<_>>()?,
+            track: c.get("track").map_or(Some(Vec::new()), |t| t.as_array().cloned())?,
         },
         "media_bake" => MixCall::Bake(c.get("bake").filter(|b| b.is_object())?.clone()),
         "handed" => MixCall::Handed {
@@ -229,7 +232,9 @@ impl Hub<'_> {
             return Err(json!({"code": "bad_rate", "sample_rate": rate}));
         }
         let span = match d.pointer("/transport/span") {
+            // An open span has no end: the mix plays on as with no span (Transport).
             None => None,
+            Some(Value::String(s)) if s == "open" => None,
             v => Some(time(d, v).map_err(bad)?),
         };
         let empty = Map::new();
@@ -396,8 +401,12 @@ impl Hub<'_> {
 
     pub fn mix_call(&mut self, call: &MixCall) -> Value {
         match call {
-            MixCall::Mix { doc, segments } => {
-                let (mix, extra) = match self.mix_with(doc) {
+            MixCall::Mix { doc, segments, track } => {
+                let mut doc = doc.clone();
+                if let Err(i) = self.inline_occurrences(&mut doc, track) {
+                    return json!({"code": i.code, "issues": [i.to_json()]});
+                }
+                let (mix, extra) = match self.mix_with(&doc) {
                     Ok((m, extra)) => (Arc::new(m), extra),
                     Err(e) => return e,
                 };
