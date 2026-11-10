@@ -133,6 +133,10 @@
         "image": {
           "spec": "^0.25",
           "why": "Issue #339: the captured frame as gpui's RenderImage, and the held run's frame written as a PNG; on every platform the app builds on since the frame's pixels became a gpui image (show.rs). Already in gpui's tree."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #1458: the chrome's code face is a bundled one, so GPUI's text system is given its bytes."
         }
       },
       "dev-dependencies": {
@@ -1327,6 +1331,12 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #70: wgpu's Vulkan backend, the GPU layer's backend on Linux."
+        }
+      },
+      "dev-dependencies": {
+        "blake3": {
+          "spec": "^1.5.5",
+          "why": "Issue #501: the CPU hash the GPU frame hash is tested against."
         }
       }
     },

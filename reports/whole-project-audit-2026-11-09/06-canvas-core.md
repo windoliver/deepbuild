@@ -733,7 +733,7 @@ A finding whose confidence line names two levels (one for the fact, one for the 
   after `for step in &recipe.steps {` (line 1920), before `let curve = …`. It reads only `scope[..base]`.
 - verify: unit test with the recipe above; today `!result.ok`.
 - risk: when both `when` and the count are faulty, the `when` error is now the one reported. No test has both
-  (`rg '"when"' packs tests/acceptance/*/fixtures` → `packs/blender-1.0.0/light@1.json` only, no repeat).
+  (`rg '"when"' packs tests/acceptance/*/fixtures` → one familiar-names pack's `light@1.json` only, no repeat).
 
 ### rust-canvas-core-18  A control whose `range` is written high-to-low panics the input session at the first drag or arrow key
 (slice id G-6; slice: the ten small crates)

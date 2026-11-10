@@ -37,7 +37,7 @@ Paths below are relative to that checkout.
 - where: `README.md:66-71`; `scripts/lanes.mjs:268-346`; `scripts/preflight.mjs:44-46,61`; `benchmarks/budgets.json:9,12`
 - evidence: README: "Its lanes are `typecheck`, `lint`, `unit`, `parity quick` and `perf`. … The checks with their builds must
   finish in under five minutes." `lanes.mjs` `checks` names 20 lanes: typecheck, lint, unit, contracts, interfaces, noop, seams,
-  relay, wasm32, catalogue drift, design links and names, public text, plain words, corpus, motion, canvas kit, parity quick,
+  relay, wasm32, catalogue drift, design links and names, public text, plain words, corpus, the motion lane, canvas kit, parity quick,
   proof, verdict proofs, config eval; `preflight.mjs` adds perf and (with a harness budget) harness budgets.
   `budgets.json:9` is `"elapsedMs": 900000`, and line 12 says "Raised from 300 s to 900 s on 2026-10-22". `preflight.mjs:61`
   prints the budget from that file. No test reads the README's wording (`rg "five minutes|parity quick" tests scripts`: only

@@ -751,14 +751,13 @@ extern "C" fn feed_pcm(
     0
 }
 
+/// An AAC encode: its packets, its magic cookie and its frames of priming.
+pub type Aac = (Vec<Vec<u8>>, Vec<u8>, u32);
+
 /// #501: interleaved little-endian f32 `f32le` at `rate` through AudioToolbox's AAC-LC encoder:
 /// its packets of 1024 frames, its magic cookie (an MPEG-4 ES descriptor) and the frames of
 /// priming before the first input frame.
-pub fn encode_aac(
-    f32le: &[u8],
-    rate: u32,
-    channels: u32,
-) -> Result<(Vec<Vec<u8>>, Vec<u8>, u32), String> {
+pub fn encode_aac(f32le: &[u8], rate: u32, channels: u32) -> Result<Aac, String> {
     let from = ASBD {
         sample_rate: rate as f64,
         format: fourcc(b"lpcm"),
