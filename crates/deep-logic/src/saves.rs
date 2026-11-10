@@ -30,9 +30,13 @@ use crate::{Planted, VERSION};
 /// One item's carried state, as a save holds it.
 struct State {
     failed: bool,
+    /// Steps that had run (Logic: turn clock).
+    ran: i64,
     memory: Vec<u8>,
     globals: Vec<u64>,
     arrays: Vec<u8>,
+    /// A linear write's values before the last step that ran; empty when it only holds.
+    prev: Vec<u8>,
     pending: BTreeMap<String, VecDeque<Entry>>,
 }
 
@@ -109,15 +113,17 @@ fn val(ty: &str, x: u64) -> Val {
     }
 }
 
-/// Every logic item's state in piece order (a u32 count, then each one's ID, its memory's length
-/// and the pages that hold a nonzero byte, its mutable globals as 8 bytes each, its arrays and its
-/// waiting entries), then each same-machine counter's ID and the steps it has seen.
+/// Every logic item's state in piece order (a u32 count, then each one's ID, whether it failed,
+/// the steps that had run, its memory's length and the pages that hold a nonzero byte, its mutable
+/// globals as 8 bytes each, its arrays, its linear writes' previous values and its waiting
+/// entries), then each same-machine counter's ID and the steps it has seen.
 fn encode(w: &mut World) -> Vec<u8> {
     let planted = w.planted;
     let mut out = (w.lives.len() as u32).to_le_bytes().to_vec();
     for (item, l) in w.piece.clone().items.iter().zip(w.lives.iter_mut()) {
         put(&mut out, item.id.as_bytes());
         out.push(u8::from(l.failed));
+        out.extend(l.ran.to_le_bytes());
         let memory = l.memory().to_vec();
         out.extend((memory.len() as u32).to_le_bytes());
         let pages: Vec<(usize, &[u8])> = memory
@@ -140,6 +146,7 @@ fn encode(w: &mut World) -> Vec<u8> {
             out.extend(bits(g).to_le_bytes());
         }
         put(&mut out, &l.arrays);
+        put(&mut out, &l.prev);
         let pending: BTreeMap<&String, Vec<Value>> = if planted.save_drops_input_position {
             BTreeMap::new()
         } else {
@@ -183,6 +190,7 @@ fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
             [1] => true,
             _ => return None,
         };
+        let ran = i64::from_le_bytes(take(&mut b, 8)?.try_into().ok()?);
         let mut memory = vec![0; Some(u32_of(&mut b)?).filter(|n| *n as u64 <= MAX_MEMORY)?];
         for _ in 0..u32_of(&mut b)? {
             let at = u32_of(&mut b)? * PAGE as usize;
@@ -194,6 +202,7 @@ fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
             .map(|_| Some(u64::from_le_bytes(take(&mut b, 8)?.try_into().ok()?)))
             .collect::<Option<_>>()?;
         let arrays = sized(&mut b)?.to_vec();
+        let prev = sized(&mut b)?.to_vec();
         let waiting: BTreeMap<String, Vec<Value>> = serde_json::from_slice(sized(&mut b)?).ok()?;
         let pending = waiting
             .into_iter()
@@ -203,9 +212,11 @@ fn decode(mut b: &[u8], items: usize) -> Option<Decoded> {
             id,
             State {
                 failed,
+                ran,
                 memory,
                 globals,
                 arrays,
+                prev,
                 pending,
             },
         ));
@@ -459,6 +470,8 @@ fn opened(
         }
         if s.memory.len() as u64 != memory_bytes(&item.bytes)
             || s.arrays.len() != item.layout.size("writes") as usize
+            || !(s.prev.is_empty() || s.prev.len() == s.arrays.len())
+            || !(0..=k).contains(&s.ran)
         {
             return Err(
                 json!({"code": "save_refused", "differs": [{"what": "state", "item": item.id}]}),
@@ -477,7 +490,11 @@ fn opened(
         let mut live: Live = World::load(&item.bytes, item, &s.memory, &globals)?;
         live.failed = s.failed;
         live.next = k;
+        // As a restore: the step before the save's ran last (Logic: turn clock).
+        live.ran = s.ran;
+        live.last = k - 1;
         live.arrays = s.arrays;
+        live.prev = s.prev;
         live.pending = s.pending;
         live.cursor = track
             .iter()
@@ -716,12 +733,14 @@ fn migrate(
     };
     Ok(State {
         failed: old.failed,
+        ran: old.ran,
         memory: new_memory.to_vec(),
         globals: new_globals
             .chunks(8)
             .map(|c| u64::from_le_bytes(c.try_into().expect("8 bytes")))
             .collect(),
         arrays: old.arrays.clone(),
+        prev: old.prev.clone(),
         pending: old.pending.clone(),
     })
 }
