@@ -21,7 +21,7 @@
 // writes it. A key whose journal holds a call and whose outputs aren't kept made a call the hub can't know the fate
 // of: a retry makes no call and is BLOCKED with one unblock ask naming the provider and the key. While a job runs, a
 // second request with its key joins it, starting nothing, and a request that is cancelled leaves it; the job stops
-// only once no request waits on it.
+// only once no request waits on it. A request whose session closed leaves it too, but the job runs on (#1925).
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -128,13 +128,14 @@ export class Jobs {
   }
 
   /**
-   * A request's caller gone (#1923): it leaves the job it waits on. The job stops only once no request waits on it, so
-   * a joiner's cancel never stops the job for the request that started it.
+   * A request's caller gone (#1923): it leaves the job it waits on. A cancelled request's job stops only once no
+   * request waits on it, so a joiner's cancel never stops the job for the request that started it. A request whose
+   * connection `closed`, its session gone, stops nothing: the job runs on and its row keeps counting (#1925).
    */
-  gone(caller: string): void {
+  gone(caller: string, closed = false): void {
     this.leaving.get(caller)?.();
     for (const job of this.running.values()) {
-      if (!job.callers.delete(caller)) continue;
+      if (!job.callers.delete(caller) || closed) continue;
       if (job.callers.size === 0 || this.d.plant === 'job-joiner-cancels-job') job.stop.abort();
     }
   }

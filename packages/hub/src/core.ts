@@ -5076,9 +5076,12 @@ export class Core {
     // The notices it carried wait for the session's next hook (#352).
     this.siblings.gone(id);
   }
-  /** A deep mcp call cancelled, or its connection closed (#1923): it leaves the job it waits on, which stops only once no caller is left. */
-  callGone(call: string): void {
-    this.jobKinds?.gone(call);
+  /**
+   * A deep mcp call cancelled, or its connection `closed` (#1923): it leaves the job it waits on. A cancel stops the job
+   * once no caller is left; a closed session never does, so the job runs on (#1925).
+   */
+  callGone(call: string, closed = false): void {
+    this.jobKinds?.gone(call, closed);
   }
   /** A waiter whose connection closed: Claude Code stopped it, or it exited. */
   waiterGone(key: number): void {
