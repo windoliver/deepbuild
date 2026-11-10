@@ -168,7 +168,7 @@ export const timed = [
   'tests/acceptance/200/budgets.test.ts', 'tests/acceptance/21/replay.test.ts',
   'tests/acceptance/21/sessions.live.test.ts', 'tests/acceptance/23/match/budgets.test.ts',
   'tests/acceptance/236/budgets.test.ts', 'tests/acceptance/237/budgets.test.ts',
-  'tests/acceptance/238/budgets.test.ts', 'tests/acceptance/24/budgets.test.ts',
+  'tests/acceptance/238/budgets.test.ts', 'tests/acceptance/24/budgets.test.ts', 'tests/acceptance/24/redraft-1463/timing.test.ts',
   'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/25/live/budgets.test.ts',
   'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/routes/twenty-minutes.test.ts',
   'tests/acceptance/25/routes/wake.test.ts', 'tests/acceptance/26/budgets.test.ts',
