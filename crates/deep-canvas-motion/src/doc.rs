@@ -2050,6 +2050,10 @@ pub fn read_with(doc: &Map<String, Value>, f32_beats: bool, arc: quat::Arc) -> R
                 Some("wrap") => true,
                 Some(_) => return refuse("bad_doc", "transport/loop"),
             };
+            // An open span has no end to wrap at: its loop must be none (Transport).
+            if wrap && t.get("span").and_then(Value::as_str) == Some("open") {
+                return refuse("bad_doc", "transport/loop");
+            }
             if wrap && span.is_none_or(|s| s <= 0) {
                 return refuse("bad_time", "transport/span");
             }

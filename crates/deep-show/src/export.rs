@@ -335,6 +335,11 @@ impl Hub<'_> {
         let frames = match &job.range {
             Span::Unbuilt(form) => return Err(json!({"code": "range_unbuilt", "range": form})),
             Span::Whole => {
+                // An open span has no end: an export takes a finite range of its own (Transport).
+                if doc.pointer("/transport/span").and_then(Value::as_str) == Some("open") {
+                    return Err(json!({"code": "span_open", "span": "open",
+                        "why": "span open has no end: give the export a range, such as the recorded track's"}));
+                }
                 let span = doc_span(&doc).ok_or_else(|| refuse("no_span"))?;
                 0..on_grid(span)?
             }
