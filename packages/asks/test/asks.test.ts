@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import type { JsonValue } from '@deepbuild/contracts';
-import { openRecord, RecordError, type Connection, type Event, type RecordStore } from '@deepbuild/record';
+import { openRecord, RecordError, testStorage, type Connection, type Event, type RecordStore } from '@deepbuild/record';
 import { openAsks, type Asks, type Delivery } from '../src/index.js';
 
 type Obj = { [key: string]: JsonValue };
@@ -433,5 +433,26 @@ describe('the resolver gate reads every decision the record holds, however it wa
     } finally {
       off();
     }
+  });
+});
+
+describe('an answer that saves a decision (#319.43d13eb3, #22)', () => {
+  it('syncs the record once: the answer and its decision are durable together, before the agent hears it', async () => {
+    await record.close();
+    const storage = testStorage();
+    const path = join(dir, 'synced.db');
+    record = await openRecord({ path, now: () => now, storage });
+    const heard: string[] = [];
+    asks = await openAsks({ record, now: () => now, deliver: (d) => { if (d.option !== null) heard.push(`${d.ask} ${storage.syncs().length}`); } });
+    await start('S1', 'T1');
+    const handle = await asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
+    const before = storage.syncs().length;
+    await asks.answer(card, handle, { option: 'green' });
+    expect(storage.syncs().slice(before), 'one FULL commit for the answer and the decision it saves').toEqual([{ file: path, mode: 'full' }]);
+    expect(heard, 'the agent hears the answer once it is durable').toEqual([`${handle} ${before + 1}`]);
+    storage.cutPower();
+    record = await openRecord({ path, now: () => now, storage });
+    expect((await events('ask.answered')).map((e) => e.subject), 'the answer survives a power cut').toEqual([handle]);
+    expect((await events('decision.created')).map((e) => (e.data as Obj).answer), 'and so does its decision').toEqual(['green']);
   });
 });

@@ -286,6 +286,8 @@ class SqliteRecord implements RecordStore {
   private readonly migrations = new Map<string, Migration>();
   private readonly evidenceWriter: EvidenceWriter | undefined;
   private readonly queue: Pending[] = [];
+  /** The FULL appends made in this turn of the event loop: they share one FULL commit at its end (#22). */
+  private readonly fulls: Pending[] = [];
   private scheduled = false;
   /** The one stop every close waits for, once a close began. */
   private closing: Promise<void> | undefined;
@@ -567,7 +569,16 @@ class SqliteRecord implements RecordStore {
     }
     this.sealed(prepared);
     if (CORE_ONLY.has(input.kind) || this.options.commitEach) {
-      const [outcome] = this.commit([prepared], CORE_ONLY.has(input.kind) || this.resumes([prepared]) ? 'full' : 'normal');
+      // FULL appends made in one turn sync once, so an answer and the decision it saves cost one sync, not two (#22).
+      if (CORE_ONLY.has(input.kind) || this.resumes([prepared])) {
+        return new Promise<Appended>((resolve, reject) => {
+          this.fulls.push({ prepared, resolve, reject });
+          if (this.fulls.length === 1) queueMicrotask(() => this.commitPending(this.fulls.splice(0), true));
+        });
+      }
+      // What was appended before it commits before it.
+      this.commitPending(this.fulls.splice(0), true);
+      const [outcome] = this.commit([prepared], 'normal');
       if (!outcome!.ok) throw outcome!.error;
       return outcome!.appended;
     }
@@ -612,12 +623,17 @@ class SqliteRecord implements RecordStore {
   /** Commits the queued stream events in one NORMAL batch, each taking its log_pos inside the commit. */
   private flush(): void {
     this.scheduled = false;
-    const batch = this.queue.splice(0);
+    this.commitPending(this.fulls.splice(0), true);
+    this.commitPending(this.queue.splice(0), false);
+  }
+
+  /** Commits a batch of appends in one commit, FULL when asked or when it resumes an ended session, and answers each. */
+  private commitPending(batch: Pending[], full: boolean): void {
     if (!batch.length) return;
     let outcomes: Outcome[];
     try {
       const items = batch.map((p) => p.prepared);
-      outcomes = this.commit(items, this.resumes(items) ? 'full' : 'normal');
+      outcomes = this.commit(items, full || this.resumes(items) ? 'full' : 'normal');
     } catch (error) {
       for (const p of batch) p.reject(error as Error);
       return;
@@ -869,7 +885,7 @@ class SqliteRecord implements RecordStore {
 
   /** Waits for every queued stream event to commit or be refused. */
   private async settle(): Promise<void> {
-    while (this.queue.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
+    while (this.queue.length || this.fulls.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
   }
 
   /** A clean stop: no new appends, every one accepted committed or refused, the state recorded FULL. */
@@ -878,7 +894,7 @@ class SqliteRecord implements RecordStore {
     return this.closing;
   }
   private async stop(): Promise<void> {
-    while (this.inFlight || this.queue.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
+    while (this.inFlight || this.queue.length || this.fulls.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
     const lost = this.db.prepare('INSERT OR IGNORE INTO lost_sessions (session) VALUES (?)');
     const put = this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
     this.full(() => {
