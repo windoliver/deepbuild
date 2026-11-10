@@ -86,6 +86,10 @@ pub fn modules() -> Vec<Module> {
     out.push(deep_canvas_test_modules::registries::rules_isolated());
     #[cfg(feature = "test-registries-load")]
     out.push(deep_canvas_test_modules::registries::load());
+    #[cfg(feature = "test-export-target")]
+    out.push(deep_canvas_test_modules::registries::export_raw());
+    #[cfg(feature = "test-export-target-self-read")]
+    out.push(deep_canvas_test_modules::registries::export_self_read());
     out
 }
 
@@ -99,4 +103,23 @@ pub fn effects_with_base_steps() -> Module {
             .extend(deep_canvas::registry::core_lists::base_steps());
     };
     m
+}
+
+/// #501: the writer of a test module's `export.target@1` entry: the frames' BGRA8 rows, one
+/// after another, in one file at `temp`; `None` for a target no test module writes.
+pub(crate) fn write_export(
+    target: &str,
+    entry: &serde_json::Value,
+    parts: &[crate::export::Rendered],
+    temp: &std::path::Path,
+) -> Option<serde_json::Value> {
+    if !entry["writer"].as_str()?.starts_with("test.") {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    for f in parts.iter().flat_map(|p| &p.files) {
+        bytes.extend(std::fs::read(f).ok()?);
+    }
+    std::fs::write(temp, bytes).ok()?;
+    Some(serde_json::json!({"name": target, "writer": entry["writer"]}))
 }

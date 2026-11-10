@@ -79,9 +79,13 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             centers: p == Some(Planted::GpuCullByCenter),
             reversed: p == Some(Planted::CompactInReverse),
             row_as_element: p == Some(Planted::RowAsElement),
+            occlusion_by_centre: p == Some(Planted::OcclusionByCentre),
         },
         ids_by_compacted_place: p == Some(Planted::IdsByCompactedRow),
         count_read_back: p == Some(Planted::CountReadBack),
+        pyramid_from_previous_frame: p == Some(Planted::PyramidFromPreviousFrame),
+        occlusion_in_cascades: p == Some(Planted::OcclusionInCascades),
+        occlusion_in_probe_captures: p == Some(Planted::OcclusionInProbeCaptures),
         // #428's and #481's shading plants, a bit each in scene3d.wgsl's order.
         lobes: [
             Planted::AbsorptionIgnoresThickness,
@@ -325,6 +329,33 @@ pub fn masks(app: &mut App, key: u32, level: u32) -> Vec<(&'static str, [u32; 2]
     })
 }
 
+/// Culls the camera's lists by occlusion too, or by the frustum alone (a view's `occlusion:
+/// off`, #1637).
+pub fn set_occlusion(app: &mut App, on: bool) {
+    app.worker.call(move |state| {
+        if let Some(s) = state.scene3d.as_ref() {
+            if let Some(r) = lock(&s.shared).renderer.as_mut() {
+                r.set_occlusion(on);
+            }
+        }
+    })
+}
+
+/// Which whole solids each pass of the frame just drawn drew (#1637).
+pub fn kept_items(app: &mut App) -> Vec<(String, Vec<String>)> {
+    app.worker.call(|state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        shared
+            .renderer
+            .as_ref()
+            .map_or(Vec::new(), |r| r.read_kept_items(&device))
+    })
+}
+
 /// Draws the session from the CPU's f64 cull (#484).
 pub fn cull_on_cpu(app: &mut App) {
     app.worker.call(|state| {
@@ -414,6 +445,8 @@ pub struct Drawn {
     pub pre_tone: Option<Vec<u8>>,
     /// The frame's GPU time and each pass's share, ms.
     pub timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
+    /// What the passes' declared costs price this frame at, ms (#1637).
+    pub declared: Vec<(&'static str, f64)>,
     /// How many pixels the status guard moved, when the stage ran and the frame asked.
     pub moved: Option<u32>,
     /// With timings: the GPU memory the device holds as the frame draws (#383).
@@ -582,6 +615,7 @@ pub fn draw_on(
                     .as_ref()
                     .and_then(|_| deep_gpu::memory::allocated(&device)),
                 timing,
+                declared: r.declared_ms(),
                 moved,
             })
         })

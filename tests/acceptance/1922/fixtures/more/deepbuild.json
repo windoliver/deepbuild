@@ -1,0 +1,7 @@
+{
+  "id": "test/upper-more",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "job_tools": [{ "kind": "test.upper", "tool": "upper-b@1.0.0" }],
+  "requires": { "preview": ["deep.registerJobTool"] }
+}

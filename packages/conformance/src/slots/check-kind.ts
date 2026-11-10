@@ -63,11 +63,11 @@ const rules: SlotRule[] = Object.values(RULES).map(({ id, rule }) => ({ id, rule
 
 /**
  * The ways a command masks its tool's exit, each with the text named as the mask: a failure branch (`|| …`), a
- * pipe (the pipeline's exit is the last command's), an `exit N` anywhere, `set +e`, a `!` negation, and any
+ * pipe, `|` or `|&` (the pipeline's exit is the last command's), an `exit N` anywhere, `set +e`, a `!` negation, and any
  * command after the tool (`…; true`, `…; echo done`): the tool's exit reaches the runner only when the tool is the
  * last command of a plain `&&` chain.
  */
-const MASKS: RegExp[] = [/\|\|\s*\S+/, /(?<![|&])\|(?![|&])\s*\S+/, /\bexit\s+\d+/, /\bset\s+\+e\b/, /(?:^|[;&|(]\s*)(!)(?=\s)/];
+const MASKS: RegExp[] = [/\|\|\s*\S+/, /(?<![|&])\|(?!\|)&?\s*\S+/, /\bexit\s+\d+/, /\bset\s+\+e\b/, /(?:^|[;&|(]\s*)(!)(?=\s)/];
 function maskIn(command: string): string | null {
   for (const m of MASKS) { const hit = m.exec(command); if (hit) return (hit[1] ?? hit[0]).trim(); }
   const segments = command.split(/&&|;|\n/).map((s) => s.trim()).filter(Boolean);

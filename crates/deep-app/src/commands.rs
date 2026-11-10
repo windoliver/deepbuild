@@ -7,20 +7,25 @@
 
 use std::{path::PathBuf, rc::Rc};
 
+use crate::chrome::{sizes, Typed as _};
 use gpui_kit::base::input::{Input, InputEvent, InputState};
 use gpui_kit::*;
 use serde_json::{json, Value};
 
+use crate::address::{Address, Place};
 use crate::chrome;
 
-actions!(deepbuild, [OpenCommands]);
+actions!(deepbuild, [OpenCommands, Back, Forward]);
 
-/// How tall ⌘K's list grows before it scrolls.
-const LIST_HEIGHT: f32 = 320.;
-
-/// ⌘K opens the list wherever focus is in the app.
+/// ⌘K opens the list wherever focus is in the app. ⌘[ and ⌘] walk the addresses you opened (#1460), except while a
+/// text field or a terminal has the keys, which keep them.
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("cmd-k", OpenCommands, None)]);
+    const WALKS: Option<&str> = Some("Shell && !Input && !Terminal");
+    cx.bind_keys([
+        KeyBinding::new("cmd-k", OpenCommands, None),
+        KeyBinding::new("cmd-[", Back, WALKS),
+        KeyBinding::new("cmd-]", Forward, WALKS),
+    ]);
 }
 
 /// A view as `deep.registerView` gives it: its panel's folder, its pages and its ⌘K commands.
@@ -98,10 +103,10 @@ pub enum Entry {
         name: String,
         action: String,
     },
-    /// A page the app ships, by its panel's name (#1454).
-    Shipped {
+    /// A page the app ships or a session, by its address (#1454, #1460).
+    Open {
         name: String,
-        panel: &'static str,
+        address: Address,
     },
     Page {
         name: String,
@@ -109,6 +114,11 @@ pub enum Entry {
         page: String,
         param: String,
         value: String,
+    },
+    /// A preference ⌘K answers by opening the box with its change drafted (#1998), found by its words too.
+    Preference {
+        name: String,
+        words: &'static [&'static str],
     },
 }
 
@@ -118,7 +128,8 @@ impl Entry {
         match self {
             Entry::Command { name, .. }
             | Entry::Page { name, .. }
-            | Entry::Shipped { name, .. } => name,
+            | Entry::Open { name, .. }
+            | Entry::Preference { name, .. } => name,
         }
     }
 
@@ -128,7 +139,7 @@ impl Entry {
             Entry::Page {
                 page, param, value, ..
             } => Some(json!({"name": page, "params": {param: value}})),
-            Entry::Command { .. } | Entry::Shipped { .. } => None,
+            Entry::Command { .. } | Entry::Open { .. } | Entry::Preference { .. } => None,
         }
     }
 }
@@ -156,7 +167,8 @@ pub fn entries(views: &[View]) -> Vec<Entry> {
 
 /// The entries matching `query`, in ⌘K's order: the exact name, then names that start with it, then names with a
 /// word that does, then names that hold it, case aside; within each, the most recently used first, then in the order
-/// they registered. Nothing else is read, so the same query on the same state gives the same order.
+/// they registered. A preference whose words hold one starting with the query ranks with the word matches (#1998), so
+/// "mute" finds Sounds. Nothing else is read, so the same query on the same state gives the same order.
 pub fn rank<'a>(query: &str, entries: &'a [Entry], recent: &[String]) -> Vec<&'a Entry> {
     let query = query.trim().to_lowercase();
     let class = |name: &str| -> Option<u8> {
@@ -182,7 +194,16 @@ pub fn rank<'a>(query: &str, entries: &'a [Entry], recent: &[String]) -> Vec<&'a
                 .iter()
                 .position(|r| r == entry.name())
                 .unwrap_or(usize::MAX);
-            class(entry.name()).map(|class| (class, used, at, entry))
+            let by_words = || match entry {
+                Entry::Preference { words, .. } if !query.is_empty() => words
+                    .iter()
+                    .any(|word| word.starts_with(query.as_str()))
+                    .then_some(2),
+                _ => None,
+            };
+            class(entry.name())
+                .or_else(by_words)
+                .map(|class| (class, used, at, entry))
         })
         .collect();
     ranked.sort_by_key(|&(class, used, at, _)| (class, used, at));
@@ -210,8 +231,8 @@ pub fn read_recency(path: &std::path::Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// What opening an entry does: the app runs a command's action and mounts a page.
-pub type Open = Rc<dyn Fn(&Entry, &mut Window, &mut App)>;
+/// What choosing an entry does: the app runs a command's action, and mounts a page's view, which `open` shows.
+pub type Open = Rc<dyn Fn(&Entry, &mut Window, &mut App) -> Option<AnyView>>;
 
 /// ⌘K: a query and the entries it ranks, over the shell.
 pub struct Palette {
@@ -240,7 +261,7 @@ impl Palette {
                 cx.notify();
             }
         });
-        Palette {
+        let palette = Palette {
             entries: entries(views),
             recent,
             query,
@@ -248,13 +269,42 @@ impl Palette {
             back: None,
             open,
             _changed: changed,
-        }
+        };
+        palette.mount(cx);
+        palette
     }
 
     /// What it lists from now on (#1454): the app learns its entries from the hub.
     pub fn set_entries(&mut self, entries: Vec<Entry>, cx: &mut Context<Self>) {
         self.entries = entries;
+        self.mount(cx);
         cx.notify();
+    }
+
+    /// Its pages are how `open` mounts `page/<name>/<value>` (#1460).
+    fn mount(&self, cx: &mut App) {
+        let (entries, open) = (self.entries.clone(), self.open.clone());
+        crate::open::set_mount(
+            Rc::new(move |name, value, window, cx| {
+                let entry = entries.iter().find(|entry| {
+                    matches!(entry, Entry::Page { page, value: v, .. }
+                        if page == name && Some(v.as_str()) == value)
+                })?;
+                open(entry, window, cx)
+            }),
+            cx,
+        );
+    }
+
+    /// What it lists: the entries it was given, then each session by its task's title.
+    fn listed(&self) -> Vec<Entry> {
+        let sessions = crate::views::sidebar()
+            .into_iter()
+            .map(|(id, task, _)| Entry::Open {
+                name: if task.is_empty() { id.clone() } else { task },
+                address: Address::session(&id),
+            });
+        self.entries.iter().cloned().chain(sessions).collect()
     }
 
     /// Shows it with an empty query, its input focused; `back` takes focus again once it hides.
@@ -280,7 +330,20 @@ impl Palette {
         self.recent.retain(|name| name != entry.name());
         self.recent.insert(0, entry.name().to_owned());
         self.hide(window, cx);
-        (self.open)(&entry, window, cx);
+        let address = match &entry {
+            // A command runs, and a preference opens the box with its change drafted: neither is a page.
+            Entry::Command { .. } | Entry::Preference { .. } => {
+                (self.open)(&entry, window, cx);
+                return;
+            }
+            Entry::Open { address, .. } => address.clone(),
+            Entry::Page { page, value, .. } => Address {
+                place: Place::Page,
+                id: page.clone(),
+                parameter: Some(value.clone()),
+            },
+        };
+        crate::open::open(&address, window, cx).ok();
     }
 }
 
@@ -291,44 +354,61 @@ impl Render for Palette {
         }
         let chrome = chrome::of(window);
         let query = self.query.read(cx).value().to_string();
-        let ranked: Vec<Entry> = rank(&query, &self.entries, &self.recent)
+        let listed = self.listed();
+        let ranked: Vec<Entry> = rank(&query, &listed, &self.recent)
             .into_iter()
             .cloned()
             .collect();
         div()
             .id("commands")
             .absolute()
-            .top(px(64.))
+            .top(relative(0.1))
             .left_0()
             .right_0()
             .flex()
             .justify_center()
-            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
-                if event.keystroke.key == "escape" {
-                    this.hide(window, cx);
-                    cx.stop_propagation();
+            .capture_key_down(cx.listener({
+                let first = ranked.first().cloned();
+                move |this, event: &KeyDownEvent, window, cx| {
+                    if event.keystroke.key == "escape" {
+                        this.hide(window, cx);
+                        cx.stop_propagation();
+                    } else if event.keystroke.key == "enter" {
+                        // Return opens the first entry the query ranks, as a click on it does (#1460).
+                        if let Some(entry) = first.clone() {
+                            this.choose(entry, window, cx);
+                        }
+                        cx.stop_propagation();
+                    }
                 }
             }))
             .child(
                 div()
-                    .w(px(480.))
+                    .w(relative(0.5))
                     .flex_none()
-                    .p_2()
+                    .typed(sizes().body)
+                    .p(sizes().space(1))
                     .flex()
                     .flex_col()
-                    .gap_1()
+                    .gap(sizes().space(0))
                     .bg(chrome.raised)
-                    .border_1()
+                    .border(sizes().hairline)
                     .border_color(chrome.divider)
-                    .rounded_md()
+                    .rounded(sizes().radius)
                     .text_color(chrome.ink_primary)
-                    .child(div().flex_none().h(px(32.)).child(Input::new(&self.query)))
+                    .child(
+                        div()
+                            .flex_none()
+                            .h(sizes().title.line + sizes().space(2))
+                            .child(Input::new(&self.query)),
+                    )
                     .child(
                         crate::views::observed("command-list")
                             .role(Role::ListBox)
                             .aria_label("Commands and pages")
                             .flex_none()
-                            .max_h(px(LIST_HEIGHT))
+                            // Half the window it opens at, before it scrolls.
+                            .max_h(sizes().window.1 / 2.)
                             .overflow_y_scroll()
                             .flex()
                             .flex_col()
@@ -337,11 +417,11 @@ impl Render for Palette {
                                 crate::views::observed(("command", at))
                                     .role(Role::ListBoxOption)
                                     .aria_label(name.clone())
-                                    .h(px(24.))
-                                    .px_2()
+                                    .h(sizes().space(4))
+                                    .px(sizes().space(1))
                                     .flex()
                                     .items_center()
-                                    .rounded_sm()
+                                    .rounded(sizes().radius)
                                     .hover(|style| style.bg(chrome.hover))
                                     .child(name)
                                     .on_click(cx.listener(move |this, _, window, cx| {

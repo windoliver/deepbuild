@@ -67,6 +67,13 @@ impl Hub<'_> {
                     if let Some(p) = self.sandbox.programs.get(&(r.def.name.clone(), name)) {
                         e["program"] = p.clone();
                     }
+                    // #501: an export target's writer, reader, fidelity and hidden items, as
+                    // the entry's own fields.
+                    if r.def.name == "export.target@1" {
+                        for k in ["writer", "reader", "fidelity", "hidden"] {
+                            e[k] = e["value"][k].clone();
+                        }
+                    }
                 }
                 row
             })

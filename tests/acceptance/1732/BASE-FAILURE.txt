@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/github-issue-1732-247c39/agent-ad275b8d1c382b664/tests/acceptance/1732
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-1732-247c39/agent-ad275b8d1c382b664/tests/acceptance/1732
 
  ❯ ac2-stacked.test.ts (2 tests | 2 failed) 12914ms
    ❯ AC2 #1732.c7ddc865 chairs stacked at the room's centre solve apart; a solve that ignores pair overlap fails the audit (2)

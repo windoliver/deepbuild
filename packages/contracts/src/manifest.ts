@@ -90,6 +90,31 @@ function checkSecrets(secrets: unknown): ContractIssue[] {
     ];
   });
 }
+/**
+ * The job kinds a package registers through `deep.registerJob` and the tools it adds through `deep.registerJobTool`
+ * (#1922): a kind's name, one slot each under the one-slot rule, and each tool's kind and pinned name@version; a tool
+ * that runs off the machine names the one host its calls go to (#1924), as a library source does.
+ */
+const JOB_KIND = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
+const JOB_TOOL = /^[a-z0-9][a-z0-9_-]*@\d+\.\d+\.\d+$/;
+function checkJobs(jobs: unknown, tools: unknown): ContractIssue[] {
+  const found: ContractIssue[] = [];
+  if (jobs !== undefined) {
+    if (!Array.isArray(jobs)) found.push(issue('type', '/jobs', jobs));
+    else jobs.forEach((kind, i) => { if (typeof kind !== 'string' || !JOB_KIND.test(kind)) found.push(issue('pattern', `/jobs/${i}`, kind)); });
+  }
+  if (tools !== undefined) {
+    if (!Array.isArray(tools)) found.push(issue('type', '/job_tools', tools));
+    else tools.forEach((t, i) => {
+      const { kind, tool, host, ...rest } = (typeof t === 'object' && t !== null ? t : {}) as Record<string, unknown>;
+      if (typeof t !== 'object' || t === null || Object.keys(rest).length) return void found.push(issue('type', `/job_tools/${i}`, t));
+      if (typeof kind !== 'string' || !JOB_KIND.test(kind)) found.push(issue('pattern', `/job_tools/${i}/kind`, kind));
+      if (typeof tool !== 'string' || !JOB_TOOL.test(tool)) found.push(issue('pattern', `/job_tools/${i}/tool`, tool));
+      if (host !== undefined && (typeof host !== 'string' || !host)) found.push(issue('type', `/job_tools/${i}/host`, host));
+    });
+  }
+  return found;
+}
 function checkSources(sources: unknown, plugin: string): ContractIssue[] {
   if (!Array.isArray(sources)) return [issue('type', '/sources', sources)];
   return sources.flatMap((s, i): ContractIssue[] => {
@@ -115,9 +140,9 @@ export function checkManifest(value: unknown): Validation {
   // interface a row's reading is adapted from. `secrets` and `sources` are the secret and source blocks' (#364). A
   // `provides` row's `schema` and `digests`, a `uses` row's `schema`, `from` and `optional`, and the package IDs in
   // `replaces` are extension.compose@1's (#103). Each sits at the manifest's root, or in its row, so its issues' paths
-  // are the manifest's.
+  // are the manifest's. `jobs` and `job_tools` are the job kinds' and their tools' (#1922).
   const object = typeof value === 'object' && value !== null && !Array.isArray(value);
-  const { templates, environments, state_sources, secrets, sources, conflicts, kernel, signature, leases, host, stability, requires, calls, ...rest } = object ? value as Record<string, unknown> : {};
+  const { templates, environments, state_sources, secrets, sources, conflicts, kernel, signature, leases, host, stability, requires, calls, jobs, job_tools, ...rest } = object ? value as Record<string, unknown> : {};
   const adapters: { at: number; adapter: unknown }[] = [];
   /** Each row's fields beside it, out of the row, by the row's position. */
   const besideRows = (rows: unknown, fields: string[]): unknown[] | undefined => {
@@ -158,6 +183,7 @@ export function checkManifest(value: unknown): Validation {
   const issues: ContractIssue[] = [
     ...(templates === undefined ? [] : checkTemplates(templates)),
     ...(environments === undefined ? [] : checkEnvironments(environments)),
+    ...checkJobs(jobs, job_tools),
     ...(state_sources === undefined ? [] : checkEnvironments(state_sources, 'state_sources')),
     ...(secrets === undefined ? [] : checkSecrets(secrets)),
     ...(sources === undefined ? [] : checkSources(sources, (value as Manifest).id.slice((value as Manifest).id.indexOf('/') + 1))),
@@ -179,8 +205,12 @@ export function checkManifest(value: unknown): Validation {
   });
   const plugin = m.id.slice(m.id.indexOf('/') + 1);
   const replaces = new Set(m.replaces ?? []);
+  // A check named after a job kind the package registers, `<kind>_<name>` or `<kind>.<name>`, is that kind's output
+  // check (#1922): the kind's one slot keeps the name the package's own.
+  const kinds = Array.isArray(jobs) ? jobs.filter((k): k is string => typeof k === 'string') : [];
+  const kindCheck = (name: string): boolean => kinds.some((k) => name.length > k.length + 1 && name.startsWith(k) && '_.'.includes(name[k.length]!) && OWN_NAME.test(name.slice(k.length + 1)));
   for (const list of NAME_LISTS) {
-    (m[list] ?? []).forEach((name, i) => { if (!replaces.has(name) && !own(name, plugin, false)) issues.push(issue('pattern', `/${list}/${i}`, name)); });
+    (m[list] ?? []).forEach((name, i) => { if (!replaces.has(name) && !own(name, plugin, false) && !(list === 'checks' && kindCheck(name))) issues.push(issue('pattern', `/${list}/${i}`, name)); });
   }
   (m.provides ?? []).forEach((provided, i) => {
     if (!replaces.has(provided.interface) && !own(provided.interface, plugin, true)) issues.push(issue('pattern', `/provides/${i}/interface`, provided.interface));

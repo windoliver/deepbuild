@@ -86,10 +86,8 @@ pub(crate) fn invert(m: &[f64; 16]) -> [f64; 16] {
     let minor = |skip_c: usize, skip_r: usize| {
         let pick = |skip: usize| {
             let mut out = [0usize; 3];
-            let mut n = 0;
-            for i in (0..4).filter(|i| *i != skip) {
+            for (n, i) in (0..4).filter(|i| *i != skip).enumerate() {
                 out[n] = i;
-                n += 1;
             }
             out
         };

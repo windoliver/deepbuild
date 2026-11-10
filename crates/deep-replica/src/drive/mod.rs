@@ -496,29 +496,39 @@ impl Replica {
                             runtime.map_err(|e| e.to_string()).and_then(|runtime| {
                                 let view = deep_app::mount_panel(&runtime, &dir, window, cx)
                                     .map_err(|e| e.to_string())?;
-                                deep_app::views::place_extension(view.clone().into());
+                                deep_app::open::place_extension(view.clone().into(), cx);
                                 Ok(Some((runtime, view)))
                             });
                     }
-                    None => deep_app::views::place_extension(deep_app::views::shipped(
-                        Kind::Sidebar,
+                    None => deep_app::open::place_extension(
+                        deep_app::views::shipped(Kind::Sidebar, cx),
                         cx,
-                    )),
+                    ),
                 });
-            if let Some(view) = view {
-                let _ = window.update(cx, |_, window, cx| {
-                    let palette = cx.new(|cx| {
-                        deep_app::commands::Palette::new(
-                            &[view],
-                            recency(plant),
-                            opener(plant),
-                            window,
-                            cx,
-                        )
-                    });
-                    shell.update(cx, |shell, cx| shell.set_commands(palette, window, cx));
+            // ⌘K lists a registered view's entries and the preferences, which open the box (#1998).
+            let _ = window.update(cx, |_, window, cx| {
+                let views: Vec<_> = view.into_iter().collect();
+                let palette = cx.new(|cx| {
+                    let mut palette = deep_app::commands::Palette::new(
+                        &[],
+                        recency(plant),
+                        opener(plant),
+                        window,
+                        cx,
+                    );
+                    let mut entries = deep_app::commands::entries(&views);
+                    entries.extend(deep_app::words::preference_entries());
+                    palette.set_entries(entries, cx);
+                    palette
                 });
-            }
+                let words = cx.new(|cx| {
+                    deep_app::words::WordsBox::new(deep_app::words::hub_say(), window, cx)
+                });
+                shell.update(cx, |shell, cx| {
+                    shell.set_commands(palette, window, cx);
+                    shell.set_box(words, cx);
+                });
+            });
             window
         });
         let (runtime, script) = mounted
@@ -595,6 +605,8 @@ impl Replica {
         let result = match name {
             "act" => self.act(call),
             "feed" => self.feed(call),
+            "open" => self.open(call),
+            "notification" => self.notification(call),
             "resize" => self.resize(call),
             "wait_for" => self.wait_for(call),
             "see" => self.see(call),
@@ -606,7 +618,7 @@ impl Replica {
             "close" => return Ok(self.close()),
             other => Err(fail(
                 "refused",
-                format!("{other:?} is no call; the calls are launch, act, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, close, ui_check and motion_check"),
+                format!("{other:?} is no call; the calls are launch, act, open, notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, close, ui_check and motion_check"),
             )),
         };
         let mut digested = call.clone();
@@ -663,9 +675,8 @@ impl Replica {
         };
         let before = nanos(self.clock.t);
         self.clock.t += step;
-        if self.dirty.is_some() {
-            self.move_views_clock();
-        }
+        // The views' clock follows the replica's in every mode, so an age a row writes ticks as the clock runs (#1458).
+        self.move_views_clock();
         self.cx
             .advance_clock(Duration::from_nanos(nanos(self.clock.t) - before));
         self.cx.run_until_parked();
@@ -706,7 +717,9 @@ impl Replica {
     fn notify(&mut self) {
         let now = self.now + self.clock.t * 1000 / FLICKS;
         let notifier = &mut self.notifier;
-        let due = deep_app::record::with_view(|view| notifier.due(view, now, None, true));
+        // Sounds off in the box's words (#1998) leave the question unsounded, as in the app.
+        let sounds = deep_app::hub::sounds_on();
+        let due = deep_app::record::with_view(|view| notifier.due(view, now, None, sounds));
         for posted in due.unwrap_or_default() {
             #[cfg(target_os = "macos")]
             if self.plant == Some(Plant::StartsSound) && posted.sound.is_some() {
@@ -1205,7 +1218,24 @@ impl Replica {
         for run in frame.runs.iter().filter(|r| r.visible) {
             add_text(&mut snapshot.tree, run.text.clone(), run.bounds);
         }
-        (snapshot.to_json(), frame)
+        let mut json = snapshot.to_json();
+        // #1458: each string drawn with its size and face, and where each shipped view was laid out.
+        json["runs"] = frame
+            .runs
+            .iter()
+            .filter(|r| r.visible)
+            .map(|r| json!({"text": r.text, "bounds": r.bounds, "size": r.size, "face": r.face, "cut": r.cut}))
+            .collect();
+        let scale = frame.scale;
+        let device = |v: gpui_kit::Pixels| (f32::from(v) * scale).round() as i64;
+        json["views"] = deep_app::views::drawn_views()
+            .into_iter()
+            .map(|(name, b)| {
+                let bounds = [b.origin.x, b.origin.y, b.size.width, b.size.height].map(device);
+                json!({"name": name, "bounds": bounds})
+            })
+            .collect();
+        (json, frame)
     }
 
     fn see(&mut self, call: &Value) -> Result<Value, Fail> {
@@ -1247,11 +1277,20 @@ impl Replica {
             let bounds = bounds_of(&root["bounds"]);
             let mut inside = Vec::new();
             collect_inside(&snapshot["tree"], bounds, &mut inside);
-            inside.retain(|n| {
-                !(n["role"] == root["role"]
-                    && n["name"] == root["name"]
-                    && n["bounds"] == root["bounds"])
-            });
+            // The located node is the root: what it holds stays, under the root (#1460).
+            let inside: Vec<Value> = inside
+                .into_iter()
+                .flat_map(|n| {
+                    if n["role"] == root["role"]
+                        && n["name"] == root["name"]
+                        && n["bounds"] == root["bounds"]
+                    {
+                        n["children"].as_array().cloned().unwrap_or_default()
+                    } else {
+                        vec![n]
+                    }
+                })
+                .collect();
             root["children"] = Value::Array(inside);
             snapshot["tree"] = root;
         }
@@ -1260,7 +1299,32 @@ impl Replica {
         }
         keep(&mut snapshot["tree"], &include);
         let hash = sha256(snapshot.to_string().as_bytes());
-        Ok(json!({"snapshot": snapshot, "sha256": hash}))
+        // The list's rows the window draws (#1463), in its order, and the record position they were built at: what
+        // deep status --json holds at that log_pos.
+        let (log_pos, rows) = deep_app::record::with_view(|view| {
+            let rows: Vec<Value> = view
+                .table()
+                .list()
+                .into_iter()
+                .map(|row| {
+                    let mut row = row.clone();
+                    if let Some(fields) = row.as_object_mut() {
+                        fields.remove("listed");
+                        fields.remove("order");
+                    }
+                    row
+                })
+                .collect();
+            (view.log_pos, rows)
+        })
+        .unwrap_or_default();
+        // The address the window shows (#1460), beside the snapshot so stored snapshots keep their bytes.
+        let address = self
+            .cx
+            .update(|cx| deep_app::open::current(cx).map(|address| address.to_string()));
+        Ok(
+            json!({"snapshot": snapshot, "sha256": hash, "rows": rows, "log_pos": log_pos, "address": address}),
+        )
     }
 
     /// The window's snapshot, written once under `trace/` by its hash: an action's before and after.
@@ -1482,10 +1546,14 @@ fn opener(plant: Option<Plant>) -> deep_app::commands::Open {
     // Each page's runtime lives as long as ⌘K does, as the panel's does.
     let runtimes = RefCell::new(Vec::new());
     Rc::new(move |entry, window, cx| {
+        if let deep_app::commands::Entry::Preference { name, .. } = entry {
+            deep_app::words::open_preference(name, window, cx);
+            return None;
+        }
         let (Some(mut page), deep_app::commands::Entry::Page { panel, .. }) =
             (entry.page_props(), entry)
         else {
-            return;
+            return None;
         };
         if plant == Some(Plant::PageDropsParam) {
             page["params"] = json!({});
@@ -1496,10 +1564,11 @@ fn opener(plant: Option<Plant>) -> deep_app::commands::Open {
             Ok(view)
         });
         match mounted {
-            Ok(view) => {
-                deep_app::views::fill_slot(view.into(), cx);
+            Ok(view) => Some(view.into()),
+            Err(e) => {
+                eprintln!("deep-drive: {} didn't open: {e:#}", entry.name());
+                None
             }
-            Err(e) => eprintln!("deep-drive: {} didn't open: {e:#}", entry.name()),
         }
     })
 }

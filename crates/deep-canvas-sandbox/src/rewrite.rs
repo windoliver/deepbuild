@@ -220,7 +220,7 @@ pub fn rewrite_as(bytes: &[u8], faults: Faults, mode: Mode) -> Result<Rewritten,
                 while !reader.eof() {
                     let offset = reader.original_position();
                     let op = reader.read().map_err(err)?;
-                    fv.op(offset as u64, &op).map_err(err)?;
+                    fv.op(offset, &op).map_err(err)?;
                     height = height.max(fv.operand_stack_height());
                     ops.push(op);
                     at.push(offset as u32);

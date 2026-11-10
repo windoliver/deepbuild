@@ -1,0 +1,114 @@
+{
+  "failures": [
+    "upper-b@1.0.0 installed again under the same version with one byte changed in tool/case.mjs, its second file, was accepted: its build (d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876 before) must count tool/case.mjs, whose change makes it d1:13f2ea49019d29d640552d717209212ce2394193c74e413179d6502d025d891c",
+    "upper-b@1.0.1 is listed with the build \"d1:a9a566b016ad7278208ea0517fb2b89470d54b3f10877035b701f0216c648f0e\", not its files' d1:13f2ea49019d29d640552d717209212ce2394193c74e413179d6502d025d891c",
+    "upper-b@1.0.1's receipt names the build \"d1:a9a566b016ad7278208ea0517fb2b89470d54b3f10877035b701f0216c648f0e\", not its files' d1:13f2ea49019d29d640552d717209212ce2394193c74e413179d6502d025d891c"
+  ],
+  "seen": {
+    "first": {
+      "started": 1,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.0",
+          "key": "d7c86b746aa0ddb26edd33011228237b68a0852a4293b1a4b5e8b51834f30acc",
+          "build": "d1:a9a566b016ad7278208ea0517fb2b89470d54b3f10877035b701f0216c648f0e",
+          "cache": "miss",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      }
+    },
+    "again": {
+      "old": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+      "next": "d1:13f2ea49019d29d640552d717209212ce2394193c74e413179d6502d025d891c",
+      "ran": {
+        "code": 0,
+        "stdout": "Source: /private/tmp/dh1922-fzrwtP/more-2\n  test/upper-more@1.0.0, digest d1:86231facab471070386a765d41f59fb613f654006b097947de8deeb3acd2de6d, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: none\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-more@1.0.0\n",
+        "stderr": ""
+      }
+    },
+    "hit": {
+      "started": 0,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.0",
+          "key": "d7c86b746aa0ddb26edd33011228237b68a0852a4293b1a4b5e8b51834f30acc",
+          "build": "d1:a9a566b016ad7278208ea0517fb2b89470d54b3f10877035b701f0216c648f0e",
+          "cache": "hit",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      }
+    },
+    "joined": {
+      "code": 0,
+      "stdout": "Source: /private/tmp/dh1922-fzrwtP/more-3\n  test/upper-more@1.0.1, digest d1:969e888b1daf2adc45dad69ecc5ac55c582971efec3342a4f5b5456203f12de5, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: none\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-more@1.0.1\n",
+      "stderr": ""
+    },
+    "listed": {
+      "tool": "upper-b@1.0.1",
+      "plugin": "test/upper-more",
+      "build": "d1:a9a566b016ad7278208ea0517fb2b89470d54b3f10877035b701f0216c648f0e"
+    },
+    "next": [
+      {
+        "started": 1,
+        "reply": {
+          "status": "done",
+          "outputs": {
+            "text": {
+              "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+            }
+          },
+          "receipt": {
+            "kind": "test.upper",
+            "tool": "upper-b@1.0.1",
+            "key": "7e4bb8a488095896fb5059350615ea9bd879a2b0bd707c7745fde43cd4a8d020",
+            "build": "d1:a9a566b016ad7278208ea0517fb2b89470d54b3f10877035b701f0216c648f0e",
+            "cache": "miss",
+            "inputs": {
+              "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+            }
+          }
+        }
+      },
+      {
+        "started": 0,
+        "reply": {
+          "status": "done",
+          "outputs": {
+            "text": {
+              "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+            }
+          },
+          "receipt": {
+            "kind": "test.upper",
+            "tool": "upper-b@1.0.1",
+            "key": "7e4bb8a488095896fb5059350615ea9bd879a2b0bd707c7745fde43cd4a8d020",
+            "build": "d1:a9a566b016ad7278208ea0517fb2b89470d54b3f10877035b701f0216c648f0e",
+            "cache": "hit",
+            "inputs": {
+              "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

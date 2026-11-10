@@ -1,0 +1,8 @@
+{
+  "id": "test/upper-rival",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "checks": ["test.upper_rival"],
+  "jobs": ["test.upper"],
+  "requires": { "preview": ["deep.registerJob"] }
+}

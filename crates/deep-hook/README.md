@@ -14,10 +14,10 @@ The binary every agent hook runs as `deep-hook <agent> <event>`: it stamps the c
 
 ## What it may import
 
-Core, beside the hub: deep-contracts (through its crate root) and std, nothing else today, with the few libc calls it makes declared in its own `extern "C"` blocks. It never imports a canvas, GPU or app crate.
+Core, beside the hub: deep-contracts (through its crate root), std, and rustls with ring for a joined project's hub over TLS 1.3 (#1338, `src/remote.rs`), with the few libc calls it makes declared in its own `extern "C"` blocks. It never imports a canvas, GPU or app crate.
 
 ## Deviations
 
 - `src/lib.rs`: the matcher and shell reader are a library so the local preflight's cargo-semver-checks can diff their public items against the merge base (#139).
 - `tests/busy_disk.rs`: its own test binary because it keeps the disk busy; cargo runs test binaries one at a time, so no other test's spool write runs beside it.
-- `Cargo.toml`: the `plant-*` features build the planted wrong programs for #16, #304, #315 and #316's acceptance criteria; no default build has them. `env-plants` reads `DEEP_HUB_PLANT`, the planted programs a test selects at run time; a release build refuses it (#1408).
+- `Cargo.toml`: the `plant-*` features build the planted wrong programs for #16, #304, #315, #316, #1097, #1407, #1503 and #1676's acceptance criteria; no default build has them. `env-plants` reads `DEEP_HUB_PLANT`, the planted programs a test selects at run time; a release build refuses it (#1408).

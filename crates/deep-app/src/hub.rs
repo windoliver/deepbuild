@@ -23,6 +23,15 @@ pub fn configured_address() -> Option<PathBuf> {
     address.strip_prefix("unix:").map(PathBuf::from)
 }
 
+/// Whether sounds play (#1998): `sounds` in config.json, on unless it says false. You change it in the box's words.
+pub fn sounds_on() -> bool {
+    std::fs::read_to_string(root().join("config.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|config| config.get("sounds")?.as_bool())
+        .unwrap_or(true)
+}
+
 /// The hub's address: the setting's, or the installed hub's socket.
 pub fn address() -> PathBuf {
     configured_address().unwrap_or_else(|| root().join("hub.sock"))

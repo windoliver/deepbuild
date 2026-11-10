@@ -149,7 +149,7 @@ pub fn bands_of(item: &Value, path: &str) -> Result<Option<Bands>, Refused> {
                 return Err(bad(&format!("/bands/{i}/params/ratio")));
             }
             let error = num("error");
-            if error.is_some_and(|e| !(e >= 0.0)) {
+            if error.is_some_and(|e| e.is_nan() || e < 0.0) {
                 return Err(bad(&format!("/bands/{i}/params/error")));
             }
             proxy = Some(Proxy { ratio, error });

@@ -646,7 +646,7 @@ impl Player {
                 }
             }
             let g = if bus.mute { 0.0 } else { amp(bus.gain_db) };
-            for f in block.chunks_exact_mut(2) {
+            for f in block.as_chunks_mut::<2>().0 {
                 let (l, r) = balance(f[0], f[1], bus.pan);
                 f[0] = (l as f64 * g) as f32;
                 f[1] = (r as f64 * g) as f32;
@@ -671,10 +671,17 @@ impl Player {
         let model = if self.planted.inverse_only { Model::Inverse } else { e.distance.model };
         let g = emitter::distance_gain(&e.distance, dist, model)
             * emitter::cone_gain(&e.cone, p.forward, p.source, p.listener, self.planted.cone_reversed);
-        let pan = if dist == 0.0 {
+        // W3C PannerNode's equal-power azimuth: in the listener's horizontal plane, a source behind
+        // pans as its mirror in front, and the pan is azimuth ÷ 90°.
+        let ahead = [p.right[2], 0.0, -p.right[0]];
+        let x = d[0] * p.right[0] + d[2] * p.right[2];
+        let z = d[0] * ahead[0] + d[2] * ahead[2];
+        let pan = if x == 0.0 && z == 0.0 {
             0.0
         } else {
-            (d[0] * p.right[0] + d[1] * p.right[1] + d[2] * p.right[2]) / dist
+            let az = ops::deg(ops::atan2(x, z));
+            let az = if az > 90.0 { 180.0 - az } else if az < -90.0 { -180.0 - az } else { az };
+            az / 90.0
         };
         (g, pan)
     }

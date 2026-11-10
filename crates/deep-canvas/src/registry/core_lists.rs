@@ -4,7 +4,8 @@
 //! outputs) and `gpu.function@1` (step functions); `mark@1`, `builder@1`, `modifier@1` and
 //! `check.kind.doc@1`; and the kits of `device.class@1` and `logic.service@1`, whose entries land
 //! with the input seam and the logic module; and `data.layout@1` (#415), the data layouts canvas
-//! modules, first-party packs and packs fill, whose validators the sandbox module runs. Each kit's
+//! modules, first-party packs and packs fill, whose validators the sandbox module runs; and
+//! `constraint@1`, `column.source@1` (#397), `outline.source@1` (#443) and `ease@1` (#490). Each kit's
 //! rules are each isolated by a planted wrong entry that breaks that rule alone.
 
 use serde_json::{json, Value};
@@ -540,8 +541,12 @@ fn class_one_track(v: &Value) -> Result<(), String> {
     let Some(t) = v.pointer("/fixture/tracks").and_then(Value::as_object) else {
         return Ok(());
     };
-    let mut hashes: Vec<&Value> = t.values().collect();
-    hashes.dedup();
+    let mut hashes: Vec<&Value> = Vec::new();
+    for h in t.values() {
+        if !hashes.contains(&h) {
+            hashes.push(h);
+        }
+    }
     if hashes.len() > 1 {
         Err(format!(
             "its recorded fixture gives {} track hashes across frame rates",
@@ -859,8 +864,11 @@ fn column_source() -> RegistryDef {
 
 // ---- outline.source@1 (#443: Builder `extrude`: outlines from text, paths and SVG)
 
+/// A fixture's contours with their fill rule.
+type Rings = (Vec<Vec<[f64; 2]>>, crate::outline::FillRule);
+
 /// The contours and fill rule at `at` in an entry's fixture.
-fn rings_at(v: &Value, at: &str) -> Result<(Vec<Vec<[f64; 2]>>, crate::outline::FillRule), String> {
+fn rings_at(v: &Value, at: &str) -> Result<Rings, String> {
     let o = v.pointer(at).ok_or(format!("its fixture has no `{at}`"))?;
     let rule = match o.get("rule").and_then(Value::as_str) {
         Some("nonzero") => crate::outline::FillRule::NonZero,
@@ -1171,6 +1179,41 @@ fn ease() -> RegistryDef {
     )
 }
 
+// ---- export.target@1 (#501; Export: Targets)
+
+fn reader_is_not_writer(v: &Value) -> Result<(), String> {
+    match (v["writer"].as_str(), v["reader"].as_str()) {
+        (Some(w), Some(r)) if w == r => Err(format!("`{w}` writes it and reads it back")),
+        _ => Ok(()),
+    }
+}
+
+/// An export target: the canvas module that writes it, the check kinds that hold its output to
+/// the document, the reader those checks read it back with, and what it does with a hidden item.
+fn export_target() -> RegistryDef {
+    let name = json!({"type": "string"});
+    RegistryDef::new(
+        "export.target@1",
+        obj(
+            json!({"writer": name, "fidelity": {"type": "array", "items": name}, "reader": name,
+                   "hidden": {"enum": ["left_out", "listed"]}}),
+            &["writer", "fidelity", "reader", "hidden"],
+        ),
+        &["module"],
+        "R6",
+    )
+    .rule("reader_is_not_writer", "a target whose reader is its own writer", reader_is_not_writer)
+    .planted(
+        "reads_itself",
+        json!({"writer": "x", "fidelity": ["export.fidelity"], "reader": "x", "hidden": "left_out"}),
+    )
+}
+
+/// `export.target@1`'s declaration, for the planted layout that declares it in the media module.
+pub fn export_target_registry() -> RegistryDef {
+    export_target()
+}
+
 /// Every registry the core declares, by name; with `eases`, `ease@1` among them, which only
 /// the planted layout that declares it in the motion module leaves out.
 pub fn registries_with(eases: bool) -> Vec<RegistryDef> {
@@ -1186,6 +1229,7 @@ pub fn registries_with(eases: bool) -> Vec<RegistryDef> {
         out.push(ease());
     }
     out.extend([
+        export_target(),
         gpu_function(),
         gpu_output(),
         gpu_step(),
@@ -1310,6 +1354,15 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn one_track_counts_each_different_hash_once() {
+        let entry = json!({"fixture": {"tracks": {"30": "a1", "60": "b2", "120": "a1"}}});
+        assert_eq!(
+            class_one_track(&entry),
+            Err("its recorded fixture gives 2 track hashes across frame rates".into())
+        );
     }
 
     #[test]

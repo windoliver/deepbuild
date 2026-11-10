@@ -89,7 +89,7 @@ impl Eq {
     }
 
     pub fn process(&mut self, block: &mut [f32]) {
-        for frame in block.chunks_exact_mut(2) {
+        for frame in block.as_chunks_mut::<2>().0 {
             for (ch, x) in frame.iter_mut().enumerate() {
                 let mut v = *x as f64;
                 for (k, c) in self.coefficients.iter().enumerate() {

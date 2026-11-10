@@ -81,3 +81,8 @@ At `0f7fb686` every tagged test fails, for a missing surface or the base's liter
 - **Gpui-kit's own chrome** (the dock's tab bars and borders, if they show) counts as app chrome: its colors must come from the roles too.
 - **A registered panel** is a `register_panel` call in the app's Rust source. Script panels under `crates/deep-app/panels` aren't planted; the inventory may list them.
 - **The inventory check** isn't required in a lane; the issue asks only for the check mode.
+
+## Swapped for #1458
+
+#1458 (text sizes and spacing are roles of the look) changes what the chrome's ink is: two tiers and disabled, every one but ink_disabled at 4.5:1 on every fill a row is drawn on. The cases `#882.98cbaa26` (the shipped look's roles) and `#882.218503b6`'s ink half were redrafted blind from this
+issue, #1458, the design and the base `2721ca7b`, and swapped in with the owner's approval: `redraft-1458/look.test.mjs` and `redraft-1458/replica.test.mjs`, with their wrong programs in `redraft-1458/wrong.test.mjs`.

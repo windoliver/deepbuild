@@ -14,9 +14,9 @@ test('the plants break only what their criteria name, at the ratios the README g
   assert.deepEqual(plantRatios(), []);
 });
 
-test('the fixture look, which keeps every rule the README pins, passes the guard and resolves its terminal and focus roles', () => {
-  assert.deepEqual(judgeControl(realGuard), []);
-});
+// This control, the bright black plant and both focus plants are in redraft-1458/look.test.mjs: their fixture gave
+// ink_tertiary at 3.59:1, which #1458's 4.5:1 floor refuses before a plant is reached, so they were redrafted blind on a
+// fixture with two inks and disabled and swapped in with the owner's approval.
 
 test(`${AC[1]} a planted look whose selected fill drops the secondary ink under its floor is refused, naming the role and "selected over raised"`, () => {
   assert.deepEqual(judgeSelected(realGuard), []);
@@ -30,9 +30,6 @@ test(`${AC[3]} every shipped look passes, in light and dark, and holds every flo
   assert.deepEqual(judgeShipped(realGuard), []);
 });
 
-test(`${AC[3]} a planted look whose bright black is 2:1 on the terminal background is refused, naming the color`, () => {
-  assert.deepEqual(judgeBrightBlack(realGuard), []);
-});
 
 test(`${AC[4]} with a row selected and another focused, the shipped app look's focus ring keeps 3:1 on the selected fill and every other surface, light and dark`, () => {
   const [answer] = realGuard([{ look: 'clean' }]);
@@ -41,10 +38,4 @@ test(`${AC[4]} with a row selected and another focused, the shipped app look's f
   assert.deepEqual(failures, []);
 });
 
-test(`${AC[4]} a planted look with no focus role is refused`, () => {
-  assert.deepEqual(judgeNoFocus(realGuard), []);
-});
 
-test(`${AC[4]} (scope) a planted look whose focus is under 3:1 on a surface is refused, naming focus and that surface`, () => {
-  assert.deepEqual(judgeFaintFocus(realGuard), []);
-});

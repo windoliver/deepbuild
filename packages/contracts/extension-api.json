@@ -1088,6 +1088,232 @@
     }
   },
   {
+    "method": "deep.registerJob",
+    "variants": null,
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1922",
+    "digest": "d1:2f59a429c37a1668d10da0e96e9a002f3583d9dd8ab1691283758c94ac4f55c6",
+    "params": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+        },
+        "job": {
+          "type": "object",
+          "properties": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "params": {
+                  "type": "object"
+                },
+                "inputs": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "params",
+                "inputs"
+              ],
+              "additionalProperties": false
+            },
+            "outputs": {
+              "type": "object"
+            },
+            "key": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "tool",
+                  "params",
+                  "inputs"
+                ]
+              }
+            },
+            "output_checks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "qualification": {
+              "type": "object",
+              "properties": {
+                "fixtures": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "params": {
+                        "type": "object"
+                      },
+                      "inputs": {
+                        "type": "object"
+                      },
+                      "expect": {
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "params",
+                      "inputs",
+                      "expect"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "fixtures"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "schema",
+            "outputs",
+            "key",
+            "output_checks",
+            "qualification"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "job"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.registerJobTool",
+    "variants": null,
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1922",
+    "digest": "d1:5d582e90a4ba9fbcfeaba21aa699f1f2af376f9ac3bf395fd61a544ee8229a7e",
+    "params": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+        },
+        "tool": {
+          "type": "object",
+          "properties": {
+            "tool": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]*@\\d+\\.\\d+\\.\\d+$"
+            },
+            "params": {
+              "type": "object"
+            },
+            "run": {
+              "type": "object",
+              "properties": {
+                "dir": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "entry": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "oneOf": [
+                {
+                  "required": [
+                    "dir",
+                    "entry"
+                  ]
+                },
+                {
+                  "required": [
+                    "url"
+                  ]
+                }
+              ],
+              "additionalProperties": false
+            },
+            "qualification": {
+              "type": "object"
+            },
+            "cost": {
+              "type": "object",
+              "properties": {
+                "usd": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "usd"
+              ],
+              "additionalProperties": false
+            },
+            "weights": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sha256"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "needs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [
+            "tool",
+            "params",
+            "run",
+            "qualification"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "tool"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.fetch",
     "variants": null,
     "since": "R1",

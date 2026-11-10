@@ -1,0 +1,3 @@
+Mac15,12
+Now drawing from 'AC Power'
+start: Tue Nov 10 05:14:11 UTC 2026 | 23:14  up 42 days,  1:39, 1 user, load averages: 3.31 7.14 6.37

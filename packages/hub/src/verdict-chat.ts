@@ -73,6 +73,9 @@ export async function claimState(query: Query, id: string, expected: ReadonlyMap
     const passed = new Set(checks.filter((c) => c.outcome === 'passed' && !unproved.has(c.check)).map((c) => c.check));
     state = { outcome: null, requirements: [...seen].map((check, i) => ({ req: `req:${claim.id}#R${i + 1}`, outcome: passed.has(check) ? 'PASS' : 'pending', smallest: null, points_to: null })), running, ...(held.length ? { held } : {}), ...(tests ? { tests } : {}) };
   }
+  // The receipt is the address of the claim's page, its session's page at the claim, the session's ID cut to its first
+  // 8 as the app shortens it, so it fits the line (#1460); deep open takes it.
+  if (claim.session_id) state.receipt = `session/${claim.session_id.slice(0, 8)}/${claim.id.replace(/^claim:/, '')}`;
   return { task: claim.subject_ref, session: claim.session_id, created: claim.created, state, checks, verdictAt: verdict?.created ?? null };
 }
 
