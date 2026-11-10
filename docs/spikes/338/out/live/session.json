@@ -1752,9 +1752,9 @@
           },
           {
             "role": "button",
-            "name": "Definition ask 24 in docs: go ahead?",
-            "value": "later",
-            "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC",
+            "name": "Authority ask 25 in docs: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH",
             "bounds": [
               16,
               1440,
@@ -1766,90 +1766,10 @@
                 "role": "label",
                 "name": "!",
                 "value": "needs_you",
-                "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC:mark",
-                "bounds": [
-                  32,
-                  1440,
-                  32,
-                  64
-                ],
-                "children": []
-              },
-              {
-                "role": "label",
-                "name": "Definition ask 24 in docs: go ahead?",
-                "value": null,
-                "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC:title",
-                "bounds": [
-                  80,
-                  1440,
-                  160,
-                  64
-                ],
-                "children": []
-              },
-              {
-                "role": "label",
-                "name": "set for later",
-                "value": null,
-                "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC:word",
-                "bounds": [
-                  240,
-                  1440,
-                  156,
-                  64
-                ],
-                "children": []
-              },
-              {
-                "role": "label",
-                "name": "08:00",
-                "value": null,
-                "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC:time",
-                "bounds": [
-                  396,
-                  1440,
-                  90,
-                  64
-                ],
-                "children": [
-                  {
-                    "role": "label",
-                    "name": "08:00",
-                    "value": null,
-                    "id": "ask:01MCBK1VV0C16MFYY0FV9VS2MC:applies",
-                    "bounds": [
-                      412,
-                      1452,
-                      74,
-                      40
-                    ],
-                    "children": []
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "role": "button",
-            "name": "Authority ask 25 in docs: go ahead?",
-            "value": "needs_you",
-            "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH",
-            "bounds": [
-              16,
-              1504,
-              486,
-              64
-            ],
-            "children": [
-              {
-                "role": "label",
-                "name": "!",
-                "value": "needs_you",
                 "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH:mark",
                 "bounds": [
                   32,
-                  1504,
+                  1440,
                   32,
                   64
                 ],
@@ -1862,7 +1782,7 @@
                 "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH:title",
                 "bounds": [
                   80,
-                  1504,
+                  1440,
                   192,
                   64
                 ],
@@ -1875,7 +1795,7 @@
                 "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH:word",
                 "bounds": [
                   272,
-                  1504,
+                  1440,
                   124,
                   64
                 ],
@@ -1888,7 +1808,7 @@
                 "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH:time",
                 "bounds": [
                   396,
-                  1504,
+                  1440,
                   90,
                   64
                 ],
@@ -1900,7 +1820,7 @@
                     "id": "ask:01MCBK3PE07YZ30D3DDGHH7TAH:applies",
                     "bounds": [
                       412,
-                      1516,
+                      1452,
                       74,
                       40
                     ],
@@ -1917,7 +1837,7 @@
             "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3",
             "bounds": [
               16,
-              1568,
+              1504,
               486,
               64
             ],
@@ -1929,7 +1849,7 @@
                 "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3:mark",
                 "bounds": [
                   32,
-                  1568,
+                  1504,
                   32,
                   64
                 ],
@@ -1942,7 +1862,7 @@
                 "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3:title",
                 "bounds": [
                   80,
-                  1568,
+                  1504,
                   184,
                   64
                 ],
@@ -1955,7 +1875,7 @@
                 "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3:word",
                 "bounds": [
                   264,
-                  1568,
+                  1504,
                   132,
                   64
                 ],
@@ -1968,7 +1888,7 @@
                 "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3:time",
                 "bounds": [
                   396,
-                  1568,
+                  1504,
                   90,
                   64
                 ],
@@ -1980,7 +1900,7 @@
                     "id": "ask:01MCBK5H10C35HRB0K1WQ7ZGW3:applies",
                     "bounds": [
                       412,
-                      1580,
+                      1516,
                       74,
                       40
                     ],
@@ -1997,7 +1917,7 @@
             "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA",
             "bounds": [
               16,
-              1632,
+              1568,
               486,
               64
             ],
@@ -2009,7 +1929,7 @@
                 "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA:mark",
                 "bounds": [
                   32,
-                  1632,
+                  1568,
                   32,
                   64
                 ],
@@ -2022,7 +1942,7 @@
                 "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA:title",
                 "bounds": [
                   80,
-                  1632,
+                  1568,
                   152,
                   64
                 ],
@@ -2035,7 +1955,7 @@
                 "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA:word",
                 "bounds": [
                   232,
-                  1632,
+                  1568,
                   164,
                   64
                 ],
@@ -2048,7 +1968,7 @@
                 "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA:time",
                 "bounds": [
                   396,
-                  1632,
+                  1568,
                   90,
                   64
                 ],
@@ -2060,7 +1980,7 @@
                     "id": "ask:01MCBK7BM0KJTAA4KEFCSDT2CA:applies",
                     "bounds": [
                       412,
-                      1644,
+                      1580,
                       74,
                       40
                     ],
@@ -2077,7 +1997,7 @@
             "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R",
             "bounds": [
               16,
-              1696,
+              1632,
               486,
               64
             ],
@@ -2089,7 +2009,7 @@
                 "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R:mark",
                 "bounds": [
                   32,
-                  1696,
+                  1632,
                   32,
                   64
                 ],
@@ -2102,7 +2022,7 @@
                 "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R:title",
                 "bounds": [
                   80,
-                  1696,
+                  1632,
                   198,
                   64
                 ],
@@ -2115,7 +2035,7 @@
                 "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R:word",
                 "bounds": [
                   278,
-                  1696,
+                  1632,
                   118,
                   64
                 ],
@@ -2128,7 +2048,7 @@
                 "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R:time",
                 "bounds": [
                   396,
-                  1696,
+                  1632,
                   90,
                   64
                 ],
@@ -2140,7 +2060,7 @@
                     "id": "ask:01MCBKB0T0KWE4C5CFPMHW4J7R:applies",
                     "bounds": [
                       412,
-                      1708,
+                      1644,
                       74,
                       40
                     ],
@@ -2157,7 +2077,7 @@
             "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2",
             "bounds": [
               16,
-              1760,
+              1696,
               486,
               64
             ],
@@ -2169,7 +2089,7 @@
                 "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2:mark",
                 "bounds": [
                   32,
-                  1760,
+                  1696,
                   32,
                   64
                 ],
@@ -2182,7 +2102,7 @@
                 "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2:title",
                 "bounds": [
                   80,
-                  1760,
+                  1696,
                   196,
                   64
                 ],
@@ -2195,7 +2115,7 @@
                 "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2:word",
                 "bounds": [
                   276,
-                  1760,
+                  1696,
                   120,
                   64
                 ],
@@ -2208,7 +2128,7 @@
                 "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2:time",
                 "bounds": [
                   396,
-                  1760,
+                  1696,
                   90,
                   64
                 ],
@@ -2220,7 +2140,7 @@
                     "id": "ask:01MCBKCVD0NQS534YAM1ZTMWJ2:applies",
                     "bounds": [
                       412,
-                      1772,
+                      1708,
                       74,
                       40
                     ],
@@ -2237,7 +2157,7 @@
             "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ",
             "bounds": [
               16,
-              1824,
+              1760,
               486,
               64
             ],
@@ -2249,7 +2169,7 @@
                 "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ:mark",
                 "bounds": [
                   32,
-                  1824,
+                  1760,
                   32,
                   64
                 ],
@@ -2262,7 +2182,7 @@
                 "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ:title",
                 "bounds": [
                   80,
-                  1824,
+                  1760,
                   246,
                   64
                 ],
@@ -2275,7 +2195,7 @@
                 "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ:word",
                 "bounds": [
                   326,
-                  1824,
+                  1760,
                   70,
                   64
                 ],
@@ -2288,7 +2208,7 @@
                 "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ:time",
                 "bounds": [
                   396,
-                  1824,
+                  1760,
                   90,
                   64
                 ],
@@ -2300,7 +2220,7 @@
                     "id": "ask:01MCBKEP00AF27SH36Z7R1YMBQ:applies",
                     "bounds": [
                       412,
-                      1836,
+                      1772,
                       74,
                       40
                     ],
@@ -2317,7 +2237,7 @@
             "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H",
             "bounds": [
               16,
-              1888,
+              1824,
               486,
               64
             ],
@@ -2329,7 +2249,7 @@
                 "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H:mark",
                 "bounds": [
                   32,
-                  1888,
+                  1824,
                   32,
                   64
                 ],
@@ -2342,7 +2262,7 @@
                 "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H:title",
                 "bounds": [
                   80,
-                  1888,
+                  1824,
                   192,
                   64
                 ],
@@ -2355,7 +2275,7 @@
                 "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H:word",
                 "bounds": [
                   272,
-                  1888,
+                  1824,
                   124,
                   64
                 ],
@@ -2368,7 +2288,7 @@
                 "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H:time",
                 "bounds": [
                   396,
-                  1888,
+                  1824,
                   90,
                   64
                 ],
@@ -2378,6 +2298,86 @@
                     "name": "05:00",
                     "value": null,
                     "id": "ask:01MCBKGGK0MYVC1Z4PFPG8Q85H:applies",
+                    "bounds": [
+                      412,
+                      1836,
+                      74,
+                      40
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "role": "button",
+            "name": "Unblock ask 32 in review: go ahead?",
+            "value": "needs_you",
+            "id": "ask:01MCBKJB60W8KQQYERE7QKXH5K",
+            "bounds": [
+              16,
+              1888,
+              486,
+              64
+            ],
+            "children": [
+              {
+                "role": "label",
+                "name": "!",
+                "value": "needs_you",
+                "id": "ask:01MCBKJB60W8KQQYERE7QKXH5K:mark",
+                "bounds": [
+                  32,
+                  1888,
+                  32,
+                  64
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Unblock ask 32 in review: go ahead?",
+                "value": null,
+                "id": "ask:01MCBKJB60W8KQQYERE7QKXH5K:title",
+                "bounds": [
+                  80,
+                  1888,
+                  184,
+                  64
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "Your step",
+                "value": null,
+                "id": "ask:01MCBKJB60W8KQQYERE7QKXH5K:word",
+                "bounds": [
+                  264,
+                  1888,
+                  132,
+                  64
+                ],
+                "children": []
+              },
+              {
+                "role": "label",
+                "name": "06:00",
+                "value": null,
+                "id": "ask:01MCBKJB60W8KQQYERE7QKXH5K:time",
+                "bounds": [
+                  396,
+                  1888,
+                  90,
+                  64
+                ],
+                "children": [
+                  {
+                    "role": "label",
+                    "name": "06:00",
+                    "value": null,
+                    "id": "ask:01MCBKJB60W8KQQYERE7QKXH5K:applies",
                     "bounds": [
                       412,
                       1900,
@@ -2491,7 +2491,7 @@
                   1052,
                   192,
                   1440,
-                  54
+                  374
                 ],
                 "children": [
                   {
@@ -2503,7 +2503,7 @@
                       1054,
                       244,
                       1436,
-                      0
+                      320
                     ],
                     "children": []
                   }
