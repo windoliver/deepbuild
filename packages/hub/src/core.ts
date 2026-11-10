@@ -65,6 +65,7 @@ import { identityAt } from './identity.js';
 import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
 import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
+import { Box } from './box.js';
 import { NEWER_SET, OLDER_SET, UNREAD_WINDOW } from './status.js';
 import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { Channels, type ChannelAsk } from './channels.js';
@@ -585,6 +586,8 @@ export class Core {
   private readonly teardowns: Teardowns;
   /** The Agents page's syncs (#148): servers and skills written into each agent's own files. */
   private readonly agents: Agents;
+  /** The box (#1998): changes in words, each a proposal you approve. */
+  private readonly box: Box;
   /** Each session's deep_drive replicas (#124). */
   private readonly replicas: Replicas;
   /** The screen each session's computer use last switched to, one it leases (#332). */
@@ -864,6 +867,20 @@ export class Core {
       wanted: async () => { await this.ready; return ((await this.record.raw("SELECT data FROM events WHERE kind = 'agents.synced' ORDER BY log_pos")) as { data: string }[]).map((r) => JSON.parse(r.data) as Obj); },
       sessions: () => [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, agent: s.agent, pid: s.pid, start: s.start })),
       older: (sync) => this.olderSet(sync),
+    });
+    this.box = new Box({
+      root: this.root.dir, plant: options.plant, now: this.now,
+      raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan as never); },
+      folders: async () => { await this.ready; return [...new Set([...[...this.sessions.values()].map((s) => s.cwd), ...(await repoFolders(this.record, this.store)).values()])]; },
+      lessons: async () => { await this.ready; return (await this.lessons()).map((l) => ({ id: l.id, text: l.text })); },
+      forget: async (id) => {
+        const lesson = (await this.lessons()).find((l) => l.id === id);
+        if (!lesson) return `the lesson ${id} is gone`;
+        if (lesson.claim.startsWith('wiki:rules#') && lesson.why) { const r = await this.removeRule(lesson); return r.status === 'refused' ? String(r.reason) : undefined; }
+        await this.wikiBuild.forget(lesson.claim);
+        return undefined;
+      },
+      learn: async () => { await this.wikiBuild.build(); await syncRejected(this.raw, this.root.dir); },
     });
     this.runs = new Runs({
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
@@ -3604,6 +3621,7 @@ export class Core {
   /** Your answer to an ask the done gate raised (#325): an issue's budget approved, a stalled claim split, funded or accepted, a switch left off. */
   private delivery(d: Delivery): void {
     if (this.agents.delivered(d.ask, d.option, d.decision)) return;
+    if (this.box.delivered(d.ask, d.option)) return;
     const fail = (what: string) => (error: unknown) => process.stderr.write(`deep hub: ${what} for ${d.ask} was not recorded: ${error instanceof Error ? error.message : String(error)}\n`);
     const budget = this.budgetAsks.get(d.ask);
     if (budget) {
@@ -5691,6 +5709,7 @@ export class Core {
       case 'staged.undo': return this.staging.undo(params);
       case 'agents.propose': await this.ready; return this.agents.propose(params);
       case 'agents.read': return this.agents.read();
+      case 'box.say': await this.ready; return this.box.say(String(params.words ?? ''), typeof params.repo === 'string' ? params.repo : undefined);
       case 'agents.restart': await this.ready; return this.agents.restart(params);
       case 'agents.undo': return this.agents.undo(params);
       case 'mcp.exec': return this.agents.exec(params);

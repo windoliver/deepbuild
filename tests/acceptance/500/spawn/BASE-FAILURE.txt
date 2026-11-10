@@ -1,0 +1,18 @@
+Base: 96b462a6 (the same tree as 0c4a4ec7). Not built or run there: the surfaces these tests drive don't exist at the
+base, so every test fails before it judges a voice or a sample.
+
+What is missing in `deep-show run` at the base (crates/deep-show/src/mixdown.rs, main.rs, crates/deep-canvas-media):
+
+- `media_mix` reads only a document's `transport`, `strips`, `buses`, `processors`, `emitters` and `scene`; it ignores
+  `occurrences`, `spawns` and `remaps` and scene items' `body`, so the documents here render silence (they hold no
+  strips), and its reply has no `voices`. Each test's first `media_mix` reply fails at "<what>: mix.voices is an array,
+  got undefined": AC1 (variants.test.ts), AC6 (voices.test.ts), AC7 (space.test.ts), AC8 (remap.test.ts).
+- None of the planted names (`spawn_ignores_cooldown`, `spawn_pans_from_item_origin`, `spawn_starts_at_child_flick`)
+  is known; a scenario naming one answers {"ok": false, "code": "bad_input"}. The tests reach them only after their
+  clean runs, so at the base they fail first on the missing `voices`.
+- Behind those surfaces: no spawn, no pick by hash(seed, spawn ID, occurrence index), no cooldown, voice limit or steal,
+  no voice panned from an occurrence's point, no time remap of a world's occurrences exist anywhere in the base.
+
+Expected at the base: 4 tests, 4 failed, each for that reason (the missing behaviour, not a test mistake).
+The suite type-checks at the base: `node node_modules/typescript/bin/tsc -p tests/acceptance/500/spawn/tsconfig.json`
+exits 0.

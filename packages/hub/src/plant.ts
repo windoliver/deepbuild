@@ -201,11 +201,14 @@ export type Plant =
   // #1296's: a doctor that reads only your user settings for a status line, a session with no window reading shown
   // at 0% or with another repo's reading, and a hub that sends a hook's context whole past the cap.
   | 'statusline-user-settings-only' | 'window-unknown-as-zero' | 'window-carried-from-other-repo' | 'sends-block-whole'
+  // #1998's: a box that applies a change in words as it drafts it, and one whose approval applies whatever moved since.
+  | 'box-applies-at-once' | 'box-ignores-revision'
   // #1922's: a job key over the params' text as written, one without the tool's version, and a host whose tool build
   // hashes only the entry file, or adds where the files are, or when they were modified.
   | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
+  'box-applies-at-once', 'box-ignores-revision',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',

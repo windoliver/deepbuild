@@ -2010,5 +2010,41 @@
         "decision": "deny"
       }
     }
+  },
+  {
+    "source": "box.change",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Remove DeepBuild from Codex? Codex's hooks.json and config.toml go back to how they were before setup, as deep setup --undo leaves them; Claude Code and the hub stay.",
+        "options": [
+          {
+            "id": "apply",
+            "label": "Apply it",
+            "decision": "allow"
+          },
+          {
+            "id": "keep",
+            "label": "Keep it as it is",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1763139600000,
+        "fallback": "you",
+        "default": "keep",
+        "provisional": false,
+        "owner": "you",
+        "key": "4b8e2d6f0a1c3e5b7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "4b8e2d6f0a1c3e5b7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
   }
 ]
