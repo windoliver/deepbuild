@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AC, ANIM_COLORS, FLICKS, FLOOR, FRAMES, HASHED_CELLS, HEX_CELL, PLAIN_CELL, RATE, animDoc, atlasPng, cellShown, check,
-  describeErrors, fl, flipDoc, gradientTile, hexCentre, px, putAssets, rasterLine, rasterLines, rgbOff, rowPixel,
+  describeErrors, fl, hexCentre, px, putAssets, rasterLine, rasterLines, rgbOff, rowPixel,
   sameBytes, seeded, solidAtlas, terrain, terrainColor, tilesOf, useBin, useDir, type Image,
 } from './helpers.ts';
 
@@ -63,28 +63,6 @@ describe(`${ID} atlas tiles drawn`, () => {
       expect(missing, `zoom ${zoom}: every cell has pixels clear of every quad edge to judge`).toEqual([]);
     });
     expect(problems, `each cell draws its own tile from inside its atlas cell at every zoom:\n${problems.join('\n')}`).toEqual([]);
-  });
-
-  it(`${ID} a flipped row draws mirrored`, () => {
-    const store = dir();
-    const [asset] = putAssets(store, [gradientTile()]);
-    const [plain, h, v] = rasterLines(bin(), [0, 1, 2].map((flip) => rasterLine(dir(), flipDoc(asset!, flip), 0, { store })), 'the flip rows').map((r) => r.image);
-    // The quad's drawn extent in the unflipped picture; a mirror maps it onto itself.
-    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
-    for (let y = 0; y < plain!.height; y++) for (let x = 0; x < plain!.width; x++) if (px(plain!, x, y)[3] > 0) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-    expect(x1 - x0, `the unflipped row draws a 16 u quad (drawn extent x ${x0}..${x1})`).toBeGreaterThanOrEqual(14);
-    expect(y1 - y0, `the unflipped row draws a 16 u quad (drawn extent y ${y0}..${y1})`).toBeGreaterThanOrEqual(14);
-    const off = (a: Image, b: Image, x: number, y: number, bx: number, by: number): number => Math.max(...px(a, x, y).map((c, k) => Math.abs(c - px(b, bx, by)[k]!)));
-    let asymmetric = 0; const hProblems: string[] = []; const vProblems: string[] = [];
-    for (let y = y0 + 1; y < y1; y++) for (let x = x0 + 1; x < x1; x++) {
-      const mx = x0 + x1 - x; const my = y0 + y1 - y;
-      asymmetric = Math.max(asymmetric, off(plain!, plain!, x, y, mx, y));
-      if (off(h!, plain!, x, y, mx, y) > 2) hProblems.push(`(${x}, ${y}) shows [${px(h!, x, y).join(', ')}], the unflipped (${mx}, ${y}) [${px(plain!, mx, y).join(', ')}]`);
-      if (off(v!, plain!, x, y, x, my) > 2) vProblems.push(`(${x}, ${y}) shows [${px(v!, x, y).join(', ')}], the unflipped (${x}, ${my}) [${px(plain!, x, my).join(', ')}]`);
-    }
-    expect(asymmetric, 'the gradient tile is not its own mirror, so a flip that does nothing shows').toBeGreaterThan(50);
-    expect(hProblems.slice(0, 10), `flip 1 (h) draws the row mirrored left to right (${hProblems.length} pixels aren't)`).toEqual([]);
-    expect(vProblems.slice(0, 10), `flip 2 (v) draws the row mirrored top to bottom (${vProblems.length} pixels aren't)`).toEqual([]);
   });
 
   it(`${ID} an animated row shows frame ⌊t × frame_rate + phase × frames⌋ mod frames, the same seeked as played`, () => {

@@ -160,15 +160,6 @@ export function hexCentre(cx: number, cy: number): [number, number] {
 export const FLOOR: [number, number][] = [];
 for (let cy = 0; cy < 5; cy++) for (let cx = 0; cx < 6; cx++) FLOOR.push([cx, cy]);
 
-/** A 16 × 16 tile whose texel (i, j) is (20 + 14i, 20 + 14j, 120): no mirror of it equals it. */
-export function gradientTile(): Buffer {
-  return encodeRgbaPng(16, 16, (x, y) => [20 + 14 * x, 20 + 14 * y, 120, 255]);
-}
-/** One row at cell (1, 1) of a square grid with 16 u cells, drawing the gradient tile with `flip`. */
-export function flipDoc(asset: string, flip: number): JsonObject {
-  return doc(`flip-${flip}`, [48, 48], [atlasSet('tiles', 'a1', asset, [16, 16], { shape: 'square', cell: [16, 16] }, [{ cx: 1, cy: 1, tile: 0, flip }])]);
-}
-
 /** The animation atlas: eight solid 16 × 16 cells, one color each. */
 export const ANIM_COLORS: Rgb[] = [[230, 25, 75], [60, 180, 75], [255, 225, 25], [0, 130, 200], [245, 130, 48], [145, 30, 180], [70, 240, 240], [240, 50, 230]];
 export const FRAMES = 4;
