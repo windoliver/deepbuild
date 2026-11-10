@@ -25,10 +25,14 @@ use crate::snapshot::{self, Drawn, Unfit};
 pub fn op_issue(i: &OpIssue) -> Issue {
     let what = format!("{} can't evaluate this", i.operator);
     let actual = i.actual.clone().unwrap_or(Value::Null);
-    match &i.item {
+    // #544: a read a logic item doesn't declare names its close declared names as the canvas
+    // does an unknown kind's.
+    let close = actual.get("close").and_then(Value::as_array).into_iter().flatten().map(|n| json!({"name": n})).collect();
+    let issue = match &i.item {
         Some(id) => Issue::error(i.code, id, i.path.clone(), actual, &what),
         None => Issue::envelope(i.code, i.path.clone(), actual, &what),
-    }
+    };
+    Issue { close, ..issue }
 }
 
 /// What the renderer can't draw, as a revision's issue.
@@ -239,6 +243,14 @@ impl<'a> Hub<'a> {
         let Some(session) = self.sessions.get_mut(&e.doc).filter(|_| rev.is_some()) else {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
+        // #544's planted start_on: a run starts at the session's first frame at or after it.
+        if self.scenario.planted == Some(crate::hub::Planted::StartOnAtFirstFrame) && !self.first_frames.contains_key(&e.doc) {
+            self.first_frames.insert(e.doc.clone(), t);
+            if let Some(mut d) = session.document().cloned() {
+                crate::logic::from_first_frame(&mut d, t);
+                session.load(&mut self.sched, &d);
+            }
+        }
         let view = session_view(session, &e.view);
         let _ = self.sched.take_hashes();
         let perturb = e.perturb.as_deref().map(Target::parse);

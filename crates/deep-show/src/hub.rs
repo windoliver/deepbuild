@@ -46,6 +46,9 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The criteria's wrong programs, each reachable only through the scenario's `planted`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #544: a start_on run on a logic item's occurrences starts at the first frame its session
+    /// evaluates at or after the occurrence.
+    StartOnAtFirstFrame,
     PresentsUnnamedRemoval,
     DiffsItemsOnly,
     InlinesEveryIssue,
@@ -1032,6 +1035,8 @@ pub struct Hub<'a> {
     pub pack_authors: BTreeMap<String, String>,
     /// Each document's expansions at its last check, for the replies that carry them.
     pub expansions: BTreeMap<String, Vec<Expansion>>,
+    /// #544's planted start_on: each session's first evaluated time since its revision loaded.
+    pub first_frames: BTreeMap<String, i64>,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -1182,6 +1187,7 @@ impl<'a> Hub<'a> {
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),
             expansions: BTreeMap::new(),
+            first_frames: BTreeMap::new(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
@@ -2156,6 +2162,15 @@ impl<'a> Hub<'a> {
                 issues.push(unfit_issue(r.code, r.path));
             }
             issues.extend(self.inline_vectors(form));
+            // #544: a spawn's reads of a logic item's occurrences, checked against its emits
+            // before any step runs; then the logic items baked into the lists their readers read.
+            if !deep_canvas_media::planted("undeclared_field_reads_zero") {
+                issues.extend(crate::spawn::undeclared_issues(form));
+            }
+            if let Err(i) = self.inline_occurrences(form, &[]) {
+                issues.push(i);
+            }
+            // #533: then each logic item's program inlined for the logic module's steps.
             self.inline_programs(form);
         }
         // Mark set columns that read a column source, resolved and narrowed by the core's
@@ -2254,6 +2269,7 @@ impl<'a> Hub<'a> {
         if let Some(session) = self.sessions.get_mut(&show.doc) {
             session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
         }
+        self.first_frames.remove(&show.doc);
         // #1732: render-back's geometry audit of the revision, on its frame at `t`.
         if show.include.iter().any(|i| matches!(i, Include::Audit)) {
             let audit = self.audit_of(&show.doc, show.t);

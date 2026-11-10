@@ -1,0 +1,33 @@
+#1461's redraft (AC7, AC10, AC18, AC19, AC25, AC27) on the base: not run.
+
+Every test here needs `deep-drive`, a cold Cargo build of the GPUI stack, and the surfaces each test reads are plainly
+absent at the base (d51be2c3, and main at 4ab2750c), so the outcome below is the expected one, read from the base's
+source, not a run's. The type check passes:
+
+    node node_modules/typescript/bin/tsc -p tests/acceptance/1461/redraft/tsconfig.json   # exit 0
+
+What the base lacks: no node `list`, `heading:<...>` or `<row>:mark|title|word|time` (crates/deep-app/src/views.rs draws
+a sidebar and a Needs you view; its ask rows carry `needs_you` as their value and set folded, later and held apart by
+indent, ink and italics, `Kind::NeedsYou`); `deep-drive` refuses `act click` with no locator ("act {kind} needs a
+locator", crates/deep-replica/src/drive/mod.rs `act`); `launch` reads no `replaces` and puts a launched panel in the
+sidebar's slot; `DEEP_HUB_PLANT` names none of these plants, so a planted build draws the base window.
+
+rows.test.ts
+- AC10 plain: FAILS. The list holds no row for any open ask or session (no `list` node), so the precondition names all
+  eight rows missing.
+- AC10 row-24: FAILS. No row is named 24 tall, since there are no rows.
+- AC19 plain: FAILS at the fixture check, [5, 0, 1]: #328's fixture's one `ask.later` is written by `app` (README,
+  reading 3). Past it, each waiting row would fail as "no row ... in the list".
+- AC19 wait-by-ink: FAILS. The only failures are "no row ...", which don't count as a row drawn like an open one.
+- AC27 plain: FAILS. Neither ask has a `<handle>:word` slot: "row ... draws no state word".
+- AC27 ask-words-alike: FAILS. Two "draws no state word" failures, not the one "both read" failure.
+
+moves.test.ts
+- AC18 plain and press-through-move, AC25 plain and list-drops-presses: each FAILS at its first step, the list holding
+  no session rows (no `list` node: expected at least 3, got 0). Past it, the press at a point would be refused.
+
+tree.test.ts
+- AC7 plain: the kit half holds at the base (#1459's `needs-you@1` passes `needs-you-by-id`); the window half FAILS:
+  "the list's first heading isn't heading:needs-you (...): no node with id "list"".
+- AC7 hides-oldest: the kit half holds at the base (the kit names #328's fixture's oldest open ask); the window half FAILS:
+  its one failure is the missing list, not the oldest ask left out of the first section.

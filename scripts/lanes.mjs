@@ -288,6 +288,11 @@ alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
 // #1818's files each build deep-show and mix seconds of audio through the media processors.
 alone.push('tests/acceptance/1818/');
+// #1461's files build deep-drive plain and with env-plants, start real hubs and many replicas; its AC1 and AC14 file and
+// its AC28 file open the real app's window, with Accessibility and Screen Recording, by hand; its AC9 file is timed.
+alone.push('tests/acceptance/1461/');
+byHand.push('tests/acceptance/1461/shell.test.ts', 'tests/acceptance/1461/shown.test.ts');
+timed.push('tests/acceptance/1461/budget.test.ts');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
@@ -322,6 +327,8 @@ alone.push('tests/acceptance/408/crossing.test.ts', 'tests/acceptance/408/overla
 alone.push('tests/acceptance/408-redraft-ac5/');
 timed.push('tests/acceptance/408-redraft-ac5/machines.test.ts');
 byHand.push('tests/acceptance/408/machines.test.ts');
+// #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
+alone.push('tests/acceptance/544/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

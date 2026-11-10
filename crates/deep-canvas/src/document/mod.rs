@@ -38,6 +38,7 @@ pub use check::{
     check, check_costed, check_in, check_packed, check_with, duration, frame_of, frame_rate_of,
     literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
 };
+pub use close::undeclared;
 pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use packs::{Expansion, Pack, PackId, Packs, Planted as PackPlanted};
@@ -102,6 +103,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     // #499: the media module's buses and processors (Bus, Processor).
     "buses",
     "processors",
+    // #544: the media module's spawns (Spawn), which may read a logic item's occurrences.
+    "spawns",
 ];
 
 /// An item's keys (Item and kind), in this slice.

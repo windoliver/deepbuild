@@ -48,6 +48,9 @@ pub struct Planted {
     pub read_region_drops_player: bool,
     pub replay_changes_step_37: bool,
     pub budget_counts_lane_reading: bool,
+    pub seek_repeats_occurrences: bool,
+    pub occurrences_keep_cap: bool,
+    pub occurrences_sort_ties_by_payload: bool,
 }
 
 impl Planted {
@@ -70,6 +73,9 @@ impl Planted {
             "budget_charges_function_first_line" => p.budget_first_line = true,
             "replay_changes_step_37" => p.replay_changes_step_37 = true,
             "budget_counts_lane_reading" => p.budget_counts_lane_reading = true,
+            "seek_repeats_occurrences" => p.seek_repeats_occurrences = true,
+            "occurrences_keep_cap" => p.occurrences_keep_cap = true,
+            "occurrences_sort_ties_by_payload" => p.occurrences_sort_ties_by_payload = true,
             _ => return None,
         }
         Some(self)
@@ -340,8 +346,9 @@ fn hashes(piece: &Piece, rec: &Record) -> Map<String, Value> {
 
 /// A seek to step `to`, against the straight world's ring: the nearest checkpoint at or before it,
 /// restored and stepped to `to`, an optional probe there, then on through the first checkpoint
-/// after `to`, whose full-state hashes it reports.
-fn seek(straight: &World, to: i64, probe_of: Option<&Fork>) -> Result<Value, Value> {
+/// after `to`, whose full-state hashes it reports, and the occurrence lists as it leaves them: the
+/// straight bake's (`baked`), each step it ran again replaced by its own rows.
+fn seek(straight: &World, baked: &Record, to: i64, probe_of: Option<&Fork>) -> Result<Value, Value> {
     let from = straight
         .nearest(to)
         .ok_or_else(|| bad("seek: no checkpoint at or before it"))?;
@@ -351,7 +358,8 @@ fn seek(straight: &World, to: i64, probe_of: Option<&Fork>) -> Result<Value, Val
         .find(|c| *c > to)
         .ok_or_else(|| bad("seek: no checkpoint after it"))?;
     let mut w = straight.restore(from, None)?;
-    w.run(to, &mut Record::default(), &mut |_, _| {});
+    let mut ran = Record::default();
+    w.run(to, &mut ran, &mut |_, _| {});
     let p = match probe_of {
         None => Value::Null,
         Some(f) => {
@@ -377,7 +385,8 @@ fn seek(straight: &World, to: i64, probe_of: Option<&Fork>) -> Result<Value, Val
         })
         .collect();
     Ok(
-        json!({"to": to, "from": from, "hashes": hashes(&w.piece, &rec), "checkpoint": {"step": next, "deep_hash": deep}, "probe": p}),
+        json!({"to": to, "from": from, "hashes": hashes(&w.piece, &rec), "checkpoint": {"step": next, "deep_hash": deep}, "probe": p,
+            "occurrences": baked.occurrences_after(&[&ran, &rec], &w.piece)}),
     )
 }
 
@@ -516,7 +525,7 @@ impl Logic {
         }
         let seeks_out = seeks
             .iter()
-            .map(|f| seek(&world, f.at, f.probe.as_deref()))
+            .map(|f| seek(&world, &rec, f.at, f.probe.as_deref()))
             .collect::<Result<Vec<_>, _>>()?;
         let mut peeks = Vec::new();
         for p in line
@@ -540,7 +549,7 @@ impl Logic {
         let budgets = self.budgets(&piece, &entries, &rec)?;
         let keys = keys(&piece, &entries);
         Ok(json!({
-            "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "checkpoints": rec.checkpoints,
+            "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints,
             "traps": rec.traps, "budgets": budgets, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
         }))
@@ -618,6 +627,10 @@ impl Logic {
         for i in &piece.items {
             digest += &format!("{} {}\n", i.id, i.hash);
         }
+        // The occurrence lists' hash, when an item emits.
+        let occurrences = rec.occurrences(&piece);
+        let occurrences_hash = (!occurrences.is_empty())
+            .then(|| format!("{:016x}", piece::h64(Value::Object(occurrences).to_string().as_bytes())));
         let host = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
         let other = if std::env::consts::ARCH == "x86_64" {
             "macos-aarch64"
@@ -627,7 +640,7 @@ impl Logic {
         let golden = json!({
             "bake_key": keys, "runtime_digest": format!("{:016x}", piece::h64(digest.as_bytes())),
             "machine": {"os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu()},
-            "step_hashes": hashes(&piece, &rec), "checkpoint_hashes": rec.checkpoints.clone(), "occurrences_hash": null,
+            "step_hashes": hashes(&piece, &rec), "checkpoint_hashes": rec.checkpoints.clone(), "occurrences_hash": occurrences_hash,
             "record_on": host, "verify_on": [other, "web"],
         });
         Ok((golden, rec))
@@ -845,6 +858,9 @@ impl Logic {
                     "reads_at": i.reads_at, "writes_at": i.writes_at, "reads_size": i.layout.size("reads"), "writes_size": i.layout.size("writes"),
                     "regions": regions, "writes": writes, "globals": n.globals, "pages": n.pages,
                     "assets": (!i.assets.is_empty()).then(|| B64.encode(i.asset_bytes())), "assets_at": i.assets_at,
+                    "emits_at": i.emits_at,
+                    "emits": i.emits.iter().map(|e| json!({"kind": e.kind, "max": e.max, "row": e.row(), "size": e.size(),
+                        "fields": e.fields.iter().map(|(n, t)| json!([n, t.name()])).collect::<Vec<_>>()})).collect::<Vec<_>>(),
                 })
             })
             .collect();
