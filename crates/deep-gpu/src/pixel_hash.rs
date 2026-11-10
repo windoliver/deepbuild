@@ -147,8 +147,8 @@ impl PixelHash {
     /// a render while checking).
     pub fn sums(
         &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &crate::counted::Wgpu,
+        queue: &crate::counted::Queue,
         bytes: &[u8],
         size: [u32; 2],
         format: Format,
@@ -158,8 +158,8 @@ impl PixelHash {
 
     fn run(
         &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &crate::counted::Wgpu,
+        queue: &crate::counted::Queue,
         bytes: &[u8],
         size: [u32; 2],
         format: Format,
