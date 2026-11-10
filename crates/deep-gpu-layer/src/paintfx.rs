@@ -240,6 +240,12 @@ impl PaintFx {
                 let b = p.blur(m, d.blur as f32 * scale);
                 p.one("lin", b, Step { f: [d.opacity as f32, 0.0, 0.0, 0.0], ..Step::default() })
             }
+            Part::Halo(h) => {
+                let grown = p.dilate(a, h.width as f32 * scale);
+                let m = p.shift(grown, [h.offset[0] as f32 * scale, h.offset[1] as f32 * scale]);
+                let b = p.blur(m, h.blur as f32 * scale);
+                p.one("lin", b, Step { f: [h.opacity as f32, 0.0, 0.0, 0.0], ..Step::default() })
+            }
             Part::Inner(s) => {
                 let l = fx::toward(s.light);
                 let off = s.offset as f32 * scale;

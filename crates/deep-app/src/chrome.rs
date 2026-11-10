@@ -149,6 +149,10 @@ pub struct Sizes {
     pub sidebar: Pixels,
     pub band: Pixels,
     pub window: (Pixels, Pixels),
+    /// The list's narrowest width, the page's narrowest, and the reading lane's widest (#1461).
+    pub list_min: Pixels,
+    pub page_min: Pixels,
+    pub lane: Pixels,
     pub placed: Pixels,
     /// The widths of the chrome's lines: a divider, the focus ring and the open row's bar.
     pub hairline: Pixels,
@@ -199,6 +203,9 @@ pub fn sizes() -> &'static Sizes {
                 px(given.shell["window_width"] as f32),
                 px(given.shell["window_height"] as f32),
             ),
+            list_min: px(given.shell["list_min"] as f32),
+            page_min: px(given.shell["page_min"] as f32),
+            lane: px(given.shell["lane"] as f32),
             placed: px(given.shell["placed"] as f32),
             hairline: px(given.stroke["hairline"] as f32),
             ring: px(given.stroke["ring"] as f32),
@@ -207,6 +214,21 @@ pub fn sizes() -> &'static Sizes {
             code: face("code"),
         }
     })
+}
+
+/// The reading lane on a page `page` wide (#1461): the card, a session's content and the box share
+/// `min(720, page − 48)`, centred, so text keeps one left edge.
+pub fn lane(page: Pixels) -> Pixels {
+    let s = sizes();
+    s.lane.min(page - s.space(4) * 2.).max(px(0.))
+}
+
+/// The list's width in a window `window` wide when `wanted` was asked for (#1461): from the list's
+/// narrowest to the window less the page's narrowest, or `None`, hidden, when both don't fit.
+pub fn list_width(wanted: Pixels, window: Pixels) -> Option<Pixels> {
+    let s = sizes();
+    let widest = window - s.page_min;
+    (widest >= s.list_min).then(|| wanted.clamp(s.list_min, widest))
 }
 
 /// A terminal's colors in light or dark (#1003): the look's 16 by ANSI index, the background they keep 3:1

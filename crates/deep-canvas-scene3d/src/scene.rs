@@ -2294,6 +2294,14 @@ pub(crate) fn evaluate_compiled(
             if let (true, Some(p)) = (look.drawn.is_some(), params.get("paint")) {
                 painted.insert(id.clone(), p.clone());
             }
+            // #1653: a 3D item's lights shade it, and Modifier: bevel bevels it; never a 2D
+            // paint's bevel or shade.
+            if let Some(field) = ["bevel", "shade"]
+                .into_iter()
+                .find(|f| is_3d(kind) && params.pointer(&format!("/paint/{f}")).is_some())
+            {
+                return refused("paint_2d_only", format!("{path}/paint/{field}"));
+            }
             match kind {
                 "mark.box@1" | "mark.cylinder@1" | "mark.sphere@1" => {
                     let shape = match kind {
@@ -3479,6 +3487,42 @@ mod stroke_tests {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// #1653: a 2D paint's bevel or shade on a 3D item is refused, naming the field; the
+    /// builders' own `bevel` and `shade` params are not paint and draw.
+    #[test]
+    fn a_bevel_or_a_shade_on_a_3d_item_is_refused() {
+        let look = Look3::read(&json!({"roles": {"block": "#808080", "ground": "#ffffff"}}))
+            .expect("the look reads");
+        let doc = |paint: Value| {
+            json!({
+                "format": 1, "profile": "scene", "title": "T", "description": "D", "size": [64, 64],
+                "camera": "cam", "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+                "items": {
+                    "cam": {"id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
+                        "params": {"projection": "perspective", "target": [0, 0, 0], "position": [0, 0, 20], "fov": 40}},
+                    "b": {"id": "b", "kind": "mark.box@1", "layer": "main", "name": "B", "order": "a1",
+                        "params": {"size": [1, 1, 1], "paint": paint}},
+                }
+            })
+        };
+        let fill = json!({"role": "block"});
+        for field in ["bevel", "shade"] {
+            let mut paint = json!({"fill": fill});
+            paint[field] = json!({"size": 4});
+            let refused = evaluate(&doc(paint), 0, &look, &mut Labels::new())
+                .err()
+                .expect("refused");
+            assert_eq!(
+                (refused.code, refused.path.as_str()),
+                (
+                    "paint_2d_only",
+                    format!("items/b/params/paint/{field}").as_str()
+                )
+            );
+        }
+        assert!(evaluate(&doc(json!({"fill": fill})), 0, &look, &mut Labels::new()).is_ok());
+    }
 
     #[test]
     fn a_child_box_rides_its_parent_once() {
