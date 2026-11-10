@@ -430,6 +430,20 @@ impl World {
         Some(hex(m.get(at..at.checked_add(len)?)?))
     }
 
+    /// Each array, by `<item>.<write>`, as its item's last step left it, as its write region lays
+    /// it out.
+    pub fn arrays(&self) -> Vec<(String, Vec<u8>)> {
+        let mut out = Vec::new();
+        for (item, l) in self.piece.items.iter().zip(&self.lives) {
+            for w in &item.writes {
+                let e = item.write(&w.name).expect("a write entry");
+                let bytes = l.arrays[e.offset as usize..(e.offset + e.size) as usize].to_vec();
+                out.push((format!("{}.{}", item.id, w.name), bytes));
+            }
+        }
+        out
+    }
+
     /// Each item's deep hash now.
     pub fn deep_hashes(&mut self) -> Map<String, Value> {
         let ids: Vec<String> = self.piece.items.iter().map(|i| i.id.clone()).collect();
