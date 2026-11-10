@@ -7,8 +7,9 @@
 //
 // The merged commit is the merge of the pull request that closed the issue, or, for a task closed with none, main's
 // first-parent head when it closed. Its tests are the files of that commit tagged with one of the issue's criterion IDs
-// or under tests/acceptance/<issue>/, run there in a temporary checkout (git archive, never a worktree) with this
-// checkout's node_modules cloned in and the workspaces and deep-hook built; a criterion's tests are those whose full
+// or under tests/acceptance/<issue>/, run there in a temporary checkout (a clone sharing this repo's objects, never a
+// worktree, with origin/main at this repo's) with this checkout's node_modules copied in and the workspaces and
+// deep-hook built; a criterion's tests are those whose full
 // name carries its ID or its `AC<i>`. Each test reads as the repo's tests say: passed, failed, BLOCKED or INCONCLUSIVE
 // (a failure or skip whose message starts so), and a live suite, which spends plan usage and runs by hand, is not run
 // here: its criteria read INCONCLUSIVE. A criterion is the highest of its tests by the verdict table's precedence, and
@@ -19,7 +20,7 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readIssue } from './proof-change.mjs';
-import { checkout } from './proof-runs.mjs';
+import { temporary } from './proof-runs.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SLUG = 'windoliver/deepbuild';
@@ -52,6 +53,21 @@ function landed(commit, issue) {
   const folder = run(ROOT, 'git', ['ls-tree', '-r', '--name-only', commit, `tests/acceptance/${issue}/`]).stdout.split('\n').filter(Boolean);
   const isTest = (p) => /\.test\.(ts|js|mjs)$/.test(p) && !p.includes('/twins/') && !p.includes('/fixtures/');
   return [...new Set([...tagged, ...folder])].filter(isTest).sort();
+}
+
+/**
+ * A temporary checkout of `commit` that git reads as it reads this repo at that commit: a clone sharing its objects
+ * (never writing there, never a worktree of it), HEAD detached at the commit and origin/main where this repo's is, so a
+ * test's `git merge-base HEAD origin/main` answers as it would here.
+ */
+function checkout(commit, prefix) {
+  const dir = temporary(prefix);
+  const main = run(ROOT, 'git', ['rev-parse', '--verify', '-q', 'refs/remotes/origin/main']).stdout.trim();
+  for (const [cwd, args] of [[ROOT, ['clone', '-q', '--shared', '--no-checkout', '--template=', ROOT, dir]], [dir, ['update-ref', 'refs/remotes/origin/main', main]], [dir, ['checkout', '-q', '--detach', commit]]]) {
+    const r = run(cwd, 'git', args);
+    if (r.status !== 0) throw Error(`git ${args[0]} for the checkout of ${commit} failed: ${tail(r)}`);
+  }
+  return dir;
 }
 
 /** How a test ended, as a criterion reads it: a failure or skip the test words as BLOCKED or INCONCLUSIVE is that. */
@@ -95,7 +111,8 @@ function parts(issue, commit) {
   const section = (r.stdout ?? '').split(/^###\s+Parts\s*$/m)[1]?.split(/^#{1,6}\s/m)[0] ?? '';
   return [...section.matchAll(/^\s*- (#(\d+) .+)$/gm)].map(([, text, part]) => {
     const id = `#${issue}.${createHash('sha256').update(text.trim().replace(/\s+/g, ' ')).digest('hex').slice(0, 8)}`;
-    return { id, outcome: judge(Number(part), commit).verdict };
+    const j = judge(Number(part), commit);
+    return { id, outcome: j.verdict, ...(j.why ? { why: j.why } : {}) };
   });
 }
 
@@ -113,9 +130,10 @@ function judge(issue, commit) {
   let tests = [];
   let why = '';
   if (files.length) {
-    const dir = checkout(ROOT, commit, `spine-${issue}-`);
+    const dir = checkout(commit, `spine-${issue}-`);
     try {
-      spawnSync('/bin/cp', ['-cR', join(ROOT, 'node_modules'), join(dir, 'node_modules')]);
+      // A copy-on-write clone where cp has one (macOS), a plain copy elsewhere.
+      spawnSync('cp', [process.platform === 'darwin' ? '-cR' : '-R', join(ROOT, 'node_modules'), join(dir, 'node_modules')]);
       const built = run(dir, 'npm', ['run', 'build', '--workspaces', '--if-present']);
       const hook = run(dir, 'cargo', ['build', '--locked', '-q', '-p', 'deep-hook']);
       if (built.status !== 0) why = `the workspaces didn't build at ${commit.slice(0, 12)}: ${tail(built)}`;
@@ -137,7 +155,7 @@ function judge(issue, commit) {
 
 /** A task that didn't reach PASS opens again, its comment naming the criterion and how each ended. */
 function reopen(j) {
-  const lines = j.criteria.filter((c) => c.outcome !== 'PASS').map((c) => `- ${c.id}: ${c.outcome}`).join('\n');
+  const lines = j.criteria.filter((c) => c.outcome !== 'PASS').map((c) => `- ${c.id}: ${c.outcome}${c.why ? ` (${c.why})` : ''}`).join('\n');
   const body = `Re-judged at its merged commit ${j.commit} once this repo was gated (#33 AC8): ${j.verdict}, naming ${j.reopen.criterion}.\n\n${lines}${j.why ? `\n\n${j.why}` : ''}`;
   const r = run(ROOT, 'gh', ['issue', 'reopen', String(j.issue), '-R', SLUG, '--comment', body], 120_000);
   if (r.status !== 0) process.stderr.write(`spine: #${j.issue} wasn't reopened: ${tail(r)}\n`);
