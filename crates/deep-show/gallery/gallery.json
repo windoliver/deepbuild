@@ -38,6 +38,11 @@
       "file": "familiar-names.md",
       "name": "familiar-names",
       "title": "Familiar names and close names"
+    },
+    {
+      "file": "logic.md",
+      "name": "logic",
+      "title": "Logic: work across steps, and rolls keyed by the action"
     }
   ]
 }
