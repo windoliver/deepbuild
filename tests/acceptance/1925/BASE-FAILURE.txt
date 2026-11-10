@@ -1,0 +1,161 @@
+Base commit: d51be2c3 (Merge pull request #2108), the brief's base; #1922's job API is merged there, no implementation of
+#1925 exists. The worktree was clean but for this folder.
+Built first (by the caller): npm ci; npm run build --workspaces (packages/cli/dist/main.js); cargo build of deep-hook and
+deep-drive (target/debug/deep-hook, target/debug/deep-drive). cargo from rustup's proxies on PATH.
+Commands, each file once (the supervisor's sandbox needs a shell that may start it: Claude Code's Bash, sandbox off):
+  export PATH=/opt/homebrew/opt/rustup/bin:$PATH
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1925/count.test.ts --testTimeout=600000 --no-file-parallelism
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1925/planted.test.ts --testTimeout=600000 --no-file-parallelism
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1925/reopen.test.ts --testTimeout=600000 --no-file-parallelism
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1925/tsconfig.json          # exit 0
+Date: 2026-11-10  Machine: macOS (Apple silicon)  Node: v24.22.2  vitest 5.0.5. Load average 190 to 300 (other sessions on
+this Mac). <repo> below is the worktree.
+Result: 3 files, 3 tests, 3 failed, each at an assertion in this folder; none BLOCKED, none passed, none failed to load.
+About 85 to 90 s a file: each runs the 600-frame encode to its end (80 s), since the judge needs the encoder's log.
+
+Per test, at the base:
+
+  count.test.ts    x "the list never held a row for the job test.encode on encode-a@1.0.0: none of 395 reads of rows.read
+                     (what deep status --json prints) over its 80.9 s had a row whose id starts job:"
+  planted.test.ts  x "the judge fails the planted tool for a row at "300 of 600" while its tool had written 150 frames; its
+                     failures: ["the list never held a row for the job test.encode on encode-guess@1.0.0: ..."]:
+                     expected undefined to be defined"
+  reopen.test.ts   x "the app opened at frame 300 (41.2 s to 41.6 s, the tool at 285 to 300 frames) draws no row for the
+                     job test.encode on encode-a@1.0.0: no node of its window has an id starting job:", and the same for
+                     the app opened again (45.7 s to 46.3 s, the tool at 315 to 345 frames)
+
+What worked at the base, so the failures are the missing surface and not the harness (read from the proof files):
+  - Both plug-ins installed (their encoders passed test.encode's qualification); the hub started the run's tool as one
+    process (process.starting with cwd .../encoder, then run.cleaned); the encoder wrote 15 frames every 2.00 s to the
+    millisecond: 150 at 20.0 s, 300 at 40.0 s, 600 at 80.0 s, by its log.
+  - deep_job's first reply came at 55 s from deep mcp: {"code":"unavailable", ..., "The DeepBuild hub is unreachable (it
+    did not answer in time)"} while the hub ran the job on (README, reading 9); the rerun after the run ended was
+    {"status":"done", ..., "cache":"hit"}, and the log output read back by its hash from the evidence store.
+  - rows.read answered every 200 ms in about 1 to 2 ms (the first 367 ms), {log_pos, rows: []}: no row of any kind.
+  - The app: deep-drive started, launched from record_copy and answered see in about 0.4 to 0.6 s, at 41 s (no row showed
+    300 of 600, so the 41 s fallback) and again 4 s after its close.
+  - A throwaway run of the judges on made-up runs (deleted, not kept in the suite) passed a right row and right app views,
+    and failed the planted counter (naming job:…, test.encode and encode-guess@1.0.0, "while its tool had written 150
+    frames"), a hub guessing from elapsed time on the right tool, a row with no time left, a time left twice the true one,
+    a row trailing its tool by 2.5 s, an app reopened at 0 or at its count from the close, and an app with no job row.
+
+reopen.test.ts was run a second time after one change to the failure's wording (a job with no row is named "test.encode
+on encode-a@1.0.0", where the first run printed "job:(no row) (test.encode on encode-a@1.0.0)"); its first run failed the
+same two ways at 41.1 s and 45.6 s. After the count and planted runs, two more changes were made that their base runs
+never reach (both return at "the list never held a row"): the job's name without a row, and the time-left check skipped
+for a row at 300 of 600 sooner than 30 s into the run (the planted tool's), so its failure is the count alone.
+
+The runs' output follows.
+----------------------------------------------------------------------------------------------------------------------
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1925/count.test.ts --testTimeout=600000 --no-file-parallelism
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1925/count.test.ts (1 test | 1 failed) 83859ms
+   ❯ #1925.c0a82b1d An encode job of 600 frames shows 300 of 600 when its tool has written 300, and its time left is within 10% of the time it then takes. A planted tool that reports elapsed time over an expected duration shows 300 of 600 while 150 frames are written and fails, naming the job. Closing the app at frame 300 leaves the job running, and reopening shows its true count, never 0 (1)
+     × the 600-frame encode's row shows 300 of 600 while its tool has written 300, with a time left within 10% of the time it then takes 83669ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1925/count.test.ts > #1925.c0a82b1d An encode job of 600 frames shows 300 of 600 when its tool has written 300, and its time left is within 10% of the time it then takes. A planted tool that reports elapsed time over an expected duration shows 300 of 600 while 150 frames are written and fails, naming the job. Closing the app at frame 300 leaves the job running, and reopening shows its true count, never 0 > the 600-frame encode's row shows 300 of 600 while its tool has written 300, with a time left within 10% of the time it then takes
+AssertionError: the job's row against the encoder's own log (proof: $TMPDIR/deep-1925-proof/count.json): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the list never held a row for the job test.encode on encode-a@1.0.0: none of 395 reads of rows.read (what deep status --json prints) over its 80.9 s had a row whose id starts job:",
++ ]
+
+ ❯ tests/acceptance/1925/count.test.ts:18:113
+     16|     const failures = judgeCount(r);
+     17|     proof('count.json', { failures, ...proofOf(r) });
+     18|     expect(failures, `the job's row against the encoder's own log (pro…
+       |                                                                                                                 ^
+     19|   }, 600_000);
+     20| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  02:17:26
+   Duration  84.89s (tests 99%, transform 1%)
+
+NO_COLOR=1 node node_modules/vitest/vitest.mjs run  --testTimeout=600000   7.19s user 28.60s system 41% cpu 1:25.92 total
+exit 1
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1925/planted.test.ts --testTimeout=600000 --no-file-parallelism
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1925/planted.test.ts (1 test | 1 failed) 90901ms
+   ❯ #1925.c0a82b1d An encode job of 600 frames shows 300 of 600 when its tool has written 300, and its time left is within 10% of the time it then takes. A planted tool that reports elapsed time over an expected duration shows 300 of 600 while 150 frames are written and fails, naming the job. Closing the app at frame 300 leaves the job running, and reopening shows its true count, never 0 (1)
+     × the planted tool that reports elapsed time over an expected duration shows 300 of 600 while 150 frames are written, and fails, naming the job 90525ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1925/planted.test.ts > #1925.c0a82b1d An encode job of 600 frames shows 300 of 600 when its tool has written 300, and its time left is within 10% of the time it then takes. A planted tool that reports elapsed time over an expected duration shows 300 of 600 while 150 frames are written and fails, naming the job. Closing the app at frame 300 leaves the job running, and reopening shows its true count, never 0 > the planted tool that reports elapsed time over an expected duration shows 300 of 600 while 150 frames are written, and fails, naming the job
+AssertionError: the judge fails the planted tool for a row at "300 of 600" while its tool had written 150 frames; its failures: ["the list never held a row for the job test.encode on encode-guess@1.0.0: none of 400 reads of rows.read (what deep status --json prints) over its 81.6 s had a row whose id starts job:"]: expected undefined to be defined
+ ❯ tests/acceptance/1925/planted.test.ts:19:162
+     17|     proof('planted.json', { failures, ...proofOf(r) });
+     18|     const shown = failures.find((f) => /showed "300 of 600" at [\d.]+ …
+     19|     expect(shown, `the judge fails the planted tool for a row at "300 …
+       |                                                                                                                                                                  ^
+     20|     const id = r.readings.find((x) => x.row)?.row?.id as string;
+     21|     for (const part of [id, KIND, PLANTED]) expect(shown, `the failure…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  02:20:45
+   Duration  92.23s (tests 99%, transform 1%)
+
+NO_COLOR=1 node node_modules/vitest/vitest.mjs run  --testTimeout=600000   8.15s user 31.17s system 41% cpu 1:34.50 total
+exit 1
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1925/reopen.test.ts --testTimeout=600000 --no-file-parallelism
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1925/reopen.test.ts (1 test | 1 failed) 86545ms
+   ❯ #1925.c0a82b1d An encode job of 600 frames shows 300 of 600 when its tool has written 300, and its time left is within 10% of the time it then takes. A planted tool that reports elapsed time over an expected duration shows 300 of 600 while 150 frames are written and fails, naming the job. Closing the app at frame 300 leaves the job running, and reopening shows its true count, never 0 (1)
+     × closing the app at frame 300 leaves the job running to its last frame, and the app opened again shows its true count, never 0 86349ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1925/reopen.test.ts > #1925.c0a82b1d An encode job of 600 frames shows 300 of 600 when its tool has written 300, and its time left is within 10% of the time it then takes. A planted tool that reports elapsed time over an expected duration shows 300 of 600 while 150 frames are written and fails, naming the job. Closing the app at frame 300 leaves the job running, and reopening shows its true count, never 0 > closing the app at frame 300 leaves the job running to its last frame, and the app opened again shows its true count, never 0
+AssertionError: the app at frame 300, closed, and opened again, against the encoder's own log (proof: $TMPDIR/deep-1925-proof/reopen.json): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the app opened at frame 300 (41.2 s to 41.6 s, the tool at 285 to 300 frames) draws no row for the job test.encode on encode-a@1.0.0: no node of its window has an id starting job:",
++   "the app opened again after it closed at frame 300 (45.7 s to 46.3 s, the tool at 315 to 345 frames) draws no row for the job test.encode on encode-a@1.0.0: no node of its window has an id starting job:",
++ ]
+
+ ❯ tests/acceptance/1925/reopen.test.ts:23:148
+     21|       proof('reopen.json', { failures, ...proofOf(r) });
+     22|     }
+     23|     expect(failures, `the app at frame 300, closed, and opened again, …
+       |                                                                                                                                                    ^
+     24|   }, 600_000);
+     25| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  02:24:58
+   Duration  87.58s (tests 99%)
+
+NO_COLOR=1 node node_modules/vitest/vitest.mjs run  --testTimeout=600000   8.53s user 26.28s system 39% cpu 1:29.11 total
+exit 1

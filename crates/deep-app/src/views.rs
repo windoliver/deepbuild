@@ -1082,6 +1082,8 @@ struct Record {
     details: Vec<String>,
     /// Whether the rows are the list the hub built (#1463), whose ask rows say their state word at the right edge.
     listed: bool,
+    /// The sidebar's running jobs (#1925), in the list's order: each row's ID, its words and why it is there.
+    jobs: Vec<(String, String, String)>,
 }
 
 /// What the sidebar draws: every session, in the order each first appears, with its task's title and its state.
@@ -1279,6 +1281,26 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
         }
         _ => Vec::new(),
     };
+    // Each running job's row (#1925), as the hub built it: a job whose tool reports no counter says how long it has
+    // run, which reads differently as the clock moves on.
+    let jobs = match kind {
+        Kind::Sidebar => listed
+            .iter()
+            .filter(|row| text(row, "id").starts_with("job:"))
+            .map(|row| {
+                if row["progress"].is_null() {
+                    let since = row["since"].as_u64().unwrap_or(now());
+                    states::changes_after(states::changes_in(now().saturating_sub(since)));
+                }
+                (
+                    text(row, "id"),
+                    states::job_words(row, now()),
+                    text(row, "why"),
+                )
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
     Record {
         open,
         sessions,
@@ -1288,6 +1310,7 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
         problems,
         details,
         listed: table.listed(),
+        jobs,
     }
 }
 
@@ -1781,6 +1804,29 @@ impl Render for Shipped {
                                     ))
                             }),
                     )
+                    // Each running job's row (#1925), after the sessions as the list orders it: its mark, its kind and
+                    // its count from its tool's own counter, its time at the right edge, and why under it, quieter.
+                    // A job has no page, so the row opens nothing.
+                    .children(record.jobs.iter().enumerate().map(|(index, (id, words, why))| {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                marked(ElementId::Name(id.clone().into()), "running", words.clone())
+                                    .h(sizes().space(4))
+                                    .pl(sizes().space(2))
+                                    .pr(sizes().space(0)),
+                            )
+                            .child(
+                                label(("sidebar-job-why", index), why.clone())
+                                    .block()
+                                    .typed(sizes().small)
+                                    .h(sizes().small.line)
+                                    .pl(sizes().space(3))
+                                    .text_color(chrome.ink_secondary)
+                                    .truncate(),
+                            )
+                    }))
             }
             Kind::Home => match unfinished {
                 Some(count) => page

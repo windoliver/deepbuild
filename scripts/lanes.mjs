@@ -308,6 +308,9 @@ byHand.push('tests/acceptance/1462/shown.test.ts');
 // #1901's files build deep-show; build-digest.test.ts builds it three times, one with a canvas module's source changed
 // for that build and restored after it, so nothing else may build in the checkout while it runs.
 alone.push('tests/acceptance/1901/');
+// #1925's files each start a hub that runs an 80 s encode through the supervisor and read its row to the 2 s batch,
+// and its reopen file starts deep-drive twice: one file at a time.
+alone.push('tests/acceptance/1925/');
 // #408's files each build deep-show (module-label.test.ts with test-glyph-label). Criterion 5 runs from its redraft,
 // which also builds it in release and for Linux x86_64 in a local image with a C++ toolchain and libclang, and times
 // film.layout against the lane's rule; the original criterion-5 file, whose image can't build deep-show, runs by hand.
