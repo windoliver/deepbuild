@@ -196,3 +196,11 @@ a kept folder holding exactly the files of a recorded call, with the same `run.j
   (AC13).
 - `fixtures/pages.events.jsonl`: the record. `TASTE.json`: AC13's taste call, unrecorded. `tsconfig.json`: as #1459's.
   `BASE-FAILURE.txt`: the run at the base.
+
+## Swapped: AC13
+
+AC13's first test waited for the card option "Drop it", which only the replica's fixture offers, while the real app's
+world it seeds (through #26's helper) offers "SQLite" and "Plain files"; and it had no way to Home in the real window.
+It was redrafted blind from the issue, the design and the base `2721ca7b`, and swapped in with the owner's approval:
+`redraft-ac13/shown.test.ts`, its `TASTE.json` and README. `pictures.test.ts` and this folder's `TASTE.json` are gone;
+the rows above that name them read as `redraft-ac13/`.
