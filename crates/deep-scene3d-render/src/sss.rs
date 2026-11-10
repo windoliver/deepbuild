@@ -204,7 +204,7 @@ pub(crate) type ShareDraw = (
 /// The share pass's pipeline with `fs` as its fragment stage: `sss_fs`, or a material operator's
 /// `op_sss_fs` (#486).
 pub(crate) fn share_pipeline(
-    d: &wgpu::Device,
+    d: &deep_gpu::counted::Wgpu,
     samples: u32,
     layout: &wgpu::PipelineLayout,
     module: &wgpu::ShaderModule,
@@ -247,7 +247,7 @@ struct Target {
 
 impl Target {
     fn new(
-        d: &wgpu::Device,
+        d: &deep_gpu::counted::Wgpu,
         size: [u32; 2],
         samples: u32,
         format: wgpu::TextureFormat,
@@ -298,7 +298,7 @@ pub(crate) struct Inputs<'a> {
 }
 
 impl Subsurface {
-    pub(crate) fn new(d: &wgpu::Device, size: [u32; 2], i: Inputs<'_>) -> Subsurface {
+    pub(crate) fn new(d: &deep_gpu::counted::Wgpu, size: [u32; 2], i: Inputs<'_>) -> Subsurface {
         let usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
         let (share_t, share) = Target::new(d, size, i.samples, SHARE);
         let (profile_t, profile) = Target::new(d, size, i.samples, PROFILE);
@@ -415,7 +415,7 @@ impl Subsurface {
 
     /// Writes the taps, and the planted pass that takes every tap (`across`: its scale and pixel
     /// size in mm where a pixel holds no subsurface part).
-    pub fn write(&self, queue: &wgpu::Queue, across: Option<(f64, f64)>) {
+    pub fn write(&self, queue: &deep_gpu::counted::Queue, across: Option<(f64, f64)>) {
         let (radii, edges) = taps();
         let (on, scale, size) = across.map_or((0.0, 0.0, 0.0), |(s, p)| (1.0, s, p));
         let u = SpreadUniform {
