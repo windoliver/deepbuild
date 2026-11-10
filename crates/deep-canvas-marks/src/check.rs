@@ -16,6 +16,62 @@ use crate::look::{self, Look};
 use crate::paint::Adjust;
 use crate::scene::{self, object_or_empty, Palette, Planted, Record, Rgb, Type};
 
+/// render.contrast's default minimum: the WCAG ratio a text keeps on what is under its glyphs.
+pub const CONTRAST_MIN: f64 = 4.5;
+
+/// #1653: a text whose halos, laid outside in over the ground, leave its ink under
+/// [`CONTRAST_MIN`] in either theme is refused, naming the item (Text `text@1`: halo). Under the
+/// glyphs every halo covers the run, so the ground is what they make there; offset and blur, which
+/// thin a halo only at its edge, are left out.
+fn halo_contrast(items: &Map<String, Value>, look: &Look) -> Vec<Issue> {
+    let mut out = Vec::new();
+    for (id, item) in items {
+        let kind = item.get("kind").and_then(Value::as_str);
+        let params = object_or_empty(item.get("params"));
+        let texts = kind == Some("text@1")
+            || (kind == Some("marks@1")
+                && params.get("mark").and_then(Value::as_str) == Some("text"));
+        if !texts || params.get("halo").is_none() {
+            continue;
+        }
+        let path = format!("items/{id}/params/halo");
+        for (theme, palette) in [("light", &look.light), ("dark", &look.dark)] {
+            let Ok(halos) = crate::fx::halos(palette, params.get("halo"), &path) else {
+                continue;
+            };
+            let ink_role = params
+                .get("paint")
+                .and_then(|p| p.pointer("/fill/role"))
+                .and_then(Value::as_str)
+                .unwrap_or("ink");
+            let (Some(&ink), Some(&ground)) = (palette.get(ink_role), palette.get("ground")) else {
+                continue;
+            };
+            let under = halos.iter().fold(ground, |base, h| {
+                let t = h.opacity.clamp(0.0, 1.0);
+                std::array::from_fn(|i| {
+                    (f64::from(base[i]) * (1.0 - t) + f64::from(h.color[i]) * t).round() as u8
+                })
+            });
+            let ratio = look::contrast(ink, under);
+            if ratio < CONTRAST_MIN {
+                out.push(Issue {
+                    fix: "Give the halo a role that keeps the text's ink apart, or drop it.".into(),
+                    ..Issue::error(
+                        "halo_contrast",
+                        id,
+                        path.clone(),
+                        json!({"theme": theme, "ratio": ratio, "min": CONTRAST_MIN}),
+                        "its halos bring the text under render.contrast's minimum",
+                    )
+                });
+                break;
+            }
+        }
+    }
+    out
+}
+
 /// Every look role an item's paint names, sorted and once each.
 fn roles(value: &Value, out: &mut Vec<String>) {
     match value {
@@ -521,6 +577,9 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     }
     // #467: a looping document's parallax bands travel whole repeats.
     issues.extend(crate::fields::loop_issues(doc, true));
+    issues.extend(halo_contrast(items, look));
+    // #1653: no repeated status, and no status badge a y sort can slide under.
+    issues.extend(crate::fields::status_issues(doc));
     glyph_issues(items, &look.light_type, &mut issues);
     if look.dark_type != look.light_type {
         glyph_issues(items, &look.dark_type, &mut issues);

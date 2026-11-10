@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The logic module, `logic@1` (#531, #532; design: The logic module): a logic item's program, by hash, checked and rewritten by sandbox@1 in the role `logic` and stepped at its own rate, with its read and write regions, its step seed, traps that freeze only its item, checkpoints, restores, bakes, goldens, `logic.determinism` and `logic.budget`. The `deep-logic` binary serves it as JSON lines, one reply per line, and is the proof surface the #531 and #532 acceptance READMEs name. deep-show steps its world on the transport's clock in a live play. `web/logic.mjs` is the web player's runtime for the same rewritten bytes.
+The logic module, `logic@1` (#531, #532; design: The logic module): a logic item's program, by hash, checked and rewritten by sandbox@1 in the role `logic` and stepped at its own rate, with its read and write regions, its step seed, traps that freeze only its item, checkpoints, restores, bakes, goldens, `logic.determinism` and `logic.budget`, and (#544) the occurrences it emits: its `emits` kinds, copied from the emit region at `emits_at` after each step into its occurrence list. The `deep-logic` binary serves it as JSON lines, one reply per line, and is the proof surface the #531 and #532 acceptance READMEs name. deep-show steps its world on the transport's clock in a live play, and bakes a document's logic items into the occurrence lists Spawn and motion read. `web/logic.mjs` is the web player's runtime for the same rewritten bytes.
 
 ## Where new code goes
 
@@ -10,7 +10,7 @@ The logic module, `logic@1` (#531, #532; design: The logic module): a logic item
 - `src/checks.rs`: `logic.determinism`; `src/budget.rs`: `logic.budget` and its calibration programs; `src/live.rs`: a live view with no bake.
 - `src/lines.rs`: source lines through a program's debug sidecar.
 - `src/lib.rs`: the JSON calls, bakes and bake keys; `src/main.rs`: the command line and `--planted`.
-- The browser's runtime goes in `web/logic.mjs`. The acceptance tests are in `tests/acceptance/531` and `tests/acceptance/532`.
+- The browser's runtime goes in `web/logic.mjs`. The acceptance tests are in `tests/acceptance/531`, `tests/acceptance/532` and `tests/acceptance/544`.
 
 ## What it may import
 

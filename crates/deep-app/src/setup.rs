@@ -29,6 +29,13 @@ pub fn assume_finished() {
     ASSUMED.with(|assumed| assumed.set(true));
 }
 
+/// A replica on a machine whose setup hasn't finished (#1461): the first-launch window. In no shipped build (#1457).
+#[cfg(feature = "fixtures")]
+pub fn assume_unfinished() {
+    ASSUMED.with(|assumed| assumed.set(false));
+    DISK.with(|disk| disk.set(Some(Disk::NotStarted)));
+}
+
 /// What the disk says about setup in this home (#1457): read by [`refresh`], never by a frame.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Disk {

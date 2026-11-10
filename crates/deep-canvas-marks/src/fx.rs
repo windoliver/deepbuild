@@ -218,6 +218,22 @@ pub struct Satin {
     pub mode: Mode,
 }
 
+/// #1653: one of a text's `halo [{width, role, opacity, offset, blur}]`: the shaped run's outline
+/// widened by width, shifted by offset and softened by blur, under the glyphs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Halo {
+    pub color: Rgb,
+    pub width: f64,
+    pub opacity: f64,
+    pub offset: [f64; 2],
+    pub blur: f64,
+    /// Its place among the text's halos as they draw, outermost first.
+    pub order: usize,
+}
+
+/// The halos a text takes at most.
+pub const MAX_HALOS: usize = 4;
+
 /// Everything an item's paint builds from its coverage.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Fx {
@@ -226,6 +242,8 @@ pub struct Fx {
     pub glow: Option<Glow>,
     pub bevel: Option<Bevel>,
     pub satin: Option<Satin>,
+    /// A text's halos, widest first (#1653).
+    pub halos: Vec<Halo>,
 }
 
 /// The look's light: its direction and elevation in degrees, 135 and 45 without one.
@@ -449,8 +467,66 @@ impl Fx {
     }
 }
 
+/// A text's `halo` at `path` (`items/<id>/params/halo`), widest first, ties as written: at most
+/// [`MAX_HALOS`], each in a role of the look.
+pub fn halos(palette: &Palette, halo: Option<&Value>, path: &str) -> Result<Vec<Halo>, Refused> {
+    let list = match halo {
+        None | Some(Value::Null) => return Ok(Vec::new()),
+        Some(Value::Array(l)) => l,
+        Some(_) => {
+            return Err(Refused {
+                code: "bad_doc",
+                path: path.to_string(),
+            })
+        }
+    };
+    if list.len() > MAX_HALOS {
+        return Err(Refused {
+            code: "out_of_range",
+            path: path.to_string(),
+        });
+    }
+    let mut out = Vec::new();
+    for (i, h) in list.iter().enumerate() {
+        let Some(o) = h.as_object() else {
+            return Err(Refused {
+                code: "bad_doc",
+                path: format!("{path}/{i}"),
+            });
+        };
+        let r = Reader {
+            palette,
+            o,
+            path: format!("{path}/{i}"),
+        };
+        out.push(Halo {
+            color: r.color()?,
+            width: r.px("width", 2.0)?,
+            opacity: r.opacity(1.0)?,
+            offset: r.pair("offset", [0.0, 0.0])?,
+            blur: r.px("blur", 0.0)?,
+            order: 0,
+        });
+    }
+    out.sort_by(|a, b| b.width.total_cmp(&a.width));
+    out.iter_mut().enumerate().for_each(|(i, h)| h.order = i);
+    Ok(out)
+}
+
 // ---------------------------------------------------------------------------------------------
 // The layers, from coverage.
+
+/// A halo: the coverage widened by a disc of its width, moved by its offset, then blurred.
+pub fn halo_alpha(a: &Grid, h: &Halo, scale: f32) -> Grid {
+    let grown = dilate(a, h.width as f32 * scale);
+    let moved = shift(
+        &grown,
+        [h.offset[0] as f32 * scale, h.offset[1] as f32 * scale],
+    );
+    let mut g = blur(&moved, h.blur as f32 * scale);
+    g.a.iter_mut().for_each(|v| *v *= h.opacity as f32);
+    g
+}
 
 /// The blurred drop: coverage moved by the offset, then blurred.
 pub fn drop_alpha(a: &Grid, d: &Drop, scale: f32) -> Grid {
@@ -626,6 +702,7 @@ pub enum Part {
     Satin(Satin),
     /// The bevel's shadow (`false`) or its highlight (`true`).
     Bevel(Bevel, bool),
+    Halo(Halo),
 }
 
 impl Part {
@@ -638,6 +715,7 @@ impl Part {
             Part::Satin(_) => "satin",
             Part::Bevel(_, false) => "bevel.shadow",
             Part::Bevel(_, true) => "bevel.highlight",
+            Part::Halo(h) => ["halo.0", "halo.1", "halo.2", "halo.3"][h.order.min(MAX_HALOS - 1)],
         }
     }
 
@@ -649,6 +727,7 @@ impl Part {
             Part::Satin(s) => s.color,
             Part::Bevel(b, false) => b.shadow.0,
             Part::Bevel(b, true) => b.highlight.0,
+            Part::Halo(h) => h.color,
         }
     }
 
@@ -658,13 +737,13 @@ impl Part {
             Part::Glow(g) => g.mode,
             Part::Inner(s) => s.mode,
             Part::Satin(s) => s.mode,
-            Part::Bevel(..) => Mode::Normal,
+            Part::Bevel(..) | Part::Halo(_) => Mode::Normal,
         }
     }
 
-    /// Whether it draws under the item's own marks: a drop and an outer glow.
+    /// Whether it draws under the item's own marks: a drop, an outer glow and a halo.
     pub fn under(&self) -> bool {
-        matches!(self, Part::Drop(_)) || matches!(self, Part::Glow(g) if !g.inner)
+        matches!(self, Part::Drop(_) | Part::Halo(_)) || matches!(self, Part::Glow(g) if !g.inner)
     }
 
     /// The px past the coverage its ops read or draw: a crop that keeps this much clear around
@@ -676,6 +755,7 @@ impl Part {
             Part::Inner(s) => s.blur + s.offset,
             Part::Satin(s) => s.size + s.offset,
             Part::Bevel(b, _) => 2.0 * b.size + b.soften,
+            Part::Halo(h) => h.width + h.blur + h.offset[0].abs().max(h.offset[1].abs()),
         };
         m as f32 + 4.0
     }
@@ -687,7 +767,17 @@ impl Part {
             Part::Drop(d) => {
                 let r = d.blur + 1.0;
                 let [x, y] = d.offset;
-                [r - x.min(0.0), r - y.min(0.0), r + x.max(0.0), r + y.max(0.0)]
+                [
+                    r - x.min(0.0),
+                    r - y.min(0.0),
+                    r + x.max(0.0),
+                    r + y.max(0.0),
+                ]
+            }
+            Part::Halo(h) => {
+                let r = h.width + h.blur + 1.0;
+                let [x, y] = h.offset;
+                [r - x, r - y, r + x, r + y].map(|v| v.max(0.0))
             }
             Part::Glow(g) if !g.inner => [g.size + 1.0; 4],
             Part::Bevel(b, _) if b.shape != Shape::Inner => [b.size + b.soften + 1.0; 4],
@@ -702,6 +792,7 @@ impl Part {
             Part::Glow(g) => glow_alpha(a, g, scale),
             Part::Inner(s) => inner_alpha(a, s, scale),
             Part::Satin(s) => satin_alpha(a, s, scale),
+            Part::Halo(h) => halo_alpha(a, h, scale),
             Part::Bevel(b, high) => {
                 let (h, l) = bevel_alpha(a, b, scale);
                 if *high {
@@ -724,6 +815,8 @@ impl Fx {
         if let Some(g) = self.glow.as_ref().filter(|g| !g.inner) {
             out.push(Part::Glow(g.clone()));
         }
+        // Halos right under the glyphs, from the outside in.
+        out.extend(self.halos.iter().cloned().map(Part::Halo));
         if let Some(s) = &self.inner {
             out.push(Part::Inner(s.clone()));
         }

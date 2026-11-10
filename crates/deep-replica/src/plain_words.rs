@@ -81,6 +81,7 @@ mod lane {
             center: vec![views::NEEDS_YOU.into(), views::SESSION.into()],
             active: 0,
             line: views::LINE.into(),
+            needs_you: views::NEEDS_YOU.into(),
         };
 
         // The card: one click on its ask's row in Needs you.
