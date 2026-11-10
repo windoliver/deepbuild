@@ -332,6 +332,8 @@ alone.push('tests/acceptance/405/broken-fixture.test.ts', 'tests/acceptance/405/
 alone.push('tests/acceptance/405-redraft-ac4/');
 timed.push('tests/acceptance/405-redraft-ac4/budgets.test.ts');
 byHand.push('tests/acceptance/405/budgets.test.ts');
+// #544's files build deep-logic and deep-show, draw on the GPU, export a film, and build deep-logic for Linux x86_64 in Docker.
+alone.push('tests/acceptance/544/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

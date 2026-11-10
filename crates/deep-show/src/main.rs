@@ -33,6 +33,7 @@ mod jobs;
 mod kept;
 mod kinds;
 mod kit;
+mod logic;
 mod media;
 mod mixdown;
 mod modes;
@@ -1192,6 +1193,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || deep_canvas_media::PLANTED.contains(p)
                 // #1732's wrong programs live in the motion module's arrangement solve.
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
+                || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1219,6 +1221,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "sorts_by_order_key_alone" => Planted::SortsByOrderKeyAlone,
                 "reply_without_digest" => Planted::ReplyWithoutDigest,
                 "reads_wasm_bytes" => Planted::ReadsWasmBytes,
+                "start_on_at_first_frame" => Planted::StartOnAtFirstFrame,
                 "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
                 "diffs_whole_document" => Planted::DiffsWholeDocument,
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
