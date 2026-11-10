@@ -808,6 +808,12 @@ impl Ctx<'_> {
                 Some("object" | "world" | "view") => Ty::V(Sc::F32, 3),
                 _ => return Err(bad("normal takes space: object, world or view".into())),
             },
+            "position" => match s.fields.get("space").and_then(Value::as_str) {
+                Some("world") => Ty::V(Sc::F32, 3),
+                _ => return Err(bad("position takes space: world".into())),
+            },
+            "tangent" => Ty::V(Sc::F32, 4),
+            "uv0" => Ty::V(Sc::F32, 2),
             "blend" => {
                 let mode = s.fields.get("mode").and_then(Value::as_str);
                 if mode.and_then(deep_canvas::blend::step_mode).is_none() {
@@ -1935,10 +1941,17 @@ fn check_inner(
     }
     for (name, a) in &op.outputs {
         let path = format!("outputs/{name}");
-        // Today's outputs are the core's entries of gpu.output@1 (#200).
-        let want = match deep_canvas::registry::core_lists::output_type(op.kind.name(), name) {
+        // Today's outputs are the core's entries of gpu.output@1 (#200); a material's lobes,
+        // occlusion and normal are scene3d's (#486).
+        let scene3d = (op.kind == Kind::Material)
+            .then(|| deep_canvas_scene3d::gpu::output_type(name))
+            .flatten();
+        let want = match deep_canvas::registry::core_lists::output_type(op.kind.name(), name)
+            .or(scene3d)
+        {
             Some("vec4<f32>") => Ty::V(Sc::F32, 4),
             Some("vec3<f32>") => Ty::V(Sc::F32, 3),
+            Some("vec2<f32>") => Ty::V(Sc::F32, 2),
             Some("f32") => Ty::F32,
             _ => {
                 issues.push(Issue::at_path(
