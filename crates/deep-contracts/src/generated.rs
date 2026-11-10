@@ -48862,9 +48862,9 @@ pub struct OpenItemOpenedV4Data {
 impl Contract for OpenItemOpenedV4Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["task_ref", "text", "item", "from", "resolved_by", "replaces"])?;
-        deep_contracts::check_member(members, at, "task_ref", &RULE_126)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_129)?;
         deep_contracts::check_member(members, at, "text", &RULE_6)?;
-        deep_contracts::check_member(members, at, "item", &RULE_78)?;
+        deep_contracts::check_member(members, at, "item", &RULE_81)?;
         deep_contracts::check_member(members, at, "resolved_by", &RULE_6)?;
         deep_contracts::check_member(members, at, "replaces", &RULE_0)?;
         Ok(Self {
@@ -48913,7 +48913,7 @@ impl Contract for OpenItemOpenedV4 {
         let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
         deep_contracts::check_member(members, at, "id", &RULE_0)?;
         deep_contracts::check_member(members, at, "subject", &RULE_2)?;
-        deep_contracts::check_member(members, at, "writer", &RULE_93)?;
+        deep_contracts::check_member(members, at, "writer", &RULE_96)?;
         deep_contracts::check_member(members, at, "actor", &RULE_3)?;
         deep_contracts::check_member(members, at, "scope", &RULE_3)?;
         deep_contracts::check_member(members, at, "ts", &RULE_4)?;
