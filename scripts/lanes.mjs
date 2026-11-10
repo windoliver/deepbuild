@@ -231,6 +231,9 @@ timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
 alone.push('tests/acceptance/1436/');
 byHand.push('tests/acceptance/1436/ac2-still.live.test.ts', 'tests/acceptance/1436/ac9-budgets.live.test.ts');
 timed.push('tests/acceptance/1436/ac9-budgets.live.test.ts');
+// #1485's files build deep-canvas-render and the app, and its AC3 file opens the app's window and times its frames.
+alone.push('tests/acceptance/1485/');
+timed.push('tests/acceptance/1485/panel.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 

@@ -63,6 +63,10 @@ fixtures = []
 # wrong programs DEEP_CHROME_PLANT selects, in no shipped build. Unlike env-plants it builds in release, which the
 # budget run needs.
 chrome-fixture = []
+# Issue #1485: the canvas panel in the app's real window, fed a scenario's revisions and its frames timed (`deep-app
+# --canvas`), with the planted decode its acceptance tests time and the wrong program DEEP_CANVAS_PLANT selects, in no
+# shipped build. It builds in release, which the frame-time run needs.
+canvas-fixture = []
 # Issue #1460's wrong program: a sidebar row click opens its session's page by setting the selection, without the one
 # `open`. In no shipped build.
 plant-row-skips-open = []
