@@ -290,13 +290,13 @@ alone.push('tests/acceptance/1924/');
 // #1923's files each start a hub and a provider on 127.0.0.1, kill and restart the hub mid-call, and count the
 // provider's submissions around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1923/');
-// #408's files each build deep-show (module-label.test.ts with test-glyph-label); machines.test.ts also builds it in
-// release and for Linux x86_64 in Docker, and times film.layout against the lane's rule.
-alone.push('tests/acceptance/408/');
-timed.push('tests/acceptance/408/machines.test.ts');
-// #408's criterion-5 redraft builds deep-show for Linux x86_64 in a local image with a C++ toolchain and libclang.
+// #408's files each build deep-show (module-label.test.ts with test-glyph-label). Criterion 5 runs from its redraft,
+// which also builds it in release and for Linux x86_64 in a local image with a C++ toolchain and libclang, and times
+// film.layout against the lane's rule; the original criterion-5 file, whose image can't build deep-show, runs by hand.
+alone.push('tests/acceptance/408/crossing.test.ts', 'tests/acceptance/408/overlap-covered.test.ts', 'tests/acceptance/408/cut.test.ts', 'tests/acceptance/408/module-label.test.ts');
 alone.push('tests/acceptance/408-redraft-ac5/');
 timed.push('tests/acceptance/408-redraft-ac5/machines.test.ts');
+byHand.push('tests/acceptance/408/machines.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
