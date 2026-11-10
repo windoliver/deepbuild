@@ -3346,9 +3346,38 @@ mod tests {
             let e = Template::of(&lets).eval(&scope()).unwrap_err();
             assert!(e.contains("past the cap of"), "{e}");
         }
+        // A refused text reads no name.
+        assert_eq!(Template::of(&json!(deep)).reads(), (vec![], vec![]));
         // A repeat whose count no cap stops is still read as it was: a literal.
         let plain = json!({"repeat": {"count": "a b", "as": "j", "of": "j"}});
         assert_eq!(Template::of(&plain).eval(&scope()), Ok(plain.clone()));
+    }
+
+    #[test]
+    fn the_recipe_lexer_reads_each_token_form() {
+        let value = |t: &str| Expr::parse(t).and_then(|e| e.eval(&scope()));
+        assert_eq!(value("(i == 2) + (1 != 2) + (2 >= 1)"), Ok(3.0));
+        assert_eq!(value(".5 + 1.5\t+\n1"), Ok(3.0));
+        // Names are ASCII letters, digits and `_`, and numbers ASCII digits and dots.
+        let (names, _) = Template::of(&json!("_a + a_1 + b2")).reads();
+        assert_eq!(names, ["_a", "a_1", "b2"]);
+        for (text, bad) in [
+            ("aé", "é"),
+            ("a١", "١"),
+            ("1١", "١"),
+            ("١", "١"),
+            ("é", "é"),
+        ] {
+            let want = format!("unexpected `{bad}`");
+            assert_eq!(Expr::parse(text).err(), Some(want), "{text}");
+        }
+        assert_eq!(
+            Expr::parse("1 # 2").err().as_deref(),
+            Some("unexpected `#`")
+        );
+        // Text a cap stops that no expression could be says so.
+        let e = Expr::parse(&"-".repeat(70)).err();
+        assert_eq!(e.as_deref(), Some("isn't an expression"));
     }
 
     #[test]
@@ -3378,6 +3407,7 @@ mod tests {
             "1 # 2",
             "1 : 2",
             "1 2",
+            "a[1, 2]",
         ];
         for text in never {
             assert!(!could_be_expression(text), "{text}");
