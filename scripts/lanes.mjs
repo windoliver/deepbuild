@@ -82,7 +82,7 @@ export const slow = [
   'tests/acceptance/417/state.test.ts', 'tests/acceptance/419/velocity-seek.test.ts',
   'tests/acceptance/42/doctor.test.ts', 'tests/acceptance/422/showpiece-fixture.test.ts',
   'tests/acceptance/424/picks.test.ts', 'tests/acceptance/425/redraft/taste.test.ts',
-  'tests/acceptance/48/harness.test.mjs', 'tests/acceptance/484/forest.test.ts',
+  'tests/acceptance/48/harness.test.mjs', 'tests/acceptance/484/forest.test.ts', 'tests/acceptance/484/redraft-1637/forest.test.ts',
   'tests/acceptance/674/default.test.ts', 'tests/acceptance/674/document.test.ts',
   'tests/acceptance/674/nearest.test.ts', 'tests/acceptance/674/session.test.ts',
   'tests/acceptance/824/cycles.test.ts', 'tests/acceptance/85/hub/network.test.ts',
