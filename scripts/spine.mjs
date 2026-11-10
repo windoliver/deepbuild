@@ -44,7 +44,9 @@ const PRECEDENCE = ['FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE', 'PASS'];
 /** How long one task's tests may run before what is left reads INCONCLUSIVE. */
 const TASK_MS = 3 * 3_600_000;
 
-const run = (cwd, command, args, timeout = TASK_MS) => spawnSync(command, args, { cwd, encoding: 'utf8', timeout, maxBuffer: 1 << 28, env: { ...process.env, CARGO_INCREMENTAL: '0', CARGO_PROFILE_DEV_DEBUG: '0' } });
+// No inherited GIT_DIR or the like (a hook's), which would point git, and the tests, in the checkout at this repo.
+const ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES)$/.test(k)));
+const run = (cwd, command, args, timeout = TASK_MS) => spawnSync(command, args, { cwd, encoding: 'utf8', timeout, maxBuffer: 1 << 28, env: { ...ENV, CARGO_INCREMENTAL: '0', CARGO_PROFILE_DEV_DEBUG: '0' } });
 const tail = (r) => `${r.stderr ?? ''}${r.stdout ?? ''}`.trim().split('\n').slice(-3).join(' ').slice(0, 300);
 
 /** The tests a task landed at its commit: files tagged with one of its criterion IDs, and its acceptance folder's. */
@@ -58,16 +60,17 @@ function landed(commit, issue) {
 /**
  * A temporary checkout of `commit` that git reads as it reads this repo at that commit: a clone sharing its objects
  * (never writing there, never a worktree of it), HEAD detached at the commit and origin/main where this repo's is, so a
- * test's `git merge-base HEAD origin/main` answers as it would here.
+ * test's `git merge-base HEAD origin/main` answers as it would here. Returns its directory, or why it couldn't be made.
  */
 function checkout(commit, prefix) {
   const dir = temporary(prefix);
   const main = run(ROOT, 'git', ['rev-parse', '--verify', '-q', 'refs/remotes/origin/main']).stdout.trim();
+  if (!main) return { why: 'this repo has no origin/main to set in the checkout' };
   for (const [cwd, args] of [[ROOT, ['clone', '-q', '--shared', '--no-checkout', '--template=', ROOT, dir]], [dir, ['update-ref', 'refs/remotes/origin/main', main]], [dir, ['checkout', '-q', '--detach', commit]]]) {
     const r = run(cwd, 'git', args);
-    if (r.status !== 0) throw Error(`git ${args[0]} for the checkout of ${commit} failed: ${tail(r)}`);
+    if (r.status !== 0) return { why: `git ${args[0]} for the checkout of ${commit.slice(0, 12)} failed: ${tail(r)}` };
   }
-  return dir;
+  return { dir };
 }
 
 /** How a test ended, as a criterion reads it: a failure or skip the test words as BLOCKED or INCONCLUSIVE is that. */
@@ -130,13 +133,15 @@ function judge(issue, commit) {
   let tests = [];
   let why = '';
   if (files.length) {
-    const dir = checkout(commit, `spine-${issue}-`);
-    try {
-      // A copy-on-write clone where cp has one (macOS), a plain copy elsewhere.
-      spawnSync('cp', [process.platform === 'darwin' ? '-cR' : '-R', join(ROOT, 'node_modules'), join(dir, 'node_modules')]);
+    const { dir, why: unmade } = checkout(commit, `spine-${issue}-`);
+    why = unmade ?? '';
+    if (dir) try {
+      // A copy-on-write clone where the file system has one, a plain copy elsewhere.
+      const copied = run(ROOT, 'cp', [...(process.platform === 'darwin' ? ['-c'] : ['--reflink=auto']), '-R', join(ROOT, 'node_modules'), join(dir, 'node_modules')]);
       const built = run(dir, 'npm', ['run', 'build', '--workspaces', '--if-present']);
       const hook = run(dir, 'cargo', ['build', '--locked', '-q', '-p', 'deep-hook']);
-      if (built.status !== 0) why = `the workspaces didn't build at ${commit.slice(0, 12)}: ${tail(built)}`;
+      if (copied.status !== 0) why = `node_modules wasn't copied into the checkout: ${tail(copied)}`;
+      else if (built.status !== 0) why = `the workspaces didn't build at ${commit.slice(0, 12)}: ${tail(built)}`;
       else if (hook.status !== 0 && existsSync(join(dir, 'crates/deep-hook'))) why = `deep-hook didn't build at ${commit.slice(0, 12)}: ${tail(hook)}`;
       else tests = results(dir, files);
     } finally {
