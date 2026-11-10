@@ -709,6 +709,35 @@ fn pick(
         .map(|(id, _)| id.clone())
 }
 
+/// #1976's planted depth reader: each hit's point put back from the depth target, the view-axis
+/// depth at the pointer's pixel unprojected through the pointer, as a hit must never be.
+fn depth_hits(
+    hits: &mut [deep_canvas_scene3d::hit::Hit],
+    cam: &deep_canvas_scene3d::scene::Camera,
+    depth: Option<&[u8]>,
+    size: [u32; 2],
+    at: [f64; 2],
+) {
+    let i = at[1].floor() as usize * size[0] as usize + at[0].floor() as usize;
+    let Some(z) = depth.and_then(|d| d.get(i * 4..i * 4 + 4)) else {
+        return;
+    };
+    let p = cam.unproject(
+        at[0],
+        at[1],
+        f64::from(f32::from_le_bytes([z[0], z[1], z[2], z[3]])),
+    );
+    let o = if cam.perspective {
+        cam.eye
+    } else {
+        cam.unproject(at[0], at[1], 0.0)
+    };
+    for h in hits {
+        h.point = p;
+        h.distance = (0..3).map(|k| (p[k] - o[k]).powi(2)).sum::<f64>().sqrt();
+    }
+}
+
 fn srgb_decode(c: u8) -> f64 {
     let c = f64::from(c) / 255.0;
     if c <= 0.04045 {
@@ -2054,7 +2083,20 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                                 margin,
                             )
                         });
-                        json!({"at": at, "pick": p})
+                        // #1976: where the ray through the pointer meets the picked item.
+                        let mut hit = p.as_deref().map_or_else(Vec::new, |p| {
+                            deep_canvas_scene3d::hit::hits(&evaluated, *at, &[p])
+                        });
+                        if app.planted == Some(Planted::HitFromDepth) {
+                            depth_hits(&mut hit, &evaluated.camera, drawn.view_depth.as_deref(), size, *at);
+                        }
+                        let hit: Vec<Value> = hit
+                            .iter()
+                            .map(|h| {
+                                json!({"item": h.item, "sub": h.sub, "point": h.point, "normal": h.normal, "distance": h.distance})
+                            })
+                            .collect();
+                        json!({"at": at, "pick": p, "hit": hit})
                     })
                     .collect();
                 frame.insert("clicks".into(), json!(answered));
