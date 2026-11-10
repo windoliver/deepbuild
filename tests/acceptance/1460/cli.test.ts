@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as t83 from '../83/helpers.ts';
 import { cleanup as cleanup16 } from '../16/helpers.ts';
 import { RealApp } from '../1459/helpers.ts';
-import { appBinary, askAt, claimAt, hookBinary, ID, MIN, receiptFailures, receiptOf, sessionAt, writtenByOpen, type Ev } from './helpers.ts';
+import { appBinary, claimAt, hookBinary, ID, MIN, receiptFailures, receiptOf, sessionAt } from './helpers.ts';
 
 afterAll(async () => { await t83.cleanup(); await cleanup16(); }, 60_000);
 
@@ -37,7 +37,6 @@ async function shows(ids: string[], what: string): Promise<string[]> {
     return ids.filter((id) => !have.includes(id)).map((id) => `${what}: no node of the real window has the accessibilityIdentifier ${id}; it has ${JSON.stringify(have.filter((i) => /\//.test(i) || i === 'question-card')).slice(0, 300)}`);
   });
 }
-const lastPos = (events: readonly t83.Ev[]): number => Math.max(0, ...events.map((e) => e.log_pos));
 
 beforeAll(async () => {
   await hookBinary();
@@ -90,37 +89,6 @@ describe(`AC7 ${ID.receipt} The receipt part of a PASS line, passed to \`deep op
   });
 });
 
-describe(`AC3 ${ID.unarmed} \`open\` on an ask presents its card unarmed, and the record gains no answer. A planted \`open\` that writes an event fails, naming the event`, () => {
-  /** `deep open ask/<id>` on `app`: what an open wrote to the hub's record, once the card shows and three seconds pass. */
-  async function written(app: RealApp): Promise<{ failures: string[]; written: string[] }> {
-    world.app = app;
-    const before = lastPos(await t83.allEvents(world.hub));
-    const address = askAt(world.ask);
-    const failures = [...await open(address), ...await shows([address, 'question-card'], `after deep open ${address}`)];
-    await sleep(3000);
-    const after = (await t83.allEvents(world.hub)) as unknown as Ev[];
-    return { failures, written: writtenByOpen(after, before, world.ask) };
-  }
-
-  it(`AC3 ${ID.unarmed} deep open ask/<id> presents the ask's card in the running app, the hub's record gains no event from it, and the ask stays open`, async () => {
-    const { failures, written: events } = await written(world.app);
-    expect(failures).toEqual([]);
-    expect(events, 'open writes nothing to the record').toEqual([]);
-    const open = (await t83.inboxRead(world.hub)).map((a) => a.ask ?? a.handle);
-    expect(open, `${world.ask} is still open in the inbox`).toContain(world.ask);
-  }, 10 * MIN);
-
-  it(`AC3 ${ID.unarmed} (wrong program) plant-open-writes-event, an open that writes an event, fails, naming the event`, async () => {
-    const planted = await appBinary('plant-open-writes-event');
-    await world.app.stop();
-    const app = await RealApp.launch(world.h.home, planted);
-    try {
-      const { failures, written: events } = await written(app);
-      expect(failures, 'the planted app opens the ask too').toEqual([]);
-      expect(events, 'the planted open\'s event is found and named by its kind').not.toEqual([]);
-      for (const e of events) expect(e).toMatch(/^[a-z_.]+ \(log_pos \d+, written by /);
-    } finally {
-      await app.stop();
-    }
-  }, 20 * MIN);
-});
+// AC3's record half, both its tests, is in redraft-ac3/ac3.test.ts, swapped in with the owner's approval: no app call
+// writes an event without answering the ask or the OS confirming you, so this file's planted open could not be built,
+// and the redraft's judge counts every event an open's window gains (its README, The dispute).

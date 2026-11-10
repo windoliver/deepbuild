@@ -146,7 +146,7 @@ IDs are `criterionId` in `scripts/proof-change.mjs`.
 |---|---|---|---|
 | AC1 | `#1460.2a9c7aec` | `doors.test.ts`: in fresh replicas, B opened, then A by each door; each lands on `session/<A>`, ⌘[ goes back to B and ⌘] to A, and every door's page snapshot is equal. `cli.test.ts`: `deep open session/<id>` lands the real app on that address | the base (no `open`, no `deep open`, no page id); `plant-row-skips-open`, naming the row click |
 | AC2 | `#1460.d705eebf` | `history.test.ts`: A to E opened; ⌘[ ×4 to A, ⌘] ×4 to E; C archived, then skipped both ways; from B, opening F leaves no forward step and ⌘[ returns to B | the base (no `open`) |
-| AC3 | `#1460.e8743dab` | `card.test.ts`: open `ask/<id>` presents that ask's card reading `presented`, its row still in Needs you. `cli.test.ts`: `deep open ask/<id>` shows the card in the real app; the hub's record gains no event from the app, the CLI or about the ask in the next 3 s; the ask stays open | the base (no `open`, no `deep open`); `plant-open-writes-event`, naming the event's kind |
+| AC3 | `#1460.e8743dab` | `card.test.ts`: open `ask/<id>` presents that ask's card reading `presented`, its row still in Needs you. `redraft-ac3/ac3.test.ts` (2, swapped in with the owner's approval: no app call writes an event without answering the ask or the OS confirming you): `deep open ask/<id>` shows the card in the real app; the hub's record gains no event but an agent session's own in the next 3 s; the ask stays open | the base (no `open`, no `deep open`); `plant-open-writes-event`, an open that pastes an image, naming the event's kind |
 | AC4 | `#1460.e6caebd8` | `card.test.ts`: the closed ask's page says its question, `answered` and `Serif receipt`; `nonsense/what-is-this` shows `No match` with the address | the base (no `open`) |
 | AC5 | `#1460.b224c18f` | `doors.test.ts`: deep_drive's open and a row click land on one address with equal page snapshots | the base (no `open`) |
 | AC6 | `#1460.939ea70f` | `lint.test.ts`: the lint passes the app's source; it fails `OPENED` planted in views.rs and in commands.rs, and the base's `POPPED`, `DOCK` and slot view in a file of their own, each naming its file | the base (no lint; its views.rs holds all four) |
@@ -182,5 +182,5 @@ what the lint reads; a turn, an Index entry, a wiki page or a document as a page
 - `helpers.ts`: builds, the fixture's IDs, addresses, the replica driver and its doors, the record and receipt judges. Reuses
   `../1459/helpers.ts` (the replica driver, snapshots, the real app reader) and, in `cli.test.ts`, `../83/helpers.ts`.
 - `doors.test.ts` (AC1, AC5), `history.test.ts` (AC2, AC8), `card.test.ts` (AC3, AC4), `lint.test.ts` (AC6), `cli.test.ts`
-  (AC1's `deep open`, AC3's record, AC7).
+  (AC1's `deep open`, AC7), `redraft-ac3/ac3.test.ts` (AC3's record, swapped in).
 - `fixtures/record.events.jsonl`, `tsconfig.json`, `BASE-FAILURE.txt`.
