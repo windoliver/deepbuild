@@ -120,6 +120,27 @@ making the first screen shorter.
     stand-in for it. On the machine this audit ran on, the hub's login-service label was held by a job loaded from
     a temp home that carries the prefix #667's helper gives its homes.
 
+## Issues filed for what was left
+
+Filed on Nov 10, each posted body checked against its draft. A finding an open issue already held went there as a
+comment, with the numbers, and no second issue was made.
+
+| Finding | Where it went |
+|---|---|
+| 1, `deep_status` at the start of a task | #2197 |
+| 2 and 3, what every session loads | a comment on #1105, which already holds the ceilings and the canvas tools on demand |
+| 4, 5 and 7, three refusals | #2198 |
+| 6 | withdrawn |
+| 8, `deep inbox` and the option IDs | #2199 |
+| 9, a usage error that sets the machine up | #2200; #2176 already holds the stack trace |
+| 10 and 12, the hub-down numbers and the silent commands | a comment on #1812 |
+| 11, `deep doctor` after a clean setup | a comment on #1361 |
+| 13, the app's shell | none: #2167 is merged |
+| 14, `tests/agent-eval.test.mjs` | #2201 |
+| 15, the typecheck lane | #2202 |
+| 16, the repo rules | a comment on #2178 |
+| 17, a test's hub in the real service manager | #2203 |
+
 ## Verification
 
 Run once each after the last edit, and the first three lines once more after merging main at `a04378eb`:
