@@ -1,0 +1,188 @@
+{
+  "failures": [
+    "nothing sent before your answer: the job test.hosted hosted-a@1.0.0 {\"case\":\"upper\"} on bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2 sent 2 request(s) to its host before your answer, holding the agent's file: [\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\"]",
+    "after your yes: the job test.hosted hosted-a@1.0.0 {\"case\":\"upper\"} on bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2 must send the agent's file to 127.0.0.1:63922 once after your yes; the host got it 2 times",
+    "a second job with the same file and host: the job test.hosted hosted-a@1.0.0 {\"case\":\"lower\"} on bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2 must send the agent's file to 127.0.0.1:63922 once",
+    "the same file to another host: the job test.hosted hosted-b@1.0.0 {\"case\":\"upper\"} on bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2 sent 1 request(s) to 127.0.0.1:63923 before your answer: [\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\"]",
+    "a render DeepBuild made: the job test.hosted hosted-b@1.0.0 {\"case\":\"upper\"} on 73e4a3388f9dea508bd4808f7e2f4196480ab9fe837687a20f97570f5560ead2 must send the render to 127.0.0.1:63923 once"
+  ],
+  "seen": {
+    "notes": "bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2",
+    "render": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "c35640037437fde75fc2e21380cbe96750388235d03328cba86b54944d6a0aa0"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-b@1.0.0",
+          "key": "cd11ef0f995b28597bfe8d291c4356318dd87f1d34a6d825e686bbfe268c341c",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "73e4a3388f9dea508bd4808f7e2f4196480ab9fe837687a20f97570f5560ead2"
+          },
+          "sent": [
+            {
+              "sha256": "73e4a3388f9dea508bd4808f7e2f4196480ab9fe837687a20f97570f5560ead2",
+              "host": "127.0.0.1:63923"
+            }
+          ]
+        }
+      },
+      "asks": []
+    },
+    "held": {
+      "job": "the job test.hosted hosted-a@1.0.0 {\"case\":\"upper\"} on bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2",
+      "first": {
+        "status": "held",
+        "ask": "ask:01M72FH3FRTA6W25K7QFEPAGYD"
+      },
+      "second": {
+        "status": "held",
+        "ask": "ask:01M72FH3FRTA6W25K7QFEPAGYD"
+      },
+      "asks": [
+        {
+          "handle": "ask:01M72FH3FRTA6W25K7QFEPAGYD",
+          "kind": "authority",
+          "question": "Send the file bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2, which an agent put in the evidence store, to 127.0.0.1:63922 for hosted-a@1.0.0 (test.hosted)?",
+          "options": [
+            {
+              "id": "send",
+              "label": "Send it",
+              "decision": "allow"
+            },
+            {
+              "id": "decline",
+              "label": "Don't send it",
+              "decision": "deny"
+            }
+          ],
+          "recommended": null,
+          "deadline": 1794392386038,
+          "fallback": "you",
+          "default": "decline",
+          "provisional": false,
+          "owner": "you",
+          "key": "2d726ca6cada1e7b73938434bf87572670a9f60b8b114cb49b6b21ae116c2c82",
+          "pinned_to": {
+            "kind": "evidence",
+            "ref": "bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2"
+          }
+        }
+      ],
+      "early": "[\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\"]"
+    },
+    "afterYes": [
+      {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "9524a491f870405fbbd8ad374cc4f1efc5eb0e73b91d22ac0a04a2fcb88bfd27"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-a@1.0.0",
+          "key": "9033cbcf3b1c2bc75deed875397b93300fa867d8ee9a1994b0cefd9fc41b91da",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2"
+          },
+          "sent": [
+            {
+              "sha256": "bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2",
+              "host": "127.0.0.1:63922"
+            }
+          ]
+        }
+      }
+    ],
+    "pair": {
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-a@1.0.0",
+          "key": "85e11a68fe8ec92f2ab180ece0cdb001a563a186edfa0b756b5028c309bcb948",
+          "build": null,
+          "cache": "miss",
+          "inputs": {
+            "text": "bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2"
+          },
+          "sent": [
+            {
+              "sha256": "bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2",
+              "host": "127.0.0.1:63922"
+            }
+          ]
+        }
+      },
+      "asks": []
+    },
+    "other": {
+      "reply": {
+        "status": "held",
+        "ask": "ask:01M72FH40GYJZQ4VAV2VCGWHNK"
+      },
+      "asks": [
+        {
+          "handle": "ask:01M72FH40GYJZQ4VAV2VCGWHNK",
+          "kind": "authority",
+          "text": "{\"kind\":\"authority\",\"question\":\"Send the file bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2, which an agent put in the evidence store, to 127.0.0.1:63923 for hosted-b@1.0.0 (test.hosted)?\",\"options\":[{\"id\":\"send\",\"label\":\"Send it\",\"decision\":\"allow\"},{\"id\":\"decline\",\"label\":\"Don't send it\",\"decision\":\"deny\"}],\"recommended\":null,\"deadline\":1794392386576,\"fallback\":\"you\",\"default\":\"decline\",\"provisional\":false,\"owner\":\"you\",\"key\":\"3ffd10745f592750244d9343f638f0ccf3d68ddb177a039a4a02c070f7ecdf18\",\"pinned_to\":{\"kind\":\"evidence\",\"ref\":\"bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2\"}}",
+          "data": {
+            "kind": "authority",
+            "question": "Send the file bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2, which an agent put in the evidence store, to 127.0.0.1:63923 for hosted-b@1.0.0 (test.hosted)?",
+            "options": [
+              {
+                "id": "send",
+                "label": "Send it",
+                "decision": "allow"
+              },
+              {
+                "id": "decline",
+                "label": "Don't send it",
+                "decision": "deny"
+              }
+            ],
+            "recommended": null,
+            "deadline": 1794392386576,
+            "fallback": "you",
+            "default": "decline",
+            "provisional": false,
+            "owner": "you",
+            "key": "3ffd10745f592750244d9343f638f0ccf3d68ddb177a039a4a02c070f7ecdf18",
+            "pinned_to": {
+              "kind": "evidence",
+              "ref": "bd962073ebc23bc686d77ea33455d2002095b0000615fc0905cebc137d8360b2"
+            }
+          }
+        }
+      ]
+    },
+    "byPath": {
+      "file": {
+        "status": "refused",
+        "reason": "hosted-a@1.0.0 runs off the machine on 127.0.0.1:63922, so it takes files only by hash from the evidence store, as inputs [{name, sha256}], never by path; nothing was read or sent"
+      },
+      "nothing": {
+        "status": "refused",
+        "reason": "hosted-a@1.0.0 runs off the machine on 127.0.0.1:63922, so it takes files only by hash from the evidence store, as inputs [{name, sha256}], never by path; nothing was read or sent"
+      }
+    },
+    "hosts": {
+      "127.0.0.1:63922": "[\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"aGVsbG8=\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"lower\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"lower\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\"]",
+      "127.0.0.1:63923": "[\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"aGVsbG8=\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"YWdlbnQgbm90ZXMgOGRiZWUxZWIxYTBhOiB0aGUgaGVybyB3YWxrcyBsZWZ0\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"cmVuZGVyIDhiYmQxZGVkZTZiMjogZnJhbWUgNDIgb2YgdGhlIGhlcm8gc2hvdA==\\\"}}\",\"POST /run {\\\"params\\\":{\\\"case\\\":\\\"upper\\\",\\\"trim\\\":false},\\\"inputs\\\":{\\\"text\\\":\\\"cmVuZGVyIDhiYmQxZGVkZTZiMjogZnJhbWUgNDIgb2YgdGhlIGhlcm8gc2hvdA==\\\"}}\"]"
+    }
+  }
+}
