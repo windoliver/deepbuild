@@ -263,6 +263,8 @@ struct Played {
     runs: Vec<Vec<Drawn>>,
     limits: Limits,
     peak_bytes: Option<u64>,
+    /// The check's estimate of the view's GPU memory (#2189).
+    estimate_bytes: u64,
     seek_ms: Option<f64>,
     log: Vec<Value>,
     inputs: Vec<Value>,
@@ -287,6 +289,7 @@ fn checked(
         size,
         args_look,
         0,
+        Path::Copy,
         labels,
         Some((&raw, plants)),
         planted,
@@ -456,6 +459,7 @@ fn play(
         planted,
     )?;
     let limits = a.limits;
+    let estimate_bytes = a.fit.bytes();
     let mut kit = Kit::new(device);
     let mut view = opened(device, &mut kit, &args.look, a, labels, plants, planted)?;
     let mut timer = Timer::new(device);
@@ -481,6 +485,7 @@ fn play(
         runs: Vec::with_capacity(RUNS + 1),
         limits,
         peak_bytes: stub.map(|s| s.gpu_bytes),
+        estimate_bytes,
         seek_ms: None,
         log: Vec::new(),
         inputs: Vec::new(),
@@ -513,6 +518,7 @@ fn play(
                         Some(args.size),
                         &args.look,
                         0,
+                        Path::Copy,
                         labels,
                         None,
                         planted,
@@ -736,7 +742,7 @@ fn fixture_row(name: &str, p: &Played, reference: bool) -> (Value, Option<Timed>
             Some(b) if b <= limit => Verdict::Pass,
             Some(_) => Verdict::Fail,
         };
-        json!({"limit_bytes": limit, "verdict": same_machine(v, reference).name(), "peak_bytes": p.peak_bytes})
+        json!({"limit_bytes": limit, "verdict": same_machine(v, reference).name(), "peak_bytes": p.peak_bytes, "estimate_bytes": p.estimate_bytes})
     };
     let verdict = worst([
         frame_time
@@ -1275,6 +1281,7 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
                     Some(size),
                     &look,
                     0,
+                    Path::Copy,
                     &mut labels,
                     Some((&payload, &plants)),
                     planted,

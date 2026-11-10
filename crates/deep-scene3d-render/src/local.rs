@@ -157,6 +157,26 @@ pub fn runs(owners: &[String], only: Option<&BTreeSet<String>>) -> Vec<std::ops:
     out
 }
 
+/// What [`Locals::ensure`] makes for `scene`'s first frame (#2189): a layer of the scene's map
+/// side for each face of the shadows its light policy keeps, six for a cube and one for a spot.
+pub fn bytes(scene: &Scene) -> u64 {
+    use deep_canvas_scene3d::light::{self, LightKind};
+    let policy = scene
+        .light_cut
+        .clone()
+        .unwrap_or_else(|| light::policy(&scene.lights, &scene.camera));
+    let scores = light::scores(&scene.lights, &scene.camera);
+    let kept = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores).kept;
+    let layers: u64 = kept
+        .iter()
+        .filter(|&&(i, _)| scene.lights[i].kind != LightKind::Sun)
+        .take(SLOTS)
+        .map(|&(i, _)| if shadow::local_map(&scene.lights[i]).cube { 6 } else { 1 })
+        .sum();
+    let texel = u64::from(FORMAT.block_copy_size(None).unwrap_or(4));
+    u64::from(scene.shadowing.local_map).pow(2) * layers * texel
+}
+
 impl Locals {
     /// This frame's maps from the policy's `kept` local lights, with each one's key; true when the
     /// texture must be made again for them.
