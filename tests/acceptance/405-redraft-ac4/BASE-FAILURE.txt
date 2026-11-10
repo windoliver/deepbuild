@@ -1,0 +1,29 @@
+At base 903a1c07 (Mac17,10, M5 Max, 64 GB), on 2026-11-10, the file was not run: the one-minute load was 64 to 87 on 18
+cores, so deep-show was not built (a first build of `full` from an empty target/ adds hours of load to a shared
+machine). What each test would meet first, read from the base's code, not observed:
+
+- Both tests: `cargo build --locked --bin deep-show --no-default-features --features full` exists at the base. The
+  agent's deep_show of the figure should come back `presented`: every solid names a fill role (accent, ink, muted,
+  raised) that the shipped clean look has, which is what the scene3d.lights operator and scene3d's `paint` read
+  (crates/deep-canvas-scene3d/src/scene.rs `paint`, module.rs `lit`); `role: "part"`, `name`, `order`, `at.pos`,
+  `at.rot`, `camera`, `transport` and `requires.modules.scene3d` are fields the base's document check takes.
+
+- The geometry audit test, on the debug build: crates/deep-show/src/verdict.rs `judge` runs, of the core's kinds, only
+  document.validate, document.determinism, film.layout and honest_numbers; every other core kind, geometry.audit
+  among them, returns BLOCKED with `{code: "not_run", kind: "geometry.audit"}`, no issues and no `timing`. So it fails
+  at "the geometry audit of the 1,000-part figure, on the debug build", listing: "is BLOCKED, not FAIL", "no error of
+  the geometry audit names both part-0000 and part-0998", the same for part-0499 and part-0500, and "reports no
+  timing.check_ms". The release build and judgeLimit are never reached.
+
+- The hashing test, on the debug build: `determinism_runs` plays and seeks the figure at the five times, each side drawn
+  on the GPU (`rgba3d`) and hashed (`render_hash`), and with the still figure the hashes agree, so the row is PASS on
+  `machines: same`; but it carries no `timing`. So it fails at "determinism hashing over render time on the 1,000-part
+  figure, on the debug build", listing "reports no render time, timing.render_ms" and "reports no hashing time,
+  timing.hash_ms". On a machine with no GPU the row is BLOCKED `gpu_unavailable` and the test is INCONCLUSIVE instead.
+
+Run: `npx tsc -p tests/acceptance/405-redraft-ac4/tsconfig.json` passes (after `npm ci`, the repo's pins). A scratch
+script (not kept) ran the generator: 1,000 items in the `part` role (337 boxes, 332 cylinders, 331 spheres, the plate
+among the boxes), every part's bounds bottom at y = 0 exactly and inside the plate's footprint, exactly two pairs whose
+bounds overlap (part-0000/part-0998 and part-0499/part-0500, 0.1 m each), every other pair of parts at least 0.1 m
+apart, and the plate's four corners inside the 1920 × 1080 frame through the camera (pixels 125 to 1795 across, 303 to
+943 down); the figure's JSON is about 200 KB.

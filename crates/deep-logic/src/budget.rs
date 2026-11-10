@@ -190,11 +190,12 @@ pub fn ceiling(class: Class, step: i64, host: &str) -> i64 {
     (ms * 1e6 * 0.75 / per_frame / ns_per_fuel(host)).floor() as i64
 }
 
-/// Whether an item runs pipelined (Logic: work across steps): it steps at 30 Hz or slower, so its
-/// step k + 1 runs on the logic thread across the frames that draw k − 1 to k. Every write is
-/// linear or hold, the only two `interpolate` takes.
+/// Whether an item runs pipelined (Logic: work across steps): it steps at 30 Hz or slower on a
+/// fixed clock, so its step k + 1 runs on the logic thread across the frames that draw k − 1 to
+/// k, a linear write drawing one step late. Every write is linear or hold, the only two
+/// `interpolate` takes; a turn clock's steps run only when asked, so they stay on the frame.
 pub fn pipelined(item: &Item) -> bool {
-    item.step >= 2 * FRAME
+    item.step >= 2 * FRAME && !item.turn
 }
 
 /// What an item's steps are held to on `host`: its class's ceiling, twice the 60 Hz one when it
