@@ -206,15 +206,24 @@ pub struct Line {
     pub over: bool,
     /// Its segments are one drawn line's pieces (#149), so their caps draw no soft edge.
     pub joined: bool,
+    /// A mesh-edge line's dash and gap in its size space, each segment dashed from its start
+    /// (#1640); zeros for none.
+    pub dash: [f64; 2],
+    /// The dash is in m: as `world`, but for #1640's planted `edges_dash_other_space`.
+    pub dash_world: bool,
 }
 
-/// A mesh-edge line's mesh, its kind and the matrix that places the mesh.
+/// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
 #[derive(Clone, Debug, PartialEq)]
 pub struct EdgesOf {
     pub mesh: Arc<crate::geom::Mesh>,
     pub kind: crate::geom::EdgeKind,
     pub model: Affine3,
     pub width: f64,
+    /// The edges, on welded positions, in the mesh's space.
+    pub list: Arc<Vec<[crate::geom::V3; 2]>>,
+    /// Whether this evaluation derived `list` rather than reusing a crease set (#1640).
+    pub derived: bool,
 }
 
 impl EdgesOf {
@@ -222,7 +231,7 @@ impl EdgesOf {
     /// `edges_unwelded` reader).
     pub fn segments(&self, welded: bool) -> Vec<Segment> {
         let edges = if welded {
-            self.mesh.edge_list(self.kind, None)
+            self.list.as_ref().clone()
         } else {
             self.mesh
                 .edges(self.kind == crate::geom::EdgeKind::All, false)
@@ -693,6 +702,8 @@ pub struct Scene {
     pub water: Option<Arc<crate::water::Water>>,
     /// #166: whether the view reads back each mirror part's lookup (view3d's `reflection`).
     pub read_reflection: bool,
+    /// #268: whether the view reads back the water's foam share (view3d's `foam`).
+    pub read_foam: bool,
     /// Its light probes (#427; Light probe `light.probe@1`), each with its own capture or bake,
     /// in item order. They draw nothing in the look.
     pub probes: Vec<crate::probe::Probe>,
@@ -722,13 +733,53 @@ impl Scene {
                 .any(|s| s.material.is_some())
     }
 
+    /// #268's wrong field, reachable only through `deep-gpu --planted`: the water's shore baked
+    /// with each item's centre standing for where it meets the water.
+    pub fn plant_shore_from_centre(&mut self, doc: &Value) -> Result<(), Refused> {
+        let (Some(map), Some(water)) = (doc.as_object(), self.water.as_mut()) else {
+            return Ok(());
+        };
+        let w = Arc::make_mut(water);
+        let plates: Vec<[f64; 4]> = w.plates.iter().map(|(_, p)| *p).collect();
+        if let Some(shore) = &mut w.shore {
+            shore.field = Some(crate::shore::field(
+                map,
+                &w.material,
+                shore,
+                &self.layers,
+                &plates,
+                w.level,
+                crate::shore::Planted::FromCentre,
+            )?);
+        }
+        Ok(())
+    }
+
     /// #420 AC6's wrong programs, reachable only through `deep-gpu --planted`: mesh-edge lines
-    /// read from the unwelded mesh, or drawn over what is in front of them.
-    pub fn plant_edges(&mut self, unwelded: bool, over: bool) {
+    /// read from the unwelded mesh, or drawn over what is in front of them; and #1640's
+    /// (`crease_below_angle`, `edges_derive_every_frame`, `edges_dash_other_space`).
+    pub fn plant_edges(&mut self, unwelded: bool, over: bool, planted: Option<&str>) {
         for line in self.layers.iter_mut().flat_map(|l| &mut l.lines) {
             let Some(edges) = line.edges.clone() else {
                 continue;
             };
+            if let (crate::geom::EdgeKind::Crease { angle, border }, Some(name)) =
+                (edges.kind, planted)
+            {
+                if matches!(name, "crease_below_angle" | "edges_derive_every_frame") {
+                    let (list, derived) = edges.mesh.crease_set(angle, border, planted);
+                    let source = EdgesOf {
+                        list,
+                        derived,
+                        ..(*edges).clone()
+                    };
+                    line.segments = source.segments(true);
+                    line.edges = Some(Arc::new(source));
+                }
+            }
+            if planted == Some("edges_dash_other_space") {
+                line.dash_world = !line.world;
+            }
             if unwelded {
                 line.segments = edges.segments(false);
             }
@@ -1132,6 +1183,8 @@ fn line(items: &Items<'_>, id: &str, params: &Value, look: &Look3) -> Result<Lin
         edges: None,
         over: false,
         joined: drawn_line.is_some(),
+        dash: [0.0; 2],
+        dash_world: false,
     })
 }
 
@@ -1353,6 +1406,7 @@ fn edge_line(
     look: &Look3,
     seconds: f64,
     outlines: Outlines<'_>,
+    assets: Option<Assets<'_>>,
 ) -> Result<Line, Refused> {
     let path = format!("items/{id}/params");
     let edges = &params["edges"];
@@ -1361,10 +1415,9 @@ fn edge_line(
     let Some(item) = items.get(target) else {
         return refused("ref_unresolved", format!("{path}/edges/of"));
     };
-    let Some(kind) =
-        crate::geom::EdgeKind::named(edges.get("kind").and_then(Value::as_str).unwrap_or("quads"))
-    else {
-        return refused("out_of_range", format!("{path}/edges/kind"));
+    let kind = match crate::geom::EdgeKind::read(edges) {
+        Ok(kind) => kind,
+        Err(field) => return refused("out_of_range", format!("{path}/edges/{field}")),
     };
     let width = match params.get("width") {
         None | Some(Value::Null) => 1.5,
@@ -1373,7 +1426,23 @@ fn edge_line(
             None => return refused("out_of_range", format!("{path}/width")),
         },
     };
-    let mut mesh = mesh_of(doc, target, item, seconds, outlines)?;
+    // Its dash and gap in its size space; one length dashes as long as it gaps.
+    let dash = match params.get("dash") {
+        None | Some(Value::Null) => [0.0; 2],
+        Some(v) => match v.as_array().map(|a| a.iter().map(|x| num(Some(x))).collect()) {
+            Some(Some::<Vec<f64>>(d)) if d.iter().all(|x| *x >= 0.0) && matches!(d.len(), 1 | 2) => {
+                [d[0], d[d.len() - 1]]
+            }
+            _ => return refused("out_of_range", format!("{path}/dash")),
+        },
+    };
+    let mut mesh = match (item.get("kind").and_then(Value::as_str), assets) {
+        // A glTF asset's mesh, read as its solid is (#1640).
+        (Some("mesh.asset@1"), Some(read)) => {
+            asset_mesh(read, target, item.get("params").unwrap_or(&Value::Null))?.0
+        }
+        _ => mesh_of(doc, target, item, seconds, outlines)?,
+    };
     if let Some((_, part)) = of.split_once('#') {
         let Some(tris) = mesh
             .parts
@@ -1395,20 +1464,29 @@ fn edge_line(
         }
         mesh = only;
     }
+    let (list, derived) = match kind {
+        crate::geom::EdgeKind::Crease { angle, border } => mesh.crease_set(angle, border, None),
+        _ => (Arc::new(mesh.edge_list(kind, None)), true),
+    };
     let source = EdgesOf {
         mesh: Arc::new(mesh),
         kind,
         model: world(items, target),
         width,
+        list,
+        derived,
     };
+    let world = params.get("size_space").and_then(Value::as_str) == Some("world");
     Ok(Line {
         id: id.to_string(),
         segments: source.segments(true),
-        world: params.get("size_space").and_then(Value::as_str) == Some("world"),
+        world,
         color: paint(look, params, &path)?,
         edges: Some(Arc::new(source)),
         over: false,
         joined: false,
+        dash,
+        dash_world: world,
     })
 }
 
@@ -1739,6 +1817,8 @@ fn evaluate_any(
     };
     // #166: a wake behind an item a logic array moves, refused at check before anything else.
     crate::water::logic_moved(map)?;
+    // #268: a shore item that anything moves or reshapes, refused at check.
+    crate::shore::static_items(map)?;
     let program = Program::compile(map).map_err(|r| Refused {
         code: r.code,
         path: r.path,
@@ -2280,7 +2360,7 @@ pub(crate) fn evaluate_compiled(
                 }
                 "mark.line@1" if params.get("edges").is_some_and(|e| !e.is_null()) => {
                     let doc = doc_value.get_or_insert_with(|| Value::Object(map.clone()));
-                    let l = edge_line(doc, &items, id, params, look, seconds, outlines)?;
+                    let l = edge_line(doc, &items, id, params, look, seconds, outlines, assets)?;
                     bounds.extend(l.segments.iter().flat_map(|s| [s.a, s.b]));
                     layer.lines.push(l);
                 }
@@ -2876,6 +2956,7 @@ pub(crate) fn evaluate_compiled(
         flare,
         water: None,
         read_reflection: false,
+        read_foam: false,
         probes,
     };
     scene.set_cutaway(cutaway);
@@ -2888,6 +2969,19 @@ pub(crate) fn evaluate_compiled(
             wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
             let times = crate::water::wake_times(t, step, wake.span);
             wake.path = wake_path(map, program, &items, &w.material, &wake.item, &times)?;
+        }
+        // #268: the shore's field, baked once per key.
+        if let Some(shore) = &mut w.shore {
+            let plates: Vec<[f64; 4]> = w.plates.iter().map(|(_, p)| *p).collect();
+            shore.field = Some(crate::shore::field(
+                map,
+                &w.material,
+                shore,
+                &scene.layers,
+                &plates,
+                w.level,
+                crate::shore::Planted::None,
+            )?);
         }
         if scene.mirror.is_none() {
             scene.mirror = crate::mirror::own(&scene.layers, scene.camera.eye, &w);

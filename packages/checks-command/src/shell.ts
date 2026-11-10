@@ -2,7 +2,7 @@
 // program the read tracer can't see into, and a child that leaves the run's process group. Each is named, so the
 // run is uncounted naming it rather than claimed complete. The untraced and hidden-child rules follow check.kind@1's
 // reference runner (#314); the masks are the design's whole list.
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, readSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { blanked, maskIn, segmentsOf, wordsOf } from '@deepbuild/gate';
 import type { Filter } from './listing.js';
@@ -56,6 +56,16 @@ const installed = (at: string, writable: string[]): string | null => {
   return writable.some((w) => real === w || real.startsWith(`${w}/`)) ? null : (real.split('/').pop() ?? real);
 };
 const realOf = (at: string): string => { try { return realpathSync(at); } catch { return at; } };
+/** A file's first line as its first 200 bytes hold it, read as latin1: a `#!` line, or how a binary starts. Only those bytes are read. */
+export function firstLine(path: string): string {
+  const file = openSync(path, 'r');
+  try {
+    const head = Buffer.alloc(200);
+    return head.toString('latin1', 0, readSync(file, head, 0, 200, 0)).split('\n')[0] ?? '';
+  } finally {
+    closeSync(file);
+  }
+}
 /**
  * A program the run's tracers see into: Node, Python with its site setup, or a script one of them runs (its `#!`
  * line, through `env` or not), each as `trust` allows; or one that reads no file.
@@ -70,7 +80,7 @@ function traced(program: string, args: string[], cwd: string, path: string, trus
   if (name === 'node' || real === 'node') return trust.node && real === 'node';
   let head = '';
   try {
-    head = readFileSync(at, 'latin1').slice(0, 200).split('\n')[0] ?? '';
+    head = firstLine(at);
   } catch { /* unreadable: untraced */ }
   if (!head.startsWith('#!')) return trust.python && real !== null && PYTHON.test(real) && !isolated(args);
   if (depth > 0) return false;

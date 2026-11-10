@@ -7,7 +7,7 @@ import type { KindBudget } from '@deepbuild/conformance';
 import type { JobRecord } from '@deepbuild/runner';
 import type { ClaimCheck, Run } from '@deepbuild/verdicts';
 
-export interface ChangeSession { agent: 'claude-code' | 'codex'; transcript: string; route: SessionRoute }
+export interface ChangeSession { agent: string; transcript: string; route: SessionRoute }
 export interface ReviewAt { claim: string; commit: string; check: ClaimCheck }
 export interface Independence { answered: string; change: string; counted: boolean; reason: string | null; note: string | null }
 export interface ReviewJobRun { run: Run; independence: Independence | null }

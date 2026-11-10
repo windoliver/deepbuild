@@ -1,0 +1,72 @@
+#327 AC2 blind redraft signed per #1579 (answers-redraft-1579/ac2.test.ts), run on the base f1e8736e ("Merge pull
+request #1742 …") as built at the base export: workspaces built, deep-hook built with
+`cargo build --locked -q -p deep-hook` (Rust 1.99.1, rust-toolchain.toml), macOS, Node 24.22.0 (fnm).
+
+Command, from the export's root:
+  NO_COLOR=1 scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/327/answers-redraft-1579 --no-file-parallelism --testTimeout=600000
+
+`deep lease` ran it unleased: the export has no hub token. The Mac was loaded (load averages near 200, below).
+
+Result: FAILS on the base, at a named assertion. 1 failed, 1 passed:
+
+- "a taste call … answered by a click on C …" FAILS at its one assertion, `expect(failures).toEqual([])`
+  ("the answer C reaches the agent, delivered and acknowledged"), with one failure: the hub refused the card's answer
+  c-cobalt (C: cobalt header), `credential` at `/params/signature`, "Sign the answer with a device you paired, over
+  exactly the params it sends." The base verifies only #34's old format (`device` and a bare signature string among
+  the params), so it refuses `signature: {signed: {device, method, hub, at, once, params}, sig}`. The run stops there;
+  the judges after the answer (ask.answered, the next input, delivered once the transcript shows it) are not reached.
+- "wrong program: a card that maps the click to the record's index …" PASSES, but only because the planted card's
+  answer b-bone is refused the same way and the refusal names b-bone (B: bone header). It isn't evidence the judges
+  catch the planted card on a hub that accepts the new format.
+
+Runs before this one, disclosed:
+1. The first run hung: `cargo` wasn't on PATH (`spawn cargo ENOENT` from buildDeepHook) and both tests timed out at
+   240 s. Its output file was also overwritten by a parallel job's run. Not a result.
+2. With cargo on PATH, a run of the first draft, which typed a prompt in the session as ../answers-redraft does,
+   failed at the same assertion for another reason: "ask:… was already answered Pick a header colour for the
+   checkout total. in the session; the first answer stands, so c-cobalt counts for nothing." The base's typed-prompt
+   rule (#84, Nov 5) closed the open taste call with the typed prompt, as the design allows. The draft was changed to
+   type no prompt while the ask is open (README: Readings, 6).
+3. The changed folder's first run was BLOCKED in setup in both tests: "the hub never recorded session …'s Stop"
+   within 60 s, at load ~190. INCONCLUSIVE, not a result.
+4. A scratch diagnostic, the changed test with #34's old signer swapped back in (not part of this folder, deleted),
+   passed 2/2 on the base: the scenario without a typed prompt holds the Stop and the base passes AC2's judges with
+   the old format. So the failure below is the signature format and nothing else.
+
+The run's output (run 5), the export path shortened to <export>:
+
+ 0:54  up 2 days,  9:31, 6 users, load averages: 204.14 196.47 194.47
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/327/answers-redraft-1579 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 <export>/tests/acceptance/327/answers-redraft-1579
+
+ ❯ ac2.test.ts (2 tests | 1 failed) 26075ms
+   ❯ AC2 #327.da06e3b1 a click on C records C, the agent's next input holds C's ID and label, and delivery.outcome is delivered once the turn shows it (2)
+     × #327.da06e3b1 a taste call (A, C, B in the record; B recommended, drawn first) answered by a click on C: ask.answered records C, the session's transcript shows C's ID and label as its next input, and delivered is recorded only once it does 17427ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2.test.ts > AC2 #327.da06e3b1 a click on C records C, the agent's next input holds C's ID and label, and delivery.outcome is delivered once the turn shows it > #327.da06e3b1 a taste call (A, C, B in the record; B recommended, drawn first) answered by a click on C: ask.answered records C, the session's transcript shows C's ID and label as its next input, and delivered is recorded only once it does
+AssertionError: the answer C reaches the agent, delivered and acknowledged: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the hub refused the card's answer c-cobalt (C: cobalt header) to ask:01M6ZR9KTF7H4V87DZPTXQYM1V: {\"v\":1,\"id\":\"ask.answer#6\",\"error\":{\"code\":\"credential\",\"retryable\":false,\"remediation\":\"Sign the answer with a device you paired, over exactly the params it sends.\",\"path\":\"/params/signature\",\"actual\":\"\",\"evidence\":[]}}",
++ ]
+
+ ❯ ac2.test.ts:163:84
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  00:55:03
+   Duration  28.88s (tests 93%, transform 6%, import 1%)
+
+exit 1
+ 0:55  up 2 days,  9:32, 6 users, load averages: 207.95 198.08 195.12

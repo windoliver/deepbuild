@@ -1565,7 +1565,15 @@ impl Paints<'_> {
             return Ok(Fill::Solid(steps.color(self.step(id, &steps, &path)?)));
         }
         // #149: a noise fill draws its ramp through the drawn pass, and a named fill or line takes
-        // the ink when it names no role.
+        // the ink when it names no role; #1646: so does a dither fill its stops.
+        if let Some(n) = p.get("dither") {
+            let first = n.pointer("/stops/0");
+            return Ok(Fill::Solid(role(
+                self.palette,
+                first,
+                &format!("{path}/dither/stops/0"),
+            )?));
+        }
         if let Some(n) = p.get("noise") {
             let first = n.pointer("/stops/0/role");
             return Ok(Fill::Solid(role(
@@ -2063,6 +2071,11 @@ fn columns(
     params: &Map<String, Value>,
     verbs: &[Verb],
 ) -> Result<(Column, Column), Refused> {
+    // With neither column written, the usual shape, both are empty: no arc length is measured.
+    let written = |name: &str| params.get(name).is_some_and(|v| !v.is_null());
+    if !written("width") && !written("opacity") && ctx.planted != Planted::MergeZeroFills {
+        return Ok((Vec::new(), Vec::new()));
+    }
     let anchors = anchors_of(verbs);
     let at = anchor_lengths(verbs, anchors.len());
     let read = |name: &str| -> Result<Column, Refused> {
@@ -3132,12 +3145,13 @@ pub fn text_at(
     if let Some(template) = template_of(item) {
         // A template shows each slot's value at its own precision (Text `text@1`, `template`).
         // A keyed data value shows as the frame evaluated it (`params/data/<name>`, motion@1).
-        let mut at_t = doc.clone();
+        // A slot's value is read from `data` alone (`template::value`), so only it is copied,
+        // never the whole document.
+        let mut data = doc.get("data").cloned();
         if let Some(values) = item.pointer("/params/data").and_then(Value::as_object) {
             for (name, x) in values {
-                let entry = at_t
-                    .entry("data")
-                    .or_insert_with(|| json!({}))
+                let entry = data
+                    .get_or_insert_with(|| json!({}))
                     .as_object_mut()
                     .and_then(|d| d.get_mut(name));
                 match entry {
@@ -3151,7 +3165,7 @@ pub fn text_at(
         }
         let path = format!("items/{id}/params/template");
         let mut text = String::new();
-        let at_t = Value::Object(at_t);
+        let at_t = Value::Object(data.map(|d| ("data".to_string(), d)).into_iter().collect());
         for part in template::parts(template).or_else(|_| refuse("ref_unresolved", path.clone()))? {
             match part {
                 template::Part::Words(w) => text.push_str(w),
@@ -4211,6 +4225,20 @@ fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Va
     let mut moves = Vec::new();
     for (id, item) in items.iter() {
         let anchor = item.pointer("/at/anchor").and_then(Value::as_str);
+        // #499: an image's own anchor, `ID#name`: a point given as fractions of the image,
+        // where its box draws it.
+        if let Some((source, name)) = anchor.and_then(|a| a.split_once('#')) {
+            let image = items.get(source).filter(|s| s["kind"] == "image@1");
+            if let Some(f) = image.and_then(|s| pair(s.pointer(&format!("/params/anchors/{name}"))))
+            {
+                let s = image.expect("an image");
+                if let Some([x, y, w, h]) = four(s.pointer("/params/box")) {
+                    let p = item_pos(s);
+                    moves.push((id.clone(), [p[0] + x + f[0] * w, p[1] + y + f[1] * h]));
+                }
+                continue;
+            }
+        }
         let Some(set) = anchor.and_then(|a| a.strip_suffix("#head")) else {
             continue;
         };
@@ -4641,6 +4669,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         look.light.is_some()
             || look.strokes.is_some()
             || names("fill", ["fill", "noise"])
+            || names("fill", ["dither", "dither"])
             || names("stroke", ["line", "line"])
     });
     let kinetic = kinetic || dressing.is_some();

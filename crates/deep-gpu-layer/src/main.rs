@@ -161,6 +161,10 @@ pub enum Planted {
     FlareIgnoresOcclusion,
     /// #166: the water's foam carried from frame to frame as simulation state.
     WaterFoamKeepsState,
+    /// #268: the shore's field measured from each item's centre, not where it meets the water.
+    ShoreFieldFromCentre,
+    /// #268: waves at full amplitude by the shore, ignoring its field.
+    ShoreCalmIgnoresField,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -211,6 +215,11 @@ pub enum Planted {
     SamplerHoldsCamera,
     EdgesUnwelded,
     EdgesSkipDepth,
+    /// #1640's: crease lines keep the edges below their angle, derive their set every frame, or
+    /// read their dash in the other size space.
+    CreaseBelowAngle,
+    EdgesDeriveEveryFrame,
+    EdgesDashOtherSpace,
     ReleasesAtRevision,
     /// #417's: the look switch's clock stops at the request, before the new look is on screen.
     StopsAtRequest,
@@ -259,6 +268,11 @@ pub enum Planted {
     IdsByCompactedRow,
     RowAsElement,
     DispatchWithoutGuard,
+    /// #1637's wrong programs (tests/acceptance/1637/README.md: Planted programs).
+    PyramidFromPreviousFrame,
+    OcclusionByCentre,
+    OcclusionInCascades,
+    OcclusionInProbeCaptures,
     IdsIgnoreMask,
     CutsColorOnly,
     SoftNoiseFromFrame,
@@ -301,6 +315,10 @@ pub enum Planted {
     OrenNayarUncompensated,
     RetroreflectionIgnored,
     FlakesByPixel,
+    // #481: the subsurface spread takes every tap, whatever part it lands on; the spread light is
+    // added to the whole diffuse.
+    SubsurfaceAcrossParts,
+    SubsurfaceAddsToDiffuse,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -396,6 +414,8 @@ impl Planted {
             "flare_fixed_ghosts" => Planted::FlareFixedGhosts,
             "flare_ignores_occlusion" => Planted::FlareIgnoresOcclusion,
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
+            "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
+            "shore_calm_ignores_field" => Planted::ShoreCalmIgnoresField,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
@@ -431,6 +451,9 @@ impl Planted {
             "sampler_holds_camera" => Planted::SamplerHoldsCamera,
             "edges_unwelded" => Planted::EdgesUnwelded,
             "edges_skip_depth" => Planted::EdgesSkipDepth,
+            "crease_below_angle" => Planted::CreaseBelowAngle,
+            "edges_derive_every_frame" => Planted::EdgesDeriveEveryFrame,
+            "edges_dash_other_space" => Planted::EdgesDashOtherSpace,
             "releases_at_revision" => Planted::ReleasesAtRevision,
             "stops_at_request" => Planted::StopsAtRequest,
             "winding_ignores_determinant" => Planted::WindingIgnoresDeterminant,
@@ -465,6 +488,10 @@ impl Planted {
             "ids_by_compacted_row" => Planted::IdsByCompactedRow,
             "row_as_element" => Planted::RowAsElement,
             "dispatch_without_guard" => Planted::DispatchWithoutGuard,
+            "pyramid_from_previous_frame" => Planted::PyramidFromPreviousFrame,
+            "occlusion_by_centre" => Planted::OcclusionByCentre,
+            "occlusion_in_cascades" => Planted::OcclusionInCascades,
+            "occlusion_in_probe_captures" => Planted::OcclusionInProbeCaptures,
             "ids_ignore_mask" => Planted::IdsIgnoreMask,
             "cut_color_only" => Planted::CutsColorOnly,
             "soft_noise_from_frame" => Planted::SoftNoiseFromFrame,
@@ -501,6 +528,8 @@ impl Planted {
             "oren_nayar_uncompensated" => Planted::OrenNayarUncompensated,
             "retroreflection_ignored" => Planted::RetroreflectionIgnored,
             "flakes_by_pixel" => Planted::FlakesByPixel,
+            "subsurface_across_parts" => Planted::SubsurfaceAcrossParts,
+            "subsurface_adds_to_diffuse" => Planted::SubsurfaceAddsToDiffuse,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,

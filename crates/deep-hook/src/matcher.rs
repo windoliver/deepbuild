@@ -27,7 +27,9 @@
 //! - `effect:<class>`: a call with that effect: `cloud-resource` (a command that creates one), `dependency`
 //!   (adds a package), `service` (starts a long-running one), `top-level-folder` (makes a folder at the
 //!   checkout's top), or `unknown-reach-delete` (a delete run from a script file or over a pattern or a value
-//!   the line can't know, so what it deletes can't be worked out before it runs), `discard-edits` (git discards
+//!   the line can't know, so what it deletes can't be worked out before it runs), `unrestorable-delete` (a delete
+//!   whose known target lies outside the session's worktree and temporary folders or holds the worktree, such as
+//!   `rm -rf ../sibling` or `rm -rf ~/`, or a `git clean` that deletes, #1507), `discard-edits` (git discards
 //!   uncommitted edits to tracked files: a hard reset, a path checkout or restore, a forced switch, `rm` or
 //!   `worktree remove`, `read-tree -u --reset`, `checkout-index -f`, or `--abort` or `--skip` of a merge, rebase,
 //!   cherry-pick, revert or am), `drop-stash`
@@ -92,6 +94,7 @@ const EFFECTS: &[&str] = &[
     "service",
     "top-level-folder",
     "unknown-reach-delete",
+    "unrestorable-delete",
     "discard-edits",
     "drop-stash",
     "push",
@@ -246,7 +249,7 @@ impl Call {
                     unread: None,
                     ..(*run).clone()
                 };
-                has_effect(&known, rest)
+                self.has_effect(&known, rest)
             }),
             _ => false,
         };
@@ -320,9 +323,30 @@ impl Call {
                 } else {
                     (&self.reads, &self.by.1, "reads")
                 };
+                if paths.is_empty() {
+                    return None;
+                }
+                // Each glob and each path is spelled out once, its links resolved, not once per pair
+                // of them; the exceptions only once some glob matches.
+                let globs: Vec<Vec<String>> =
+                    globs.iter().map(|g| self.glob_spellings(g)).collect();
+                let mut excepted: Option<Vec<Vec<String>>> = None;
+                let any = |globs: &[Vec<String>], forms: &[String]| {
+                    globs.iter().any(|g| {
+                        forms
+                            .iter()
+                            .any(|text| g.iter().any(|p| glob_path(p.as_bytes(), text.as_bytes())))
+                    })
+                };
                 let k = paths.iter().position(|w| {
-                    globs.iter().any(|g| self.path_matches(g, w))
-                        && !but.iter().any(|g| self.path_matches(&g[1..], w))
+                    let forms = self.path_spellings(w);
+                    any(&globs, &forms)
+                        && !any(
+                            excepted.get_or_insert_with(|| {
+                                but.iter().map(|g| self.glob_spellings(&g[1..])).collect()
+                            }),
+                            &forms,
+                        )
                 })?;
                 // A redirection isn't one of its run's words, so the call's own line names it.
                 let ran = match (by[k], &self.command) {
@@ -396,6 +420,97 @@ impl Call {
             }
         }
         Some(outermost(folders))
+    }
+
+    /// What a delete that reaches past its worktree reaches, for the hub to stage before it runs (#1507): each path
+    /// past the worktree it deletes, and for `git clean` the folder it works in. None when that folder can't be known.
+    pub fn past(&self) -> Option<Vec<PathBuf>> {
+        let mut paths: Vec<PathBuf> = Vec::new();
+        for run in self.runs.iter().filter(|r| self.unrestorable(r)) {
+            if run.is("git") {
+                paths.push(lexical(&git_cwd(run)?));
+            } else {
+                paths.extend(self.past_targets(run));
+            }
+        }
+        Some(outermost(paths))
+    }
+
+    /// The session's worktree: the checkout that holds its folder, or the folder itself outside a checkout.
+    fn worktree(&self) -> Option<PathBuf> {
+        let cwd = self.cwd.as_deref()?;
+        Some(checkout(cwd).map_or_else(|| real(cwd), |c| c.root))
+    }
+
+    /// The paths a delete whose words the line knows deletes, as written; a relative one only where the run's folder is known.
+    fn deleted(&self, run: &Run) -> Vec<PathBuf> {
+        let named = targets(run);
+        let texts: Vec<&str> = if run.is("find") && named.is_empty() {
+            vec!["."]
+        } else {
+            named.iter().filter_map(|a| a.text.as_deref()).collect()
+        };
+        texts
+            .into_iter()
+            .filter_map(|t| match &run.cwd {
+                _ if t == "~" || t.starts_with("~/") || t.starts_with('/') => {
+                    Some(self.path_in(Path::new("/"), t))
+                }
+                Some(cwd) => Some(self.path_in(cwd, t)),
+                None => None,
+            })
+            .collect()
+    }
+
+    /// What a delete's paths reach past the session's worktree: each that holds the worktree, or lies outside it and
+    /// outside the temporary folders. The home folder is never a temporary one, even under /tmp. `find` and `rsync`
+    /// delete under the path they name, so naming the worktree itself stays inside it; `rm` deletes the path.
+    fn past_targets(&self, run: &Run) -> Vec<PathBuf> {
+        let worktree = self.worktree();
+        let home = real(&self.home);
+        let tmp = real(&std::env::temp_dir());
+        let shared = ["/tmp", "/private/tmp", "/var/tmp"].map(|t| real(Path::new(t)));
+        let under = run.is("find") || run.is("rsync");
+        self.deleted(run)
+            .into_iter()
+            .filter(|path| {
+                // What the delete removes is the entry itself, so its folder's links are read and its name isn't.
+                let at = match (path.parent(), path.file_name()) {
+                    (Some(up), Some(name)) => real(up).join(name),
+                    _ => real(path),
+                };
+                let temp = !at.starts_with(&home)
+                    && std::iter::once(&tmp)
+                        .chain(&shared)
+                        .any(|t| at.starts_with(t) && at != *t);
+                match &worktree {
+                    Some(w) if w.starts_with(&at) => !(under && *w == at),
+                    Some(w) => !(at.starts_with(w) || temp),
+                    None => !temp,
+                }
+            })
+            .collect()
+    }
+
+    /// Whether a run deletes what git can't restore, its reach known: a `git clean` that deletes, or a delete whose
+    /// known target reaches past the session's worktree (#1507). A delete whose reach can't be worked out is the
+    /// other class's.
+    fn unrestorable(&self, run: &Run) -> bool {
+        if !deletes(run) || unknown_reach(run) {
+            return false;
+        }
+        if run.is("git") {
+            return cleans(run);
+        }
+        !self.past_targets(run).is_empty()
+    }
+
+    /// Whether a run has the effect `class`; top-level-folder is the call's, not a run's.
+    fn has_effect(&self, run: &Run, class: &str) -> bool {
+        if class == "unrestorable-delete" {
+            return self.unrestorable(run);
+        }
+        has_effect(run, class)
     }
 
     /// `text` as the path it is in `cwd`, `~` read as the home folder.
@@ -528,6 +643,10 @@ impl Call {
 
     fn effect(&self, class: &str) -> Option<Hit> {
         if class == "top-level-folder" {
+            // A call that writes nothing makes no folder: its checkout is never looked up.
+            if self.writes.is_empty() {
+                return None;
+            }
             let root = checkout(self.cwd.as_deref()?)?.root;
             let new = self.writes.iter().zip(&self.by.0).find_map(|(w, by)| {
                 let rest = real(w).strip_prefix(&root).ok()?.to_path_buf();
@@ -547,7 +666,7 @@ impl Call {
                 detail: Some(format!("It makes the top-level folder {}.", new.display())),
             });
         }
-        let found = self.runs.iter().find(|r| has_effect(r, class));
+        let found = self.runs.iter().find(|r| self.has_effect(r, class));
         found.map(|run| {
             let detail = if class == "unknown-reach-delete" {
                 let why = if run.scripted {
@@ -559,6 +678,22 @@ impl Call {
                     "What it deletes can't be worked out before it runs: {why}. It runs: {}",
                     command_of(run)
                 )
+            } else if class == "unrestorable-delete" {
+                let what = if run.is("git") {
+                    "what it removes is untracked or ignored".to_string()
+                } else {
+                    let past = self.past_targets(run);
+                    let shown: Vec<String> = past.iter().map(|p| p.display().to_string()).collect();
+                    let worktree = self.worktree().map_or_else(
+                        || "this session's worktree".to_string(),
+                        |w| format!("this session's worktree {}", w.display()),
+                    );
+                    format!(
+                        "it deletes {}, which reach past {worktree}",
+                        shown.join(", ")
+                    )
+                };
+                format!("Git can't restore it: {what}. It runs: {}", command_of(run))
             } else if class == "discard-edits" || class == "drop-stash" {
                 format!("To run it yourself: {}", command_of(run))
             } else if class == "merge" {
@@ -572,7 +707,9 @@ impl Call {
         })
     }
 
-    fn path_matches(&self, pattern: &str, written: &Path) -> bool {
+    /// A path glob as it is matched whole: as written and, when anchored, with its literal part's
+    /// links resolved; one that isn't anchored matches under any folder.
+    fn glob_spellings(&self, pattern: &str) -> Vec<String> {
         let pattern = match pattern.strip_prefix("~/") {
             Some(rest) => format!("{}/{rest}", self.home.display()),
             None if pattern == "~" => self.home.display().to_string(),
@@ -596,26 +733,39 @@ impl Call {
         if cfg!(feature = "plant-paths-as-written") {
             patterns.truncate(1);
         }
+        patterns
+            .iter()
+            .map(|p| {
+                let p = same_name(p);
+                if anchored {
+                    p
+                } else {
+                    format!("*/{p}")
+                }
+            })
+            .collect()
+    }
+
+    /// A path as a glob is matched against it: as written and as its links resolve.
+    fn path_spellings(&self, written: &Path) -> Vec<String> {
+        // The planted twin matches the path only as written.
         let forms = if cfg!(feature = "plant-paths-as-written") {
             vec![lexical(written)]
         } else {
             vec![lexical(written), real(written)]
         };
-        let patterns: Vec<String> = patterns.iter().map(|p| same_name(p)).collect();
-        forms.iter().any(|form| {
-            let text = same_name(&form.to_string_lossy());
-            patterns.iter().any(|p| {
-                if anchored {
-                    glob_path(p.as_bytes(), text.as_bytes())
-                } else {
-                    glob_path(format!("*/{p}").as_bytes(), text.as_bytes())
-                }
-            })
-        })
+        forms
+            .iter()
+            .map(|form| same_name(&form.to_string_lossy()))
+            .collect()
     }
 
     /// The other checkout a git run is aimed at, and the command for you to run there.
     fn other_checkout(&self) -> Option<String> {
+        // A call that runs no git is aimed at no checkout: its own is never looked up.
+        if !self.runs.iter().any(|r| r.is("git")) {
+            return None;
+        }
         let own = checkout(self.cwd.as_deref()?)?;
         for run in self.runs.iter().filter(|r| r.is("git")) {
             let Some(theirs) = git_target(run) else {
@@ -805,7 +955,9 @@ fn programs(class: &str) -> &'static [&'static str] {
         "service" => &[
             "docker", "podman", "docker-compose", "brew", "systemctl", "launchctl", "pm2",
         ],
-        "unknown-reach-delete" => &["rm", "unlink", "shred", "srm", "find", "git", "rsync"],
+        "unknown-reach-delete" | "unrestorable-delete" => {
+            &["rm", "unlink", "shred", "srm", "find", "git", "rsync"]
+        }
         "push" => &["git", "jj", "sl", "gt", "git-town"],
         "pr" => &["gh", "glab", "gt", "git", "git-town", "sl"],
         "merge" => &["gh", "glab", "gt", "git", "git-town"],
@@ -849,6 +1001,21 @@ fn targets(run: &Run) -> Vec<&Arg> {
         return plain.last().copied().into_iter().collect();
     }
     plain
+}
+
+/// Whether a `git clean` deletes: forced, and not a dry run.
+fn cleans(run: &Run) -> bool {
+    let rest = git_rest(run);
+    let before: Vec<&str> = rest
+        .iter()
+        .skip(1)
+        .map(String::as_str)
+        .take_while(|w| *w != "--")
+        .collect();
+    let has = |name: &str, c: char| before.iter().any(|w| long(w, name) || short(w, c));
+    rest.first().map(String::as_str) == Some("clean")
+        && has("--force", 'f')
+        && !has("--dry-run", 'n')
 }
 
 fn deletes(run: &Run) -> bool {
@@ -1596,10 +1763,11 @@ fn checkout(dir: &Path) -> Option<Checkout> {
         let dot = at.join(".git");
         if let Ok(meta) = fs::metadata(&dot) {
             return Some(if meta.is_dir() {
+                let git = real(&dot);
                 Checkout {
                     root: at.clone(),
-                    gitdir: real(&dot),
-                    common: real(&dot),
+                    gitdir: git.clone(),
+                    common: git,
                 }
             } else {
                 let gitdir = gitdir_of(&dot, &at)?;
@@ -2285,5 +2453,97 @@ mod tests {
         assert_eq!(stash("git stash drop \"$E\""), None);
         // The second drop's stash@{0} is the first one's stash@{1}.
         assert_eq!(stash("git stash drop && git stash drop"), None);
+    }
+
+    /// A call in `cwd`, a fresh checkout under `/w`'s stand-in: no `.git` on disk, so the folder is the worktree.
+    fn bash_in(line: &str, cwd: &Path, home: &Path) -> Call {
+        Call::new(
+            "Bash",
+            Some(line),
+            (&[], false),
+            Some(cwd),
+            home,
+            &home.join(".deepbuild/hub.sock"),
+        )
+    }
+
+    #[test]
+    fn a_delete_past_its_worktree_is_unrestorable_and_one_inside_it_is_free() {
+        let home = std::env::temp_dir().join(format!("dh1507-home-{}", std::process::id()));
+        let repo = home.join("work/repo");
+        fs::create_dir_all(repo.join(".git")).unwrap();
+        fs::create_dir_all(home.join("work/sibling")).unwrap();
+        let home = real(&home);
+        let repo = real(&repo);
+        let past = |line: &str| {
+            bash_in(line, &repo, &home)
+                .matches("effect:unrestorable-delete")
+                .is_some()
+        };
+        for line in [
+            "rm -rf tests/ plan/ ~/",
+            "rm -rf ~",
+            "rm -rf /",
+            "rm -rf ..",
+            "rm -rf ../sibling",
+            "unlink ../sibling/a",
+            "shred -u ~/notes.txt",
+            "find .. -delete",
+            "rsync -a --delete empty/ ../sibling/",
+            "cd .. && rm -rf repo",
+            "git clean -fdx",
+            "git clean -f",
+            "git -C ../sibling clean -fd",
+            "git clean --force -d",
+        ] {
+            assert!(past(line), "{line} reaches past its worktree");
+        }
+        for line in [
+            "rm -rf node_modules",
+            "rm -rf build/",
+            "rm -rf ./build ../repo/dist",
+            "rm /tmp/x",
+            "find . -name '*.o' -delete",
+            "find -delete",
+            "rsync -a --delete src/ out/",
+            "git clean -n",
+            "git clean -fdn",
+            "git clean --dry-run -f",
+            "git clean",
+            "ls ~",
+            // A pattern's or a value's reach can't be worked out: the other class's (#347).
+            "rm -rf ../*",
+            "rm -rf \"$OUT\"",
+        ] {
+            assert!(!past(line), "{line} stays inside, or is the other class's");
+        }
+        // A folder with no checkout counts its working folder as the worktree.
+        let bare = home.join("scratch");
+        fs::create_dir_all(&bare).unwrap();
+        let free = |line: &str| {
+            bash_in(line, &bare, &home)
+                .matches("effect:unrestorable-delete")
+                .is_none()
+        };
+        assert!(free("rm -rf out"));
+        assert!(!free("rm -rf ../work"));
+        // The home folder is never a temporary folder, even under /tmp.
+        let hit = bash_in("rm -rf ~/", &repo, &home)
+            .matches("effect:unrestorable-delete")
+            .unwrap();
+        assert!(hit.detail.unwrap().contains(&home.display().to_string()));
+        assert_eq!(
+            bash_in("rm -rf tests/ plan/ ~/", &repo, &home).past(),
+            Some(vec![home.clone()])
+        );
+        assert_eq!(
+            bash_in("rm -rf ../sibling build", &repo, &home).past(),
+            Some(vec![home.join("work/sibling")])
+        );
+        assert_eq!(
+            bash_in("git clean -fdx", &repo, &home).past(),
+            Some(vec![repo.clone()])
+        );
+        let _ = fs::remove_dir_all(&home);
     }
 }

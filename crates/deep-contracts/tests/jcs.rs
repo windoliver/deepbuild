@@ -31,6 +31,39 @@ fn an_object_with_many_keys_parses_in_linear_time() {
 }
 
 #[test]
+fn a_repeated_key_keeps_its_first_place_and_its_last_value_in_a_small_object_and_a_large_one() {
+    use deep_contracts::Value;
+    for count in [2, 16, 17, 18, 40] {
+        // Every key twice over, then the first and the last a third time.
+        let keys: Vec<String> = (0..count).map(|i| format!("k{i}")).collect();
+        let mut members: Vec<String> = Vec::new();
+        for round in 0..2 {
+            members.extend(
+                keys.iter()
+                    .enumerate()
+                    .map(|(i, k)| format!("\"{k}\":{}", round * 100 + i)),
+            );
+        }
+        members.push(format!("\"{}\":-1", keys[0]));
+        members.push(format!("\"{}\":-2", keys[count - 1]));
+        let read = deep_contracts::parse(&format!("{{{}}}", members.join(","))).expect("JSON");
+        let expected: Vec<(String, Value)> = keys
+            .iter()
+            .enumerate()
+            .map(|(i, k)| {
+                let last = match i {
+                    0 => -1.0,
+                    i if i == count - 1 => -2.0,
+                    i => (100 + i) as f64,
+                };
+                (k.clone(), Value::Number(last))
+            })
+            .collect();
+        assert_eq!(read, Value::Object(expected), "{count} keys");
+    }
+}
+
+#[test]
 fn a_seq_is_never_negative() {
     assert!(deep_contracts::Seq::new(-1).is_none());
     assert_eq!(

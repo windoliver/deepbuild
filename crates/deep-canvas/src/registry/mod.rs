@@ -165,6 +165,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),
     ("effect", "scene3d"),
+    // #1732: placement by relation in 3D is the motion module's.
+    ("arrange", "motion"),
 ];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
@@ -386,6 +388,9 @@ pub struct Kind {
     pub preview: Option<String>,
     /// Its one-line description, as the sheet `deep_kinds` serves prints it (#412).
     pub description: Option<String>,
+    /// The param naming an asset whose probe the check reads (#499): the core has the decode
+    /// worker probe it, so a module reads an asset without the media module.
+    pub probes: Option<String>,
 }
 
 /// An array, with one writer: its owner (canvas primitives: Array and table).
@@ -745,7 +750,16 @@ impl Registrar {
             deprecated: None,
             preview: None,
             description: None,
+            probes: None,
         });
+        self
+    }
+
+    /// The last kind registered reads the probe of the asset its param `param` names (#499).
+    pub fn probes(&mut self, param: &str) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.probes = Some(param.into());
+        }
         self
     }
 
@@ -1277,6 +1291,8 @@ pub struct Sealed {
     left_out: BTreeMap<String, String>,
     /// `family.name` → the missing optional module whose array the kind needs.
     left_out_kinds: BTreeMap<String, String>,
+    /// The core's kinds plus every kind the sealed modules register, built once at the seal.
+    kinds: crate::kinds::Registry,
     /// A d1 digest over the sorted modules' names, versions and digests.
     pub set_digest: String,
     /// Each canvas interface, by name, with its digest and the implementation the build chose.
@@ -1432,6 +1448,16 @@ impl Sealed {
             .map(|k| k.draws_as.as_str())
     }
 
+    /// The param of `kind_text` naming an asset the decode worker probes at check (#499).
+    pub fn probed_param(&self, kind_text: &str) -> Option<&str> {
+        let (full, major) = crate::kinds::parse_kind(kind_text)?;
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.kinds.iter())
+            .find(|k| k.entry.is(&full) && k.entry.version(major).is_some())
+            .and_then(|k| k.probes.as_deref())
+    }
+
     /// The `rect@1` params a sealed module's kind draws as, when it registered a drawing.
     pub fn draw_of(&self, kind_text: &str) -> Option<DrawFn> {
         let (full, major) = crate::kinds::parse_kind(kind_text)?;
@@ -1495,13 +1521,12 @@ impl Sealed {
 
     /// The core's kinds plus every kind the sealed modules register.
     pub fn kinds(&self) -> crate::kinds::Registry {
-        let mut out = crate::kinds::registry();
-        out.extend(
-            self.modules
-                .iter()
-                .flat_map(|m| m.shapes.kinds.iter().map(|k| k.entry.clone())),
-        );
-        out
+        self.kinds.clone()
+    }
+
+    /// [`Sealed::kinds`], lent: what each check and each patch's recheck reads.
+    pub(crate) fn kinds_ref(&self) -> &crate::kinds::Registry {
+        &self.kinds
     }
 
     /// `(deprecated_since, replaced_by)` of the kind `family.name`, once a module deprecated it.
@@ -2020,7 +2045,7 @@ impl Registry {
                 .chain(r.tables.iter().map(|t| &t.name))
                 .find(|n| {
                     !n.starts_with(&own)
-                        || !well_named(n)
+                        || !id_named(n)
                         || known
                             .iter()
                             .any(|k| k.len() > name.len() && n.starts_with(&format!("{k}.")))
@@ -2030,7 +2055,7 @@ impl Registry {
                     "not_own_name",
                     &[name],
                     &[misnamed],
-                    format!("`{name}` registers `{misnamed}`; an array or table of `{name}` is named `{name}.<x>` in [a-z0-9]+ segments, with no other module's name between"),
+                    format!("`{name}` registers `{misnamed}`; an array or table of `{name}` is named `{name}.<x>` in ID segments ([a-z0-9][a-z0-9_-]*), with no other module's name between"),
                 ));
             }
         }
@@ -2963,6 +2988,12 @@ impl Registry {
                 .collect(),
         ))
         .map_err(|e| SealError::new("bad_shape", &[], &[], e.to_string()))?;
+        let mut kinds = crate::kinds::registry();
+        kinds.extend(
+            modules
+                .iter()
+                .flat_map(|m| m.shapes.kinds.iter().map(|k| k.entry.clone())),
+        );
         Ok(Sealed {
             build_set: self.build_set,
             modules,
@@ -2974,6 +3005,7 @@ impl Registry {
             fixtures,
             left_out,
             left_out_kinds,
+            kinds,
             set_digest,
             interfaces,
             interface_ns,
@@ -3087,6 +3119,18 @@ pub(crate) fn well_named(name: &str) -> bool {
         && name
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.')
+}
+
+/// An array's or table's name: segments joined by `.`, each as the ID grammar's
+/// (`[a-z0-9][a-z0-9_-]{0,47}`; canvas primitives: Value types, `ID`).
+pub(crate) fn id_named(name: &str) -> bool {
+    name.split('.').all(|seg| {
+        let b = seg.as_bytes();
+        !b.is_empty()
+            && b.len() <= 48
+            && (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
+            && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
+    })
 }
 
 /// True when `name`'s manifest names `dep` in `depends_on`; every module reads the core's own.

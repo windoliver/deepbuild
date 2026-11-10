@@ -10,17 +10,25 @@ use serde_json::{json, Map, Value};
 use crate::device::Device;
 use crate::hub::{HubClient, HubError};
 
-/// Signs `params`, the card's `ask.answer` params, and sends them. A device the hub no longer knows, as after a restore,
-/// pairs again, once.
+/// Signs `params`, the card's `ask.answer` params, for `ask.answer` on this hub, and sends them. A device the hub no
+/// longer knows, as after a restore, pairs again, once.
 pub fn send(params: &Value) -> Result<Value, HubError> {
     let mut client = HubClient::app()?;
     let params = params.as_object().cloned().unwrap_or_default();
+    // The hub's ID, as its hello names it: what the signature is for (#1579).
+    let hub = client.hello["hub"].as_str().unwrap_or_default().to_owned();
     let device = Device::paired(&mut client)?;
-    match client.call("ask.answer", device.sign(params.clone())) {
-        Err(HubError::Refused(refusal)) if refusal["code"] == "credential" => {
+    match client.call(
+        "ask.answer",
+        device.sign("ask.answer", &hub, params.clone())?,
+    ) {
+        Err(HubError::Refused(refusal))
+            if refusal["code"] == "credential"
+                && refusal["path"] == "/params/signature/signed/device" =>
+        {
             Device::forget();
             let device = Device::paired(&mut client)?;
-            client.call("ask.answer", device.sign(params))
+            client.call("ask.answer", device.sign("ask.answer", &hub, params)?)
         }
         reply => reply,
     }

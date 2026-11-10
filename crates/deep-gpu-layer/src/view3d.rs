@@ -58,6 +58,8 @@ struct Args {
     capture: Capture,
     /// #166: each captured frame lists the rain rings alive on each water part.
     rings: bool,
+    /// #268: each captured frame reports the water's shore field: its key, bytes and bake time.
+    shore: bool,
     /// Operator outputs each captured frame reads back (#483).
     read: Vec<String>,
     /// `cull: "cpu"`: the document drawn from the CPU's f64 cull, the reference a GPU frame is
@@ -65,6 +67,8 @@ struct Args {
     cull_on_cpu: bool,
     /// Each captured frame reports what each culled list kept (#484).
     cull_report: bool,
+    /// `occlusion: "off"`: the camera's lists culled by the frustum alone (#1637).
+    occlusion_off: bool,
     /// `(after, to)`: right after frame `after` draws, the session jumps to frame `to` (#484).
     seeks: Vec<(u64, u64)>,
     window: Option<Window3>,
@@ -310,10 +314,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
                 | "backdrop"
                 | "depth"
                 | "reflection"
+                | "foam"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth and reflection",
+            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection and foam",
         ));
     }
     let export = match call["class"].as_str() {
@@ -417,6 +422,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         targets,
         capture,
         rings: call["rings"].as_bool().unwrap_or(false),
+        shore: call["shore"].as_bool().unwrap_or(false),
         read: call["read"]
             .as_array()
             .map(|r| {
@@ -431,6 +437,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
             Some(_) => return Err(refused("bad_input", "cull is \"cpu\" when it's given")),
         },
         cull_report: call["cull_report"].as_bool().unwrap_or(false),
+        occlusion_off: match call["occlusion"].as_str() {
+            None => false,
+            Some("off") => true,
+            Some(_) => return Err(refused("bad_input", "occlusion is \"off\" when it's given")),
+        },
         seeks: call["seeks"]
             .as_array()
             .into_iter()
@@ -965,6 +976,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if args.cull_on_cpu {
         session3::cull_on_cpu(app);
     }
+    session3::set_occlusion(app, !args.occlusion_off);
     // The core targets the document's operators read, built only then (#431); the planted core
     // builds both for every frame.
     let builds_all = app.planted == Some(Planted::BuildsUnreadTargets);
@@ -1010,6 +1022,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         "backdrop",
         "depth",
         "reflection",
+        "foam",
     ]
     .iter()
     .any(|t| args.targets.contains(*t));
@@ -1074,6 +1087,13 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
+        // #1640's wrong programs for mesh-edge lines, by their planted names.
+        let edge_plant = match app.planted {
+            Some(Planted::CreaseBelowAngle) => Some("crease_below_angle"),
+            Some(Planted::EdgesDeriveEveryFrame) => Some("edges_derive_every_frame"),
+            Some(Planted::EdgesDashOtherSpace) => Some("edges_dash_other_space"),
+            _ => None,
+        };
         for n in frame_order(args.from, args.frames, &args.seeks) {
             let frame_started = std::time::Instant::now();
             // A seek applies every patch up to the frame it opens at.
@@ -1190,8 +1210,22 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             scene.plant_edges(
                 app.planted == Some(Planted::EdgesUnwelded),
                 app.planted == Some(Planted::EdgesSkipDepth),
+                edge_plant,
             );
+            // #268's wrong field: the shore measured from each item's centre.
+            if app.planted == Some(Planted::ShoreFieldFromCentre) {
+                scene
+                    .plant_shore_from_centre(&composed)
+                    .map_err(|r| refused(r.code, r.path))?;
+            }
             let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
+            // How many times this frame derived each mesh-edge line's edge set (#1640).
+            let edge_sets_derived: Map<String, Value> = scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.lines)
+                .filter_map(|l| Some((l.id.clone(), json!(u32::from(l.edges.as_ref()?.derived)))))
+                .collect();
             // Each mesh-edge line's segments, in world metres, as `counts` reports them.
             let edge_segments: Map<String, Value> = scene
                 .layers
@@ -1211,6 +1245,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             // #166: each mirror part's lookup, read back as the `reflection` target.
             scene.read_reflection = args.targets.contains("reflection");
+            // #268: the water's foam share, read back as the `foam` target.
+            scene.read_foam = args.targets.contains("foam");
+            let shore = (args.shore)
+                .then(|| {
+                    let w = scene.water.as_ref()?;
+                    let f = w.shore.as_ref()?.field.clone()?;
+                    Some((w.material.clone(), f))
+                })
+                .flatten();
             let rings = (args.rings).then(|| {
                 scene.water.as_ref().map_or(Vec::new(), |w| {
                     w.rings()
@@ -1345,6 +1388,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             let edges = (
                 app.planted == Some(Planted::EdgesUnwelded),
                 app.planted == Some(Planted::EdgesSkipDepth),
+                edge_plant,
             );
             let at_time = |tk: i64, labels: &mut Labels| -> Result<Scene, Value> {
                 let mut sc = evaluate_sourced(&composed, tk, &args.look, labels, &read, outlines)
@@ -1352,7 +1396,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 sc.texels.clone_from(&scene.texels);
                 sc.ground = scene.ground;
                 sc.set_cutaway(scene.cutaway.clone());
-                sc.plant_edges(edges.0, edges.1);
+                sc.plant_edges(edges.0, edges.1, edges.2);
                 if let Some(status) = status.as_ref().filter(|_| bound) {
                     status::strokes(&mut sc, status, &bindings, &args.states)?;
                 }
@@ -1775,6 +1819,21 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 if let Some(rings) = &rings {
                     frame.insert("rings".into(), json!(rings));
                 }
+                if let (Some(f), true) = (&drawn.foam, args.targets.contains("foam")) {
+                    frame.insert("foam".into(), json!(write_named(out, f, "f32")?));
+                }
+                if let Some((material, f)) = &shore {
+                    let bytes: Vec<u8> = f.cells.iter().flat_map(|c| c.to_le_bytes()).collect();
+                    frame.insert(
+                        "shore".into(),
+                        json!({
+                            "material": material,
+                            "key": f.key,
+                            "field": write_named(out, &bytes, "bin")?,
+                            "bake_ms": f.bake_ms,
+                        }),
+                    );
+                }
                 if !args.read.is_empty() {
                     // Each operator output as it stood when this frame drew (#483).
                     let (keys, fx2, dir) = (args.read.clone(), fx.clone(), out.to_string());
@@ -1866,6 +1925,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
                 frame.insert("compiled".into(), json!(compiled));
                 frame.insert("segments".into(), Value::Object(edge_segments));
+                frame.insert("edge_sets_derived".into(), Value::Object(edge_sets_derived));
             }
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));
@@ -1881,6 +1941,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     }));
                 }
                 frame.insert("cull".into(), json!(rows));
+                // #1637: the whole items each pass drew.
+                let mut items = Vec::new();
+                for (view, kept) in session3::kept_items(app) {
+                    let file =
+                        write_named(out, &serde_json::to_vec(&kept).unwrap_or_default(), "json")?;
+                    items.push(json!({"view": view, "count": kept.len(), "kept": file}));
+                }
+                frame.insert("kept_items".into(), json!(items));
             }
             if args.light_cut {
                 frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));
@@ -1942,6 +2010,12 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
                 frame.insert("cpu_ms".into(), json!(cpu_ms));
                 frame.insert("passes_ms".into(), json!(passes));
+                let declared: serde_json::Map<String, Value> = drawn
+                    .declared
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), json!(v)))
+                    .collect();
+                frame.insert("declared_ms".into(), Value::Object(declared));
             }
             if !clicks.is_empty() {
                 let ids = drawn.targets.as_ref().map(|(_, ids)| ids.as_slice());

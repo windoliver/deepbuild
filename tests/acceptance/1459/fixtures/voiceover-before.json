@@ -1,0 +1,10 @@
+{
+  "what": "What a screen reader read on each sidebar row before #1459: each row's accessible name at the base, read from the base's own deep-drive `see` over fixtures/record.events.jsonl (deep-live pairs that name with the AppKit title a screen reader speaks). `parts` is the name without the status glyph, split at ' · ': the title, then the state word and what it waits on.",
+  "base": "dd83ac2f",
+  "rows": [
+    { "session": "01KB1459SE0000000000000001", "name": "! Cart totals · needs you", "parts": ["Cart totals", "needs you"] },
+    { "session": "01KB1459SE0000000000000002", "name": "! Release notes · needs you", "parts": ["Release notes", "needs you"] },
+    { "session": "01KB1459SE0000000000000003", "name": "✗ Search index · sent back 1 of 3", "parts": ["Search index", "sent back 1 of 3"] },
+    { "session": "01KB1459SE0000000000000004", "name": "↻ Docs refresh · says done", "parts": ["Docs refresh", "says done"] }
+  ]
+}

@@ -6,8 +6,10 @@ The hub daemon on its socket (#16), the one writer to the record and evidence st
 
 ## Where new code goes
 
-- `src/server.ts`: the socket and event loop; `src/core.ts`: the core, run in a worker (`src/core-worker.ts`); `src/wire.ts`: what crosses the socket and threads.
+- `src/server.ts`: the socket and event loop; `src/core.ts`: the core, run in a worker (`src/core-worker.ts`); `src/wire.ts`: what crosses the socket and threads. `src/log-reads.ts`: the log's pages, read-ahead and stream, a seam of the core's with its own state.
 - `src/hub-command.ts`: `deep hub run | start | status | stop | use`, the package's `./hub` entry, so the running hub loads the server's modules and none of the other commands'.
+- `src/index.ts`: the package's entry; each command loads its own module when it runs, so `deep inbox` loads none of `deep status`'s or the gate's. A command whose modules are heavy stays behind its wrapper there.
+- `src/disk.ts`: the machine's disk floor and free space, apart from the product store, so `deep lease` reads them without the store's YAML.
 - `src/stacks.ts`: worktree and check-run stack policy (`deep env`, `deep_env`, #331, #332), through a supplied lifecycle provider. The composition root currently supplies env-local. Runtime selection of an installed `environment@1` remains unimplemented; the empty release list is a separate limitation, not proof that replacement works.
 - `src/teardowns.ts`: the teardown task each outside resource gets, from the `resources` of a repo's done.yaml and its sessions' own calls (#342); only its check closes it.
 - `src/agents.ts`: the Agents page's syncs (#148): an MCP server or a skill written into each chosen agent's own file at user level, planned in memory, journaled, replaced and flushed, recovered at start, undone by `deep undo sync:<id>`; each agent's rules come from its facts' `entries`. `src/mcp-exec.ts` is `deep mcp-exec <name>`, a synced server's command with its secrets by handle.

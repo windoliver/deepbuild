@@ -40,6 +40,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         winding_ignores_determinant: p == Some(Planted::WindingIgnoresDeterminant),
         water: deep_scene3d_render::water::Planted {
             foam_keeps_state: p == Some(Planted::WaterFoamKeepsState),
+            calm_ignores_shore: p == Some(Planted::ShoreCalmIgnoresField),
         },
         flare: deep_scene3d_render::flare::Planted {
             fixed_ghosts: p == Some(Planted::FlareFixedGhosts),
@@ -78,10 +79,14 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             centers: p == Some(Planted::GpuCullByCenter),
             reversed: p == Some(Planted::CompactInReverse),
             row_as_element: p == Some(Planted::RowAsElement),
+            occlusion_by_centre: p == Some(Planted::OcclusionByCentre),
         },
         ids_by_compacted_place: p == Some(Planted::IdsByCompactedRow),
         count_read_back: p == Some(Planted::CountReadBack),
-        // #428's shading plants, a bit each in scene3d.wgsl's order.
+        pyramid_from_previous_frame: p == Some(Planted::PyramidFromPreviousFrame),
+        occlusion_in_cascades: p == Some(Planted::OcclusionInCascades),
+        occlusion_in_probe_captures: p == Some(Planted::OcclusionInProbeCaptures),
+        // #428's and #481's shading plants, a bit each in scene3d.wgsl's order.
         lobes: [
             Planted::AbsorptionIgnoresThickness,
             Planted::TransmissionIgnoresRoughness,
@@ -92,6 +97,9 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             Planted::OrenNayarUncompensated,
             Planted::RetroreflectionIgnored,
             Planted::FlakesByPixel,
+            // #481's.
+            Planted::SubsurfaceAcrossParts,
+            Planted::SubsurfaceAddsToDiffuse,
         ]
         .iter()
         .position(|q| p == Some(*q))
@@ -321,6 +329,33 @@ pub fn masks(app: &mut App, key: u32, level: u32) -> Vec<(&'static str, [u32; 2]
     })
 }
 
+/// Culls the camera's lists by occlusion too, or by the frustum alone (a view's `occlusion:
+/// off`, #1637).
+pub fn set_occlusion(app: &mut App, on: bool) {
+    app.worker.call(move |state| {
+        if let Some(s) = state.scene3d.as_ref() {
+            if let Some(r) = lock(&s.shared).renderer.as_mut() {
+                r.set_occlusion(on);
+            }
+        }
+    })
+}
+
+/// Which whole solids each pass of the frame just drawn drew (#1637).
+pub fn kept_items(app: &mut App) -> Vec<(String, Vec<String>)> {
+    app.worker.call(|state| {
+        let Some(s) = state.scene3d.as_ref() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        shared
+            .renderer
+            .as_ref()
+            .map_or(Vec::new(), |r| r.read_kept_items(&device))
+    })
+}
+
 /// Draws the session from the CPU's f64 cull (#484).
 pub fn cull_on_cpu(app: &mut App) {
     app.worker.call(|state| {
@@ -410,6 +445,8 @@ pub struct Drawn {
     pub pre_tone: Option<Vec<u8>>,
     /// The frame's GPU time and each pass's share, ms.
     pub timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
+    /// What the passes' declared costs price this frame at, ms (#1637).
+    pub declared: Vec<(&'static str, f64)>,
     /// How many pixels the status guard moved, when the stage ran and the frame asked.
     pub moved: Option<u32>,
     /// With timings: the GPU memory the device holds as the frame draws (#383).
@@ -423,6 +460,8 @@ pub struct Drawn {
     /// #166: the view-axis depth, f32 a pixel, and each mirror part's lookup, f32 RGBA.
     pub view_depth: Option<Vec<u8>>,
     pub reflection: Option<Vec<u8>>,
+    /// #268: the water's foam share, f32 a pixel.
+    pub foam: Option<Vec<u8>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -557,6 +596,11 @@ pub fn draw_on(
                 } else {
                     None
                 },
+                foam: if read_targets && !noop {
+                    r.read_foam(&device)
+                } else {
+                    None
+                },
                 backdrop: if read_targets && !noop {
                     r.read_backdrop(&device)
                 } else {
@@ -571,6 +615,7 @@ pub fn draw_on(
                     .as_ref()
                     .and_then(|_| deep_gpu::memory::allocated(&device)),
                 timing,
+                declared: r.declared_ms(),
                 moved,
             })
         })

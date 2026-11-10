@@ -196,6 +196,7 @@ fn register_compiling(
     )
     .applies(is_target)
     .run(channels);
+    register_arrange(r);
     r.code(
         "bad_doc",
         "A motion section, or a field of one, that isn't the shape motion reads.",
@@ -489,4 +490,153 @@ fn slide() -> Value {
                 "keys": {"k0": {"t": "0s", "value": 16, "interp": "linear"}, "k1": {"t": "2s", "value": 260, "interp": "linear"}}}}}},
         "placements": {"p": {"clip": "slide", "slots": {"target": "mover"}, "start": "0s"}}
     })
+}
+
+/// #1732: `arrange@1`, solved at check once per revision of the document, each arranged item's
+/// transform then written into the core's from that one solve; the planted per-frame solve runs
+/// in a frame phase instead.
+fn register_arrange(r: &mut Registrar) {
+    use crate::arrange;
+    use deep_canvas::kinds::{Entry, Param, ParamType, Version};
+    let json_param = |name: &'static str| Param {
+        name,
+        ty: ParamType::Json,
+        unit: "",
+        default: json!([]),
+        min: None,
+        max: None,
+        minor: 0,
+        module: "",
+        operator: "",
+    };
+    r.kind(
+        Entry {
+            family: "",
+            name: "arrange",
+            versions: vec![Version {
+                major: 1,
+                minor: 0,
+                params: vec![
+                    json_param("items"),
+                    json_param("relations"),
+                    json_param("broken_out"),
+                ],
+            }],
+            migrations: Vec::new(),
+        },
+        &[],
+        "",
+    );
+    // One solve per revision of every arrangement in the document, at check: the frames read
+    // its places and never solve.
+    r.array(
+        "motion.arranged",
+        "arranged",
+        "document",
+        "transform",
+        "plan",
+    );
+    // It runs on every document, so the readers on each solid always have their writer: the
+    // core keeps an unchanged item's nodes, and their bindings, across revisions.
+    r.operator("arrange", "plan", &["refs"], &["motion.arranged"])
+        .document()
+        .run(arrange_op);
+    r.contribution(
+        "motion.placed",
+        "transform",
+        "item",
+        "transform",
+        "items",
+        "core.transform",
+    );
+    r.operator("placed", "items", &["motion.arranged"], &["motion.placed"])
+        .applies(is_arranged)
+        .run(placed_op);
+    r.array(
+        "motion.arrangelive",
+        "arrangement",
+        "item",
+        "transform",
+        "items",
+    );
+    r.operator(
+        "arrangelive",
+        "items",
+        &["self", "refs", "t"],
+        &["motion.arrangelive"],
+    )
+    .applies(|_, _, item| arrange::is_arrangement(item))
+    .run(arrange_live_op);
+    r.code(
+        arrange::UNSATISFIED,
+        "An arrangement whose relations can't all hold with nothing passing into anything.",
+        "Drop or loosen the relations it names, or give the items more room.",
+        false,
+    );
+}
+
+/// A solid: what an arrangement can place. It reads only the item, since the core keeps an
+/// unchanged item's nodes from one revision to the next; the node writes only for the items an
+/// arrangement places.
+fn is_arranged(_: &Value, _: &str, item: &Value) -> bool {
+    crate::arrange::is_solid(item)
+}
+
+/// Every arrangement of the document solved from where it stands its items, in document order.
+fn arrange_op(v: &mut View<'_>) -> Result<(), OpError> {
+    let doc = v.document()?;
+    let planted = v.planted();
+    v.write("motion.arranged", Val::typed(solve_all(doc, planted)?))
+}
+
+fn solve_all(doc: &Value, planted: Option<&str>) -> Result<crate::arrange::Arranged, OpError> {
+    let mut all = crate::arrange::Arranged::default();
+    let items = doc.get("items").and_then(Value::as_object);
+    for (id, _) in items
+        .into_iter()
+        .flatten()
+        .filter(|(_, i)| crate::arrange::is_arrangement(i))
+    {
+        match crate::arrange::solve_doc(doc, id, planted) {
+            Ok(a) => all.0.extend(a.0),
+            Err((code, path, actual)) => return Err(OpError::new(code, path).with(actual)),
+        }
+    }
+    Ok(all)
+}
+
+/// The planted per-frame solve: the arrangement solved again in every frame. As shipped it
+/// solves nothing and writes nothing.
+fn arrange_live_op(v: &mut View<'_>) -> Result<(), OpError> {
+    let _ = v.t()?;
+    let _ = v.item()?;
+    if v.planted() != Some(crate::arrange::SOLVES_PER_FRAME) {
+        return Ok(());
+    }
+    let id = v.id().unwrap_or_default().to_string();
+    let doc = v.document()?;
+    match crate::arrange::solve_doc(doc, &id, v.planted()) {
+        Ok(a) => v.write("motion.arrangelive", Val::typed(a)),
+        Err((code, path, actual)) => Err(OpError::new(code, path).with(actual)),
+    }
+}
+
+/// An arranged item's solved place, written over its own transform.
+fn placed_op(v: &mut View<'_>) -> Result<(), OpError> {
+    let id = v.id().unwrap_or_default().to_string();
+    let Some(arranged) = v.typed::<crate::arrange::Arranged>("motion.arranged")? else {
+        return Ok(());
+    };
+    let Some((pos, rot)) = arranged.0.get(&id).copied() else {
+        return Ok(());
+    };
+    let set = |name: &str, x: [f64; 3]| Edit {
+        add: false,
+        path: vec![name.to_string()],
+        value: Datum::Nums(x.to_vec()),
+    };
+    v.write(
+        "motion.placed",
+        Val::typed(Edits(vec![set("pos", pos), set("rot", rot)])),
+    )
 }

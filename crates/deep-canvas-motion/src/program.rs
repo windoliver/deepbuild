@@ -191,6 +191,8 @@ pub enum Planted {
     TransitionRestarts,
     /// #490: a table's interval form from 8 samples between its range's ends.
     TableFormSamples8,
+    /// #1646: cells takes its seed with the time, so a still point's outputs move.
+    CellsSeededFromT,
     /// #490: a pulse that leaves 1e-6 at its end.
     PulseLeavesResidue,
     /// #490: out_back with its fixed 1.70158, ignoring `overshoot`.
@@ -2165,7 +2167,11 @@ impl Program {
         // The order by item and stage: an item's transform composes before its first
         // constraint, or after its last write when it has none.
         let mut names: Vec<String> = Vec::new();
-        let last_of = |item: &str| order.iter().rposition(|&i| nodes[i].item == item);
+        // Each item's last place in the order, found in one pass.
+        let mut last: std::collections::BTreeMap<&str, usize> = Default::default();
+        for (at, &i) in order.iter().enumerate() {
+            last.insert(nodes[i].item.as_str(), at);
+        }
         let mut composed = std::collections::BTreeSet::new();
         for (at, &i) in order.iter().enumerate() {
             let node = &nodes[i];
@@ -2173,7 +2179,7 @@ impl Program {
                 names.push(format!("{}.transform", node.item));
             }
             names.push(format!("{}.{}", node.item, node.stage.name()));
-            if last_of(&node.item) == Some(at) && composed.insert(node.item.clone()) {
+            if last.get(node.item.as_str()) == Some(&at) && composed.insert(node.item.clone()) {
                 names.push(format!("{}.transform", node.item));
             }
         }
@@ -2331,6 +2337,12 @@ impl Program {
         }
         if self.options.planted == Planted::TableFormSamples8 {
             scope.planted = Some(deep_canvas::expr::Planted::TableFormSamples8);
+        }
+        if self.options.planted == Planted::CellsSeededFromT {
+            scope.planted = Some(deep_canvas::expr::Planted::CellsSeededFromT);
+            if !inputs_of.iter().any(|(n, _)| *n == "t") {
+                inputs_of.push(("t", CoreInput::Time));
+            }
         }
         let expr = Expr::compile(&text, &scope, DRIVER_OPS).map_err(|r| Refused {
             code: "bad_doc",

@@ -710,6 +710,17 @@
       "initialReason": "Issue #63 first measurement: the merge base has no reading by reference. One process archives fifty 60-message sessions and one of 1,000 messages, then reads every slice of the long one, of its message 900 and of ten others as deep read does, failing unless each holds at most 8,192 characters and each cursor leads on to the end; p50 includes Node's start and the archive pass. The issue's 200 ms per deep read stays in tests/acceptance/63/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "reading-find",
+      "command": [
+        "node",
+        "benchmarks/reading.mjs",
+        "find"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1515 first measurement: at the merge base deep find reads every archived transcript on every call, with no index. One process archives three hundred 40-message sessions, indexes them as the hub does after an archive pass, then runs deep find ten times each for part of a word, a Greek and a Chinese word, failing unless each finds its seeded message; p50 includes Node's start, the archive pass and the indexing. The issue's 100 ms per search stays in tests/acceptance/1515/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "wiki-build",
       "command": [
         "node",
@@ -965,6 +976,35 @@
         "waves_vertex_ms": 0.1
       },
       "initialReason": "Issue #166 first measurement: the merge base has no water and no such task. A release deep-gpu draws two 1080p stages for 300 frames a side, five runs after a warm-up one, each a fresh process: a 400 m lake of 256 x 256 cells filling the lower half of the frame (four waves, ripples, rain at 50 drops per m2 per s) against the same plate as a plain mirror, and a 10 m plate of 256 x 256 cells seen 300 m away (four waves) against the same plate as a plain mirror, each the difference of the sides' median GPU time, so the mirror's own pass is in both sides. canvas.mjs judge holds the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-occlusion",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "occlusion"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "gpu_fall": 0.7,
+        "pyramid_declared_error": 0.25
+      },
+      "initialReason": "Issue #1637 first measurement: the merge base culls by the frustum alone and has no such task. A release deep-gpu walks the city of tests/acceptance/1637 (20,000 building items, 100,000 instanced street items, the camera 1.7 m above the street for 10 s) at 1920 x 1080, 301 frames at 30 fps, twice a run, the shipped occlusion cull and occlusion: off, their order alternating, five runs after a warm-up one, each a fresh process: p95 GPU time shipped over frustum-only, and the depth pyramid's declared cost against its measured time, medians over the shipped frames. canvas.mjs judge holds both on a reference Mac; tests/acceptance/1637/budgets.test.ts holds the issue's numbers. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-water-shore",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "water-shore"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "shore_lake_gpu_ms": 0.5
+      },
+      "initialReason": "Issue #268 first measurement: the merge base has no shore on water and no such task. A release deep-gpu draws #166's 400 m lake filling the lower half of a 1080p frame with its shore on (twelve piles, a quay and a floating deck in its collection, cell 0.25, shade 0.5) against the same plate and items as a plain mirror, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time, so the mirror's own pass is in both. The field's bake time is printed as a reading with no limit. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "replica-cold-start",

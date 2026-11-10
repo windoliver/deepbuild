@@ -12,6 +12,13 @@
     "merged": "finished",
     "verdict": "result",
     "session": "agent at work",
-    "claim": "says done"
+    "claim": "says done",
+    "batched authority": "approval",
+    "stalled claim": "stuck",
+    "early question about done": "what done means",
+    "unblock": "your step",
+    "choice": "pick one",
+    "taste": "how it looks",
+    "exception": "problem"
   }
 }

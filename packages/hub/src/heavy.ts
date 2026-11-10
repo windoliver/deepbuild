@@ -15,7 +15,7 @@ import { closeSync, constants, lstatSync, openSync, readFileSync, readSync, rmSy
 import { availableParallelism, homedir, loadavg, totalmem } from 'node:os';
 import type { Caller, Lease, LeaseTable, Mode, Resource } from '@deepbuild/leases';
 import { call, type Reply } from './client.js';
-import { DISK_FLOOR, freeBytes } from './products.js';
+import { DISK_FLOOR, freeBytes } from './disk.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
@@ -34,6 +34,8 @@ export type Pressure = 'normal' | 'warn' | 'critical';
  * or Linux's pressure stall information (/proc/pressure/memory: full stalls over 10% of the last 10 s are critical,
  * some over 10% a warning). DEEP_TEST_MEMORY_PRESSURE_FILE names a file holding the level instead (tests only).
  */
+/** macOS's own reading, kept a second: every waiting `deep lease` asks four times a second, and each read is a process the core waits on. */
+let macRead: { at: number; level: Pressure } | undefined;
 export function memoryPressure(env: NodeJS.ProcessEnv = process.env): Pressure {
   const file = env.DEEP_TEST_MEMORY_PRESSURE_FILE;
   if (file) {
@@ -44,8 +46,10 @@ export function memoryPressure(env: NodeJS.ProcessEnv = process.env): Pressure {
   }
   try {
     if (process.platform === 'darwin') {
+      if (macRead && Date.now() - macRead.at < 1000) return macRead.level;
       const level = Number(execFileSync('/usr/sbin/sysctl', ['-n', 'kern.memorystatus_vm_pressure_level'], { encoding: 'utf8', timeout: 2000 }).trim());
-      return level >= 4 ? 'critical' : level >= 2 ? 'warn' : 'normal';
+      macRead = { at: Date.now(), level: level >= 4 ? 'critical' : level >= 2 ? 'warn' : 'normal' };
+      return macRead.level;
     }
     if (process.platform === 'linux') {
       const psi = readFileSync('/proc/pressure/memory', 'utf8');

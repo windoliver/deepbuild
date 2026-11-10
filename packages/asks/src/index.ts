@@ -35,7 +35,7 @@ import { ADAPTERS, shipped } from '@deepbuild/adapters';
 import type { AdapterRegistry } from '@deepbuild/adapters';
 import { canonicalize, sha256Hex, validate } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
-import { ulid } from '@deepbuild/record';
+import { asCore, ulid } from '@deepbuild/record';
 import type { Connection, Event, RecordStore } from '@deepbuild/record';
 import { KINDS, place, remotesOf, targetsOf, UNCOVERED, type CardTarget, type Target } from './targets.js';
 
@@ -745,7 +745,7 @@ class AsksCore implements Asks {
         await this.raiseFold(thread, connection.session, { actor: connection.actor, scope: connection.scope }, [`ask:${id}`], data.deadline as number);
       }
       await this.options.record.append(connection, { v, id, kind: 'ask.created', ts: now, data: data });
-      if (proposed) await this.options.record.append(this.core(connection), { v: 'targets' in proposed ? 2 : 1, id: ulid(now), kind: 'plan.proposed', ts: now, data: proposed });
+      if (proposed) await this.options.record.append(asCore(connection), { v: 'targets' in proposed ? 2 : 1, id: ulid(now), kind: 'plan.proposed', ts: now, data: proposed });
       await this.sync();
       const ask = this.asks.get(id)!;
       // A provisional taste call or choice goes on with the recommended option at once.
@@ -785,7 +785,7 @@ class AsksCore implements Asks {
       if (ask.closed) {
         // A later answer to a closed ask is refused, and the refusal is recorded; nothing reaches the agent.
         const { outcome, at } = ask.closed;
-        await this.options.record.append(this.core(connection), {
+        await this.options.record.append(asCore(connection), {
           v: 1, id: ulid(now), kind: 'answer.refused', subject: ask.handle, ts: now,
           data: { outcome, closed_at: at, via, option: option ?? null },
         });
@@ -835,7 +835,7 @@ class AsksCore implements Asks {
         : [];
       // Each one is delivered as soon as it's recorded, so a write that fails partway leaves the rest open, not closed unheard.
       for (const { a, option: o } of together) {
-        await this.options.record.append(this.core(connection), {
+        await this.options.record.append(asCore(connection), {
           v, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now,
           data: { answer: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null },
         });
@@ -850,7 +850,7 @@ class AsksCore implements Asks {
       // A card with a target only the agent read saves your answer for this ask only (#1098).
       const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
       // The answer and its decision are appended in one turn, so the record makes them durable in one commit (#22).
-      const answered = this.options.record.append(this.core(connection), {
+      const answered = this.options.record.append(asCore(connection), {
         v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
           answer: option ?? (words as string | undefined) ?? (image as string), plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
@@ -861,7 +861,7 @@ class AsksCore implements Asks {
       await this.sync();
       this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision, null, null, null, (image as string | undefined) ?? null);
       for (const rider of riders) {
-        await this.options.record.append(this.core({ ...connection, ...rider.who }), {
+        await this.options.record.append(asCore({ ...connection, ...rider.who }), {
           v, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
           data: { answer: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null, words: null, image: null },
         });
@@ -870,7 +870,7 @@ class AsksCore implements Asks {
         ask.receiptAlso.push(rider.handle);
       }
       for (const { member, allow } of others) {
-        await this.options.record.append(this.core({ ...connection, ...member.who }), {
+        await this.options.record.append(asCore({ ...connection, ...member.who }), {
           v, id: ulid(now), kind: 'ask.answered', subject: member.handle, ts: now,
           data: { answer: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: member.data.pinned_to!, token: token ?? null, words: null, image: null },
         });
@@ -967,7 +967,7 @@ class AsksCore implements Asks {
       if (!Number.isSafeInteger(until) || until < 0) throw new AskRefused('Later takes a time in ms since the epoch', { field: 'until' });
       if (until >= deadline) throw new AskRefused(`Later can't pass ${ask.handle}'s deadline, ${new Date(deadline).toISOString()}`, { field: 'until', ask: ask.handle });
       const now = this.options.now();
-      await this.options.record.append(this.core(connection), { v: 1, id: ulid(now), kind: 'ask.later', subject: ask.handle, ts: now, data: { until } });
+      await this.options.record.append(asCore(connection), { v: 1, id: ulid(now), kind: 'ask.later', subject: ask.handle, ts: now, data: { until } });
       await this.sync();
       await this.settle();
     });
@@ -985,7 +985,7 @@ class AsksCore implements Asks {
       }
       const now = this.options.now();
       const deadline = now + ask.wait;
-      await this.options.record.append(this.core({ ...connection, ...ask.who }), { v: 1, id: ulid(now), kind: 'default.undone', subject: ask.handle, ts: now, data: { deadline } });
+      await this.options.record.append(asCore({ ...connection, ...ask.who }), { v: 1, id: ulid(now), kind: 'default.undone', subject: ask.handle, ts: now, data: { deadline } });
       await this.sync();
       await this.settle();
     });
@@ -1080,7 +1080,7 @@ class AsksCore implements Asks {
         const chosen = steps.filter((s) => s.ask === handle && on.get(`${s.ask}#${s.step}`)).map((s) => s.step);
         // A plan with none of its steps switched on isn't approved: it waits for its own card.
         if (!chosen.length) continue;
-        await this.options.record.append(this.core({ ...connection, ...ask.who }), {
+        await this.options.record.append(asCore({ ...connection, ...ask.who }), {
           v: 3, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
           data: { answer: allow.id, plan_hash: ask.plan.hash, decision: 'allow', via, verified: true, on: ask.data.pinned_to!, token: input.token, steps: chosen },
         });
@@ -1153,7 +1153,7 @@ class AsksCore implements Asks {
       const decision = await this.saveAt(connection, ask, scope, option.id);
       if (!this.decisions.get(old)?.overruled.has(scope)) {
         const now = this.options.now();
-        await this.options.record.append(this.core(connection), { v: 2, id: ulid(now), kind: 'decision.overruled', subject: old, ts: now, data: { decision: old, at: scope } });
+        await this.options.record.append(asCore(connection), { v: 2, id: ulid(now), kind: 'decision.overruled', subject: old, ts: now, data: { decision: old, at: scope } });
         await this.sync();
       }
       // The agent hears your answer, which undoes the one the decision gave.
@@ -1183,7 +1183,7 @@ class AsksCore implements Asks {
       if (!option) throw new AskRefused(`${ask.handle} has no option ${held.answer}`, { option: held.answer });
       const widened = await this.saveAt(connection, ask, 'all', held.answer, false);
       const now = this.options.now();
-      await this.options.record.append(this.core({ ...connection, ...ask.who, session: ask.session }), { v: 1, id: ulid(now), kind: 'decision.applied', subject: ask.handle, ts: now, data: { decision: widened, ask: ask.handle } });
+      await this.options.record.append(asCore({ ...connection, ...ask.who, session: ask.session }), { v: 1, id: ulid(now), kind: 'decision.applied', subject: ask.handle, ts: now, data: { decision: widened, ask: ask.handle } });
       await this.sync();
       this.hand(ask, option.id, null, false, option.decision, widened);
       await this.settle();
@@ -1200,7 +1200,7 @@ class AsksCore implements Asks {
       if (!decision) throw new AskRefused(`${handle} is no decision`, { field: 'decision' });
       if (decision.state === 'revoked') throw new AskRefused(`${handle} is already revoked or overruled`, { field: 'decision' });
       const now = this.options.now();
-      await this.options.record.append(this.core(connection), { v: 1, id: ulid(now), kind: 'decision.revoked', subject: handle, ts: now, data: { decision: handle } });
+      await this.options.record.append(asCore(connection), { v: 1, id: ulid(now), kind: 'decision.revoked', subject: handle, ts: now, data: { decision: handle } });
       await this.sync();
     });
   }
@@ -1302,7 +1302,7 @@ class AsksCore implements Asks {
       if (!first || ask.conflict.length) return;
       const option = ask.options.find((o) => o.id === first.answer)!;
       const now = this.options.now();
-      await this.options.record.append(this.core({ ...CORE, ...ask.who, session: ask.session }), { v: 1, id: ulid(now), kind: 'decision.applied', subject: handle, ts: now, data: { decision: first.decision, ask: handle } });
+      await this.options.record.append(asCore({ ...CORE, ...ask.who, session: ask.session }), { v: 1, id: ulid(now), kind: 'decision.applied', subject: handle, ts: now, data: { decision: first.decision, ask: handle } });
       await this.sync();
       this.hand(ask, option.id, null, false, option.decision, first.decision);
     });
@@ -1320,7 +1320,7 @@ class AsksCore implements Asks {
       // Revoked is final; a judgment that leaves the state as it is records nothing.
       if (decision.state === 'revoked' || decision.state === next) return decision.state;
       const now = this.options.now();
-      await this.options.record.append(this.core(connection), {
+      await this.options.record.append(asCore(connection), {
         v: 1, id: ulid(now), kind: 'decision.judged', subject: handle, ts: now,
         data: {
           decision: handle, state: next, verdict: judgment.verdict,
@@ -1350,7 +1350,7 @@ class AsksCore implements Asks {
     const contradicted = !overrules || needsPerson(ask.data).length ? [] : this.covering(ask).filter((d) => d.answer !== answer);
     const now = this.options.now();
     const id = ulid(now);
-    const as = this.core(connection);
+    const as = asCore(connection);
     // Appended in one turn, in this order, so they are durable in one commit (#22).
     await Promise.all([
       this.options.record.append(as, { v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } }),
@@ -1358,10 +1358,6 @@ class AsksCore implements Asks {
     ]);
     await this.sync();
     return `decision:${id}`;
-  }
-
-  private core(connection: Connection): Connection {
-    return { ...CORE, actor: connection.actor, scope: connection.scope, ...(connection.session ? { session: connection.session } : {}) };
   }
 
   private threadOf(session: string | undefined): string {
@@ -1683,14 +1679,14 @@ class AsksCore implements Asks {
     };
   }
 
-  /** What an answer to the ask would be saved as, said in words, and how many other open asks that decision would then answer. */
+  /** What an answer to the ask would be saved as, said as what answering will do (nothing is saved yet, #1455), and how many other open asks that decision would then answer. */
   private savesOf(ask: Ask): Card['saves'] {
     if (ask.fold || ask.theirs || !ask.options.length) return null;
-    if (this.unplaced(ask).length) return { scope: 'Saved for this ask only', also: 0 };
+    if (this.unplaced(ask).length) return { scope: 'Answering saves it for this ask only', also: 0 };
     const scope = this.scopeOf(ask);
     if (scope === null) return null;
     const project = this.sessions.get(ask.session)?.project;
-    const words = scope.startsWith('repo:') && project ? `Saved for this repo (${project})` : 'Saved for this session';
+    const words = scope.startsWith('repo:') && project ? `Answering saves it for this repo (${project})` : 'Answering saves it for this session';
     const also = this.open().filter((a) => a !== ask && !a.theirs && !a.fold && a.data.key === ask.data.key && this.scopeCovers(scope, a)).length;
     return { scope: words, also };
   }
@@ -1855,8 +1851,9 @@ class AsksCore implements Asks {
         if (e.writer === 'core' && e.session) this.continued.set(e.session, [...(this.continued.get(e.session) ?? []), { stop: String(d.stop), because: String(d.because), ts: e.ts }]);
         return;
       case 'session.end':
-        // A session you stopped (its SessionEnd) isn't resumed by a task closing: a continue would wake nobody.
-        if (e.writer === 'hook' && e.session) this.ended.set(e.session, e.ts);
+        // A session you stopped (its SessionEnd, or the core's end for a Codex process that exited without one, #1023)
+        // isn't resumed by a task closing: a continue would wake nobody.
+        if ((e.writer === 'hook' || e.writer === 'core') && e.session) this.ended.set(e.session, e.ts);
         // Only a verified end counts toward forgetting: an unverified one ends nothing, as in the hub.
         if (e.session && !e.unverified) {
           this.endOrder.add(e.session);

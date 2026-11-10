@@ -2,10 +2,8 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import type { Verdict } from '@deepbuild/conformance';
-import { replaySession } from '../../../adapters/index.mjs';
 // The conformance table, the contracts and the telemetry doctor load only in the commands that use them, so
 // `deep inbox` starts without them (#24's budget).
 
@@ -44,7 +42,7 @@ function banner(): string {
 
 // Why each event of a recorded session was read the way it was: the facts entry that mapped it and
 // the agent version behind it. A live session's ID needs the hub's record, which doesn't exist yet.
-function explain(session: string, json: boolean): number {
+async function explain(session: string, json: boolean): Promise<number> {
   const dir = resolve(session);
   if (!existsSync(join(dir, 'session.json'))) {
     console.error(`deep explain: ${session} is not a recorded session folder; explaining a live session by ID needs the hub's record (#14, #16)`);
@@ -54,6 +52,8 @@ function explain(session: string, json: boolean): number {
   const factsPath = `adapters/${meta.agent}.facts.json`;
   const facts: unknown = JSON.parse(readFileSync(join(root, factsPath), 'utf8'));
   const cases = jsonLines(join(dir, 'events.jsonl'));
+  // The facts engine loads only here, so every other command starts without it.
+  const { replaySession } = await import('../../../adapters/index.mjs');
   const replayed = replaySession({ facts, version: meta.version, payloads: cases.map((recorded) => recorded.payload as Record<string, unknown>), transcript: jsonLines(join(dir, 'transcript.jsonl')) });
   replayed.payloads.forEach(({ events, verified }, index) => {
     const hook = String((cases[index]?.payload as Record<string, unknown>).hook_event_name);
@@ -149,6 +149,7 @@ async function debugBundle(): Promise<number> {
   const dir = join(root, 'debug');
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const path = join(dir, `bundle-${new Date().toISOString().replace(/[:.]/g, '-')}.json.gz`);
+  const { gzipSync } = await import('node:zlib');
   writeFileSync(path, gzipSync(JSON.stringify(bundle)), { mode: 0o600 });
   chmodSync(path, 0o600);
   console.log(path);
@@ -219,7 +220,7 @@ const usage = [
   'deep update --check   whether a newer DeepBuild is out',
   'deep debug bundle   redacted logs, versions and doctor output, for a bug report',
   'deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names',
-  'deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it',
+  'deep find [<query>] [--file <path>] [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it; with --file, of sessions that read or edited it',
 ];
 const commandsOf = (line: string) => /^deep ([a-z-]+(?: \| [a-z-]+)*)/.exec(line)![1]!.split(' | ');
 const commands = [...new Set(usage.flatMap(commandsOf))];
@@ -230,10 +231,24 @@ const helpWords = ['--help', '-h', 'help'];
 const asksHelp = args.length === 0 || (args.includes('--') ? args.slice(0, args.indexOf('--')) : args).some((arg) => helpWords.includes(arg));
 // The planted wrong program runs deep backup before its help check, so #1359's table must name it.
 const help = asksHelp && !(args[0] === 'backup' && (await import('@deepbuild/hub')).activePlant() === 'dispatches-before-help');
+// What a person runs first, then their work, then what developers run (#1455); a command no group names is a developer's.
+const groups: [string, string[]][] = [
+  ['Start here', ['setup', 'status', 'inbox', 'doctor', 'off', 'install', 'memory', 'secret', 'update']],
+  ['Your work', ['fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
+  ['For developers', ['explain', 'run', 'hub', 'mcp', 'env', 'lease', 'show', 'export', 'kinds', 'mcp-exec', 'read', 'find']],
+];
+const groupOf = (line: string): number => {
+  const at = groups.findIndex(([, names]) => names.includes(commandsOf(line)[0]!));
+  return at < 0 ? groups.length - 1 : at;
+};
 function printHelp(): void {
   const lines = usage.filter((line) => commandsOf(line).includes(args[0] ?? ''));
   if (args.length === 0 || helpWords.includes(args[0]!) || args[0] === '--version') {
-    console.log(`${banner()}\nUsage: deep [--help | --version]\n       ${usage.join('\n       ')}\n\nRepository skeleton.`);
+    console.log(`${banner()}\nUsage: deep [--help | --version]\n\n${groups.map(([title, names], at) => `${title}:\n${usage
+      .filter((line) => groupOf(line) === at)
+      .sort((a, b) => names.indexOf(commandsOf(a)[0]!) - names.indexOf(commandsOf(b)[0]!))
+      .map((line) => `  ${line}`)
+      .join('\n')}`).join('\n\n')}`);
   } else if (lines.length > 0) {
     console.log(`Usage: ${lines.join('\n       ')}`);
   } else {
@@ -288,7 +303,7 @@ if (help) {
 } else if (args.length === 1 && args[0] === '--version') {
   console.log(version());
 } else if (args[0] === 'explain' && args[1] && args.slice(2).every((arg) => arg === '--json')) {
-  process.exitCode = explain(args[1], args.includes('--json'));
+  process.exitCode = await explain(args[1], args.includes('--json'));
 } else if (args[0] === 'hub') {
   // Its own entry, loaded only for hub commands: every other command starts without the hub's modules, and the
   // running hub without the other commands'.
@@ -303,7 +318,7 @@ if (help) {
   process.exitCode = await envCommand(args.slice(1));
 } else if (args[0] === 'gate') {
   const { gateCommand } = await import('@deepbuild/hub');
-  process.exitCode = gateCommand(args.slice(1));
+  process.exitCode = await gateCommand(args.slice(1));
 } else if (args[0] === 'start') {
   const { startCommand } = await import('@deepbuild/hub');
   process.exitCode = await startCommand(args.slice(1));

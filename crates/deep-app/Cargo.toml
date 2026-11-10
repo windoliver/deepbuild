@@ -37,9 +37,17 @@ plant-row = []
 plant-card-skips-confirm = []
 plant-page-drops-param = []
 plant-panel-skips-kit = []
+# Issue #1459's wrong programs, in no shipped build (tests/acceptance/1459): Needs you rows keyed by their place, the
+# base's hand-written label kept beside the session page's chart, and a sidebar row named by its task's title alone.
+plant-row-index-ids = []
+plant-chart-label-beside = []
+plant-row-title-only = []
 # Issue #1454: a file stands in for the OS's prompt, in no shipped build: a test can't be you, and an environment variable
 # in the shipped app would let an agent answer for you.
 test-confirm = []
+# Issue #1455: the app draws the bound values of the file DEEP_APP_TEST_BOUND names, as `deep-replica --bound` does, in no
+# shipped build: its pictures need a bound panel from the real app.
+test-bound = ["fixtures"]
 # Issue #1477's wrong programs, in no shipped build (tests/acceptance/1477): a table that builds an element per cell,
 # one that places rows by f32 offsets, and a text sort that isn't stable.
 plant-element-per-cell = []
@@ -74,6 +82,8 @@ deep-text-gpui = { path = "../deep-text-gpui" }
 deep-marks-gpui = { path = "../deep-marks-gpui" }
 # Issue #326: the look's status map, which every surface draws a state with.
 deep-canvas-marks = { path = "../deep-canvas-marks" }
+# Issue #1436: chrome-fx@1, the pack the chrome's effects come from, read and checked as data.
+deep-canvas-effects = { path = "../deep-canvas-effects" }
 # Issue #402: the cell grid's emulator and palette, whose screen the app paints row by row.
 deep-canvas-cells = { path = "../deep-canvas-cells" }
 # Issue #377: the GPU layer, whose views the window shows in place.
@@ -100,7 +110,7 @@ objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL", "NSArray", "NSBundle", "NSEnumerator", "NSDictionary", "NSValue"] }
 # Issue #883: `--notification-center` reads what Notification Center holds from the app (the version gpui uses).
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationRequest", "UNNotificationContent", "UNNotificationSettings"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell", "NSScreen", "NSGraphics", "NSSound"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell", "NSScreen", "NSGraphics", "NSSound", "NSWorkspace"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFCGTypes", "CFData", "CFDictionary", "CFString"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "CGDisplayConfiguration", "CGSession", "libc"] }
 block2 = "0.6"

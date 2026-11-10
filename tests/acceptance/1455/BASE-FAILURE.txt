@@ -1,0 +1,71 @@
+#1455 acceptance suite on the base commit dd83ac2fc7c6563b2d395d154bc877032ba16ec1 (origin/main), before any #1455 code.
+
+Commands: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1455 --no-file-parallelism <file>
+          node node_modules/typescript/bin/tsc -p tests/acceptance/1455/tsconfig.json   (clean)
+Node:     v24.22.2, cargo 1.99.1, workspaces built (npm ci; npm run build --workspaces)
+Run:      2026-11-08, 16:49 to 17:45 local, macOS, load average 150 to 240 on 18 cores (other sessions' builds).
+          Each file's last run is after its last edit; they ran as three vitest runs, not one.
+          Every file failed; 14 tests failed, none passed. No test failed on a missing build or a test-side error.
+          The process had Accessibility and Screen Recording (#1454's probe: {"screen":true,"ax":true}).
+
+shown.test.ts (AC1, AC2, AC3): 6 failed. The fixture run drew all views (150 strings, dumped as strings.json).
+  AC1, clean, fails naming 14 strings, each the issue's own complaint:
+    the card shows "stalled claim": "stalled claim" is an internal kind name
+    the session page "Header layout" shows "! Header layout returned · needs you": "returned" is filler on the return line
+      (and the same on "Checkout page" and the untitled session's page)
+    the welcome shows "Where your agents show, not tell.": ... the welcome pane's tagline
+    the bound panel shows "Cart total": "Cart total" is a fixture word
+    the bound panel shows "! Session 01MCBH57 returned · needs you": "returned" ...
+    the deep --help shows "Repository skeleton.": "Repository skeleton" is filler at the end of deep --help
+    the card for "Header layout came back four times. ..." starts "stalled claim", an internal kind name
+    the card for "Keep the old logo in the header?" starts "choice", an internal kind name
+  AC2, clean, fails naming 6:
+    the session page "Header layout" shows its caption "Hours to each deadline" 2 times, not once
+    the session page "Header layout"'s readout "2" isn't the hours to any of its deadlines (6.0, 30.0) that its caption
+      "Hours to each deadline" says it shows
+    the session page "Checkout page" has no deadline yet draws session-line, session-caption, session-readout
+    the session page "Checkout page" has no deadline yet shows "Hours to each deadline: 0 points", "Hours to each deadline"
+    (and both again for the untitled session's page)
+  AC3, clean, fails naming 3:
+    the session page "Header layout" (01PXHEAD000000000000000001) has no accessible name holding "Session" and its title
+    the session page "Checkout page" (01PXCHEK000000000000000002): the same
+    the session page "01PXQRST000000000000000003"'s visible title "Session 01PXQRST" draws its raw ID (01PXQRST)
+  The three plant tests fail first on their premise, "the clean run already fails ACn, so the plant can't be told from
+  it", so the plants (card-shows-kind-name, readout-counts-asks, title-draws-id) were not run: the base has none.
+
+count.test.ts (AC6): 2 failed.
+  clean: the home reads "1 asks need you" for one ask, not "1 ask needs you"
+         the menu bar doesn't read "1 ask needs you" for one ask: it shows ["1"]
+         (the list, in deep-drive and on the first screen, reads "1 ask needs you")
+  plant (count-one-asks): fails on its premise, as above.
+
+doctor.test.ts (AC4): 3 failed.
+  clean: 26 failures, "deep doctor prints a fix under the healthy item <item>: "Fix: Nothing to do."" for every ok item
+         (hub.socket, hub.jobs, hub.disk, hub.ports, claude.hooks, the timing items, claude.mcp, codex.*, claude.*,
+         otlp.telemetry), and "deep doctor ends with 0 summary lines, not one". Items not ok in #19's world here:
+         app.notifications and claude.prompt (not checked), canvas.gpu, canvas.headless, canvas.verdict (failed).
+  --json: INCONCLUSIVE: deep doctor --json differs between two runs of this same program, five times running (line 4:
+          hub.disk "372.6 GB free" against "372.5 GB free"), so byte equality with the merge base can't be judged; this
+          is not a pass. (At the base the merge base is this commit, so the comparison itself can't fail here.)
+  plant (doctor-healthy-fix): fails on its premise.
+
+setup.test.ts (AC5): 2 failed.
+  clean: the app's Set up says "DeepBuild added its hooks in watch-only mode, so no stop is held and no verdict blocks
+         until you approve a repo's checks, and started the hub at login; deep setup --undo removes it all.", and deep
+         setup "DeepBuild added its hooks and status line forwarder to <home>/.claude/settings.json, beside yours; its
+         MCP server to ...; its skill at ...; its safety rules at .... Its gates are watch-only until you approve a
+         repo's checks. deep setup --undo removes it all."
+         deep setup's line lacks "watch-only mode"
+         the line Set up says is defined 2 times: packages/hub/src/setup.ts, crates/deep-app/src/setup.rs
+  plant (a second copy at crates/deep-app/src/set_up_copy.rs): fails on its premise (the two copies above).
+
+pictures.test.ts (AC7): 1 failed, on the real window.
+  The merge base's app and this checkout's (the same commit here) each launched against a real hub, at 1512 x 982 points;
+  the run took before- and after- first-screen, question-card and session-page, and before-bound-panel from the merge
+  base's replica, all 3024 x 1964 px. It failed: "each state is on the real window before its picture is taken":
+    this checkout's app can't draw a bound panel: crates/deep-app/Cargo.toml has no feature test-bound (README, The contract)
+  so it never reached TASTE.json. Without a recorded call it would read INCONCLUSIVE, never PASS.
+
+The judges' logic was checked against throwaway twins in a scratch folder, not committed (README, Criterion to tests):
+35 checks, a right twin of each criterion passing and each wrong twin failing naming what the table says, plus a
+templated Set up line found once and twice. That proves the judges, not any implementation.

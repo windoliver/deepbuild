@@ -1,0 +1,15 @@
+{
+  "issue": 499,
+  "criterion": "#499.9dbb482c",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in the session (\"you validte for me\"); not the owner's own call, and the owner may overturn it",
+  "when": "2026-11-09T18:30:52Z",
+  "screenshots": {
+    "frame-3s.png": "5d466192bfa053b3bd4aa5b00d7ea8f189b618b186f52df535576c3dc512b9c2",
+    "frame-3.5s.png": "ff35932f0a1ef55c58ec0572f1c1b6a96cbf1be2c3353019e728cd785d7087b2",
+    "crop-quarter.png": "09a05ba38e2fb377e7331e7f858cff4291d8b7b139f6c27c4be09ceca7ad3bbf",
+    "push-ring.png": "97ecea14b637132f75df14aaa1d7699ea95e6e1dcad0c3ae6e1960c1cf78a3ee",
+    "push.apng": "52d16a78bf1492f59912cbd82e45ef7e418e1b7ec21bb8fcc66e1444f921e2d7"
+  },
+  "note": "Looked at all five and measured them. The 3 s and 3.5 s frames are different frames of the noise recording (mean grey difference 65.9 of 255), both with the click's square and dot in place. crop-quarter.png is the 3 s frame's top-left quarter at 2x, pixel for pixel (mean difference 0.00; 63-70 against the other three quarters). push.apng has 61 frames at 30 fps; the ring's centre stays within 0.47 px of the click's dot in every frame while both grow from 36 to 72 px, a 2x push that eases in and out. push-ring.png shows the ring centred on the dot mid-push. Nothing looks wrong."
+}

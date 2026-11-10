@@ -82,6 +82,22 @@ const FEATURES: &[&str] = if cfg!(feature = "plant-f-test") {
     &[]
 };
 
+/// The hub contract this deep-hook speaks, "major.minor": the hub's own is `CONTRACT` in packages/hub/src/wire.ts.
+const CONTRACT: &str = "1.0";
+
+/// Why a hub whose hello names a contract a major apart from this deep-hook's gets nothing (#1334); none when they agree.
+fn contract_mismatch(hub: Option<&Value>) -> Option<String> {
+    let Some(Value::String(theirs)) = hub else {
+        return None;
+    };
+    let major = |c: &str| c.split('.').next().unwrap_or_default().to_string();
+    (major(theirs) != major(CONTRACT)).then(|| {
+        format!(
+            "deep-hook: the hub speaks contract {theirs} and this deep-hook speaks contract {CONTRACT}, a major apart, so nothing was sent to it and its fail_closed guard entries apply. Promote a build whose deep-hook matches the hub's contract (deep hub promote), then start the session again."
+        )
+    })
+}
+
 fn home() -> PathBuf {
     PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".deepbuild")
 }
@@ -469,7 +485,11 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
 }
 
 /// The heavy.command@1 entry a shell call's command matches (#1015), read from the payload as the agent sent it.
-fn heavy_call(payload: &Value, plant: Option<&str>) -> Option<(heavy::Hit, String)> {
+fn heavy_call(
+    payload: &Value,
+    called: Option<&matcher::Call>,
+    plant: Option<&str>,
+) -> Option<(heavy::Hit, String)> {
     let Some(Value::String(tool)) = member(payload, "tool_name") else {
         return None;
     };
@@ -485,8 +505,15 @@ fn heavy_call(payload: &Value, plant: Option<&str>) -> Option<(heavy::Hit, Strin
         Some(Value::String(cwd)) if Path::new(cwd).is_absolute() => Some(PathBuf::from(cwd)),
         _ => None,
     };
-    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
-    heavy::matched(command, cwd.as_deref(), &home, plant).map(|hit| (hit, command.clone()))
+    // The call the rules were matched on read this same line, in this folder and home: its runs serve.
+    let hit = match called.filter(|call| call.command.as_deref() == Some(command.as_str())) {
+        Some(call) => heavy::matched_in(&call.runs, command, cwd.as_deref(), plant),
+        None => {
+            let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
+            heavy::matched(command, cwd.as_deref(), &home, plant)
+        }
+    };
+    hit.map(|hit| (hit, command.clone()))
 }
 
 /// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
@@ -573,7 +600,7 @@ fn denials(matched: &[(&Guard, matcher::Hit)], covered: bool) -> Vec<String> {
 
 /// The request's fields for what the matcher read of a call: `,"notes":{...}` for an entry's words, so the hub's
 /// denial says them too, and `,"stage":{...}` for what the hub stages before the call runs: the folders a delete whose
-/// reach can't be worked out names (#347), the paths a discard of tracked edits reaches and the stash a drop names (#1294).
+/// reach can't be worked out names (#347), the paths a delete past its worktree reaches (#1507), the paths a discard of tracked edits reaches and the stash a drop names (#1294).
 fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)]) -> String {
     let notes = matched
         .iter()
@@ -594,6 +621,7 @@ fn read_fields(called: Option<&matcher::Call>, matched: &[(&Guard, matcher::Hit)
         let called = called?;
         let paths = match pattern {
             "effect:unknown-reach-delete" => called.stage(),
+            "effect:unrestorable-delete" => called.past(),
             "effect:discard-edits" => called.edits(),
             "effect:drop-stash" => called.stash(),
             _ => None,
@@ -684,7 +712,8 @@ enum Outcome {
     /// The hub isn't there, refused the request or sent what doesn't parse; `late` when it was there but
     /// didn't acknowledge in time or didn't reply by its hold.
     Down { late: bool },
-    /// A hub below the writer generation this machine has seen of it (#1338): nothing was sent, and nothing spooled.
+    /// A hub below the writer generation this machine has seen of it (#1338), or a contract major apart from this
+    /// deep-hook's (#1334): nothing was sent, and nothing spooled.
     Stale(String),
 }
 
@@ -782,6 +811,11 @@ fn exchange(
     {
         return (None, Outcome::Stale(why), hello);
     }
+    // A hub a contract major apart fails closed with its reason, as a stale one does: nothing is sent or spooled, so
+    // nothing of the session is judged by a hub whose contract it doesn't speak (#1334).
+    if let Some(why) = contract_mismatch(member(&hello_value, "contract")) {
+        return (None, Outcome::Stale(why), hello);
+    }
     let listed = match member(&hello_value, "features") {
         Some(Value::Array(items)) => items.as_slice(),
         _ => &[],
@@ -807,9 +841,14 @@ fn exchange(
     let _ = reader
         .get_ref()
         .set_write_timeout(ack_deadline.map(|_| left.max(Duration::from_millis(1))));
-    let sent = match joined {
-        Some(joined) => remote::hello(joined) + &request,
-        None => request.clone(),
+    // The request goes as it is, lent; only a joined hub's hello makes a second text.
+    let with_hello;
+    let sent: &str = match joined {
+        Some(joined) => {
+            with_hello = remote::hello(joined) + &request;
+            &with_hello
+        }
+        None => &request,
     };
     if let Err(error) = reader.get_mut().write_all(sent.as_bytes()) {
         let late = matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut);
@@ -1204,7 +1243,19 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     }
     // The agent's hook JSON goes as it came: a raw newline in valid JSON is only whitespace, so it becomes a space.
     let payload = if parsed.is_some() {
-        input.trim().replace(['\n', '\r'], " ")
+        // In the text's own buffer, which nothing reads again: a tool's output can pass 1 MiB, and a
+        // second copy of it counts against the hook's memory. A space for a newline keeps it UTF-8.
+        let mut bytes = std::mem::take(&mut input).into_bytes();
+        for b in &mut bytes {
+            if matches!(*b, b'\n' | b'\r') {
+                *b = b' ';
+            }
+        }
+        let mut text = String::from_utf8(bytes).unwrap_or_default();
+        text.truncate(text.trim_end().len());
+        let lead = text.len() - text.trim_start().len();
+        text.drain(..lead);
+        text
     } else {
         quoted(&input)
     };
@@ -1251,7 +1302,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let heavy = parsed
         .as_ref()
         .filter(|_| event == "PreToolUse")
-        .and_then(|p| heavy_call(p, plant.as_deref()));
+        .and_then(|p| heavy_call(p, called.as_ref(), plant.as_deref()));
     let heavy_field = heavy
         .as_ref()
         .map(|(hit, command)| {

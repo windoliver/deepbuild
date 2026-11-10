@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use deep_canvas_drawn::geometry::{direction, seeded};
-use deep_canvas_drawn::medium::{words, Lamp, Medium};
+use deep_canvas_drawn::medium::{words, Kind, Lamp, Medium};
 use deep_canvas_drawn::spec::{Anchor, Look, ReliefFrom, Zoom, TEETH};
 use deep_canvas_drawn::tooth;
 use deep_canvas_marks::drawn::View;
@@ -56,6 +56,8 @@ pub struct Page {
     pub zoom: f64,
     /// The field moves with the camera: any anchor but the frame.
     pub scale_follows: bool,
+    /// Pixel to world u, whatever the paper's anchor: what a world-anchored dither reads.
+    pub world: (f64, [f64; 2]),
     pub size: [f64; 2],
     pub seed: u32,
     pub tooth: Option<Tooth>,
@@ -201,6 +203,7 @@ impl Page {
             offset,
             zoom: 1.0 / scale,
             scale_follows: paper.is_none_or(|p| p.anchor != Anchor::Frame),
+            world: view.to_world(),
             size,
             seed: doc_seed as u32,
             tooth,
@@ -237,6 +240,7 @@ impl Page {
         let mut page = self.clone();
         page.lamps = lamps;
         let (scale, offset) = view.copied().unwrap_or(View::NONE).to_world();
+        page.world = (scale, offset);
         if self.scale_follows {
             (page.scale, page.offset, page.zoom) = (scale, offset, 1.0 / scale);
         }
@@ -763,6 +767,9 @@ impl Drawn {
         w[5] = m.bounds.map(f);
         let (kind_words, list) = words(m);
         w[6..10].copy_from_slice(&kind_words);
+        if let Kind::Dither(..) = m.kind {
+            w[6] = [f(page.world.0), f(page.world.1[0]), f(page.world.1[1]), 0.0];
+        }
         w[10][3] = f(m.dry);
         let seed = m.seed;
         let shift = |k: u32| f(seeded(u64::from(seed), "shift", k) * 400.0);

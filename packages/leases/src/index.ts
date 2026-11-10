@@ -338,6 +338,8 @@ class Table implements LeaseTable {
   async tick(): Promise<void> {
     await this.sync();
     const now = this.options.now();
+    // One read of the process table per agent a tick: a leased command holds several leases under one agent.
+    const starts = new Map<number, ReturnType<typeof startOf>>();
     for (const h of [...this.held.values()]) {
       if (!this.held.has(h.lease.id)) continue;
       if (now > h.lease.expires && this.plant === 'releases-at-expiry') {
@@ -349,7 +351,7 @@ class Table implements LeaseTable {
         h.stale = true;
         await this.append('lease.stale', 1, h.lease.id, { resource: h.lease.resource, holder: h.lease.holder, mode: h.lease.mode, expires: h.lease.expires });
       }
-      const end = await this.ended(h);
+      const end = await this.ended(h, starts);
       const { running, proof } = this.processes(h.run);
       if (end && !running.length) await this.end(h, [end, ...proof]);
       // A package's lease on a run ends once the supervisor proved each process of the run gone; the supervisor ends
@@ -358,12 +360,14 @@ class Table implements LeaseTable {
     }
   }
   /** The event that says the lease's holder session has ended, recording its agent's end when it is proven gone. */
-  private async ended(h: Held): Promise<string | undefined> {
+  private async ended(h: Held, starts: Map<number, ReturnType<typeof startOf>>): Promise<string | undefined> {
     const holder = h.lease.holder;
     // Only a session ends on its own; a lease another writer holds (the supervisor's, for a run) is released by it.
     if (!holder.startsWith('session:')) return undefined;
     if (this.ends.has(holder) || !h.agent) return this.ends.get(holder);
-    const start = await startOf(h.agent.pid);
+    let read = starts.get(h.agent.pid);
+    if (!read) starts.set(h.agent.pid, (read = startOf(h.agent.pid)));
+    const start = await read;
     // A table that can't be read ends no holder: the next tick reads it again.
     if (start === undefined) return this.ends.get(holder);
     const gone = this.plant === 'pid-only-liveness' ? start === null : start !== h.agent.start;

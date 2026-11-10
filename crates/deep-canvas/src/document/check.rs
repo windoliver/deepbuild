@@ -75,13 +75,13 @@ pub fn check(doc: &Value) -> CheckResult {
 /// build lacks, through `requires.modules`, a kind or a field an absent module evaluates, is
 /// refused with `module_missing` naming the module.
 pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
-    check_by(doc, sealed, &sealed.kinds(), None, &Packs::default())
+    check_by(doc, sealed, sealed.kinds_ref(), None, &Packs::default())
 }
 
 /// [`check_in`] in a build that admitted `packs` (Pack): a document's `packs` resolve through
 /// them, and each recipe instance expands at check into its derived items.
 pub fn check_packed(doc: &Value, sealed: &Sealed, packs: &Packs) -> CheckResult {
-    check_by(doc, sealed, &sealed.kinds(), None, packs)
+    check_by(doc, sealed, sealed.kinds_ref(), None, packs)
 }
 
 /// [`check_in`], estimating a document's cost from `coefficients` rather than the reference
@@ -90,7 +90,7 @@ pub fn check_costed(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -
     check_by(
         doc,
         sealed,
-        &sealed.kinds(),
+        sealed.kinds_ref(),
         Some(coefficients),
         &Packs::default(),
     )
@@ -435,7 +435,15 @@ fn module_checks(
                     .iter()
                     .find(|c| c.code == r.code)
                     .map(|c| c.fix.clone());
+                // An issue at another item's or a strip's field names it too (#499's av_unlinked).
+                let other = ["strips/", "items/"]
+                    .iter()
+                    .find_map(|p| r.path.strip_prefix(p))
+                    .and_then(|p| p.split('/').next())
+                    .filter(|o| *o != id)
+                    .map(str::to_string);
                 let mut issue = Issue::error(r.code, id, r.path, actual, &r.what);
+                issue.ids.extend(other);
                 issue.severity = if r.severity == "warning" {
                     "warning"
                 } else {
@@ -740,6 +748,25 @@ fn recheck_by(
                 .get(p)
                 .and_then(|i| member(i, "parent"))
                 .and_then(Value::as_str);
+        }
+    }
+    // #499: the items that play an asset an affected item plays (a video's picture and its
+    // sound strip, by the asset's hash), which a check links them by.
+    let mut assets: BTreeSet<String> = BTreeSet::new();
+    for id in &affected {
+        if let Some(params) = items.get(id).and_then(|i| member(i, "params")) {
+            strings_in(params, &mut |s| {
+                if s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    assets.insert(s.to_string());
+                }
+            });
+        }
+    }
+    if !assets.is_empty() {
+        for (id, item) in items {
+            if member(item, "params").is_some_and(|p| names_any(p, &assets)) {
+                context.insert(id.clone());
+            }
         }
     }
     let mut reduced = Map::new();
@@ -2096,6 +2123,15 @@ fn check_targets(
                             json!(text),
                             &what,
                         ));
+                    } else if moves_a_dither(doc, &path) {
+                        // Paint: dither fill: it can never vary with time or frame.
+                        issues.push(Issue::error(
+                            "out_of_range",
+                            key,
+                            target_path,
+                            json!(text),
+                            "a dither fill never varies with time, so nothing drives it",
+                        ));
                     } else if let Some((module, missing)) =
                         left_out_param(doc, &path, kinds, sealed)
                     {
@@ -2284,6 +2320,39 @@ fn lacks(name: &str, module: &str, missing: &str) -> String {
         format!("`{name}` is evaluated by the {missing} module, which this build lacks")
     } else {
         format!("`{name}` reads the {missing} module, which this build lacks")
+    }
+}
+
+/// Whether an item target reaches a dither fill or holds one (Paint: dither fill).
+fn moves_a_dither(doc: &Value, path: &Path) -> bool {
+    fn holds(v: &Value) -> bool {
+        match v {
+            Value::Object(map) => {
+                map.get("fill").is_some_and(|f| f.get("dither").is_some())
+                    || map.values().any(holds)
+            }
+            Value::Array(list) => list.iter().any(holds),
+            _ => false,
+        }
+    }
+    if path.section() != Section::Items {
+        return false;
+    }
+    let fields = path.fields();
+    if fields
+        .windows(2)
+        .any(|w| w[0] == "fill" && w[1] == "dither")
+    {
+        return true;
+    }
+    let mut reached = member(doc, "items").and_then(|m| member(m, path.id().as_str()));
+    for field in fields {
+        reached = reached.and_then(|v| v.get(field.as_str()));
+    }
+    match (fields.last().map(String::as_str), reached) {
+        (Some("fill"), Some(v)) => v.get("dither").is_some(),
+        (_, Some(v)) => holds(v),
+        _ => false,
     }
 }
 

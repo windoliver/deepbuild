@@ -10,7 +10,10 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use super::core_ops::Edits;
-use super::{Access, Bound, Loaded, Node, OpError, Outside, Session, Tokens, Val, VIEW_INPUTS};
+use super::{
+    view_input, Access, Bound, Key, Loaded, Node, OpError, Outside, Session, Tokens, Val,
+    VIEW_INPUTS,
+};
 use crate::registry::{Sealed, SealedOp, TableValue};
 
 /// What a step reads beside the view: its time, the stepping arrays as they stand, and as
@@ -27,7 +30,8 @@ pub struct View<'a> {
     l: &'a Loaded,
     node: &'a Node,
     sop: &'a SealedOp,
-    tables: BTreeMap<String, TableValue>,
+    /// The scheduler's tables; the node's own are built before it runs.
+    tables: &'a BTreeMap<String, (TableValue, Key)>,
     log: bool,
     access: Vec<Access>,
     out: Vec<Val>,
@@ -58,7 +62,7 @@ impl<'a> View<'a> {
         sealed: &'a Sealed,
         l: &'a Loaded,
         node: &'a Node,
-        tables: BTreeMap<String, TableValue>,
+        tables: &'a BTreeMap<String, (TableValue, Key)>,
         log: bool,
         step: Option<StepCtx<'a>>,
         forgets_changes: bool,
@@ -148,6 +152,7 @@ impl<'a> View<'a> {
                 code: "undeclared_read",
                 path: self.path(),
                 read: Some(term.to_string()),
+                actual: None,
             }),
         }
     }
@@ -434,6 +439,7 @@ impl<'a> View<'a> {
                 code: "undeclared_read",
                 path: self.path(),
                 read: Some(format!("parent:{own}")),
+                actual: None,
             });
         }
         match &self.node.reads[k] {
@@ -453,7 +459,12 @@ impl<'a> View<'a> {
 
     /// `view(<input>)`: one of the six view inputs.
     pub fn view(&mut self, input: &str) -> Result<&'a Value, OpError> {
-        self.declared(&format!("view({input})"))?;
+        // The operator's own read term, where it declared one, saves writing it out again.
+        let sop = self.sop;
+        match sop.op.reads.iter().find(|r| view_input(r) == Some(input)) {
+            Some(term) => self.declared(term)?,
+            None => self.declared(&format!("view({input})"))?,
+        };
         let k = VIEW_INPUTS.iter().position(|v| *v == input).unwrap_or(0);
         Ok(&self.session.view[k])
     }
@@ -497,8 +508,7 @@ impl<'a> View<'a> {
         self.declared(&format!("table:{name}"))?;
         self.tables
             .get(name)
-            .cloned()
-            .and_then(|v| v.downcast::<T>().ok())
+            .and_then(|(v, _)| v.clone().downcast::<T>().ok())
             .ok_or_else(|| OpError::new("table_missing", name))
     }
 

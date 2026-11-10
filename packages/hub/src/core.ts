@@ -27,7 +27,7 @@ import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { alive as running, openSupervisor, openUnder, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
-import { predictionContradictions, recordVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
+import { predictionContradictions, recordVerdict, verdict as claimVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, HOLD_MARGIN_MS, installed, readJson, relations, restore, STOP_HOLD_MS, tampered, words } from './claude-settings.js';
 import { Confirmer } from './confirm.js';
@@ -47,7 +47,7 @@ import { opensOf, Questions, type Sorted } from './questions.js';
 import { couldDo, reachOf, struck, type Reach, type ReachTool } from './could-do.js';
 import { Staging } from './staging.js';
 import { CAN_RUN, CANT_RUN, describe, RUN_BY, unrunnable } from './hook-programs.js';
-import { SLASH_COMMAND, coveredBy, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
+import { SLASH_COMMAND, adapterOf, coveredBy, loopFact, registry, toolClasses, versionOf } from './hookmap.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { cachedRuleFiles, creditOf, handleOf as ruleHandle, pageLines, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, setOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
@@ -69,7 +69,7 @@ import { aboutCall, aboutPermission, standingRules, type About } from './standin
 import { Channels, type ChannelAsk } from './channels.js';
 import { Workspaces } from './workspaces.js';
 import { checkKey, Devices } from './trusted.js';
-import { openIndex, pageClaims, search, type IndexFill } from './search.js';
+import { aboutSessions, openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { gateTokens, openGitHub, type AppKey, type GitHub, type GitHubPlant } from '@deepbuild/github';
 import { closesIssue, Forge, isPrCreate, parsePrUrl, partOfIssue, prUrlIn } from './forge.js';
 import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
@@ -88,9 +88,10 @@ import { checkArguments } from './tools.js';
 import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
-import { plantedReload, plantedSessionEnd, plantedStop } from './plant.js';
+import { plantedReload, plantedSessionEnd, plantedStop, type Plant } from './plant.js';
 import { draftedPools, HeavyQueue, JobPool, poolTokens } from './heavy.js';
 import { Products } from './products.js';
+import { LogReads } from './log-reads.js';
 import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts, type AssetKind } from './libraries.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
@@ -167,6 +168,12 @@ const ENDED_KEPT = 64;
 const FOREIGN = new Set(['cursor', 'grok']);
 /** The agents whose adapter has no route to hold a prompt at its submit: pi's package and paseo's plugin take none (#40, #55). */
 const HOLDS_NO_PROMPT = new Set(['pi', 'paseo']);
+/** An agent whose idle session no answer can wake (caps.wakeIdle): what it is to read reaches it in a held stop or a call's reply. */
+const noWake = (agent: string | undefined): boolean => adapterOf(agent)?.caps.wakeIdle === false;
+/** An agent whose own tool calls the adapter doesn't see (caps.nativeTools): its turn shows no work but its claim (#55). */
+const unseenTools = (agent: string | undefined): boolean => adapterOf(agent)?.caps.nativeTools === false;
+/** An agent whose own package places an answer in its session, steering a running turn or starting one (caps.steer, caps.startTurn). */
+const placesItself = (agent: string | undefined): boolean => { const caps = adapterOf(agent)?.caps; return caps !== undefined && caps.steer && caps.startTurn; };
 /** The commands that take effect only once the OS confirms you (#19), as `you.confirm` names them. */
 /** The sign-in command each agent's facts name, by the agent's name as a task would say it (#84). */
 function signInCommands(): Record<string, string> {
@@ -181,6 +188,8 @@ const reusedPids = (): number[] => {
   try { const list = JSON.parse(readFileSync(file, 'utf8')) as unknown; return Array.isArray(list) ? list.filter((n): n is number => Number.isSafeInteger(n)) : []; } catch { return []; }
 };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** A verdict as the hub records and returns it: the gate's, or its opposite in #1334's planted misjudging build. */
+const misjudged = <V extends { outcome: string }>(v: V, plant: Plant | undefined): V => (plant === 'judges-claims-wrongly' ? { ...v, outcome: v.outcome === 'PASS' ? 'FAIL' : 'PASS' } : v);
 const isUnder = (path: string, dir: string) => {
   const rel = relative(dir, path);
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
@@ -395,17 +404,6 @@ interface Stamp { session: string; tool: string; digest: string }
 
 /** A prompt Codex's subagent got, which its hook names with the root's session ID and an agent_id. */
 const childPrompt = (meta: HookMeta): boolean => meta.agent === 'codex' && Boolean(meta.fields?.agent_id);
-/**
- * An event's JSON text, built by SQLite from the stored row: the record's toJson fields, seq as its decimal string, and
- * `verified` for the unverified mark. `data` and `evidence` are stored as JSON text already, and json_quote writes a
- * string as JSON.stringify does.
- */
-const EVENT_TEXT = `'{"v":' || v || ',"id":' || json_quote(id) || ',"kind":' || json_quote(kind) || ',"writer":' || json_quote(writer)
-  || ',"actor":' || json_quote(actor) || ',"scope":' || json_quote(scope) || ',"ts":' || ts || ',"log_pos":' || log_pos
-  || ',"data":' || data || ',"evidence":' || coalesce(evidence, '[]') || iif(subject IS NULL, '', ',"subject":' || json_quote(subject))
-  || iif(seq IS NULL, '', ',"seq":"' || CAST(seq AS TEXT) || '"') || iif(session_id IS NULL, '', ',"session":' || json_quote(session_id))
-  || iif(project_id IS NULL, '', ',"project":' || json_quote(project_id)) || iif(agent IS NULL, '', ',"agent":' || json_quote(agent))
-  || ',"verified":' || iif(unverified, 'false', 'true') || '}'`;
 
 
 export class Core {
@@ -416,6 +414,8 @@ export class Core {
   private record!: RecordStore;
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
+  /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
+  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight]), ownerSeen: () => this.seenBy(OWNER), emit: (sub, json) => this.emit(sub, json) });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
@@ -545,6 +545,13 @@ export class Core {
   private readonly expected = new Map<string, number>();
   /** Each process's start time, as `ps -o lstart=` prints it: how a process is told apart from a reused PID. */
   private readonly starts = new Map<number, Promise<string | undefined>>();
+  /** A hook's parent's command line, read once for the hook: its start's readers share one `ps`. */
+  private readonly argsRead = new WeakMap<HookMeta, Promise<string>>();
+  private parentArgs(meta: HookMeta): Promise<string> {
+    let read = this.argsRead.get(meta);
+    if (!read) this.argsRead.set(meta, (read = argsOf(meta.ppid).catch(() => '')));
+    return read;
+  }
   /** Hooks and calls run in arrival order: a deep_* call finds the stamp its PreToolUse left. */
   private chain: Promise<unknown> = Promise.resolve();
   /** Whether the start has finished: from then on, work waiting for it joins the queue at once. */
@@ -575,13 +582,8 @@ export class Core {
   private readonly replicas: Replicas;
   /** The screen each session's computer use last switched to, one it leases (#332). */
   private readonly onScreen = new Map<string, string>();
-  private readonly subscribers = new Map<string, number>();
   /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
   private readonly inflight = new Set<Promise<unknown>>();
-  private streaming = false;
-  private restream = false;
-  /** The full page after the last one read, built ahead for a reader paging in order. */
-  private ahead: { after: number; limit: number; seen: string; log_pos: number; events: string } | undefined;
   private secrets: { at: number; value: Promise<string> } | undefined;
   private readonly timers: NodeJS.Timeout[] = [];
   /**
@@ -590,6 +592,8 @@ export class Core {
    */
   private readonly jobs = new Map<string, { failures: number; since: number; at: number; error: string } | null>();
   private stopping = false;
+  /** A promotion's drain (#1334): no session starts until the hub restarts on the new build. */
+  private draining = false;
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
   private dropped = false;
@@ -733,8 +737,8 @@ export class Core {
       reading: (session, agent, reading) => this.appendReading(session, agent, reading),
     });
     this.questions = new Questions({
-      raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, holds: this.holds, now: this.now, plant: options.plant,
-      append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
+      raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, holds: this.holds, plant: options.plant,
+      connection: (session, agent) => this.connection('core', { session, agent }),
       pin: (cwd, question) => this.pinOf(cwd, question), reading: (session, agent, reading) => this.appendReading(session, agent, reading),
       reach: (session) => this.reachOfSession(session), checks: (cwd) => [...this.checksOf(cwd).keys()],
       denied: (command) => blocksCall(this.root.dir, deepHook(), command), signIns: () => signInCommands(),
@@ -901,7 +905,7 @@ export class Core {
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
     this.record = streamed(this.record, ({ kind, subject, data }, connection) => {
-      this.stream();
+      this.log.stream();
       if (kind !== 'session.state') {
         // The next state pass reads the sessions appended to since the last; an event of no session, every session.
         if (this.touched !== 'all') { if (connection.session) this.touched.add(connection.session); else this.touched = 'all'; }
@@ -947,7 +951,7 @@ export class Core {
     const asks = this.asks = await openAsks({
       record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir, threads: slackThreads(this.root.dir), network: networkCheck(),
       // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
-      errorTurnHook: (agent) => { try { return registry().get(ADAPTERS[agent] ?? agent).caps.errorTurnHook === true; } catch { return false; } },
+      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true,
     });
     await this.continues();
     this.askingSoon();
@@ -972,7 +976,7 @@ export class Core {
       const pos = await landed();
       if (pos > ticked) { ticked = pos; return true; }
       if (batch) return true;
-      return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ${this.now()} OR kind = 'unblock') LIMIT 1`)).length > 0;
+      return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0;
     };
     // The hook programs are checked at start and every 10 minutes on the hub's clock (#993): no hook arrives to say they can't run.
     await this.hookPrograms().catch(() => undefined);
@@ -1146,7 +1150,7 @@ export class Core {
     await extensions.ready().catch((error: unknown) => process.stderr.write(`deep hub: ${error instanceof Error ? error.message : String(error)}\n`));
     // Your channels (#65): the asks reach you where you said, and each answer a channel returns is checked here.
     this.channels = new Channels({
-      root: this.root.dir, now: this.now, plant: this.options.plant, devices: this.devices,
+      root: this.root.dir, hub: this.hubId(), now: this.now, plant: this.options.plant, devices: this.devices,
       loaded: () => extensions.channels(),
       call: (name, op, item, ctx) => (op === 'deliver' ? extensions.channel(name, op, item!, ctx) : extensions.channel(name, op, null, ctx)),
       asks: () => this.channelAsks(),
@@ -1190,7 +1194,10 @@ export class Core {
         // With no token the forge's logs can't be read, so no run is asked for.
         repos.splice(0, repos.length, ...(env.GH_TOKEN ? await this.forgeRepos() : []));
         await archive.pass();
-      })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => { archiving = undefined; });
+      })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); })
+        // The archive's text index follows each pass, whatever the pass copied (#1515): a session it doesn't hold yet is read from its transcript.
+        .then(() => this.record.indexTranscripts()).catch((error: unknown) => { process.stderr.write(`deep hub: archive index: ${error instanceof Error ? error.message : String(error)}\n`); })
+        .finally(() => { archiving = undefined; });
       return archiving;
     };
     archivePass();
@@ -1405,7 +1412,7 @@ export class Core {
     if (meta.transcript && resolve(meta.transcript) !== session.transcript) return;
     // npm's Codex runs as node with its bin script, its native build as codex itself.
     const binaries = meta.agent === 'codex' ? [CODEX_BINARY, /@openai\/codex\/bin\/codex\.js(?:\s|$)/] : meta.agent === 'claude-code' || meta.agent === 'claude' ? [CLAUDE_BINARY] : [];
-    const args = binaries.length ? await argsOf(meta.ppid) : '';
+    const args = binaries.length ? await this.parentArgs(meta) : '';
     if (binaries.length && !binaries.some((b) => b.test(args))) return;
     const ppid = meta.ppid;
     const [last] = (await this.record.raw(`SELECT ts, json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [session.id, `${OLDER_SET}%`, `${NEWER_SET}%`])) as { ts: number; text: string }[];
@@ -1662,7 +1669,7 @@ export class Core {
       }
     }
     if (session && verified && !replayed) {
-      if (meta.agent === 'codex') await this.promptless(drafts, meta, session);
+      await this.promptless(drafts, meta, session);
       this.queuedAsks(drafts, session, meta.event);
       if (meta.event === 'UserPromptSubmit') this.appNotes(drafts, meta.session);
     }
@@ -1866,7 +1873,7 @@ export class Core {
       for (const s of done) sends!.set(s.key, { label: s.label, pr: false, done: true });
       // The server gates a resumed session's calls until it hears again which sessions have sends to match.
       if (meta.fields?.source === 'resume') { this.askingSent = ''; this.askingSoon(); }
-      if (meta.agent === 'claude-code' || meta.agent === 'claude') void settled.then(() => this.modsReading(meta)).catch(() => undefined);
+      void settled.then(() => this.modsReading(meta)).catch(() => undefined);
     }
   }
   /** A PreToolUse the server's reply denied (#1033): what denied it and the call in words. */
@@ -1876,7 +1883,7 @@ export class Core {
   /** The mods of the Claude Code home a session's transcript lives in, and the folders its command line loads; another agent loads none. */
   private async sessionMods(meta: HookMeta): Promise<HomeMods> {
     if (meta.agent !== 'claude-code' && meta.agent !== 'claude') return { home: '', mods: [] };
-    const dirs = pluginDirs(await argsOf(meta.ppid).catch(() => ''));
+    const dirs = pluginDirs(await this.parentArgs(meta));
     const home = homeOfTranscript(meta.transcript) ?? claudeHomes(process.env)[0]!;
     // Read again only when what Claude Code lists them from changes, or after MODS_MS: each read starts claude several
     // times. A read in flight is shared, so starts that arrive together start claude once.
@@ -1935,6 +1942,7 @@ export class Core {
    */
   private async modsReading(meta: HookMeta): Promise<void> {
     const read = await this.sessionMods(meta);
+    if (!read.home) return;
     const held = await denyHolds({ ...process.env, ...(read.home ? { CLAUDE_CONFIG_DIR: read.home } : {}) }, claudeOnPath(process.env), () => this.planOf(read.home));
     const risky = held || !('mods' in read) ? [] : read.mods.filter((m) => m.overrides);
     let reading: string | undefined;
@@ -1957,7 +1965,7 @@ export class Core {
     const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
     const rules = readJson(join(this.root.dir, 'rules.json'));
     const entries = isObj(rules) && isObj(rules.entries) ? rules.entries : {};
-    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
+    const blocks = (Array.isArray(d.matched) ? d.matched.map(String) : []).filter((n) => { const e = entries[n]; return isObj(e) && e.mode === 'block' && !/^effect:(dependency|cloud-resource|unknown-reach-delete|unrestorable-delete|discard-edits|drop-stash)$/.test(String(e.match)); });
     return blocks.length ? { guard: blocks.join(', ').slice(0, 2000), label: callOf(d, effectEntries(this.root.dir)).label.slice(0, 2000) } : undefined;
   }
 
@@ -1971,7 +1979,7 @@ export class Core {
   /** A request line the adapters map, for a payload the core rebuilt from what the parser kept of the hook. */
   private mapped(meta: HookMeta, draft: Draft, payload: Obj, transcript: readonly Obj[]): Obj | undefined {
     if (meta.agent === 'pi' || meta.agent === 'paseo') return undefined;
-    const name = meta.agent === 'codex' ? 'codex' : 'claude';
+    const name = ADAPTERS[meta.agent] ?? 'claude';
     const adapter = registry().get(name);
     const version = ((adapter.facts as Obj).versions as string[]).at(-1)!;
     const line = { v: 1 as const, agent: name, event: meta.event, seq: draft.seq ?? '0', id: draft.id, pid: meta.pid, ppid: meta.ppid, matched: [], payload: { session_id: meta.session, hook_event_name: meta.event, ...payload } as JsonValue };
@@ -2340,6 +2348,8 @@ export class Core {
    * first hook's events, its origin read from the rollout's opening user message by the facts' turnWithoutPrompt.
    */
   private async promptless(drafts: Draft[], meta: HookMeta, session: Session): Promise<void> {
+    const facts = (adapterOf(meta.agent)?.facts as Obj | undefined)?.turnWithoutPrompt as { values: Record<string, string>; otherwise: string } | undefined;
+    if (!facts) return;
     const turn = meta.fields?.turn_id;
     // A subagent's hooks carry its own turn; no prompt of the root's stands behind them.
     if (!turn || meta.fields?.agent_id) return;
@@ -2349,8 +2359,6 @@ export class Core {
     const started = this.turnsStarted.get(session.id);
     this.turnsStarted.set(session.id, turn);
     if (meta.event === 'UserPromptSubmit' || meta.event === 'SessionStart' || started === undefined || started === turn) return;
-    const facts = (registry().get('codex').facts as Obj).turnWithoutPrompt as { values: Record<string, string>; otherwise: string } | undefined;
-    if (!facts) return;
     let text = '';
     let inTurn = false;
     for (const raw of (await this.tail(session.transcript, 4 << 20)).split('\n')) {
@@ -2718,10 +2726,23 @@ export class Core {
       this.letGoLive(session.id);
       const ts = this.now();
       await this.append(this.connection('core', { session: session.id, agent: session.agent }), { v: 1, id: ulid(ts), kind: 'session.gone', ts, subject: `session:${letters(session.id)}`, data: { pid: session.pid, start: session.start } }).catch(() => undefined);
+      if (session.agent === 'codex' && this.options.plant !== 'leaves-codex-session-open') await this.closedAtExit(session).catch(() => undefined);
       this.endedOrder.delete(session.id);
       this.endedOrder.add(session.id);
       this.forgetEnded();
     }
+  }
+  /**
+   * Codex ended with Ctrl-C may fire no SessionEnd (#1023), so its process ending is its end: the core records the
+   * session.end, a reading that says so, and each answer still waiting for it goes by its task, as an ended Codex
+   * session's answer does (#39).
+   */
+  private async closedAtExit(session: Session): Promise<void> {
+    this.sessionOver(session);
+    const ts = this.now();
+    await this.append(this.connection('core', { session: session.id, agent: session.agent }), { v: 2, id: ulid(ts), kind: 'session.end', ts, subject: `session:${letters(session.id)}`, data: { reason: 'process_exited' } });
+    await this.appendReading(session.id, session.agent, `Codex fired no SessionEnd: the hub closed this session when its process (pid ${session.pid}) exited`);
+    for (const answer of await this.answers.waitingFor(session.id)) await this.answers.outcome(answer.id, 'on_task', 'waiting');
   }
   /** A session has ended, by its SessionEnd or its Archive: what it started goes with it (#342). */
   private sessionOver(session: Session): void {
@@ -2849,13 +2870,9 @@ export class Core {
 
   // ---- Our entries in Claude Code's settings (#18).
 
-  /** A file's identity and size and time, so a change is seen once. */
-  private keyOf(file: string): string {
-    try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; }
-  }
   private watchSettings(): void {
     const file = claudeSettings();
-    this.settingsKey = this.keyOf(file);
+    this.settingsKey = statKey(file);
     const check = () => void this.queue(() => this.settingsChanged()).catch(() => undefined);
     try {
       this.watcher = watch(resolve(file, '..'), (_, name) => { if (!name || String(name) === 'settings.json') check(); });
@@ -2871,7 +2888,7 @@ export class Core {
    */
   private async settingsChanged(): Promise<void> {
     const file = claudeSettings();
-    const key = this.keyOf(file);
+    const key = statKey(file);
     if (key === this.settingsKey) return;
     this.settingsKey = key;
     const record = installed(this.root.dir);
@@ -2881,7 +2898,7 @@ export class Core {
     const running = [...this.live].flatMap(([id, l]) => [...l.calls.values()].filter((c) => c.ended === undefined || now - c.ended <= CALL_GRACE).map((c) => ({ id, agent: l.agent, what: c.what })));
     if (!running.length) return;
     restore(record);
-    this.settingsKey = this.keyOf(file);
+    this.settingsKey = statKey(file);
     for (const r of running) {
       const text = `DeepBuild's hook entries in ${file} were removed or changed (${changed.join('; ')}) while the ${r.what} was running; they were put back at once.`;
       this.settingsReadings.push(text);
@@ -2909,7 +2926,7 @@ export class Core {
     const rows = (await this.record.raw(`SELECT id, session_id, agent, data FROM events WHERE kind IN ('tool.before', 'tool.after') AND ts >= ? AND session_id IS NOT NULL AND (instr(data, ?) > 0 OR instr(data, '.claude/settings.json') > 0) ORDER BY log_pos`, [since, file])) as { id: string; session_id: string; agent: string | null; data: string }[];
     if (!rows.length) return;
     restore(record, flag);
-    this.settingsKey = this.keyOf(file);
+    this.settingsKey = statKey(file);
     const what = [flag ? 'turned Claude Code\'s hooks off (disableAllHooks)' : '', changed.length ? `changed DeepBuild's entries (${changed.join('; ')})` : ''].filter(Boolean).join(' and ');
     for (const session of new Set(rows.map((r) => r.session_id))) {
       const mine = rows.filter((r) => r.session_id === session);
@@ -3072,7 +3089,7 @@ export class Core {
     this.delivery(delivery);
     void this.waitsOnTask(delivery).catch(() => undefined);
     const asker = this.sessions.get(delivery.session);
-    if (asker?.agent === 'pi' || asker?.agent === 'paseo' || this.routes.get(delivery.session)?.places) return void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
+    if (placesItself(asker?.agent) || this.routes.get(delivery.session)?.places) return void this.queue(() => this.placeOrRefuse(delivery.session)).catch(() => undefined);
     // Inside paseo, with neither deep-hook's waiter nor paseo's plugin there to take it, the answer waits on the row (#55).
     const route = this.routes.get(delivery.session);
     if (this.inPaseo.has(delivery.session) && !route?.waiter && !route?.relay) this.answerWaiting.add(delivery.session);
@@ -4077,7 +4094,7 @@ export class Core {
     if (typeof handle !== 'string' || !/^offer:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/offer', 'Name the offer by its handle, offer:<id>, as deep inbox lists it.', handle));
     const offer = this.offers.get(handle);
     if (!offer) throw new Refused(refusal('not_found', '/params/offer', `No offer ${handle}; save one deep inbox lists.`, handle));
-    await this.trusted(params, context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle, offer.scope);
+    await this.trusted('offer.save', params, context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle, offer.scope);
     return this.saveOffer(handle, this.connection(context.role === 'app' ? 'app' : 'cli'));
   }
   /** The offer saved: its permission raised as an authority ask and answered yes on the trusted path, which saves it for the repo. */
@@ -4481,7 +4498,7 @@ export class Core {
     const stopAt = ulidTime(meta.id) + this.stepped;
     // Codex's hold may run as long as its Stop timeout lets a slow check, but an answer waits no longer than anyone's.
     const held = until;
-    until = meta.agent === 'codex' ? Math.min(until, Date.now() + STOP_HOLD_MS) : until;
+    until = noWake(meta.agent) ? Math.min(until, Date.now() + STOP_HOLD_MS) : until;
     const lane = judged?.claim ? await this.laneOf(judged.claim, until) : undefined;
     // What the stop ends on, sorted before the stall rule reads whether a question holds its send-back (#84).
     const message = meta.fields?.last_assistant_message?.trim() ?? '';
@@ -4524,7 +4541,7 @@ export class Core {
     let questionMs = 0;
     try {
       const questionHeld = judged?.claim ? await this.questionHolds(meta.session) : false;
-      if (lane && !lane.sendBack && !sized && judged?.claim && meta.agent === 'codex' && lane.slow.length && !questionHeld) {
+      if (lane && !lane.sendBack && !sized && judged?.claim && noWake(meta.agent) && lane.slow.length && !questionHeld) {
         const failed = await this.slowStop(meta, r, judged.claim, held);
         if (failed) lane.sendBack = failed;
         // An answer that ended the hold is delivered below, with the wait an answer gets.
@@ -4833,7 +4850,7 @@ export class Core {
     }
     if (params.push === true || context.role === 'mcp') {
       const agent = this.sessions.get(session)?.agent;
-      if (context.session !== session || (agent !== 'pi' && agent !== 'paseo')) throw refuse('role', '/params/session', 'Wait only on the pi or paseo session this connection is bound to.', session);
+      if (context.session !== session || !placesItself(agent)) throw refuse('role', '/params/session', 'Wait only on the pi or paseo session this connection is bound to.', session);
       r.places = true;
     }
     if (params.poll === true) {
@@ -4893,7 +4910,7 @@ export class Core {
   private async placed(params: Obj, context: CallContext): Promise<Obj> {
     const session = String(params.session);
     const agent = this.sessions.get(session)?.agent;
-    if (!context.session || context.session !== session || (agent !== 'pi' && agent !== 'paseo')) throw refuse('role', '/params/session', 'Report only on the pi or paseo session this connection is bound to.', session);
+    if (!context.session || context.session !== session || !placesItself(agent)) throw refuse('role', '/params/session', 'Report only on the pi or paseo session this connection is bound to.', session);
     const via = String(params.via);
     const outcome = String(params.outcome);
     if (!['steer', 'next_prompt'].includes(via)) throw refuse('enum', '/params/via', 'Say steer or next_prompt.', via);
@@ -4984,7 +5001,7 @@ export class Core {
     if (live.claim && live.claimTurn === live.turn && !live.workedSinceClaim) {
       // An agent paseo runs with no hooks of its own claims through deep_claim alone: its turn's end runs the gate on
       // that claim, the repo's spec checks at its commit (#55).
-      if (meta.agent === 'paseo' && !this.lanes.has(live.claim)) await this.paseoClaim(meta, live.claim);
+      if (unseenTools(meta.agent) && !this.lanes.has(live.claim)) await this.paseoClaim(meta, live.claim);
       return live;
     }
     // The head as the turn's last commits left it, read by the chain follow() started.
@@ -5505,7 +5522,7 @@ export class Core {
     const binary = meta.agent === 'codex' ? CODEX_BINARY : meta.agent === 'claude-code' || meta.agent === 'claude' ? CLAUDE_BINARY : undefined;
     const resumed = meta.fields?.source === 'resume' || (meta.agent === 'codex' && meta.fields?.source === 'startup');
     if (binary && transcript === session.transcript && meta.event === 'SessionStart' && resumed
-      && (session.ended || await this.startOf(session.pid, true) !== session.start) && binary.test(await argsOf(meta.ppid))) {
+      && (session.ended || await this.startOf(session.pid, true) !== session.start) && binary.test(await this.parentArgs(meta))) {
       Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false, interrupted: false, watched: false });
       return true;
     }
@@ -5539,7 +5556,7 @@ export class Core {
       const pid = this.sessions.get(id)!.pid;
       if (pid && ![...this.sessions.values()].some((s) => s.id !== id && s.pid === pid)) this.starts.delete(pid);
       this.sessions.delete(id);
-      for (const kept of [this.lastMessage, this.counters, this.typedAt, this.projects, this.tasted, this.idleSent, this.completions]) kept.delete(id);
+      for (const kept of [this.lastMessage, this.counters, this.typedAt, this.projects, this.tasted, this.idleSent, this.completions, this.tails]) kept.delete(id);
       this.nudgeable.delete(id);
       this.versioned.delete(id);
       this.miscalled.delete(id);
@@ -5562,7 +5579,7 @@ export class Core {
       if (!actual || actual !== parent.start) return null;
       const served = [...this.sessions.values()].filter((s) => s.pid === parent.pid && s.start === actual && !s.ended);
       // A Codex process may run another thread at any time: each of its calls binds by its own stamp.
-      return served.length === 1 && served[0]!.agent !== 'codex' ? served[0]!.id : null;
+      return served.length === 1 && (adapterOf(served[0]!.agent)?.facts as Obj | undefined)?.daemon === undefined ? served[0]!.id : null;
     });
   }
 
@@ -5612,9 +5629,9 @@ export class Core {
       case 'test.send_back': return this.sendBack(params);
       case 'test.verdict': return this.testVerdict(params);
       case 'test.clock': return this.testClock(params);
-      case 'events.read': return this.read(params, context);
-      case 'inbox.read': return this.reflecting(() => this.inbox());
-      case 'sessions.read': return this.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
+      case 'events.read': return this.log.read(params, this.seenBy(context.role));
+      case 'inbox.read': return this.log.reflecting(() => this.inbox());
+      case 'sessions.read': return this.log.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
       case 'person.add': return this.addPerson(params, context);
       case 'library.on': case 'library.off': case 'library.rule': return this.library(method, params, context);
       case 'person.invite': return this.invitePerson(params, context);
@@ -5626,7 +5643,7 @@ export class Core {
         if (!joined) throw new Refused(refusal('credential', '/invite', 'This invite is spent, lapsed or not one this hub issued.'));
         return joined;
       }
-      case 'numbers.read': return this.reflecting(async () => {
+      case 'numbers.read': return this.log.reflecting(async () => {
         const read = await this.numbers.read() as unknown as { rows: unknown[] };
         return { ...read, rows: [...read.rows, await this.handbacks()] } as unknown as Obj;
       });
@@ -5666,12 +5683,23 @@ export class Core {
       case 'status.read':
         this.replayLate();
         // The state pass under way lands first (#992): what deep status lists is in the record the app draws from.
-        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.reflecting(async () => ({ rows: await this.statusSeen(context.role) })));
+        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.log.reflecting(async () => ({ rows: await this.statusSeen(context.role) })));
       case 'guard.add': return this.addGuard(params, context);
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runs.start(params);
       case 'start.approve': return this.sessionStarts.approve(params, context);
-      case 'start.session': return this.sessionStarts.startSession(params, context);
+      case 'start.session':
+        if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
+        return this.sessionStarts.startSession(params, context);
+      // A promotion (#1334): the run pauses and its running turns are counted until none is left; the fixture claim
+      // judged by this build's own verdict engine; and, on the build that came back, the rollback's one notice.
+      case 'hub.drain':
+        this.draining = params.on !== false;
+        // A turn runs while its session reads working, or waits on a permission prompt, as session.state records it.
+        await this.statesSettled();
+        return { turns: [...this.states.values()].filter((s) => s.startsWith('working/') || s === 'needs you/waiting').length };
+      case 'hub.check': return this.healthClaim();
+      case 'build.rolled_back': return this.rolledBack(params);
       case 'test.load': return this.testLoad(params);
       case 'record.backup': return this.backup(params);
       case 'lease.wait': return this.heavy.wait(params, context.peer, () => this.agentAbove(context.peer)).catch((e: Error) => { throw new Refused(refusal('type', '/params', e.message, method)); });
@@ -5790,7 +5818,11 @@ export class Core {
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
     const claude = { relations: relations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.settingsReadings] };
     const codex = { relations: codexRelations(this.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...modified(this.root.dir), ...trustProblems(this.root.dir).map((p) => `Codex's hook list reports ${p}`)], trust: readTrust(this.root.dir) ?? null };
-    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
+    // The newest sessions, each closed once an end is on record since its last start (#1023); as `deep status` does, this
+    // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
+    const sessions = ((await this.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
+      FROM sessions s WHERE s.last_seen IS NOT NULL ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
+    return { gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.jobs].map(([name, failing]) => [name, { failing }])) };
   }
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
   private secretStore(): Promise<string> {
@@ -5805,15 +5837,6 @@ export class Core {
     return value;
   }
 
-  /**
-   * A page of the log as each event's JSON text, the record's own JSON with `verified` for its unverified mark,
-   * built by SQLite from the stored text without parsing it again: the reads and the stream page through many events.
-   */
-  private async page(after: number, limit: number, kinds?: string[], seen = ''): Promise<{ log_pos: number; json: string }[]> {
-    const only = kinds ? ` AND kind IN (${kinds.map((k) => `'${k.replace(/'/g, "''")}'`).join(',')})` : '';
-    // The position and the page size bound, so every page is the one statement the record keeps compiled.
-    return (await this.record.raw(`SELECT log_pos, ${EVENT_TEXT} AS json FROM events WHERE log_pos > ?${only}${seen} ORDER BY log_pos LIMIT ?`, [after, limit])) as { log_pos: number; json: string }[];
-  }
   /** deep status's rows, a person's only of the sessions they may see (#1338). */
   private async statusSeen(role: string): Promise<StatusRow[]> {
     const rows = await statusRows((sql) => this.record.raw(sql), this.now());
@@ -5836,46 +5859,6 @@ export class Core {
     return ` AND scope IN (${scopes.map((x) => `'${sql(x)}'`).join(',')})`;
   }
   /**
-   * The log's committed end, read in the same step as `read` starts, before anything else can append: a read
-   * reflects at least that log_pos, so a consumer that subscribes after it misses nothing.
-   */
-  private async reflecting(read: () => Promise<Obj>): Promise<Obj> {
-    await Promise.allSettled([...this.inflight]);
-    const end = this.record.raw('SELECT coalesce(max(log_pos), 0) AS log_pos FROM events');
-    const result = read();
-    result.catch(() => undefined);
-    return { log_pos: Number(((await end) as { log_pos: number }[])[0]!.log_pos), ...(await result) };
-  }
-  /**
-   * A page of the log: a full one reflects its last event, a short one the log's end, so an empty gap is crossed
-   * once. Its events go back as one JSON array's text, which the server writes as it is.
-   */
-  private async read(params: Obj, context: CallContext): Promise<Obj> {
-    const seen = this.seenBy(context.role);
-    const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
-    const limit = Number.isSafeInteger(params.limit) && (params.limit as number) > 0 ? Math.min(params.limit as number, 1000) : 1000;
-    const kinds = Array.isArray(params.kinds) && params.kinds.every((k) => typeof k === 'string') ? (params.kinds as string[]) : undefined;
-    const ahead = !kinds && this.ahead?.after === after && this.ahead.limit === limit && this.ahead.seen === seen ? this.ahead : undefined;
-    this.ahead = undefined;
-    let out: { log_pos: number; events: string };
-    if (ahead) {
-      await Promise.allSettled([...this.inflight]);
-      out = { log_pos: ahead.log_pos, events: ahead.events };
-    } else {
-      const read = await this.reflecting(async () => ({ events: await this.page(after, limit, kinds, seen) }));
-      const events = read.events as { log_pos: number; json: string }[];
-      out = { log_pos: events.length === limit ? events[limit - 1]!.log_pos : Math.max(after, read.log_pos as number), events: `[${events.map((e) => e.json).join(',')}]` };
-    }
-    // History is paged in order: the next full page is built while the reader takes this one. A full page never
-    // changes once committed, since log positions only grow and a gap never fills.
-    if (!kinds && out.events !== '[]') {
-      setImmediate(() => void this.page(out.log_pos, limit, undefined, seen).then((next) => {
-        if (next.length === limit) this.ahead = { after: out.log_pos, limit, seen, log_pos: next[limit - 1]!.log_pos, events: `[${next.map((e) => e.json).join(',')}]` };
-      }));
-    }
-    return out;
-  }
-  /**
    * changes/:id: a claim, with the runs and verdicts of its checks, and its receipt (#83): the line the chat showed
    * and the second line; the checks it ran; its ask with the PR's state and link, read from the forge now; what it
    * produced (the PR, the files the session wrote, the pages the record saw); and, once it passed, the next
@@ -5884,7 +5867,7 @@ export class Core {
   private change(params: Obj): Promise<Obj> {
     const id = typeof params.id === 'string' && /^claim:[0-9A-Za-z]+$/.test(params.id) ? params.id.slice(6) : undefined;
     if (!id) throw new Refused(refusal('pattern', '/params/id', 'Name the change as claim:<id>.', params.id));
-    return this.reflecting(async () => {
+    return this.log.reflecting(async () => {
       const [claim] = await this.record.raw(`SELECT * FROM claims WHERE id = ?`, [id]);
       if (!claim) throw new Refused(refusal('not_found', '/params/id', `No change claim:${id} in the record.`, params.id));
       const runs = await this.record.raw(`SELECT * FROM runs WHERE claim_id = ? ORDER BY started`, [id]);
@@ -5912,7 +5895,7 @@ export class Core {
   private evidence(params: Obj): Promise<Obj> {
     const sha = typeof params.sha === 'string' && /^[0-9a-f]{64}$/.test(params.sha) ? params.sha : undefined;
     if (!sha) throw new Refused(refusal('pattern', '/params/sha', 'Name the evidence by its SHA-256, in lower-case hex.', params.sha));
-    return this.reflecting(async () => {
+    return this.log.reflecting(async () => {
       const evidence = await this.store.get(sha);
       if (!evidence) throw new Refused(refusal('not_found', '/params/sha', `The store holds no evidence ${sha}.`, sha));
       return { evidence: JSON.parse(JSON.stringify(evidence)) as Obj };
@@ -5921,15 +5904,24 @@ export class Core {
 
   // ---- Answers on the trusted path (#24, #34).
 
+  private hub: string | undefined;
+  /** The hub's ID, as its hello names it (#1338): what an invite and a device's signature name (#1579). */
+  private hubId(): string {
+    return (this.hub ??= identityAt(join(this.options.root, 'hub.key'), 'deep-hub').id);
+  }
+
   /**
-   * Whether an answer may count: a paired device's valid signature, from any role; otherwise, from the CLI alone,
-   * the OS confirming you with a prompt that names what you answer. The control token and the peer check alone
-   * never make one count, and a deep command run inside an agent's process tree acts as that agent's session.
+   * Whether an answer may count: a paired device's valid signature for this method, this hub and these params (#1579),
+   * from any role; otherwise, from the CLI alone, the OS confirming you with a prompt that names what you answer. The
+   * control token and the peer check alone never make one count, and a deep command run inside an agent's process
+   * tree acts as that agent's session.
    */
-  private async trusted(params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void> {
-    if (params.signature !== undefined || params.device !== undefined) {
-      if (this.devices.signed(params)) return;
-      throw new Refused(refusal('credential', '/params/signature', 'Sign the answer with a device you paired, over exactly the params it sends.', params.device));
+  private async trusted(method: string, params: Obj, context: CallContext, what: string, handle: string, revision: string): Promise<void> {
+    if (params.signature !== undefined) {
+      const why = this.devices.verify(params.signature, { method, hub: this.hubId(), params, now: this.now() }, { skipsTime: this.options.plant === 'signature-skips-time' });
+      if (!why) return;
+      const signed = (params.signature as { signed?: Obj }).signed;
+      throw new Refused(refusal('credential', why.field === 'signature' ? '/params/signature/sig' : `/params/signature/signed/${why.field}`, `${handle} stays open: the signature's ${why.field} doesn't hold (${why.reason}). Sign it again with a device you paired, for ${method} on this hub, over exactly the params it sends.`, signed?.[why.field] ?? why.field));
     }
     if (context.role !== 'cli') throw new Refused(refusal('unconfirmed', '/params/signature', `${handle} stays open: an answer from the app counts only when a device you paired signs it.`, handle));
     const agent = await this.agentAbove(context.peer);
@@ -6032,7 +6024,7 @@ export class Core {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
     // A channel's answer was checked by the channels (#65): a paired device's signature over the card it showed, or an account link.
-    if (!channel) await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
+    if (!channel) await this.trusted('ask.answer', params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
     // A paired phone's yes binds the plan its card stood for, and its own token, as the app's click does.
     if (channel?.proof === 'device' && chosen?.decision === 'allow') {
       input.token = `${channel.channel}:${ulid(this.now())}`;
@@ -6149,7 +6141,7 @@ export class Core {
     // A definition that locked on the default stands: a different answer now would change nothing but the record of it.
     const locked = await this.tasks.lockedOn(handle);
     if (locked) throw new Refused(refusal('locked', '/params/ask', `${handle} took its default and the definition of ${locked} locked on it; a change to that definition goes through a dispute, not an undo.`, handle));
-    await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle, await this.revisionOf(handle, { pinned_to: row.pinned_to ? JSON.parse(row.pinned_to) as { ref?: string } : undefined }));
+    await this.trusted('ask.undo', params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle, await this.revisionOf(handle, { pinned_to: row.pinned_to ? JSON.parse(row.pinned_to) as { ref?: string } : undefined }));
     await this.asks.undo(this.connection(context.role === 'app' ? 'app' : 'cli'), handle).catch((error: unknown) => { throw asRefused(error); });
     const [open] = (await this.record.raw(`SELECT deadline FROM asks WHERE id = ?`, [handle.slice(4)])) as { deadline: number }[];
     return { ask: handle, deadline: open?.deadline ?? null };
@@ -6161,7 +6153,7 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT key, answer, state FROM decisions WHERE id = ?`, [id.slice(9)])) as { key: string; answer: string; state: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
     if (row.state === 'revoked') return { overruled: id };
-    await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id, row.state);
+    await this.trusted('decision.overrule', params, context, `overrule the saved decision ${row.answer}`, id, row.state);
     // First: a retry finds a revoked decision done, so a guard left behind would never go.
     dropKept(this.root.dir, row.key);
     await this.appendCore('decision.overruled', { decision: id }, { subject: id });
@@ -6178,7 +6170,7 @@ export class Core {
     const { extension, name, value } = params;
     if (typeof extension !== 'string' || typeof name !== 'string' || typeof value !== 'string' || !value) throw new Refused(refusal('required', '/params', 'Name the package and the secret, and give its value.', null));
     if (!this.extensions) throw new Refused(refusal('unavailable', '/params/extension', `${extension} isn't loaded, so nothing can name ${name}.`, extension));
-    await this.trusted(params, context, `add the secret ${name} for ${extension}`, `secret:${extension}/${name}`, name);
+    await this.trusted('secret.enter', params, context, `add the secret ${name} for ${extension}`, `secret:${extension}/${name}`, name);
     const { saved, test } = await this.extensions.enterSecret(this.connection('cli'), extension, name, value);
     return { saved, test };
   }
@@ -6224,8 +6216,7 @@ export class Core {
     const device = params.device;
     if (typeof device !== 'string' || !/^device:[0-9A-Za-z]+$/.test(device)) throw new Refused(refusal('pattern', '/params/device', 'Name the device as device:<id>, as device.pair returned it.', device));
     if (!this.devices.keyOf(device)) throw new Refused(refusal('not_found', '/params/device', `No paired device ${device}.`, device));
-    const { device: _unpaired, ...rest } = params;
-    await this.trusted(rest, context, `unpair ${device}, so what it signs counts for nothing`, device, 'unpair');
+    await this.trusted('device.unpair', params, context, `unpair ${device}, so what it signs counts for nothing`, device, 'unpair');
     this.devices.unpair(device, this.now());
     this.channels?.unpaired(device);
     return { unpaired: device };
@@ -6280,8 +6271,7 @@ export class Core {
     await this.asYou(context, 'person.invite', `invite ${person} to ${forge}`, `invite:${person}`, forge);
     try {
       const secret = this.people.invite(person, forge);
-      const hub = identityAt(join(this.options.root, 'hub.key'), 'deep-hub').id;
-      return { invite: inviteText({ v: 1, address, hub, secret, project: forge, person }), person, project: projectIdOf(forge) };
+      return { invite: inviteText({ v: 1, address, hub: this.hubId(), secret, project: forge, person }), person, project: projectIdOf(forge) };
     } catch (error) {
       throw new Refused(refusal('pattern', '/params/person', `Nobody was invited: ${error instanceof Error ? error.message : String(error)}.`, person));
     }
@@ -6328,8 +6318,8 @@ export class Core {
    */
   private async enrollAgain(params: Obj, context: CallContext): Promise<Obj> {
     if (context.role !== 'app') throw new Refused(refusal('role', '/method', "deep-confirm's key is set up again from the app, on the trusted path.", 'confirm.enroll'));
-    await this.trusted(params, context, "set up deep-confirm's key again", 'device:deep-confirm', 'enroll');
-    const why = await this.confirmer.enroll(this.now(), { words: "set up DeepBuild's confirmation key again on this Mac", subject: { handle: 'device:deep-confirm', revision: String(params.device) } });
+    await this.trusted('confirm.enroll', params, context, "set up deep-confirm's key again", 'device:deep-confirm', 'enroll');
+    const why = await this.confirmer.enroll(this.now(), { words: "set up DeepBuild's confirmation key again on this Mac", subject: { handle: 'device:deep-confirm', revision: String((params.signature as { signed?: Obj }).signed?.device) } });
     if (why) throw new Refused(refusal('unconfirmed', '', `deep-confirm's key stays as it was: ${why}.`, 'confirm.enroll', true));
     return { device: this.devices.enclave()!.device };
   }
@@ -6452,6 +6442,8 @@ export class Core {
    */
   private async agentAbove(peer: CallContext['peer']): Promise<string | undefined> {
     if (!peer || (await this.startOf(peer.pid, true)) !== peer.start) return undefined;
+    // Only a session of another process can be above it (a process table has no cycles): with none, the table isn't read.
+    if (![...this.sessions.values()].some((s) => s.pid > 1 && s.pid !== peer.pid)) return undefined;
     const up = await parents();
     const seen = new Set<number>();
     for (let pid = up.get(peer.pid); pid !== undefined && pid > 1 && !seen.has(pid); pid = up.get(pid)) {
@@ -6470,41 +6462,10 @@ export class Core {
   /** Streams every event after `after` to the subscriber, then each one appended from then on. */
   async subscribe(sub: string, after: number): Promise<void> {
     await this.ready;
-    this.subscribers.set(sub, after);
-    this.stream();
+    this.log.subscribe(sub, after);
   }
   unsubscribe(sub: string): void {
-    this.subscribers.delete(sub);
-  }
-  private stream(): void {
-    if (!this.subscribers.size) return;
-    // An append during a flush flushes again after it, so its frame never waits for the next append.
-    if (this.streaming) {
-      this.restream = true;
-      return;
-    }
-    this.streaming = true;
-    setImmediate(() => void this.flushStream().finally(() => {
-      this.streaming = false;
-      if (this.restream) {
-        this.restream = false;
-        this.stream();
-      }
-    }));
-  }
-  private async flushStream(): Promise<void> {
-    for (const [sub, after] of this.subscribers) {
-      let last = after;
-      for (;;) {
-        // Only the owner subscribes, and reads what the owner may see (#1337).
-        const events = await this.page(last, 1000, undefined, this.seenBy(OWNER));
-        if (!this.subscribers.has(sub)) break;
-        for (const event of events) this.emit(sub, event.json);
-        if (events.length) last = events[events.length - 1]!.log_pos;
-        if (events.length < 1000) break;
-      }
-      if (this.subscribers.has(sub)) this.subscribers.set(sub, last);
-    }
+    this.log.unsubscribe(sub);
   }
 
   // ---- deep mcp.
@@ -6533,7 +6494,7 @@ export class Core {
         case 'deep_show': return await this.show(session ? { session } : { session: null }, showCall(args));
         case 'deep_kinds': return await this.kinds(args);
         case 'deep_status': return await this.status(session);
-        case 'deep_search': return await this.find(String(args.query), session, context);
+        case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
         case 'deep_ask': return await this.askFor(session!, args);
         case 'deep_wait': return await this.waitFor(session!, String(args.ask));
         case 'deep_open_item': return await this.openItem(session!, String(args.text));
@@ -6890,8 +6851,11 @@ export class Core {
     return { session, gates, claims };
   }
 
-  /** deep_search: the wiki, decisions and the project's spec; bound to a session, its own open items and verdicts too. */
-  private async find(query: string, session: string | undefined, context: CallContext): Promise<Obj> {
+  /**
+   * deep_search: the wiki, decisions and the project's spec; bound to a session, its own open items and verdicts too,
+   * and its repo's past sessions (#1515), narrowed to those that touched `file` when it names one.
+   */
+  private async find(query: string, session: string | undefined, context: CallContext, file?: string, cursor?: string): Promise<Obj> {
     const worktree = session ? this.sessions.get(session)?.cwd : this.worktreeAt(context.cwd);
     const everyone = !session && this.options.plant === 'unbound-reads-all';
     // A claim reaches a session at its own scope, its repo's or everywhere's; a call bound to no session reads every repo's.
@@ -6902,7 +6866,21 @@ export class Core {
       query, index: await this.wikiIndex(), raw: (q, params) => this.record.raw(q, params), worktree, session: everyone ? { everyone: true } : session, covers,
       trustsIndex: this.options.plant === 'trusts-index',
       readings: (q) => this.numbers.search(q, everyone ? { everyone: true } : session),
+      ...(session ? { past: await this.pastSessions(project?.project_id ?? null, file, worktree) } : {}),
+      ...(cursor !== undefined ? { cursor } : {}),
     });
+  }
+  /**
+   * The past sessions a bound call reads (#1515): its repo's archived ones, newest first, and, naming a file, only
+   * those whose recorded reads and edits touched it. Another repo's are reached only as a wiki claim's scope allows.
+   */
+  private async pastSessions(project: string | null, file: string | undefined, worktree: string | undefined): Promise<NonNullable<Parameters<typeof search>[0]['past']>> {
+    let sessions = project === null ? [] : ((await this.record.raw('SELECT id FROM sessions WHERE project_id = ? AND transcript IS NOT NULL ORDER BY last_seen DESC, id', [project])) as { id: string }[]).map((r) => r.id);
+    if (file !== undefined) {
+      const by = new Set((await this.record.touched(file, worktree)).map((t) => t.session));
+      sessions = sessions.filter((id) => by.has(id));
+    }
+    return { sessions, messages: (terms, ids) => this.record.findMessages(terms, ids), about: (ids) => aboutSessions((sql, params) => this.record.raw(sql, params), ids) };
   }
   /** The wiki's index: a loaded package's in place of the shipped one, rebuilt from the pages when it first serves (#355). */
   private async wikiIndex(): Promise<IndexFill | undefined> {
@@ -7063,7 +7041,7 @@ export class Core {
         if (this.stopping && this.options.plant !== 'stop-answers-waiting') throw refuse('unavailable', '', 'The hub is stopping, and nothing was answered; wait on the ask again once it is back.', handle, true);
         if (this.stopping || Date.now() >= until) {
           if (places) this.askWaits.delete(handle.slice(4));
-          return { ask: handle, status: 'waiting', ...(this.sessions.get(session)?.agent === 'codex' ? { note: 'Still waiting for your answer; wait on it again with deep_wait.' } : {}), answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
+          return { ask: handle, status: 'waiting', ...(noWake(this.sessions.get(session)?.agent) ? { note: 'Still waiting for your answer; wait on it again with deep_wait.' } : {}), answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
         }
         await wait.woken;
       } finally {
@@ -7134,7 +7112,7 @@ export class Core {
     const live = this.live.get(session);
     if (live) live.claimedInTurn = true;
     // An agent paseo runs with no hooks of its own shows no work but this claim: its turn's end is judged on it (#55).
-    if (live && this.sessions.get(session)?.agent === 'paseo') live.judged = true;
+    if (live && unseenTools(this.sessions.get(session)?.agent)) live.judged = true;
     // An answer to an ended session of another thread waits on its task: the next session that works the task reads it.
     const task = sql(String(args.task_ref));
     const answers = await this.queue(async () => this.deliver(await this.waitingFor(session, `a.session_id IN (SELECT session_id FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${task}')
@@ -7433,6 +7411,27 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT outcome FROM runs WHERE id = ?`, [run.slice(4)])) as { outcome: string | null }[];
     return row?.outcome ?? 'stopped';
   }
+  /**
+   * A promotion's health check (#1334): one fixture claim, a requirement its one check covers and a passing run of
+   * it, judged by this build's verdict engine and returned as judged() records a claim's. A good build reads it PASS.
+   */
+  private healthClaim(): Obj {
+    const commit = '0'.repeat(40), req = 'req:HEALTH#R1', check = 'health', digest = `d1:${'0'.repeat(64)}`, claim = 'claim:HEALTH';
+    const v = misjudged(claimVerdict({
+      claim, agent: 'session:HEALTH', repo: 'health', task: 'task:HEALTH', commit, now: this.now(), changes: [], waivers: [],
+      requirements: [{ req, depth: 'unit', oracle: 'code', on_base: 'passes' }],
+      checks: [{ check, digest, source: 'definition', depth: 'unit', proof: 'test_run', covers: [req], environment: {}, tools: {} }],
+      runs: [{ run: 'run:HEALTH', check, claim, commit, digest, environment: {}, tools: {}, outcome: 'passed', ended: 1, tests_run: 1, reads: [], failures: [], evidence: [], kept: true }],
+    }), this.options.plant);
+    return { claim, outcome: v.outcome, reasons: v.reasons };
+  }
+  /** The rollback's one notice (#1334), recorded by the build that came back: the promoted commit, the restored one and why. */
+  private async rolledBack(p: Obj): Promise<Obj> {
+    const hex = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{40}$/.test(v);
+    if (!hex(p.commit) || typeof p.restored !== 'string' || !p.restored) throw refuse('pattern', '/params/commit', 'Name the promoted commit as 40 hex digits, and the build that came back.', p.commit);
+    await this.appendCore('build.rolled_back', { commit: p.commit, restored: p.restored, why: String(p.why ?? '').slice(0, 8192) });
+    return { recorded: true };
+  }
   /** Each claim's verdict on its way to the record after its lane (#82): what reads the record waits for it. */
   private readonly verdictWrites = new Map<string, Promise<void>>();
   /** Each claim's last recorded verdict, by its hash: a verdict that didn't change isn't recorded again. */
@@ -7482,6 +7481,7 @@ export class Core {
       const ran = await this.overridesFor(claim);
       if (ran.length) v = { ...v, outcome: 'INCONCLUSIVE', reasons: [...v.reasons, `a call DeepBuild denied ran anyway in this session: ${ran.map((o) => `${o.label} (${o.call})`).join('; ')}; its own checks can't pass it`.slice(0, 8000)] };
     }
+    v = misjudged(v, this.options.plant);
     const hash = verdictHash(v);
     if (this.verdictsMade.get(claim) === hash) return;
     try {

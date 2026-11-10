@@ -275,7 +275,8 @@ impl Hub<'_> {
                 .pointer("/requires/modules/scene3d")
                 .is_some();
         let drawn = if three {
-            match self.mode_3d(show, args, &revision.drawn, &mut reply) {
+            let placed = self.arranged(&show.doc, &revision.drawn);
+            match self.mode_3d(show, args, &placed, &mut reply) {
                 Ok(rows) => rows,
                 Err(refusal) => return refusal,
             }
@@ -412,6 +413,8 @@ impl Hub<'_> {
                     edges: None,
                     over: false,
                     joined: false,
+                    dash: [0.0; 2],
+                    dash_world: false,
                 }],
                 points: Vec::new(),
                 labels: Vec::new(),

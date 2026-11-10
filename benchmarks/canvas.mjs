@@ -859,6 +859,50 @@ workloads.water = () => {
   }
 };
 
+// #268: the same 1080p lake with its shore on: twelve piles, a quay and a floating deck in its shore's collection
+// (`cell: 0.25`, shade 0.5), against the same plate and items as a plain mirror, so the mirror's own pass is in both;
+// and the field's bake time, the frame row's `shore.bake_ms`, as a reading. The stage is
+// tests/acceptance/268/budgets.test.ts's.
+function shoreStage(water) {
+  const doc = waterStage('lake', water);
+  const wood = { kind: 'material@1', params: { base_color: [0.5, 0.36, 0.24, 1], roughness: 0.8 } };
+  const shapes = { wood, quay: { kind: 'mark.box@1', params: { size: [60, 3, 6] }, at: { pos: [0, -0.5, -40] }, material: 'wood' },
+    deck: { kind: 'mark.box@1', params: { size: [8, 0.2, 6] }, at: { pos: [-10, 0.6, -14] }, material: 'wood' } };
+  for (let k = 0; k < 12; k++) shapes[`pile${k}`] = { kind: 'mark.cylinder@1', params: { size: [1, 3, 1] }, at: { pos: [-15 + 2.7 * k, 0, -20 - 4 * (k % 3)] }, material: 'wood' };
+  for (const id of Object.keys(doc.items)) if (id.startsWith('crate')) delete doc.items[id];
+  let order = Object.keys(doc.items).length;
+  for (const [id, item] of Object.entries(shapes)) doc.items[id] = { ...item, id, name: id, order: `a${String(order++).padStart(3, '0')}`, layer: 'main' };
+  doc.collections = { 'lake-shore': { members: Object.keys(shapes).filter((k) => k !== 'wood') } };
+  return doc;
+}
+workloads['water-shore'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'filmic-268', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const shore = { waves: WATER_WAVES, ripples: { strength: 0.3 }, rain: 50, shore: { items: 'lake-shore', cell: 0.25, shade: 0.5 } };
+    const docs = Object.fromEntries(Object.entries({ shore: shoreStage(shore), mirror: shoreStage(null) }).map(([k, d]) => {
+      const path = join(dir, `${k}.json`);
+      writeFileSync(path, JSON.stringify(d));
+      return [k, path];
+    }));
+    const side = (doc) => ({ call: 'view3d', doc, look, size: FLARE_SIZE, frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [side(docs.shore), side(docs.mirror), { ...side(docs.shore), frames: 1, capture: [0], shore: true, timings: false }] });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [lake, mirror] = answer.replies.slice(0, 2).map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      const water = answer.replies[0].frames.map((f) => f.passes_ms?.['scene3d.water'] ?? 0);
+      return { shore_lake_gpu_ms: Math.max(0, lake - mirror), water_pass_ms: median(water), mirror_gpu_ms: mirror, bake_ms: answer.replies[2].frames[0]?.shore?.bake_ms ?? null };
+    });
+    console.log(JSON.stringify({ task: 'canvas-water-shore', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #896's two boards of a run, the 1,000-item one first; `null` for a run with any other boards.
 const pair = (r) => {
   const [small, large] = r.boards ?? [];
@@ -888,6 +932,8 @@ const EFFICIENCY = {
   'replica-cold-start': { first_settled_ms: (r) => r.ms },
   'canvas-flares-mirrors': { finish_gpu_ms: (r) => r.finish_gpu_ms, flare_gpu_ms: (r) => r.flare_gpu_ms, mirror_share: (r) => r.mirror_share, indexed_target_bytes: (r) => r.indexed_target_bytes },
   'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
+  'canvas-occlusion': { gpu_fall: (r) => r.gpu_fall, pyramid_declared_error: (r) => r.pyramid_declared_error },
+  'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
 };
 const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes']);
 
@@ -1133,6 +1179,99 @@ workloads['capture-save'] = () => {
     if (answer.ok !== true || frames !== 119.5 * 60) throw Error(`the capture didn't keep every frame: ${JSON.stringify(answer).slice(0, 2000)}`);
   } finally {
     rmSync(evidence, { recursive: true, force: true });
+  }
+};
+
+// #1637: occlusion from this frame's depth, at 1920 × 1080 on a release `deep-gpu`. The city of
+// tests/acceptance/1637/helpers.ts (20,000 building items on a 200 × 100 grid of 32 m blocks, 100,000 street items in
+// one instancer, the same seeds), walked 1.7 m above the street for 10 s at 30 frames a second, drawn twice a run, the
+// shipped occlusion cull and `occlusion: off` (frustum only), their order alternating; one warm-up run and five, each a
+// fresh process. A run reports p95 GPU time shipped ÷ frustum-only, and the depth pyramid's declared cost against its
+// measured time, both medians over the shipped frames.
+function occlusionCity() {
+  const rng = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return (t ^ (t >>> 14)) >>> 0; }; };
+  const PITCH = 32, x0 = 40 * PITCH + 16, z = 50 * PITCH + 1, cutX = x0, cutZ = 60 * PITCH + 1;
+  const clear = [[x0 - 10, x0 + 60, 50 * PITCH - 6, 50 * PITCH + 6], [cutX - 10, cutX + 60, 60 * PITCH - 6, 60 * PITCH + 6]];
+  const r = rng(1637); const u = () => r() / 4294967296; const round = (v) => Math.round(v * 1000) / 1000;
+  const rows = [];
+  while (rows.length < 100_000) {
+    const alongX = u() < 0.5;
+    const line = alongX ? Math.floor(u() * 101) * PITCH : Math.floor(u() * 201) * PITCH;
+    const along = alongX ? u() * 200 * PITCH : u() * 100 * PITCH;
+    const off = (u() < 0.5 ? -1 : 1) * (3.5 + 2 * u());
+    const k = u();
+    const proto = k < 0.35 ? 0 : k < 0.6 ? 1 : k < 0.8 ? 2 : 3;
+    const x = round(alongX ? along : line + off); const zz = round(alongX ? line + off : along);
+    const sc = round(0.9 + 0.2 * u());
+    if (clear.some(([a, b, c, d]) => x >= a && x <= b && zz >= c && zz <= d)) continue;
+    rows.push({ proto, pos: [x, proto === 2 ? round(0.225 * sc) : 0, zz], yaw: alongX ? 0 : 90, scale: sc });
+  }
+  rows[31_416] = { proto: 3, pos: [x0 + 6, 0, z + 1.2], yaw: 0, scale: 1 };
+  rows[31_415] = { proto: 2, pos: [x0 + 10, 0.225, z + 2], yaw: 90, scale: 1 };
+  rows[77_777] = { proto: 0, pos: [cutX + 25, 0, cutZ + 3.5], yaw: 0, scale: 1 };
+  const box = (size, pos, material, extra = {}) => ({ kind: 'mark.box@1', params: { size }, at: { pos }, material, ...extra });
+  const mat = (params) => ({ kind: 'material@1', params });
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'perspective', position: [x0, 1.7, z], target: [x0 + 100, 1.7, z], fov: 60, near: 0.1, far: 3000 } },
+    sky: { kind: 'sky@1', params: { top: [0.35, 0.5, 0.75, 1], low: [0.75, 0.82, 0.9, 1], ambient_top: [0.25, 0.3, 0.35], ambient_low: [0.1, 0.1, 0.1] } },
+    key: { kind: 'light.sun@1', at: { rot: [-20, 90, 0] }, params: { illuminance: Math.PI, color: [1, 1, 1], shadow: false } },
+    ground_mat: mat({ base_color: [0.3, 0.3, 0.3, 1], roughness: 0.95 }),
+    wall0: mat({ base_color: [0.62, 0.55, 0.48, 1], roughness: 0.9 }), wall1: mat({ base_color: [0.5, 0.52, 0.56, 1], roughness: 0.9 }), wall2: mat({ base_color: [0.7, 0.66, 0.6, 1], roughness: 0.9 }),
+    lamp_mat: mat({ base_color: [0.2, 0.2, 0.22, 1], metallic: 1, roughness: 0.4 }), tree_mat: mat({ base_color: [0.12, 0.35, 0.12, 1], roughness: 0.85 }),
+    bench_mat: mat({ base_color: [0.45, 0.3, 0.15, 1], roughness: 0.8 }), bin_mat: mat({ base_color: [0.1, 0.25, 0.15, 1], roughness: 0.6 }),
+    kiosk_mat: mat({ base_color: [0.6, 0.15, 0.1, 1], roughness: 0.7 }), statue_mat: mat({ base_color: [0.8, 0.8, 0.78, 1], roughness: 0.5 }),
+    ground: box([6420, 1, 3220], [3200, -0.5, 1600], 'ground_mat'),
+    lamp: { kind: 'lathe@1', params: { outline: [[0.08, 0, false], [0.08, 3.8, false], [0.35, 3.9, true], [0.3, 4.1, true], [0.05, 4.2, false]], segments: 48 }, material: 'lamp_mat', visible: false },
+    tree: { kind: 'lathe@1', params: { outline: [[0.15, 0, false], [0.15, 2, false], [1.2, 2.5, true], [1.5, 3.5, true], [1, 4.8, true], [0.05, 5.5, false]], segments: 64 }, material: 'tree_mat', visible: false },
+    bench: box([1.8, 0.45, 0.5], [0, 0, 0], 'bench_mat', { visible: false }),
+    bin: { kind: 'lathe@1', params: { outline: [[0.22, 0, false], [0.25, 0.95, false], [0.27, 1, false], [0.05, 1.02, false]], segments: 32 }, material: 'bin_mat', visible: false },
+    street: { kind: 'instance@1', params: { of: ['lamp', 'tree', 'bench', 'bin'], ids: rows.map((_, i) => i), proto: rows.map((x) => x.proto), pos: rows.map((x) => x.pos), yaw: rows.map((x) => x.yaw), scale: rows.map((x) => x.scale) } },
+    kiosk: box([0.5, 2.5, 1.6], [x0 + 8, 1.25, z - 3], 'kiosk_mat'),
+    probe: { kind: 'light.probe@1', params: { type: 'reflection', size: [4, 3, 4] }, at: { pos: [x0 + 12, 1.5, z - 1] } },
+    statue: box([0.6, 2.4, 0.6], [x0 + 12, 1.2, z - 4.5], 'statue_mat'),
+  };
+  const b = rng(1638);
+  for (let j = 0; j < 100; j++) for (let i = 0; i < 200; i++) {
+    const h = Math.round(100 + 200 * (b() / 4294967296)) / 10; const k = j * 200 + i;
+    items[`b${String(k).padStart(5, '0')}`] = box([20, h, 20], [i * PITCH + 16, h / 2, j * PITCH + 16], `wall${k % 3}`);
+  }
+  let order = 0;
+  for (const [id, item] of Object.entries(items)) Object.assign(item, { id, name: id, order: `a${String(order++).padStart(6, '0')}`, layer: 'main' });
+  const at = (axis, x) => ({ target: `items/cam/params/${axis}/0`, type: 'f32', keys: { k0: { t: '0s', value: x, interp: 'linear' }, k1: { t: '10s', value: x + 14, interp: 'linear' } } });
+  return { format: 1, id: 'city-1637-bench', profile: 'scene', title: 'city-1637-bench', description: 'The #1637 city walk.', size: FLARE_SIZE, camera: 'cam', transport: { span: '10s' },
+    requires: { modules: { scene3d: '^1' } }, layers: { main: { writer: 'agent:bench', title: 'main', order: 'a0' } }, items, channels: { cam_x: at('position', x0), aim_x: at('target', x0 + 100) } };
+}
+workloads.occlusion = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look = { id: 'look-1637-plain', format: 1, basis: 'physical', license: 'Apache-2.0', description: 'A #1637 bench look.',
+    palette: { night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', stone: '#d9dde3', sand: '#e6d3a3' }, roles: { ground: 'night', ink: 'graphite', muted: 'slate', stone: 'stone', sand: 'sand' },
+    themes: { light: {}, dark: {} }, fonts: { body: { family: 'Inter', file: 'Inter-Regular.ttf', license: 'OFL-1.1', embed: true, single_line: false }, mono: { family: 'JetBrains Mono', file: 'JetBrainsMono-Regular.ttf', license: 'OFL-1.1', embed: true, single_line: false } },
+    tone_map: 'none', exposure: -Math.log2(1.2), finish: [], deband: 'none', bloom: 'none', ground_3d: { kind: 'none' },
+    status: { pass: '#007429', fail: '#bf232b', invalid: '#8645b0', blocked: '#a44700', inconclusive: '#666600', running: '#0063b8', needs_you: '#8a5900', stale: '#326c6f', idle: '#636464' },
+    status_treatment: { core_min_px: 4, glyph: { pass: '✓', fail: '✗', invalid: '⊘', blocked: '■', inconclusive: '?', running: '↻', needs_you: '!', stale: '◇', idle: '○' } }, min_distance: 0.1,
+    attention_treatment: { line: 'dashed', role: 'ink', glyph: '⚠' }, legend: 'auto' };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const doc = join(dir, 'city.json');
+    writeFileSync(doc, JSON.stringify(occlusionCity()));
+    const side = (off) => ({ call: 'view3d', doc, look, size: FLARE_SIZE, frames: 301, fps: 30, capture: [], timings: true, ...(off ? { occlusion: 'off' } : {}) });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const p95 = (xs) => [...xs].sort((a, b) => a - b)[Math.max(0, Math.ceil(0.95 * xs.length) - 1)];
+    let k = 0;
+    const measured = runs(() => {
+      const offFirst = k++ % 2 === 1;
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: offFirst ? [side(true), side(false)] : [side(false), side(true)] });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [on, off] = offFirst ? [answer.replies[1], answer.replies[0]] : [answer.replies[0], answer.replies[1]];
+      const measuredMs = median(on.frames.map((f) => f.passes_ms['scene3d.depth_pyramid']));
+      const declaredMs = median(on.frames.map((f) => f.declared_ms['scene3d.depth_pyramid']));
+      return { shipped_p95_ms: p95(on.frames.map((f) => f.gpu_ms)), frustum_p95_ms: p95(off.frames.map((f) => f.gpu_ms)),
+        gpu_fall: p95(on.frames.map((f) => f.gpu_ms)) / p95(off.frames.map((f) => f.gpu_ms)),
+        pyramid_measured_ms: measuredMs, pyramid_declared_ms: declaredMs, pyramid_declared_error: Math.abs(declaredMs - measuredMs) / measuredMs };
+    });
+    console.log(JSON.stringify({ task: 'canvas-occlusion', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 };
 

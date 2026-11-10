@@ -37,6 +37,8 @@ export type Plant =
   | 'kept-in-service-cgroup'
   // #1359's: a CLI whose `deep backup` runs before it checks its arguments for help, as the merge base's did.
   | 'dispatches-before-help'
+  // #1334's: a build that judges every claim the opposite of its gate, and a hub that speaks a contract a major ahead.
+  | 'judges-claims-wrongly' | 'contract-major-ahead'
   | 'evidence-checks-path-first' | 'binds-first-stamp' | 'unbound-reads-all' | 'errors-without-actual' | 'errors-unscrubbed' | 'trusts-index'
   | 'adapter-decides' | 'unknown-tool-read' | 'unplaced-is-person' | 'loop-from-origins' | 'holds-stop-anyway' | 'restores-at-session-start-only'
   | 'acts-on-peer-check' | 'off-guards-watch-only' | 'undo-reserializes' | 'gates-before-approval' | 'setup-writes-project-settings'
@@ -63,6 +65,8 @@ export type Plant =
   // #342's: a reaper that takes every volume a session's commands made, a teardown task closed on your word, a pool
   // that asks which stack to stop, and a reaper that takes a killed session's stack.
   | 'reap-session-volumes' | 'teardown-closes-on-word' | 'pool-asks-which-stack' | 'reap-on-kill'
+  // #1023's: an adapter that leaves a Codex session open when its process ends with no SessionEnd.
+  | 'leaves-codex-session-open'
   | 'bundle-raw-logs' | 'doctor-hides-token' | 'doctor-not-checked-first' | 'doctor-takes-any-flag' | 'stop-hold-wide-margin'
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-under-stop-only' | 'waiter-polls' | 'waiter-checks-every-5s'
@@ -76,6 +80,8 @@ export type Plant =
   | 'rule-without-reason' | 'copies-no-standing-rules'
   // #668's: a status that leaves out a session's commits, a doctor that trusts setup's record, and a `deep on` that keeps the gates off.
   | 'status-omits-commit' | 'doctor-misses-hooks' | 'on-stays-off'
+  // #1455's: a doctor that prints a fix under a healthy item.
+  | 'doctor-healthy-fix'
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
   // the text, a stop rule that reads every stop with tool calls as a claim, and a claim whose checks run the file on disk.
   | 'first-prompt-always-task' | 'midturn-always-task' | 'hash-ids-only' | 'hash-check-paths' | 'role-from-text' | 'claim-on-tool-calls'
@@ -136,6 +142,8 @@ export type Plant =
   | 'paseo-delivers-beside-waiter'
   // #880's: a confirmation counted on a signature by the stored key over whatever the helper says it signed.
   | 'signature-covers-anything'
+  // #1579's: the one verifier, skipping the time, so a signature counts however old it is.
+  | 'signature-skips-time'
   // #909's: a hub that never checks its lock again once it holds it.
   | 'lock-never-rechecked'
   // #906's: an answer recorded delivered as the hub writes its reply, and one sent again without reading the session.
@@ -198,8 +206,9 @@ const PLANTS: readonly string[] = [
   'env-reuses-stale-install', 'env-keeps-database', 'env-keeps-redis', 'env-reuses-web-image', 'env-keeps-db-mount', 'env-second-install-store',
   'env-clones-next-whole', 'env-starts-at-every-claim', 'pool-reclaims-running', 'sandbox-any-loopback',
   'reap-session-volumes', 'teardown-closes-on-word', 'pool-asks-which-stack', 'reap-on-kill',
+  'leaves-codex-session-open',
   'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
-  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline', 'kept-in-service-cgroup', 'dispatches-before-help',
+  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline', 'kept-in-service-cgroup', 'dispatches-before-help', 'judges-claims-wrongly', 'contract-major-ahead',
   'evidence-checks-path-first', 'binds-first-stamp', 'unbound-reads-all', 'errors-without-actual', 'errors-unscrubbed', 'trusts-index',
   'adapter-decides', 'unknown-tool-read', 'unplaced-is-person', 'loop-from-origins', 'holds-stop-anyway', 'restores-at-session-start-only',
   'acts-on-peer-check', 'off-guards-watch-only', 'undo-reserializes', 'gates-before-approval', 'setup-writes-project-settings',
@@ -216,6 +225,7 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
+  'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
   'writes-before-parsing', 'replaces-from-first-plan', 'copies-original-each-write', 'no-folder-flush', 'skips-entry-check', 'restarts-without-answer',
@@ -240,6 +250,7 @@ const PLANTS: readonly string[] = [
   'no-work-never-sent-back', 'skips-prompt-turns',
   'paseo-delivers-beside-waiter',
   'signature-covers-anything',
+  'signature-skips-time',
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',

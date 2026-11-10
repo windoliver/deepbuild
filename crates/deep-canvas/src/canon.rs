@@ -103,11 +103,11 @@ fn index_step(i: usize) -> Cow<'static, str> {
 }
 
 /// Calls `f` with `steps` as the `&[&str]` a [`Shape`] reads, on the stack for the usual depth.
-fn with_steps<R>(steps: &[Cow<'_, str>], f: impl FnOnce(&[&str]) -> R) -> R {
+fn with_steps<S: AsRef<str>, R>(steps: &[S], f: impl FnOnce(&[&str]) -> R) -> R {
     let mut buf: [&str; 16] = [""; 16];
     if steps.len() <= buf.len() {
         for (slot, step) in buf.iter_mut().zip(steps) {
-            *slot = step;
+            *slot = step.as_ref();
         }
         f(&buf[..steps.len()])
     } else {
@@ -433,13 +433,11 @@ fn nfc_cow(s: &str) -> Cow<'_, str> {
 }
 
 fn width_of(shape: &dyn Shape, path: &[String]) -> Width {
-    let path: Vec<&str> = path.iter().map(String::as_str).collect();
-    shape.width(&path)
+    with_steps(path, |path| shape.width(path))
 }
 
 fn default_of<'a>(shape: &'a dyn Shape, path: &[String]) -> Option<&'a Value> {
-    let path: Vec<&str> = path.iter().map(String::as_str).collect();
-    shape.default_at(&path)
+    with_steps(path, |path| shape.default_at(path))
 }
 
 fn join(path: &[String], last: Option<&str>) -> String {
