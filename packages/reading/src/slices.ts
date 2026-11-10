@@ -5,7 +5,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openEvidenceStore } from '@deepbuild/evidence';
-import { openRecordReader, parseClaimLine, type Message, type RecordReader } from '@deepbuild/record';
+import { foldText, openRecordReader, parseClaimLine, type Message, type RecordReader } from '@deepbuild/record';
 
 /** Output is capped per call, at 8,192 characters by default. */
 export const CAP = 8192;
@@ -29,8 +29,12 @@ export class NotFound extends Error {}
 
 export interface Slicer {
   read(handle: string, cursor?: string): Promise<Slice>;
-  /** Handles whose text holds the query, ignoring case: transcript messages of `sessions` (default: every archived one), and, without `sessions`, your decisions, text evidence and wiki claims. */
-  find(query: string, cursor?: string, sessions?: readonly string[]): Promise<Found>;
+  /**
+   * Handles whose text holds the query, ignoring case: transcript messages of `sessions` (default: every archived one),
+   * and, without `sessions` or `file`, your decisions, text evidence and wiki claims. With `file`, only sessions whose
+   * recorded reads and edits touched it: their messages that hold the query, or, with no query, the sessions (#1515).
+   */
+  find(query: string, cursor?: string, sessions?: readonly string[], file?: { path: string; cwd?: string }): Promise<Found>;
   /** The sessions a transcript.archived event links, as `session:<id>` handles. */
   archived(): Promise<string[]>;
   /** What a handle names, whole, with how its source knew it; undefined for nothing. For quotes, never shown to an agent. */
@@ -46,8 +50,8 @@ const OFFSET_CURSOR = /^c(\d+)$/;
 
 /** The most a find hit's line of context holds. */
 const CONTEXT = 400;
-/** A character lowercased for matching: a final sigma is a sigma, as the whole word lowercased elsewhere may write it. */
-const lowerOf = (ch: string): string => ch.toLowerCase().replace(/\u03C2/g, '\u03C3');
+/** A character lowercased for matching: a final sigma is a sigma, as the whole word lowercased elsewhere may write it; the archive's index folds its text so. */
+const lowerOf = foldText;
 /**
  * Where a lowercase needle is in text, ignoring case, as an index into the text itself: lowercasing can change a
  * character's length ('İ' becomes two), so an index into the lowercased text can point elsewhere. -1 when absent.
@@ -206,10 +210,10 @@ export async function openSlicer(root: string): Promise<Slicer> {
       if (!found) throw new NotFound(`${handle} names nothing the record can read`);
       return textSlice(handle, found.text, cursor);
     },
-    async find(query, cursor, sessions) {
+    async find(query, cursor, sessions, file) {
       // Lowercased a character at a time, as matchAt reads the text, so 'ΟΔΟΣ', 'οδος' and 'οδοσ' find each other.
-      const needle = [...query].map(lowerOf).join('');
-      if (!needle.trim()) throw new NotFound('deep find needs words to look for');
+      const needle = foldText(query);
+      if (!needle.trim() && !file) throw new NotFound('deep find needs words to look for');
       const from = cursor === undefined ? 0 : Number(/^h(\d+)$/.exec(cursor)?.[1] ?? NaN);
       if (!Number.isInteger(from)) throw new NotFound(`deep find ${query}: no slice at ${cursor}`);
       // The hit test and the context's place read the text the same way, character by character.
@@ -224,12 +228,16 @@ export async function openSlicer(root: string): Promise<Slicer> {
         const line = text.slice(between(text, start) ? start - 1 : start, between(text, end) ? end + 1 : end).replace(/\s+/g, ' ').trim();
         return line.slice(0, cutAt(line, 0, CONTEXT));
       };
-      for (const handle of sessions ?? (await archived())) {
-        const id = SESSION.exec(handle)?.[1];
-        const t = id ? await record.transcript(id) : undefined;
-        for (const m of t ?? []) if (holds(m.text)) hits.push({ handle: `${handle}#${m.id}`, context: context(m.text) });
+      // The archive's index finds the messages, and each session it doesn't hold is read from its transcript.
+      let ids = (sessions ?? (await archived())).flatMap((handle) => SESSION.exec(handle)?.[1] ?? []);
+      if (file) {
+        const touched = await record.touched(file.path, file.cwd);
+        const by = new Set(touched.map((t) => t.session));
+        ids = sessions ? ids.filter((id) => by.has(id)) : [...by].filter((id) => SESSION.test(`session:${id}`));
+        if (!needle.trim()) for (const id of ids) hits.push({ handle: `session:${id}`, context: `touched ${touched.filter((t) => t.session === id).map((t) => t.path).join(', ')}`.slice(0, CONTEXT) });
       }
-      if (!sessions) {
+      if (needle.trim()) for (const m of await record.findMessages([[needle]], ids)) if (holds(m.text)) hits.push({ handle: `session:${m.session}#${m.id}`, context: context(m.text) });
+      if (!sessions && !file) {
         for (const handle of await record.findable()) {
           const text = (await record.resolve(handle))?.text;
           // Bytes that are not UTF-8 text decode with U+FFFD or hold NUL: not text to show.

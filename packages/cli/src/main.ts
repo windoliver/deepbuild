@@ -219,7 +219,7 @@ const usage = [
   'deep update --check   whether a newer DeepBuild is out',
   'deep debug bundle   redacted logs, versions and doctor output, for a bug report',
   'deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names',
-  'deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it',
+  'deep find [<query>] [--file <path>] [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it; with --file, of sessions that read or edited it',
 ];
 const commandsOf = (line: string) => /^deep ([a-z-]+(?: \| [a-z-]+)*)/.exec(line)![1]!.split(' | ');
 const commands = [...new Set(usage.flatMap(commandsOf))];
