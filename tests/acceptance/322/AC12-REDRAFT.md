@@ -54,6 +54,11 @@ under `.deepbuild/`; which file it writes is decided only when it runs. The test
 
 ## Assertion to source
 
+Each assertion below is a file-local `must` built on `node:assert`'s `ok(cond, message)` (second send-back, from the
+proof lane), so a failing one is the framework's own assertion failure thrown in this file, which
+`node scripts/proof.mjs before` counts. The messages are unchanged. The BLOCKED setup throws (the rewrite refused or
+not landed, a hub that doesn't start) stay plain `Error`s, so they never read as an assertion failure.
+
 | Assertion (in order) | Source |
 |---|---|
 | The handed definition locks for the prompt's task | Definition of done, Locked |

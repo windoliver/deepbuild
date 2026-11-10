@@ -17,15 +17,22 @@
 // `.deepbuild/checks/expired-status.sh`, which compares the status `src/auth.js` gives with the expected output it
 // references, `.deepbuild/checks/expired-token.expected` (`401`). At the base `rejectsExpired` is false, so the
 // approved check fails; FLAG makes it pass.
+import { ok } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   AC12, BEHAVIOR, EXPECTED_BYTES, EXPECTED_FILE, FIX, FLAG, REF_CHECK_BYTES, REF_CHECK_FILE, byId, childEnv, claimsOf, cleanup, control, decision,
-  expectTask, failureOf, lastPos, listed, lockedFor, makeWorld, must, proposalsNaming, replyText, req, runOf, runsOf, Session, settle, sha256, shown,
+  expectTask, failureOf, lastPos, listed, lockedFor, makeWorld, proposalsNaming, replyText, req, runOf, runsOf, Session, settle, sha256, shown,
   startHub, stopHub, taskVerdicts, trustRepo, verdict, type Draft, type Ev, type Hub, type Line,
 } from './helpers.ts';
+
+// The criterion's assertions are node:assert's, so a failing one is the framework's own assertion failure, thrown in
+// this file (the proof lane's before run reads only those); a BLOCKED setup still throws a plain Error.
+function must(cond: boolean, message: string): asserts cond {
+  ok(cond, message);
+}
 
 afterEach(cleanup, 60_000);
 

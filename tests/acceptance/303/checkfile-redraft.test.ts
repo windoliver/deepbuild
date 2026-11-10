@@ -18,6 +18,7 @@
 // `rejectsExpired`), the disk's file still the planted `exit 0`, and a run of R1 for that claim must record passed.
 // The wrong programs `hash-check-paths` and `runs-disk-bytes` (DEEP_HUB_PLANT) must each fail the assertion naming
 // their clause and the file.
+import { ok } from 'node:assert';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -25,10 +26,18 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   BEHAVIOR, CHECK_BYTES, CHECK_FILE, QUESTION, ALL_DRAFTS, askNamed, childEnv, cleanup, control, draftFor, expectTask, failureOf, lockedFor,
-  makeWorld, must, NODE, recomputedAt, req, said, Session, settle, shown, startHub, stopHub, stopsOf, taskOf, type Ev, type Line,
+  makeWorld, must as setup, NODE, recomputedAt, req, said, Session, settle, shown, startHub, stopHub, stopsOf, taskOf, type Ev, type Line,
 } from './helpers.ts';
 
 const AC12 = 'AC12 #303.ec3af335';
+/**
+ * A criterion assertion: node:assert's, so a failure is the framework's own AssertionError thrown from this file
+ * (the proof lane's "at its assertion"). Setup that can't make the criterion's situation arise throws `BLOCKED:`
+ * through the helpers' plain `must`, here `setup`, which never reads as an assertion failure.
+ */
+function must(cond: boolean, message: string): asserts cond {
+  ok(cond, message);
+}
 const APPROVED_SHA = createHash('sha256').update(CHECK_BYTES).digest('hex');
 /** What the unrecognized write leaves on disk: a check that passes whatever the code does. */
 const PLANTED = '#!/bin/sh\nexit 0\n';
@@ -84,7 +93,7 @@ async function scenario(plant?: string): Promise<void> {
     let events = await settle(hub, (all) => { const ref = taskOf(askNamed(all, s, BEHAVIOR)); return ref !== undefined && lockedFor(all, ref).length > 0; }, 180_000);
     const ref = expectTask(events, s, BEHAVIOR, AC12, { handle: true });
     const [lock] = lockedFor(events, ref);
-    must(lock !== undefined, `BLOCKED: ${AC12} the task ${ref} must hold a locked definition before the check file changes: none was locked`);
+    setup(lock !== undefined, `BLOCKED: ${AC12} the task ${ref} must hold a locked definition before the check file changes: none was locked`);
     const locked = String(lock!.data.hash);
     await s.read('src/auth.ts');
     await s.edit('src/auth.ts', 'return token.exp > 0;', 'return token.exp > Date.now() / 1000;');
@@ -98,15 +107,15 @@ async function scenario(plant?: string): Promise<void> {
       response: { type: 'create', filePath: helper, content: HELPER_SOURCE, structuredPatch: [] },
       effect: () => { mkdirSync(dirname(helper), { recursive: true }); writeFileSync(helper, HELPER_SOURCE); },
     });
-    must(wrote.allowed, `BLOCKED: ${AC12} the Write of ${HELPER} must be allowed for the situation to arise: ${shown(wrote.before)}`);
+    setup(wrote.allowed, `BLOCKED: ${AC12} the Write of ${HELPER} must be allowed for the situation to arise: ${shown(wrote.before)}`);
     let output = '';
     const ran = await s.call('Bash', { command: 'npm test', description: 'Run the tests' }, {
       effect: () => { output = execFileSync(join(dirname(NODE), 'npm'), ['test'], { cwd: s.cwd, env: childEnv(w.home), encoding: 'utf8' }); },
       response: { stdout: '', stderr: '', interrupted: false, isImage: false },
     });
-    must(ran.allowed, `BLOCKED: ${AC12} the guard recognized the call that changes ${CHECK_FILE} (npm test), so the criterion's situation can't arise: ${shown(ran.before)}`);
+    setup(ran.allowed, `BLOCKED: ${AC12} the guard recognized the call that changes ${CHECK_FILE} (npm test), so the criterion's situation can't arise: ${shown(ran.before)}`);
     const onDisk = readFileSync(join(s.cwd, CHECK_FILE), 'utf8');
-    must(onDisk === PLANTED, `BLOCKED: ${AC12} npm test's child must have rewritten ${CHECK_FILE} on disk: it holds ${JSON.stringify(onDisk)} (npm said ${JSON.stringify(output.slice(0, 300))})`);
+    setup(onDisk === PLANTED, `BLOCKED: ${AC12} npm test's child must have rewritten ${CHECK_FILE} on disk: it holds ${JSON.stringify(onDisk)} (npm said ${JSON.stringify(output.slice(0, 300))})`);
     const changedAt = (await settle(hub, () => true)).at(-1)!.log_pos;
     await s.stop('The tests pass.');
 
@@ -118,9 +127,9 @@ async function scenario(plant?: string): Promise<void> {
       response: { type: 'create', filePath: code, content: FIX_SOURCE, structuredPatch: [] },
       effect: () => writeFileSync(code, FIX_SOURCE),
     });
-    must(fixed.allowed, `BLOCKED: ${AC12} the Write of ${FIX} must be allowed: ${shown(fixed.before)}`);
+    setup(fixed.allowed, `BLOCKED: ${AC12} the Write of ${FIX} must be allowed: ${shown(fixed.before)}`);
     const stillPlanted = readFileSync(join(s.cwd, CHECK_FILE), 'utf8');
-    must(stillPlanted === PLANTED, `BLOCKED: ${AC12} ${CHECK_FILE} must still hold the planted bytes at the third claim: ${JSON.stringify(stillPlanted)}`);
+    setup(stillPlanted === PLANTED, `BLOCKED: ${AC12} ${CHECK_FILE} must still hold the planted bytes at the third claim: ${JSON.stringify(stillPlanted)}`);
     await s.stop('auth.js now exports rejectsExpired.');
 
     // Every run of R1's check that each of the three claims started has finished.
@@ -149,7 +158,7 @@ async function scenario(plant?: string): Promise<void> {
     const r1 = ((lock!.data.requirements ?? []) as Line[]).find((r) => r.id === 'R1');
     must(r1 !== undefined && strings(r1).includes(APPROVED_SHA), `${AC12} the locked definition's R1 must name the SHA-256 of ${CHECK_FILE}'s bytes at the lock, ${APPROVED_SHA}: ${JSON.stringify(r1)}`);
     const kept = await control(hub, 'evidence.read', { sha: APPROVED_SHA }).catch((error: unknown) => {
-      throw Error(`${AC12} the approved bytes of ${CHECK_FILE} must be kept in the hub by their digest ${APPROVED_SHA}: ${error instanceof Error ? error.message : String(error)}`);
+      must(false, `${AC12} the approved bytes of ${CHECK_FILE} must be kept in the hub by their digest ${APPROVED_SHA}: ${error instanceof Error ? error.message : String(error)}`);
     });
     must(kept.evidence !== undefined, `${AC12} evidence.read ${APPROVED_SHA} must find the approved bytes of ${CHECK_FILE}: ${JSON.stringify(kept)}`);
 

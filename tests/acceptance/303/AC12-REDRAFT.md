@@ -86,6 +86,12 @@ stop (the third claim). The wait holds until every run of R1 each claim started 
 Each twin test requires its message to carry its clause and `.deepbuild/checks/expired-token.sh`. A BLOCKED setup is
 rethrown by `failureOf`, never read as the plant's failure.
 
+Each criterion assertion is the file's own `must`, built on `node:assert`'s `ok`, so a failure is an `AssertionError`
+thrown from the test file, which the proof lane's `before` counts as failing at its assertion on the twins
+(`tests/acceptance/303/twins.json`). The `BLOCKED:` setup checks keep the helpers' plain `must` (imported as `setup`),
+so a setup that can't make the situation arise is never read as an assertion failure. Changed 2026-11-10 at the
+lane's send-back; what each assertion asserts, and its message, are unchanged.
+
 ## What was run, and what was not
 
 Run on the base `414947b4` (Linux arm64): `npm ci`, `npm run build --workspaces`, `cargo build -p deep-hook`;
