@@ -1139,11 +1139,18 @@ pub enum Fault {
     /// Registers `camera@1` in the scene3d module instead of the core (#493), so a build
     /// without scene3d has no camera.
     CameraInScene3d,
+    /// Declares `export.target@1` in the media module instead of the core (#501): the core
+    /// declares none, so a build without media refuses every other module's target.
+    ExportTargetInMedia,
 }
 
 /// The module that declares `ease@1` in the planted layout that moves it out of the core, which
 /// a build that lacks it names as missing (#490).
 pub const EASES_OUTSIDE_CORE: &str = "motion";
+
+/// The module that declares `export.target@1` in the planted layout that moves it out of the
+/// core, which the seal of a build that lacks it names (#501).
+pub const EXPORT_TARGETS_OUTSIDE_CORE: &str = "media";
 
 /// The type an array declares when it holds JSON, which only a check phase writes (#855).
 pub const JSON: &str = "json";
@@ -2904,6 +2911,9 @@ impl Registry {
         let started = self.clock.map(|c| c());
         let eases = self.fault != Some(Fault::EaseInMotion);
         let mut core_registries = core_lists::registries_with(eases);
+        if self.fault == Some(Fault::ExportTargetInMedia) {
+            core_registries.retain(|d| d.name != "export.target@1");
+        }
         core_registries.extend(self.declared.iter().cloned());
         let mut core_entries: Vec<lists::EntryDef> =
             core_lists::entries(self.fault == Some(Fault::BaseStepsElsewhere))
@@ -4753,5 +4763,54 @@ mod tests {
             .iter()
             .any(|i| i.code == "out_of_range" && i.path == "items/x/kind"));
         assert!(!result.issues.iter().any(|i| i.code == "module_missing"));
+    }
+
+    /// The module `x` filling `export.target@1` (#501) with `raw`, read back by `reader`.
+    fn export_target(r: &mut Registrar, reader: &str) {
+        r.entry(
+            "export.target@1",
+            "test.raw",
+            json!({"writer": "x", "fidelity": ["export.fidelity"], "reader": reader,
+                   "hidden": "listed"}),
+            "R6",
+        );
+    }
+
+    fn raw_target() -> Module {
+        module("x", &[], |r| export_target(r, "y"))
+    }
+
+    #[test]
+    fn a_build_without_media_seals_another_modules_export_target() {
+        let sealed = seal_core([raw_target()]).unwrap();
+        let targets = sealed.registry("export.target@1").expect("declared");
+        assert_eq!(targets.owner, "core");
+        let names: Vec<&str> = targets.entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["test.raw"]);
+    }
+
+    #[test]
+    fn an_export_target_read_by_its_own_writer_is_refused_by_name() {
+        let err = seal_core([module("x", &[], |r| export_target(r, "x"))]).unwrap_err();
+        assert_eq!(err.code, "entry_refused");
+        let at = err.registry.as_ref().expect("a registry refusal");
+        assert_eq!(at.name, "export.target@1");
+        assert_eq!(at.entries, [json!("test.raw")]);
+        assert_eq!(at.rules, ["reader_is_not_writer"]);
+    }
+
+    #[test]
+    fn export_targets_declared_in_media_refuse_a_build_without_it_naming_media() {
+        let err = Registry::new(BuildSet::Core)
+            .with(raw_target())
+            .plant(Fault::ExportTargetInMedia)
+            .seal()
+            .unwrap_err();
+        assert_eq!(err.code, "unknown_registry");
+        assert_eq!(err.modules, ["media", "x"]);
+        assert_eq!(
+            err.registry.as_ref().map(|r| r.name.as_str()),
+            Some("export.target@1")
+        );
     }
 }

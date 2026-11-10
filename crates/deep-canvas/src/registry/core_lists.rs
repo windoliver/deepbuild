@@ -1171,6 +1171,41 @@ fn ease() -> RegistryDef {
     )
 }
 
+// ---- export.target@1 (#501; Export: Targets)
+
+fn reader_is_not_writer(v: &Value) -> Result<(), String> {
+    match (v["writer"].as_str(), v["reader"].as_str()) {
+        (Some(w), Some(r)) if w == r => Err(format!("`{w}` writes it and reads it back")),
+        _ => Ok(()),
+    }
+}
+
+/// An export target: the canvas module that writes it, the check kinds that hold its output to
+/// the document, the reader those checks read it back with, and what it does with a hidden item.
+fn export_target() -> RegistryDef {
+    let name = json!({"type": "string"});
+    RegistryDef::new(
+        "export.target@1",
+        obj(
+            json!({"writer": name, "fidelity": {"type": "array", "items": name}, "reader": name,
+                   "hidden": {"enum": ["left_out", "listed"]}}),
+            &["writer", "fidelity", "reader", "hidden"],
+        ),
+        &["module"],
+        "R6",
+    )
+    .rule("reader_is_not_writer", "a target whose reader is its own writer", reader_is_not_writer)
+    .planted(
+        "reads_itself",
+        json!({"writer": "x", "fidelity": ["export.fidelity"], "reader": "x", "hidden": "left_out"}),
+    )
+}
+
+/// `export.target@1`'s declaration, for the planted layout that declares it in the media module.
+pub fn export_target_registry() -> RegistryDef {
+    export_target()
+}
+
 /// Every registry the core declares, by name; with `eases`, `ease@1` among them, which only
 /// the planted layout that declares it in the motion module leaves out.
 pub fn registries_with(eases: bool) -> Vec<RegistryDef> {
@@ -1186,6 +1221,7 @@ pub fn registries_with(eases: bool) -> Vec<RegistryDef> {
         out.push(ease());
     }
     out.extend([
+        export_target(),
         gpu_function(),
         gpu_output(),
         gpu_step(),

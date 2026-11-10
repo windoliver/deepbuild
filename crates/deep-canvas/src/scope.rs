@@ -83,6 +83,7 @@ pub enum Event {
     Key {
         key: String,
         cmd: bool,
+        alt: bool,
     },
     Text(String),
     /// An entry on one of the canvas's view controls (Scope and input classes: view class), the
@@ -1110,7 +1111,7 @@ impl Scope {
                     commit(&mut done);
                 }
             }
-            Event::Key { key, cmd } => {
+            Event::Key { key, cmd, .. } => {
                 match (key.as_str(), cmd) {
                     ("Escape", _) => self.back(),
                     ("k", true) => self.palette = Some(String::new()),
@@ -1299,6 +1300,7 @@ mod tests {
         let esc = Event::Key {
             key: "Escape".into(),
             cmd: false,
+            alt: false,
         };
         s.input(&doc, 2000 * MS, 5, &esc);
         assert_eq!(
@@ -1414,6 +1416,7 @@ mod tests {
         let esc = Event::Key {
             key: "Escape".into(),
             cmd: false,
+            alt: false,
         };
         s.input(&doc, 0, 10, &esc);
         assert!(s.hidden(&doc).is_empty(), "the first Esc ends isolation");
