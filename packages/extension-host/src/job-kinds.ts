@@ -31,7 +31,12 @@ export interface JobTool {
  * What an install holds of the job API: the kinds it registered, and its tools, each with the build it qualified as,
  * none for a tool off the machine, whose files aren't here, and the host it runs on.
  */
-export interface HeldJobs { kinds: Record<string, JobKind>; tools: { kind: string; tool: string; build: string | null; host?: string; descriptor: JobTool }[] }
+export interface HeldJobs { kinds: Record<string, JobKind>; tools: { kind: string; tool: string; build: string | null; host?: string; descriptor: JobTool; provider?: string }[] }
+/**
+ * A paid call's run (#1923): the provider's host the tool may reach, its submission key, and the call journal it
+ * appends to, `{key, provider}` before its request leaves and `{key, provider, task}` when the provider answers.
+ */
+export interface JobCall { provider: string; key: string; journal: string }
 /** The URL a tool off the machine is called at, or undefined for one that runs as its own files. */
 export const urlOf = (t: JobTool): string | undefined => ('url' in t.run ? t.run.url : undefined);
 /** The planted hosts of #1922 AC6 and AC7, each a build that isn't the digest of the tool's files as installed. */

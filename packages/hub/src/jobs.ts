@@ -15,6 +15,13 @@
 // pair, and the receipt lists every file sent, by hash and host. One that runs an open model declares its weight files
 // by hash and the capabilities its call needs; before each call its host reports both, a mismatch is BLOCKED with an
 // unblock ask naming the file or the capability and nothing is sent, and the weight hashes are part of the key.
+//
+// A tool that calls a provider is never run twice for one key (#1923). It appends its submission key to the key's call
+// journal before its request leaves and the provider's task ID when it answers; the hub reads that journal and never
+// writes it. A key whose journal holds a call and whose outputs aren't kept made a call the hub can't know the fate
+// of: a retry makes no call and is BLOCKED with one unblock ask naming the provider and the key. While a job runs, a
+// second request with its key joins it, starting nothing, and a request that is cancelled leaves it; the job stops
+// only once no request waits on it.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -58,6 +65,8 @@ export interface JobDeps {
   plant?: string | undefined;
 }
 interface Cached { outputs: Record<string, string>; build: string | null }
+/** A job running for its key (#1923): what it will answer, the requests waiting on it, and its stop. */
+interface Running { result: Promise<Obj>; callers: Set<string>; stop: AbortController }
 interface Saved { cache: Record<string, Cached>; rules: Record<string, number> }
 
 export class Jobs {
@@ -75,6 +84,11 @@ export class Jobs {
   private readonly sendNo = new Set<string>();
   /** The unblock ask each cause raised, so one cause asks once. */
   private readonly unblocks = new Map<string, string>();
+  /** The jobs running, by key: a second request with a running job's key joins it and starts nothing (#1923). */
+  private readonly running = new Map<string, Running>();
+  /** How each waiting request leaves its job when its caller cancels. */
+  private readonly leaving = new Map<string, () => void>();
+  private anonymous = 0;
 
   constructor(private readonly d: JobDeps) {
     const file = join(d.root, 'jobs.json');
@@ -113,8 +127,20 @@ export class Jobs {
     return true;
   }
 
-  /** deep_job's run: done with its outputs by hash and a receipt, held on an ask, refused, or failed naming why. */
-  async run(args: Obj): Promise<Obj> {
+  /**
+   * A request's caller gone (#1923): it leaves the job it waits on. The job stops only once no request waits on it, so
+   * a joiner's cancel never stops the job for the request that started it.
+   */
+  gone(caller: string): void {
+    this.leaving.get(caller)?.();
+    for (const job of this.running.values()) {
+      if (!job.callers.delete(caller)) continue;
+      if (job.callers.size === 0 || this.d.plant === 'job-joiner-cancels-job') job.stop.abort();
+    }
+  }
+
+  /** deep_job's run: done with its outputs by hash and a receipt, held on an ask, refused, BLOCKED, or failed naming why. */
+  async run(args: Obj, caller: string = `anonymous#${++this.anonymous}`): Promise<Obj> {
     const host = this.d.host();
     const refused = (reason: string): Obj => ({ status: 'refused', reason });
     if (!host) return refused('the hub has no extension host yet; try again once it is ready');
@@ -163,6 +189,22 @@ export class Jobs {
     const cached = this.saved.cache[key];
     if (cached && (await Promise.all(Object.values(cached.outputs).map((sha) => this.d.has(sha)))).every(Boolean)) return done(cached.outputs, cached.build, 'hit');
 
+    // A running job with this key: this request joins it, passes no gate, sends nothing and starts nothing. The
+    // planted runner job-second-call runs the tool again.
+    const running = this.running.get(key);
+    if (running && this.d.plant !== 'job-second-call') return this.wait(running, caller, true);
+    // A call made for this key, with no job running it and no outputs kept: its answer was lost, and it isn't made again.
+    const made = pinned.provider && !running ? this.called(key) : undefined;
+    if (made) {
+      const journal = this.journal(key);
+      return this.blocked(`lost ${key}`, {
+        cause: `${tool} sent a paid call for ${kind} to ${made.provider} under the submission key ${key}, and ${made.task ? `${made.provider} answered it as task ${made.task}, but no output of it was kept` : 'its answer never reached DeepBuild'}, so it isn't made again`,
+        question: `${tool} sent a paid call for ${kind} to ${made.provider} under the submission key ${key}, and its outputs never reached DeepBuild, so it isn't made again. Find that call at ${made.provider}?`,
+        steps: [`Find the call at ${made.provider} by its submission key ${key}, which it was sent with as its Idempotency-Key`, `To pay for it again instead, delete the call journal ${journal} and run the job again`],
+        where: `${made.provider}, and this machine's ${journal}`, why: 'a paid call is never made twice, and this one may have run', proves: `the call journal for ${key} deleted`,
+      });
+    }
+
     if (url) {
       // The planted hub sends the files before any answer of yours.
       if (this.d.plant === 'job-host-sends-early') await host.runJobTool(tool, kind, params, bytes).catch(() => undefined);
@@ -205,13 +247,47 @@ export class Jobs {
       }
     }
 
+    const stop = new AbortController();
+    const job: Running = { callers: new Set(), stop, result: this.call(host, held, pinned, key, params, bytes, receipt, done, stop.signal) };
+    this.running.set(key, job);
+    void job.result.finally(() => { if (this.running.get(key) === job) this.running.delete(key); });
+    return this.wait(job, caller, false);
+  }
+  /** A request waiting on its job: the job's answer, its receipt saying so when it joined, or `cancelled` once its caller is gone. */
+  private wait(job: Running, caller: string, joined: boolean): Promise<Obj> {
+    job.callers.add(caller);
+    const left = new Promise<Obj>((resolve) => this.leaving.set(caller, () => resolve({ status: 'cancelled', reason: 'the request was cancelled; the job runs on for any other request waiting on it' })));
+    const answer = joined ? job.result.then((r) => (isObj(r.receipt) ? { ...r, receipt: { ...r.receipt, joined: true } } : r)) : job.result;
+    return Promise.race([answer, left]).finally(() => { this.leaving.delete(caller); job.callers.delete(caller); });
+  }
+  /** The key's call journal, which its tool appends to and the hub only reads. */
+  private journal(key: string): string {
+    return join(this.dir(), 'calls', key, 'journal.jsonl');
+  }
+  /** The call the key's journal says went out, if one did: its provider, and the provider's task ID once it answered. */
+  private called(key: string): { provider: string; task?: string } | undefined {
+    let text: string;
+    try { text = readFileSync(this.journal(key), 'utf8'); } catch { return undefined; }
+    let made: { provider: string; task?: string } | undefined;
+    for (const line of text.split('\n')) {
+      let v: unknown;
+      try { v = JSON.parse(line); } catch { continue; }
+      if (!isObj(v) || v.key !== key || typeof v.provider !== 'string') continue;
+      made = typeof v.task === 'string' ? { provider: v.provider, task: v.task } : made ?? { provider: v.provider };
+    }
+    return made;
+  }
+  /** The tool's one run for a key, its outputs held until the kind's output checks pass, then kept and cached. */
+  private async call(host: Host, held: ReturnType<Host['jobs']>[number], pinned: ReturnType<Host['jobs']>[number]['tools'][number], key: string, params: Record<string, JsonValue>, bytes: Record<string, Uint8Array>, receipt: (build: string | null, cache: 'hit' | 'miss') => Obj, done: (outputs: Record<string, string>, build: string | null, cache: 'hit' | 'miss') => Obj, stop: AbortSignal): Promise<Obj> {
+    const { kind } = held;
+    const { tool } = pinned;
     // While its tool runs, the job has a row that counts from the tool's own counters (#1925). Nothing here waits on
     // the caller, so the job runs on when the app or the session that asked for it closes.
     const job: RunningJob = { key, kind, tool, started: this.d.now() };
     this.d.row(job, true);
     let wrote: Record<string, Uint8Array>;
     try {
-      wrote = await host.runJobTool(tool, kind, params, bytes, (counter) => {
+      wrote = await host.runJobTool(tool, kind, params, bytes, pinned.provider ? { key, journal: this.journal(key) } : undefined, stop, (counter) => {
         job.counter = counter;
         job.at = this.d.now();
         this.d.row(job, true);
@@ -291,7 +367,7 @@ export class Jobs {
     this.sendHeld.set(ask, pair);
     return ask;
   }
-  /** BLOCKED, with one unblock ask for its cause: nothing was sent. */
+  /** BLOCKED, with one unblock ask for its cause: nothing was sent, and no call made. */
   private async blocked(id: string, a: { cause: string; question: string; steps: string[]; where: string; why: string; proves: string }): Promise<Obj> {
     let ask = this.unblocks.get(id);
     if (!ask) {

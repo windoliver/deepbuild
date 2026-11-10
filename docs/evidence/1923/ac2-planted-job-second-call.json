@@ -1,0 +1,125 @@
+{
+  "failures": [
+    "the second deep_job with the key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93, sent while the first ran, didn't join it: it was answered before the job ended: {\"status\":\"done\",\"outputs\":{\"text\":{\"sha256\":\"b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78\"}},\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"hosted-upper@1.0.0\",\"key\":\"491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93\",\"build\":\"d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f\",\"cache\":\"miss\",\"inputs\":{\"text\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"}}}",
+    "a deep_job with the key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93, sent while the job ran after its other joiner cancelled, didn't join it: it was answered before the job ended: {\"status\":\"done\",\"outputs\":{\"text\":{\"sha256\":\"b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78\"}},\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"hosted-upper@1.0.0\",\"key\":\"491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93\",\"build\":\"d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f\",\"cache\":\"hit\",\"inputs\":{\"text\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"}}}",
+    "2 calls reached the provider for the key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93 while one job ran: a joining request started a second call",
+    "the joining request for the key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93 isn't answered with the job's \"ABC\" by hash and a receipt naming that key with joined: true: {\"status\":\"done\",\"outputs\":{\"text\":{\"sha256\":\"b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78\"}},\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"hosted-upper@1.0.0\",\"key\":\"491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93\",\"build\":\"d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f\",\"cache\":\"hit\",\"inputs\":{\"text\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"}}}",
+    "the cancelled joining request for the key 491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93 was still answered with the job's outputs: {\"status\":\"done\",\"outputs\":{\"text\":{\"sha256\":\"b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78\"}},\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"hosted-upper@1.0.0\",\"key\":\"491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93\",\"build\":\"d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f\",\"cache\":\"miss\",\"inputs\":{\"text\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"}}}"
+  ],
+  "seen": {
+    "join": {
+      "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+      "calls": [
+        {
+          "n": 2,
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "text": "abc",
+          "task": "task-2",
+          "journaled": true,
+          "answered": true,
+          "dropped": false
+        },
+        {
+          "n": 3,
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "text": "abc",
+          "task": "task-3",
+          "journaled": true,
+          "answered": true,
+          "dropped": false
+        }
+      ],
+      "first": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-upper@1.0.0",
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "build": "d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f",
+          "cache": "miss",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      },
+      "joined": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.hosted",
+          "tool": "hosted-upper@1.0.0",
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "build": "d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f",
+          "cache": "hit",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      },
+      "cancelled": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"status\":\"done\",\"outputs\":{\"text\":{\"sha256\":\"b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78\"}},\"receipt\":{\"kind\":\"test.hosted\",\"tool\":\"hosted-upper@1.0.0\",\"key\":\"491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93\",\"build\":\"d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f\",\"cache\":\"miss\",\"inputs\":{\"text\":\"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"}}}"
+            }
+          ],
+          "isError": false,
+          "structuredContent": {
+            "status": "done",
+            "outputs": {
+              "text": {
+                "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+              }
+            },
+            "receipt": {
+              "kind": "test.hosted",
+              "tool": "hosted-upper@1.0.0",
+              "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+              "build": "d1:8714d691694ded164e2a9d0ce326329129e05f8355fcf2a2eba9e8bce3c99a0f",
+              "cache": "miss",
+              "inputs": {
+                "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+              }
+            }
+          }
+        }
+      },
+      "journal": [
+        {
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "provider": "127.0.0.1:50750",
+          "file": "/private/tmp/dh1923-AuYFlV/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+        },
+        {
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "provider": "127.0.0.1:50750",
+          "file": "/private/tmp/dh1923-AuYFlV/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+        },
+        {
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "provider": "127.0.0.1:50750",
+          "task": "task-3",
+          "file": "/private/tmp/dh1923-AuYFlV/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+        },
+        {
+          "key": "491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93",
+          "provider": "127.0.0.1:50750",
+          "task": "task-2",
+          "file": "/private/tmp/dh1923-AuYFlV/h/.deepbuild/jobs/calls/491994379ab9559131762d14cc9e677df2775bce744a38bfe992e4b720f6dc93/journal.jsonl"
+        }
+      ]
+    }
+  }
+}
