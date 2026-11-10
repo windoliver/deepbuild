@@ -9,6 +9,7 @@
 
 mod access;
 mod audio;
+mod bake;
 mod ask;
 mod capture;
 mod costs;
@@ -44,6 +45,7 @@ mod serve;
 mod shaper;
 mod shared;
 mod snapshot;
+mod spawn;
 mod spatial;
 mod terminal;
 #[cfg(feature = "test-machines")]

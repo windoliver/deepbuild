@@ -1,0 +1,12 @@
+// A test.upper tool's entry file (#1922 acceptance; README, The surface under test). The hub runs it with Node, as a
+// process of its own outside the hub, once per cache miss and per qualification fixture. It reads one JSON object on
+// stdin, {params, inputs: {text: <the input's bytes, base64>}}, and writes one on stdout, {outputs: {text: <base64>}}.
+// What it does to the text is its second file's, case.mjs.
+import { convert } from './case.mjs';
+
+const chunks = [];
+for await (const chunk of process.stdin) chunks.push(chunk);
+const request = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+const text = Buffer.from(request.inputs.text, 'base64').toString('utf8');
+const out = convert(text, request.params ?? {});
+process.stdout.write(`${JSON.stringify({ outputs: { text: Buffer.from(out, 'utf8').toString('base64') } })}\n`);

@@ -1,0 +1,7 @@
+// A test.upper tool's second file (#1922 acceptance): the text, trimmed when `trim` is true, in upper case, or in lower
+// case when `case` is lower. A missing `trim` is false, the kind's default.
+// build mark: a
+export function convert(text, params) {
+  const trimmed = params.trim === true ? text.trim() : text;
+  return params.case === 'lower' ? trimmed.toLowerCase() : trimmed.toUpperCase();
+}

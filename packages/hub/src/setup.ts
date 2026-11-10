@@ -257,7 +257,8 @@ function withStatusLine(root: string, settings: Obj, ours: string): Obj {
   });
   return { ...settings, statusLine: { ...(line ?? {}), type: 'command', command: ours } };
 }
-function editConfig(root: string, edit: (config: Obj) => void): void {
+/** Edits DeepBuild's own config.json under `root`. */
+export function editConfig(root: string, edit: (config: Obj) => void): void {
   const file = join(root, 'config.json');
   let config: Obj = {};
   try { config = JSON.parse(readFileSync(file, 'utf8')) as Obj; } catch { /* draftAskSettings wrote it */ }
@@ -335,23 +336,19 @@ async function undo(): Promise<number> {
     delete servers['deep-actions'];
     return { ...v, mcpServers: servers };
   });
-  // Codex's files where setup wrote them, and the server as it wrote it, whatever this environment says today.
-  const [recordedHooks, recordedConfig, server] = [join(recordedHome(root), 'hooks.json'), join(recordedHome(root), 'config.toml'), recordedServer(root)];
   // The planted wrong program takes our entries out and writes the JSON again, whatever you had.
   const notes = [
     plant() === 'undo-reserializes' ? hooksOut() : putBack(root, record, settingsFile, hooksOut),
     putBack(root, record, userFile, mcpOut),
-    putBack(root, record, recordedHooks, () => editedCodex(recordedHooks, (text) => withoutEntries(root, text), "only DeepBuild's entries")),
-    putBack(root, record, recordedConfig, () => editedCodex(recordedConfig, (text) => (server ? withoutServer(text, server) : text), "DeepBuild's MCP server if it was as setup wrote it")),
+    ...removeCodex(root, record),
     undoPaseo(root, record),
   ].filter((n): n is string => n !== undefined);
   // Every other agent file an Agents page sync wrote (#148): its original bytes back where you haven't edited it since.
-  const handled = new Set([settingsFile, userFile, recordedHooks, recordedConfig, join(homedir(), '.paseo', 'config.json')]);
+  const handled = new Set([settingsFile, userFile, join(homedir(), '.paseo', 'config.json')]);
   for (const file of Object.keys(record.files).filter((f) => !handled.has(f))) {
     const note = putBack(root, record, file, () => `you edited ${file} since DeepBuild wrote it, so undo left it as it is; take DeepBuild's entries out by hand`);
     if (note) notes.push(note);
   }
-  forgetEntries(root);
   for (const dir of record.created) rmSync(dir, { recursive: true, force: true });
   rmSync(installedRecord(root), { force: true });
   rmSync(join(root, 'setup.json'), { force: true });
@@ -360,6 +357,25 @@ async function undo(): Promise<number> {
   for (const note of notes) console.log(note);
   console.log(`DeepBuild is removed from Claude Code: its hooks, status line forwarder, MCP server, skill and the hub's login service are gone, and your settings are as they were. Your record, evidence and wiki stay in ${root}; deleting that folder is yours to do.`);
   return 0;
+}
+
+/**
+ * DeepBuild out of Codex alone, as `deep setup --undo` takes it out (#1998): each Codex file setup wrote gets its bytes
+ * from before back where you haven't edited it since, and only our parts taken out where you have; then what setup
+ * kept for Codex goes, so nothing watches or restores its entries. The notes say what was left as it is.
+ */
+export function removeCodex(root: string, record = setupRecord(root)): string[] {
+  // Codex's files where setup wrote them, and the server as it wrote it, whatever this environment says today.
+  const [hooks, config, server] = [join(recordedHome(root), 'hooks.json'), join(recordedHome(root), 'config.toml'), recordedServer(root)];
+  const notes = [
+    putBack(root, record, hooks, () => editedCodex(hooks, (text) => withoutEntries(root, text), "only DeepBuild's entries")),
+    putBack(root, record, config, () => editedCodex(config, (text) => (server ? withoutServer(text, server) : text), "DeepBuild's MCP server if it was as setup wrote it")),
+  ].filter((n): n is string => n !== undefined);
+  delete record.files[hooks];
+  delete record.files[config];
+  if (existsSync(join(root, 'setup.json'))) saveRecord(root, record);
+  forgetEntries(root);
+  return notes;
 }
 
 /** paseo's command on this PATH, or none: setup adds the plugin only where paseo is found (#55). */

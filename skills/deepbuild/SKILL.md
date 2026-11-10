@@ -94,6 +94,12 @@ Never: The source of truth; the wiki's pages are.
 
 Never: Called from a panel or past its quota, or a reading without its source and as-of time, or a tool not counted as read.
 
+## Job (R6, with the agent tools for scenes)
+
+- deep_job. List the job kinds and the tools that qualified for each, and run a kind on one tool pinned by name@version, outside the hub's process; a rerun with the same tool, params and input bytes is a cache hit that starts no process.
+
+Never: Run in the canvas core or a frame, change a document, count as a verdict, or hand an item an output before the kind's output checks pass.
+
 ## Canvas
 
 - deep_kinds. Look up what this core can draw before you write a document, with the kinds, recipes, packs and registries it has, each with its schema, an example by hash, its stability and whether it is available here; the word another tool uses for one, from a familiar-names pack; and the installed guides and gallery, read in pages.
