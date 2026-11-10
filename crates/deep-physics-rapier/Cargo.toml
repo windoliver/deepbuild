@@ -1,0 +1,26 @@
+[package]
+name = "deep-physics-rapier"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #2009: physics.world@1's backend on Rapier 0.36.1, pinned with enhanced-determinism and
+# serde-serialize, simd8 and parallel left out, behind deep-canvas-physics's backend interface, with
+# the deep-physics JSON-lines runner. Outside the canvas lint's scope: Rapier is the engine the
+# design pins, and the module crate it implements names none of its types.
+[dependencies]
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+rapier3d = { version = "=0.36.1", default-features = false, features = ["dim3", "f32", "std", "enhanced-determinism", "serde-serialize"] }
+base64 = "0.22"
+bincode = "1"
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+[features]
+# The planted twin of criterion 4 (tests/acceptance/2009): a public re-export and a public function
+# that name Rapier types, which the public-API check must catch.
+test-leaks-rapier = []
+
+[[bin]]
+name = "deep-physics"
+path = "src/main.rs"
