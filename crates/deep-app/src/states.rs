@@ -39,10 +39,10 @@ pub enum State {
     },
 }
 
-/// The table's rows: the word on every surface, its status-map entry, and the words that never name it. The last
-/// three are the states the hub's one reading gives a session that no claim names (#992), which the list's rows carry
-/// (#1463).
-pub const TABLE: [(&str, &str, &[&str]); 14] = [
+/// The table's rows: the word on every surface, its status-map entry, and the words that never name it. Stuck,
+/// flagged and finished are the states the hub's one reading gives a session that no claim names (#992), which the
+/// list's rows carry (#1463); running is a running job's row (#1925).
+pub const TABLE: [(&str, &str, &[&str]); 15] = [
     ("queued", "idle", &[]),
     ("working", "running", &["in progress"]),
     ("says done", "running", &["done"]),
@@ -57,6 +57,7 @@ pub const TABLE: [(&str, &str, &[&str]); 14] = [
     ("stuck", "blocked", &[]),
     ("flagged", "fail", &[]),
     ("finished", "idle", &[]),
+    ("running", "running", &[]),
 ];
 
 impl State {
@@ -164,6 +165,20 @@ pub fn time_at_end(words: &str) -> (&str, Option<&str>) {
             (rest, Some(&words[rest.len() + 1..]))
         }
         _ => (words, None),
+    }
+}
+
+/// A running job's row words after its kind (#1925): its count from its tool's own counter with its time left, as the
+/// hub wrote them; or, when its tool reports no counter, the word running and how long it has run, which a row draws
+/// at its right edge. Never a bar, and never a count its tool didn't report.
+pub fn job_words(row: &Value, now: u64) -> String {
+    let title = row["title"].as_str().unwrap_or_default();
+    match row["progress"].as_str() {
+        Some(progress) => format!("{title} · {progress}"),
+        None => {
+            let ran = now.saturating_sub(row["since"].as_u64().unwrap_or(now));
+            format!("{title} · running {}", span(ran))
+        }
     }
 }
 
@@ -360,6 +375,8 @@ pub struct Table {
     rows: HashMap<String, (String, Value)>,
     /// Whether the record holds any row.set: a record from before the hub built rows keeps the app's own reading.
     listed: bool,
+    /// Each session's project, from the first event that names one (#1462): the list's heading it goes under.
+    projects: HashMap<String, String>,
 }
 
 /// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
@@ -423,6 +440,15 @@ impl Table {
             reading.read(event, handle);
             if !done && reading.done() {
                 self.asks.retain(|ask| self::handle(ask) != handle);
+            }
+        }
+        if let (Some(session), Some(project)) =
+            (event["session"].as_str(), event["project"].as_str())
+        {
+            if !project.is_empty() {
+                self.projects
+                    .entry(session.to_owned())
+                    .or_insert_with(|| project.to_owned());
             }
         }
         let kind = event["kind"].as_str().unwrap_or_default();
@@ -520,6 +546,11 @@ impl Table {
 
     /// The title of the session's task, as every surface draws it. The agent chooses it, so its controls and
     /// direction marks show as the question card shows them (#1738); the record keeps the bytes.
+    /// The project a session is part of, as its events name it; empty when none does (#1462).
+    pub fn project(&self, session: &str) -> String {
+        self.projects.get(session).cloned().unwrap_or_default()
+    }
+
     pub fn title(&self, session: &str) -> String {
         let title = self
             .titles
@@ -881,8 +912,30 @@ pub fn entry_of(entry: &str) -> &'static str {
         .map_or("idle", |(_, known, _)| known)
 }
 
-/// The menu bar's menu under the count: a line per session, its task and its status mark.
+/// The menu bar's menu under the count: a line per session, its task and its status mark. A record whose rows the hub
+/// built (#1463) says each session as the list and `deep status` do: its row's title, its entry's mark and its word
+/// (#1462).
 pub fn menu(table: &Table, now: u64) -> Vec<String> {
+    if table.listed() {
+        return table
+            .list()
+            .into_iter()
+            .filter(|row| {
+                row["id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("session:"))
+            })
+            .map(|row| {
+                let text = |key: &str| row[key].as_str().unwrap_or_default();
+                let title = crate::question::visible(text("title"));
+                format!(
+                    "{title} · {} {}",
+                    glyph(entry_of(text("entry"))),
+                    text("word")
+                )
+            })
+            .collect();
+    }
     table
         .every_session()
         .into_iter()
@@ -894,6 +947,24 @@ pub fn menu(table: &Table, now: u64) -> Vec<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// #1925: a running job's row shows its tool's count as the hub wrote it; with no counter, the word running and
+    /// how long it has run, in the row's time slot, never a count it wasn't given.
+    #[test]
+    fn a_job_row_counts_only_from_its_tools_counter() {
+        let counted = json!({"title": "test.encode", "progress": "300 of 600 · 40 s left", "since": 0});
+        assert_eq!(
+            job_words(&counted, 45_000),
+            "test.encode · 300 of 600 · 40 s left"
+        );
+        let bare = json!({"title": "test.encode", "since": 1_000});
+        let words = job_words(&bare, 41_000);
+        assert_eq!(words, "test.encode · running 40 s");
+        assert_eq!(
+            time_at_end(&words),
+            ("test.encode · running", Some("40 s"))
+        );
+    }
 
     /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.
     #[test]

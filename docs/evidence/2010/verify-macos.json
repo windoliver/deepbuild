@@ -1,0 +1,53 @@
+{
+ "replay": {
+  "ok": true,
+  "verdict": "PASS",
+  "bake_key": "53e18fa44784aa003eb076a6576503725f930b7db7c52c7ab3e2581edb1194f0",
+  "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+  "machine": {
+   "os": "macos",
+   "arch": "aarch64",
+   "cpu": "Apple M5 Max"
+  },
+  "target": "aarch64-apple-darwin",
+  "report": null,
+  "failure": null
+ },
+ "one_ulp_shift_at_300": {
+  "ok": true,
+  "verdict": "FAIL",
+  "bake_key": "53e18fa44784aa003eb076a6576503725f930b7db7c52c7ab3e2581edb1194f0",
+  "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+  "machine": {
+   "os": "macos",
+   "arch": "aarch64",
+   "cpu": "Apple M5 Max"
+  },
+  "target": "aarch64-apple-darwin",
+  "report": {
+   "first_step": 300,
+   "checkpoint": 300,
+   "field": {
+    "id": "ball",
+    "field": "linear.x",
+    "values": [
+     1.5,
+     1.5000001192092896
+    ],
+    "ulp_distance": 1
+   }
+  },
+  "failure": null
+ },
+ "cross_machine": {
+  "ok": true,
+  "verdict": "BLOCKED",
+  "asks": [
+   {
+    "kind": "unblock",
+    "target": "x86_64-unknown-linux-gnu",
+    "what": "No second machine runs x86_64-unknown-linux-gnu: configure one in the hosts block and run this golden's golden_verify there; until it has run, the golden is BLOCKED."
+   }
+  ]
+ }
+}

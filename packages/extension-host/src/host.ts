@@ -34,6 +34,7 @@ import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
 import { basename, dirname, isAbsolute, join } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
@@ -48,7 +49,7 @@ import { after, badDeadline, type Cleanup, type Host as RunHost, type Supervisor
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type ProvideRow, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
-import { buildOf, kindOf, paramsOf, toolOf, urlOf, type BuildPlant, type HeldJobs, type JobKind, type JobTool, type Weight } from './job-kinds.js';
+import { buildOf, counterOf, kindOf, paramsOf, toolOf, urlOf, type BuildPlant, type HeldJobs, type JobCall, type JobCounter, type JobKind, type JobTool, type Weight } from './job-kinds.js';
 import { answered, jobPrompt, jobRequest, type Answer } from './jobs.js';
 import { checkReply, join as joinReplies, type JoinPlant, type Template } from './replies.js';
 import { cadenceOf, declareSchedule, Schedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings, type Verdict } from './schedules.js';
@@ -338,8 +339,12 @@ export interface ExtensionHost {
   jobs(): JobListing[];
   /** A kind's params made canonical, every default written out (#1922); an Error names what doesn't hold. */
   jobParams(kind: string, value: unknown): Record<string, JsonValue>;
-  /** One run of a qualified tool as a process of its own outside the hub (#1922): its outputs' bytes by name. */
-  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>>;
+  /**
+   * One run of a qualified tool as a process of its own outside the hub (#1922): its outputs' bytes by name. A tool
+   * that calls a provider is given `call`, its submission key and journal, and may reach that provider; `stop` ends its run (#1923).
+   * `watch` hears each counter the tool reports as it runs (#1925).
+   */
+  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>>;
   /** What a tool off the machine's host reports before a call (#1924): the weight files it holds, by hash, and its capabilities. */
   jobHostReport(tool: string, kind: string): Promise<{ weights: Weight[]; capabilities: string[] }>;
   /** One search or fetch of a loaded library source (#1731), its calls the hub's; `noAnswer` when one got none. */
@@ -438,6 +443,8 @@ const CALL_MS = 10_000;
 /** How long one run of a job tool may take (#1922), and the most it may write on stdout. */
 const JOB_MS = 120_000;
 const JOB_OUT = 16 * 1024 * 1024;
+/** The longest stderr line read for a counter (#1925); a counter's line is far shorter. */
+const COUNTER_LINE = 4096;
 /** A tool's answer, `{outputs}` with each output's bytes in base64, as bytes by name. */
 function outputsOf(tool: string, answer: unknown): Record<string, Uint8Array> {
   const outputs = (typeof answer === 'object' && answer !== null ? answer as { outputs?: unknown } : {}).outputs;
@@ -544,10 +551,10 @@ interface Manifest {
   state_sources?: string[];
   /** The job kinds it registers and the tools it adds to a kind (#1922), each tool pinned by name@version. */
   jobs?: string[];
-  job_tools?: { kind: string; tool: string; host?: string }[];
+  job_tools?: { kind: string; tool: string; host?: string; provider?: string }[];
 }
 /** A job kind as an install holds it (#1922), with the tools that joined it. */
-export interface JobListing { kind: string; plugin: string; descriptor: JobKind; tools: { tool: string; plugin: string; build: string | null; host?: string; descriptor: JobTool }[] }
+export interface JobListing { kind: string; plugin: string; descriptor: JobKind; tools: { tool: string; plugin: string; build: string | null; host?: string; descriptor: JobTool; provider?: string }[] }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
 interface Entry extends Installed { grant: { record: string[]; text?: boolean; projects?: string[]; hosts?: HostGrant[]; docs?: string[] }; holds: string[]; jobs?: HeldJobs }
 /** A session adapters bound: who bound it in order, who gates it, whether a turn runs, and the answers waiting for a route. */
@@ -1037,7 +1044,7 @@ class Host implements ExtensionHost {
     const entries = Object.values(this.entries);
     return entries.flatMap((e) => Object.entries(e.jobs?.kinds ?? {}).map(([kind, descriptor]) => ({
       kind, plugin: e.id, descriptor,
-      tools: entries.flatMap((t) => (t.jobs?.tools ?? []).filter((x) => x.kind === kind).map((x) => ({ tool: x.tool, plugin: t.id, build: x.build, ...(x.host && { host: x.host }), descriptor: x.descriptor }))),
+      tools: entries.flatMap((t) => (t.jobs?.tools ?? []).filter((x) => x.kind === kind).map((x) => ({ tool: x.tool, plugin: t.id, build: x.build, ...(x.host && { host: x.host }), descriptor: x.descriptor, ...(x.provider ? { provider: x.provider } : {}) }))),
     })));
   }
   jobParams(kind: string, value: unknown): Record<string, JsonValue> {
@@ -1045,9 +1052,10 @@ class Host implements ExtensionHost {
     if (!held) throw Error(`no installed package registers the job kind ${kind}`);
     return paramsOf(held.descriptor.schema.params, value);
   }
-  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>> {
+  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
     const { folder, held } = this.jobTool(tool, kind);
-    return this.runTool(folder, held.descriptor, params, inputs);
+    if (held.provider && !call) throw Error(`${tool} calls ${held.provider}, so its run needs its submission key and call journal`);
+    return this.runTool(folder, held.descriptor, params, inputs, held.provider && call ? { provider: held.provider, ...call } : undefined, stop, watch);
   }
   async jobHostReport(tool: string, kind: string): Promise<{ weights: Weight[]; capabilities: string[] }> {
     const url = urlOf(this.jobTool(tool, kind).held.descriptor);
@@ -2179,7 +2187,7 @@ class Host implements ExtensionHost {
       try { kinds[kind] = kindOf(kind, ext.jobKinds.get(kind)); } catch (e) { refuse(message(e)); }
     }
     const tools: HeldJobs['tools'] = [];
-    for (const { kind, tool, host } of manifest.job_tools ?? []) {
+    for (const { kind, tool, host, provider } of manifest.job_tools ?? []) {
       const raw = ext.jobTools.find((t) => t.kind === kind && (t.tool as { tool?: unknown } | null)?.tool === tool);
       if (!raw) return refuse(`${entry.id}'s manifest declares the tool ${tool} of ${kind}, which its code doesn't register`);
       let descriptor: JobTool;
@@ -2192,27 +2200,34 @@ class Host implements ExtensionHost {
       if (build !== null && before !== undefined && before !== build) refuse(`${entry.id}'s tool ${tool} qualified on ${TRIPLE} as build ${before}, and these files are build ${build}: one name@version is one build, so the changed tool takes a new version`);
       for (const f of held.qualification.fixtures) {
         let wrote: Record<string, Uint8Array>;
+        // A tool that calls a provider calls it here too (#1923), with a journal of its own that outlives nothing.
+        const scratch = provider ? join(this.options.home, 'jobs', 'qualify', ulid(this.options.now())) : undefined;
         try {
-          wrote = await this.runTool(entry.folder, descriptor, paramsOf(held.schema.params, f.params), Object.fromEntries(Object.entries(f.inputs).map(([n, t]) => [n, Buffer.from(t, 'utf8')])));
+          const call = provider && scratch ? { provider, key: sha256Hex(canonicalize({ qualification: f.name, kind, tool })), journal: join(scratch, 'journal.jsonl') } : undefined;
+          wrote = await this.runTool(entry.folder, descriptor, paramsOf(held.schema.params, f.params), Object.fromEntries(Object.entries(f.inputs).map(([n, t]) => [n, Buffer.from(t, 'utf8')])), call);
         } catch (e) {
           return refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification at the fixture ${f.name}: ${message(e)}`);
+        } finally {
+          if (scratch) rmSync(scratch, { recursive: true, force: true });
         }
         for (const [name, text] of Object.entries(f.expect)) {
           const got = wrote[name];
           if (!got || !Buffer.from(got).equals(Buffer.from(text, 'utf8'))) refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification at the fixture ${f.name}: it wrote ${got ? JSON.stringify(Buffer.from(got).toString('utf8')) : 'nothing'} for ${name}, where the fixture expects ${JSON.stringify(text)}, and it doesn't join ${kind}`);
         }
       }
-      tools.push({ kind, tool, build, ...(host && { host }), descriptor });
+      tools.push({ kind, tool, build, ...(host && { host }), descriptor, ...(provider ? { provider } : {}) });
     }
     return { kinds, tools };
   }
   /**
    * One run of a job tool (#1922): `node <its dir>/<its entry>` through the supervisor, in the platform sandbox with only
    * its own files and Node to read, given `{params, inputs}` (each input's bytes in base64) on stdin and writing
-   * `{outputs}` the same way on stdout. It reads no path, name or time of an input: only the bytes it is given.
+   * `{outputs}` the same way on stdout. It reads no path, name or time of an input: only the bytes it is given. A tool
+   * that calls a provider is also given `call` (#1923), and may reach that one host and write its call journal's folder.
+   * Its counters come as lines on stderr while it runs (`counterOf`), each handed to `watch` (#1925); its other text is its own.
    */
-  private async runTool(folder: string, tool: JobTool, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>): Promise<Record<string, Uint8Array>> {
-    const input = Buffer.from(JSON.stringify({ params, inputs: Object.fromEntries(Object.entries(inputs).map(([n, b]) => [n, Buffer.from(b).toString('base64')])) }));
+  private async runTool(folder: string, tool: JobTool, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>, call?: JobCall, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
+    const input = Buffer.from(JSON.stringify({ params, inputs: Object.fromEntries(Object.entries(inputs).map(([n, b]) => [n, Buffer.from(b).toString('base64')])), ...(call ? { call } : {}) }));
     // A tool off the machine (#1924): one POST of the same object to its URL, answered the same way.
     if ('url' in tool.run) return outputsOf(tool.tool, await this.hostCall(tool.tool, new URL(tool.run.url), 'POST', input.toString('utf8')));
     const { supervisor } = this.options;
@@ -2220,17 +2235,35 @@ class Host implements ExtensionHost {
     const run = `run:${ulid(this.options.now())}`;
     const out: Buffer[] = [];
     let size = 0;
+    const text = new StringDecoder('utf8');
+    let line = '';
+    const counters = (chunk: Buffer) => {
+      const lines = (line + text.write(chunk)).split('\n');
+      line = lines.pop()!;
+      // A line longer than any counter's is the tool's own text, so it isn't kept to the end.
+      if (line.length > COUNTER_LINE) line = '';
+      for (const l of lines) {
+        const counter = counterOf(l);
+        if (counter) watch!(counter);
+      }
+    };
+    if (call) mkdirSync(dirname(call.journal), { recursive: true });
     const started = await supervisor.start({
       run, argv: [process.execPath, join(dir, tool.run.entry)], cwd: dir, inherit: false, input,
       env: { PATH: '/usr/bin:/bin', HOME: dir, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
-      grant: { read: [NODE_HOME, ...NODE_LIBS, dir] },
-      output: { stdout: (chunk: Buffer) => { size += chunk.length; if (size <= JOB_OUT) out.push(chunk); }, stderr: () => undefined },
+      grant: { read: [NODE_HOME, ...NODE_LIBS, dir], ...(call ? { write: [dirname(call.journal)], hosts: [call.provider] } : {}) },
+      output: { stdout: (chunk: Buffer) => { size += chunk.length; if (size <= JOB_OUT) out.push(chunk); }, stderr: watch ? counters : () => undefined },
     });
     if (started.status !== 'started') throw Error(`the sandbox held ${tool.tool}: BLOCKED on ${started.kind}`);
+    const end = () => void supervisor.signal(run, 'SIGTERM').catch(() => undefined);
+    if (stop?.aborted) end();
+    stop?.addEventListener('abort', end, { once: true });
     try {
       const exit = await within(JOB_MS, `${tool.tool}'s run`, supervisor.wait(run));
+      if (stop?.aborted) throw Error(`${tool.tool}'s run was stopped: every request for it was cancelled`);
       if (exit.code !== 0) throw Error(`${tool.tool} exited ${exit.code ?? exit.signal}`);
     } finally {
+      stop?.removeEventListener('abort', end);
       await supervisor.cleanup(run).catch(() => undefined);
     }
     if (size > JOB_OUT) throw Error(`${tool.tool} wrote more than ${JOB_OUT} bytes`);

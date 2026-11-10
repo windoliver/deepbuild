@@ -1073,6 +1073,12 @@
       }
     },
     "crates/deep-show/Cargo.toml": {
+      "build-dependencies": {
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #1901: the build script's digest of the sources the binary is built from, which the machine fingerprint names. Already in the workspace tree."
+        }
+      },
       "dependencies": {
         "deep-canvas-cells": {
           "spec": "* path=../deep-canvas-cells",
@@ -1581,6 +1587,10 @@
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #380: the registry the effects module registers its passes and fixture through, and the core's ops for its constants."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #486: scene3d's entries of gpu.output@1 and gpu.function@1 (the lobe outputs, occlusion, normal, core.bump@1) and which lobe each output needs, which the operator check types, inlines and refuses by; effects already depends on scene3d as a canvas module."
         },
         "serde_json": {
           "spec": "^1",

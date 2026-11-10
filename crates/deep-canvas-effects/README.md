@@ -15,7 +15,7 @@ The effects canvas module (issue #380): GPU operators as data, a typed graph of 
 
 ## What it may import
 
-A canvas module crate. It reaches the core only through the `deep-canvas` crate and uses third-party crates listed in `lint/canvas/crates.json`, under `scripts/canvas-lint.mjs`. No GPU crate, no render crate, no app.
+A canvas module crate. It reaches the core only through the `deep-canvas` crate, scene3d's GPU registry entries (the lobe outputs and `core.bump@1`, #486) only through `deep_canvas_scene3d::gpu`, and uses third-party crates listed in `lint/canvas/crates.json`, under `scripts/canvas-lint.mjs`. No GPU crate, no render crate, no app.
 
 ## Deviations
 

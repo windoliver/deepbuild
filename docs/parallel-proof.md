@@ -168,6 +168,16 @@ The trust a shard gives up is a bay's: it carries its `target/` from run to run,
 - **The record comes back.** It names the host, the platform, the tree hash, the bundle hash and, for composite trees, their recipe, in the evidence record every lane writes (T9b).
 - **Merged per test.** A PR's unit verdict is the Spark run merged with a Mac `--only` run of the test IDs the Spark skipped, plus those that reach a platform-branching source: tests reaching `process.platform` sources, crates with `cfg(target_os)`, and platform-branching helpers. Any FAIL wins: a Spark FAIL and a Mac pass of one test ID merge to FAIL. The merged verdict must equal a full Mac run of the same tree.
 
+### 8a. The x86_64 lane (#1983)
+
+No x86_64 machine exists, so `node scripts/lane-x86.mjs` on the reference Mac is the other CPU architecture for CPU checks:
+
+- **The host.** A linux/amd64 container of the Rust toolchain image of `rust-toolchain.toml`'s channel, pinned by its index digest in `scripts/lane-x86.json`. The lane builds `deep-logic` there with `cargo build --locked`, the checkout mounted read-only and its caches under `target/lane-x86/`, then runs the golden's replay (`golden_verify` calls on stdin) in a second container with `--network none`. It never pulls: with no runtime, or no linux/amd64 image of the pin, its record is BLOCKED with one ask, naming `docker pull --platform linux/amd64 <image>@<digest>` for the image.
+- **The record.** `~/.deepbuild/lanes/<tree>-x86_64.json`, #1115's fields plus `recording_machine` (the golden's machine), `lane_arch` (what the replay's own `deep-logic` reports), `host_arch`, `emulated`, `image_digest`, `network` (from the container's own interfaces), `bake_key`, Golden's `report` on FAIL and the `ask` on BLOCKED.
+- **What counts.** logic.determinism `cross_machine` reads that record by tree and bake key: PASS only on a PASS record naming every field, on another architecture than the golden's and with no network; FAIL naming the step, item and field; BLOCKED with one ask without a record. A run on aarch64, natively or in a linux/arm64 container, reads `machines: same` and never passes. A reading taken in the lane is never a timing or a budget: logic.budget refuses each, naming the lane and `emulated: true`.
+- **Merged as remote lanes merge.** `mergeRecords(tree)` in `lanes.mjs` takes the worst state of a tree's records and names the lanes holding it, so the lane's FAIL wins over the Mac's pass.
+- **What emulation proves.** Our code compiled for x86_64 gives the same bits as the arm64 build; not real x86 hardware, and timings there mean nothing. A real x86_64 host that writes the same record with `emulated: false` replaces the container without changing any check that reads it.
+
 ## 9. Hygiene (do first, no design needed)
 
 The baseline's load and swap make every budget INCONCLUSIVE, and no tooling change can be measured on top of them. T0 cleans up first, with readings only: no script, option or config key.

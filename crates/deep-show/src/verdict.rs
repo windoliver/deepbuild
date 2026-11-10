@@ -84,6 +84,10 @@ fn done(mut row: Map<String, Value>, result: &str, blocked: Vec<Value>) -> Value
     Value::Object(row)
 }
 
+fn list_of(v: &Value) -> Vec<Value> {
+    v.as_array().cloned().unwrap_or_default()
+}
+
 /// Why checks are BLOCKED, one row per kind the build doesn't know with the items of that kind.
 fn blocked_rows(by_kind: BTreeMap<String, Vec<String>>) -> Vec<Value> {
     by_kind
@@ -327,8 +331,9 @@ impl<'a> Hub<'a> {
 
     /// The core's `document.determinism` on each requirement that names it: every deliverable's
     /// current revision played to and seeked to each of the input's `at_times` (#488's
-    /// comparison on a 60 Hz display), an error for each time whose pixels differ or that
-    /// couldn't be drawn. Requirement ID → its issues.
+    /// comparison on a 60 Hz display), an error for each time whose GPU pixel hashes differ
+    /// (#1897) or that couldn't be drawn; a requirement this machine can't run alone (no GPU, or
+    /// a `compare` other than `same_machine`) is BLOCKED instead. Requirement ID → its issues.
     fn determinism_runs(&mut self, c: &crate::hub::Claim) -> BTreeMap<String, Vec<Value>> {
         let mut out = BTreeMap::new();
         for r in c.requirements.iter().filter(|r| r.check["kind"] == DETERMINISM) {
@@ -338,21 +343,51 @@ impl<'a> Hub<'a> {
                     .collect()
             });
             let mut issues = Vec::new();
+            match r.check["compare"].as_str() {
+                None | Some("same_machine") => {}
+                Some("shards") => {
+                    for doc in &c.deliverables {
+                        let compared = self.shards_check(doc);
+                        match compared["outcome"].as_str() {
+                            Some("compared") => issues.extend(list_of(&compared["issues"])),
+                            _ if compared["code"] == "gpu_unavailable" => issues.push(json!({"code": "gpu_unavailable",
+                                "blocked": true, "doc": doc, "ask": "run the check on a machine with a GPU to export on"})),
+                            _ => issues.push(json!({"check": DETERMINISM, "code": "not_drawn", "severity": "error",
+                                "ids": [], "doc": doc, "what": format!("the revision couldn't be exported: {}", compared["code"])})),
+                        }
+                    }
+                    out.insert(r.id.clone(), issues);
+                    continue;
+                }
+                Some(other) => {
+                    // Another machine's record: nothing this hub runs alone.
+                    issues.push(json!({"code": "not_run", "blocked": true, "kind": DETERMINISM, "compare": other,
+                        "ask": "make this document's record on the other CPU architecture and compare it with determinism's against"}));
+                    out.insert(r.id.clone(), issues);
+                    continue;
+                }
+            }
             for doc in &c.deliverables {
                 let d = crate::time::Determinism {
                     doc: doc.clone(),
                     display_hz: 60,
                     play: crate::time::PlayPath::Warm,
                     at_times: at_times.clone(),
+                    compare: crate::determinism::Compare::SameMachine,
                 };
                 let compared = self.determinism(&d);
+                if compared["code"] == "gpu_unavailable" {
+                    issues.push(json!({"code": "gpu_unavailable", "blocked": true, "doc": doc,
+                        "ask": "run the check on a machine with a GPU to hash the canonical renders on"}));
+                    continue;
+                }
                 let Some(frames) = compared["frames"].as_array() else {
                     issues.push(json!({"check": DETERMINISM, "code": "not_drawn", "severity": "error",
                         "ids": [], "doc": doc, "what": format!("the revision couldn't be drawn: {}", compared["code"])}));
                     continue;
                 };
                 for f in frames {
-                    let (play, seek) = (&f["play"]["pixels"], &f["seek"]["pixels"]);
+                    let (play, seek) = (&f["play"]["pixel_hash"], &f["seek"]["pixel_hash"]);
                     if play.is_null() || play != seek {
                         issues.push(json!({"check": DETERMINISM, "code": "seek_differs", "severity": "error",
                             "ids": [], "doc": doc, "t": f["t"],
@@ -418,9 +453,16 @@ impl<'a> Hub<'a> {
         }
         if let (true, Some(raised)) = (kind == DETERMINISM, compared) {
             // Run on every deliverable before judging (`determinism_runs`): each time where
-            // playing to it and seeking to it draw different pixels is an error.
+            // playing to it and seeking to it hash different pixels is an error. GPU pixel
+            // hashes hold on this machine only (#1897).
+            row.insert("machines".into(), json!("same"));
+            let (blocked, raised): (Vec<Value>, Vec<Value>) =
+                raised.iter().cloned().partition(|i| i["blocked"] == true);
+            if !blocked.is_empty() {
+                return done(row, "BLOCKED", blocked);
+            }
             let result = if raised.is_empty() { "PASS" } else { "FAIL" };
-            row.insert("issues".into(), Value::Array(raised.clone()));
+            row.insert("issues".into(), Value::Array(raised));
             return done(row, result, Vec::new());
         }
         let honest = kind == HONEST;

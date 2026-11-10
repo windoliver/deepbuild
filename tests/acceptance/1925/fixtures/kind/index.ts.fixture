@@ -1,0 +1,42 @@
+// The test plug-in that holds the job kind test.encode (#1925; README, The world). An encode stand-in: it writes a
+// clip's frames, so a run's progress is frames written of the total. It registers the kind through deep.registerJob
+// (a params schema that paces the frames, one input, two outputs, the key hash(tool@version, params, input hashes), no
+// output check, and a qualification of two quick fixtures with their expected frames) and the kind's first tool,
+// encode-a@1.0.0, through deep.registerJobTool. Everything it registers is data: the tool is the program in ./encoder,
+// which the hub runs.
+
+/** test.encode's params: how many frames, how many the tool writes at a time, and how long it takes over each batch. */
+const PARAMS = {
+  type: 'object',
+  properties: {
+    frames: { type: 'integer', minimum: 1, maximum: 100000 },
+    batch: { type: 'integer', minimum: 1, maximum: 100000 },
+    every_ms: { type: 'integer', minimum: 0, maximum: 60000 },
+  },
+  required: ['frames', 'batch', 'every_ms'],
+  additionalProperties: false,
+};
+/**
+ * The kind's qualification: two clips encoded at once, and the frames (UTF-8) a tool must write for each. The `log`
+ * output, when each batch was written, holds times, so no fixture names it.
+ */
+const FIXTURES = [
+  { name: 'fx-three', params: { frames: 3, batch: 1, every_ms: 0 }, inputs: { clip: 'dawn' }, expect: { video: 'dawn#1\ndawn#2\ndawn#3\n' } },
+  { name: 'fx-five', params: { frames: 5, batch: 2, every_ms: 0 }, inputs: { clip: 'dusk' }, expect: { video: 'dusk#1\ndusk#2\ndusk#3\ndusk#4\ndusk#5\n' } },
+];
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerJob('test.encode', {
+    schema: { params: PARAMS, inputs: { clip: { media: 'text/plain' } } },
+    outputs: { video: { media: 'text/plain' }, log: { media: 'text/plain' } },
+    key: ['tool', 'params', 'inputs'],
+    output_checks: [],
+    qualification: { fixtures: FIXTURES },
+  });
+  await deep.registerJobTool('test.encode', {
+    tool: 'encode-a@1.0.0',
+    params: PARAMS,
+    run: { dir: 'encoder', entry: 'encode.mjs' },
+    qualification: { same_bytes: true },
+  });
+}

@@ -123,6 +123,8 @@ enum Request {
         captures: Vec<(u32, String)>,
         /// #392 AC3's wrong program: a frame clock that arms only on readings.
         arms_only_on_readings: bool,
+        /// #1485's wrong program on the images' decode or upload.
+        image_plant: asset::Plant,
     },
     Session {
         look: Look,
@@ -162,6 +164,8 @@ enum Request {
         store: Option<PathBuf>,
         /// #499 AC14's wrong program: GPUI's stock surface fragment, full-range BT.601.
         stock_fragment: bool,
+        /// #1485's wrong program on the images' cap.
+        image_plant: asset::Plant,
     },
 }
 
@@ -881,7 +885,9 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     || p == "roll_moves_every_grapheme"
                     || p == "weight_snaps_to_static"
                     || p == "stops_at_midpoint"
-                    || p == "drops_cells_by_corner_signs" =>
+                    || p == "drops_cells_by_corner_signs"
+                    || p == "decodes_before_header"
+                    || p == "cap_counts_copies_only" =>
             {
                 (Planted::None, false, false)
             }
@@ -953,6 +959,11 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 == Some("weight_snaps_to_static"),
             afterglow,
             formulas: ctx,
+            image_plant: input
+                .get("planted")
+                .and_then(Value::as_str)
+                .and_then(asset::Plant::named)
+                .unwrap_or_default(),
         };
         let mut request = request;
         // #496: the runs this line shapes, its check included, counted from here.
@@ -979,9 +990,14 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 None => 60,
                 Some(v) => v.as_i64().filter(|hz| *hz > 0 && 705_600_000 % hz == 0)?,
             };
-            let arms_only_on_readings = match input.get("planted") {
-                None => false,
-                Some(Value::String(p)) if p == "arms_only_on_readings" => true,
+            let (arms_only_on_readings, image_plant) = match input.get("planted") {
+                None => (false, asset::Plant::None),
+                Some(Value::String(p)) if p == "arms_only_on_readings" => {
+                    (true, asset::Plant::None)
+                }
+                Some(Value::String(p)) if p == "decodes_per_draw" || p == "uploads_per_frame" => {
+                    (false, asset::Plant::named(p)?)
+                }
                 Some(_) => return None,
             };
             let captures = match input.get("captures") {
@@ -1012,6 +1028,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 },
                 captures,
                 arms_only_on_readings,
+                image_plant,
             }
         }
         "idle" => Request::Idle {
@@ -1121,6 +1138,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 Some(Value::String(p)) if p == "gpui_oklab_gradient" => (true, false, false),
                 Some(Value::String(p)) if p == "drops_glyph" => (false, true, false),
                 Some(Value::String(p)) if p == "stock_bt601_fragment" => (false, false, true),
+                Some(Value::String(p)) if p == "cap_counts_copies_only" => (false, false, false),
                 Some(_) => return None,
             };
             Request::Render {
@@ -1134,6 +1152,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 drops_glyph,
                 store: store(input.get("store"))?,
                 stock_fragment,
+                image_plant: match input.get("planted").and_then(Value::as_str) {
+                    Some("cap_counts_copies_only") => asset::Plant::CapCountsCopiesOnly,
+                    _ => asset::Plant::None,
+                },
             }
         }
         _ => return None,

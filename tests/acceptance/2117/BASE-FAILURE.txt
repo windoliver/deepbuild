@@ -1,0 +1,72 @@
+Base commit: 4ab2750c ("Merge pull request #2152 from windoliver/worktree-github-issue-1923-029e74")
+Command: cargo test --locked -p deep-app --test acceptance_2117
+Run on: this Mac (macOS, Apple silicon), with only the README's [[test]] entry added to crates/deep-app/Cargo.toml and
+then taken out again. Nothing else outside this folder was changed for the run.
+
+RUN. Every test reaches only surfaces the base has, so each fails on the base's own readings, at a named assertion,
+not on a missing surface. All 5 criteria FAIL; the 3 plants' tests are ignored in this build (each needs its feature,
+which the base doesn't declare). Output (cargo's build lines left out):
+
+running 8 tests
+AC1 over the 60 s after the first frame: the window drew 60 frames; BoundPanel rendered its bound line `price` 60 times and was notified 60 times; the panel's script rendered 60 times and was notified 0; the window's content rendered 60 times and was notified 0
+test ac1_789c5dd8_a_still_bound_panel_held_60_s_renders_0_times_and_draws_0_frames_after_the_first ... FAILED
+
+---- ac1_789c5dd8_a_still_bound_panel_held_60_s_renders_0_times_and_draws_0_frames_after_the_first ----
+FAIL: a panel whose reading didn't change, fresh for 120 s, held 60 s: after the first frame the window drew 60 frames; BoundPanel rendered its bound line `price` 60 times and was notified 60 times; the panel's script rendered 60 times and was notified 0; the window's content rendered 60 times and was notified 0. A still panel renders 0 times and draws 0 frames
+
+AC2: frames drawn before 2.500 s: 2; the frame at 2.500 s drawn: false, showing `price` as "182.40 USD" in ink_primary (#1b1d22)
+test ac2_ebc91643_the_frame_at_as_of_plus_stale_after_draws_it_muted_with_its_age_and_none_before_it ... FAILED
+
+---- ac2_ebc91643_the_frame_at_as_of_plus_stale_after_draws_it_muted_with_its_age_and_none_before_it ----
+FAIL: the window drew 2 frames before `price` went stale at 2.500 s, at 1.000 s, 2.000 s: no frame is drawn before it
+FAIL: `price` went stale at 2.500 s and no frame drew it then: the window shows a stale number as live, "182.40 USD" in ink_primary (#1b1d22), where it reads "182.40 USD · 2 min old" in the look's muted role
+
+AC3 over 180 s while stale: the age shown changed 3 times, at 29.700 s, 89.700 s, 149.700 s; the window drew 180 frames; BoundPanel rendered its bound line `price` 180 times and was notified 180 times; the panel's script rendered 180 times and was notified 0; the window's content rendered 180 times and was notified 0
+test ac3_426efcc0_while_stale_the_panel_renders_once_for_each_change_of_the_age_it_shows_never_between ... FAILED
+
+---- ac3_426efcc0_while_stale_the_panel_renders_once_for_each_change_of_the_age_it_shows_never_between ----
+FAIL: the age `price` shows changed at 29.700 s to "182.40 USD · 3 min old", and the panel didn't render then
+FAIL: the age `price` shows changed at 89.700 s to "182.40 USD · 4 min old", and the panel didn't render then
+FAIL: the age `price` shows changed at 149.700 s to "182.40 USD · 5 min old", and the panel didn't render then
+FAIL: the panel rendered 180 times for 3 changes of the age `price` shows, 180 of them with no change, at 1.000 s ("182.40 USD · 2 min old"), 2.000 s ("182.40 USD · 2 min old"), 3.000 s ("182.40 USD · 2 min old"), 4.000 s ("182.40 USD · 2 min old"), 5.000 s ("182.40 USD · 2 min old"), …
+
+AC4: the new reading showed 42 frames (700 ms) after the reader held it; the window drew 1 frames; BoundPanel rendered its bound line `price` 1 times and was notified 1 times; the panel's script rendered 1 times and was notified 0; the window's content rendered 1 times and was notified 0
+test ac4_0504b71f_a_new_reading_shows_within_2_frames_of_the_reader_holding_it_no_other_view_notified ... FAILED
+
+---- ac4_0504b71f_a_new_reading_shows_within_2_frames_of_the_reader_holding_it_no_other_view_notified ----
+FAIL: a new reading of reading:quotes, "190.10 USD", showed in `price` 42 frames (700 ms) after the record's reader held it, not within 2 frames
+
+AC5 over the 2 s after a reading equal to the one shown: the window drew 2 frames; BoundPanel rendered its bound line `price` 2 times and was notified 2 times; the panel's script rendered 2 times and was notified 0; the window's content rendered 2 times and was notified 0
+test ac5_2a24617a_a_reading_equal_to_the_one_shown_renders_0_views_and_draws_0_frames ... FAILED
+
+---- ac5_2a24617a_a_reading_equal_to_the_one_shown_renders_0_views_and_draws_0_frames ----
+FAIL: after a reading of reading:quotes equal to the one shown ("182.40 USD"), over 2 s the window drew 2 frames; BoundPanel rendered its bound line `price` 2 times and was notified 2 times; the panel's script rendered 2 times and was notified 0; the window's content rendered 2 times and was notified 0. A reading equal to the one shown renders 0 views and draws 0 frames
+
+test plant_panel_ticks_ac1_789c5dd8_a_timer_that_notifies_every_second_fails_naming_the_view ... ignored, the plant runs only in a build with --features plant-panel-ticks
+test plant_panel_grays_on_reading_ac2_ebc91643_a_panel_that_waits_for_the_next_reading_fails_naming_the_element ... ignored, the plant runs only in a build with --features plant-panel-grays-on-reading
+test plant_panel_waits_for_redraw_ac4_0504b71f_a_panel_that_waits_for_another_views_redraw_fails_naming_the_source ... ignored, the plant runs only in a build with --features plant-panel-waits-for-redraw
+test result: FAILED. 0 passed; 5 failed; 3 ignored
+
+What each reading is, against the issue:
+
+- AC1 reads 60 renders and 60 frames, the issue's "the merge base reads 60 of each": `BoundPanel`'s 1 s TICK notifies
+  every second, and each notify is a frame that renders every view in the window.
+- AC2: the base draws at 1.000 and 2.000 s, before the value goes stale, and draws nothing at 2.500 s when it does, so
+  the window shows the stale number as live in ink_primary until its next tick at 3 s.
+- AC3: 180 renders for 3 changes of the age shown; each change is drawn 0.3 s late, at the next whole-second tick.
+- AC4 reads 700 ms, within the issue's "the merge base takes up to 1 s": the reading reached the reader at 10.300 s
+  and showed at the 11 s tick.
+- AC5: the ticks at 2 and 3 s render every view and draw a frame, though nothing shown changed.
+
+The run is deterministic: both clocks are virtual and moved by the test, so it reads the same on any Mac and at any
+load (this one ran at a load average near 160).
+
+Not committed and not part of the suite: to see that the suite can pass and that each plant fails it, this job also
+ran it against a throwaway sketch of the fix in panel_values.rs and record.rs (compare before notifying, one timer
+for the next change from bound_text's changes_at, the reader observed through record.rs's Shown entity) with the three
+plant features declared, then reverted all of it. The sketch passed the five criteria (AC1 0/0, AC2 drawn at 2.500 s
+in muted #8b8f97, AC3 3 renders at the 3 changes, AC4 1 frame, AC5 0/0); each plant's test passed, its criterion
+failing with the names asked (BoundPanel; `price` shown as live; reading:quotes); and a mutant that notifies on every
+reading it's handed failed AC5 (1 frame). With the features declared, `cargo clippy -p deep-app --test acceptance_2117
+-- -D warnings` reports nothing in this file, and rustfmt --check passes it. That is no proof a real implementation
+passes: only that the harness can tell right from wrong on one.

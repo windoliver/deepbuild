@@ -36,6 +36,18 @@
     "tracking": "#1454"
   },
   {
+    "method": "ask.later",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1462"
+  },
+  {
+    "method": "session.pause",
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#1462"
+  },
+  {
     "method": "ask.confirm",
     "since": "R1",
     "stability": "preview",
@@ -226,6 +238,12 @@
     "since": "R1",
     "stability": "stable",
     "called_by": "deep mcp"
+  },
+  {
+    "method": "mcp.cancel",
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1923"
   },
   {
     "method": "evidence.paste",

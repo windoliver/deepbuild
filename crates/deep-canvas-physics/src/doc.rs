@@ -221,7 +221,29 @@ pub struct World {
     pub bodies: BTreeMap<String, Body>,
     pub joints: BTreeMap<String, Joint>,
     pub forces: BTreeMap<String, Force>,
+    pub outputs: BTreeMap<String, Output>,
 }
+
+/// A physics output (Physics output: `from`, `read`): before #1918 only a body's position.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Output {
+    /// The body it reads.
+    pub from: String,
+}
+
+/// A physics output's fields; all but `from` and `read` wait for #1918.
+const OUTPUT_KEYS: &[&str] = &[
+    "from",
+    "read",
+    "to",
+    "interpolate",
+    "reduce",
+    "average",
+    "sample",
+    "keep",
+    "expr",
+    "unit",
+];
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[
@@ -250,7 +272,7 @@ const WORLD_KEYS: &[&str] = &[
     "outputs",
 ];
 /// Fields this backend interface doesn't run yet, each with the issue that brings it.
-const LATER: &[(&str, &str)] = &[("inputs", "#522"), ("outputs", "#1918")];
+const LATER: &[(&str, &str)] = &[("inputs", "#522")];
 const RULES: &[(&str, Rule)] = &[
     ("geometric", Rule::Geometric),
     ("average", Rule::Average),
@@ -608,6 +630,12 @@ impl Reader {
                 forces.insert(id.clone(), f);
             }
         }
+        let mut outputs = BTreeMap::new();
+        for (id, v) in self.map(m, "outputs") {
+            if let Some(o) = self.output(v, &format!("outputs/{id}"), &bodies) {
+                outputs.insert(id.clone(), o);
+            }
+        }
         World {
             dimensions,
             step_rate,
@@ -626,6 +654,48 @@ impl Reader {
             bodies,
             joints,
             forces,
+            outputs,
+        }
+    }
+
+    /// An output reading a body's position; its other fields and reads are refused, naming #1918.
+    fn output(&mut self, v: &Value, p: &str, bodies: &BTreeMap<String, Body>) -> Option<Output> {
+        let o = &self.obj(v, p, OUTPUT_KEYS);
+        for (k, x) in o.iter().filter(|(k, _)| *k != "from" && *k != "read") {
+            self.refuse(
+                "physics.unsupported",
+                join(p, k),
+                x,
+                format!("an output's {k} isn't run by this backend interface yet; #1918 brings it"),
+            );
+        }
+        match o.get("read") {
+            Some(Value::String(r)) if r == "position" => {}
+            None => self.refuse(
+                "physics.missing_field",
+                join(p, "read"),
+                &Value::Null,
+                format!("{p} needs a read"),
+            ),
+            Some(r) => self.refuse(
+                "physics.unsupported",
+                join(p, "read"),
+                r,
+                "an output reads only a body's position before #1918 brings the other reads".into(),
+            ),
+        }
+        let from = o.get("from").unwrap_or(&Value::Null);
+        match from.as_str() {
+            Some(id) if bodies.contains_key(id) => Some(Output { from: id.into() }),
+            _ => {
+                self.refuse(
+                    "ref_unresolved",
+                    join(p, "from"),
+                    from,
+                    format!("{from} is not a body of this world"),
+                );
+                None
+            }
         }
     }
 
