@@ -150,6 +150,9 @@ pub enum Planted {
     ChecksSkipUnknownKind,
     /// #403: a check kind no module in the build registers is INCONCLUSIVE.
     MissingKindInconclusive,
+    /// #408: film.layout takes its texts by the kinds text@1, vector@1, mark.text and counter,
+    /// not from the core's glyph-box array.
+    LayoutTextByKind,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.

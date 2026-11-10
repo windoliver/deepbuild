@@ -194,6 +194,7 @@ impl<'a> Hub<'a> {
         };
         let read = self.evaluated_reads(c);
         let determinism = self.determinism_runs(c);
+        let layout = self.film_layout_runs(c);
         let mut docs: Vec<(String, Current)> = Vec::new();
         let mut missing = false;
         for d in &c.deliverables {
@@ -219,7 +220,16 @@ impl<'a> Hub<'a> {
         let rows: Vec<Value> = c
             .requirements
             .iter()
-            .map(|r| self.judge(r, &docs, missing, &read, &c.session, determinism.get(&r.id)))
+            .map(|r| {
+                let laid = layout.get(&r.id);
+                let compared = determinism.get(&r.id).or(laid.map(|(i, _)| i));
+                let mut row = self.judge(r, &docs, missing, &read, &c.session, compared);
+                // #408: film.layout's own time on the requirement.
+                if let (Some((_, ms)), Some(map)) = (laid, row.as_object_mut()) {
+                    map.insert("timing".into(), json!({"check_ms": ms}));
+                }
+                row
+            })
             .collect();
         // A deliverable the hub doesn't hold is INVALID; a definition with no requirement checks
         // nothing, so it never passes.
@@ -463,6 +473,14 @@ impl<'a> Hub<'a> {
             }
             let result = if raised.is_empty() { "PASS" } else { "FAIL" };
             row.insert("issues".into(), Value::Array(raised));
+            return done(row, result, Vec::new());
+        }
+        if let (true, Some(raised)) = (kind == crate::film_layout::FILM_LAYOUT, compared) {
+            // Run on every deliverable before judging (`film_layout_runs`): a text cut,
+            // overlapping, crossed or covered is an error; a notice decides nothing (#408).
+            let errors = raised.iter().any(|i| i["severity"] == "error");
+            let result = if errors { "FAIL" } else { "PASS" };
+            row.insert("issues".into(), Value::Array(raised.clone()));
             return done(row, result, Vec::new());
         }
         let honest = kind == HONEST;

@@ -42,6 +42,9 @@ test-deprecated = ["dep:deep-canvas-test-modules"]
 # Issue #403: a test canvas module that registers a document check kind, and a build with the
 # logic module left out of the full set's list.
 test-check-kind = ["dep:deep-canvas-test-modules"]
+# Issue #408: a test canvas module whose kind's items contribute glyph boxes to the core's
+# glyph-box array, and draw nothing else.
+test-glyph-label = ["dep:deep-canvas-test-modules"]
 test-leave-out-logic = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []

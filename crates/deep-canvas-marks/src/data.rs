@@ -1849,13 +1849,16 @@ fn cross_zero(id: &str, items: &Map<String, Value>, path: &str) -> Result<(bool,
 }
 
 /// One axis, generated from its scale: the line along the scale's range, a tick per step and its
-/// label; labels that would crowd thin by parity, keeping the first and the last.
+/// label; labels that would crowd thin by parity, keeping the first and the last. With `grid`, a
+/// grid line per tick under them, from the line across the plot to the frame's far edge
+/// (`frame`, the document's size in u).
 pub fn axis(
     id: &str,
     item: &Value,
     items: &Map<String, Value>,
     palette: &Palette,
     pos: [f64; 2],
+    frame: [f64; 2],
 ) -> Result<Drawing, Refused> {
     let path = format!("items/{id}/params");
     let p = object_or_empty(item.get("params"));
@@ -1893,17 +1896,43 @@ pub fn axis(
     } else {
         -1.0
     };
-    let mut marks = vec![rule(
+    let mut faded = scale.faded_ticks();
+    faded.retain(|t| t.2 > 0.0);
+    let mut marks = Vec::new();
+    let mut fades = std::collections::BTreeMap::new();
+    // Grid lines first, under the line, the ticks and the labels: each from the line to the
+    // frame's edge on the side away from the labels.
+    if p.get("grid").and_then(Value::as_bool) == Some(true) {
+        let at = if horizontal { cross + pos[1] } else { cross + pos[0] };
+        let far = if out_dir > 0.0 {
+            0.0
+        } else if horizontal {
+            frame[1]
+        } else {
+            frame[0]
+        };
+        for (k, (v, _, alpha)) in faded.iter().enumerate() {
+            let along = scale.map(*v);
+            if *alpha < 1.0 {
+                fades.insert(format!("{id}#grid{k}"), *alpha);
+            }
+            marks.push(rule(
+                format!("{id}#grid{k}"),
+                point(along, 0.0),
+                point(along, far - at),
+                1.0,
+                color,
+            ));
+        }
+    }
+    marks.push(rule(
         format!("{id}#line"),
         point(scale.range[0], 0.0),
         point(scale.range[1], 0.0),
         1.0,
         color,
-    )];
-    let mut faded = scale.faded_ticks();
-    faded.retain(|t| t.2 > 0.0);
+    ));
     let ticks: Vec<(f64, String)> = faded.iter().map(|(v, l, _)| (*v, l.clone())).collect();
-    let mut fades = std::collections::BTreeMap::new();
     // Thin by parity until labels clear each other: every 2nd, then every 4th, first and last kept.
     let est = |l: &str| 0.6 * LABEL_SIZE * l.chars().count() as f64 + 4.0;
     let spacing = |k: usize| -> f64 {
@@ -2210,7 +2239,14 @@ mod tests {
             let all = items(domain);
             let axis = json!({"params": {"scale": "xs", "side": "zero", "role": "ink"}});
             let palette = Palette::from([("ink".to_string(), [0, 0, 0])]);
-            let drawn = super::axis("a", &axis, all.as_object().unwrap(), &palette, [0.0, 0.0]);
+            let drawn = super::axis(
+                "a",
+                &axis,
+                all.as_object().unwrap(),
+                &palette,
+                [0.0, 0.0],
+                [640.0, 480.0],
+            );
             match drawn.unwrap().marks[0] {
                 Mark::Rect { bounds, .. } => bounds[1] + bounds[3] / 2.0,
                 _ => panic!("an axis line along x is a rect"),
@@ -2302,6 +2338,7 @@ mod tests {
             items,
             &palette,
             [0.0, 0.0],
+            [640.0, 480.0],
         )
         .unwrap()
         .marks;
@@ -2320,6 +2357,7 @@ mod tests {
             items.as_object().unwrap(),
             &palette,
             [0.0, 0.0],
+            [640.0, 480.0],
         )
         .unwrap()
         .marks;
@@ -2347,6 +2385,7 @@ mod tests {
             items.as_object().unwrap(),
             &palette,
             [0.0, 0.0],
+            [640.0, 480.0],
         )
         .unwrap()
         .marks;
