@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use deep_canvas::budget::Class;
 use deep_canvas_sandbox::rewrite::{self, hash, Mode, Rewritten};
 use deep_sandbox_wasmtime::service::{refusals_json, Budget, Sandbox};
 use serde_json::{json, Map, Value};
@@ -418,7 +419,8 @@ fn saves_of(
 
 impl Item {
     pub fn checked(&self) -> Value {
-        json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at})
+        json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
+            "pipelined": crate::budget::pipelined(self)})
     }
     /// The assets as memory holds them from `assets_at`: each after a u32 of its length.
     pub fn asset_bytes(&self) -> Vec<u8> {
@@ -449,6 +451,8 @@ pub const MACHINE: &str = "same_machine.counter@1";
 #[derive(Clone, Debug)]
 pub struct Piece {
     pub seed: i64,
+    /// Its budget class (Budget classes): `class`, figure when it names none.
+    pub class: Class,
     pub controls: BTreeSet<String>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
@@ -895,6 +899,10 @@ pub fn check_in(
 ) -> Result<Piece, Refused> {
     let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
     let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
+    let class = match piece.get("class") {
+        None => Class::Figure,
+        Some(c) => c.as_str().and_then(Class::parse).ok_or_else(bad)?,
+    };
     let controls: BTreeSet<String> = piece
         .get("controls")
         .and_then(Value::as_object)
@@ -1260,6 +1268,7 @@ pub fn check_in(
     }
     Ok(Piece {
         seed,
+        class,
         controls,
         tour: piece.get("tour").cloned(),
         items,

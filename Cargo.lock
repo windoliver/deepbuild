@@ -1994,6 +1994,7 @@ dependencies = [
  "deep-canvas-marks",
  "deep-effects-render",
  "deep-gpu",
+ "deep-images",
  "deep-marks-gpui",
  "deep-text",
  "deep-text-gpui",
@@ -2287,6 +2288,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-images"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "image",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "deep-input"
 version = "0.0.0"
 dependencies = [
@@ -2333,6 +2343,7 @@ dependencies = [
  "deep-canvas-vector",
  "deep-codecs",
  "deep-gpu",
+ "deep-images",
  "deep-marks-gpui",
  "deep-marks-vello",
  "deep-replica",
@@ -2470,6 +2481,7 @@ dependencies = [
  "deep-codecs",
  "deep-effects-render",
  "deep-gpu",
+ "deep-images",
  "deep-logic",
  "deep-marks-vello",
  "deep-relay",

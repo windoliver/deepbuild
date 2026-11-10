@@ -60,6 +60,9 @@ pub struct Planted {
     pub seek_restores_arrays_only: bool,
     pub open_span_reads_zero: bool,
     pub judder_checks_shots_only: bool,
+    pub budget_holds_steps_to_fuel_budget: bool,
+    pub budget_web_passes_from_fuel: bool,
+    pub pipeline_draws_before_step_ends: bool,
 }
 
 impl Planted {
@@ -92,6 +95,9 @@ impl Planted {
             "seek_restores_arrays_only" => p.seek_restores_arrays_only = true,
             "open_span_reads_zero" => p.open_span_reads_zero = true,
             "judder_checks_shots_only" => p.judder_checks_shots_only = true,
+            "budget_holds_steps_to_fuel_budget" => p.budget_holds_steps_to_fuel_budget = true,
+            "budget_web_passes_from_fuel" => p.budget_web_passes_from_fuel = true,
+            "pipeline_draws_before_step_ends" => p.pipeline_draws_before_step_ends = true,
             _ => return None,
         }
         Some(self)
@@ -462,6 +468,7 @@ impl Logic {
                 "interface": "logic@1", "sandbox": deep_canvas_sandbox::module::INTERFACE,
                 "engine": {"name": "wasmtime", "version": deep_sandbox_wasmtime::WASMTIME},
                 "arch": std::env::consts::ARCH, "os": std::env::consts::OS,
+                "ns_per_fuel": {"app": budget::ns_per_fuel("app"), "web": budget::ns_per_fuel("web")},
             }),
             Some("check") => match self.check(line) {
                 Ok(p) => {
@@ -472,6 +479,7 @@ impl Logic {
             },
             Some("bake") => self.bake(line).unwrap_or_else(|e| e),
             Some("web_plan") => self.web_plan(line).unwrap_or_else(|e| e),
+            Some("metering") => self.metering().unwrap_or_else(|e| e),
             // sandbox@1's web runner first: its offset map, trap kinds and frames are the ones used.
             Some("web_runner") => {
                 json!({"source": format!("{}\n{WEB_RUNNER}", deep_sandbox_wasmtime::service::WEB_RUNNER)})
@@ -912,6 +920,19 @@ impl Logic {
         Ok(json!({"ok": true, "request": request}))
     }
 
+    /// One reading of the metering benchmark in the app, and the web runner's requests for the
+    /// benchmark and its twin, `METER_STEPS` steps each, which benchmarks/logic.mjs times in Chrome.
+    fn metering(&mut self) -> Result<Value, Value> {
+        const METER_STEPS: i64 = 20;
+        let (ns_per_fuel, fuel) = budget::metered();
+        let [bench, twin] =
+            budget::meter().map(|p| self.web_plan(&json!({"piece": p, "steps": METER_STEPS})));
+        Ok(
+            json!({"ok": true, "app": {"ns_per_fuel": ns_per_fuel, "fixed": budget::fixed_now()}, "fuel": fuel, "steps": METER_STEPS,
+            "web": {"bench": bench?["request"], "twin": twin?["request"]}}),
+        )
+    }
+
     /// A live view of the piece at time 0 with no bake, for `span` seconds, or with `span:
     /// "open"` for live play with no end (Transport).
     fn view(&mut self, line: &Value) -> Result<Value, Value> {
@@ -953,7 +974,12 @@ impl Logic {
         if let Some(t) = secs("seek").transpose()? {
             v.t = t.min(v.span.unwrap_or(v.played));
         }
-        if let Some(d) = secs("play").transpose()? {
+        // `play: true` plays one 60 Hz frame on (#546).
+        let play = match line.get("play") {
+            Some(Value::Bool(true)) => Some(Ok(F / 60)),
+            _ => secs("play"),
+        };
+        if let Some(d) = play.transpose()? {
             v.t = v.t.saturating_add(d).min(v.span.unwrap_or(i64::MAX));
             v.played = v.played.max(v.t);
         }
@@ -1151,6 +1177,7 @@ mod tests {
         std::thread::spawn(move || {
             let piece = Piece {
                 seed: 0,
+                class: deep_canvas::budget::Class::Figure,
                 controls: Default::default(),
                 tour: Some(json!({"idle_after": 0, "keys": {"a": [[-1, 1]]}})),
                 items: Vec::new(),

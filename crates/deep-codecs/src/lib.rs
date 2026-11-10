@@ -446,7 +446,7 @@ fn decode(
         Format::Png(..) => {
             let img = image::load_from_memory(data)
                 .map_err(|e| e.to_string())?
-                .to_rgba8();
+                .into_rgba8();
             let (w, h) = img.dimensions();
             let mut px = img.into_raw();
             if bgra {

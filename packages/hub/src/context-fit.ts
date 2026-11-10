@@ -14,7 +14,7 @@ export interface Fitted { inline: string; rest: string; inlineNames: string[]; r
 
 const JOIN = '\n\n';
 /** Room the continue line takes: its words and a handle of 64 hex digits, with room to spare. */
-export const CONTINUE_ROOM = 400;
+const CONTINUE_ROOM = 400;
 /** The line that ends a block cut to fit: where the rest is, and the command that reads it. */
 export const continueLine = (handle: string, names: readonly string[], cap: number): string =>
   `DeepBuild: ${names.join(', ')} didn't fit in this hook's ${cap}-character limit; the rest is at ${handle}. Continue with \`deep read ${handle}\`.`;

@@ -524,6 +524,21 @@ impl World {
         Some(hex(m.get(at..at.checked_add(len)?)?))
     }
 
+    /// Each array, by `<item>.<write>`, as its item's last step left it, as its write region lays
+    /// it out.
+    pub fn arrays(&self) -> Vec<(String, Vec<u8>)> {
+        arrays_of(&self.piece, self.lives.iter().map(|l| &l.arrays[..]))
+    }
+
+    /// What a frame draws from, per item: its last step that ran, its write region before that
+    /// step (empty without a linear write) and after it.
+    pub fn shown(&self) -> Vec<Shown> {
+        self.lives
+            .iter()
+            .map(|l| (l.last, l.prev.clone(), l.arrays.clone()))
+            .collect()
+    }
+
     /// Each item's deep hash now.
     pub fn deep_hashes(&mut self) -> Map<String, Value> {
         let ids: Vec<String> = self.piece.items.iter().map(|i| i.id.clone()).collect();
@@ -741,35 +756,13 @@ impl World {
     }
 
     /// Each item's arrays as a frame at `t` (flicks) draws them, by `<item>.<write>` (Logic:
-    /// interpolated writes): a held write as its last step stored it; a linear write from the
-    /// value before that step toward it by α = (t − that step's time) ÷ the step length, so it
-    /// reads one step late. Nothing else reads this: steps, hashes and checks read the stored.
+    /// interpolated writes): `drawn` over this state.
     pub fn drawn(&self, t: i64) -> Map<String, Value> {
-        let mut out = Map::new();
-        for (item, l) in self.piece.items.iter().zip(&self.lives) {
-            let since = if self.planted.linear_blends_forward {
-                t.rem_euclid(item.step)
-            } else {
-                (t - l.last * item.step).clamp(0, item.step)
-            };
-            for w in &item.writes {
-                let e = item.write(&w.name).expect("a write entry");
-                let size = w.ty.size() as usize;
-                let at = e.offset as usize;
-                let values: Vec<Value> = (0..w.count as usize)
-                    .map(|n| {
-                        let to = &l.arrays[at + n * size..][..size];
-                        if !w.linear || l.prev.is_empty() || l.last < 0 || since >= item.step {
-                            return w.ty.value(to);
-                        }
-                        let from = &l.prev[at + n * size..][..size];
-                        w.ty.blend(from, to, since as f64 / item.step as f64)
-                    })
-                    .collect();
-                out.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
-            }
-        }
-        out
+        let shown = self
+            .lives
+            .iter()
+            .map(|l| (l.last, &l.prev[..], &l.arrays[..]));
+        drawn(&self.piece, shown, t, self.planted.linear_blends_forward)
     }
 
     fn step(&mut self, i: usize, snapshot: &[Vec<u8>], rec: &mut Record) {
@@ -1350,4 +1343,64 @@ fn bodies(bytes: &[u8]) -> Vec<u32> {
             _ => None,
         })
         .collect()
+}
+
+/// What a frame draws from, per item: its last step that ran, its write region before that step
+/// (empty without a linear write) and after it.
+pub type Shown = (i64, Vec<u8>, Vec<u8>);
+
+/// Each array, by `<item>.<write>`, as each item's write region lays it out.
+pub fn arrays_of<'a>(
+    piece: &Piece,
+    regions: impl Iterator<Item = &'a [u8]>,
+) -> Vec<(String, Vec<u8>)> {
+    let mut out = Vec::new();
+    for (item, region) in piece.items.iter().zip(regions) {
+        for w in &item.writes {
+            let e = item.write(&w.name).expect("a write entry");
+            out.push((
+                format!("{}.{}", item.id, w.name),
+                region[e.offset as usize..(e.offset + e.size) as usize].to_vec(),
+            ));
+        }
+    }
+    out
+}
+
+/// Each item's arrays as a frame at `t` (flicks) draws them from what it `shown`, by
+/// `<item>.<write>` (Logic: interpolated writes): a held write as its last step stored it; a
+/// linear write from the value before that step toward it by α = (t − that step's time) ÷ the
+/// step length, so it reads one step late. Nothing else reads this: steps, hashes and checks read
+/// the stored. The planted blend draws toward the next step, as a physics output blends.
+pub fn drawn<'a>(
+    piece: &Piece,
+    shown: impl Iterator<Item = (i64, &'a [u8], &'a [u8])>,
+    t: i64,
+    forward: bool,
+) -> Map<String, Value> {
+    let mut out = Map::new();
+    for (item, (last, prev, arrays)) in piece.items.iter().zip(shown) {
+        let since = if forward {
+            t.rem_euclid(item.step)
+        } else {
+            (t - last * item.step).clamp(0, item.step)
+        };
+        for w in &item.writes {
+            let e = item.write(&w.name).expect("a write entry");
+            let size = w.ty.size() as usize;
+            let at = e.offset as usize;
+            let values: Vec<Value> = (0..w.count as usize)
+                .map(|n| {
+                    let to = &arrays[at + n * size..][..size];
+                    if !w.linear || prev.is_empty() || last < 0 || since >= item.step {
+                        return w.ty.value(to);
+                    }
+                    let from = &prev[at + n * size..][..size];
+                    w.ty.blend(from, to, since as f64 / item.step as f64)
+                })
+                .collect();
+            out.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
+        }
+    }
+    out
 }
