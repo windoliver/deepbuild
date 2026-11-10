@@ -247,6 +247,8 @@ alone.push('tests/acceptance/1348/');
 alone.push('tests/acceptance/1455/');
 // #505's files each build deep-canvas-render (and its formula file deep-show): one file at a time.
 alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
+// #1653's files each build deep-canvas-render and draw with Vello CPU, as #467's do: one file at a time.
+alone.push('tests/acceptance/1653/', 'tests/acceptance/1653-redraft-ac2-flip/');
 // #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.
 alone.push('tests/acceptance/1479/');
 // #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
