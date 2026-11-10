@@ -1,0 +1,60 @@
+# Suite 315 and cargo test -p deep-hook on the reference Mac, at 4ab03520 (same code as this branch's head but one doc comment).
+# Run by the Mac runner from a git worktree whose path has no "deep-hook", hyperfine 1.19.0, on AC power.
+# Machine:
+#   Mac15,12
+#   Apple M3
+#   17179869184
+#   8
+#   ProductName:		macOS
+#   ProductVersion:		14.7.7
+#   BuildVersion:		23H723
+#   Now drawing from 'AC Power'
+#   suite 315 ran 23:18:05-23:23:17 local, start load 3.61
+# Run log:
+#   HEAD 4ab035207d783f84b9a3e6ff9f770da9a927c129 status [] 23:17:14 | 23:17  up 42 days,  1:42, 1 user, load averages: 3.34 5.98 6.09
+#   hyperfine hyperfine 1.19.0 23:17:14 | 23:17  up 42 days,  1:42, 1 user, load averages: 3.34 5.98 6.09
+#   setup exit=0 23:18:04 | 23:18  up 42 days,  1:43, 1 user, load averages: 3.61 5.66 5.96
+#   suite 315 start 23:18:05 | 23:18  up 42 days,  1:43, 1 user, load averages: 3.61 5.66 5.96
+#   suite 315 exit=0 23:23:17 | 23:23  up 42 days,  1:48, 1 user, load averages: 2.89 3.79 4.97
+#   cargo test deep-hook exit=0 23:23:36 | 23:23  up 42 days,  1:48, 1 user, load averages: 2.70 3.70 4.92
+#   DONE-17S
+#   waiting for the e2e addendum (e2e-done) 23:23:36 | 23:23  up 42 days,  1:48, 1 user, load averages: 2.70 3.70 4.92
+# npx vitest run --root tests/acceptance/315 --no-file-parallelism: 24 tests, 24 passed, 0 failed, 0 skipped. Per test (status, ms, name):
+passed 1883 AC3 #315.c8a3b16d with ANTHROPIC_API_KEY set, the SessionStart event carries true for it, and no log, spool or record row holds its value AC3 hub up and hub stopped: the request and the recorded session.start carry billing.ANTHROPIC_API_KEY true (false where unset), and the value is nowhere
+passed 12997 AC2 #315.9543886e overhead under 10 ms at p95 on top of process start, measured over 1,000 calls (redraft) AC2 1,000 PreToolUse calls for ls forwarded to a running hub, each matched by a watch-mode entry and allowed, cost under 10 ms at p95 over a native no-op binary
+passed 45 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base (redraft) AC8 on the reference Mac, the forwarded call's p95 overhead on top of process start, measured with hyperfine against the no-op floor, is under 10 ms
+passed 51 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base AC8 the perf lane has deep-hook's two tasks, each a #315 first measurement, valid against the merge base's budgets
+passed 39887 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base AC8 `node benchmarks/deep-hook.mjs overhead` runs and exits 0
+passed 2427 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base AC8 `node benchmarks/deep-hook.mjs fail-open` runs and exits 0
+passed 10143 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base AC8 under 50 ms to fail open: a PreToolUse against a hub stopped with SIGSTOP, from spawn to exit, p95 of 50 calls
+passed 6005 AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base AC8 peak memory under 10 MB forwarding, failing open and failing closed, and a release binary under 3 MB
+passed 3824 AC9 #315.23cd76ed overhead is measured with hyperfine against a native no-op binary as the floor AC9 `node benchmarks/deep-hook.mjs overhead` runs hyperfine, timing deep-hook beside a native binary that does nothing
+passed 2795 AC10 #315.787a7ca4 eight deep-hook processes spool 1,000 events, one killed mid-write: each exited event recorded once, the cut line recorded naming its offset, the lines after it kept AC10 1,000 hooks eight at a time with the hub stopped, hook 400 killed mid-write after 650 more ran, then the hub starts
+passed 11627 AC10 #315.787a7ca4 eight deep-hook processes spool 1,000 events, one killed mid-write: each exited event recorded once, the cut line recorded naming its offset, the lines after it kept AC10 (wrong program) a hub that stops at the first bad line fails this test, naming the first ID lost
+passed 1707 AC11 #315.2d265264 power cut right after the hub removes a replayed 200-event spool: on restart all 200 are in the record or still in the spool AC11 200 hooks spooled with the hub stopped; the test VFS cuts power right after the spool's removal; the hub restarts
+passed 9806 AC11 #315.2d265264 power cut right after the hub removes a replayed 200-event spool: on restart all 200 are in the record or still in the spool AC11 (wrong program) a hub that removes the spool after a synchronous=NORMAL batch fails this test, naming the first ID
+passed 2821 AC1 #315.f0560928 with the hub stopped, a normal command is allowed in under 50 ms AC1 a PreToolUse for `ls` is allowed in under 50 ms, ten times each, with no hub, a hub stopped by SIGTERM, one killed with its socket left behind, and one stopped with SIGSTOP
+passed 31304 AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer AC13 against a hub that accepts and never reads, one that reads and never replies and one stopped with SIGSTOP, then a hub that holds a push 30 s, then a working hub reading the spool
+passed 112503 AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer AC13 (wrong program) a deep-hook with only a connect timeout waits for the agent's hook timeout and fails this test, naming the hub
+passed 14833 AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer AC13 (wrong program) a deep-hook that cuts every reply at a fixed deadline lets the held push through before its answer and fails this test
+passed 6589 AC5 #315.f8b9a600 a turn with tool calls but no hook event at the hub shows a "hooks not reaching DeepBuild" reading AC5 turn 2 ran a Bash call and no hook of it reached the hub: the session reads "hooks not reaching DeepBuild"; a session whose every turn reached the hub doesn't
+passed 14360 AC12 #315.9abdf3f5 a refused request or a reply that doesn't parse: pkill -f node denied, ls allowed, none of the hub's bytes printed, the request spooled AC12 the hub refuses a request carrying the planted field f_test; a test hub replies with a line that doesn't parse
+passed 13850 AC12 #315.9abdf3f5 a refused request or a reply that doesn't parse: pkill -f node denied, ls allowed, none of the hub's bytes printed, the request spooled AC12 (wrong program) a deep-hook that prints the reply as it came fails this test
+passed 983 AC7 #315.2a5a4d2b two hooks of one session with the clock fixed to the same nanosecond get different IDs, and both are in the record (redraft) AC7 hub up: two PreToolUse hooks of one session stamped …789 carry that stamp, two different IDs, and are two events stamped …789
+passed 1152 AC7 #315.2a5a4d2b two hooks of one session with the clock fixed to the same nanosecond get different IDs, and both are in the record (redraft) AC7 hub stopped, then started: two PreToolUse hooks of one session stamped …790 are spooled with that stamp and two different IDs, and are two events stamped …790
+passed 1925 AC4 #315.bf6d3707 events from hooks that ran while the hub was stopped are in the record after it starts, in order, with none lost AC4 two sessions' hooks, run one after another with the hub stopped mid-session, are each in the record once, in the order they ran, after the turn the hub saw
+passed 6750 AC6 #315.8366a61c with the clock fixed, hooks stamped …789 and …790 are spooled with those exact strings and recorded in that order; replaying the spool again appends nothing AC6 the two stamps, spooled, recorded as two events in order, and the same spool put back and replayed appends nothing
+
+# cargo test --locked -p deep-hook --no-fail-fast (tail): exit 0
+test a_print_runs_waiter_under_its_entrys_shell_exits_at_once ... ok
+test a_hold_past_the_contract_is_the_hub_away ... ok
+test an_acknowledgement_of_another_request_is_the_hub_away ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.56s
+
+   Doc-tests deep_hook
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
