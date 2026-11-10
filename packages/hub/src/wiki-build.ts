@@ -548,7 +548,8 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
         })();
         // Done is each job finished or waiting on the plan reserve: a job that waits goes on in the background.
         let settled = false;
-        void chain.finally(() => { settled = true; });
+        // A job's clean-up that can't read or write the wiki ends the reading there; the next build reads what is left.
+        void chain.catch((error: unknown) => process.stderr.write(`deep hub: a wiki reading's changed pages weren't recorded: ${error instanceof Error ? error.message : String(error)}\n`)).finally(() => { settled = true; });
         while (!settled) {
           if ((await o.runner.list()).some((j) => j.kind === 'read' && j.state === 'waiting' && j.blocked)) { built.reading.waiting = true; break; }
           await new Promise((r) => setTimeout(r, 100));

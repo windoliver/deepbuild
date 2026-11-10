@@ -14,6 +14,7 @@
 #[cfg(feature = "test-meter")]
 mod allocations;
 mod blur;
+mod budget;
 mod calibrate;
 mod columns;
 mod compare;
@@ -342,6 +343,10 @@ pub enum Planted {
     KeepsLatestError,
     ReopensTightLoop,
     ResizeLeavesRendering,
+    /// #1899's wrong programs (tests/acceptance/1899/README.md: Planted programs).
+    RepeatsLastReading,
+    DropsUnresolvedFrames,
+    LadderActsInBudgetRun,
 }
 
 impl Planted {
@@ -549,6 +554,9 @@ impl Planted {
             "keeps_latest_error" => Planted::KeepsLatestError,
             "reopens_tight_loop" => Planted::ReopensTightLoop,
             "resize_leaves_rendering" => Planted::ResizeLeavesRendering,
+            "repeats_last_reading" => Planted::RepeatsLastReading,
+            "drops_unresolved_frames" => Planted::DropsUnresolvedFrames,
+            "ladder_acts_in_budget_run" => Planted::LadderActsInBudgetRun,
             _ => return None,
         })
     }
@@ -805,6 +813,7 @@ impl App {
             Some("spike2d") => marks2d::spike2d(self, out, call),
             Some("film2d") => film::film2d(self, out, call),
             Some("canonical") => live::canonical(self, out, call),
+            Some("frame_budget") => budget::call(self, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
             #[cfg(feature = "test-meter")]

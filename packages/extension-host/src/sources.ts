@@ -74,8 +74,8 @@ const secretKey = (owner: string, name: string): string => `deepbuild/${owner}/$
 
 /** The largest answer a source call takes. */
 const ANSWER = 1024 * 1024;
-/** The largest file a library fetch downloads in one call (#1731). */
-const FILE = 512 * 1024 * 1024;
+/** The largest file a library fetch downloads in one call (#1731): under what one base64 string can hold, 384 MiB of bytes. */
+const FILE = 380 * 1024 * 1024;
 const HOPS = 5;
 const MINUTE = 60_000;
 const DAY = 86_400_000;
@@ -513,7 +513,8 @@ export class Sources {
     let bytes = 0;
     try {
       const got = await Promise.race([this.options.http(request, signal), aborted]);
-      bytes = Buffer.byteLength(got.body);
+      // A file's body is base64 text: its bytes are what the text carries.
+      bytes = Buffer.byteLength(got.body, request.encoding === 'base64' ? 'base64' : 'utf8');
       answer = this.scrubAnswer(got);
     } catch {
       answer = { error: signal.aborted ? 'timeout' : 'unreachable' };

@@ -88,6 +88,8 @@ export async function review(spec: ReviewSpec, ctx: CheckContext, reviewer: Revi
   } catch (e) {
     return crashed(e instanceof Error ? e.message : String(e));
   }
+  // A rubric with no rule can send nothing back: the review ran nothing, never a pass.
+  if (!rules.length) return { ...nothing(), outcome: 'ran_nothing', testsRun: 0, failures: [], verdictLine: `review: ${spec.rubric} holds no rule (- <rule>: <text>)` };
   let answer: unknown;
   try {
     answer = await answerBy(reviewer, { diff, rubric: rules.map((r) => `${r.rule}: ${r.text}`) }, ctx.deadline);

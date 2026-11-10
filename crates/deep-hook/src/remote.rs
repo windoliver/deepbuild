@@ -357,11 +357,30 @@ pub fn send_later(home: &Path, hub: &str) {
     }
 }
 
+/// How each request deep-hook spools begins, so one appended right after a cut line is found in it.
+const REQUEST: &str = "{\"v\":1,\"agent\":";
+
+/// The requests in a spool file's text, in the order they were written. A line that doesn't parse, cut by a write
+/// that never finished, is skipped as this machine's own hub skips one: the hub would refuse it and end the
+/// connection, holding back every request after it. One appended right after the cut bytes shares their line.
+fn requests(text: &str) -> Vec<&str> {
+    text.lines()
+        .filter_map(|line| {
+            if parse(line).is_ok() {
+                return Some(line);
+            }
+            line.match_indices(REQUEST)
+                .map(|(at, _)| &line[at..])
+                .find(|glued| parse(glued).is_ok())
+        })
+        .collect()
+}
+
 /// How long a spool sender may take, all of it.
 const SEND_BUDGET: Duration = Duration::from_secs(20);
 
 /// `deep-hook spool-send <hub>`: the hooks spooled for a joined hub, sent over one connection as late hooks under this
-/// machine's credential, each file removed once the hub took every line in it. A spool moves aside first, so a hook
+/// machine's credential, each file removed once the hub took every request in it. A spool moves aside first, so a hook
 /// that spools meanwhile starts a new one; the hub records an event once, so a file two senders took counts once.
 pub fn send_spool(home: &Path, hub: &str) -> ExitCode {
     let folder = spool_folder(home, hub);
@@ -429,8 +448,7 @@ pub fn send_spool(home: &Path, hub: &str) -> ExitCode {
         let Ok(text) = fs::read_to_string(&file) else {
             continue;
         };
-        let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-        for request in &lines {
+        for request in requests(&text) {
             if reader
                 .get_mut()
                 .write_all(format!("{request}\n").as_bytes())
@@ -463,6 +481,24 @@ fn now_ns() -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_cut_line_in_a_spool_holds_back_no_request_after_it() {
+        let request = |id: &str| {
+            format!(
+                r#"{{"v":1,"agent":"claude-code","event":"PreToolUse","seq":"1","id":"{id}","pid":1,"ppid":1,"matched":[],"payload":{{"session_id":"s"}}}}"#
+            )
+        };
+        let (first, glued, third) = (request("a"), request("b"), request("c"));
+        // Two writes never finished: the second request was appended right after the first one's cut bytes.
+        let text = format!(
+            "{first}\n{}{glued}\n{third}\n{}",
+            &first[..40],
+            &third[..25]
+        );
+        assert_eq!(requests(&text), [&first, &glued, &third]);
+        assert_eq!(requests("{cut\n\n"), Vec::<&str>::new());
+    }
 
     #[test]
     fn forge_identities_read_as_the_hub_reads_them() {

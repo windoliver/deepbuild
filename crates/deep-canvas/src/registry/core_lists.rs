@@ -4,7 +4,8 @@
 //! outputs) and `gpu.function@1` (step functions); `mark@1`, `builder@1`, `modifier@1` and
 //! `check.kind.doc@1`; and the kits of `device.class@1` and `logic.service@1`, whose entries land
 //! with the input seam and the logic module; and `data.layout@1` (#415), the data layouts canvas
-//! modules, first-party packs and packs fill, whose validators the sandbox module runs. Each kit's
+//! modules, first-party packs and packs fill, whose validators the sandbox module runs; and
+//! `constraint@1`, `column.source@1` (#397), `outline.source@1` (#443) and `ease@1` (#490). Each kit's
 //! rules are each isolated by a planted wrong entry that breaks that rule alone.
 
 use serde_json::{json, Value};
@@ -540,8 +541,12 @@ fn class_one_track(v: &Value) -> Result<(), String> {
     let Some(t) = v.pointer("/fixture/tracks").and_then(Value::as_object) else {
         return Ok(());
     };
-    let mut hashes: Vec<&Value> = t.values().collect();
-    hashes.dedup();
+    let mut hashes: Vec<&Value> = Vec::new();
+    for h in t.values() {
+        if !hashes.contains(&h) {
+            hashes.push(h);
+        }
+    }
     if hashes.len() > 1 {
         Err(format!(
             "its recorded fixture gives {} track hashes across frame rates",
@@ -859,8 +864,11 @@ fn column_source() -> RegistryDef {
 
 // ---- outline.source@1 (#443: Builder `extrude`: outlines from text, paths and SVG)
 
+/// A fixture's contours with their fill rule.
+type Rings = (Vec<Vec<[f64; 2]>>, crate::outline::FillRule);
+
 /// The contours and fill rule at `at` in an entry's fixture.
-fn rings_at(v: &Value, at: &str) -> Result<(Vec<Vec<[f64; 2]>>, crate::outline::FillRule), String> {
+fn rings_at(v: &Value, at: &str) -> Result<Rings, String> {
     let o = v.pointer(at).ok_or(format!("its fixture has no `{at}`"))?;
     let rule = match o.get("rule").and_then(Value::as_str) {
         Some("nonzero") => crate::outline::FillRule::NonZero,
@@ -1346,6 +1354,15 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn one_track_counts_each_different_hash_once() {
+        let entry = json!({"fixture": {"tracks": {"30": "a1", "60": "b2", "120": "a1"}}});
+        assert_eq!(
+            class_one_track(&entry),
+            Err("its recorded fixture gives 2 track hashes across frame rates".into())
+        );
     }
 
     #[test]

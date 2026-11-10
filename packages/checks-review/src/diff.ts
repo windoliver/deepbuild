@@ -35,10 +35,13 @@ export function newSide(diff: string): DiffLine[] {
 export function hunks(diff: string): Hunk[] {
   const out: Hunk[] = [];
   let file = '';
+  // Inside a hunk a line starting `--- ` is a removed line whose text starts `-- `, as `newSide` reads `+++ `.
+  let inHunk = false;
   for (const raw of diff.split('\n')) {
-    if (raw.startsWith('--- ')) { file = raw.slice(4).replace(/^a\//, ''); continue; }
+    if (raw.startsWith('diff --git ')) { inHunk = false; continue; }
+    if (!inHunk && raw.startsWith('--- ')) { file = raw.slice(4).replace(/^a\//, ''); continue; }
     const h = /^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@/.exec(raw);
-    if (h) out.push({ file, from: Number(h[1]), count: h[2] === undefined ? 1 : Number(h[2]), added: h[3] === undefined ? 1 : Number(h[3]) });
+    if (h) { inHunk = true; out.push({ file, from: Number(h[1]), count: h[2] === undefined ? 1 : Number(h[2]), added: h[3] === undefined ? 1 : Number(h[3]) }); }
   }
   return out;
 }
