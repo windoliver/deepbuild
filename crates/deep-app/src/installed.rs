@@ -13,14 +13,18 @@ use serde_json::{json, Value};
 use crate::commands::{entries, Entry, Open, Palette, View};
 use crate::views;
 
-/// The pages ⌘K always lists.
+/// The pages ⌘K always lists, and the preferences it opens the box for (#1998).
 pub fn shipped_pages() -> Vec<Entry> {
-    [("Home", views::HOME), ("Needs you", views::NEEDS_YOU)]
-        .map(|(name, panel)| Entry::Shipped {
+    let pages = [("Home", views::HOME), ("Needs you", views::NEEDS_YOU)].map(|(name, panel)| {
+        Entry::Shipped {
             name: name.to_owned(),
             panel,
-        })
-        .into()
+        }
+    });
+    pages
+        .into_iter()
+        .chain(crate::words::preference_entries())
+        .collect()
 }
 
 /// What opening a ⌘K entry does in the app: a command runs off the main thread, a page mounts in the page region.
@@ -38,6 +42,7 @@ pub fn opener(runtime: Rc<ShellRuntime>) -> Open {
             .detach();
         }
         Entry::Shipped { panel, .. } => views::show_panel(panel, window, cx),
+        Entry::Preference { name, .. } => crate::words::open_preference(name, window, cx),
         Entry::Page { panel, .. } => {
             let Some(page) = entry.page_props() else {
                 return;

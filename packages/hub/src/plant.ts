@@ -200,9 +200,12 @@ export type Plant =
   | 'drafted-spec-only' | 'bootstrap-commands-only' | 'failures-as-fail'
   // #1296's: a doctor that reads only your user settings for a status line, a session with no window reading shown
   // at 0% or with another repo's reading, and a hub that sends a hook's context whole past the cap.
-  | 'statusline-user-settings-only' | 'window-unknown-as-zero' | 'window-carried-from-other-repo' | 'sends-block-whole';
+  | 'statusline-user-settings-only' | 'window-unknown-as-zero' | 'window-carried-from-other-repo' | 'sends-block-whole'
+  // #1998's: a box that applies a change in words as it drafts it, and one whose approval applies whatever moved since.
+  | 'box-applies-at-once' | 'box-ignores-revision';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
+  'box-applies-at-once', 'box-ignores-revision',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
