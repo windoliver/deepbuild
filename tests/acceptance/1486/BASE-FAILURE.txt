@@ -1,0 +1,229 @@
+#1486's acceptance suite at the base, f2af227be, in this worktree with only tests/acceptance/1486 added.
+Mac17,10 / Apple M5 Max / 64 GiB (a reference Mac), macOS; the machine was loaded by other sessions (one-minute load
+about 60 to 110 on 18 cores), which no test here judges except AC1's timings, which never ran.
+
+Command (cargo 1.99.1 first on PATH; scripts/lease found no `deep` and ran it unleased):
+  PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH" CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    scripts/lease npx vitest run --root tests/acceptance/1486 --no-file-parallelism --testTimeout=600000
+
+Result: 10 tests, 10 failed, each at the missing surface. `deep-canvas-render` has no `live` subcommand: it prints its
+usage and exits 2 (README: Surfaces this suite names). For the grid's long requests it exits before reading them, so the
+write ends in EPIPE beside the exit status. Underneath, the base draws these pictures whole and refuses them past its
+64 MiB cap (README: what the base does), and `raster` answers no `levels`, which AC5 reads after `live`.
+
+  AC1 grid.test.ts    honest  FAIL  live exited 2 (usage), after the 1,000 pictures were made (33.3 s)
+  AC2 grid.test.ts    honest  FAIL  live exited 2 (usage), on the 10,000-picture grid
+  AC2 grid.test.ts    plant   FAIL  live exited 2 (usage): queue_without_cancel can't run either
+  AC3 grid.test.ts    honest  FAIL  live exited 2 (usage)
+  AC4 grid.test.ts    honest  FAIL  live exited 2 (usage)
+  AC4 grid.test.ts    plant   FAIL  live exited 2 (usage): evictor_ignores_two_frames can't run either
+  AC6 grid.test.ts    honest  FAIL  live exited 2 (usage), at the first open
+  AC8 grid.test.ts    honest  FAIL  live exited 2 (usage), before any picture was taken; docs/evidence/1486 not written
+  AC5 levels.test.ts  honest  FAIL  live exited 2 (usage)
+  AC7 levels.test.ts  honest  FAIL  live exited 2 (usage)
+
+An earlier run of the same files, before `helpers.ts`'s `one` reported a process's status beside an EPIPE, failed the
+same 10 tests at the same call (8 of them as a bare EPIPE). Paths below are redacted: <worktree> is this checkout,
+<tmp> the OS temp folder.
+
+---- vitest output ----
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/1486 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1486
+
+stdout | grid.test.ts > AC1 #1486.38c05d85 a 1,000-image grid of 120 px cover tiles from 1024 × 640 JPEGs and PNGs, in a 1280 × 800 view scrolled at 40 px a frame: first screen under 200 ms, UI-thread p99 under 4 ms, and cache bytes never over budget except for what the last two frames drew > AC1 #1486.38c05d85 opened cold and scrolled 40 px a frame to the grid's end (300 frames): every frame draws the tiles in its view and holds the cache within its budget but for what the last two frames drew; in five runs after a warm-up on a reference Mac the first screen is under 200 ms and the UI thread's frame time under 4 ms at p99
+made the 1000 pictures in 33.3 s
+
+ ❯ grid.test.ts (8 tests | 8 failed) 49949ms
+   ❯ AC1 #1486.38c05d85 a 1,000-image grid of 120 px cover tiles from 1024 × 640 JPEGs and PNGs, in a 1280 × 800 view scrolled at 40 px a frame: first screen under 200 ms, UI-thread p99 under 4 ms, and cache bytes never over budget except for what the last two frames drew (1)
+     × AC1 #1486.38c05d85 opened cold and scrolled 40 px a frame to the grid's end (300 frames): every frame draws the tiles in its view and holds the cache within its budget but for what the last two frames drew; in five runs after a warm-up on a reference Mac the first screen is under 200 ms and the UI thread's frame time under 4 ms at p99 34173ms
+   ❯ AC2 #1486.a0330377 at 10,000 images with a 64 MiB budget, evicted and cancelled are above 0 and failed is 0. A planted queue with no cancel decodes every row it passed and fails on decoded (2)
+     × AC2 #1486.a0330377 the 10,000-picture grid with a 64 MiB budget flung to its end and settled: evicted and cancelled above 0, failed 0, fewer decoded than the pictures the view passed, and the cache within its budget but for what the last two frames drew 6778ms
+     × AC2 #1486.a0330377 planted queue_without_cancel decodes every picture the fling passed and fails the check on decoded 3649ms
+   ❯ AC3 #1486.36b0c465 after a settled frame, 10 further full redraws make 0 gross allocations in the service, by a counting allocator (1)
+     × AC3 #1486.36b0c465 the grid opened and settled, then 10 full redraws, each drawing every tile in view at its level: the service allocates 0 times in each, though the same counter reads its decodes' allocations while the grid opened 304ms
+   ❯ AC4 #1486.0be6d156 a planted evictor that ignores the two-frame rule shows an empty tile in a frame and fails, naming the frame (2)
+     × AC4 #1486.0be6d156 with a 1 MiB budget, under one screen's tiles, no tile that showed its picture is ever shown empty while in view, and the cache holds what the last two frames drew past its budget 313ms
+     × AC4 #1486.0be6d156 planted evictor_ignores_two_frames shows a tile empty after it showed, and the check fails naming the frame 309ms
+   ❯ AC6 #1486.427b5b13 a second open of the same grid decodes nothing, by the worker's job list (1)
+     × AC6 #1486.427b5b13 the grid opened and settled twice, each in its own process on one store: the first decodes every picture in view, the second's job list holds no decode and a read for each 295ms
+   ❯ AC8 #1486.9e82ff7a screenshots of a 1,000-tile grid mid-scroll and settled, taken by the check run from the fixture document at the reference window, with a recording of the scroll, and the one taste call on them (1)
+     × AC8 #1486.9e82ff7a the check run scrolls the grid at the reference window and takes its pictures, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS 278ms
+ ❯ levels.test.ts (2 tests | 2 failed) 1623ms
+   ❯ AC5 #1486.b1bef80e at every level, the settled live frame's image pixels equal the canonical render's within 2 levels per channel (1)
+     × AC5 #1486.b1bef80e a JPEG and a PNG at levels 0 to 6 and as a cover tile: the settled live frame and the canonical render each draw every picture at its level, and every pixel inside each picture is within 2 levels per channel of the other's 430ms
+   ❯ AC7 #1486.0381bfcf moving an image's box 1% a frame through a 1.2× resize makes no new decode (1)
+     × AC7 #1486.0381bfcf a picture at level 2 resized 1% a frame to 1.2× over 20 frames: every frame asks for and draws level 2, and no decode starts while it moves, by the job list 8ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  grid.test.ts > AC1 #1486.38c05d85 a 1,000-image grid of 120 px cover tiles from 1024 × 640 JPEGs and PNGs, in a 1280 × 800 view scrolled at 40 px a frame: first screen under 200 ms, UI-thread p99 under 4 ms, and cache bytes never over budget except for what the last two frames drew > AC1 #1486.38c05d85 opened cold and scrolled 40 px a frame to the grid's end (300 frames): every frame draws the tiles in its view and holds the cache within its budget but for what the last two frames drew; in five runs after a warm-up on a reference Mac the first screen is under 200 ms and the UI thread's frame time under 4 ms at p99
+Error: deep-canvas-render live exited 2 (spawnSync <tmp>/deep-1486-bin-XXXXXX/deep-canvas-render EPIPE):
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path
+
+ ❯ one helpers.ts:691:31
+    689|   const name = `deep-canvas-render ${subcommand}`;
+    690|   // A process that exits before reading a long request leaves the wri…
+    691|   if (run.status !== 0) throw Error(`${name} exited ${run.status ?? ru…
+       |                               ^
+    692|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    693|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+ ❯ live helpers.ts:741:18
+ ❯ grid.test.ts:68:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  grid.test.ts > AC2 #1486.a0330377 at 10,000 images with a 64 MiB budget, evicted and cancelled are above 0 and failed is 0. A planted queue with no cancel decodes every row it passed and fails on decoded > AC2 #1486.a0330377 the 10,000-picture grid with a 64 MiB budget flung to its end and settled: evicted and cancelled above 0, failed 0, fewer decoded than the pictures the view passed, and the cache within its budget but for what the last two frames drew
+Error: deep-canvas-render live exited 2 (spawnSync <tmp>/deep-1486-bin-XXXXXX/deep-canvas-render EPIPE):
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path
+
+ ❯ one helpers.ts:691:31
+    689|   const name = `deep-canvas-render ${subcommand}`;
+    690|   // A process that exits before reading a long request leaves the wri…
+    691|   if (run.status !== 0) throw Error(`${name} exited ${run.status ?? ru…
+       |                               ^
+    692|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    693|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+ ❯ live helpers.ts:741:18
+ ❯ fling grid.test.ts:109:13
+ ❯ grid.test.ts:136:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  grid.test.ts > AC2 #1486.a0330377 at 10,000 images with a 64 MiB budget, evicted and cancelled are above 0 and failed is 0. A planted queue with no cancel decodes every row it passed and fails on decoded > AC2 #1486.a0330377 planted queue_without_cancel decodes every picture the fling passed and fails the check on decoded
+Error: deep-canvas-render live exited 2 (spawnSync <tmp>/deep-1486-bin-XXXXXX/deep-canvas-render EPIPE):
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path
+
+ ❯ one helpers.ts:691:31
+    689|   const name = `deep-canvas-render ${subcommand}`;
+    690|   // A process that exits before reading a long request leaves the wri…
+    691|   if (run.status !== 0) throw Error(`${name} exited ${run.status ?? ru…
+       |                               ^
+    692|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    693|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+ ❯ live helpers.ts:741:18
+ ❯ fling grid.test.ts:109:13
+ ❯ grid.test.ts:141:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  grid.test.ts > AC3 #1486.36b0c465 after a settled frame, 10 further full redraws make 0 gross allocations in the service, by a counting allocator > AC3 #1486.36b0c465 the grid opened and settled, then 10 full redraws, each drawing every tile in view at its level: the service allocates 0 times in each, though the same counter reads its decodes' allocations while the grid opened
+Error: deep-canvas-render live exited 2 (spawnSync <tmp>/deep-1486-bin-XXXXXX/deep-canvas-render EPIPE):
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path
+
+ ❯ one helpers.ts:691:31
+    689|   const name = `deep-canvas-render ${subcommand}`;
+    690|   // A process that exits before reading a long request leaves the wri…
+    691|   if (run.status !== 0) throw Error(`${name} exited ${run.status ?? ru…
+       |                               ^
+    692|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    693|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+ ❯ live helpers.ts:741:18
+ ❯ grid.test.ts:154:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  grid.test.ts > AC4 #1486.0be6d156 a planted evictor that ignores the two-frame rule shows an empty tile in a frame and fails, naming the frame > AC4 #1486.0be6d156 with a 1 MiB budget, under one screen's tiles, no tile that showed its picture is ever shown empty while in view, and the cache holds what the last two frames drew past its budget
+Error: deep-canvas-render live exited 2 (spawnSync <tmp>/deep-1486-bin-XXXXXX/deep-canvas-render EPIPE):
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path
+
+ ❯ one helpers.ts:691:31
+    689|   const name = `deep-canvas-render ${subcommand}`;
+    690|   // A process that exits before reading a long request leaves the wri…
+    691|   if (run.status !== 0) throw Error(`${name} exited ${run.status ?? ru…
+       |                               ^
+    692|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    693|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+ ❯ live helpers.ts:741:18
+ ❯ still grid.test.ts:187:13
+ ❯ grid.test.ts:200:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  grid.test.ts > AC4 #1486.0be6d156 a planted evictor that ignores the two-frame rule shows an empty tile in a frame and fails, naming the frame > AC4 #1486.0be6d156 planted evictor_ignores_two_frames shows a tile empty after it showed, and the check fails naming the frame
+Error: deep-canvas-render live exited 2 (spawnSync <tmp>/deep-1486-bin-XXXXXX/deep-canvas-render EPIPE):
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path
+
+ ❯ one helpers.ts:691:31
+    689|   const name = `deep-canvas-render ${subcommand}`;
+    690|   // A process that exits before reading a long request leaves the wri…
+    691|   if (run.status !== 0) throw Error(`${name} exited ${run.status ?? ru…
+       |                               ^
+    692|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    693|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+ ❯ live helpers.ts:741:18
+ ❯ still grid.test.ts:187:13
+ ❯ grid.test.ts:214:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  grid.test.ts > AC6 #1486.427b5b13 a second open of the same grid decodes nothing, by the worker's job list > AC6 #1486.427b5b13 the grid opened and settled twice, each in its own process on one store: the first decodes every picture in view, the second's job list holds no decode and a read for each
+Error: deep-canvas-render live exited 2 (spawnSync <tmp>/deep-1486-bin-XXXXXX/deep-canvas-render EPIPE):
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path
+
+ ❯ one helpers.ts:691:31
+    689|   const name = `deep-canvas-render ${subcommand}`;
+    690|   // A process that exits before reading a long request leaves the wri…
+    691|   if (run.status !== 0) throw Error(`${name} exited ${run.status ?? ru…
+       |                               ^
+    692|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    693|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+ ❯ live helpers.ts:741:18
+ ❯ grid.test.ts:229:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  grid.test.ts > AC8 #1486.9e82ff7a screenshots of a 1,000-tile grid mid-scroll and settled, taken by the check run from the fixture document at the reference window, with a recording of the scroll, and the one taste call on them > AC8 #1486.9e82ff7a the check run scrolls the grid at the reference window and takes its pictures, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+Error: deep-canvas-render live exited 2 (spawnSync <tmp>/deep-1486-bin-XXXXXX/deep-canvas-render EPIPE):
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path
+
+ ❯ one helpers.ts:691:31
+    689|   const name = `deep-canvas-render ${subcommand}`;
+    690|   // A process that exits before reading a long request leaves the wri…
+    691|   if (run.status !== 0) throw Error(`${name} exited ${run.status ?? ru…
+       |                               ^
+    692|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    693|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+ ❯ live helpers.ts:741:18
+ ❯ grid.test.ts:267:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  levels.test.ts > AC5 #1486.b1bef80e at every level, the settled live frame's image pixels equal the canonical render's within 2 levels per channel > AC5 #1486.b1bef80e a JPEG and a PNG at levels 0 to 6 and as a cover tile: the settled live frame and the canonical render each draw every picture at its level, and every pixel inside each picture is within 2 levels per channel of the other's
+Error: deep-canvas-render live exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path
+
+ ❯ one helpers.ts:691:31
+    689|   const name = `deep-canvas-render ${subcommand}`;
+    690|   // A process that exits before reading a long request leaves the wri…
+    691|   if (run.status !== 0) throw Error(`${name} exited ${run.status ?? ru…
+       |                               ^
+    692|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    693|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+ ❯ live helpers.ts:741:18
+ ❯ levels.test.ts:70:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  levels.test.ts > AC7 #1486.0381bfcf moving an image's box 1% a frame through a 1.2× resize makes no new decode > AC7 #1486.0381bfcf a picture at level 2 resized 1% a frame to 1.2× over 20 frames: every frame asks for and draws level 2, and no decode starts while it moves, by the job list
+Error: deep-canvas-render live exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry | labels | crosshair | path
+
+ ❯ one helpers.ts:691:31
+    689|   const name = `deep-canvas-render ${subcommand}`;
+    690|   // A process that exits before reading a long request leaves the wri…
+    691|   if (run.status !== 0) throw Error(`${name} exited ${run.status ?? ru…
+       |                               ^
+    692|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+    693|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+ ❯ live helpers.ts:741:18
+ ❯ levels.test.ts:122:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  10 failed (10)
+   Start at  12:03:25
+   Duration  52.15s (tests 99%)
+
