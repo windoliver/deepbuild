@@ -32,6 +32,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/1172/',
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
+  'tests/acceptance/1463/',
   'tests/acceptance/1002/first-screen-redraft/',
   'tests/acceptance/994/first-screen-redraft/',
   'tests/acceptance/167/', 'tests/acceptance/1328/',
@@ -46,7 +47,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
   'tests/acceptance/990/',
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
-  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/'];
+  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/'];
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
  * in the worktrees and affected.mjs's node --test reports held on 2026-11-07. affected.mjs runs them with --slow and for
@@ -82,7 +83,7 @@ export const slow = [
   'tests/acceptance/417/state.test.ts', 'tests/acceptance/419/velocity-seek.test.ts',
   'tests/acceptance/42/doctor.test.ts', 'tests/acceptance/422/showpiece-fixture.test.ts',
   'tests/acceptance/424/picks.test.ts', 'tests/acceptance/425/redraft/taste.test.ts',
-  'tests/acceptance/48/harness.test.mjs', 'tests/acceptance/484/forest.test.ts',
+  'tests/acceptance/48/harness.test.mjs', 'tests/acceptance/484/forest.test.ts', 'tests/acceptance/484/redraft-1637/forest.test.ts',
   'tests/acceptance/674/default.test.ts', 'tests/acceptance/674/document.test.ts',
   'tests/acceptance/674/nearest.test.ts', 'tests/acceptance/674/session.test.ts',
   'tests/acceptance/824/cycles.test.ts', 'tests/acceptance/85/hub/network.test.ts',
@@ -167,7 +168,7 @@ export const timed = [
   'tests/acceptance/200/budgets.test.ts', 'tests/acceptance/21/replay.test.ts',
   'tests/acceptance/21/sessions.live.test.ts', 'tests/acceptance/23/match/budgets.test.ts',
   'tests/acceptance/236/budgets.test.ts', 'tests/acceptance/237/budgets.test.ts',
-  'tests/acceptance/238/budgets.test.ts', 'tests/acceptance/24/budgets.test.ts',
+  'tests/acceptance/238/budgets.test.ts', 'tests/acceptance/24/budgets.test.ts', 'tests/acceptance/24/redraft-1463/timing.test.ts',
   'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/25/live/budgets.test.ts',
   'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/routes/twenty-minutes.test.ts',
   'tests/acceptance/25/routes/wake.test.ts', 'tests/acceptance/26/budgets.test.ts',
@@ -196,7 +197,7 @@ export const timed = [
   'tests/acceptance/246/lanes.test.mjs', 'tests/acceptance/568/', 'tests/acceptance/583/perf-added-tests.test.mjs',
   'tests/acceptance/724/', 'tests/preflight.test.mjs',
   'tests/acceptance/572/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
-  'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/raised.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts',
+  'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/redraft-1463/raised.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts',
   'tests/acceptance/68/budgets.test.ts', 'tests/acceptance/69/budgets.test.ts',
   'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/wait.test.ts',
   'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts',
@@ -256,6 +257,8 @@ alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests
 // players and out-of-view readings are timed.
 alone.push('tests/acceptance/499/');
 timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/video/out-of-view.test.ts');
+// #500's files each build deep-show; the bake folder and the Oracle lane bake about 26 minutes of EBU test audio.
+alone.push('tests/acceptance/500/', 'tests/acceptance/500-oracle/');
 // #532's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome, and read CPU times per frame and per step.
 alone.push('tests/acceptance/532/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
@@ -268,6 +271,27 @@ alone.push('tests/acceptance/1477/');
 timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts', 'tests/acceptance/1477/redraft/record.test.ts');
 // #1718's files build deep-show and deep-hook, start hubs and lay out an installed tree.
 alone.push('tests/acceptance/1718/');
+// #1637's files build deep-gpu and draw a city of 120,000 solids on Metal; its budget runs as a timed file.
+alone.push('tests/acceptance/1637/');
+timed.push('tests/acceptance/1637/budgets.test.ts');
+// #1458's replica file builds deep-drive plain and with env-plants and starts many replicas; its AC13 file opens the
+// real app's window on a real hub, with Accessibility and Screen Recording, by hand.
+alone.push('tests/acceptance/1458/');
+byHand.push('tests/acceptance/1458/redraft-ac13/shown.test.ts');
+// #501's files each build deep-show (seal.test.ts three times), export films through the GPU and the encode tool, and run a 600 s soak on the audio output.
+alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
+timed.push('tests/acceptance/501/budgets.test.ts');
+// #1818's files each build deep-show and mix seconds of audio through the media processors.
+alone.push('tests/acceptance/1818/');
+// #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
+// counting the record's process starts around each deep_job call: one file at a time.
+alone.push('tests/acceptance/1922/');
+// #1924's files each start a hub, an agent stand-in and test hosts on loopback, and read every request a host gets
+// around each deep_job call: one file at a time.
+alone.push('tests/acceptance/1924/');
+// #1923's files each start a hub and a provider on 127.0.0.1, kill and restart the hub mid-call, and count the
+// provider's submissions around each deep_job call: one file at a time.
+alone.push('tests/acceptance/1923/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

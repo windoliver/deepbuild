@@ -2,7 +2,7 @@
 // per item a case declares), its planted entries (one per code of every code family) and its clean fill.
 import { canonicalize, ContractError, sha256Hex } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
-import type { AdapterEvent, HookRequestLine, PermissionAnswer } from '@deepbuild/adapters';
+import type { AdapterEvent, HookOutput, HookRequestLine, PermissionAnswer } from '@deepbuild/adapters';
 import { AGENT, fakeFill, SURFACE } from './fake-agent.js';
 import type { Faults } from './fake-agent.js';
 import { codeFamilies } from './families.js';
@@ -80,10 +80,12 @@ const request = (extra: { [k: string]: JsonValue } = {}): JsonValue => ({ kind: 
 const rule = (id: string) => ({ id, code: CODES.rule(id) });
 const R = {
   calling: rule('who-is-calling'), order: rule('order-by-seq'), clock: rule('clock-stepped-back'), late: rule('late-event-in-stopped-turn'), quiet: rule('unknown-not-finished'),
+  modelOnly: rule('block-only-where-it-reaches-model'), noStderr: rule('no-block-on-stderr-at-exit-0'),
   threads: rule('threads-across-rotated-ids'), owner: rule('one-owner-per-session'), decision: rule('allow-only-from-decision'), unparsed: rule('unparsed-stop-reads-unknown'), transcript: rule('delivery-confirmed-from-transcript'),
 };
 const RULE_MESSAGES: Record<keyof typeof R, string> = {
   calling: "subagent event recorded as its parent's", order: 'duplicate event ID', clock: 'event stamped before its turn started', late: 'event after stop', quiet: 'quiet turn reported finished',
+  modelOnly: 'needed block sent where it reaches no model', noStderr: 'needed block sent as stderr on exit 0',
   threads: 'rotated session ID not threaded', owner: 'answer delivered to another session', decision: 'allow taken from outside decision', unparsed: 'unparsed stop given a cause', transcript: 'acknowledged with no transcript sign',
 };
 
@@ -97,6 +99,18 @@ const answered = (fields: Partial<PermissionAnswer>): PermissionAnswer => ({ ask
 function notAllowed(h: Harness, answer: PermissionAnswer, what: string): void {
   const digest = (a: PermissionAnswer): string => sha256Hex(canonicalize(h.reply(a, pushRequest)));
   if (digest(answer) === digest({ ...answer, decision: 'allow' })) h.fail(`${RULE_MESSAGES.decision}: \`${PUSH}\` answered ${what} got the reply for allow`, [R.decision.code]);
+}
+
+/** Which output of a hook reply carries `block`: additionalContext or systemMessage in its JSON, plain stdout, or stderr. */
+function channelOf(reply: HookOutput, block: string): 'additionalContext' | 'systemMessage' | 'stdout' | 'stderr' | 'stderrOnBlock' | undefined {
+  const json = ((): unknown => { try { return JSON.parse(reply.stdout); } catch { return undefined; } })();
+  if (isObject(json as JsonValue)) {
+    const out = json as { hookSpecificOutput?: { additionalContext?: unknown }; systemMessage?: unknown };
+    if (typeof out.hookSpecificOutput?.additionalContext === 'string' && out.hookSpecificOutput.additionalContext.includes(block)) return 'additionalContext';
+    if (typeof out.systemMessage === 'string' && out.systemMessage.includes(block)) return 'systemMessage';
+  } else if (reply.stdout.includes(block)) return 'stdout';
+  if (reply.stderr.includes(block)) return reply.exit === 0 ? 'stderr' : 'stderrOnBlock';
+  return undefined;
 }
 
 const cases: Case[] = [
@@ -142,6 +156,23 @@ const cases: Case[] = [
     const timeouts = isObject(h.facts) && isObject(h.facts.hookTimeouts) ? h.facts.hookTimeouts : {};
     const stop = isObject(timeouts.perHook) ? timeouts.perHook.Stop : undefined;
     if (typeof stop !== 'number') h.fail(`hookTimeouts.perHook.Stop is missing: the rule "${String(timeouts.readBy ?? '')}" reads the Stop hook's timeout`, ['required']);
+  }),
+  kase('context/reaches-model', {}, (h) => {
+    // A block the model needs goes out only on an output the facts mark as reaching it (#1296): a block sent as
+    // stdout where stdout goes to the debug log, or as stderr on exit 0, never reaches the model.
+    const entry = isObject(h.facts) && isObject(h.facts.contextOutput) ? h.facts.contextOutput : undefined;
+    // Facts with no contextOutput entry fail the adapter-facts case (scripts/corpus.mjs), not this one.
+    if (!entry || !isObject(entry.events)) return;
+    const block = 'DeepBuild: the open asks in this thread and their requirements: task_01: R1, R2.';
+    for (const [event, reach] of Object.entries(entry.events)) {
+      if (!isObject(reach)) continue;
+      const reply = h.context(event, block);
+      const reaches = Object.entries(reach).filter(([, where]) => where === 'model').map(([output]) => output);
+      const output = reply ? channelOf(reply, block) : undefined;
+      if (output === 'stderr') h.fail(`${RULE_MESSAGES.noStderr}: the reply to ${event} sent it as stderr on exit 0, which the model never sees`, [R.noStderr.code]);
+      if (output && reach[output] !== 'model') h.fail(`${RULE_MESSAGES.modelOnly}: the reply to ${event} sent it as ${output}, which the facts mark as reaching ${String(reach[output] ?? 'nowhere')}`, [R.modelOnly.code]);
+      if (!output && reaches.length) h.fail(`${RULE_MESSAGES.modelOnly}: no reply to ${event} gives it on ${reaches.join(' or ')}, which the facts mark as reaching the model`, [R.modelOnly.code]);
+    }
   }),
   kase('drive/order-by-seq', { flags: ['startTurn'], operations: ['startTurn'], kinds: ['user.ask'] }, (h) => {
     const events = startTurn(h, { prompt: 'order the events' });
@@ -241,6 +272,8 @@ function fakes(): Fake[] {
     fake('allow-from-suggestion', RULE_MESSAGES.decision, [R.decision.code], { rule: R.decision.id }, { allowFromSuggestion: true }),
     fake('unparsed-stop-given-cause', RULE_MESSAGES.unparsed, [R.unparsed.code], { rule: R.unparsed.id }, { unparsedStopCause: true }),
     fake('acknowledged-without-sign', RULE_MESSAGES.transcript, [R.transcript.code], { rule: R.transcript.id }, { noSign: true }),
+    fake('block-as-postcompact-stdout', RULE_MESSAGES.modelOnly, [R.modelOnly.code], { rule: R.modelOnly.id }, { contextAsStdout: true }),
+    fake('block-as-stderr-exit-0', RULE_MESSAGES.noStderr, [R.noStderr.code], { rule: R.noStderr.id }, { contextAsStderr: true }),
   ];
   const flags: Fake[] = [
     ...(['startTurn', 'steer', 'followUp'] as const).map((flag) => fake(`flag-${flag}-unsupported`, HARNESS.flagUnsupported(flag, flag, SURFACE), [CODES.flag(flag)], { flag }, { unsupportedFlag: flag })),

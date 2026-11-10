@@ -66,17 +66,6 @@ impl Default for Surface {
     }
 }
 
-impl Surface {
-    /// The upscale it draws through: `none` at scale 1.
-    pub fn upscale_name(&self) -> &'static str {
-        if self.scale != 1.0 {
-            self.upscale.name()
-        } else {
-            "none"
-        }
-    }
-}
-
 /// The frame's internal size at `scale`.
 pub fn scaled(size: [u32; 2], scale: f64) -> [u32; 2] {
     [

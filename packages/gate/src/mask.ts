@@ -3,13 +3,13 @@
 // here from @deepbuild/checks-command (#30), which reads it from the core.
 /**
  * The ways a command masks its tool's exit, each with the text named as the mask: a failure branch (`|| true`,
- * `|| :`, `|| echo`, `|| exit 0`), a pipe (the pipeline's exit is the last command's), an `exit N`, `set +e`, a
+ * `|| :`, `|| echo`, `|| exit 0`), a pipe, `|` or `|&` (the pipeline's exit is the last command's), an `exit N`, `set +e`, a
  * leading `!`, a `trap` that exits, a command left running with `&`, `make -i` or `-k`, `--if-present`,
  * `--passWithNoTests` and `continue-on-error`. A Makefile's or justfile's own masks are read only once the runner
  * reads the target a command runs.
  */
 const MASKS: RegExp[] = [
-  /\|\|\s*\S+(?:\s+\d+)?/, /(?<![|&])\|(?![|&])\s*\S+/, /(?<![-\w])exit\s+\d+/, /\bset\s+\+e\b/, /(?:^|[;&|(]\s*)(!)(?=\s)/, /\btrap\b[^;&|]*\bexit\b/,
+  /\|\|\s*\S+(?:\s+\d+)?/, /(?<![|&])\|(?!\|)&?\s*\S+/, /(?<![-\w])exit\s+\d+/, /\bset\s+\+e\b/, /(?:^|[;&|(]\s*)(!)(?=\s)/, /\btrap\b[^;&|]*\bexit\b/,
   /(?<![&>|])&(?![&>])/, /\bmake\b[^;&|]*\s-[A-Za-z]*[ik]\b/, /--if-present\b/, /--passWithNoTests\b/, /continue-on-error/,
 ];
 /** The command with the text of each quoted span blanked, its length kept: what's inside quotes is a word's, not the shell's. */

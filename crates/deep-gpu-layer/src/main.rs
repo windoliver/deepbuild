@@ -14,6 +14,7 @@
 #[cfg(feature = "test-meter")]
 mod allocations;
 mod blur;
+mod budget;
 mod calibrate;
 mod columns;
 mod compare;
@@ -268,6 +269,11 @@ pub enum Planted {
     IdsByCompactedRow,
     RowAsElement,
     DispatchWithoutGuard,
+    /// #1637's wrong programs (tests/acceptance/1637/README.md: Planted programs).
+    PyramidFromPreviousFrame,
+    OcclusionByCentre,
+    OcclusionInCascades,
+    OcclusionInProbeCaptures,
     IdsIgnoreMask,
     CutsColorOnly,
     SoftNoiseFromFrame,
@@ -337,6 +343,10 @@ pub enum Planted {
     KeepsLatestError,
     ReopensTightLoop,
     ResizeLeavesRendering,
+    /// #1899's wrong programs (tests/acceptance/1899/README.md: Planted programs).
+    RepeatsLastReading,
+    DropsUnresolvedFrames,
+    LadderActsInBudgetRun,
 }
 
 impl Planted {
@@ -483,6 +493,10 @@ impl Planted {
             "ids_by_compacted_row" => Planted::IdsByCompactedRow,
             "row_as_element" => Planted::RowAsElement,
             "dispatch_without_guard" => Planted::DispatchWithoutGuard,
+            "pyramid_from_previous_frame" => Planted::PyramidFromPreviousFrame,
+            "occlusion_by_centre" => Planted::OcclusionByCentre,
+            "occlusion_in_cascades" => Planted::OcclusionInCascades,
+            "occlusion_in_probe_captures" => Planted::OcclusionInProbeCaptures,
             "ids_ignore_mask" => Planted::IdsIgnoreMask,
             "cut_color_only" => Planted::CutsColorOnly,
             "soft_noise_from_frame" => Planted::SoftNoiseFromFrame,
@@ -540,6 +554,9 @@ impl Planted {
             "keeps_latest_error" => Planted::KeepsLatestError,
             "reopens_tight_loop" => Planted::ReopensTightLoop,
             "resize_leaves_rendering" => Planted::ResizeLeavesRendering,
+            "repeats_last_reading" => Planted::RepeatsLastReading,
+            "drops_unresolved_frames" => Planted::DropsUnresolvedFrames,
+            "ladder_acts_in_budget_run" => Planted::LadderActsInBudgetRun,
             _ => return None,
         })
     }
@@ -796,6 +813,7 @@ impl App {
             Some("spike2d") => marks2d::spike2d(self, out, call),
             Some("film2d") => film::film2d(self, out, call),
             Some("canonical") => live::canonical(self, out, call),
+            Some("frame_budget") => budget::call(self, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
             #[cfg(feature = "test-meter")]

@@ -4,11 +4,18 @@
 //! seek equals play bit for bit on one build and architecture. Gain is a-rate, evaluated per
 //! sample from the sample's own time, so a strip that starts mid-block starts at its exact sample.
 //! The same player feeds the live transport and an export, so the live mix is the export's.
+//!
+//! #1818: buses send to buses and a compressor reads a key bus, both edges of the order; each
+//! bus delays its inputs to the latest of their latencies, the master ends in a true-peak
+//! limiter after its gain and pan, and the player renders ahead by the master's latency, so a
+//! strip at t is heard at t.
 
 use std::sync::Arc;
 
 use deep_canvas::ops;
 
+use crate::delay::{Delay, DelaySpec, DelayState, Pitch, PitchSpec, PitchState};
+use crate::dynamics::{Compressor, CompressorSpec, CompressorState, Limiter, LimiterSpec, LimiterState};
 use crate::emitter::{self, Cone, Distance, Model};
 use crate::eq;
 use crate::reverb::{self, Reverb};
@@ -248,6 +255,11 @@ impl Strip {
 pub enum ProcKind {
     Eq(Vec<eq::Band>),
     Reverb(reverb::Spec),
+    /// The compressor and the index of its key bus, if it names one.
+    Compressor(CompressorSpec, Option<usize>),
+    Limiter(LimiterSpec),
+    Delay(DelaySpec),
+    Pitch(PitchSpec),
 }
 
 impl ProcKind {
@@ -255,6 +267,19 @@ impl ProcKind {
         match self {
             ProcKind::Eq(_) => "eq",
             ProcKind::Reverb(_) => "reverb",
+            ProcKind::Compressor(..) => "compressor",
+            ProcKind::Limiter(_) => "limiter",
+            ProcKind::Delay(_) => "delay",
+            ProcKind::Pitch(_) => "pitch",
+        }
+    }
+
+    /// Its latency at `rate`, in samples.
+    pub fn latency(&self, rate: i64) -> i64 {
+        match self {
+            ProcKind::Limiter(s) => s.latency(rate) as i64,
+            ProcKind::Pitch(s) => (Pitch::samples(s, rate) / 2) as i64,
+            _ => 0,
         }
     }
 }
@@ -269,6 +294,17 @@ pub struct Proc {
     pub budget: Option<usize>,
 }
 
+/// A bus's send (canvas primitives: Bus, `sends`).
+#[derive(Clone, Debug)]
+pub struct BusSend {
+    pub id: String,
+    /// Index of the bus it adds into.
+    pub to: usize,
+    pub gain_db: f64,
+    /// Tapped after the bus's processors and before its gain, pan and mute; else after them.
+    pub pre: bool,
+}
+
 pub struct Bus {
     pub id: String,
     pub gain_db: f64,
@@ -277,6 +313,17 @@ pub struct Bus {
     pub processors: Vec<Proc>,
     /// Index of the bus it feeds, or `None` for the master.
     pub out: Option<usize>,
+    pub sends: Vec<BusSend>,
+}
+
+impl Bus {
+    /// The key buses its compressors read.
+    fn keys(&self) -> impl Iterator<Item = usize> + '_ {
+        self.processors.iter().filter_map(|p| match p.kind {
+            ProcKind::Compressor(_, k) => k,
+            _ => None,
+        })
+    }
 }
 
 pub struct Mix {
@@ -285,6 +332,9 @@ pub struct Mix {
     pub buses: Vec<Bus>,
     order: Vec<usize>,
     master: usize,
+    /// Per bus, in samples: the latest latency among its inputs, and its output's.
+    arrival: Vec<i64>,
+    latency: Vec<i64>,
 }
 
 impl Mix {
@@ -302,7 +352,6 @@ impl Mix {
                 }
             }
         }
-        // Topological: a bus before the bus it feeds.
         let depth = |mut i: usize| {
             let mut d = 0;
             while let Some(o) = buses[i].out {
@@ -311,9 +360,48 @@ impl Mix {
             }
             d
         };
-        let mut order: Vec<usize> = (0..n).collect();
-        order.sort_by_key(|i| std::cmp::Reverse(depth(*i)));
-        Ok(Mix { rate, strips, buses, order, master })
+        // Topological over `out`, sends and keys: a bus before every bus it feeds, sends to or
+        // keys, the deepest ready bus first and then the lowest index, which without sends or
+        // keys is the order by depth alone.
+        let mut feeds: Vec<Vec<usize>> = vec![Vec::new(); n];
+        for (i, b) in buses.iter().enumerate() {
+            feeds[i].extend(b.out);
+            feeds[i].extend(b.sends.iter().map(|s| s.to));
+            for k in b.keys() {
+                feeds[k].push(i);
+            }
+        }
+        let mut waits = vec![0usize; n];
+        for f in &feeds {
+            for &j in f {
+                waits[j] += 1;
+            }
+        }
+        let mut order = Vec::with_capacity(n);
+        let mut done = vec![false; n];
+        while order.len() < n {
+            let next = (0..n)
+                .filter(|&i| !done[i] && waits[i] == 0)
+                .min_by_key(|&i| (std::cmp::Reverse(depth(i)), i));
+            let Some(i) = next else {
+                let stuck = (0..n).find(|&i| !done[i]).unwrap_or(0);
+                return Err(buses[stuck].id.clone());
+            };
+            done[i] = true;
+            order.push(i);
+            for &j in &feeds[i] {
+                waits[j] -= 1;
+            }
+        }
+        // Latencies, in order: a bus's inputs arrive at the latest of theirs.
+        let (mut arrival, mut latency) = (vec![0i64; n], vec![0i64; n]);
+        for &b in &order {
+            latency[b] = arrival[b] + buses[b].processors.iter().map(|p| p.kind.latency(rate)).sum::<i64>();
+            for &j in &feeds[b] {
+                arrival[j] = arrival[j].max(latency[b]);
+            }
+        }
+        Ok(Mix { rate, strips, buses, order, master, arrival, latency })
     }
 
     /// Flicks per sample.
@@ -342,18 +430,38 @@ pub struct Planted {
     pub inverse_only: bool,
     /// The cone takes its angle from source minus listener.
     pub cone_reversed: bool,
+    /// #1818: every limiter, the master's too, reads sample peaks only.
+    pub limiter_sample_peaks: bool,
+    /// #1818: the compressor's curve has a hard knee.
+    pub hard_knee: bool,
+    /// #1818: the mix compensates no latency.
+    pub no_latency_compensation: bool,
+    /// #1818: the pitch processor ignores its semitones.
+    pub pitch_ignores_semitones: bool,
+    /// #1818: every send taps post.
+    pub sends_tap_post: bool,
+    /// #1818: a delay empties its line when a seek restores it.
+    pub delay_empties_at_seek: bool,
 }
 
 /// A processor as it runs.
 enum Unit {
     Eq(eq::Eq),
     Reverb(Reverb),
+    Compressor(Compressor),
+    Limiter(Limiter),
+    Delay(Delay),
+    Pitch(Pitch),
 }
 
 #[derive(Clone)]
 enum UnitState {
     Eq(eq::State),
     Reverb(reverb::State),
+    Compressor(CompressorState),
+    Limiter(LimiterState),
+    Delay(DelayState),
+    Pitch(PitchState),
 }
 
 impl UnitState {
@@ -361,44 +469,115 @@ impl UnitState {
         match self {
             UnitState::Eq(s) => s.len() * 16,
             UnitState::Reverb(s) => s.bytes(),
+            UnitState::Compressor(_) => 16,
+            UnitState::Limiter(s) => s.bytes(),
+            UnitState::Delay(s) => s.bytes(),
+            UnitState::Pitch(s) => s.bytes(),
         }
     }
 }
 
 impl Unit {
-    fn new(kind: &ProcKind, rate: i64) -> Unit {
+    fn new(kind: &ProcKind, rate: i64, planted: &Planted) -> Unit {
         match kind {
             ProcKind::Eq(bands) => Unit::Eq(eq::Eq::new(bands, rate)),
             ProcKind::Reverb(spec) => Unit::Reverb(Reverb::new(*spec, rate)),
+            ProcKind::Compressor(spec, _) => Unit::Compressor(Compressor::new(*spec, rate, planted.hard_knee)),
+            ProcKind::Limiter(spec) => Unit::Limiter(Limiter::new(*spec, rate, planted.limiter_sample_peaks)),
+            ProcKind::Delay(spec) => Unit::Delay(Delay::new(*spec, rate)),
+            ProcKind::Pitch(spec) => Unit::Pitch(Pitch::new(*spec, rate, planted.pitch_ignores_semitones)),
         }
     }
-    fn process(&mut self, block: &mut [f32]) {
+    fn process(&mut self, block: &mut [f32], key: Option<&[f32]>) {
         match self {
             Unit::Eq(e) => e.process(block),
             Unit::Reverb(r) => r.process(block),
+            Unit::Compressor(c) => c.process(block, key),
+            Unit::Limiter(l) => l.process(block),
+            Unit::Delay(d) => d.process(block),
+            Unit::Pitch(p) => p.process(block),
         }
     }
     fn state(&self) -> UnitState {
         match self {
             Unit::Eq(e) => UnitState::Eq(e.state.clone()),
             Unit::Reverb(r) => UnitState::Reverb(r.state.clone()),
+            Unit::Compressor(c) => UnitState::Compressor(c.state),
+            Unit::Limiter(l) => UnitState::Limiter(l.state.clone()),
+            Unit::Delay(d) => UnitState::Delay(d.state.clone()),
+            Unit::Pitch(p) => UnitState::Pitch(p.state.clone()),
         }
     }
-    fn set(&mut self, s: &UnitState, without_tail: bool) {
+    fn set(&mut self, s: &UnitState, planted: &Planted) {
         match (self, s) {
             (Unit::Eq(e), UnitState::Eq(s)) => e.state.clone_from(s),
             (Unit::Reverb(r), UnitState::Reverb(s)) => {
-                r.state = if without_tail { s.without_tail() } else { s.clone() }
+                r.state = if planted.restores_without_tail { s.without_tail() } else { s.clone() }
             }
+            (Unit::Compressor(c), UnitState::Compressor(s)) => c.state = *s,
+            (Unit::Limiter(l), UnitState::Limiter(s)) => l.state.clone_from(s),
+            (Unit::Delay(d), UnitState::Delay(s)) => {
+                d.state = if planted.delay_empties_at_seek { s.emptied() } else { s.clone() }
+            }
+            (Unit::Pitch(p), UnitState::Pitch(s)) => p.state.clone_from(s),
             _ => {}
         }
     }
-    /// Its tail, in flicks, to −120 dBFS.
-    fn tail(&self) -> i64 {
-        match self {
-            Unit::Eq(_) => 0,
-            Unit::Reverb(r) => (r.tail_seconds() * FLICKS as f64).ceil() as i64,
+    /// Its tail, in flicks: to −120 dBFS for a reverb and a delay, its line for a limiter and a
+    /// pitch shifter, none for an eq or a compressor.
+    fn tail(&self, kind: &ProcKind, rate: i64) -> i64 {
+        let samples = |n: i64| {
+            let f = n as i128 * FLICKS as i128;
+            (f / rate as i128 + i128::from(f % rate as i128 != 0)) as i64
+        };
+        match (self, kind) {
+            (Unit::Reverb(r), _) => (r.tail_seconds() * FLICKS as f64).ceil() as i64,
+            (_, ProcKind::Limiter(s)) => samples(s.latency(rate) as i64),
+            (_, ProcKind::Delay(s)) => samples(Delay::tail(s, rate)),
+            (_, ProcKind::Pitch(s)) => samples(Pitch::samples(s, rate) as i64),
+            _ => 0,
         }
+    }
+}
+
+/// A delay line on an edge into a bus: interleaved stereo frames.
+#[derive(Clone)]
+struct Line {
+    buf: Vec<f32>,
+    at: usize,
+}
+
+impl Line {
+    fn new(frames: i64) -> Line {
+        Line { buf: vec![0.0; 2 * frames.max(0) as usize], at: 0 }
+    }
+
+    /// Delays `block` in place by the line's length.
+    fn pass(&mut self, block: &mut [f32]) {
+        let n = self.buf.len() / 2;
+        if n == 0 {
+            return;
+        }
+        for f in block.as_chunks_mut::<2>().0 {
+            let at = 2 * self.at;
+            std::mem::swap(&mut self.buf[at], &mut f[0]);
+            std::mem::swap(&mut self.buf[at + 1], &mut f[1]);
+            self.at = (self.at + 1) % n;
+        }
+    }
+}
+
+/// The mix's own state, kept on the processors' grid beside theirs: its edges' delay lines and
+/// the master's end limiter.
+#[derive(Clone)]
+struct Own {
+    lines: Vec<Line>,
+    end: LimiterState,
+}
+
+impl Own {
+    fn bytes(&self) -> usize {
+        self.lines.iter().map(|l| 4 * l.buf.len() + 8).sum::<usize>() + self.end.bytes()
     }
 }
 
@@ -427,11 +606,73 @@ pub struct Report {
     pub checkpoints: Vec<(i64, usize)>,
 }
 
+/// Where each edge's delay line is, and how far a bus's strips are delayed.
+struct Edges {
+    /// Per bus: its `out` edge's line, when it delays.
+    out: Vec<Option<usize>>,
+    /// Per bus: each send's line.
+    sends: Vec<Vec<usize>>,
+    /// Per processor: its key bus and that edge's line.
+    keys: Vec<Option<(usize, usize)>>,
+    /// Per bus: its strips' delay, in samples.
+    strips: Vec<i64>,
+    /// Each line's length, in frames.
+    lengths: Vec<i64>,
+    /// How far the player renders ahead: the master's latency and its end limiter's.
+    lead: i64,
+}
+
+impl Edges {
+    fn new(mix: &Mix, planted: &Planted) -> Edges {
+        let rate = mix.rate;
+        let comp = !planted.no_latency_compensation;
+        let delay = |d: i64| if comp { d.max(0) } else { 0 };
+        let mut lengths = Vec::new();
+        let mut line = |frames: i64| {
+            lengths.push(frames);
+            lengths.len() - 1
+        };
+        let mut out = Vec::new();
+        let mut sends = Vec::new();
+        for (b, bus) in mix.buses.iter().enumerate() {
+            out.push(bus.out.and_then(|o| {
+                let d = delay(mix.arrival[o] - mix.latency[b]);
+                (d > 0).then(|| line(d))
+            }));
+            sends.push(bus.sends.iter().map(|s| line(delay(mix.arrival[s.to] - mix.latency[b]))).collect());
+        }
+        let mut keys = Vec::new();
+        for &b in &mix.order {
+            let mut before = 0;
+            for p in &mix.buses[b].processors {
+                keys.push(match p.kind {
+                    ProcKind::Compressor(_, Some(k)) => Some((k, line(delay(mix.arrival[b] + before - mix.latency[k])))),
+                    _ => None,
+                });
+                before += p.kind.latency(rate);
+            }
+        }
+        let end = LimiterSpec::default().latency(rate) as i64;
+        Edges {
+            out,
+            sends,
+            keys,
+            strips: mix.arrival.iter().map(|a| delay(*a)).collect(),
+            lengths,
+            lead: if comp { mix.latency[mix.master] + end } else { end },
+        }
+    }
+}
+
 /// A mix played from a position: what both the live transport and an export render through.
 pub struct Player {
     pub mix: Arc<Mix>,
     units: Vec<(usize, String, i64, Unit)>,
     rings: Vec<Ring<UnitState>>,
+    edges: Edges,
+    lines: Vec<Line>,
+    end: Limiter,
+    own: Ring<Own>,
     /// The next block to render.
     block: i64,
     /// The master's rendered block, each processor's output over it, and how much has been read.
@@ -439,6 +680,9 @@ pub struct Player {
     outs: Vec<Vec<f32>>,
     read: usize,
     buses: Vec<Vec<f32>>,
+    /// A bus's block after its processors (a pre send's tap), and an edge's delayed copy.
+    pre: Vec<f32>,
+    edge: Vec<f32>,
     planted: Planted,
     taps: Vec<sha2::Sha256>,
 }
@@ -448,22 +692,33 @@ impl Player {
         let mut units = Vec::new();
         let mut rings = Vec::new();
         for (b, p) in mix.processors() {
-            units.push((b, p.id.clone(), p.every.max(1), Unit::new(&p.kind, mix.rate)));
+            units.push((b, p.id.clone(), p.every.max(1), Unit::new(&p.kind, mix.rate, &planted)));
             rings.push(Ring::new(p.budget.unwrap_or(RING_BUDGET), planted.ring_drops_oldest));
         }
         let n = 2 * BLOCK as usize;
-        Player {
+        let edges = Edges::new(&mix, &planted);
+        let lead = edges.lead;
+        let mut p = Player {
             outs: vec![vec![0.0; n]; units.len()],
             taps: units.iter().map(|_| sha2::Sha256::default()).collect(),
             buses: vec![vec![0.0; n]; mix.buses.len()],
+            lines: edges.lengths.iter().map(|l| Line::new(*l)).collect(),
+            end: Limiter::new(LimiterSpec::default(), mix.rate, planted.limiter_sample_peaks),
+            own: Ring::new(RING_BUDGET, planted.ring_drops_oldest),
+            edges,
             mix,
             units,
             rings,
             block: 0,
             buf: vec![0.0; n],
+            pre: vec![0.0; n],
+            edge: vec![0.0; n],
             read: n,
             planted,
-        }
+        };
+        p.seek_graph(lead);
+        p.take_taps();
+        p
     }
 
     /// Fills `out` (interleaved stereo) from the current position, adding each processor's output
@@ -501,36 +756,51 @@ impl Player {
     /// Moves to `sample`: restores the latest checkpoint at or before it that every processor's
     /// ring holds, renders forward from there and returns what each processor did.
     pub fn seek(&mut self, sample: i64) -> Vec<(String, Sought)> {
+        self.seek_graph(sample + self.edges.lead)
+    }
+
+    /// Moves the graph, which runs `lead` samples ahead of what is heard, to `sample`.
+    fn seek_graph(&mut self, sample: i64) -> Vec<(String, Sought)> {
         let target = sample.div_euclid(BLOCK);
         // Each ring's latest checkpoint at or before the seek; the earliest of those is where
         // the chain can restore together (the rings' grids nest, so the others hold it too).
+        let own = self.own.at_or_before(target * BLOCK).map(|(slot, _)| slot);
         let best: Option<Vec<i64>> = self
             .rings
             .iter()
             .zip(&self.units)
             .map(|(r, u)| r.at_or_before(target * BLOCK).map(|(slot, _)| slot * u.2))
+            .chain(std::iter::once(own))
             .collect();
         let second = best.and_then(|b| b.into_iter().min()).filter(|s| {
-            self.rings
-                .iter()
-                .zip(&self.units)
-                .all(|(r, u)| s % u.2 == 0 && r.get(s / u.2).is_some())
+            self.own.get(*s).is_some()
+                && self
+                    .rings
+                    .iter()
+                    .zip(&self.units)
+                    .all(|(r, u)| s % u.2 == 0 && r.get(s / u.2).is_some())
         });
         let rate = self.mix.rate;
         let from_block = match second {
             Some(s) => {
                 for ((_, _, every, unit), ring) in self.units.iter_mut().zip(&self.rings) {
                     if let Some(st) = ring.get(s / *every) {
-                        unit.set(st, self.planted.restores_without_tail);
+                        unit.set(st, &self.planted);
                     }
+                }
+                if let Some(o) = self.own.get(s) {
+                    self.lines.clone_from(&o.lines);
+                    self.end.state.clone_from(&o.end);
                 }
                 (s * rate).div_euclid(BLOCK) + i64::from((s * rate).rem_euclid(BLOCK) != 0)
             }
             None => {
                 let mix = self.mix.clone();
                 for (u, (_, p)) in self.units.iter_mut().zip(mix.processors()) {
-                    u.3 = Unit::new(&p.kind, rate);
+                    u.3 = Unit::new(&p.kind, rate, &self.planted);
                 }
+                self.lines = self.edges.lengths.iter().map(|l| Line::new(*l)).collect();
+                self.end = Limiter::new(LimiterSpec::default(), rate, self.planted.limiter_sample_peaks);
                 0
             }
         };
@@ -549,17 +819,16 @@ impl Player {
 
     /// Each processor's report.
     pub fn reports(&self) -> Vec<Report> {
+        let rate = self.mix.rate;
         self.units
             .iter()
             .zip(&self.rings)
-            .map(|((_, id, every, unit), ring)| Report {
+            .zip(self.mix.processors())
+            .map(|(((_, id, every, unit), ring), (_, p))| Report {
                 id: id.clone(),
-                kind: match unit {
-                    Unit::Eq(_) => "eq",
-                    Unit::Reverb(_) => "reverb",
-                },
-                tail: unit.tail(),
-                latency: 0,
+                kind: p.kind.name(),
+                tail: unit.tail(&p.kind, rate),
+                latency: p.kind.latency(rate),
                 budget: ring.budget(),
                 bytes: ring.bytes(),
                 peak: ring.peak(),
@@ -591,14 +860,20 @@ impl Player {
                     ring.put(s / every, k * BLOCK, st, bytes);
                 }
             }
+            if self.own.wants(s) {
+                let st = Own { lines: self.lines.clone(), end: self.end.state.clone() };
+                let bytes = st.bytes();
+                self.own.put(s, k * BLOCK, st, bytes);
+            }
         }
         let mix = self.mix.clone();
         let step = mix.step();
         for b in &mut self.buses {
             b.iter_mut().for_each(|x| *x = 0.0);
         }
-        let t0 = k * BLOCK * step;
         for s in &mix.strips {
+            // A bus's strips arrive as late as its latest input.
+            let t0 = (k * BLOCK - self.edges.strips[s.bus]) * step;
             if s.start + s.span <= t0 || s.start >= t0 + BLOCK * step {
                 continue;
             }
@@ -639,26 +914,61 @@ impl Player {
         for &b in &mix.order {
             let bus = &mix.buses[b];
             let mut block = std::mem::take(&mut self.buses[b]);
-            for ((ub, _, _, unit), o) in self.units.iter_mut().zip(self.outs.iter_mut()) {
-                if *ub == b {
-                    unit.process(&mut block);
-                    o.copy_from_slice(&block);
+            for (u, ((ub, _, _, unit), o)) in self.units.iter_mut().zip(self.outs.iter_mut()).enumerate() {
+                if *ub != b {
+                    continue;
                 }
+                match self.edges.keys[u] {
+                    Some((kb, l)) => {
+                        self.edge.copy_from_slice(&self.buses[kb]);
+                        self.lines[l].pass(&mut self.edge);
+                        unit.process(&mut block, Some(&self.edge));
+                    }
+                    None => unit.process(&mut block, None),
+                }
+                o.copy_from_slice(&block);
+            }
+            if bus.sends.iter().any(|s| s.pre) {
+                self.pre.copy_from_slice(&block);
             }
             let g = if bus.mute { 0.0 } else { amp(bus.gain_db) };
-            for f in block.chunks_exact_mut(2) {
+            for f in block.as_chunks_mut::<2>().0 {
                 let (l, r) = balance(f[0], f[1], bus.pan);
                 f[0] = (l as f64 * g) as f32;
                 f[1] = (r as f64 * g) as f32;
             }
             if let Some(o) = bus.out {
-                for (d, x) in self.buses[o].iter_mut().zip(&block) {
+                match self.edges.out[b] {
+                    Some(l) => {
+                        self.edge.copy_from_slice(&block);
+                        self.lines[l].pass(&mut self.edge);
+                        for (d, x) in self.buses[o].iter_mut().zip(&self.edge) {
+                            *d += x;
+                        }
+                    }
+                    None => {
+                        for (d, x) in self.buses[o].iter_mut().zip(&block) {
+                            *d += x;
+                        }
+                    }
+                }
+            }
+            for (send, &l) in bus.sends.iter().zip(&self.edges.sends[b]) {
+                let tap = if send.pre && !self.planted.sends_tap_post { &self.pre } else { &block };
+                let g = amp(send.gain_db);
+                for (e, x) in self.edge.iter_mut().zip(tap) {
+                    *e = (f64::from(*x) * g) as f32;
+                }
+                self.lines[l].pass(&mut self.edge);
+                for (d, x) in self.buses[send.to].iter_mut().zip(&self.edge) {
                     *d += x;
                 }
             }
             self.buses[b] = block;
         }
+        // The master ends in its true-peak limiter, after its gain and pan.
         self.buf.copy_from_slice(&self.buses[mix.master]);
+        self.end.process(&mut self.buf);
         self.read = 0;
         self.block = k + 1;
     }
@@ -671,10 +981,17 @@ impl Player {
         let model = if self.planted.inverse_only { Model::Inverse } else { e.distance.model };
         let g = emitter::distance_gain(&e.distance, dist, model)
             * emitter::cone_gain(&e.cone, p.forward, p.source, p.listener, self.planted.cone_reversed);
-        let pan = if dist == 0.0 {
+        // W3C PannerNode's equal-power azimuth: in the listener's horizontal plane, a source behind
+        // pans as its mirror in front, and the pan is azimuth ÷ 90°.
+        let ahead = [p.right[2], 0.0, -p.right[0]];
+        let x = d[0] * p.right[0] + d[2] * p.right[2];
+        let z = d[0] * ahead[0] + d[2] * ahead[2];
+        let pan = if x == 0.0 && z == 0.0 {
             0.0
         } else {
-            (d[0] * p.right[0] + d[1] * p.right[1] + d[2] * p.right[2]) / dist
+            let az = ops::deg(ops::atan2(x, z));
+            let az = if az > 90.0 { 180.0 - az } else if az < -90.0 { -180.0 - az } else { az };
+            az / 90.0
         };
         (g, pan)
     }

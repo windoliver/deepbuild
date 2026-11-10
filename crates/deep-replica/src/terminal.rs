@@ -83,7 +83,7 @@ pub fn open(
             preedit,
             focus_handle: cx.focus_handle(),
         });
-        deep_app::views::place_extension(view.clone().into());
+        deep_app::open::place_extension(view.clone().into(), cx);
         tab = Some(view);
     });
     (handle, tab)

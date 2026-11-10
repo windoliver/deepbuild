@@ -135,9 +135,9 @@ impl Reverb {
     pub fn process(&mut self, block: &mut [f32]) {
         let (wet, dry) = (self.spec.mix as f32, 1.0 - self.spec.mix as f32);
         let damp = self.damp;
-        for frame in block.chunks_exact_mut(2) {
+        for frame in block.as_chunks_mut::<2>().0 {
             let input = (frame[0] + frame[1]) * INPUT;
-            for ch in 0..2 {
+            for (ch, sample) in frame.iter_mut().enumerate() {
                 let mut out = 0.0f32;
                 for (c, line) in self.state.combs[ch * 8..ch * 8 + 8].iter_mut().enumerate() {
                     let y = line.buf[line.at];
@@ -153,7 +153,7 @@ impl Reverb {
                     line.at = (line.at + 1) % line.buf.len();
                     out = y;
                 }
-                frame[ch] = frame[ch] * dry + out * wet;
+                *sample = *sample * dry + out * wet;
             }
         }
     }

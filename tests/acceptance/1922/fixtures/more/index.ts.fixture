@@ -1,0 +1,25 @@
+// Another test plug-in that adds a tool to test.upper through deep.registerJobTool (#1922 AC1, AC3, AC5-AC7; README,
+// The surface under test). probe.json names the tool and its version, and a cost per run in USD for the paid tool;
+// the tool is the program in ./tool, which the hub runs. The planted tool (AC3) is this plug-in with ./tool/case.mjs
+// replaced by one that lowercases the last letter; the plug-in's code is the same.
+import { readFileSync } from 'node:fs';
+
+interface Probe { tool: string; version: string; cost?: { usd: number } }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+
+const PARAMS = {
+  type: 'object',
+  properties: { case: { enum: ['upper', 'lower'] }, trim: { type: 'boolean', default: false } },
+  required: ['case'],
+  additionalProperties: false,
+};
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerJobTool('test.upper', {
+    tool: `${probe.tool}@${probe.version}`,
+    params: PARAMS,
+    run: { dir: 'tool', entry: 'upper.mjs' },
+    qualification: { same_bytes: true },
+    ...(probe.cost ? { cost: probe.cost } : {}),
+  });
+}

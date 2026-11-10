@@ -17,7 +17,8 @@ import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { isPrCreate, isPrEdit } from './forge.js';
-import { registry } from './hookmap.js';
+import { adapterOf, registry } from './hookmap.js';
+import type { Part } from './context-fit.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
@@ -59,8 +60,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['staged.undo', ['app', 'cli']],
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
-  ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -71,12 +72,12 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A person added to a project, with a credential of their own (#1337).
   ['person.add', ['cli']],
   // An online model library turned on or off, and your standing rule for it (#1731).
-  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']],
+  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']], ['job.rule', ['cli']],
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
-  ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
+  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']],
   // Setup reads your history into the wiki (#356).
   ['wiki.build', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
@@ -155,21 +156,32 @@ const warnings = (ruled: string): string[] =>
  * labelled with its extension. `ruled` is the guard entries' reply: an agent with no context channel, or a reply
  * with no context, gets it as it is.
  */
-function agentReply(agent: string, reply: ExtensionReply, ruled: string): string {
+function agentReply(agent: string, reply: ExtensionReply, ruled: string, fitted?: string): string {
   if (reply.denies.length) return line({ exit: 2, stdout: '', stderr: reply.denies.map((d) => `DeepBuild blocked this: [${d.extension}] ${d.reason}`).join('\n') + '\n' });
   if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return ruled;
-  const additionalContext = [...warnings(ruled), ...reply.context.map((b) => `[${b.extension}] ${b.text}`)].join('\n');
+  const additionalContext = fitted ?? contextParts(reply, ruled).map((p) => p.text).join('\n');
   return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
 }
+/** A warn entry's words, then each extension's block, labelled: the parts of a call's context the cap fits (#1296). */
+const contextParts = (reply: ExtensionReply, ruled: string): Part[] =>
+  [...warnings(ruled).map((text) => ({ name: 'guard warnings', text, keep: true })), ...reply.context.map((b) => ({ name: `${b.extension}'s context`, text: `[${b.extension}] ${b.text}` }))];
 /**
  * The core's reply as the agent's hook output: a block with its reason (a stop sent back, a prompt answered from the
  * record), or context the agent adds at a session's start or a prompt, never a decision; beside either, the one
  * line the chat shows (`systemMessage`, #83). Nothing to say is the hook's empty reply.
  */
-function coreReplyLine(event: string, reply: { context?: string; block?: string; message?: string }, watchPaths?: string[]): string {
+function coreReplyLine(agent: string, event: string, reply: { context?: string; block?: string; message?: string }, watchPaths?: string[]): string {
   const out: Record<string, unknown> = {};
+  // Context goes as the agent's adapter gives it the model (#1296); one that gives none at this event sends nothing.
+  const adapter = adapterOf(agent);
+  const given = reply.context && !reply.block && adapter?.contextReply ? adapter.contextReply(event, reply.context) : undefined;
   if (reply.block) Object.assign(out, { decision: 'block', reason: reply.block });
-  else if (reply.context) out.hookSpecificOutput = { hookEventName: event, additionalContext: reply.context };
+  else if (given) {
+    const json = ((): unknown => { try { return JSON.parse(given.stdout); } catch { return undefined; } })();
+    if (!isObj(json)) return line(given);
+    Object.assign(out, json);
+  }
+  else if (reply.context && !adapter?.contextReply) out.hookSpecificOutput = { hookEventName: event, additionalContext: reply.context };
   // A session's start names the ticker file whose change fires its FileChanged hook: the route a line takes into the
   // terminal while a call still runs (#120).
   if (watchPaths?.length && !reply.block) out.hookSpecificOutput = { hookEventName: event, ...(isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : {}), watchPaths };
@@ -199,7 +211,7 @@ const versionRefusal = (value: Obj): Refusal =>
 
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'replayed' | 'unsubscribe' | 'waiter-gone' | 'notifier-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'replayed' | 'unsubscribe' | 'waiter-gone' | 'notifier-gone' | 'hook-gone' | 'overrun' | 'later' | 'line' | 'denied' | 'call-gone' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
@@ -259,6 +271,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
       else if (message.op === 'line') void core.line(message.session, message.agent, message.text).catch(() => undefined);
       else if (message.op === 'denied') core.denied(message.session, message.call, { guard: message.guard, label: message.label });
+      else if (message.op === 'call-gone') core.callGone(message.call);
       else core.unsubscribe(message.sub);
     },
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
@@ -342,6 +355,8 @@ class Conn {
   pending: Buffer[] = [];
   size = 0;
   readonly subs = new Set<string>();
+  /** Its deep mcp calls in flight, each `<connection>:<call ID>`: a cancel or the connection's close tells the core their caller is gone (#1923). */
+  readonly calls = new Set<string>();
   constructor(readonly id: number, readonly sock: net.Socket) {}
   write(o: object): void {
     if (!this.done && this.sock.writable) this.sock.write(line(o));
@@ -601,6 +616,7 @@ class Hub {
       this.conns.delete(conn);
       for (const sub of conn.subs) this.unsubscribe(conn, sub);
       if (conn.waiter) this.core.post({ op: 'waiter-gone', key: conn.id });
+      for (const call of conn.calls) this.core.post({ op: 'call-gone', call });
       if (conn === this.notifier) {
         this.notifier = undefined;
         this.core.post({ op: 'notifier-gone' });
@@ -1051,7 +1067,7 @@ class Hub {
     // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
     const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
     const watch = meta.event === 'SessionStart' && !meta.watchOnly && meta.session && this.watches(meta.agent) ? [this.ticker(meta.session)] : undefined;
-    conn.sock.end(shown || watch ? coreReplyLine(meta.event, shown ?? {}, watch) : EMPTY_REPLY);
+    conn.sock.end(shown || watch ? coreReplyLine(meta.agent, meta.event, shown ?? {}, watch) : EMPTY_REPLY);
   }
 
   /**
@@ -1064,7 +1080,9 @@ class Hub {
     const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
-    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled) : ruled);
+    // Past the agent's cap, the core keeps what doesn't fit and names where to continue (#1296).
+    const fitted = reply?.context.length && !reply.denies.length ? ((await this.core.request({ op: 'context-fit', meta, parts: contextParts(reply, ruled), join: '\n' }).catch(() => undefined)) as string | undefined) : undefined;
+    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled, fitted) : ruled);
   }
 
   /**
@@ -1323,6 +1341,11 @@ class Hub {
           await this.syncNetwork();
           return result;
         }));
+      case 'mcp.cancel': {
+        const call = `${conn.id}:${String(params.call)}`;
+        if (conn.calls.delete(call)) this.core.post({ op: 'call-gone', call });
+        return conn.write({ id, result: {} });
+      }
       case 'session.wait':
         conn.waiter = true;
         return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id, session: conn.session } }));
@@ -1337,7 +1360,12 @@ class Hub {
         if (READS.has(method)) {
           return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then((result) => ({ start: this.start, ...(result as Obj) })));
         }
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}) } }));
+        {
+          const call = method === 'mcp.call' ? `${conn.id}:${String(id)}` : undefined;
+          if (call) conn.calls.add(call);
+          const work = this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}), ...(call ? { call } : {}) } });
+          return void reply(call ? work.finally(() => conn.calls.delete(call)) : work);
+        }
     }
   }
 

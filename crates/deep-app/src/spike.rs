@@ -141,11 +141,11 @@ impl Render for Spike {
                             SessionState::Done => "✓",
                         };
                         crate::views::observed(("session", index))
-                            .h(px(28.))
-                            .px_2()
+                            .h(px(28.)) // size-literal-exception: the #337 spike window, in no shipped build (#1172); review 2027-04-30
+                            .px_2() // size-literal-exception: the #337 spike window, in no shipped build (#1172); review 2027-04-30
                             .flex()
                             .items_center()
-                            .gap_2()
+                            .gap_2() // size-literal-exception: the #337 spike window, in no shipped build (#1172); review 2027-04-30
                             .when(selected == Some(index), |row| row.bg(chrome.selected))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.selected = Some(index);
@@ -183,7 +183,7 @@ impl Render for Spike {
             .flex_col()
             .bg(chrome.ground)
             .text_color(chrome.ink_primary)
-            .text_sm()
+            .text_sm() // size-literal-exception: the #337 spike window, in no shipped build (#1172); review 2027-04-30
             .child(views::title_bar(window))
             .child(
                 div()
@@ -193,15 +193,15 @@ impl Render for Spike {
                     .flex()
                     .child(
                         div()
-                            .w(px(260.))
+                            .w(px(260.)) // size-literal-exception: the #337 spike window, in no shipped build (#1172); review 2027-04-30
                             .h_full()
                             .flex()
                             .flex_col()
-                            .border_r_1()
+                            .border_r_1() // size-literal-exception: the #337 spike window, in no shipped build (#1172); review 2027-04-30
                             .border_color(chrome.divider)
                             .child(
                                 div()
-                                    .p_2()
+                                    .p_2() // size-literal-exception: the #337 spike window, in no shipped build (#1172); review 2027-04-30
                                     .flex()
                                     .justify_between()
                                     .child(
@@ -212,8 +212,8 @@ impl Render for Spike {
                                     )
                                     .child(
                                         crate::views::observed("open-report")
-                                            .px_2()
-                                            .rounded_md()
+                                            .px_2() // size-literal-exception: the #337 spike window, in no shipped build (#1172); review 2027-04-30
+                                            .rounded_md() // size-literal-exception: the #337 spike window, in no shipped build (#1172); review 2027-04-30
                                             .bg(chrome.raised)
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 match write_report(

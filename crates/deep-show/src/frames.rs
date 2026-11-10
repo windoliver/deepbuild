@@ -381,18 +381,38 @@ impl<'a> Hub<'a> {
         drawing: &Painted,
         size: Option<[u16; 2]>,
     ) -> Result<(String, Drawn, [u16; 2]), Unfit> {
+        let (rgba, drawn, size) = self.canonical_rgba(drawing, size, true)?;
+        Ok((self.put_png(rgba, size)?, drawn, size))
+    }
+
+    /// #501: the raster [`Hub::canonical_png`] stores, straight RGBA rows top-down: over the
+    /// look's ground when `opaque`, over nothing otherwise (an export with alpha). A still and an
+    /// export frame are this one function, so each equals the live frame.
+    pub(crate) fn canonical_rgba(
+        &mut self,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+        opaque: bool,
+    ) -> Result<(Vec<u8>, Drawn, [u16; 2]), Unfit> {
         let drawn = self
             .renderer
             .prepare_drawing(drawing, &self.scenario.evidence)?;
         let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
-        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-        let rgba = self.renderer.raster(&drawn, size, Some(ground));
-        let png = snapshot::png(rgba, size);
-        let sha = evidence::put(&self.scenario.evidence, &png).map_err(|_| Unfit {
+        let rgba = self.renderer.raster(&drawn, size, self.ground(opaque));
+        Ok((rgba, drawn, size))
+    }
+
+    /// The look's ground, when the frame is opaque.
+    fn ground(&self, opaque: bool) -> Option<[u8; 3]> {
+        opaque.then(|| self.look.light.get("ground").copied().unwrap_or([255; 3]))
+    }
+
+    /// A PNG of `rgba` in the evidence store, its SHA-256; a store that takes no write is unfit.
+    fn put_png(&self, rgba: Vec<u8>, size: [u16; 2]) -> Result<String, Unfit> {
+        evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
             code: "evidence_unwritable",
             path: "snapshots".into(),
-        })?;
-        Ok((sha, drawn, size))
+        })
     }
 
     /// #493: [`Hub::canonical_png`] of a 2D film whose shots write its camera: each side the
@@ -406,17 +426,31 @@ impl<'a> Hub<'a> {
         sides: &crate::film::Sides,
         doc: &Value,
     ) -> Result<(String, Drawn, [u16; 2]), Unfit> {
+        let (rgba, status, size) = self.film_rgba(drawing, size, sides, doc, true)?;
+        Ok((self.put_png(rgba, size)?, status, size))
+    }
+
+    /// #501: the raster [`Hub::film_png`] stores, as [`Hub::canonical_rgba`] is to
+    /// [`Hub::canonical_png`].
+    pub(crate) fn film_rgba(
+        &mut self,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+        sides: &crate::film::Sides,
+        doc: &Value,
+        opaque: bool,
+    ) -> Result<(Vec<u8>, Drawn, [u16; 2]), Unfit> {
         let drawn = self
             .renderer
             .prepare_drawing(drawing, &self.scenario.evidence)?;
         let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
-        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
+        let ground = self.ground(opaque);
         let ink = self.look.light.get("ink").copied().unwrap_or([0; 3]);
         let frame = drawn.frame.size;
         let mut pictures = Vec::with_capacity(sides.sides.len());
         for side in &sides.sides {
             let part = drawn.part(Some(crate::film::view(&side.pose, frame)), true, false);
-            let mut rgba = self.renderer.raster(&part, size, Some(ground));
+            let mut rgba = self.renderer.raster(&part, size, ground);
             if let Some(map) = side.look.as_deref().and_then(|l| self.tone_of(doc, l)) {
                 crate::film::finish(&mut rgba, map);
             }
@@ -430,11 +464,7 @@ impl<'a> Hub<'a> {
         let status = drawn.part(Some(crate::film::view(&top.pose, frame)), false, true);
         let over = self.renderer.raster(&status, size, None);
         crate::film::over(&mut rgba, &over);
-        let sha = evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
-            code: "evidence_unwritable",
-            path: "snapshots".into(),
-        })?;
-        Ok((sha, status, size))
+        Ok((rgba, status, size))
     }
 
     /// A shot's look's tone map: the look@1 the document names by asset, read from the evidence
@@ -456,20 +486,29 @@ impl<'a> Hub<'a> {
         t: i64,
         drawing: &Painted,
     ) -> Result<String, Unfit> {
+        let (rgba, size) = self.rgba3d(doc, t, drawing, None)?;
+        self.put_png(rgba, size)
+    }
+
+    /// #501: the raster [`Hub::canonical_png3d`] stores, at `size` when given.
+    pub(crate) fn rgba3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+    ) -> Result<(Vec<u8>, [u16; 2]), Unfit> {
         let drawn = self
             .renderer
             .prepare_drawing(drawing, &self.scenario.evidence)?;
-        let size = snapshot::px(drawn.frame.size);
+        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
         let (mut rgba, size, _) = self.draw3d(doc, t, Some(size)).map_err(|()| Unfit {
             code: "gpu_unavailable",
             path: "snapshots".into(),
         })?;
         let over = self.renderer.raster(&drawn, size, None);
         snapshot::over(&mut rgba, &over);
-        evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
-            code: "evidence_unwritable",
-            path: "snapshots".into(),
-        })
+        Ok((rgba, size))
     }
 
     /// `count` frames of a session, `step` apart from `from`: how many nodes ran in each, the
@@ -1164,6 +1203,51 @@ fn debug_digest(values: &[Val]) -> Value {
     json!(deep_canvas::schedule::sha256_hex(texts.concat().as_bytes()))
 }
 
+/// How many solves of each arrangement the session's last frame ran (#1732): the document's
+/// check-phase solve when the frame took a new revision, and a frame-phase solve that wrote a
+/// result.
+fn solves(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &deep_canvas::schedule::Session,
+    revised: bool,
+) -> Value {
+    let mut out = Map::new();
+    let items = session
+        .document()
+        .and_then(|d| d.get("items"))
+        .and_then(Value::as_object);
+    for (id, _) in items
+        .into_iter()
+        .flatten()
+        .filter(|(_, i)| deep_canvas_motion::arrange::is_arrangement(i))
+    {
+        out.insert(id.clone(), json!(0));
+    }
+    for n in session.nodes(sched) {
+        if n.run != deep_canvas::schedule::Run::Ran {
+            continue;
+        }
+        // The check-phase solve covers every arrangement of the document at once.
+        let ids: Vec<String> = match (n.operator.as_str(), &n.item) {
+            ("motion.arrange", None) if revised => out.keys().cloned().collect(),
+            ("motion.arrangelive", Some(id))
+                if n.values
+                    .iter()
+                    .any(|v| !matches!(v, deep_canvas::schedule::Val::None)) =>
+            {
+                vec![id.clone()]
+            }
+            _ => Vec::new(),
+        };
+        for id in ids {
+            if let Some(c) = out.get_mut(&id) {
+                *c = json!(c.as_u64().unwrap_or(0) + 1);
+            }
+        }
+    }
+    Value::Object(out)
+}
+
 #[cfg(test)]
 mod story_tests {
     use deep_canvas::registry::{BuildSet, Registry};
@@ -1283,49 +1367,4 @@ mod story_tests {
             assert_eq!(at_dot, Some(dot), "an item on #head at {t}");
         }
     }
-}
-
-/// How many solves of each arrangement the session's last frame ran (#1732): the document's
-/// check-phase solve when the frame took a new revision, and a frame-phase solve that wrote a
-/// result.
-fn solves(
-    sched: &deep_canvas::schedule::Scheduler<'_>,
-    session: &deep_canvas::schedule::Session,
-    revised: bool,
-) -> Value {
-    let mut out = Map::new();
-    let items = session
-        .document()
-        .and_then(|d| d.get("items"))
-        .and_then(Value::as_object);
-    for (id, _) in items
-        .into_iter()
-        .flatten()
-        .filter(|(_, i)| deep_canvas_motion::arrange::is_arrangement(i))
-    {
-        out.insert(id.clone(), json!(0));
-    }
-    for n in session.nodes(sched) {
-        if n.run != deep_canvas::schedule::Run::Ran {
-            continue;
-        }
-        // The check-phase solve covers every arrangement of the document at once.
-        let ids: Vec<String> = match (n.operator.as_str(), &n.item) {
-            ("motion.arrange", None) if revised => out.keys().cloned().collect(),
-            ("motion.arrangelive", Some(id))
-                if n.values
-                    .iter()
-                    .any(|v| !matches!(v, deep_canvas::schedule::Val::None)) =>
-            {
-                vec![id.clone()]
-            }
-            _ => Vec::new(),
-        };
-        for id in ids {
-            if let Some(c) = out.get_mut(&id) {
-                *c = json!(c.as_u64().unwrap_or(0) + 1);
-            }
-        }
-    }
-    Value::Object(out)
 }

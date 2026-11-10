@@ -31,6 +31,10 @@ pub struct Export {
     pub doc: String,
     pub frame_rate: Option<(u32, u32)>,
     pub sample_rate: Option<u32>,
+    /// #501: frames whose audio span (and, with `timecode`, label) the plan answers.
+    pub frames: Option<Vec<i64>>,
+    /// #501: the timecode's start label and whether it drops frame numbers.
+    pub timecode: Option<(String, bool)>,
 }
 
 /// Which path `determinism`'s play side runs: the live transport's warm path, or a cold
@@ -86,19 +90,29 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
             doc: doc()?,
             text: c.get("text")?.as_str()?.to_string(),
         }),
+        "export" if c.contains_key("out") => crate::export::parse(c).map(Call::ExportRun),
         "export" => {
             let frame_rate = optional(c.get("frame_rate"), pair)?;
             let sample_rate = optional(c.get("audio"), |a| whole(a.get("sample_rate")?))?;
+            let frames = optional(c.get("frames"), |f| f.as_array()?.iter().map(Value::as_i64).collect())?;
+            let timecode = optional(c.get("timecode"), |t| {
+                let start = optional(t.get("start"), |s| Some(s.as_str()?.to_string()))?;
+                let drop = optional(t.get("drop_frame"), Value::as_bool)?;
+                Some((start.unwrap_or_else(|| "00:00:00:00".into()), drop.unwrap_or(false)))
+            })?;
             Some(Call::Export(Export {
                 doc: doc()?,
                 frame_rate,
                 sample_rate,
+                frames,
+                timecode,
             }))
         }
         "play" => Some(Call::Play {
             doc: doc()?,
             display_hz: whole(c.get("display_hz")?)?,
             to: c.get("to")?.as_i64()?,
+            presented: optional(c.get("presented"), Value::as_bool)?.unwrap_or(false),
         }),
         "determinism" => {
             let play = match c.get("play") {
@@ -163,7 +177,7 @@ fn display_frame(hz: u32) -> Result<i64, Value> {
 
 /// The time grammar's context for a document: its transport's frame rate and its markers as
 /// motion resolves them (Marker: `t`, resolved at check).
-fn context_of(doc: &Value) -> TimeContext {
+pub(crate) fn context_of(doc: &Value) -> TimeContext {
     let mut ctx = TimeContext {
         frame_rate: doc
             .get("transport")
@@ -180,7 +194,7 @@ fn context_of(doc: &Value) -> TimeContext {
 }
 
 /// The transport's sample rate, or the default 48 kHz.
-fn sample_rate_of(doc: &Value) -> u32 {
+pub(crate) fn sample_rate_of(doc: &Value) -> u32 {
     doc.get("transport")
         .and_then(|t| t.get("sample_rate"))
         .and_then(Value::as_u64)
@@ -374,20 +388,50 @@ impl Hub<'_> {
             Ok(sample) => sample,
             Err(why) => return bad_rate(Rate::Sample { hz }, &why),
         };
-        json!({
+        let mut reply = json!({
             "outcome": "planned",
             "frame_rate": [p, q],
             "frame": frame,
             "sample_rate": hz,
             "sample": sample,
-        })
+        });
+        // #501: each asked frame's audio samples [first, end) and its timecode label.
+        if let Some(ks) = &e.frames {
+            let tc = match &e.timecode {
+                None => None,
+                Some((start, drop)) => {
+                    let tc = match deep_canvas::timecode::of_rate(p, q, *drop) {
+                        Ok(tc) => tc,
+                        Err(why) => return json!({"outcome": "refused", "code": "drop_frame_rate",
+                            "frame_rate": format!("{p}/{q}"), "why": format!("drop_frame: {why}")}),
+                    };
+                    match tc.number(start) {
+                        Ok(n) => Some((tc, n)),
+                        Err(why) => return json!({"outcome": "refused", "code": "bad_timecode", "why": why}),
+                    }
+                }
+            };
+            let rows: Vec<Value> = ks
+                .iter()
+                .map(|&k| {
+                    let mut row = json!({"frame": k, "samples": [self.span_start(k, frame, hz), self.span_start(k + 1, frame, hz)]});
+                    if let (Some((tc, n)), Ok(k)) = (&tc, u64::try_from(k)) {
+                        row["timecode"] = json!(self.label(tc, n + k));
+                    }
+                    row
+                })
+                .collect();
+            reply["frames"] = json!(rows);
+        }
+        reply
     }
 
     /// `play`: the document's session on a virtual display at `display_hz` from the start to
     /// `to`. The display runs a frame at every multiple of its frame; the transport draws the
     /// first, then one only when the last drawn frame's `valid_until` has come or a stepping
-    /// operator steps, a change (Frame clock and scheduler: never unasked).
-    pub fn play(&mut self, doc: &str, display_hz: u32, to: i64) -> Value {
+    /// operator steps, a change (Frame clock and scheduler: never unasked). With `presented`
+    /// (#501), each vsync's display time, the time it evaluates and the hash of the frame shown.
+    pub fn play(&mut self, doc: &str, display_hz: u32, to: i64, presented: bool) -> Value {
         let document = match self.current_doc(doc) {
             Ok(doc) => doc,
             Err(reply) => return reply,
@@ -439,7 +483,18 @@ impl Hub<'_> {
             }
             k += 1;
         }
-        json!({"outcome": "played", "frames": frames, "drawn": drawn, "last_drawn": last})
+        let mut reply =
+            json!({"outcome": "played", "frames": frames, "drawn": drawn, "last_drawn": last});
+        if presented {
+            match self.presented_frames(&document, display, to) {
+                Ok(list) => reply["presented"] = list,
+                Err(mut e) => {
+                    e["outcome"] = json!("refused");
+                    return e;
+                }
+            }
+        }
+        reply
     }
 
     /// `determinism`: for each time, the frame reached by playing to it against the frame

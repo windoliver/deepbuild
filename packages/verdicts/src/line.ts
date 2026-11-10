@@ -34,6 +34,8 @@ export interface LineState {
   tests?: number;
   /** The verdict's own smallest case and where it points: the cause when no requirement holds it, as a review's finding (#1537). */
   cause?: { smallest: string | null; points_to: string | null };
+  /** The address of the claim's page, which `deep open` takes (#1460); no receipt part without one. */
+  receipt?: string;
 }
 /** Who takes the next step: the agent (a send-back), you (a PASS or something only you can clear) or DeepBuild (checks still to run). */
 type Owner = 'agent' | 'you' | 'DeepBuild';
@@ -78,7 +80,7 @@ function parts(s: LineState): Parts {
     points = failing?.points_to ?? '';
   }
   const tests = s.tests ? `${s.tests} test${s.tests === 1 ? '' : 's'}` : '';
-  return { unverified: unverified.length ? `not verified: ${unverified.join(', ')}` : '', outcome, cause, points, tests, running, owner: `next: ${ownerOf(s.outcome)}`, receipt: 'receipt' };
+  return { unverified: unverified.length ? `not verified: ${unverified.join(', ')}` : '', outcome, cause, points, tests, running, owner: `next: ${ownerOf(s.outcome)}`, receipt: s.receipt ?? '' };
 }
 
 /**
@@ -89,12 +91,14 @@ function parts(s: LineState): Parts {
 export function verdictLine(s: LineState, width = LINE_WIDTH): string {
   const p = parts(s);
   const join = (cause: string, keep: { points: boolean; owner: boolean; receipt: boolean }): string =>
-    [p.unverified, `${p.outcome}${cause ? `${CAUSE_SEP}${cause}` : ''}`, keep.points ? p.points : '', p.tests, ...p.running, keep.owner ? p.owner : '', keep.receipt ? p.receipt : ''].filter(Boolean).join(DOT);
+    [p.unverified, `${p.outcome}${cause ? `${CAUSE_SEP}${cause}` : ''}`, keep.points ? p.points : '', ...p.running, p.tests, keep.owner ? p.owner : '', keep.receipt ? p.receipt : ''].filter(Boolean).join(DOT);
   const all = { points: true, owner: true, receipt: true };
   let line = join(p.cause, all);
   if (columns(line) <= width) return line;
   // How many columns the cause may take with the given parts kept, and the line with it cut to that.
   const cut = (keep: typeof all, floor: number): string | undefined => {
+    const whole = join(p.cause, keep);
+    if (columns(whole) <= width) return whole;
     const room = width - columns(join('', keep)) - CAUSE_SEP.length - ELLIPSIS.length;
     if (room < floor) return undefined;
     const kept = [...p.cause].slice(0, room).join('').trimEnd();

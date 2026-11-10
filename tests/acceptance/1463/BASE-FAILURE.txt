@@ -1,0 +1,81 @@
+#1463's acceptance suite, run once at the base 0c4a4ec7 (clean worktree, no implementation).
+
+Machine: Mac17,10, Apple M5 Max, 64 GiB, macOS 27.2, on AC power; Node v24.22.2; cargo 1.99.1 (the repo's toolchain, put first
+on PATH). Load averages during the run: 63.00 at the start, 45.67 at the end, on 18 cores (other sessions' builds), so no
+timing here would have counted; none was reached.
+Prerequisites: npm ci --ignore-scripts; scripts/lease npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0
+cargo build --locked -q -p deep-hook -p deep-replica. The suite built deep-drive itself (plain and --features env-plants).
+
+Command (2026-11-10T06:42:31Z to 06:46:10Z):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1463 --no-file-parallelism --silent=false
+Result: Test Files 8 failed | 1 passed (9); Tests 19 failed | 12 passed (31); exit 1.
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1463/tsconfig.json   exit 0
+
+Failures, each at its assertion:
+
+AC1 #1463.f9ab70a8 (list.test.ts, 3 tests) and AC12 #1463.17f151eb (list.test.ts, 1 test)
+  deep status --json must exit 0 and print one JSON object {log_pos, rows}: exit 2, stdout "", stderr "Usage: deep status\n"
+  (the three plant tests share that read and fail with it). At the base the replica's see answers {snapshot, sha256, ok, t},
+  no rows and no log_pos; its window draws session rows `session:<id>` named "<title> · needs you" and ask rows `ask:<ULID>`
+  named by the question alone.
+
+AC2 #1463.824c8001 (deep.test.ts)
+  - deep prints the list: "deep prints help text: \"DeepBuild 0.0.0\nUsage: deep [--help | --version] ...", "deep prints more
+    after its list", "deep prints no count sentence; the app's says 3", "deep_drive's see answers no rows beside its snapshot".
+  - planted second count: the judge finds only "deep prints no count sentence; the app's says 3", not a second count
+    (deep-second-count names nothing at the base).
+  - not set up: "no ~/.deepbuild/setup-finished.json after it": bare deep prints help and runs no setup.
+
+AC3 #1463.59289fca (deep.test.ts)
+  "deep doesn't say the hub isn't answering: \"DeepBuild 0.0.0\nUsage: ...", and no rows beside the replica's snapshot.
+
+AC4 #1463.91324b7e (inbox.test.ts, question before handle)
+  "deep inbox prints ask:01M722YPG0KZ36PYKFEWDC3H27 before its question \"Which header colour on the login page?\"", and the
+  same for the other two open asks. The base's line: "ask:<ULID>  taste  <session ID>  10m  shown  <question>  [blue | green]".
+
+AC6 #1463.cc5d1e3f (words.test.ts, every word from states::TABLE)
+  "deep status prints \"2 need you\", a word no state goes by" (its count line; detail.test.ts's run shows the same form, "12 sessions: 2 need you, 10 finished").
+
+AC7 #1463.0c303476 (budget.test.ts)
+  - perf lane: "benchmarks/budgets.json has a task deep-list-700 (README, Pinned 12): expected undefined to be defined".
+    In the full run this test failed one step earlier, inside validateBudgets: "Budget preflight changed or disappeared". This
+    checkout's origin/main (2721ca7b) is no descendant of HEAD, so `git merge-base HEAD origin/main` is 9a28494a, whose
+    preflight differs from the base's. The task lookup was then moved before the validation and this one test run again alone
+    (`... run --root tests/acceptance/1463 budget -t "perf lane"`), failing as above. The merge base the test validates
+    against is the repo's convention (#24's suite, scripts/bays.mjs); on a checkout whose origin/main contains HEAD it is HEAD.
+  - 100 ms: fails before any timing, at "deep status --json must exit 0 ...: exit 2, stderr \"Usage: deep status\n\"". At the
+    base bare deep prints help, so no reading of deep on 700 rows exists.
+
+AC8 #1463.8ad45787 (inbox.test.ts)
+  - "deep inbox prints ask:01M722YPG05MKP2MHTHNKM2SJ8 before its question \"Ship the cart page today?\"" (the default sentence
+    is not reached; the base prints none).
+  - planted line: the judge names the handle-first line, not a missing default (inbox-no-default names nothing at the base).
+
+AC9 #1463.03f69be1 (detail.test.ts)
+  "deep status ends on \"and 10 more tool calls\", not the count sentence \"2 asks need you\"", "deep status prints 241 lines,
+  not under 40" (the issue's "over 200 lines and ends on a tool call").
+
+AC10 #1463.dacb7e33 (inbox.test.ts)
+  "deep inbox undo ask:01M722YPG0ZGYNG40WFQD930MH prints \"2026-11-10T06:51:02.463Z\", a UTC timestamp, not a clock time in
+  your time zone: \"ask:... is open again, its default undone; it waits until 2026-11-10T06:51:02.463Z\"", and "doesn't say
+  12:21, when the ask now defaults in your time zone (Asia/Kolkata)".
+
+AC11 #1463.bfbc08f9 (notification.test.ts)
+  - titles: "DeepBuild · Cart totals" doesn't name shop, "DeepBuild · Release notes" doesn't name docs, "DeepBuild · Session
+    24919592" doesn't name search and holds session 24919592-d08d-4a51-8725-5b254206982a's ID as "24919592".
+  - planted title: only 1 of 3 sessions named (the untitled one); notification-title-id names nothing at the base.
+
+AC5 #1463.31fc1678 (scope.test.ts, planted leak)
+  BLOCKED: the hub didn't start with DEEP_HUB_PLANT=status-row-leak: "DEEP_HUB_PLANT=status-row-leak names no planted program".
+
+Passing at the base, and why:
+- judges.test.ts, 9 tests: no criterion tag; they hold the judges to right and wrong inputs, with no hub or app.
+- AC5's first test: the agent's deep_status at the base is {"session":"<its own ID>","gates":{...},"claims":[]}, bound to its
+  session with nothing of the other session's. The criterion guards that rows never leak; its wrong program is the plant,
+  which can't start at the base.
+- AC4's second test: deep inbox answer <handle> <option> works at the base (exit 0, one ask.answered with the option, gone from
+  deep inbox); the criterion says it still must.
+- AC6's first test: tests/acceptance/992's agree.test.ts passed as it is ("exit 0, 1 passed (1)"); a regression guard.
+
+Not runnable here: nothing was BLOCKED for want of a prerequisite. The AC7 timing would have been INCONCLUSIVE on this
+reference Mac anyway: the 1-minute load average (45 to 63) was above half the cores.
