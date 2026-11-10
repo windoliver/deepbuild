@@ -220,6 +220,7 @@
   "session.end@2": "d1:a4ec3cd632122e750412e5ce1f824c21f83cb3c96049a28e5bdf948d054c25c1",
   "session.gone@1": "d1:f15a97d86fd799affbd39253a4883c0f09f55d8f0159cc0cc84f6c0ee88fdbeb",
   "session.never_started@1": "d1:a9c1daf460e8cec8034dc5d12a77984775cd75c49cc652f87494b0293c6223e2",
+  "session.paused@1": "d1:3ca4257b76f43a5ae53955bd7267f8f0d0a88e0f759d4035c20f6c635c5f787f",
   "session.pushed@1": "d1:faa92f61849e8e5ba4d152229844edf01039964b738d92d868b8d6c8abcbbc91",
   "session.reading@1": "d1:ab6cd9e4df39e55e47521c4a7b7201e87be859f87e53318ef376a6adb0e3e800",
   "session.rules_delivered@1": "d1:4e2de44c4a2c9793a389f321d4399ed52e9cc0e139a7216b8ef34c31483f616d",

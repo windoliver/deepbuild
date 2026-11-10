@@ -400,6 +400,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         "codes": [],
         "covers": {"kinds": ["mark.box@1"], "fields": ["mark.box@1/params/size"]},
     }));
+    // #486: the lobe outputs, occlusion and normal in gpu.output@1, core.bump@1 in gpu.function@1.
+    crate::gpu::register(r);
 }
 
 /// 34 suns of 10,000 lx each, `s00` to `s33`, ordered last ID first.

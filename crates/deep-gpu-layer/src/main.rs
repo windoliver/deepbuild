@@ -320,6 +320,14 @@ pub enum Planted {
     // added to the whole diffuse.
     SubsurfaceAcrossParts,
     SubsurfaceAddsToDiffuse,
+    // #486: a lobe output multiplies its field; occlusion scales the direct light and emission
+    // too; core.bump@1 ignores the tangent's handedness; coat_normal bends the base lobes too;
+    // the check admits a lobe the material lacks, which the frame it first runs compiles.
+    LobeOutputScalesField,
+    OcclusionScalesDirect,
+    BumpIgnoresHandedness,
+    CoatNormalBendsBase,
+    MissingLobeTurnedOn,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -535,6 +543,11 @@ impl Planted {
             "flakes_by_pixel" => Planted::FlakesByPixel,
             "subsurface_across_parts" => Planted::SubsurfaceAcrossParts,
             "subsurface_adds_to_diffuse" => Planted::SubsurfaceAddsToDiffuse,
+            "lobe_output_scales_field" => Planted::LobeOutputScalesField,
+            "occlusion_scales_direct" => Planted::OcclusionScalesDirect,
+            "bump_ignores_handedness" => Planted::BumpIgnoresHandedness,
+            "coat_normal_bends_base" => Planted::CoatNormalBendsBase,
+            "missing_lobe_turned_on" => Planted::MissingLobeTurnedOn,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,

@@ -101,7 +101,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The pi package holds the same wait on its own connection, and says what became of each answer it took (#40).
   ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
-  ['session.note', ['app']],
+  ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
   // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).
