@@ -73,6 +73,12 @@ plant-row-skips-open = []
 # Issue #1460's wrong program: `open` on an ask pastes one small PNG through the app's hub connection, which the hub
 # keeps as `evidence.stored`. In no shipped build.
 plant-open-writes-event = []
+# Issue #2117's wrong programs, in no shipped build (tests/acceptance/2117): a panel that also notifies on a 1 s timer,
+# one that grays a value only when a new reading reaches it, and one that shows a new reading only when another view
+# redraws.
+plant-panel-ticks = []
+plant-panel-grays-on-reading = []
+plant-panel-waits-for-redraw = []
 # Issue #1462's wrong programs, in no shipped build (tests/acceptance/1462): an action left out of every menu, an Approve
 # item, a row control drawn only on hover, a card whose Tab skips a control, a card that starts on the option that
 # allows, a ⌘K list that opens only on a click, a command that only logs, no Quit item, a context-only action, a list
@@ -223,4 +229,11 @@ harness = false
 [[test]]
 name = "lists_1477"
 path = "lists_1477.rs"
+harness = false
+
+# Issue #2117: a plug-in panel's bound value redraws when what it shows changes, written blind in tests/acceptance/2117.
+# Each test runs in a process of its own; AppKit needs the main thread, so no libtest harness.
+[[test]]
+name = "acceptance_2117"
+path = "../../tests/acceptance/2117/app/panel.rs"
 harness = false

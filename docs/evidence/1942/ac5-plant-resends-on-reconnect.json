@@ -1,0 +1,52 @@
+{
+  "failures": [
+    "the run started 2 times on dh-fedora for one remote start, token rd8NR2DoyRw-RFAZiYqH75fGBwDO5GZe (the starts' tokens: rd8NR2DoyRw-RFAZiYqH75fGBwDO5GZe, rd8NR2DoyRw-RFAZiYqH75fGBwDO5GZe): after the drop the start must be read back by its token, never sent again",
+    "run:01M72J6DEXEQX6Z5WR3DRPNS0J, token rd8NR2DoyRw-RFAZiYqH75fGBwDO5GZe: its stdout evidence isn't the run's output once (\"tick 1\" to \"tick 20\", then \"done\"; sha256 a99c0d6ddae7), it holds [\"97361b8f26204e0fcc29014ebd10cbe415ae5b723b89f18a351b190504828c63\",\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"]"
+  ],
+  "seen": {
+    "dropped": {
+      "connections": 1
+    },
+    "reply": {
+      "v": 1,
+      "id": 1,
+      "result": {
+        "run": "run:01M72J6DEXEQX6Z5WR3DRPNS0J"
+      }
+    },
+    "at_drop": {
+      "starts": 1,
+      "units": [
+        {
+          "unit": "deep-rd8NR2DoyRw-RFAZiYqH75fGBwDO5GZe.service",
+          "active": "active",
+          "sub": "running"
+        }
+      ]
+    },
+    "run": "run:01M72J6DEXEQX6Z5WR3DRPNS0J",
+    "starts": [
+      "rd8NR2Do",
+      "rd8NR2Do"
+    ],
+    "finished": {
+      "run": "run:01M72J6DEXEQX6Z5WR3DRPNS0J",
+      "outcome": "passed",
+      "tests_run": 0,
+      "passed": 0,
+      "runs": 1,
+      "evidence": [
+        "97361b8f26204e0fcc29014ebd10cbe415ae5b723b89f18a351b190504828c63",
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "check": "once",
+      "assertion": null,
+      "expected": null,
+      "actual": null,
+      "step": null,
+      "points_to": null,
+      "findings": [],
+      "environment": "darwin-arm64"
+    }
+  }
+}

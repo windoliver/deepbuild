@@ -89,6 +89,10 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
   }
   const byRepo = [...new Set(quiet.map((r) => r.project ?? 'no repo'))].sort().map((p) => `${p} ${quiet.filter((r) => (r.project ?? 'no repo') === p).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
+  // Each running job (#1925): its count from its tool's own counter, or with none how long it has run, and why.
+  const jobs = rows.filter((r) => r.id.startsWith('job:'));
+  if (jobs.length) out.push('Running jobs:');
+  for (const r of jobs) out.push(`  ${r.word.padEnd(9)}  ${r.title}${r.progress ? ` · ${r.progress}` : age(r)}`, `      ${r.why}`);
   if (asks.length) out.push('Needs you');
   for (const r of asks) out.push(`  ${r.title}  ${r.word}  ${r.project ?? 'no repo'}${age(r)}`);
   if (!sessions.length) out.push('Start a Claude Code or Codex session in a repo and it shows here; deep doctor checks the setup.');

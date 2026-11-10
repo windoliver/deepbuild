@@ -240,6 +240,12 @@ fn register_compiling(
         false,
     );
     r.code(
+        "occurrence.undeclared",
+        "A start_on, a mark set's rows or a driver reads a logic item's occurrences by a kind or field the item doesn't declare in emits.",
+        "Name a kind the item's emits declares and a field that kind declares, or declare it in emits.",
+        false,
+    );
+    r.code(
         "transition_kind",
         "A transition of a kind motion doesn't land.",
         "Use a cut.",
@@ -379,6 +385,10 @@ fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
     out
 }
 
+/// #544's wrong program (scenario `planted`): a check that passes a reader of a logic item's
+/// occurrences naming a kind or field the item doesn't declare.
+pub const UNDECLARED_KIND_ACCEPTED: &str = "undeclared_kind_accepted";
+
 /// The revision's motion, compiled once at check.
 fn compile(v: &mut View<'_>) -> Result<(), OpError> {
     // Compiled from the canonical form, members in name order, so a program's layout (its items'
@@ -388,7 +398,13 @@ fn compile(v: &mut View<'_>) -> Result<(), OpError> {
     let Value::Object(doc) = &canonical else {
         return Err(OpError::new("bad_doc", ""));
     };
-    let program = Program::compile(doc).map_err(|r| OpError::new(r.code, r.path))?;
+    // #544's planted check passes a reader naming what a logic item doesn't emit.
+    let options = crate::program::Options {
+        planted: if v.planted() == Some(UNDECLARED_KIND_ACCEPTED) { crate::program::Planted::AcceptsUndeclaredOccurrence } else { Default::default() },
+        ..Default::default()
+    };
+    // What a refusal names past its path (#544: the reader, the undeclared name, close names).
+    let program = Program::compile_with(doc, options).map_err(|r| OpError { actual: r.detail, ..OpError::new(r.code, r.path) })?;
     v.write("motion.program", Val::typed(Arc::new(program)))
 }
 

@@ -2,11 +2,11 @@
 
 ## What it is for
 
-The macOS app shell on gpui-kit (issues #337, #338, #326, #327, #339, #105, #1172 and on): the window with its dock panels and shipped views, the menu-bar count, the question card with its arming and confirmation, notifications, setup, capture, and the canvas drawn from the canvas crates. It reads the record only from the hub's socket through one record reader. People run it; deep-replica and deep-gpu-layer build on it.
+The macOS app shell on gpui-kit (issues #337, #338, #326, #327, #339, #105, #1172 and on): the window as one list and one page (#1461: the list on the left, then an ask's card, a session's page or a project's page, with the box at the foot of every page), the menu-bar count, the question card with its arming and confirmation, notifications, setup, capture, and the canvas drawn from the canvas crates. It reads the record only from the hub's socket through one record reader. People run it; deep-replica and deep-gpu-layer build on it.
 
 ## Where new code goes
 
-- One module per surface in `src/` (`card.rs`, `question.rs`, `views.rs`, `commands.rs` for ⌘K, `capture.rs` and so on), declared in `src/lib.rs`. `src/main.rs` holds only the app's start, its menu bar and its notifications; the probes the suites run as `deep-app --flag` are each a file in `src/probes/` (#1457).
+- One module per surface in `src/` (`card.rs`, `question.rs`, `views.rs`, `list.rs` for the list's rows and when they move, `empties.rs`, `unread.rs`, `commands.rs` for ⌘K, `capture.rs` and so on), declared in `src/lib.rs`. `src/main.rs` holds only the app's start, its menu bar and its notifications; the probes the suites run as `deep-app --flag` are each a file in `src/probes/` (#1457).
 - Hub calls go through `src/hub.rs`, and the record is read only through `src/record.rs`. A view that draws the record or bound values observes them with `record::observe`, and an age it shows sets its next tick from `states::ages_written` (#1546), so a change marks the window dirty with no input.
 - Canvas text goes through deep-text-gpui (`src/text.rs`), never GPUI's text system, which stays for the chrome.
 - Unit tests sit in a `#[cfg(test)]` module in the file; integration tests in `tests/`; pixel tests rendered offscreen in `screens.rs`.

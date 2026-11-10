@@ -194,14 +194,21 @@ mod suite {
             })
             .collect();
         let nodes = snapshot.flatten();
+        // #1461: the list's ask rows, by their ids, as many as the window holds, in the projection's order.
         let rows: Vec<&str> = nodes
             .iter()
+            .filter(|node| {
+                node.id
+                    .as_deref()
+                    .is_some_and(|id| id.starts_with("ask:") && id.matches(':').count() == 1)
+            })
             .filter_map(|node| node.name.as_deref())
-            .filter(|name| questions.contains(name))
             .collect();
+        assert!(!rows.is_empty(), "the list draws ask rows");
         assert_eq!(
-            rows, questions,
-            "the Needs you view lists the projection's rows"
+            rows,
+            questions[..rows.len()],
+            "the list's Needs you rows are the projection's, oldest first"
         );
         for node in &nodes {
             let read = format!("{:?} {:?}", node.name, node.value);
@@ -211,15 +218,26 @@ mod suite {
 
     fn sidebar_view_snapshot() {
         let snapshot = view_snapshot("sidebar");
-        let buttons = snapshot
-            .flatten()
-            .into_iter()
-            .filter(|node| node.role == "button")
-            .count();
-        assert_eq!(
-            buttons,
-            deep_replica::load_state().sessions.len() + 2,
-            "the window's count, Agents, and one button per session (#1454: a replica draws the app's tree)"
+        // #1461: the list is one node named Tasks, and every row in it, an ask's or a session's, is a button.
+        let nodes = snapshot.flatten();
+        let list = nodes
+            .iter()
+            .find(|node| node.id.as_deref() == Some("list"))
+            .expect("the window has its list");
+        assert_eq!(list.name.as_deref(), Some("Tasks"));
+        let rows: Vec<_> = nodes
+            .iter()
+            .filter(|node| {
+                node.id.as_deref().is_some_and(|id| {
+                    (id.starts_with("ask:") || id.starts_with("session:"))
+                        && id.matches(':').count() == 1
+                })
+            })
+            .collect();
+        assert!(!rows.is_empty(), "the list draws rows");
+        assert!(
+            rows.iter().all(|row| row.role == "button"),
+            "every row is a button (#1454: a replica draws the app's tree)"
         );
     }
 
@@ -409,6 +427,7 @@ mod suite {
             center: vec![script("needs-you")],
             active: 0,
             line: LINE.into(),
+            needs_you: NEEDS_YOU.into(),
         }
     }
 
@@ -569,8 +588,11 @@ mod suite {
         };
         let mut opened = open_with(&["338-sidebar"], &layout);
         assert_eq!(names(&mut opened, DockPlacement::Left), [script("sidebar")]);
-        // #1454: the center is the app's, Needs you showing.
-        assert_eq!(names(&mut opened, DockPlacement::Center)[0], NEEDS_YOU);
+        // #1454, #1461: the pages are the app's, home first.
+        assert_eq!(
+            names(&mut opened, DockPlacement::Center)[0],
+            deep_app::views::HOME
+        );
         let tree = tree_of(&mut opened, &script("sidebar"));
         assert!(tree.contains("\"script sidebar\""), "{tree}");
     }
@@ -602,14 +624,13 @@ mod suite {
     }
 
     fn slot_line_from_registry() {
+        // #1461: the line is on a session's page; nothing is docked below the window's two regions.
         let layout = Layout {
             line: script("line"),
             ..Layout::shipped("needs-you")
         };
         let mut opened = open_with(&["338-line"], &layout);
-        assert_eq!(names(&mut opened, DockPlacement::Bottom), [script("line")]);
-        let tree = tree_of(&mut opened, &script("line"));
-        assert!(tree.contains("\"script line\""), "{tree}");
+        assert!(names(&mut opened, DockPlacement::Bottom).is_empty());
     }
 
     fn slot_replace_needs_you_from_registry() {
@@ -619,7 +640,7 @@ mod suite {
             [script("needs-you")]
         );
         assert_eq!(names(&mut opened, DockPlacement::Left), [SIDEBAR]);
-        assert_eq!(names(&mut opened, DockPlacement::Bottom), [LINE]);
+        assert!(names(&mut opened, DockPlacement::Bottom).is_empty());
         let rows = rows_of(&tree_of(&mut opened, &script("needs-you")));
         assert_eq!(
             rows,

@@ -1,0 +1,391 @@
+# #544 acceptance suite at the base: this worktree's HEAD f38d2b3983496ca502cb4743fda249bbc2e5b162 ("Merge pull
+# request #2155"; it holds #531, #532, #492, #500 and #501), clean but for tests/acceptance/544 added.
+# Command: PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+#   scripts/lease npx vitest run --root tests/acceptance/544 --testTimeout=600000 --no-file-parallelism
+# (scripts/lease found no `deep` CLI here, so the run was unleased, as its first line says.)
+# Result: 15 of 15 tests fail (5 of 5 files), every one on an assertion naming the missing behaviour; nothing is
+# BLOCKED and nothing crashed in this suite's helpers. The base's deep-logic and deep-show build and run, and answer:
+#   - a piece whose logic item declares `emits` (bake, determinism) with logic_refused, "emits isn't built yet in
+#     logic@1" (AC1 tests 1 and 4, AC2 tests 1 to 4, AC3 test 1);
+#   - `media_mix` of the shot lab with unbaked_list: "spawn shots reads `lab.occurrences`, which isn't a baked
+#     occurrence list in the document" (AC1 test 2);
+#   - `deep show` of the shot lab refused with unknown_field at `spawns`, its logic@1 item skipped as unknown_kind
+#     (AC1 test 3, AC5 tests 1 and 2: no occurrence.undeclared issue, and the lab spelled right isn't presented);
+#   - `deep show` of the door refused with ref_unresolved at placements/swing/start_on, its logic@1 item skipped as
+#     unknown_kind (AC3 tests 2 and 3, AC4 tests 1 and 2: no occurrence.undeclared issue, and the door spelled right
+#     isn't presented).
+# Each planted test runs the clean program first, so at the base it fails there, before its planted name (which the
+# base answers as bad_input) is used. Skipped at the base by the tests' own order, since the Mac leg fails first:
+# criterion 2's Linux x86_64 build and bake in Docker (Docker 29.5.2 is here, but its rust:1.99.1-slim-bookworm image
+# is arm64, so that leg would read BLOCKED until `docker pull --platform linux/amd64 rust:1.99.1-slim-bookworm`), the
+# media_mix seeks, the video export, and the door's frames at 6.000 s.
+# Before this run a probe (not committed) checked the harness on the base's components: README, Run them.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/544 --testTimeout=600000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 tests/acceptance/544
+
+ ❯ ac3-door-start.test.ts (3 tests | 3 failed) 3971ms
+   ❯ AC3 #544.35794d75 a placement started on a logic item's occurrences starts at the occurrence's time, played or seeked (3)
+     × AC3 #544.35794d75 the latch emits door_open once, at step 300 (5.000 s) 511ms
+     × AC3 #544.35794d75 at t = 6.000 s the door shows the clip 1.000 s in, played straight and after a seek to 6.000 s alike 1786ms
+     × AC3 #544.35794d75 a planted start_on that starts a run when a frame first reads the occurrence (start_on_at_first_frame) shows the clip 0 s in after the seek and fails the frame comparison at 6.000 s 403ms
+ ❯ ac1-shot-lab.test.ts (4 tests | 4 failed) 3593ms
+   ❯ AC1 #544.090a698b a lab's shots: 10 rows at their steps and 10 voices at their steps' samples, played, seeked and exported (4)
+     × AC1 #544.090a698b the lab holds exactly 10 shot rows, at steps 60, 120 … 600, played straight and after a seek to 5.5 s, and logic.determinism passes 757ms
+     × AC1 #544.090a698b the spawn on lab.occurrences filtered to shot starts 10 voices, each at its step's time to the sample, played straight and after a seek to 5.5 s 1520ms
+     × AC1 #544.090a698b a video export of the lab carries the same 10 voices: each frame's samples are the straight play's 86ms
+     × AC1 #544.090a698b a planted module that adds a second copy of the rows of each step a seek runs again (seek_repeats_occurrences) fails logic.determinism, naming the first step whose occurrences differ 5ms
+ ❯ ac5-spawn-undeclared.test.ts (2 tests | 2 failed) 2454ms
+   ❯ AC5 #544.e6e1fd57 a Spawn expression that reads a field its occurrence kind doesn't declare is refused at check, with the close names (2)
+     × AC5 #544.e6e1fd57 the spawn shots reading powr on shot {power: f64} is refused with occurrence.undeclared, naming shots, powr and power; spelled right it checks 1669ms
+     × AC5 #544.e6e1fd57 a planted reader that reads an undeclared field as 0 (undeclared_field_reads_zero) passes the check, and the test fails, naming shots 85ms
+ ❯ ac4-door-undeclared.test.ts (2 tests | 2 failed) 2676ms
+   ❯ AC4 #544.3039445f a start_on that names a kind its logic item doesn't declare is refused at check, with the close names (2)
+     × AC4 #544.3039445f kinds [door_opne] over a latch that declares door_open is refused with occurrence.undeclared, naming swing, door_opne and door_open; spelled right it checks 1864ms
+     × AC4 #544.3039445f a planted check that accepts the undeclared kind (undeclared_kind_accepted) passes the document, its clip never starts, and the test fails, naming swing 88ms
+ ❯ ac2-trap-and-ties.test.ts (4 tests | 4 failed) 990ms
+   ❯ AC2 #544.c031896f a step over its cap traps rather than dropping a row, and tied rows keep the order they were written in (4)
+     × AC2 #544.c031896f a step that writes 5 shot rows with max_per_step 4 traps with kind occurrences, naming shot, 5 and step 90; the item keeps its last good step's arrays and rows, and the rest of the piece plays on 552ms
+     × AC2 #544.c031896f a planted module that keeps four rows and drops the fifth (occurrences_keep_cap) reports no trap and fails, naming step 90 4ms
+     × AC2 #544.c031896f two shot rows with the same a and b, written 2.0 then 1.0, read in that order on macOS and after a seek; a planted list that sorts ties by payload (occurrences_sort_ties_by_payload) fails, naming step 75 9ms
+     × AC2 #544.c031896f the same tie reads 2.0 then 1.0 on Linux x86_64, played and after a seek 4ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-shot-lab.test.ts > AC1 #544.090a698b a lab's shots: 10 rows at their steps and 10 voices at their steps' samples, played, seeked and exported > AC1 #544.090a698b the lab holds exactly 10 shot rows, at steps 60, 120 … 600, played straight and after a seek to 5.5 s, and logic.determinism passes
+AssertionError: the bake of the shot lab, its logic item declaring emits {shot: {fields: {power: f64}}} baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"lab","refusals":[{"rule":"field","what":"emits isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"emits"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:331:77
+    329| /** A `bake` reply: the fields this suite reads, typed; a missing fiel…
+    330| export function bakeOf(reply: JsonObject, what: string): Bake {
+    331|   expect(reply['ok'], `${what} baked the piece (ok: true): ${show(repl…
+       |                                                                             ^
+    332|   return {
+    333|     steps: stepsOf(reply['steps'], `${what}.steps`),
+ ❯ ac1-shot-lab.test.ts:54:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  ac1-shot-lab.test.ts > AC1 #544.090a698b a lab's shots: 10 rows at their steps and 10 voices at their steps' samples, played, seeked and exported > AC1 #544.090a698b the spawn on lab.occurrences filtered to shot starts 10 voices, each at its step's time to the sample, played straight and after a seek to 5.5 s
+AssertionError: media_mix of the shot lab, played straight then seeked back to 5.5 s: mix (the sound of the document, its spawn reading the logic item's occurrences; the reply was {"code":"unbaked_list","spawn":"shots","list":"lab.occurrences","why":"spawn shots reads `lab.occurrences`, which isn't a baked occurrence list in the document","core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:72:68
+     70| export const show = (v: JsonValue | undefined, n = 1500): string => JS…
+     71| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     72|   expect(isObject(v), `${what} is an object, got ${show(v, 600)}`).toB…
+       |                                                                    ^
+     73|   return v as JsonObject;
+     74| }
+ ❯ mixOf helpers.ts:434:13
+ ❯ ac1-shot-lab.test.ts:71:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  ac1-shot-lab.test.ts > AC1 #544.090a698b a lab's shots: 10 rows at their steps and 10 voices at their steps' samples, played, seeked and exported > AC1 #544.090a698b a video export of the lab carries the same 10 voices: each frame's samples are the straight play's
+AssertionError: the lab document is presented:
+  the shot lab (a logic@1 item and a spawn on lab.occurrences) is not presented (outcome "refused"): {"notices":[{"code":"unknown_kind","severity":"notice","ids":["lab"],"path":"items/lab/kind","actual":"logic@1","what":"kind `logic@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"spawns","actual":{"shots":{"on":{"list":"lab.occurrences","kinds":["shot"]},"play":{"src":{"asset":"d9249487b690bcd60500e65146d3b057870a6cc1357866e589f8dd255473ee63"},"in":0,"out":176400000}}},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}],"issues_evidence":"20316c2033c32c551a4c66adc0aa352267113336ebba76ba7a3e6409912d17cd","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the shot lab (a logic@1 item and a spawn on lab.occurrences) is not presented (outcome \"refused\"): {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"lab\"],\"path\":\"items/lab/kind\",\"actual\":\"logic@1\",\"what\":\"kind `logic@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"spawns\",\"actual\":{\"shots\":{\"on\":{\"list\":\"lab.occurrences\",\"kinds\":[\"shot\"]},\"play\":{\"src\":{\"asset\":\"d9249487b690bcd60500e65146d3b057870a6cc1357866e589f8dd255473ee63\"},\"in\":0,\"out\":176400000}}},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}],\"issues_evidence\":\"20316c2033c32c551a4c66adc0aa352267113336ebba76ba7a3e6409912d17cd\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8\"}",
++ ]
+
+ ❯ none helpers.ts:90:73
+     88| /** No failures; the message lists them. */
+     89| export function none(failures: readonly string[], what: string): void {
+     90|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     91| }
+     92| /** A planted program's run: this suite's own check must fail on it, a…
+ ❯ ac1-shot-lab.test.ts:92:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  ac1-shot-lab.test.ts > AC1 #544.090a698b a lab's shots: 10 rows at their steps and 10 voices at their steps' samples, played, seeked and exported > AC1 #544.090a698b a planted module that adds a second copy of the rows of each step a seek runs again (seek_repeats_occurrences) fails logic.determinism, naming the first step whose occurrences differ
+AssertionError: logic.determinism of the shot lab at 5.5 s ran (ok: true): {"ok":false,"code":"logic_refused","item":"lab","refusals":[{"rule":"field","what":"emits isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"emits"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ determinismOf helpers.ts:347:65
+    345| export interface DetFailure { item: string; run: string; from: number …
+    346| export function determinismOf(reply: JsonObject, what: string): { verd…
+    347|   expect(reply['ok'], `${what} ran (ok: true): ${show(reply)}`).toBe(t…
+       |                                                                 ^
+    348|   expect(reply['kind'], `${what} is logic.determinism`).toBe('logic.de…
+    349|   const verdict = str(reply['verdict'], `${what}.verdict`);
+ ❯ ac1-shot-lab.test.ts:112:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  ac2-trap-and-ties.test.ts > AC2 #544.c031896f a step over its cap traps rather than dropping a row, and tied rows keep the order they were written in > AC2 #544.c031896f a step that writes 5 shot rows with max_per_step 4 traps with kind occurrences, naming shot, 5 and step 90; the item keeps its last good step's arrays and rows, and the rest of the piece plays on
+AssertionError: the bake of overfull and ticker, overfull declaring emits {shot: {fields: {power: f64}, max_per_step: 4}} baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"lab","refusals":[{"rule":"field","what":"emits isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"emits"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:331:77
+    329| /** A `bake` reply: the fields this suite reads, typed; a missing fiel…
+    330| export function bakeOf(reply: JsonObject, what: string): Bake {
+    331|   expect(reply['ok'], `${what} baked the piece (ok: true): ${show(repl…
+       |                                                                             ^
+    332|   return {
+    333|     steps: stepsOf(reply['steps'], `${what}.steps`),
+ ❯ ac2-trap-and-ties.test.ts:83:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  ac2-trap-and-ties.test.ts > AC2 #544.c031896f a step over its cap traps rather than dropping a row, and tied rows keep the order they were written in > AC2 #544.c031896f a planted module that keeps four rows and drops the fifth (occurrences_keep_cap) reports no trap and fails, naming step 90
+AssertionError: the bake of overfull and ticker baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"lab","refusals":[{"rule":"field","what":"emits isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"emits"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:331:77
+    329| /** A `bake` reply: the fields this suite reads, typed; a missing fiel…
+    330| export function bakeOf(reply: JsonObject, what: string): Bake {
+    331|   expect(reply['ok'], `${what} baked the piece (ok: true): ${show(repl…
+       |                                                                             ^
+    332|   return {
+    333|     steps: stepsOf(reply['steps'], `${what}.steps`),
+ ❯ ac2-trap-and-ties.test.ts:88:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  ac2-trap-and-ties.test.ts > AC2 #544.c031896f a step over its cap traps rather than dropping a row, and tied rows keep the order they were written in > AC2 #544.c031896f two shot rows with the same a and b, written 2.0 then 1.0, read in that order on macOS and after a seek; a planted list that sorts ties by payload (occurrences_sort_ties_by_payload) fails, naming step 75
+AssertionError: the bake of ties on this Mac, ties declaring emits {shot: {fields: {power: f64}}} baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"lab","refusals":[{"rule":"field","what":"emits isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"emits"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:331:77
+    329| /** A `bake` reply: the fields this suite reads, typed; a missing fiel…
+    330| export function bakeOf(reply: JsonObject, what: string): Bake {
+    331|   expect(reply['ok'], `${what} baked the piece (ok: true): ${show(repl…
+       |                                                                             ^
+    332|   return {
+    333|     steps: stepsOf(reply['steps'], `${what}.steps`),
+ ❯ ac2-trap-and-ties.test.ts:98:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  ac2-trap-and-ties.test.ts > AC2 #544.c031896f a step over its cap traps rather than dropping a row, and tied rows keep the order they were written in > AC2 #544.c031896f the same tie reads 2.0 then 1.0 on Linux x86_64, played and after a seek
+AssertionError: the bake of ties on this Mac baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"lab","refusals":[{"rule":"field","what":"emits isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"emits"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:331:77
+    329| /** A `bake` reply: the fields this suite reads, typed; a missing fiel…
+    330| export function bakeOf(reply: JsonObject, what: string): Bake {
+    331|   expect(reply['ok'], `${what} baked the piece (ok: true): ${show(repl…
+       |                                                                             ^
+    332|   return {
+    333|     steps: stepsOf(reply['steps'], `${what}.steps`),
+ ❯ ac2-trap-and-ties.test.ts:111:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  ac3-door-start.test.ts > AC3 #544.35794d75 a placement started on a logic item's occurrences starts at the occurrence's time, played or seeked > AC3 #544.35794d75 the latch emits door_open once, at step 300 (5.000 s)
+AssertionError: the bake of the latch, declaring emits {door_open: {fields: {}}} baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"latch","refusals":[{"rule":"field","what":"emits isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"emits"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:331:77
+    329| /** A `bake` reply: the fields this suite reads, typed; a missing fiel…
+    330| export function bakeOf(reply: JsonObject, what: string): Bake {
+    331|   expect(reply['ok'], `${what} baked the piece (ok: true): ${show(repl…
+       |                                                                             ^
+    332|   return {
+    333|     steps: stepsOf(reply['steps'], `${what}.steps`),
+ ❯ ac3-door-start.test.ts:57:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  ac3-door-start.test.ts > AC3 #544.35794d75 a placement started on a logic item's occurrences starts at the occurrence's time, played or seeked > AC3 #544.35794d75 at t = 6.000 s the door shows the clip 1.000 s in, played straight and after a seek to 6.000 s alike
+AssertionError: the door at 6.000 s:
+  the door (a logic@1 item and a placement started on latch.occurrences) is not presented (outcome "refused"): {"notices":[{"code":"unknown_kind","severity":"notice","ids":["latch"],"path":"items/latch/kind","actual":"logic@1","what":"kind `logic@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"placements/swing/start_on","actual":null,"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}],"issues_evidence":"972797bda58e5388b8381085099b477839e1593642578155fca41494176adb97","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the door (a logic@1 item and a placement started on latch.occurrences) is not presented (outcome \"refused\"): {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"latch\"],\"path\":\"items/latch/kind\",\"actual\":\"logic@1\",\"what\":\"kind `logic@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"ref_unresolved\",\"severity\":\"error\",\"ids\":[],\"path\":\"placements/swing/start_on\",\"actual\":null,\"what\":\"motion.compile can't evaluate this\",\"fix\":\"Name an ID the document holds, or remove the reference.\"}],\"issues_evidence\":\"972797bda58e5388b8381085099b477839e1593642578155fca41494176adb97\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8\"}",
++ ]
+
+ ❯ none helpers.ts:90:73
+     88| /** No failures; the message lists them. */
+     89| export function none(failures: readonly string[], what: string): void {
+     90|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     91| }
+     92| /** A planted program's run: this suite's own check must fail on it, a…
+ ❯ ac3-door-start.test.ts:62:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  ac3-door-start.test.ts > AC3 #544.35794d75 a placement started on a logic item's occurrences starts at the occurrence's time, played or seeked > AC3 #544.35794d75 a planted start_on that starts a run when a frame first reads the occurrence (start_on_at_first_frame) shows the clip 0 s in after the seek and fails the frame comparison at 6.000 s
+AssertionError: the door at 6.000 s:
+  the door (a logic@1 item and a placement started on latch.occurrences) is not presented (outcome "refused"): {"notices":[{"code":"unknown_kind","severity":"notice","ids":["latch"],"path":"items/latch/kind","actual":"logic@1","what":"kind `logic@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"placements/swing/start_on","actual":null,"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}],"issues_evidence":"972797bda58e5388b8381085099b477839e1593642578155fca41494176adb97","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the door (a logic@1 item and a placement started on latch.occurrences) is not presented (outcome \"refused\"): {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"latch\"],\"path\":\"items/latch/kind\",\"actual\":\"logic@1\",\"what\":\"kind `logic@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"ref_unresolved\",\"severity\":\"error\",\"ids\":[],\"path\":\"placements/swing/start_on\",\"actual\":null,\"what\":\"motion.compile can't evaluate this\",\"fix\":\"Name an ID the document holds, or remove the reference.\"}],\"issues_evidence\":\"972797bda58e5388b8381085099b477839e1593642578155fca41494176adb97\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8\"}",
++ ]
+
+ ❯ none helpers.ts:90:73
+     88| /** No failures; the message lists them. */
+     89| export function none(failures: readonly string[], what: string): void {
+     90|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     91| }
+     92| /** A planted program's run: this suite's own check must fail on it, a…
+ ❯ ac3-door-start.test.ts:66:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  ac4-door-undeclared.test.ts > AC4 #544.3039445f a start_on that names a kind its logic item doesn't declare is refused at check, with the close names > AC4 #544.3039445f kinds [door_opne] over a latch that declares door_open is refused with occurrence.undeclared, naming swing, door_opne and door_open; spelled right it checks
+AssertionError: the check of swing's start_on:
+  swing: the door whose placement swing starts on kinds [door_opne] is refused, but with no occurrence.undeclared issue: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"placements/swing/start_on","actual":null,"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}]
+  swing: spelled right, the door whose placement swing starts on kinds [door_open] is not presented (outcome "refused"): {"notices":[{"code":"unknown_kind","severity":"notice","ids":["latch"],"path":"items/latch/kind","actual":"logic@1","what":"kind `logic@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"placements/swing/start_on","actual":null,"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}],"issues_evidence":"972797bda58e5388b8381085099b477839e1593642578155fca41494176adb97","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "swing: the door whose placement swing starts on kinds [door_opne] is refused, but with no occurrence.undeclared issue: [{\"check\":\"document.validate\",\"code\":\"ref_unresolved\",\"severity\":\"error\",\"ids\":[],\"path\":\"placements/swing/start_on\",\"actual\":null,\"what\":\"motion.compile can't evaluate this\",\"fix\":\"Name an ID the document holds, or remove the reference.\"}]",
++   "swing: spelled right, the door whose placement swing starts on kinds [door_open] is not presented (outcome \"refused\"): {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"latch\"],\"path\":\"items/latch/kind\",\"actual\":\"logic@1\",\"what\":\"kind `logic@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"ref_unresolved\",\"severity\":\"error\",\"ids\":[],\"path\":\"placements/swing/start_on\",\"actual\":null,\"what\":\"motion.compile can't evaluate this\",\"fix\":\"Name an ID the document holds, or remove the reference.\"}],\"issues_evidence\":\"972797bda58e5388b8381085099b477839e1593642578155fca41494176adb97\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8\"}",
++ ]
+
+ ❯ none helpers.ts:90:73
+     88| /** No failures; the message lists them. */
+     89| export function none(failures: readonly string[], what: string): void {
+     90|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     91| }
+     92| /** A planted program's run: this suite's own check must fail on it, a…
+ ❯ ac4-door-undeclared.test.ts:35:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  ac4-door-undeclared.test.ts > AC4 #544.3039445f a start_on that names a kind its logic item doesn't declare is refused at check, with the close names > AC4 #544.3039445f a planted check that accepts the undeclared kind (undeclared_kind_accepted) passes the document, its clip never starts, and the test fails, naming swing
+AssertionError: the check of swing's start_on:
+  swing: the door whose placement swing starts on kinds [door_opne] is refused, but with no occurrence.undeclared issue: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"placements/swing/start_on","actual":null,"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}]
+  swing: spelled right, the door whose placement swing starts on kinds [door_open] is not presented (outcome "refused"): {"notices":[{"code":"unknown_kind","severity":"notice","ids":["latch"],"path":"items/latch/kind","actual":"logic@1","what":"kind `logic@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":[],"path":"placements/swing/start_on","actual":null,"what":"motion.compile can't evaluate this","fix":"Name an ID the document holds, or remove the reference."}],"issues_evidence":"972797bda58e5388b8381085099b477839e1593642578155fca41494176adb97","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "swing: the door whose placement swing starts on kinds [door_opne] is refused, but with no occurrence.undeclared issue: [{\"check\":\"document.validate\",\"code\":\"ref_unresolved\",\"severity\":\"error\",\"ids\":[],\"path\":\"placements/swing/start_on\",\"actual\":null,\"what\":\"motion.compile can't evaluate this\",\"fix\":\"Name an ID the document holds, or remove the reference.\"}]",
++   "swing: spelled right, the door whose placement swing starts on kinds [door_open] is not presented (outcome \"refused\"): {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"latch\"],\"path\":\"items/latch/kind\",\"actual\":\"logic@1\",\"what\":\"kind `logic@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"ref_unresolved\",\"severity\":\"error\",\"ids\":[],\"path\":\"placements/swing/start_on\",\"actual\":null,\"what\":\"motion.compile can't evaluate this\",\"fix\":\"Name an ID the document holds, or remove the reference.\"}],\"issues_evidence\":\"972797bda58e5388b8381085099b477839e1593642578155fca41494176adb97\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8\"}",
++ ]
+
+ ❯ none helpers.ts:90:73
+     88| /** No failures; the message lists them. */
+     89| export function none(failures: readonly string[], what: string): void {
+     90|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     91| }
+     92| /** A planted program's run: this suite's own check must fail on it, a…
+ ❯ ac4-door-undeclared.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  ac5-spawn-undeclared.test.ts > AC5 #544.e6e1fd57 a Spawn expression that reads a field its occurrence kind doesn't declare is refused at check, with the close names > AC5 #544.e6e1fd57 the spawn shots reading powr on shot {power: f64} is refused with occurrence.undeclared, naming shots, powr and power; spelled right it checks
+AssertionError: the check of shots's gain:
+  shots: the lab whose spawn shots has the gain powr - 1 is refused, but with no occurrence.undeclared issue: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"spawns","actual":{"shots":{"on":{"list":"lab.occurrences","kinds":["shot"]},"play":{"src":{"asset":"d9249487b690bcd60500e65146d3b057870a6cc1357866e589f8dd255473ee63"},"in":0,"out":176400000},"gain":"powr - 1"}},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}]
+  shots: spelled right, the lab whose spawn shots has the gain power - 1 is not presented (outcome "refused"): {"notices":[{"code":"unknown_kind","severity":"notice","ids":["lab"],"path":"items/lab/kind","actual":"logic@1","what":"kind `logic@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"spawns","actual":{"shots":{"on":{"list":"lab.occurrences","kinds":["shot"]},"play":{"src":{"asset":"d9249487b690bcd60500e65146d3b057870a6cc1357866e589f8dd255473ee63"},"in":0,"out":176400000},"gain":"power - 1"}},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}],"issues_evidence":"405e847b8e4a5692e1feb02c121117e37b68a8e0629f59f97fc201b6f83deb87","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "shots: the lab whose spawn shots has the gain powr - 1 is refused, but with no occurrence.undeclared issue: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"spawns\",\"actual\":{\"shots\":{\"on\":{\"list\":\"lab.occurrences\",\"kinds\":[\"shot\"]},\"play\":{\"src\":{\"asset\":\"d9249487b690bcd60500e65146d3b057870a6cc1357866e589f8dd255473ee63\"},\"in\":0,\"out\":176400000},\"gain\":\"powr - 1\"}},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "shots: spelled right, the lab whose spawn shots has the gain power - 1 is not presented (outcome \"refused\"): {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"lab\"],\"path\":\"items/lab/kind\",\"actual\":\"logic@1\",\"what\":\"kind `logic@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"spawns\",\"actual\":{\"shots\":{\"on\":{\"list\":\"lab.occurrences\",\"kinds\":[\"shot\"]},\"play\":{\"src\":{\"asset\":\"d9249487b690bcd60500e65146d3b057870a6cc1357866e589f8dd255473ee63\"},\"in\":0,\"out\":176400000},\"gain\":\"power - 1\"}},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}],\"issues_evidence\":\"405e847b8e4a5692e1feb02c121117e37b68a8e0629f59f97fc201b6f83deb87\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8\"}",
++ ]
+
+ ❯ none helpers.ts:90:73
+     88| /** No failures; the message lists them. */
+     89| export function none(failures: readonly string[], what: string): void {
+     90|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     91| }
+     92| /** A planted program's run: this suite's own check must fail on it, a…
+ ❯ ac5-spawn-undeclared.test.ts:31:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  ac5-spawn-undeclared.test.ts > AC5 #544.e6e1fd57 a Spawn expression that reads a field its occurrence kind doesn't declare is refused at check, with the close names > AC5 #544.e6e1fd57 a planted reader that reads an undeclared field as 0 (undeclared_field_reads_zero) passes the check, and the test fails, naming shots
+AssertionError: the check of shots's gain:
+  shots: the lab whose spawn shots has the gain powr - 1 is refused, but with no occurrence.undeclared issue: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"spawns","actual":{"shots":{"on":{"list":"lab.occurrences","kinds":["shot"]},"play":{"src":{"asset":"d9249487b690bcd60500e65146d3b057870a6cc1357866e589f8dd255473ee63"},"in":0,"out":176400000},"gain":"powr - 1"}},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}]
+  shots: spelled right, the lab whose spawn shots has the gain power - 1 is not presented (outcome "refused"): {"notices":[{"code":"unknown_kind","severity":"notice","ids":["lab"],"path":"items/lab/kind","actual":"logic@1","what":"kind `logic@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"spawns","actual":{"shots":{"on":{"list":"lab.occurrences","kinds":["shot"]},"play":{"src":{"asset":"d9249487b690bcd60500e65146d3b057870a6cc1357866e589f8dd255473ee63"},"in":0,"out":176400000},"gain":"power - 1"}},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}],"issues_evidence":"405e847b8e4a5692e1feb02c121117e37b68a8e0629f59f97fc201b6f83deb87","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "shots: the lab whose spawn shots has the gain powr - 1 is refused, but with no occurrence.undeclared issue: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"spawns\",\"actual\":{\"shots\":{\"on\":{\"list\":\"lab.occurrences\",\"kinds\":[\"shot\"]},\"play\":{\"src\":{\"asset\":\"d9249487b690bcd60500e65146d3b057870a6cc1357866e589f8dd255473ee63\"},\"in\":0,\"out\":176400000},\"gain\":\"powr - 1\"}},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "shots: spelled right, the lab whose spawn shots has the gain power - 1 is not presented (outcome \"refused\"): {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"lab\"],\"path\":\"items/lab/kind\",\"actual\":\"logic@1\",\"what\":\"kind `logic@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"spawns\",\"actual\":{\"shots\":{\"on\":{\"list\":\"lab.occurrences\",\"kinds\":[\"shot\"]},\"play\":{\"src\":{\"asset\":\"d9249487b690bcd60500e65146d3b057870a6cc1357866e589f8dd255473ee63\"},\"in\":0,\"out\":176400000},\"gain\":\"power - 1\"}},\"what\":\"not a field of the document envelope\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}],\"issues_evidence\":\"405e847b8e4a5692e1feb02c121117e37b68a8e0629f59f97fc201b6f83deb87\",\"snapshots\":[],\"outcome\":\"refused\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"90de4d0ff0c955c8dc05ed40062c110ec7215b6b6bf91f78473fa73fe468e7b8\"}",
++ ]
+
+ ❯ none helpers.ts:90:73
+     88| /** No failures; the message lists them. */
+     89| export function none(failures: readonly string[], what: string): void {
+     90|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     91| }
+     92| /** A planted program's run: this suite's own check must fail on it, a…
+ ❯ ac5-spawn-undeclared.test.ts:35:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  15 failed (15)
+   Start at  11:37:46
+   Duration  14.20s (tests 99%)
+
