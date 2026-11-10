@@ -1,0 +1,19 @@
+{
+  "run": "run:01M72J7FM8CVQYA0PT7Q4QVYFK",
+  "claim": "claim:01M72J7EXQWVHNM2T5H323XW3R",
+  "host": "dh-fedora",
+  "token": "b3sR68E-…",
+  "units": [
+    {
+      "unit": "deep-b3sR68E-X2A8loCZGdOd1R8XdDvWG3Me.service",
+      "active": "active",
+      "sub": "running"
+    }
+  ],
+  "part_bytes": {
+    "at_session_end": 2097152,
+    "after_15_s": 17825792
+  },
+  "finished": null,
+  "verdicts": []
+}

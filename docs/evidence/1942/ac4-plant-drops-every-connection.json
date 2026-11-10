@@ -1,0 +1,66 @@
+{
+  "failures": [
+    "run:01M72J2ZE153DQY5A9TPHHCQGG (B) reconnected: its connection to the host closed 5.0 s into the 60 s stall of run:01M72J2ZCW0DY2T3Y6C298MW7C's (A's) connection, which alone was stalled"
+  ],
+  "seen": {
+    "runs": {
+      "A": "run:01M72J2ZCW0DY2T3Y6C298MW7C",
+      "B": "run:01M72J2ZE153DQY5A9TPHHCQGG"
+    },
+    "rates": [
+      {
+        "conn": 3,
+        "bytes_per_s": 37968
+      },
+      {
+        "conn": 4,
+        "bytes_per_s": 4368
+      }
+    ],
+    "clock": {
+      "before": {
+        "offset": 5,
+        "rtt": 2
+      },
+      "after": {
+        "offset": 5,
+        "rtt": 2
+      }
+    },
+    "stall": {
+      "conn_a": 3,
+      "conn_b": 4,
+      "a_closed_s": 60.232,
+      "b_closed_s": 5.019
+    },
+    "opened_during_stall": [
+      {
+        "id": 5,
+        "opened_s": 5.129,
+        "down": 255930,
+        "closed_s": null
+      },
+      {
+        "id": 6,
+        "opened_s": 5.13,
+        "down": 2382514,
+        "closed_s": null
+      }
+    ],
+    "b_lag": {
+      "lines": 557,
+      "worst_ms": 268,
+      "late": 0,
+      "load": 170.873046875,
+      "cores": 18
+    },
+    "a_back": {
+      "lines": 547,
+      "first_arrived_s": 5.336,
+      "carriers": [
+        5,
+        6
+      ]
+    }
+  }
+}
