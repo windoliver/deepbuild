@@ -502,6 +502,21 @@ impl Hub<'_> {
     /// The evaluated value at `path` in an evaluated session, with the content key of what made
     /// it; `None` for a path the revision doesn't hold.
     fn read_path(&self, s: &DocSession, doc: &Value, path: &str) -> Option<(Value, Key)> {
+        // #1818: a bus's fields in the document's `buses` map read as written, and a field the
+        // bus leaves out, such as its `loudness_target`, reads missing, never a default.
+        if let Some(rest) = path.strip_prefix("buses/") {
+            let value = match held_at(doc, path) {
+                Some(v) => v,
+                None if deep_canvas_media::planted("loudness_target_defaults_to_zero")
+                    && rest.split_once('/').is_some_and(|(bus, f)| f == "loudness_target" && doc["buses"].get(bus).is_some()) =>
+                {
+                    json!(0)
+                }
+                None => return None,
+            };
+            let key = Hasher::of(self.sched.hash(), "deep_query.bus").text(path).text(&value.to_string()).finish();
+            return Some((value, key));
+        }
         let (id, field) = item_path(path)?;
         if field == "bounds" {
             return self.bounds(s, id);
