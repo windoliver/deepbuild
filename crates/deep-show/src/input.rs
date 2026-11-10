@@ -37,6 +37,8 @@ struct Seen {
 pub struct PanelScope {
     pub(crate) scope: Scope,
     seen: Vec<(i64, Seen)>,
+    /// #501: the panel's film viewer, made when a film it shows first takes a key or is read.
+    pub(crate) viewer: Option<crate::film_viewer::FilmViewer>,
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -82,6 +84,7 @@ pub fn event(v: &Value) -> Option<Event> {
         "key" => Event::Key {
             key: v.get("key")?.as_str()?.to_string(),
             cmd: mods()?.contains(&"cmd"),
+            alt: mods()?.contains(&"alt"),
         },
         "text" => Event::Text(v.get("text")?.as_str()?.to_string()),
         "control" => Event::Control {
@@ -191,6 +194,7 @@ impl Hub<'_> {
                 PanelScope {
                     scope,
                     seen: Vec::new(),
+                    viewer: None,
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -318,6 +322,10 @@ impl Hub<'_> {
         let now = self.now;
         if matches!(reached, Some(ref to) if to.as_deref() != Some(panel)) {
             return json!({"serial": serial, "reached": [reached.flatten().map_or("shell".to_string(), |p| format!("panel:{p}"))]});
+        }
+        // #501: a film's viewer takes its keys before the scope does.
+        if let Some(reply) = self.viewer_key(panel, event, serial) {
+            return reply;
         }
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));

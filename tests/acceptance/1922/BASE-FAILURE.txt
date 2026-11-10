@@ -1,0 +1,322 @@
+Base commit: 0c4a4ec7 (Merge pull request #2051), the brief's base; no implementation of #1922 exists there.
+Built first (by the caller): npm ci; npm run build --workspaces; cargo build -p deep-hook (target/debug/deep-hook).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1922 --testTimeout=600000 --no-file-parallelism
+Date: 2026-11-09  Machine: macOS (Apple silicon)  Node: v24.22.0  vitest 5.0.5. Paths below: <repo> is the worktree, ~ the home.
+Result: Test Files 7 failed (7); Tests 15 failed (15); about 14 s. Short on purpose: the surfaces don't exist.
+
+No test passed at the base. Every unplanted hub started (deep hub run, ready) and deep mcp answered initialize; the
+failures come at the first missing surface:
+
+  The 10 unplanted tests (AC1 x2, AC2, AC3 x2, AC4 x2, AC5, AC6, AC7): deep install of test/upper-kind installs
+  but doesn't load it, because extension.manifest@1 has no job fields (the job API doesn't exist):
+    "deep install of test/upper-kind didn't load it: exit 1, ... It is not loaded: it failed conformance: its
+     manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; ... at /job_tools: unlisted_field ..."
+
+  The 5 planted-hub tests (AC5 job-key-params-text and job-key-no-version, AC6 job-build-entry-only, AC7
+  job-build-hashes-paths and job-build-hashes-mtimes): the hub refuses the plant name and doesn't start:
+    "BLOCKED: the hub didn't start (deep hub run with DEEP_HUB_PLANT=<plant>): ... names no planted program"
+
+Behind those, also missing at the base (from reading the code and a throwaway probe, not kept in the suite):
+deep.registerJob and deep.registerJobTool (not in runtime/deep.mjs's API list, so a plug-in's deep has neither),
+the deep_job MCP tool (deep mcp answers tools/call deep_job with -32602 "No tool deep_job; the tools are deep_ask, ...,
+deep_propose."), and the cli method job.rule.
+
+Checked of the harness at the base, in throwaway runs not kept in the suite:
+  - fixtures/tool: upper.mjs with case.mjs turns "hello", "Done right, 42 times", "route 66" and "abc" (case upper)
+    into "HELLO", "DONE RIGHT, 42 TIMES", "ROUTE 66" and "ABC", and "ABC" (case lower) into "abc"; with
+    lowlast-case.mjs it writes "HELLo", "DONE RIGHT, 42 TIMEs", "ROUTe 66".
+  - The record: events.read on the cli role works; a minimal plug-in's install appended 2 process.starting events
+    (its conformance run and its load), and a deep_job call around which nothing starts counted 0.
+  - deep mcp restarted in a moved project folder (moveProject) answers again; snapshot() reads the moved files.
+  - Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/1922/tsconfig.json passes (exit 0).
+
+The run's output follows.
+----------------------------------------------------------------------------------------------------------------
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1922/pinned.test.ts (2 tests | 2 failed) 2656ms
+   ❯ #1922.3a2c91a2 deep_job runs only pinned tools, changes no document, and refuses a paid call without an authority ask or a standing rule (2)
+     × a run naming no tool, a tool with no version, a range or tag, or a version no plug-in registered is refused and starts no process; the pinned tool runs; no document changes 1696ms
+     × a paid tool is held with one authority ask and starts no process until your yes; after your standing rule it runs with no ask 778ms
+ ❯ tests/acceptance/1922/holder.test.ts (2 tests | 2 failed) 2130ms
+   ❯ #1922.a5d4640f A second registration of the kind test.upper by another plug-in is refused at install, naming the kind and the plug-in that holds it, unless its manifest says it replaces the first; and a job whose output fails test.upper_only returns that failure, naming the check, and leaves no output an item can name (2)
+     × a second registration of test.upper is refused at install naming the kind and its holder, and one whose manifest replaces it installs 1075ms
+     × a job whose output fails test.upper_only returns that failure, naming the check, and leaves no output an item can name 866ms
+ ❯ tests/acceptance/1922/upper.test.ts (1 test | 1 failed) 1025ms
+   ❯ #1922.08e9adc6 A test plug-in registers the job kind test.upper through deep.registerJob, with a params schema, one text output, the key hash(tool@version, params, input hashes), the output check test.upper_only it registers through deep.registerCheck, and a qualification of three fixture texts with their expected bytes; after one approval deep_job lists the kind with its tool and runs it on "abc", returning "ABC" by hash with a receipt naming the kind, the tool and the key; and a rerun with the same inputs is a cache hit that starts no process (1)
+     × after its one install, deep_job lists test.upper with upper-a@1.0.0, runs it on "abc" to "ABC" by hash with a receipt, and the rerun is a hit that starts no process 898ms
+ ❯ tests/acceptance/1922/key.test.ts (3 tests | 3 failed) 1203ms
+   ❯ #1922.fd1b18ec With test.upper's params `{case: upper, trim: false}`, where trim defaults to false, a changed input byte, a bump of the tool's version and `trim: true` each miss the cache and start one process (3 of 3), while reordering the params' keys, omitting trim, re-saving the input with a new modified time, renaming the input file and moving the project folder each hit and start none (5 of 5); a planted key over the params' text as written misses on the reordered and omitted cases and fails, naming the part, and a planted key without the tool's version serves the old output after the bump and fails, naming the part (3)
+     × three changed parts each miss and start one process, and five unchanged keys each hit and start none 881ms
+     × the planted key over the params' text as written misses on the reordered and omitted cases and fails, naming the part 98ms
+     × the planted key without the tool's version serves the old output after the bump and fails, naming the part 97ms
+ ❯ tests/acceptance/1922/tools.test.ts (2 tests | 2 failed) 1875ms
+   ❯ #1922.c2d25c7b A second tool for test.upper, registered by another test plug-in through deep.registerJobTool, appears beside the first in deep_job; a planted tool that lowercases the last letter fails the kind's qualification at install, naming the fixture, and never appears in deep_job (2)
+     × a second plug-in's tool for test.upper appears beside the first in deep_job and runs 838ms
+     × the planted tool that lowercases the last letter fails the qualification at install, naming the fixture, and never appears in deep_job 842ms
+ ❯ tests/acceptance/1922/rebuild.test.ts (2 tests | 2 failed) 909ms
+   ❯ #1922.985dc2cb A test.upper tool of two files is installed again under the same version with one byte changed in its second file: the install is refused, naming the tool and both builds, and the run on "abc" is still a cache hit that starts no process. Under the next version the changed tool qualifies and joins, and "abc" misses once. A planted host that hashes only the tool's entry file accepts the changed tool under the same version and fails, naming the file (2)
+     × the same version with one byte changed in the second file is refused naming the tool and both builds; the next version joins and misses once 682ms
+     × the planted host that hashes only the entry file accepts the changed tool and fails, naming the file 99ms
+ ❯ tests/acceptance/1922/build.test.ts (3 tests | 3 failed) 1045ms
+   ❯ #1922.583e414e The receipt for "abc" names a build equal to the digest of the tool's files as installed, and the same tool installed from two folders records one build. A planted host that hashes paths or modified times records two builds and fails, naming the tool (3)
+     × the receipt names the digest of the tool's files as installed, and two folders of the same files record one build 718ms
+     × the planted host job-build-hashes-paths records two builds and fails, naming the tool 99ms
+     × the planted host job-build-hashes-mtimes records two builds and fails, naming the tool 94ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1922/build.test.ts > #1922.583e414e The receipt for "abc" names a build equal to the digest of the tool's files as installed, and the same tool installed from two folders records one build. A planted host that hashes paths or modified times records two builds and fails, naming the tool > the receipt names the digest of the tool's files as installed, and two folders of the same files record one build
+Error: deep install of test/upper-kind didn't load it: exit 1, stdout "Source: /private/tmp/dh1922-eKVHFZ/kind\n  test/upper-kind@1.0.0, digest d1:d802266b12a1822b813bbaabb8de2190dd1a791ddcf84f026acc37adcfeb8bc3, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_only\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-kind@1.0.0\n", stderr "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; its manifest fails extension.manifest@1 at /job_tools: unlisted_field [{\"kind\":\"test.upper\",\"tool\":\"upper-a@1.0.0\"}]\n"
+ ❯ mustInstall tests/acceptance/1922/helpers.ts:361:29
+    359|   const ran = await install(w, folder);
+    360|   const id = (JSON.parse(readFileSync(join(folder, 'deepbuild.json'), …
+    361|   if (ran.code !== 0) throw Error(`deep install of ${String(id)} didn'…
+       |                             ^
+    362|   return ran;
+    363| }
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:367:3
+ ❯ tests/acceptance/1922/build.test.ts:18:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  tests/acceptance/1922/build.test.ts > #1922.583e414e The receipt for "abc" names a build equal to the digest of the tool's files as installed, and the same tool installed from two folders records one build. A planted host that hashes paths or modified times records two builds and fails, naming the tool > the planted host job-build-hashes-paths records two builds and fails, naming the tool
+Error: BLOCKED: the hub didn't start (deep hub run with DEEP_HUB_PLANT=job-build-hashes-paths):  file://<repo>/packages/hub/dist/plant.js:97
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=job-build-hashes-paths names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:97:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1557:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:316:30
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/1922/helpers.ts:180:36
+
+ ❯ openWorld tests/acceptance/1922/helpers.ts:351:15
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:366:13
+ ❯ tests/acceptance/1922/build.test.ts:26:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  tests/acceptance/1922/build.test.ts > #1922.583e414e The receipt for "abc" names a build equal to the digest of the tool's files as installed, and the same tool installed from two folders records one build. A planted host that hashes paths or modified times records two builds and fails, naming the tool > the planted host job-build-hashes-mtimes records two builds and fails, naming the tool
+Error: BLOCKED: the hub didn't start (deep hub run with DEEP_HUB_PLANT=job-build-hashes-mtimes):  file://<repo>/packages/hub/dist/plant.js:97
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=job-build-hashes-mtimes names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:97:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1557:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:316:30
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/1922/helpers.ts:180:36
+
+ ❯ openWorld tests/acceptance/1922/helpers.ts:351:15
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:366:13
+ ❯ tests/acceptance/1922/build.test.ts:26:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  tests/acceptance/1922/holder.test.ts > #1922.a5d4640f A second registration of the kind test.upper by another plug-in is refused at install, naming the kind and the plug-in that holds it, unless its manifest says it replaces the first; and a job whose output fails test.upper_only returns that failure, naming the check, and leaves no output an item can name > a second registration of test.upper is refused at install naming the kind and its holder, and one whose manifest replaces it installs
+Error: deep install of test/upper-kind didn't load it: exit 1, stdout "Source: /private/tmp/dh1922-wKJ9dR/kind\n  test/upper-kind@1.0.0, digest d1:d802266b12a1822b813bbaabb8de2190dd1a791ddcf84f026acc37adcfeb8bc3, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_only\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-kind@1.0.0\n", stderr "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; its manifest fails extension.manifest@1 at /job_tools: unlisted_field [{\"kind\":\"test.upper\",\"tool\":\"upper-a@1.0.0\"}]\n"
+ ❯ mustInstall tests/acceptance/1922/helpers.ts:361:29
+    359|   const ran = await install(w, folder);
+    360|   const id = (JSON.parse(readFileSync(join(folder, 'deepbuild.json'), …
+    361|   if (ran.code !== 0) throw Error(`deep install of ${String(id)} didn'…
+       |                             ^
+    362|   return ran;
+    363| }
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:367:3
+ ❯ tests/acceptance/1922/holder.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  tests/acceptance/1922/holder.test.ts > #1922.a5d4640f A second registration of the kind test.upper by another plug-in is refused at install, naming the kind and the plug-in that holds it, unless its manifest says it replaces the first; and a job whose output fails test.upper_only returns that failure, naming the check, and leaves no output an item can name > a job whose output fails test.upper_only returns that failure, naming the check, and leaves no output an item can name
+Error: deep install of test/upper-kind didn't load it: exit 1, stdout "Source: /private/tmp/dh1922-p2PnzN/kind\n  test/upper-kind@1.0.0, digest d1:d802266b12a1822b813bbaabb8de2190dd1a791ddcf84f026acc37adcfeb8bc3, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_only\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-kind@1.0.0\n", stderr "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; its manifest fails extension.manifest@1 at /job_tools: unlisted_field [{\"kind\":\"test.upper\",\"tool\":\"upper-a@1.0.0\"}]\n"
+ ❯ mustInstall tests/acceptance/1922/helpers.ts:361:29
+    359|   const ran = await install(w, folder);
+    360|   const id = (JSON.parse(readFileSync(join(folder, 'deepbuild.json'), …
+    361|   if (ran.code !== 0) throw Error(`deep install of ${String(id)} didn'…
+       |                             ^
+    362|   return ran;
+    363| }
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:367:3
+ ❯ tests/acceptance/1922/holder.test.ts:37:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  tests/acceptance/1922/key.test.ts > #1922.fd1b18ec With test.upper's params `{case: upper, trim: false}`, where trim defaults to false, a changed input byte, a bump of the tool's version and `trim: true` each miss the cache and start one process (3 of 3), while reordering the params' keys, omitting trim, re-saving the input with a new modified time, renaming the input file and moving the project folder each hit and start none (5 of 5); a planted key over the params' text as written misses on the reordered and omitted cases and fails, naming the part, and a planted key without the tool's version serves the old output after the bump and fails, naming the part > three changed parts each miss and start one process, and five unchanged keys each hit and start none
+Error: deep install of test/upper-kind didn't load it: exit 1, stdout "Source: /private/tmp/dh1922-GHY16V/kind\n  test/upper-kind@1.0.0, digest d1:d802266b12a1822b813bbaabb8de2190dd1a791ddcf84f026acc37adcfeb8bc3, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_only\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-kind@1.0.0\n", stderr "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; its manifest fails extension.manifest@1 at /job_tools: unlisted_field [{\"kind\":\"test.upper\",\"tool\":\"upper-a@1.0.0\"}]\n"
+ ❯ mustInstall tests/acceptance/1922/helpers.ts:361:29
+    359|   const ran = await install(w, folder);
+    360|   const id = (JSON.parse(readFileSync(join(folder, 'deepbuild.json'), …
+    361|   if (ran.code !== 0) throw Error(`deep install of ${String(id)} didn'…
+       |                             ^
+    362|   return ran;
+    363| }
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:367:3
+ ❯ judged tests/acceptance/1922/key.test.ts:23:13
+ ❯ tests/acceptance/1922/key.test.ts:33:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  tests/acceptance/1922/key.test.ts > #1922.fd1b18ec With test.upper's params `{case: upper, trim: false}`, where trim defaults to false, a changed input byte, a bump of the tool's version and `trim: true` each miss the cache and start one process (3 of 3), while reordering the params' keys, omitting trim, re-saving the input with a new modified time, renaming the input file and moving the project folder each hit and start none (5 of 5); a planted key over the params' text as written misses on the reordered and omitted cases and fails, naming the part, and a planted key without the tool's version serves the old output after the bump and fails, naming the part > the planted key over the params' text as written misses on the reordered and omitted cases and fails, naming the part
+Error: BLOCKED: the hub didn't start (deep hub run with DEEP_HUB_PLANT=job-key-params-text):  file://<repo>/packages/hub/dist/plant.js:97
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=job-key-params-text names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:97:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1557:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:316:30
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/1922/helpers.ts:180:36
+
+ ❯ openWorld tests/acceptance/1922/helpers.ts:351:15
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:366:13
+ ❯ judged tests/acceptance/1922/key.test.ts:23:13
+ ❯ tests/acceptance/1922/key.test.ts:37:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  tests/acceptance/1922/key.test.ts > #1922.fd1b18ec With test.upper's params `{case: upper, trim: false}`, where trim defaults to false, a changed input byte, a bump of the tool's version and `trim: true` each miss the cache and start one process (3 of 3), while reordering the params' keys, omitting trim, re-saving the input with a new modified time, renaming the input file and moving the project folder each hit and start none (5 of 5); a planted key over the params' text as written misses on the reordered and omitted cases and fails, naming the part, and a planted key without the tool's version serves the old output after the bump and fails, naming the part > the planted key without the tool's version serves the old output after the bump and fails, naming the part
+Error: BLOCKED: the hub didn't start (deep hub run with DEEP_HUB_PLANT=job-key-no-version):  file://<repo>/packages/hub/dist/plant.js:97
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=job-key-no-version names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:97:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1557:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:316:30
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/1922/helpers.ts:180:36
+
+ ❯ openWorld tests/acceptance/1922/helpers.ts:351:15
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:366:13
+ ❯ judged tests/acceptance/1922/key.test.ts:23:13
+ ❯ tests/acceptance/1922/key.test.ts:46:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  tests/acceptance/1922/pinned.test.ts > #1922.3a2c91a2 deep_job runs only pinned tools, changes no document, and refuses a paid call without an authority ask or a standing rule > a run naming no tool, a tool with no version, a range or tag, or a version no plug-in registered is refused and starts no process; the pinned tool runs; no document changes
+Error: deep install of test/upper-kind didn't load it: exit 1, stdout "Source: /private/tmp/dh1922-rHPzsy/kind\n  test/upper-kind@1.0.0, digest d1:d802266b12a1822b813bbaabb8de2190dd1a791ddcf84f026acc37adcfeb8bc3, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_only\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-kind@1.0.0\n", stderr "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; its manifest fails extension.manifest@1 at /job_tools: unlisted_field [{\"kind\":\"test.upper\",\"tool\":\"upper-a@1.0.0\"}]\n"
+ ❯ mustInstall tests/acceptance/1922/helpers.ts:361:29
+    359|   const ran = await install(w, folder);
+    360|   const id = (JSON.parse(readFileSync(join(folder, 'deepbuild.json'), …
+    361|   if (ran.code !== 0) throw Error(`deep install of ${String(id)} didn'…
+       |                             ^
+    362|   return ran;
+    363| }
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:367:3
+ ❯ tests/acceptance/1922/pinned.test.ts:22:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  tests/acceptance/1922/pinned.test.ts > #1922.3a2c91a2 deep_job runs only pinned tools, changes no document, and refuses a paid call without an authority ask or a standing rule > a paid tool is held with one authority ask and starts no process until your yes; after your standing rule it runs with no ask
+Error: deep install of test/upper-kind didn't load it: exit 1, stdout "Source: /private/tmp/dh1922-TE3B30/kind\n  test/upper-kind@1.0.0, digest d1:d802266b12a1822b813bbaabb8de2190dd1a791ddcf84f026acc37adcfeb8bc3, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_only\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-kind@1.0.0\n", stderr "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; its manifest fails extension.manifest@1 at /job_tools: unlisted_field [{\"kind\":\"test.upper\",\"tool\":\"upper-a@1.0.0\"}]\n"
+ ❯ mustInstall tests/acceptance/1922/helpers.ts:361:29
+    359|   const ran = await install(w, folder);
+    360|   const id = (JSON.parse(readFileSync(join(folder, 'deepbuild.json'), …
+    361|   if (ran.code !== 0) throw Error(`deep install of ${String(id)} didn'…
+       |                             ^
+    362|   return ran;
+    363| }
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:367:3
+ ❯ tests/acceptance/1922/pinned.test.ts:44:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  tests/acceptance/1922/rebuild.test.ts > #1922.985dc2cb A test.upper tool of two files is installed again under the same version with one byte changed in its second file: the install is refused, naming the tool and both builds, and the run on "abc" is still a cache hit that starts no process. Under the next version the changed tool qualifies and joins, and "abc" misses once. A planted host that hashes only the tool's entry file accepts the changed tool under the same version and fails, naming the file > the same version with one byte changed in the second file is refused naming the tool and both builds; the next version joins and misses once
+Error: deep install of test/upper-kind didn't load it: exit 1, stdout "Source: /private/tmp/dh1922-IoYVJi/kind\n  test/upper-kind@1.0.0, digest d1:d802266b12a1822b813bbaabb8de2190dd1a791ddcf84f026acc37adcfeb8bc3, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_only\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-kind@1.0.0\n", stderr "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; its manifest fails extension.manifest@1 at /job_tools: unlisted_field [{\"kind\":\"test.upper\",\"tool\":\"upper-a@1.0.0\"}]\n"
+ ❯ mustInstall tests/acceptance/1922/helpers.ts:361:29
+    359|   const ran = await install(w, folder);
+    360|   const id = (JSON.parse(readFileSync(join(folder, 'deepbuild.json'), …
+    361|   if (ran.code !== 0) throw Error(`deep install of ${String(id)} didn'…
+       |                             ^
+    362|   return ran;
+    363| }
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:367:3
+ ❯ tests/acceptance/1922/rebuild.test.ts:18:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  tests/acceptance/1922/rebuild.test.ts > #1922.985dc2cb A test.upper tool of two files is installed again under the same version with one byte changed in its second file: the install is refused, naming the tool and both builds, and the run on "abc" is still a cache hit that starts no process. Under the next version the changed tool qualifies and joins, and "abc" misses once. A planted host that hashes only the tool's entry file accepts the changed tool under the same version and fails, naming the file > the planted host that hashes only the entry file accepts the changed tool and fails, naming the file
+Error: BLOCKED: the hub didn't start (deep hub run with DEEP_HUB_PLANT=job-build-entry-only):  file://<repo>/packages/hub/dist/plant.js:97
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=job-build-entry-only names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:97:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1557:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:316:30
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/1922/helpers.ts:180:36
+
+ ❯ openWorld tests/acceptance/1922/helpers.ts:351:15
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:366:13
+ ❯ tests/acceptance/1922/rebuild.test.ts:25:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  tests/acceptance/1922/tools.test.ts > #1922.c2d25c7b A second tool for test.upper, registered by another test plug-in through deep.registerJobTool, appears beside the first in deep_job; a planted tool that lowercases the last letter fails the kind's qualification at install, naming the fixture, and never appears in deep_job > a second plug-in's tool for test.upper appears beside the first in deep_job and runs
+Error: deep install of test/upper-kind didn't load it: exit 1, stdout "Source: /private/tmp/dh1922-QM8vf6/kind\n  test/upper-kind@1.0.0, digest d1:d802266b12a1822b813bbaabb8de2190dd1a791ddcf84f026acc37adcfeb8bc3, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_only\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-kind@1.0.0\n", stderr "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; its manifest fails extension.manifest@1 at /job_tools: unlisted_field [{\"kind\":\"test.upper\",\"tool\":\"upper-a@1.0.0\"}]\n"
+ ❯ mustInstall tests/acceptance/1922/helpers.ts:361:29
+    359|   const ran = await install(w, folder);
+    360|   const id = (JSON.parse(readFileSync(join(folder, 'deepbuild.json'), …
+    361|   if (ran.code !== 0) throw Error(`deep install of ${String(id)} didn'…
+       |                             ^
+    362|   return ran;
+    363| }
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:367:3
+ ❯ tests/acceptance/1922/tools.test.ts:17:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  tests/acceptance/1922/tools.test.ts > #1922.c2d25c7b A second tool for test.upper, registered by another test plug-in through deep.registerJobTool, appears beside the first in deep_job; a planted tool that lowercases the last letter fails the kind's qualification at install, naming the fixture, and never appears in deep_job > the planted tool that lowercases the last letter fails the qualification at install, naming the fixture, and never appears in deep_job
+Error: deep install of test/upper-kind didn't load it: exit 1, stdout "Source: /private/tmp/dh1922-gfIY2G/kind\n  test/upper-kind@1.0.0, digest d1:d802266b12a1822b813bbaabb8de2190dd1a791ddcf84f026acc37adcfeb8bc3, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_only\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-kind@1.0.0\n", stderr "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; its manifest fails extension.manifest@1 at /job_tools: unlisted_field [{\"kind\":\"test.upper\",\"tool\":\"upper-a@1.0.0\"}]\n"
+ ❯ mustInstall tests/acceptance/1922/helpers.ts:361:29
+    359|   const ran = await install(w, folder);
+    360|   const id = (JSON.parse(readFileSync(join(folder, 'deepbuild.json'), …
+    361|   if (ran.code !== 0) throw Error(`deep install of ${String(id)} didn'…
+       |                             ^
+    362|   return ran;
+    363| }
+ ❯ kindWorld tests/acceptance/1922/helpers.ts:367:3
+ ❯ tests/acceptance/1922/tools.test.ts:28:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  tests/acceptance/1922/upper.test.ts > #1922.08e9adc6 A test plug-in registers the job kind test.upper through deep.registerJob, with a params schema, one text output, the key hash(tool@version, params, input hashes), the output check test.upper_only it registers through deep.registerCheck, and a qualification of three fixture texts with their expected bytes; after one approval deep_job lists the kind with its tool and runs it on "abc", returning "ABC" by hash with a receipt naming the kind, the tool and the key; and a rerun with the same inputs is a cache hit that starts no process > after its one install, deep_job lists test.upper with upper-a@1.0.0, runs it on "abc" to "ABC" by hash with a receipt, and the rerun is a hit that starts no process
+Error: deep install of test/upper-kind didn't load it: exit 1, stdout "Source: /private/tmp/dh1922-Pu2zj1/kind\n  test/upper-kind@1.0.0, digest d1:d802266b12a1822b813bbaabb8de2190dd1a791ddcf84f026acc37adcfeb8bc3, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: test.upper_only\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\nInstalled test/upper-kind@1.0.0\n", stderr "It is not loaded: it failed conformance: its manifest fails extension.manifest@1 at /jobs: unlisted_field [\"test.upper\"]; its manifest fails extension.manifest@1 at /job_tools: unlisted_field [{\"kind\":\"test.upper\",\"tool\":\"upper-a@1.0.0\"}]\n"
+ ❯ mustInstall tests/acceptance/1922/helpers.ts:361:29
+    359|   const ran = await install(w, folder);
+    360|   const id = (JSON.parse(readFileSync(join(folder, 'deepbuild.json'), …
+    361|   if (ran.code !== 0) throw Error(`deep install of ${String(id)} didn'…
+       |                             ^
+    362|   return ran;
+    363| }
+ ❯ tests/acceptance/1922/upper.test.ts:21:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  15 failed (15)
+   Start at  22:32:37
+   Duration  13.72s (tests 83%, transform 11%, import 5%)
+

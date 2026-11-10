@@ -121,12 +121,32 @@
         "chrono": {
           "spec": "^0.4",
           "why": "Issue #883: a notification gives the default's time as a clock time in your time zone; already in gpui's tree with its clock."
+        },
+        "deep-canvas-effects": {
+          "spec": "* path=../deep-canvas-effects",
+          "why": "Issue #1436: chrome-fx@1, the pack the chrome's effects come from, read and checked as data."
+        },
+        "ed25519-dalek": {
+          "spec": "^3",
+          "why": "Issue #1454: the app signs its answers as the device you paired; the version already in the tree."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #339: the captured frame as gpui's RenderImage, and the held run's frame written as a PNG; on every platform the app builds on since the frame's pixels became a gpui image (show.rs). Already in gpui's tree."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #1458: the chrome's code face is a bundled one, so GPUI's text system is given its bytes."
         }
       },
       "dev-dependencies": {
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #337: gpui-kit's test support, for the headless renders and clicks."
+        },
+        "deep-app": {
+          "spec": "* path=.",
+          "why": "Issue #1457: the app binary holds the product alone, so its own tests build it again with the spike and fixtures features they read."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -158,10 +178,6 @@
           "spec": "^0.6",
           "why": "Issue #339: reaches the cursor window's NSWindow to move it, since gpui has no window-move call. Already in gpui's tree."
         },
-        "image": {
-          "spec": "^0.25",
-          "why": "Issue #339: the captured frame as gpui's RenderImage, and the held run's frame written as a PNG. Already in gpui's tree."
-        },
         "objc2-screen-capture-kit": {
           "spec": "^0.3",
           "why": "Issue #105: the bug capture through ScreenCaptureKit: the system picker, the stream and its recording output, which writes the MP4. Same objc2 family and version as gpui's tree."
@@ -189,6 +205,14 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #140: the color check presents through a surface wgpu configures with its Srgb color space; the version deep-gpu uses."
+        },
+        "deep-effects-render": {
+          "spec": "* path=../deep-effects-render",
+          "why": "Issue #1434: the chrome operators' graphs, written as Metal source for GPUI's renderer."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #1434: the chrome fixture's idle reading (package-idle wakeups) and frame timing (thread CPU time); already in the tree."
         }
       }
     },
@@ -259,6 +283,12 @@
         "objc2-foundation": {
           "spec": "^0.3",
           "why": "Issue #338: NSArray, NSRect and NSString for the live tree's children, frames and roles. Already in gpui's tree."
+        }
+      },
+      "dev-dependencies": {
+        "deep-app": {
+          "spec": "* path=../deep-app",
+          "why": "Issue #1408: the replica's suites, #992's planted app among them, build the app with the plants they read; `cargo build` never does."
         }
       }
     },
@@ -713,6 +743,10 @@
         "deep-canvas-seams": {
           "spec": "* path=../deep-canvas-seams",
           "why": "Issue #140: the fonts backend names itself with the seams' backend type."
+        },
+        "skrifa": {
+          "spec": "^0.44",
+          "why": "Issue #443: the glyph outlines of a shaped run, read unscaled from the face the shaper set each glyph in; the reader parley and Vello CPU already use."
         }
       }
     },
@@ -725,6 +759,10 @@
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #390: the window the mask sprites go into, through the GPUI patch's paint_mask_sprite."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #1479: big text draws from glyph outlines, flattened and bucketed by zoom by the marks module's path code, as any path is."
         }
       }
     },
@@ -793,6 +831,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #391: reads the document and the deep-motion CLI JSON lines; float_roundtrip, so a key value reads back to its exact f64. Already in the workspace tree."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #494: a path key's SVG `d`, read and flattened by the marks module's path reader."
         }
       }
     },
@@ -813,6 +855,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #391: the deep-motion CLI's JSON lines; float_roundtrip, so a key value reads back to its exact f64. Already in the workspace tree."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #491: the shaper the auto layout measures text with, for a frame's layout glide."
         }
       }
     },
@@ -841,6 +887,10 @@
         "taffy": {
           "spec": "^0.14",
           "why": "Issue #375: auto layout's flexbox and grid, the engine GPUI already uses; already in the workspace tree at this version through GPUI."
+        },
+        "deep-canvas-drawn": {
+          "spec": "* path=../deep-canvas-drawn",
+          "why": "Issue #149: a drawn look's spec, geometry and media, which the marks module lowers a drawn item through."
         }
       }
     },
@@ -917,6 +967,10 @@
         "deep-canvas-vector": {
           "spec": "* path=../deep-canvas-vector",
           "why": "Issue #398: check, raster and geometry import each vector@1 item's SVG from the line's store and draw it as marks2d's items."
+        },
+        "deep-canvas-graph": {
+          "spec": "* path=../deep-canvas-graph",
+          "why": "Issue #399: graph@1 laid out and routed, and label@1 placed, where this crate draws."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -927,6 +981,22 @@
         "libc": {
           "spec": "^0.2",
           "why": "Issue #854: an idle window's wakeups and CPU, read from the process with proc_pid_rusage and getrusage; already in the lockfile."
+        },
+        "deep-canvas-media": {
+          "spec": "* path=../deep-canvas-media",
+          "why": "Issue #499: a video item's start, in and rate, and the frame its source time falls in."
+        },
+        "deep-codecs": {
+          "spec": "* path=../deep-codecs",
+          "why": "Issue #499: a video item's frames, decoded in a decode worker into pooled NV12 pixel buffers tagged with the probe's matrix and range."
+        },
+        "objc2-core-foundation": {
+          "spec": "^0.3",
+          "why": "Issue #499: holds a decoded frame's pixel buffer (CFRetained) while it is drawn; already in the tree."
+        },
+        "objc2-core-video": {
+          "spec": "^0.3",
+          "why": "Issue #499: the CVPixelBuffer a decoded video frame arrives in; already in the tree."
         }
       }
     },
@@ -943,6 +1013,10 @@
         "vello_cpu": {
           "spec": "^0.3",
           "why": "Issue #373: goldens and snapshots of 2D marks render with Vello CPU, its f32 pipeline at the scalar SIMD level, the same bytes on every platform; already in the tree through deep-text."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #1162: table columns inlined from the evidence store, shared with the hub; already in the tree."
         }
       }
     },
@@ -1111,6 +1185,18 @@
         "deep-canvas-loop": {
           "spec": "* path=../deep-canvas-loop",
           "why": "Issue #453: the loop canvas module (geometry.shading) joins the full build set."
+        },
+        "deep-canvas-input": {
+          "spec": "* path=../deep-canvas-input",
+          "why": "Issue #308: the input module, controls and control@1, in the full build set."
+        },
+        "deep-canvas-media": {
+          "spec": "* path=../deep-canvas-media",
+          "why": "Issue #499: the media module, media@1."
+        },
+        "deep-logic": {
+          "spec": "* path=../deep-logic",
+          "why": "Issue #499: the logic module's world, which a live play steps on the transport's clock."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1141,6 +1227,14 @@
         "raw-window-handle": {
           "spec": "^0.6",
           "why": "Issue #140: reaches the shown window's NSView for its accessibility tree; already in GPUI's tree."
+        },
+        "gpui-pre-macos": {
+          "spec": "=0.3.9",
+          "why": "Issue #1551: a still window stops its display link, through the vendored gpui-pre-macos's frame-link hook and plants; already in the lockfile."
+        },
+        "objc2-foundation": {
+          "spec": "^0.3",
+          "why": "Issue #1551: the point (NSPoint) a `wake` posts its pointer move at; already in the lockfile."
         }
       }
     },
@@ -1231,6 +1325,18 @@
         "objc2-metal": {
           "spec": "^0.3",
           "why": "Issue #377: the Metal texture made over a slot's IOSurface before wgpu wraps it."
+        }
+      },
+      "target.'cfg(target_os = \"linux\")'.dependencies": {
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #70: wgpu's Vulkan backend, the GPU layer's backend on Linux."
+        }
+      },
+      "dev-dependencies": {
+        "blake3": {
+          "spec": "^1.5.5",
+          "why": "Issue #501: the CPU hash the GPU frame hash is tested against."
         }
       }
     },
@@ -1335,6 +1441,30 @@
         "deep-marks-render": {
           "spec": "* path=../deep-marks-render",
           "why": "Issue #140: live and headless draw each 2D writer layer through the same GPUI and Vello CPU paths deep-canvas-render uses."
+        },
+        "deep-canvas-drawn": {
+          "spec": "* path=../deep-canvas-drawn",
+          "why": "Issue #149: the drawn pass reads the look's spec, media and geometry."
+        },
+        "deep-canvas-input": {
+          "spec": "* path=../deep-canvas-input",
+          "why": "Issue #432: the input module's control@1 kinds, the controls a live document plays through."
+        },
+        "deep-canvas-vector": {
+          "spec": "* path=../deep-canvas-vector",
+          "why": "Issue #443: vector's outline source, so view3d extrudes a vector item as deep-show's full build does."
+        },
+        "deep-codecs": {
+          "spec": "* path=../deep-codecs",
+          "why": "Issue #423: the run's decode worker, which makes a material's maps ready for the GPU."
+        },
+        "meshopt": {
+          "spec": "^0.7",
+          "why": "Issue #425: the simplify job's index-only levels by error, one meshoptimizer pass per level."
+        },
+        "naga": {
+          "spec": "^30",
+          "why": "Issue #464: the indexed operator's class, computed from its WGSL module; already in the tree."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1373,6 +1503,18 @@
         "vello_cpu": {
           "spec": "^0.3",
           "why": "Issue #378: a label's coverage mask and an anchored overlay's picture, rasterized on the CPU."
+        },
+        "deep-canvas-drawn": {
+          "spec": "* path=../deep-canvas-drawn",
+          "why": "Issue #149: a drawn look's spec and line profiles, read for the 3D module's marks."
+        },
+        "meshopt": {
+          "spec": "^0.7",
+          "why": "Issue #425: a proxy band's mesh, simplified once per content key (Level of detail: proxies)."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #419: a fixture world's step hashes; already in the tree."
         }
       }
     },
@@ -1413,12 +1555,24 @@
         "wgpu-profiler": {
           "spec": "^0.28",
           "why": "Issue #380: times scene3d's own passes (shadow map, geometry, output) in the same frame as the effects."
+        },
+        "deep-canvas-effects": {
+          "spec": "* path=../deep-canvas-effects",
+          "why": "Issue #429: a material operator's checked graph and the core's WGSL for it."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #464: the look's print fields the print pass draws."
         }
       },
       "dev-dependencies": {
         "serde_json": {
           "spec": "^1",
           "why": "Issue #386: the renderer's tests build their scene documents as JSON; already in the tree."
+        },
+        "naga": {
+          "spec": "^30",
+          "why": "Issue #464: a unit test parses and validates the print pass's WGSL; already in the tree."
         }
       }
     },
@@ -1427,6 +1581,10 @@
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #380: the registry the effects module registers its passes and fixture through, and the core's ops for its constants."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #486: scene3d's entries of gpu.output@1 and gpu.function@1 (the lobe outputs, occlusion, normal, core.bump@1) and which lobe each output needs, which the operator check types, inlines and refuses by; effects already depends on scene3d as a canvas module."
         },
         "serde_json": {
           "spec": "^1",
@@ -1463,6 +1621,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #380: operators and their parameters as JSON."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #483: the motion program a document's composed operators are evaluated through at a time, with how long each value holds."
         }
       }
     },
@@ -1673,6 +1835,10 @@
         "image": {
           "spec": "^0.25",
           "why": "Issue #498: PNG images decoded in the worker; already in the tree (deep-show, deep-app)."
+        },
+        "basisu_c_sys": {
+          "spec": "^0.9.1",
+          "why": "Issue #423: KTX2 maps (Basis Universal ETC1S or UASTC) transcoded to BC in the decode worker."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1774,6 +1940,70 @@
         }
       }
     },
+    "crates/deep-canvas-physics/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #2009: the manifest, registrar, kind and step-rate rule the physics module registers and reads through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2009: the world document as read and a refusal's actual value. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-physics-rapier/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #2009: the world reader, the caps and the backend interface this backend implements, with no copy of its own."
+        },
+        "rapier3d": {
+          "spec": "=0.36.1",
+          "why": "Issue #2009: physics.world@1's backend, the version the design pins (World and backend), with enhanced-determinism and serde-serialize and without simd8 or parallel."
+        },
+        "base64": {
+          "spec": "^0.22",
+          "why": "Issue #2009: a checkpoint's state travels as base64 in deep-physics's JSON lines. Already in the workspace tree."
+        },
+        "bincode": {
+          "spec": "^1",
+          "why": "Issue #2009: a deep checkpoint's state as Rapier's own serde bytes, the encoding Rapier's snapshot tests round-trip. Already in the workspace tree at 1.3.3."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #2009: deep-physics's JSON lines. Already in the workspace tree."
+        }
+      }
+    },
+    "spikes/245/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-sandbox": {
+          "spec": "* path=../../crates/deep-canvas-sandbox",
+          "why": "Spike #245: the fixture through sandbox@1's check and logic rewrite, as deep-logic runs a program."
+        },
+        "wasmtime": {
+          "spec": "=49.0.2",
+          "why": "Spike #245: the app's engine at the version the design pins, so both forms run what the app would."
+        },
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Spike #245: assembles steer.wat; the version wasmtime 49.0.2 already pulls in."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Spike #245: maps the copy-on-write instances' memory file and reads page faults. Already in the workspace tree."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Spike #245: the run's numbers as JSON for record.mjs. Already in the workspace tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Spike #245: the full-state hash both forms must match. Already in the workspace tree."
+        }
+      }
+    },
     "tests/acceptance/238/wat/Cargo.toml": {
       "dependencies": {
         "wat": {
@@ -1823,6 +2053,142 @@
         "yaml": {
           "spec": "2.9.1",
           "why": "Issue #37: journey files and feature entries under .deepbuild/ are YAML; env-local's pinned parser."
+        }
+      }
+    },
+    "crates/deep-canvas-drawn/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #149: the core's pinned math (ops), which every transcendental of a drawn look goes through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #149: reads a drawn look's fields from the look; already in the tree."
+        }
+      }
+    },
+    "crates/deep-canvas-input/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #308: the core's registry and canonical hash, which the input module registers control@1 and its kit through."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #308: a control's smoothing and the follow channels it feeds are motion's follow (#489), read here."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #308: reads controls and the input track's entries; already in the tree."
+        }
+      }
+    },
+    "crates/deep-canvas-media/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #499: the core's pinned math (ops) and the document's times, so audio is identical for one build and CPU architecture."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #499: the 3D module's bell emitter, a fixture of the media module's kit."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #499: reads strips, buses and processors from the document; already in the tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #499: a hash of each tap's samples, so a seek's output is compared with a play's bit for bit; already in the tree."
+        }
+      }
+    },
+    "crates/deep-input/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-input": {
+          "spec": "* path=../deep-canvas-input",
+          "why": "Issue #308: the input module, whose control sessions the deep-input proof binary drives."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #308: the binary's JSON lines, one reply per line; already in the tree."
+        }
+      }
+    },
+    "crates/deep-logic/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #531: the core's step length for a logic item's step rate."
+        },
+        "deep-canvas-sandbox": {
+          "spec": "* path=../deep-canvas-sandbox",
+          "why": "Issue #531: sandbox@1's check and rewrite of a logic item's program, in the role `logic`."
+        },
+        "deep-sandbox-wasmtime": {
+          "spec": "* path=../deep-sandbox-wasmtime",
+          "why": "Issue #531: the pinned wasmtime's version, named in a bake key and a report, and sandbox@1's web runner, served before the logic runtime."
+        },
+        "wasmtime": {
+          "spec": "=49.0.2",
+          "why": "Issue #531: runs the rewritten program; the version deep-sandbox-wasmtime pins, cranelift and runtime only."
+        },
+        "wasmparser": {
+          "spec": "=0.258.3",
+          "why": "Issue #531: reads a program's sections and its debug sidecar's, for traps by source line; the version deep-canvas-sandbox pins, so Cargo.lock holds one."
+        },
+        "addr2line": {
+          "spec": "=0.26.1",
+          "why": "Issue #531: a trap's code offset to its source line, through the debug sidecar's DWARF."
+        },
+        "gimli": {
+          "spec": "=0.33.0",
+          "why": "Issue #531: reads the debug sidecar's `.debug_*` sections for addr2line."
+        },
+        "base64": {
+          "spec": "^0.22",
+          "why": "Issue #531: a program's and an array's bytes in the binary's JSON lines."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #531: a logic item's fields and the binary's JSON lines; already in the tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #531: an item's bake key and its step and state hashes; already in the tree."
+        },
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #532: assembles logic.budget's calibration programs."
+        },
+        "libc": {
+          "spec": "^0.2",
+          "why": "Issue #532: reads thread CPU time for logic.budget's fixed cost; already in the tree."
+        }
+      }
+    },
+    "tests/acceptance/531/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #531's blind suite: its own assembler for the fixtures, a copy of #238's, apart from the code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #531's blind suite: lists each fixture's operators with their offsets, so a test knows where each trap's instruction is."
+        }
+      }
+    },
+    "tests/acceptance/532/wat/Cargo.toml": {
+      "dependencies": {
+        "wat": {
+          "spec": "=1.263.0",
+          "why": "Issue #532's blind suite: its own assembler for the fixtures, cut down from #531's, apart from the code under test."
+        },
+        "wasmparser": {
+          "spec": "=0.263.0",
+          "why": "Issue #532's blind suite: validates each fixture module before it is written."
         }
       }
     }
@@ -1881,6 +2247,102 @@
       "kind": "API key",
       "sha256": "9c88ccbf2cbb8faf2ee7522d40f527e13d882749809ac3cb3e40c3859e4b18dd",
       "why": "Issue #39: a made-up API key (dh39FAKE) the fake codex login prints, proving it never reaches an output, the record or a file under ~/.deepbuild; no real key."
+    },
+    {
+      "path": "packages/asks/sources.json",
+      "kind": "home path",
+      "sha256": "94b850a916b16d9656221eea2440ee3e5235a9a06a6a43a020117210893e5864",
+      "why": "Issue #1330: a start approval's question names a repo under the placeholder user you; no real home."
+    },
+    {
+      "path": "packages/contracts/fixtures/sandbox.refused@1/01.json",
+      "kind": "home path",
+      "sha256": "94b850a916b16d9656221eea2440ee3e5235a9a06a6a43a020117210893e5864",
+      "why": "A contract fixture: the refused target under the placeholder user you; no real home."
+    },
+    {
+      "path": "packages/contracts/fixtures/stack.served@1/01.json",
+      "kind": "home path",
+      "sha256": "94b850a916b16d9656221eea2440ee3e5235a9a06a6a43a020117210893e5864",
+      "why": "A contract fixture: a served stack's checkout under the placeholder user you; no real home."
+    },
+    {
+      "path": "packages/contracts/fixtures/start.approval@1/01.json",
+      "kind": "home path",
+      "sha256": "94b850a916b16d9656221eea2440ee3e5235a9a06a6a43a020117210893e5864",
+      "why": "A contract fixture: the repo and agent home of a start approval, under the placeholder user you; no real home."
+    },
+    {
+      "path": "packages/contracts/fixtures/start.refused@1/01.json",
+      "kind": "home path",
+      "sha256": "94b850a916b16d9656221eea2440ee3e5235a9a06a6a43a020117210893e5864",
+      "why": "A contract fixture: a refused start's repo under the placeholder user you; no real home."
+    },
+    {
+      "path": "packages/contracts/fixtures/start.started@1/01.json",
+      "kind": "home path",
+      "sha256": "94b850a916b16d9656221eea2440ee3e5235a9a06a6a43a020117210893e5864",
+      "why": "A contract fixture: a started session's repo, agent home and worktree under the placeholder user you; no real home."
+    },
+    {
+      "path": "packages/contracts/fixtures/workspace.created@1/01.json",
+      "kind": "home path",
+      "sha256": "94b850a916b16d9656221eea2440ee3e5235a9a06a6a43a020117210893e5864",
+      "why": "A contract fixture: a created workspace's folder under the placeholder user you; no real home."
+    },
+    {
+      "path": "packages/contracts/fixtures/workspace.moved@1/01.json",
+      "kind": "home path",
+      "sha256": "94b850a916b16d9656221eea2440ee3e5235a9a06a6a43a020117210893e5864",
+      "why": "A contract fixture: a moved workspace's old and new folders under the placeholder user you; no real home."
+    },
+    {
+      "path": "tests/acceptance/1022/fixtures/hooks.jsonl",
+      "kind": "home path",
+      "sha256": "a7a576d3c1a1ca5f54d3b5c43ed05163dd977b32ab1655a2ac336e5d5870028e",
+      "why": "Issue #1022's blind suite: recorded Codex hook payloads whose transcript path sits under the suite's temp folder marker, in a folder named home; no user's home."
+    },
+    {
+      "path": "tests/acceptance/124/fixtures/stress/text.events.jsonl",
+      "kind": "home path",
+      "sha256": "1ee1a19bd298057a7a90734bccee13976a34914fd0c29fda5aebc848bbfd7961",
+      "why": "Issue #124's blind suite: made-up long worktree paths under the placeholder user dev, for the stress rows; no real home."
+    },
+    {
+      "path": "tests/acceptance/124/ui-helpers.ts",
+      "kind": "home path",
+      "sha256": "1ee1a19bd298057a7a90734bccee13976a34914fd0c29fda5aebc848bbfd7961",
+      "why": "Issue #124's blind suite: a made-up long worktree path under the placeholder user dev; no real home."
+    },
+    {
+      "path": "tests/acceptance/1523/helpers.ts",
+      "kind": "API key",
+      "sha256": "656ea323826391274d6b6048ff7b9b34e3776dd1a63ed94eaa0eb7153bb89bc1",
+      "why": "Issue #1523's blind suite: a made-up access token (dh1523FAKE) written into a temp home's credentials file; no real credential."
+    },
+    {
+      "path": "tests/acceptance/1523/helpers.ts",
+      "kind": "API key",
+      "sha256": "3c48fab10d6edc889eb4c20ddfd953dbaa07b65f7cd578e3815e878506b369a2",
+      "why": "Issue #1523's blind suite: a made-up refresh token (dh1523FAKE) written into a temp home's credentials file; no real credential."
+    },
+    {
+      "path": "tests/acceptance/1537/helpers.ts",
+      "kind": "API key",
+      "sha256": "8b2ae023ec71acbe5b92ef16bf8c2d18eaeda210e5d0f738448c869a24d98ca0",
+      "why": "Issue #1537's blind suite: a made-up access token (dh1537FAKE) written into a temp home's credentials file; no real credential."
+    },
+    {
+      "path": "tests/acceptance/1537/helpers.ts",
+      "kind": "API key",
+      "sha256": "a8c55268bb6d2e473fe34b8c8949ab3cd1709f40318fbc6159756f322d52e7d9",
+      "why": "Issue #1537's blind suite: a made-up refresh token (dh1537FAKE) written into a temp home's credentials file; no real credential."
+    },
+    {
+      "path": "tests/corpus-redact.test.mjs",
+      "kind": "home path",
+      "sha256": "45c1386eb381f8d5be4342bedf020534617f4f71d1136667e207a728fb2b2365",
+      "why": "The corpus redaction's own test: the redacted form it expects, under the placeholder user user; no real home."
     }
   ]
 }

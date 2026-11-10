@@ -1,0 +1,46 @@
+// The test plug-in that holds the job kind test.upper (#1922 AC2; README, The surface under test). It registers the
+// output check test.upper_only through deep.registerCheck, the kind through deep.registerJob (a params schema, one
+// text output, the key hash(tool@version, params, input hashes), that output check and a qualification of three
+// fixture texts with their expected bytes), and the kind's first tool, upper-a@1.0.0, through deep.registerJobTool.
+// Everything it registers is data but the check: the tool is the program in ./tool, which the hub runs.
+
+/** test.upper's params: the case to write the text in, and whether to trim it first, false unless given. */
+const PARAMS = {
+  type: 'object',
+  properties: { case: { enum: ['upper', 'lower'] }, trim: { type: 'boolean', default: false } },
+  required: ['case'],
+  additionalProperties: false,
+};
+/** The kind's qualification: three fixture texts and the bytes (UTF-8) a tool must write for each. */
+const FIXTURES = [
+  { name: 'fx-greeting', params: { case: 'upper' }, inputs: { text: 'hello' }, expect: { text: 'HELLO' } },
+  { name: 'fx-sentence', params: { case: 'upper' }, inputs: { text: 'Done right, 42 times' }, expect: { text: 'DONE RIGHT, 42 TIMES' } },
+  { name: 'fx-route', params: { case: 'upper' }, inputs: { text: 'route 66' }, expect: { text: 'ROUTE 66' } },
+];
+
+interface Spec { outputs?: Record<string, string> }
+
+export default async function (deep: any): Promise<void> {
+  // The output check: an output whose text holds a lower-case letter fails, naming itself.
+  await deep.registerCheck('test.upper_only', async (spec: Spec) => {
+    const text = Buffer.from(String(spec?.outputs?.text ?? ''), 'base64').toString('utf8');
+    const lower = /[a-z]/.test(text);
+    return {
+      outcome: lower ? 'failed' : 'passed', testsRun: 1, evidence: [], read: [], mask: null,
+      failures: lower ? [{ test: 'test.upper_only', file: 'index.ts', line: 1, stack: null, assertion: true, message: `test.upper_only: the output ${JSON.stringify(text)} holds a lower-case letter` }] : [],
+    };
+  });
+  await deep.registerJob('test.upper', {
+    schema: { params: PARAMS, inputs: { text: { media: 'text/plain' } } },
+    outputs: { text: { media: 'text/plain' } },
+    key: ['tool', 'params', 'inputs'],
+    output_checks: ['test.upper_only'],
+    qualification: { fixtures: FIXTURES },
+  });
+  await deep.registerJobTool('test.upper', {
+    tool: 'upper-a@1.0.0',
+    params: PARAMS,
+    run: { dir: 'tool', entry: 'upper.mjs' },
+    qualification: { same_bytes: true },
+  });
+}

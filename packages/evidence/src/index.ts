@@ -82,8 +82,12 @@ export interface RetainInput {
   kinds?: ReadonlySet<string>;
 }
 export interface RetainResult { removed: string[] }
-export interface SendRequest { files: readonly string[]; via: ShareVia; destination: string }
-export interface ShareAsk { sha256: string; destination: string; via: ShareVia; reason: string }
+/**
+ * `job` is a job tool's host (#1924): there a file goes under its origin rule alone, while its kind's own ask and budget
+ * stand for the redaction and license rules that guard what people see in an export, a report or a post.
+ */
+export interface SendRequest { files: readonly string[]; via: ShareVia | 'job'; destination: string }
+export interface ShareAsk { sha256: string; destination: string; via: ShareVia | 'job'; reason: string }
 export interface SendBoundary {
   ask(question: ShareAsk): Promise<boolean>;
   deliver(file: { sha256: string; bytes: Uint8Array }, destination: string): Promise<void>;
@@ -262,7 +266,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         if (backwards) return refuse(`step ${backwards.step} must start at 0 ms or later and end no earlier than it starts`);
         if (request.declares === undefined) return save(peer, request, request.bytes, 'binary', request.redaction);
         const found = detect(request.bytes);
-        if (found !== request.declares) return refuse(`the slot declares ${request.declares}, but the bytes are ${found ?? 'not png, jpeg or mp4'}`);
+        if (found !== request.declares) return refuse(`the slot declares ${request.declares}, but the bytes are ${found ?? 'not png, jpeg, mp4 or webm'}`);
         return save(peer, request, request.bytes, found, request.redaction, missingEnd(found, request.bytes));
       },
       text(request) {
@@ -343,8 +347,8 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         const yes = approved.get(pair) ?? new Set<string>();
         const reasons = [
           record.origin === 'agent' && 'an agent put it there',
-          record.redaction !== 'complete' && `its redaction is ${record.redaction}`,
-          !record.license.allows.includes(via) && `its license ${record.license.name} doesn't allow ${via}`,
+          via !== 'job' && record.redaction !== 'complete' && `its redaction is ${record.redaction}`,
+          via !== 'job' && !record.license.allows.includes(via) && `its license ${record.license.name} doesn't allow ${via}`,
         ].filter((reason): reason is string => !!reason && !yes.has(reason));
         if (reasons.length) {
           if (!(await boundary.ask({ sha256: sha, destination, via, reason: reasons.join('; ') }))) {

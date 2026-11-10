@@ -557,20 +557,20 @@ impl MotionPass {
         let binds = [
             group(
                 &computes[0],
-                &[(0, u.clone()), (1, Tv(&velocity_view)), (2, Tv(&tile_view))],
+                &[(0, u.clone()), (1, Tv(velocity_view)), (2, Tv(tile_view))],
             ),
             group(
                 &computes[1],
-                &[(0, u.clone()), (3, Tv(&tile_view)), (4, Tv(&near_view))],
+                &[(0, u.clone()), (3, Tv(tile_view)), (4, Tv(near_view))],
             ),
             group(
                 &computes[2],
                 &[
                     (0, u.clone()),
-                    (1, Tv(&velocity_view)),
-                    (5, Tv(&near_view)),
+                    (1, Tv(velocity_view)),
+                    (5, Tv(near_view)),
                     (6, Tv(linear)),
-                    (7, Tv(&resolved_view)),
+                    (7, Tv(resolved_view)),
                 ],
             ),
         ];

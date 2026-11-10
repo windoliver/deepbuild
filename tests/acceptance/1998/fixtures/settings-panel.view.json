@@ -1,0 +1,5 @@
+{
+  "name": "ext.twin.settings",
+  "pages": [{ "name": "Settings", "param": "section", "values": ["General", "Sounds"] }],
+  "commands": []
+}

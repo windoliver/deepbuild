@@ -621,7 +621,7 @@ fn matched(base: &Pose, to: &[Vec3; 2], centre: [f64; 2], height: f64, frame: &F
     for _ in 0..60 {
         let Some((_, b)) = project(&pose.projector(frame.size), to, frame.size) else { break };
         let h = b[3] - b[1];
-        if !(h > 0.0) || (h / height - 1.0).abs() < 1e-12 {
+        if h.is_nan() || h <= 0.0 || (h / height - 1.0).abs() < 1e-12 {
             break;
         }
         let k = h / height;
@@ -1277,8 +1277,7 @@ impl Plan {
 
     /// The camera at index `cam` at t.
     pub fn shown(&self, cam: usize, t: i64, at: &At) -> Shown {
-        let frame = Frame { size: self.size, safe: self.safe };
-        let mut out = self.shown_bare(cam, t, at, &frame);
+        let mut out = self.shown_bare(cam, t, at);
         if !at.reduced {
             out.pose = self.kicked(cam, &out.pose, t, at);
         }
@@ -1288,8 +1287,7 @@ impl Plan {
     /// Shot `i`'s side of a transition at t: its own pose at t, as if it alone wrote the camera,
     /// its camera's kick applied.
     pub fn side(&self, i: usize, t: i64, at: &At) -> Pose {
-        let frame = Frame { size: self.size, safe: self.safe };
-        let pose = self.shot_pose(i, t.min(self.shots[i].end), at, &frame).pose;
+        let pose = self.shot_pose(i, t.min(self.shots[i].end), at).pose;
         if at.reduced { pose } else { self.kicked(self.shots[i].camera, &pose, t, at) }
     }
 
@@ -1299,11 +1297,11 @@ impl Plan {
         mine()
             .filter(|(_, s)| s.start <= t && t < s.end)
             .map(|(i, _)| i)
-            .last()
+            .next_back()
             .or_else(|| mine().filter(|(_, s)| s.end <= t).max_by_key(|(_, s)| s.end).map(|(i, _)| i))
     }
 
-    fn shown_bare(&self, cam: usize, t: i64, at: &At, frame: &Frame) -> Shown {
+    fn shown_bare(&self, cam: usize, t: i64, at: &At) -> Shown {
         let camera = &self.cameras[cam];
         // A whip's window turns the side it shows (Transition: whip).
         for tr in &self.transitions {
@@ -1312,7 +1310,7 @@ impl Plan {
                 continue;
             }
             let side = if t < tr.cut { tr.from } else { tr.to };
-            let pose = self.shot_pose(side, t, at, frame).pose;
+            let pose = self.shot_pose(side, t, at).pose;
             let half = (tr.end - tr.start) as f64 / 2.0;
             let quad_in_out = |x: f64| if x < 0.5 { 2.0 * x * x } else { 1.0 - 2.0 * (1.0 - x) * (1.0 - x) };
             let a = if t < tr.cut {
@@ -1331,9 +1329,9 @@ impl Plan {
             return Shown { pose: turned, shot: Some(side), dissolve: None, moving: true };
         }
         match self.shot_at(cam, t) {
-            Some(i) if t < self.shots[i].end => self.shot_pose(i, t, at, frame),
+            Some(i) if t < self.shots[i].end => self.shot_pose(i, t, at),
             Some(i) => Shown {
-                pose: self.shot_pose(i, self.shots[i].end, at, frame).pose,
+                pose: self.shot_pose(i, self.shots[i].end, at).pose,
                 shot: Some(i),
                 dissolve: None,
                 moving: false,
@@ -1349,7 +1347,7 @@ impl Plan {
 
     /// Shot `i`'s pose at t (at its end, its last pose), with its glide, its shake and reduced
     /// motion.
-    fn shot_pose(&self, i: usize, t: i64, at: &At, frame: &Frame) -> Shown {
+    fn shot_pose(&self, i: usize, t: i64, at: &At) -> Shown {
         let s = &self.shots[i];
         if s.keyed {
             let pose = (at.keyed)(s.camera).unwrap_or(s.framed);
@@ -1383,7 +1381,7 @@ impl Plan {
                 .enumerate()
                 .filter(|(k, p)| p.camera == s.camera && p.end <= s.start && *k != i)
                 .max_by_key(|(_, p)| p.end)
-                .map(|(k, p)| self.shot_pose(k, p.end, at, frame).pose)
+                .map(|(k, p)| self.shot_pose(k, p.end, at).pose)
                 .or(self.cameras[s.camera].own);
             if let Some(before) = before {
                 if reduced_cut {
@@ -1667,9 +1665,9 @@ impl Plan {
         let eye = self.shown(cam, t, &at).pose.position;
         let secs = if reduced { program.motion.transport.start } else { t } as f64 / F;
         let mut out = [0, 1].map(|k| g.origin[k] + eye[k] * (1.0 - g.rate[k]) + g.drift[k] * secs);
-        for k in 0..2 {
-            if let Some(w) = g.repeat[k] {
-                out[k] -= w * (out[k] / w).floor();
+        for (o, w) in out.iter_mut().zip(g.repeat) {
+            if let Some(w) = w {
+                *o -= w * (*o / w).floor();
             }
         }
         Some(out)

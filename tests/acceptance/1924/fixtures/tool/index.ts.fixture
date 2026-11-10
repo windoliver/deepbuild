@@ -1,0 +1,26 @@
+// A test plug-in that adds one tool to test.hosted through deep.registerJobTool, a tool that runs off the machine
+// (#1924; README, The surface under test). probe.json names the tool (name@version) and the URL on its test host that
+// a call goes to; for the open model it also names the weight files the tool runs, each by hash, and the capability
+// its call needs. Everything it registers is data: the call is the hub's, to the host the manifest grants.
+import { readFileSync } from 'node:fs';
+
+interface Probe { tool: string; url: string; weights?: { name: string; sha256: string }[]; needs?: string[] }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+
+const PARAMS = {
+  type: 'object',
+  properties: { case: { enum: ['upper', 'lower'] }, trim: { type: 'boolean', default: false } },
+  required: ['case'],
+  additionalProperties: false,
+};
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerJobTool('test.hosted', {
+    tool: probe.tool,
+    params: PARAMS,
+    run: { url: probe.url },
+    ...(probe.weights ? { weights: probe.weights } : {}),
+    ...(probe.needs ? { needs: probe.needs } : {}),
+    qualification: { same_bytes: true },
+  });
+}

@@ -411,7 +411,9 @@ export class Runs {
       await this.finish(run, outcome, findings, evidence);
     });
     this.live.set(run.run, { run, done, stop });
-    void done.finally(() => this.o.leases().release(lease.id, []).catch(() => undefined)).finally(() => this.live.delete(run.run));
+    void done.finally(() => this.o.leases().release(lease.id, []).catch(() => undefined)).finally(() => this.live.delete(run.run))
+      // The journal still holds the run, so the next start recovers it.
+      .catch((error: unknown) => process.stderr.write(`deep hub: ${run.run}'s finish wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     return run.run;
   }
   private async finish(run: Run, outcome: string, findings: string[], evidence: string[], counts: { tests_run: number; passed: number; assertion: string | null; points_to: string | null } = { tests_run: 0, passed: 0, assertion: null, points_to: null }, key?: KeyFacts): Promise<void> {
@@ -429,7 +431,7 @@ export class Runs {
       if (lives) return;
       clearInterval(look);
       await this.keptEnded(run);
-    }), 1000);
+    }).catch((error: unknown) => process.stderr.write(`deep hub: ${run.run}'s finish wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`)), 1000);
     look.unref();
   }
   /** No hub read a kept run's exit, so it finishes unjudged, as stopped: never passed on an exit nobody saw. */

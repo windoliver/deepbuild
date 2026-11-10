@@ -1,0 +1,18 @@
+Base: 96b462a6 (the same tree as 0c4a4ec7). Not built or run there: the surface these tests drive doesn't exist at the
+base, so each test fails before it judges any reading.
+
+What is missing in `deep-show run` at the base (crates/deep-show/src/main.rs, mixdown.rs, media.rs):
+
+- No `media_bake` call: no parser in main.rs's chain (gate, ring, terminal, capture, media, mixdown, audio) knows the
+  name, so every scenario holding one answers {"ok": false, "code": "bad_input"}. AC3 (loudness.test.ts) and AC5
+  (envelope.test.ts) fail at their first run with "deep-show run answers the scenario ok ... got
+  {"ok":false,"code":"bad_input"}".
+- AC3 reaches that run only once the EBU set is read; on a machine where it isn't cached and can't be fetched it fails
+  BLOCKED instead (its unblock line), at the base as after the change.
+- Neither planted name (`sample_peak_meter`, `envelope_reads_peak`) is known; both answer bad_input.
+- Behind that surface: no loudness bake (K-weighting, 10 ms sub-blocks, gating, LRA, true peak) and no envelope bake
+  exist anywhere in the base.
+
+Expected at the base: 2 tests, 2 failed, each for that reason.
+The suite type-checks at the base: `node node_modules/typescript/bin/tsc -p tests/acceptance/500/bake/tsconfig.json`
+exits 0.

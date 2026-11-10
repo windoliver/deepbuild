@@ -23,6 +23,15 @@ pub fn configured_address() -> Option<PathBuf> {
     address.strip_prefix("unix:").map(PathBuf::from)
 }
 
+/// Whether sounds play (#1998): `sounds` in config.json, on unless it says false. You change it in the box's words.
+pub fn sounds_on() -> bool {
+    std::fs::read_to_string(root().join("config.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|config| config.get("sounds")?.as_bool())
+        .unwrap_or(true)
+}
+
 /// The hub's address: the setting's, or the installed hub's socket.
 pub fn address() -> PathBuf {
     configured_address().unwrap_or_else(|| root().join("hub.sock"))
@@ -99,6 +108,41 @@ pub enum HubError {
 impl From<io::Error> for HubError {
     fn from(error: io::Error) -> Self {
         HubError::Io(error)
+    }
+}
+
+/// What a refusal says, in the hub's own words where it gave some.
+pub fn why(error: &HubError) -> String {
+    match error {
+        HubError::Refused(refusal) => refusal["message"]
+            .as_str()
+            .map_or_else(|| refusal.to_string(), str::to_owned),
+        other => format!("{other:?}"),
+    }
+}
+
+/// Issue #1462: a replica's own copy of the hub, which takes every call the app makes of it in place of a socket.
+pub type Local = std::sync::Arc<dyn Fn(&str, &Value) -> Result<Value, HubError> + Send + Sync>;
+
+static LOCAL: std::sync::Mutex<Option<Local>> = std::sync::Mutex::new(None);
+
+/// Sends the app's calls to `local` from now on: the replica's door, in no shipped build.
+#[cfg(feature = "fixtures")]
+pub fn set_local(local: Option<Local>) {
+    *LOCAL.lock().unwrap_or_else(|e| e.into_inner()) = local;
+}
+
+/// The replica's copy of the hub, when one takes the app's calls.
+pub fn local() -> Option<Local> {
+    LOCAL.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// One call the app makes of its hub on a connection of its own: a write a control asks for. Blocks, so a view runs
+/// it off the main thread.
+pub fn call_app(method: &str, params: Value) -> Result<Value, HubError> {
+    match local() {
+        Some(local) => local(method, &params),
+        None => HubClient::app()?.call(method, params),
     }
 }
 

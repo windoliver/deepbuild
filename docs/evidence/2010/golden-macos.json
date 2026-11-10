@@ -1,0 +1,810 @@
+{
+ "world": {
+  "kind": "physics.world@1",
+  "dimensions": 3,
+  "step_rate": 120,
+  "substeps": 4,
+  "gravity": [
+   0,
+   -9.81,
+   0
+  ],
+  "seed": 2009,
+  "mode": "dynamic",
+  "capacity": {
+   "bodies": 64,
+   "shapes": 64,
+   "joints": 64,
+   "contacts": 256,
+   "particles": 0
+  },
+  "backend": {
+   "name": "rapier3d",
+   "version": "=0.36.1"
+  },
+  "checkpoint": {
+   "every": 60
+  },
+  "contact_materials": {
+   "block": {
+    "friction": 0.5,
+    "restitution": 0.2,
+    "density": 500
+   },
+   "ground": {
+    "friction": 0.6,
+    "restitution": 0.1,
+    "density": 1000
+   }
+  },
+  "shapes": {
+   "floor": {
+    "kind": "box",
+    "half": [
+     30,
+     0.1,
+     30
+    ]
+   },
+   "cube": {
+    "kind": "box",
+    "half": [
+     0.25,
+     0.25,
+     0.25
+    ]
+   },
+   "ball": {
+    "kind": "sphere",
+    "radius": 0.1
+   }
+  },
+  "bodies": {
+   "floor": {
+    "kind": "static",
+    "shapes": [
+     {
+      "shape": "floor",
+      "contact_material": "ground"
+     }
+    ],
+    "pose": {
+     "pos": [
+      0,
+      -0.1,
+      0
+     ]
+    }
+   },
+   "box00": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      -0.04,
+      0.3,
+      -0.045
+     ]
+    },
+    "mass": 1
+   },
+   "box01": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      0,
+      0.8500000000000001,
+      -0.015
+     ]
+    },
+    "mass": 1
+   },
+   "box02": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      0.04,
+      1.4000000000000001,
+      0.015
+     ]
+    },
+    "mass": 1
+   },
+   "box03": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      -0.04,
+      1.9500000000000002,
+      0.045
+     ]
+    },
+    "mass": 1
+   },
+   "box04": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      0,
+      2.5,
+      -0.045
+     ]
+    },
+    "mass": 1
+   },
+   "box05": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      0.04,
+      3.05,
+      -0.015
+     ]
+    },
+    "mass": 1
+   },
+   "box06": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      -0.04,
+      3.6,
+      0.015
+     ]
+    },
+    "mass": 1
+   },
+   "box07": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      0,
+      4.15,
+      0.045
+     ]
+    },
+    "mass": 1
+   },
+   "box08": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      0.04,
+      4.7,
+      -0.045
+     ]
+    },
+    "mass": 1
+   },
+   "box09": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      -0.04,
+      5.25,
+      -0.015
+     ]
+    },
+    "mass": 1
+   },
+   "box10": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      0,
+      5.8,
+      0.015
+     ]
+    },
+    "mass": 1
+   },
+   "box11": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "cube",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      0.04,
+      6.3500000000000005,
+      0.045
+     ]
+    },
+    "mass": 1
+   },
+   "ball": {
+    "kind": "dynamic",
+    "shapes": [
+     {
+      "shape": "ball",
+      "contact_material": "block"
+     }
+    ],
+    "pose": {
+     "pos": [
+      -20,
+      5,
+      0
+     ]
+    },
+    "mass": 1,
+    "gravity_scale": 0,
+    "velocity": {
+     "linear": [
+      1.5,
+      0,
+      0
+     ]
+    }
+   }
+  }
+ },
+ "steps": 360,
+ "runtime": {
+  "ok": true,
+  "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+  "backend": {
+   "name": "rapier3d",
+   "version": "0.36.1",
+   "features": [
+    "alloc",
+    "dim3",
+    "enhanced-determinism",
+    "f32",
+    "serde-serialize",
+    "std"
+   ]
+  },
+  "pins": [
+   {
+    "name": "glam",
+    "version": "0.33.12",
+    "features": [
+     "approx",
+     "approx-05",
+     "f64",
+     "i32",
+     "libm",
+     "nostd-libm",
+     "scalar-math",
+     "serde",
+     "std",
+     "u32"
+    ]
+   },
+   {
+    "name": "glamx",
+    "version": "0.3.1",
+    "features": [
+     "approx",
+     "glamx-serde",
+     "i32",
+     "libm",
+     "nalgebra",
+     "nostd-libm",
+     "scalar-math",
+     "serde",
+     "std"
+    ]
+   },
+   {
+    "name": "libm",
+    "version": "0.2.16",
+    "features": [
+     "arch",
+     "default"
+    ]
+   },
+   {
+    "name": "parry3d",
+    "version": "0.31.1",
+    "features": [
+     "alloc",
+     "dim3",
+     "downcast-rs",
+     "ena",
+     "enhanced-determinism",
+     "f32",
+     "hashbrown",
+     "indexmap",
+     "required-features",
+     "rstar",
+     "serde",
+     "serde-serialize",
+     "serde_arrays",
+     "slab",
+     "smallvec",
+     "std"
+    ]
+   },
+   {
+    "name": "simba",
+    "version": "0.10.2",
+    "features": [
+     "libm",
+     "libm_force",
+     "std",
+     "wide"
+    ]
+   },
+   {
+    "name": "wide",
+    "version": "1.7.1",
+    "features": [
+     "std"
+    ]
+   }
+  ]
+ },
+ "golden": {
+  "bake_key": "53e18fa44784aa003eb076a6576503725f930b7db7c52c7ab3e2581edb1194f0",
+  "runtime_digest": "f14c2c920ef9a8f4d44414a30ff8d72074dde81977b8f9eb529d0eab65dc4023",
+  "machine": {
+   "os": "macos",
+   "arch": "aarch64",
+   "cpu": "Apple M5 Max"
+  },
+  "step_hashes": [
+   "3000742f4aa235fc",
+   "58480ecd47e44ffe",
+   "b1c916e17f8f60b0",
+   "e92ef2ba408fdb74",
+   "ba3444d5b1ea4e0d",
+   "23301acc5d1fb811",
+   "90d2e4fc76180af2",
+   "08883498036e2208",
+   "310be9b2214ef85c",
+   "a8a5505b3beb4aa1",
+   "e233ed0ee0b44499",
+   "38dfcd86b4e593a7",
+   "facdd375353ccdae",
+   "aacbf3dea9f8735a",
+   "27e799c0e5c1ebc5",
+   "39f0650d60b7872c",
+   "8843a506c5482deb",
+   "db5ed5fa26442454",
+   "8e4eda2a61a6b9f8",
+   "29803a8d3cc562c7",
+   "0e6db91de7ecff74",
+   "42ff23270ff05526",
+   "545644706958bf5b",
+   "dd8918f4ff9a4b42",
+   "11f0f868d641da29",
+   "66d7fbf65a031d47",
+   "fdd1bf90a397a7a0",
+   "552dd370a5e3aad8",
+   "f43fa56a85049937",
+   "bc1af77920ff46b0",
+   "26ad668d88950d73",
+   "ffa546f579905c64",
+   "b74939e71067b744",
+   "c84e8e346ba9a8dd",
+   "c36d0eea49b7d1aa",
+   "e6f972e985d0f161",
+   "3f346c8f916e7f08",
+   "36fba0516e68c0df",
+   "242ad52d83f6d033",
+   "f0c1a96b711e3dba",
+   "2f38c658c754f6ef",
+   "7f3c555192da4e09",
+   "b10c7ae80f5d1a15",
+   "2b3a847a58390427",
+   "a23a7dfd2ea87708",
+   "f73020baaa702ac5",
+   "80c2767f91045ef5",
+   "c3b09b1b687e899c",
+   "4d43ad08ad961eed",
+   "d391d3bca9c09bab",
+   "fc21f26fdd803ba6",
+   "5f1e603bbed37411",
+   "64a4c9951f39ad90",
+   "9fe7ec67cb698364",
+   "9cd1afcb8afd6006",
+   "9fbef6e25b1c7148",
+   "e61b2fcad42d929c",
+   "b80b0e994f540bde",
+   "3c53cb430bd89c51",
+   "db5586f328e28fd3",
+   "70dc6536ba88147b",
+   "995da5be7a517917",
+   "057a54c327ee636b",
+   "96a6375192f6e109",
+   "b540065770c954e2",
+   "ad2fd3da36525f8e",
+   "5ec050f669af336b",
+   "8369dbccb1b53e40",
+   "e58761f1875140d3",
+   "6c61e2525a403dbb",
+   "e4e3174a5c364c53",
+   "b91cfe24c7bc2e7e",
+   "d61f9c3fdcbb02da",
+   "d72e480962d65fca",
+   "3e678f707c5d9854",
+   "3f2ac9d97ac7d8f7",
+   "3373466e57ee998b",
+   "f50410cedf0baabf",
+   "4249d026883444c4",
+   "7c86e9b5d4478d85",
+   "9b17b73a227125d8",
+   "27e91cc2df812c0f",
+   "786c3a7a5a71a464",
+   "bbb2615940fe1e71",
+   "27fc9cd9c3615643",
+   "127ed7efc6ad4c08",
+   "1c63f276ca079dba",
+   "1fc7025df128f5cf",
+   "7bca5f6ae9527b65",
+   "d8426401b136aed3",
+   "7e3297c1559b4291",
+   "4a8f3daede87d08b",
+   "bac7d589df6baa49",
+   "2244f78b126132c8",
+   "46e206334f1a2c34",
+   "4e2eda7b3bc44681",
+   "1dc724f89fd684a5",
+   "a285856bcdb60b4c",
+   "5826d95f51604abb",
+   "274e642785d2d271",
+   "56eefa2477e0e240",
+   "751a9036ed4a586f",
+   "0df2206e9dcdefb5",
+   "18d95ce6a85575d4",
+   "6713995abbc23e7d",
+   "a7ded596a389dc1f",
+   "938ef7f2981339ff",
+   "98c706c060a4dd4c",
+   "aadf053c51107f74",
+   "d7f61d1ee658f2fe",
+   "9f2e944d5b1962e0",
+   "c039a9869fd18aae",
+   "fe99a7a76ee1433d",
+   "2d22a3e811ecc551",
+   "4b2a74c52dd29a6d",
+   "78ba984fba8afba9",
+   "48d7fa51a8c5bf4f",
+   "f6318debcdb57f20",
+   "e963d4e77d15e645",
+   "cdc76fdf559e14a5",
+   "843ca9a3bce7a6e9",
+   "f90a0a31ae180c47",
+   "3f6b372db7086b10",
+   "b08164e9522253f5",
+   "5ba0f571a967b9a7",
+   "5f5fafc75b4b49ad",
+   "5335eefe2e1d9a53",
+   "2011829fd562010e",
+   "7953b911a9d0e5da",
+   "7f929a874a4ad303",
+   "5cd47a32040e8a56",
+   "a23ef911dd7065af",
+   "d871f3e75746d51d",
+   "4abad8c7480d5407",
+   "49a6761a65140960",
+   "c5e6c66d026d1f5c",
+   "8092b490e037f273",
+   "815bc07f75e1f033",
+   "491ba4a5b997c6bd",
+   "917819f0470703ea",
+   "ea441a48a5551bd3",
+   "282a46ba469d78ac",
+   "6843abcf20523cf6",
+   "fccd899db5f949fd",
+   "bdaa986022542fe1",
+   "1acb97b6dc45c032",
+   "2d7a1a8374b4577b",
+   "f5b6fa5c9555d7ba",
+   "e4c23e59c03759ba",
+   "a891df49df6ca5c3",
+   "bcad1eb960b9030f",
+   "3cffbc304a16a0c9",
+   "5f7ded37dc6db895",
+   "b1e0953e55edd251",
+   "8f6b6baa03c101c5",
+   "aa49379a297814da",
+   "9777c73db09bdc26",
+   "3489624c3d8a0edf",
+   "9b9d4e8f57971c95",
+   "aef39360b4077d7c",
+   "f8146e2890d014a2",
+   "59c5c224af615f24",
+   "83749cdbc3c4d089",
+   "7c3b21d7c78e2420",
+   "d9a3806ce9a534a6",
+   "b2dd9a693289abb4",
+   "426af50232807902",
+   "ec4a339cf470620c",
+   "7df03c6c30126621",
+   "72590f40db178a5a",
+   "78b37404493d33db",
+   "cffe890ae00a5e2d",
+   "1620f2e93d8d021d",
+   "56d65bf08bb8520d",
+   "d7a014e85b3194ce",
+   "aa9714936167c27c",
+   "67fd7cfd8a6236e6",
+   "b65dba7fdb767bed",
+   "e3063ecc70f09086",
+   "aae643cec6d38f47",
+   "cdafdf88216895fc",
+   "39489dcc13257e4f",
+   "71cee4082735cb50",
+   "1e053b870c1d1987",
+   "14c4d01f8d2c0710",
+   "4dbffaad715ba77c",
+   "0bc321621e886666",
+   "53f5285541aa273e",
+   "6fefc02f24209faa",
+   "61c8d8ca8a4a33ca",
+   "a5cb19fe35a1f655",
+   "7109a0b5808fa84a",
+   "77f3b468ce587373",
+   "a3cd3c3d0658cc77",
+   "1ad535c8d53e64c3",
+   "3415d56a4cca9351",
+   "07bfa59e9e768157",
+   "71998e5a56f0c2d0",
+   "a27e94aeb2906bfa",
+   "1994997fd70e8f3d",
+   "6a0971390565f8a5",
+   "dd953f7d6a75b575",
+   "d5c47623d1b940cf",
+   "9e078617e48b7c64",
+   "838c4a8a85c417a9",
+   "c3a09292722239ac",
+   "6c0b75994dbd66b7",
+   "d32da43fe5630e27",
+   "4bae994ac752dda9",
+   "a28e28f9e77dd61a",
+   "80e191796f313e03",
+   "8eb9d5df77df7b65",
+   "68ebbba3647b7201",
+   "14c116e0c6f32c88",
+   "83588945fc29f2b8",
+   "270852d2579c0b95",
+   "7dc188136835de29",
+   "707280c12b966540",
+   "68a8d74a20cacaf9",
+   "cf0a6901e616fddc",
+   "8d68c5adae9c0dae",
+   "53d51ca49d3dcafd",
+   "c920b86f12de51e3",
+   "9181ab77c1819bb3",
+   "f4e628dc30bf683a",
+   "10cb34dc36459b65",
+   "7180e84847fa9f08",
+   "80ecd0a98d718e4c",
+   "00ef5d7ddd166ed2",
+   "adb9dc0ee0a1c653",
+   "1bcca20529755e70",
+   "46b5f3cedb1dcd8b",
+   "c1fd1d444639899e",
+   "94b542436cdd5150",
+   "cd968167b3b11937",
+   "6ce485e296306d83",
+   "24be930247195f26",
+   "bf833bd3dee437c3",
+   "a83f066602371848",
+   "77036e074f57400d",
+   "6152f9bf0bff506b",
+   "2c11f741454d4fb7",
+   "56d8d217e1902470",
+   "3eadf09219d08c0b",
+   "8c93a726f192c1c8",
+   "e2d7c7e3a6120120",
+   "eb4670700dd651af",
+   "51820d1961b49c95",
+   "73324ae6af4d812c",
+   "6ead72f3e196a994",
+   "65224de03ff5d3b3",
+   "a522f3c950bcfb62",
+   "3b20816ad14b17f8",
+   "a4ba3527645bf666",
+   "2ca5f2576f4aeef5",
+   "af380294422b546d",
+   "cc9f11ca9a009bce",
+   "88ee886903471e45",
+   "d9495953ca0db6cd",
+   "cf9807ebc8267a7a",
+   "7d3745d5afed9626",
+   "bd1275f7948e9696",
+   "f2b1cdb8cc9c395f",
+   "7b6abf9123296480",
+   "76b4c36901674aec",
+   "162ebc48b1689f7a",
+   "62acc8afaedcb1c8",
+   "304329ed0124d590",
+   "adcb8259f9fbe9ab",
+   "c431c5a45b2f516c",
+   "a626334cedd2fb8d",
+   "848582ec7e7ee12e",
+   "e269048e316611d4",
+   "e07f81ee62a58f89",
+   "34f4d83ef9364092",
+   "ec39e921cd5ff9db",
+   "0f25dbbf19edc830",
+   "308886f8afd11426",
+   "57cb1a7851d09574",
+   "ff1adb9d0f53493c",
+   "cdb47165608f7d8a",
+   "18428d3280ea7ba7",
+   "b56ad84e6e9fadae",
+   "dc9b41ff6f436a05",
+   "1d3402afd9161b3f",
+   "cc4e0b98c689f332",
+   "26b64c14772992aa",
+   "74554b17d21fdf2a",
+   "ea0649ec4690784f",
+   "80a0fa187b9670c3",
+   "ba05c0071442a5e6",
+   "e744269ed5fa9a11",
+   "169043358d947f85",
+   "f6b8f3d6a285f441",
+   "3af2cf6acee8c7a5",
+   "47c1d290f8c03632",
+   "b3c30d07e3cc68a6",
+   "4c8c49a3c12d2f77",
+   "6f23640d3db402d5",
+   "2b15cc9f7f508665",
+   "31092f5492371378",
+   "06b4bf26bd9713d3",
+   "072beec5da40c804",
+   "b6b3d733ac22bc06",
+   "254fa34a0e4e74bd",
+   "dbcfaee7cd13367e",
+   "1f56b7853de70e7c",
+   "6016db53ea446a62",
+   "71a1d2dcfb4f28ad",
+   "76d00965ec386969",
+   "144bd3ac540aa757",
+   "d8a25dfe52fe6f91",
+   "9840ac822da19c50",
+   "220ef42121905d07",
+   "675bf3c35defd23a",
+   "2074fce27e782dcb",
+   "927d3c051be2438c",
+   "bf31ec169e80d584",
+   "27ce39092d6067c5",
+   "ab6e6abd4516a1a0",
+   "5cade07a91b4fd3e",
+   "05f5a446b8aa3f69",
+   "3b81997d8503b677",
+   "06342b543ac6e7ec",
+   "a68bf07db68ebe99",
+   "9acecadaf62c1251",
+   "41cc59d97be7e64e",
+   "7540d25fec6995b4",
+   "d6fdd6c5663880cb",
+   "918dce3224a8c96e",
+   "056dad35c703ae2d",
+   "10dc38f5b878f1a8",
+   "e348d215e3aaaec8",
+   "6f78d0b277b1eba1",
+   "d473a3d97ef52e06",
+   "74158d88af1eb922",
+   "ab969c33172aba7c",
+   "67817dccee47bc39",
+   "cba6a72df0339c24",
+   "c73c14e7c93b1334",
+   "00ac4d93fe52566b",
+   "f99dd9ff9c274f1c",
+   "0667f0d25b5d6a9b",
+   "fcf1a83560f70811",
+   "e672b6a065d684cf",
+   "0f52f636bddfa324",
+   "5e8984c873e693c3",
+   "98e0ab0d088d028a",
+   "aa2e0a861e7aee34",
+   "82627c06b40845e2",
+   "3933395e1ab03ff2",
+   "67a02f07e4ac5f69",
+   "10194117aa4eff2a",
+   "d33d494de2a97112",
+   "fdb999c6f4f34e7e",
+   "138c2deda27133c7",
+   "9328e856352a26a2",
+   "61145fcd5c168b92",
+   "cc3710c2d8b7690a",
+   "055d4e58448b60c4",
+   "340871df1d1cac22"
+  ],
+  "checkpoint_hashes": [
+   {
+    "step": 60,
+    "deep_hash": "2a3c8bcd996a5693"
+   },
+   {
+    "step": 120,
+    "deep_hash": "94a1e8fe636d3477"
+   },
+   {
+    "step": 180,
+    "deep_hash": "c611df160a91c0ec"
+   },
+   {
+    "step": 240,
+    "deep_hash": "c62ec0230d5924b5"
+   },
+   {
+    "step": 300,
+    "deep_hash": "d5a59ceb5705d62f"
+   },
+   {
+    "step": 360,
+    "deep_hash": "f2fc2bc393cfdb17"
+   }
+  ],
+  "occurrences_hash": null,
+  "record_on": "aarch64-apple-darwin",
+  "verify_on": [
+   "x86_64-unknown-linux-gnu"
+  ]
+ }
+}

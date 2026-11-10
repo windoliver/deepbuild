@@ -1,0 +1,60 @@
+#1460 at the base: commit 96b462a6 (Merge pull request #2051; 0c4a4ec7 before main's history rewrite) with this folder added,
+nothing else. Node 24.22.2, vitest 5.0.5, darwin-arm64, load average 56 to 110 (other sessions on this Mac). The workspaces were
+built first (npm ci --ignore-scripts; npm run build --workspaces); cargo from rustup's proxies on PATH. The probe had Accessibility
+and Screen Recording, so cli.test.ts reached the real app; nothing was BLOCKED.
+
+  env PATH=/opt/homebrew/opt/rustup/bin:... NO_COLOR=1 caffeinate -di node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/1460 --no-file-parallelism --testTimeout=600000
+
+Exit 1. 5 files, 14 tests: 13 failed, 1 passed, 48 s (the binaries were already built in this worktree's target folder).
+(doors.test.ts was run once more after a one-line change to the notification door, a wait before its click; same 3 failures.)
+
+Per test, at the base. Every failure is at a named assertion or a missing surface; none is a crash in the helpers.
+
+doors.test.ts
+  x AC1 #1460.2a9c7aec the five replica doors each land on session/<A> through open, the pages equal
+      each door, named, fails at its first step, session B opened by deep_drive's open: "\"open\" is no call; the calls are
+      launch, act, wait_for, see, probe, ... motion_check" (Pinned 3)
+  x AC1 #1460.2a9c7aec (wrong program) plant-row-skips-open fails, naming the row click
+      "crates/deep-app/Cargo.toml has no feature plant-row-skips-open (README, Pinned 11), so this wrong program can't be built"
+  x AC5 #1460.b224c18f deep_drive's open and a row click give one address and one page snapshot
+      the row click and deep_drive open doors fail as above: deep_drive has no open
+
+history.test.ts
+  x AC2 #1460.d705eebf five opened, walked back and forth, C removed and skipped, F from the middle drops the forward side
+      "deep_drive's open of session/1460e55a-…-000000000001: ... \"open\" is no call"
+  x AC8 #1460.dea93c6a rows A, B, C; ⌘[ twice shows A; D leaves no forward step; the terminal keeps ⌘[
+      the base's row clicks land, but "after clicking the rows of A, B and C the window shows no one address (no node of the
+      window has an address for its id (README, Pinned 2)); it should show session/1460e55a-…-000000000003"
+
+card.test.ts
+  x AC3 #1460.e8743dab open ask/<id> presents its card unarmed, its row still in Needs you
+      "deep_drive's open of ask/01KB1460AK0000000000000001: ... \"open\" is no call"
+  x AC4 #1460.e6caebd8 the closed ask's page says its question, answered and Serif receipt
+      "deep_drive's open of ask/01KB1460AK0000000000000002: ... \"open\" is no call"
+  x AC4 #1460.e6caebd8 nonsense/what-is-this says No match
+      "deep_drive has no open: ... \"open\" is no call"
+
+lint.test.ts
+  x AC6 #1460.939ea70f the lint passes the app and fails each plant, naming its file
+      "scripts/selection-lint.mjs exists (README, Pinned 8): expected false to be true"
+
+cli.test.ts (the real deep-app on #83's world; its PASS line read from the Stop: "PASS 4/4 · 4 tests · next: you · receipt")
+  x AC1 #1460.2a9c7aec deep open session/<id> lands the running app on that session's page
+      "deep open session/ee81a639-… exit 2, stderr \"Unsupported command \\\"open\\\". Run deep --help for available commands.\""
+  x AC7 #1460.4b8e8988 the PASS line's receipt part is session/<first 8>/<claim>, and deep open lands on the claim's page
+      "the line \"PASS 4/4 · 4 tests · next: you · receipt\" ends in the bare word \"receipt\", not the address of the claim's
+      page (session/ee81a639/01M7236PWFDD2B8KK1F6DBJ34N) that deep open takes"
+  ok AC7 #1460.4b8e8988 (wrong program) the planted line ending in "receipt" fails, naming the word
+      passes at the base on purpose: it runs the judge on the planted line, which is the base's own line; the test above fails
+      on the base for that reason
+  x AC3 #1460.e8743dab deep open ask/<id> shows the card, the record gains no event, the ask stays open
+      "deep open ask/01M7236Q4XFBPFJGW0KSWJVRVJ exit 2, ... Unsupported command \"open\"", then "no node of the real window has
+      the accessibilityIdentifier ask/01M7236Q4XFBPFJGW0KSWJVRVJ" and "... question-card"
+  x AC3 #1460.e8743dab (wrong program) plant-open-writes-event fails, naming the event
+      "crates/deep-app/Cargo.toml has no feature plant-open-writes-event (README, Pinned 11), so this wrong program can't be built:
+      error: the package 'deep-app' does not contain this feature: plant-open-writes-event"
+
+Noted on the way (not this issue's; README, Why the receipt has that form): #83's own AC11 goldens fail on main at this base,
+since #669 added a test count to the line and test.verdict counts one test per check run: PASS reads "PASS 4/4 · 4 tests · next:
+you · receipt", not the golden "PASS 4/4 · next: you · receipt". scripts/known-failures.json doesn't list them.

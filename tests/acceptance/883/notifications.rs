@@ -105,7 +105,6 @@ mod suite {
     /// 14:40 in Berlin on NOW's day, 2027-01-15, as ms past NOW; 16:40 the same day and the next, as epoch ms.
     const TO_14_40: u64 = 20_400_000;
     const TODAY_16_40: u64 = 1_800_027_600_000;
-    const TOMORROW_16_40: u64 = 1_800_114_000_000;
 
     fn fixture(name: &str) -> PathBuf {
         repo_root().join("tests/acceptance/883/fixtures").join(name)
@@ -388,12 +387,8 @@ mod suite {
         ));
     }
 
-    fn ac3_a_default_at_16_40_tomorrow_reads_tomorrow_at_16_40() {
-        holds(reads_default_at(
-            &text_for_default_at(TOMORROW_16_40),
-            "tomorrow at 16:40",
-        ));
-    }
+    // AC3's tomorrow case is in redraft-1458/ac3_tomorrow.rs: #1458 writes a moment on another day "tomorrow 16:40", so
+    // the case that required "tomorrow at 16:40" was redrafted blind and swapped in with the owner's approval.
 
     fn planted_ac3_a_text_with_in_2_h_fails() {
         // The base's own wording for a default two hours off, planted as the text.
@@ -691,10 +686,6 @@ mod suite {
             (
                 "ac3_a_default_at_16_40_today_reads_at_16_40",
                 ac3_a_default_at_16_40_today_reads_at_16_40,
-            ),
-            (
-                "ac3_a_default_at_16_40_tomorrow_reads_tomorrow_at_16_40",
-                ac3_a_default_at_16_40_tomorrow_reads_tomorrow_at_16_40,
             ),
             (
                 "ac4_quitting_and_reopening_the_app_then_restarting_the_hub_posts_nothing_again",

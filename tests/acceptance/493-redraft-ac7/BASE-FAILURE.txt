@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/github-issue-493-929fac/agent-ae355f500511b416f/tests/acceptance/493-redraft-ac7
+ RUN  v5.0.5 ~/dev/claude-worktrees/github-issue-493-929fac/agent-ae355f500511b416f/tests/acceptance/493-redraft-ac7
 
  ❯ defaults.test.ts (4 tests | 4 failed) 2020ms
    ❯ AC7: default moves and the glide from a shot framed at 4 m, and pose channels (4)

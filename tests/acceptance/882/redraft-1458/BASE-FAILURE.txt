@@ -1,0 +1,52 @@
+#882 redraft under #1458: one run of the two tagged tests at the base 2721ca7b, 2026-11-09, macOS (Darwin 27.2.0),
+Node v24.22.2, home paths as ~, each stack trimmed to its first frame.
+Command: node --test tests/acceptance/882/redraft-1458/look.test.mjs tests/acceptance/882/redraft-1458/replica.test.mjs
+(exit 1; 2 tests, 0 pass, 2 fail). The durations include a cold build of deep-canvas-render.
+
+Both fail on their named assertion, and only for the base's third ink tier: everything else AC1 asserts (the shipped
+look passes the guard; the #b45309 readout is refused naming light, session_readout, blocked and 0.044; the one-ink
+control passes; the dark-only plant is refused naming dark) holds at the base, and dark's ink_tertiary clears 4.5:1.
+wrong.test.mjs passes at the base, 12 of 12.
+
+✖ #882.98cbaa26 the shipped look passes its guard with the chrome roles, the ink at two tiers and disabled, in light and dark; the session readout at #b45309 fails it, naming the role, blocked and 0.044 (269828.621333ms)
+✖ #882.218503b6 every ink role but ink_disabled keeps 4.5:1 on ground, raised, and hover and selected over either, in dark and in light (269130.025542ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 269927.332125
+
+✖ failing tests:
+
+test at tests/acceptance/882/redraft-1458/look.test.mjs:9:1
+✖ #882.98cbaa26 the shipped look passes its guard with the chrome roles, the ink at two tiers and disabled, in light and dark; the session readout at #b45309 fails it, naming the role, blocked and 0.044 (269828.621333ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + [
+  +   "the shipped look's roles: light: ink_tertiary #1b1d2285 is a third ink tier; the ink is ink_primary, ink_secondary, ink_disabled",
+  +   "the shipped look's roles: dark: ink_tertiary #f2f3f585 is a third ink tier; the ink is ink_primary, ink_secondary, ink_disabled"
+  + ]
+  - []
+
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-1458-3b28b6/agent-a7833c2a60010d962/tests/acceptance/882/redraft-1458/look.test.mjs:10:10)
+
+test at tests/acceptance/882/redraft-1458/replica.test.mjs:10:1
+✖ #882.218503b6 every ink role but ink_disabled keeps 4.5:1 on ground, raised, and hover and selected over either, in dark and in light (269130.025542ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + [
+  +   'light: ink_tertiary #1b1d2285 on ground is 3.50:1, under 4.5:1',
+  +   'light: ink_tertiary #1b1d2285 on raised is 3.43:1, under 4.5:1',
+  +   'light: ink_tertiary #1b1d2285 on hover over ground is 3.39:1, under 4.5:1',
+  +   'light: ink_tertiary #1b1d2285 on hover over raised is 3.31:1, under 4.5:1',
+  +   'light: ink_tertiary #1b1d2285 on selected over ground is 3.31:1, under 4.5:1',
+  +   'light: ink_tertiary #1b1d2285 on selected over raised is 3.22:1, under 4.5:1'
+  + ]
+  - []
+
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/github-issue-1458-3b28b6/agent-a7833c2a60010d962/tests/acceptance/882/redraft-1458/replica.test.mjs:14:10)

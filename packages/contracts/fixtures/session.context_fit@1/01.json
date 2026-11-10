@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "session.context_fit",
+  "subject": "session:01K74G3A5C7E9G1J3M5P7R9T1V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "event": "SessionStart",
+    "cap": 10000,
+    "chars": 14212,
+    "inline": [
+      "rules",
+      "requirement IDs"
+    ],
+    "inline_ids": [
+      "rule:typed3f2a9c1b7d4e",
+      "req:task_01#R1",
+      "req:task_01#R2"
+    ],
+    "by_handle": [
+      "briefing",
+      "sibling sessions"
+    ],
+    "handle": "ev:3f2a9c1b7d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeef"
+  },
+  "evidence": [
+    "3f2a9c1b7d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeef"
+  ]
+}

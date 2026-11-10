@@ -211,7 +211,7 @@ export async function gateRun(corpus: string, ids: string[], print: (line: strin
       print(`${r.judgement} ${c.id} ${which}: ${r.outcome}${r.reasons ? ` — ${r.reasons}` : ''}`);
     }
   }));
-  const verdict: Judgement = judged.includes('FAIL') ? 'FAIL' : judged.every((j) => j === 'PASS') ? 'PASS' : judged.includes('BLOCKED') ? 'BLOCKED' : 'INCONCLUSIVE';
+  const verdict: Judgement = judged.includes('FAIL') ? 'FAIL' : judged.length > 0 && judged.every((j) => j === 'PASS') ? 'PASS' : judged.includes('BLOCKED') ? 'BLOCKED' : 'INCONCLUSIVE';
   print(`${verdict} gate@1: ${cases.length} cases`);
   return verdict === 'PASS' ? 0 : verdict === 'FAIL' ? 1 : 3;
 }

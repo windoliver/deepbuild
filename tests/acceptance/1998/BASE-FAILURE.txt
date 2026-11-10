@@ -1,0 +1,42 @@
+#1998 at the base: commit 96b462a6 with this folder added, nothing else, on a Mac at load 25 to 64, Node 24.22.2 from Homebrew,
+cargo 1.99.1, outside the Bash tool's sandbox. deep-hook and deep-drive built with cargo first; the workspaces built with
+npm run build --workspaces.
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1998 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+11 tests: 8 failed, 3 passed, 50 s. Temp paths shown as <tmp>.
+
+The Proof, "Remove DeepBuild from Codex leaving its settings as before, shown failing first" (codex.test.ts, AC1):
+
+  × AC1 #1998.97e49eef the words come back as a proposed change; once you approve it, ~/.codex/hooks.json and config.toml are
+    byte-for-byte yours and stay so, ~/.codex is what deep setup --undo leaves, and Claude Code keeps DeepBuild
+  AssertionError: box.say "remove DeepBuild from Codex" must come back as a proposed change you approve; it was refused:
+    {"code":"unknown_method","retryable":false,"remediation":"The hub serves no method box.say.","path":"/method","actual":"box.say","evidence":[]}
+
+  It got that far for real: the twin home was set up and undone, the home under test was set up, and the control passed (setup
+  wrote DeepBuild's entries into ~/.codex/hooks.json). The base has no box, so nothing takes the words and Codex keeps
+  DeepBuild's entries. It stops there; the byte checks after an approval did not run.
+
+Failed for the expected reason, the missing surface named (7 more):
+- settings.test.ts AC2 "settings" in ⌘K: ["AC2 \"settings\" in ⌘K lists nothing; with no Settings page it must open the box"].
+  A replica launched over its fixture with no view has no ⌘K at the base (it is wired only beside a view, #366).
+- settings.test.ts AC2 the three phrases: each "must come back as a proposed change you approve; box.say answered
+  {"error":{"code":"unknown_method",...}}".
+- spec.test.ts AC3: box.say "stop checking lint in shop" (repo <tmp>/work/shop) ... refused: unknown_method.
+- mute.test.ts AC4: box.say "remove DeepBuild from Codex" (the open ask the test needs first) refused: unknown_method. The replica
+  steps did not run.
+- mute.test.ts AC4 (wrong program) names-only ⌘K: fails with the same error, since it judges the first test's run.
+- settings.test.ts AC2 (wrong program) box-applies-at-once and spec.test.ts AC3 (wrong program) box-ignores-revision: BLOCKED,
+  "with DEEP_HUB_PLANT=<plant>, deep setup must exit 0 ... exit 3 ... deep hub start: no hub answered ... within 15 s": the
+  hub refuses a plant its list doesn't name, so it never starts. These plants are this suite's (README, Pinned 7).
+
+Passed at the base, on purpose (3):
+- codex.test.ts AC1 (wrong program) hooks.json written again, and (wrong program) config.toml keeping DeepBuild's MCP table: the
+  judge on modelled bytes, no hub. Each names its file.
+- settings.test.ts AC2 (wrong program) a page named Settings: the base's replica, with fixtures/settings-panel registered, lists
+  "Settings: General" and "Settings: Sounds" for "settings", and choosing one opens the page with nothing drafted, so the judge
+  names it. This shows the twin and the judge work; it says nothing of an implementation.
+
+Not seen at the base: any test reaching the box, its ids, a redraft, or a silent notification. A probe run at the base (not kept)
+showed the observable AC4 rests on: a replica over the shipped fixture posts its asks' notifications in its trace, the first with
+"sound": "question" and the rest null, and a replica launched from record_copy over a set-up temp home starts and reads it.

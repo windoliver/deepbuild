@@ -167,11 +167,12 @@ mod replica {
         let (handle, _) = cx.update(|cx| {
             open_shell_with(options, &layout, cx, |_, cx| {
                 if colors {
-                    deep_app::views::place_extension(
+                    deep_app::open::place_extension(
                         cx.new(|_| deep_replica::kit::TerminalColors {
                             dark: dark == Some(true),
                         })
                         .into(),
+                        cx,
                     );
                 }
             })

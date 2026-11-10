@@ -730,7 +730,7 @@ export class Agents {
     rmSync(join(this.dir, 'journal', `${s.id}.json`), { force: true });
     void journal;
     if (s.status === 'complete') this.landed(s);
-    for (const t of open) if (t.status === 'conflict') void this.askConflict(s, t);
+    for (const t of open) if (t.status === 'conflict') void this.askConflict(s, t).catch((error: unknown) => process.stderr.write(`deep hub: sync:${s.id}'s conflict on ${shownPath(t.path)} wasn't asked: ${error instanceof Error ? error.message : String(error)}\n`));
   }
   /** What a complete sync leaves: the record's wanted set, the page's state, and readings for sessions started before it. */
   private landed(s: Sync): void {
