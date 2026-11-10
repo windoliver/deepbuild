@@ -344,15 +344,18 @@ export async function openReading(o: ReadingOptions): Promise<Reading> {
 // ---- `deep read` and `deep find`: read-only over a hub's root, with or without the hub running.
 
 /** A parsed command; `again` is the `--root` a continuation line repeats, when one was given. */
-interface Parsed { what: string; cursor?: string; json: boolean; root: string; again?: string }
+interface Parsed { what: string; cursor?: string; json: boolean; root: string; again?: string; file?: string }
 /** A word the shell reads back as it is: a handle or a cursor bare, anything else (a leading '#' starts a comment) in single quotes. */
 const shell = (word: string): string => (/^[A-Za-z0-9:._\/-][A-Za-z0-9:#._\/-]*$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`);
 /** The rest of a continuation line: its handle or query, the cursor, the root it read, and `--` before a word starting with '-'. */
-const again = (p: Parsed, slice: string): string =>
-  p.what.startsWith('-') ? `${slice}${p.again ?? ''} -- ${shell(p.what)}` : `${shell(p.what)} ${slice}${p.again ?? ''}`;
-/** Parses `<what> [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]`, or says what's wrong. */
+const again = (p: Parsed, slice: string): string => {
+  const rest = `${slice}${p.file !== undefined ? ` --file ${shell(p.file)}` : ''}${p.again ?? ''}`;
+  return p.what === '' ? rest : p.what.startsWith('-') ? `${rest} -- ${shell(p.what)}` : `${shell(p.what)} ${rest}`;
+};
+/** Parses `<what> [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]`, and find's `--file <path>`, or says what's wrong. */
 function parse(command: string, args: readonly string[]): Parsed | string {
   let what: string | undefined;
+  let file: string | undefined;
   let cursor: string | undefined;
   let json = false;
   let root = join(homedir(), '.deepbuild');
@@ -362,13 +365,20 @@ function parse(command: string, args: readonly string[]): Parsed | string {
     if (a === '--json') json = true;
     else if (a === '--root' && args[i + 1] !== undefined && !args[i + 1]!.startsWith('-')) { root = args[++i]!; given = true; }
     else if (a === '--slice') { if (args[i + 1] !== undefined && !args[i + 1]!.startsWith('-')) cursor = args[++i]!; }
+    else if (a === '--file' && command === 'find' && args[i + 1] !== undefined && file === undefined) file = args[++i]!;
     else if (!a.startsWith('-') && what === undefined) what = a;
     // After `--`, the next word is the handle or query even when it starts with '-'.
     else if (a === '--' && args[i + 1] !== undefined && what === undefined) what = args[++i]!;
-    else return `Usage: deep ${command} <${command === 'read' ? 'handle' : 'query'}> [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]`;
+    else return usage(command);
   }
-  return what === undefined ? `Usage: deep ${command} <${command === 'read' ? 'handle' : 'query'}> [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]` : { what, ...(cursor !== undefined ? { cursor } : {}), json, root, ...(given ? { again: ` --root ${shell(root)}` } : {}) };
+  // `deep find --file <path>` with no query lists the sessions that touched the file.
+  if (what === undefined && file !== undefined) what = '';
+  return what === undefined ? usage(command) : { what, ...(cursor !== undefined ? { cursor } : {}), json, root, ...(given ? { again: ` --root ${shell(root)}` } : {}), ...(file !== undefined ? { file } : {}) };
 }
+
+const usage = (command: string): string => command === 'read'
+  ? 'Usage: deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]'
+  : 'Usage: deep find [<query>] [--file <path>] [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]';
 
 /** `deep read <handle> --slice [<cursor>]`: one slice; a cut one ends with the command that continues it. */
 export async function readCommand(args: readonly string[]): Promise<number> {
@@ -380,7 +390,7 @@ export async function readCommand(args: readonly string[]): Promise<number> {
 /** `deep find <query>`: matching handles, a line of context each, capped as a slice is. */
 export async function findCommand(args: readonly string[]): Promise<number> {
   return command('find', args, async (slicer, p) => {
-    const found = await slicer.find(p.what, p.cursor);
+    const found = await slicer.find(p.what, p.cursor, undefined, p.file !== undefined ? { path: p.file, cwd: process.cwd() } : undefined);
     return p.json ? JSON.stringify(found) : [...found.hits.map((h) => `${h.handle}  ${h.context}`), ...(found.next !== undefined ? [`deep find ${again(p, `--slice ${found.next}`)}`] : [])].join('\n');
   });
 }
