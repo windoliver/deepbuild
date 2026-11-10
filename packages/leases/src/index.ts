@@ -130,7 +130,7 @@ export const SLOW_SLOT = 'slow';
 /** The kinds a table with a fixed list of resources leases: the planted wrong program of AC4. */
 const FIXED = ['port', 'cpu.slot'];
 /** The kinds the table's state is folded from. */
-const FOLDED = ['lease.acquired', 'lease.stale', 'lease.released', 'session.end', 'session.gone', 'process.tracked', 'process.ended'];
+const FOLDED = ['lease.acquired', 'lease.stale', 'lease.released', 'session.start', 'session.end', 'session.gone', 'process.tracked', 'process.ended'];
 
 interface Kind extends DeclaredKind { n?: number; free?: (key: string) => Promise<boolean> }
 interface Held { lease: Lease; run?: string; agent?: { pid: number; start: string }; stale: boolean }
@@ -209,9 +209,13 @@ class Table implements LeaseTable {
         this.endedAt.set(keyOf(resource!), e.ts);
         break;
       }
+      case 'session.start':
       case 'session.end':
       case 'session.gone': {
-        const holder = e.subject?.startsWith('session:') ? e.subject : e.session ? `session:${e.session}` : undefined;
+        // A hook's event names its session by the agent's ID; a holder is that ID's letters and digits.
+        const holder = e.subject?.startsWith('session:') ? e.subject : e.session ? `session:${e.session.replace(/[^0-9A-Za-z]/g, '')}` : undefined;
+        // A session that starts again has not ended.
+        if (e.kind === 'session.start') { if (holder) this.ends.delete(holder); break; }
         if (holder && !this.ends.has(holder)) this.ends.set(holder, e.id);
         if (this.ends.size > KEPT) {
           const holding = new Set([...this.held.values()].map((h) => h.lease.holder));

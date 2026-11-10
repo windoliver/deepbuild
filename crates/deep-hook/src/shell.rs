@@ -12,6 +12,10 @@ use crate::inline::{holds, interpreter, Program, INTERPRETERS};
 /// How deep shells, substitutions and evals nest before the reader reads no further in.
 pub const DEPTH: usize = 12;
 
+/// How deep a text's own syntax nests (substitutions, `${…}` defaults, compound commands) before the reader reads
+/// no further in: far past a script anyone writes, and well inside the stack.
+pub(crate) const NESTING: usize = 64;
+
 /// The largest script file the reader reads.
 const SCRIPT: u64 = 256 * 1024;
 
@@ -51,8 +55,8 @@ pub struct Run {
 pub enum Unread {
     /// The line computes its program, as with `"$(printf git)"` or a variable the line doesn't set.
     Program,
-    /// It nests deeper than DEPTH shells, substitutions and evals: the reader read no further in, so it may run
-    /// anything.
+    /// It nests deeper than DEPTH shells, substitutions and evals, or its syntax deeper than NESTING: the reader
+    /// read no further in, so it may run anything.
     Depth,
     /// A shell or an interpreter that reads its program on stdin from a pipe or a file whose text the reader can't
     /// know, as in `curl … | sh`: it may run anything.
@@ -106,6 +110,7 @@ pub fn runs(line: &str, cwd: Option<&Path>, home: &Path) -> Vec<Run> {
     let mut reader = Reader {
         runs: Vec::new(),
         written: Vec::new(),
+        nest: 0,
     };
     let mut ctx = Ctx {
         cwd: cwd.map(Path::to_path_buf),
@@ -322,6 +327,10 @@ struct Body {
 struct Lexer {
     s: Vec<char>,
     i: usize,
+    /// How many substitutions and `${…}` defaults deep it is reading.
+    depth: usize,
+    /// Whether the text nests past NESTING: it was read no further in.
+    deep: bool,
 }
 
 const SEPARATORS: &[&str] = &[";", "\n", "&"];
@@ -331,7 +340,36 @@ impl Lexer {
         Lexer {
             s: text.chars().collect(),
             i: 0,
+            depth: 0,
+            deep: false,
         }
+    }
+
+    /// Reads one level further in, a substitution or a `${…}` default. Past NESTING levels it stops reading, and
+    /// the text is too deep.
+    fn nested<T: Default>(&mut self, read: impl FnOnce(&mut Lexer) -> T) -> T {
+        if self.depth == NESTING {
+            self.deep = true;
+            self.i = self.s.len();
+            return T::default();
+        }
+        self.depth += 1;
+        let out = read(self);
+        self.depth -= 1;
+        out
+    }
+
+    /// Reads text this one holds, a heredoc's or a backquoted command's, one level further in.
+    fn inner<T: Default>(&mut self, text: &str, read: impl FnOnce(&mut Lexer) -> T) -> T {
+        self.nested(|me| {
+            let mut inner = Lexer {
+                depth: me.depth,
+                ..Lexer::new(text)
+            };
+            let out = read(&mut inner);
+            me.deep |= inner.deep;
+            out
+        })
     }
 
     fn peek(&self, k: usize) -> Option<char> {
@@ -490,7 +528,7 @@ impl Lexer {
         let subs = if quoted {
             Vec::new()
         } else {
-            Lexer::new(&text).substitutions()
+            self.inner(&text, Lexer::substitutions)
         };
         *body = Some(Body { text, subs });
     }
@@ -503,7 +541,7 @@ impl Lexer {
                 '\\' => self.i += 2,
                 '$' if self.peek(1) == Some('(') && self.peek(2) != Some('(') => {
                     self.i += 2;
-                    subs.push(self.tokens(true));
+                    subs.push(self.nested(|me| me.tokens(true)));
                 }
                 '`' => subs.push(self.backtick()),
                 _ => self.i += 1,
@@ -519,7 +557,7 @@ impl Lexer {
             match c {
                 '<' | '>' if self.peek(1) == Some('(') => {
                     self.i += 2;
-                    parts.push(Part::Sub(self.tokens(true)));
+                    parts.push(Part::Sub(self.nested(|me| me.tokens(true))));
                 }
                 c if Self::ends_word(c) => break,
                 '\\' => {
@@ -626,12 +664,12 @@ impl Lexer {
             }
             Some('(') => {
                 self.i += 1;
-                let sub = self.tokens(true);
+                let sub = self.nested(|me| me.tokens(true));
                 parts.push(Part::Sub(sub));
             }
             Some('{') => {
                 self.i += 1;
-                self.brace(parts);
+                self.nested(|me| me.brace(parts));
             }
             Some('\'') if !quoted => {
                 self.i += 1;
@@ -816,7 +854,7 @@ impl Lexer {
                 _ => raw.push(c),
             }
         }
-        Lexer::new(&raw).tokens(false)
+        self.inner(&raw, |inner| inner.tokens(false))
     }
 }
 
@@ -1000,6 +1038,8 @@ struct Reader {
     /// line spells them: each with the text it now holds when the reader knows all of it (a `>` of what `echo`,
     /// `printf` or `cat` of a heredoc prints).
     written: Vec<(PathBuf, Option<String>)>,
+    /// How many commands deep it is reading, one inside another.
+    nest: usize,
 }
 
 impl Reader {
@@ -1007,11 +1047,21 @@ impl Reader {
         if ctx.depth > DEPTH {
             return self.too_deep(ctx);
         }
-        let toks = Lexer::new(text).tokens(false);
+        let toks = self.tokens(text, ctx);
         self.walk(&toks, ctx);
     }
 
-    /// Records that what runs here nests past DEPTH, so it is unread.
+    /// The tokens of `text`; one that nests past NESTING is unread past there.
+    fn tokens(&mut self, text: &str, ctx: &Ctx) -> Vec<Tok> {
+        let mut lexer = Lexer::new(text);
+        let toks = lexer.tokens(false);
+        if lexer.deep {
+            self.too_deep(ctx);
+        }
+        toks
+    }
+
+    /// Records that what runs here nests past DEPTH or NESTING, so it is unread.
     fn too_deep(&mut self, ctx: &Ctx) {
         self.runs.push(Run {
             cwd: ctx.cwd.clone(),
@@ -1085,8 +1135,21 @@ impl Reader {
         }
     }
 
-    /// Reads one command, and returns what it prints into a pipe.
+    /// Reads one command, and returns what it prints into a pipe. One nested past NESTING commands is unread, with
+    /// what follows it.
     fn command(&mut self, cur: &mut Cursor, ctx: &mut Ctx, stops: &[&str]) -> Feed {
+        if self.nest == NESTING {
+            cur.i = cur.toks.len();
+            self.too_deep(ctx);
+            return Feed::Unknown;
+        }
+        self.nest += 1;
+        let printed = self.one(cur, ctx, stops);
+        self.nest -= 1;
+        printed
+    }
+
+    fn one(&mut self, cur: &mut Cursor, ctx: &mut Ctx, stops: &[&str]) -> Feed {
         let within = |own: &[&'static str]| -> Vec<&str> {
             let mut all: Vec<&str> = stops.to_vec();
             all.extend_from_slice(own);
@@ -1443,8 +1506,7 @@ impl Reader {
 
     /// Reads the words of `text` as the shell would split them, as `env -S` does.
     fn split(&mut self, text: &str, ctx: &Ctx) -> Vec<Val> {
-        Lexer::new(text)
-            .tokens(false)
+        self.tokens(text, ctx)
             .iter()
             .filter_map(|tok| match tok {
                 Tok::Word(parts) => Some(self.value(parts, ctx)),
@@ -2414,5 +2476,28 @@ mod tests {
         assert!(glob(b"pk[i]ll", b"pkill"));
         assert!(glob(b"p*", b"pkill"));
         assert!(!glob(b"pk[!i]ll", b"pkill"));
+    }
+
+    #[test]
+    fn syntax_is_read_to_its_nesting_bound_and_is_unread_past_it() {
+        let nest = |open: &str, n: usize, close: &str| {
+            format!("{}pkill node{}", open.repeat(n), close.repeat(n))
+        };
+        let unread = |line: &str| {
+            runs(line, Some(Path::new("/w")), Path::new("/h"))
+                .iter()
+                .any(|r| r.unread == Some(Unread::Depth))
+        };
+        // A simple command inside NESTING - 1 compound ones is NESTING commands deep.
+        for (open, close) in [("(", ")"), ("{ ", "; }"), ("if ", "; then :; fi")] {
+            let read = nest(open, NESTING - 1, close);
+            assert_eq!(names(&read)[0], "pkill node", "{open}");
+            assert!(!unread(&read), "{open}");
+            assert!(unread(&nest(open, NESTING, close)), "{open}");
+        }
+        let default = |n: usize| format!("echo {}", nest("${a:-", n, "}"));
+        assert_eq!(names(&default(NESTING)), ["echo pkill node"]);
+        assert!(!unread(&default(NESTING)));
+        assert!(unread(&default(NESTING + 1)));
     }
 }

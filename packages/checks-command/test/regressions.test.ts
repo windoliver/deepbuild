@@ -508,6 +508,12 @@ describe('a test its file holds that never ran', () => {
     }
   }, 120_000);
 
+  it('pytest: a file whose every test the source skips ran nothing, never passed', async () => {
+    const own = folder({ 'tests/test_cart.py': 'import pytest\n\n\n@pytest.mark.skip\ndef test_total():\n    assert 11 == 12\n' });
+    const s = await runCommandCheck(check(own, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    expect([s.outcome, s.testsRun], s.output.stdout).toEqual(['ran_nothing', 0]);
+  }, 120_000);
+
   it('node:test: a test the source skips or marks todo isn\'t run; a package script\'s setup or name filter that leaves a failing test out can\'t pass; the command\'s own filters can', async () => {
     const own = folder({
       'package.json': '{ "type": "module" }\n',
@@ -663,6 +669,8 @@ describe('ordinary projects, however they start their tool', () => {
     expect(hiddenChild({ file: '/bin/sh', args: ['-c', `'vitest' run`], shell: false }, cwd, path, process.execPath)).toBeNull();
     // Outside quotes they still are.
     expect(maskIn('go test ./... | tee out')).toBe('| tee');
+    // `|&` pipes both streams, and the pipeline's exit is still the last command's.
+    expect(maskIn('vitest run |& tee out')).toBe('|& tee');
     expect(maskIn('vitest run; echo done')).toBe('; echo');
     expect(maskIn('vitest run; exit 0')).toBe('exit 0');
     expect(untraced(`vitest run | 'cat'`, cwd, path)).toBe('program cat');
@@ -979,4 +987,20 @@ test('greets', () => {
     const r = await runCommandCheck(check(folder(files), { spec }));
     expect([r.outcome, r.mask]).toEqual(['uncounted', 'untraced program deep-greet']);
   });
+});
+
+describe('a run that leaves a read-only folder in its temp folder', () => {
+  it('keeps its result, and its temp folder is removed all the same', async () => {
+    const lock = "import { chmodSync, mkdirSync } from 'node:fs';\nimport { join } from 'node:path';\nmkdirSync(join(process.env.TMPDIR, 'locked', 'inner'), { recursive: true });\nchmodSync(join(process.env.TMPDIR, 'locked'), 0o555);\n";
+    const c = check(folder({ 'lock.mjs': lock }), { spec: { ...VITEST, runner: 'node lock.mjs' } });
+    const temp = join(realpathSync(tmpdir()), `deep-check-${c.run.replace(/[^A-Za-z0-9._-]/g, '-')}`);
+    try {
+      const r = await runCommandCheck(c);
+      expect([r.outcome, r.testsRun], r.failures.map((f) => f.message).join('\n')).toEqual(['passed', 1]);
+      expect(existsSync(temp), `${temp} is gone`).toBe(false);
+    } finally {
+      spawnSync('/bin/chmod', ['-R', 'u+rwX', temp]);
+      rmSync(temp, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

@@ -74,6 +74,8 @@ function report(r: Exec, harnesses: string[], spec: ProofSpec): Report {
     const body = parts[i + 1]!;
     out.ran.push(h);
     const checks: KaniCheck[] = [...body.matchAll(CHECK)].map((m) => ({ name: m[1]!, status: m[2]!, description: m[3]!, file: m[4] ?? '', line: Number(m[5] ?? 0) }));
+    // A harness with no check printed was not checked: its checker ended before it reported one.
+    if (!checks.length) { out.causes.push({ theorem: h, why: 'unfound', line: `${h} was not checked by Kani: it printed no check for it (cargo kani exited ${String(r.status)})` }); continue; }
     const own = (c: KaniCheck): boolean => c.name.startsWith(`${h}.`);
     const place = (c: KaniCheck): string => `${c.file}:${c.line}`;
     const unreached = checks.filter((c) => own(c) && /\.(cover|assertion)\.\d+$/.test(c.name) && /^(UNREACHABLE|UNSATISFIABLE)$/.test(c.status))

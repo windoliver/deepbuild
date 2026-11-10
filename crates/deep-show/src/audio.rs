@@ -222,6 +222,10 @@ struct Logic {
     rec: Record,
 }
 
+/// One written buffer: its first device sample, its interleaved samples, and the host time from
+/// which its device plays nothing more of this stream.
+type Written = (i64, Vec<f32>, Option<i64>);
+
 /// A panel's live play under the test backend: its mix's player, the stream, the clock, the
 /// frames presented and the logic steps run.
 pub struct AudioPlay {
@@ -239,9 +243,8 @@ pub struct AudioPlay {
     sound_from: i64,
     stream: Option<Stream>,
     streams_opened: u32,
-    /// Every buffer written, by device: its first device sample and its interleaved samples, and
-    /// the host time from which that device plays nothing more of this stream.
-    written: BTreeMap<String, Vec<(i64, Vec<f32>, Option<i64>)>>,
+    /// Every buffer written, by device.
+    written: BTreeMap<String, Vec<Written>>,
     frames: Vec<Frame>,
     steps: Vec<(String, i64, i64)>,
     logic: Option<Logic>,

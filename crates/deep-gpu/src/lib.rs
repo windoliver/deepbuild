@@ -6,6 +6,7 @@ pub mod cache;
 pub mod compile;
 pub mod device;
 pub mod encode;
+pub mod frame_budget;
 pub mod guard;
 pub mod memory;
 pub mod meter;

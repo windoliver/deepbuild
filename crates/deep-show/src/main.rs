@@ -734,7 +734,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 }
                 let bytes = base64(col.get("data")?.as_str()?)?;
                 let len = col.get("len")?.as_u64()? as usize;
-                if bytes.len() != len * 8 {
+                if len.checked_mul(8) != Some(bytes.len()) {
                     return None;
                 }
                 columns.insert(format!("{source}.{name}"), bytes);
@@ -2416,6 +2416,101 @@ mod tests {
     }
 
     #[test]
+    fn a_batch_column_whose_length_overflows_is_no_call() {
+        let c = json!({"call": "batch", "doc": "d", "source": "s",
+            "columns": {"x": {"dtype": "f64", "data": "", "len": 1u64 << 61}}});
+        assert!(call(c.as_object().expect("an object")).is_none());
+    }
+
+    /// #138: a golden store that can't be read, or can't be written back, takes no record and no
+    /// decision: each is refused, and a store that can't be read stays as it was.
+    #[test]
+    fn a_golden_store_that_cant_be_read_or_written_refuses_a_record_and_a_decision() {
+        use std::os::unix::fs::PermissionsExt;
+        let startup = startup();
+        let dir = std::env::temp_dir().join(format!("deep-138-store-{}", std::process::id()));
+        let goldens = dir.join("goldens");
+        let store = goldens.join("store.json");
+        std::fs::create_dir_all(&goldens).expect("a folder");
+        let reply = |call: &Value| {
+            let line = json!({"evidence": dir.join("evidence"), "goldens": goldens,
+                "commit": "0123456789abcdef0123456789abcdef01234567", "calls": [call]});
+            answer("run", &startup, &line.to_string())["replies"][0].clone()
+        };
+        // The first fixture this build records on the CPU, and a decision that needs none.
+        let manifest = reply(&json!({"call": "manifest"}));
+        let record = (manifest["fixtures"].as_array().expect("fixtures").iter())
+            .map(|f| json!({"call": "record", "fixture": f["name"], "backend": "vello_cpu"}))
+            .find(|c| reply(c)["outcome"] == "recorded")
+            .expect("a fixture records");
+        let waive =
+            json!({"call": "decide", "decision": {"waive": {"fixture": "f", "reason": "r"}}});
+        let outcomes = || {
+            [&record, &waive].map(|call| {
+                let r = reply(call);
+                let text = |k: &str| r[k].as_str().unwrap_or("").to_string();
+                format!("{} {}", text("outcome"), text("code"))
+            })
+        };
+        std::fs::write(&store, "{").expect("written");
+        let unreadable = outcomes();
+        let kept = std::fs::read_to_string(&store).expect("the store");
+        std::fs::remove_file(&store).expect("removed");
+        let mode = |m| std::fs::set_permissions(&goldens, std::fs::Permissions::from_mode(m));
+        mode(0o555).expect("read-only");
+        let unwritable = outcomes();
+        mode(0o755).expect("writable");
+        let _ = std::fs::remove_dir_all(&dir);
+        let refused = |code: &str| [(); 2].map(|()| format!("refused {code}"));
+        assert_eq!(
+            (unreadable, kept.as_str(), unwritable),
+            (
+                refused("store_unreadable"),
+                "{",
+                refused("store_unwritable")
+            )
+        );
+    }
+
+    /// #138: a kit call that runs nothing passes nothing. A call that matches no module is
+    /// INVALID and leaves the ledger as it was; a module none of whose parts ran is INVALID; and
+    /// a run over some parts only writes no ledger.
+    #[test]
+    fn a_kit_call_that_runs_nothing_is_invalid_and_a_partial_run_writes_no_ledger() {
+        let startup = startup();
+        let dir = std::env::temp_dir().join(format!("deep-138-unrun-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a folder");
+        let kit = |call: Value| {
+            let line = json!({"evidence": dir.join("evidence"), "calls": [call]});
+            answer("run", &startup, &line.to_string())["replies"][0].clone()
+        };
+        let kept = dir.join("kept.json");
+        std::fs::write(&kept, "{\"kept\": true}\n").expect("written");
+        let unmatched = kit(json!({"call": "kit", "modules": ["marks2D"], "ledger": kept}));
+        let kept = std::fs::read_to_string(&kept).expect("the ledger");
+        assert_eq!(
+            (unmatched["verdict"].as_str(), kept.as_str()),
+            (Some("INVALID"), "{\"kept\": true}\n"),
+            "no module matched"
+        );
+        for parts in [json!([]), json!(["sandbox"])] {
+            let r = kit(json!({"call": "kit", "modules": ["core"], "parts": parts}));
+            assert_eq!(
+                [&r["verdict"], &r["modules"][0]["verdict"]],
+                ["INVALID"; 2],
+                "core over the parts {parts}"
+            );
+        }
+        let partial = dir.join("partial.json");
+        let one = json!(["schedule"]);
+        let r = kit(json!({"call": "kit", "modules": ["core"], "parts": one, "ledger": partial}));
+        let written = partial.exists();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(r["modules"][0]["parts"][0]["part"], "schedule", "{r}");
+        assert!(!written, "a run of one part wrote a ledger");
+    }
+
+    #[test]
     fn every_shared_document_reply_is_stamped_on_the_clock_too() {
         // The clocked check queue builds a patch's reply itself, not through `Hub::call`.
         // `seal()` is not called here: the seal-count test counts its runs.
@@ -2920,11 +3015,15 @@ fn main() {
     };
     canvas.world.insert("evidence".into(), json!(""));
     for line in stdin.lock().lines() {
-        let Ok(line) = line else { break };
-        let reply = match command.as_str() {
-            "canvas" => canvas.line(startup, &line),
-            "live" => live(startup, &line),
-            _ => answer(&command, startup, &line),
+        let reply = match line {
+            Ok(line) => match command.as_str() {
+                "canvas" => canvas.line(startup, &line),
+                "live" => live(startup, &line),
+                _ => answer(&command, startup, &line),
+            },
+            // A line that is not UTF-8 was read to its end: it is one that can't be read.
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => bad_input(),
+            Err(_) => break,
         };
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
