@@ -13,6 +13,7 @@
 #[cfg(all(feature = "env-plants", not(debug_assertions)))]
 compile_error!("the env-plants feature is for test builds only, never a release build");
 
+pub mod actions;
 pub mod address;
 pub mod answer;
 pub mod arming;
@@ -34,6 +35,7 @@ pub mod gpu_view;
 pub mod hub;
 pub mod installed;
 pub mod kinds;
+pub mod notice;
 pub mod notify;
 pub mod open;
 #[cfg(feature = "panel-check")]
@@ -191,6 +193,13 @@ fn needs_you() -> Result<HostValue, HostError> {
         .ok_or_else(|| HostError::new("the app hasn't read the record from the hub yet"))?;
     let text =
         |row: &serde_json::Value, key: &str| row[key].as_str().unwrap_or_default().to_owned();
+    // Needs you's order (#1462): open asks oldest first, those put off with Later after them until they come back.
+    let now = views::now();
+    let later = |row: &serde_json::Value| {
+        row["status"] == "later" && row["until"].as_u64().is_none_or(|until| until > now)
+    };
+    let mut inbox = inbox;
+    inbox.sort_by_key(|row| later(row));
     let open: Vec<&serde_json::Value> = inbox
         .iter()
         .filter(|row| row["status"] != "closed")
@@ -320,6 +329,7 @@ pub fn init(cx: &mut App) {
     views::register_views(cx);
     card::init(cx);
     commands::init(cx);
+    actions::init(cx);
     // Chrome effects hold their still pose under macOS's Reduce Motion (#1436).
     #[cfg(target_os = "macos")]
     cx.set_reduce_motion(
