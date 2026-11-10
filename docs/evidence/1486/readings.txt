@@ -46,7 +46,11 @@ Every move frame asked for and drew level 2; no decode job started at or after t
   docs/evidence/1486/grid-mid-scroll.png  81bf9999b70ba6caeaad8d385a2667b143d20e920f12dabb8ee68f14e3f2bd9c
   docs/evidence/1486/grid-settled.png     10bf260cdd89b06728f2388c339c2d81db1affcf3e3f18693a3389cb12d07f76
   docs/evidence/1486/grid-scroll.apng     4a4e6d69cd7604d6fb9ed6fb92dd5b70df8d8638821e3660735e190552859504
-INCONCLUSIVE until the owner's taste call is recorded in tests/acceptance/1486/TASTE.json.
+Taste call: looks_right, by Claude on the owner's delegation in session ("check for me"), recorded in
+tests/acceptance/1486/TASTE.json. Read from the pictures: every tile in view shows its own picture, cut to cover;
+the stripe bands average to an even grey with no moire; 0 tiles shown empty across the recording's 60 frames
+(4,500 in-view tile appearances, the suite's chroma rule at each sample patch). AC8 rerun on the merged build:
+its settled frame was bit-identical to the recorded one, so the call stands.  -> PASS
 
 ## #1485, whose surface this change reaches
 header.test.ts (AC1 and its plant), decode.test.ts (AC4 and its plant), upload.test.ts (AC5 and its plant): PASS.
