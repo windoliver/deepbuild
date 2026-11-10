@@ -845,13 +845,19 @@ class AsksCore implements Asks {
       }
       // The same question from other threads, shown through this card, takes the same option.
       const riders = chosen ? this.open().filter((a) => this.rides(a) === ask) : [];
-      await this.options.record.append(asCore(connection), {
+      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
+      // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
+      // A card with a target only the agent read saves your answer for this ask only (#1098).
+      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
+      // The answer and its decision are appended in one turn, so the record makes them durable in one commit (#22).
+      const answered = this.options.record.append(asCore(connection), {
         v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
           answer: option ?? (words as string | undefined) ?? (image as string), plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
           via, verified: true, on: ask.data.pinned_to!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
         },
       });
+      await Promise.all([answered, scope === null ? undefined : this.saveAt(connection, ask, scope, chosen!.id)]);
       await this.sync();
       this.hand(ask, chosen?.id ?? null, (words as string | undefined) ?? null, false, decision, null, null, null, (image as string | undefined) ?? null);
       for (const rider of riders) {
@@ -872,11 +878,6 @@ class AsksCore implements Asks {
         this.hand(member, allow.id, null, false, allow.decision);
         ask.receiptAlso.push(member.handle);
       }
-      // An option you chose is saved as a decision for the ask's repo, or its session, whatever its words claim. A
-      // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
-      // A card with a target only the agent read saves your answer for this ask only (#1098).
-      const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
-      if (scope !== null) await this.saveAt(connection, ask, scope, chosen!.id);
       await this.settle();
       return scope === null ? null : String(ask.data.key);
     });
@@ -1350,10 +1351,11 @@ class AsksCore implements Asks {
     const now = this.options.now();
     const id = ulid(now);
     const as = asCore(connection);
-    await this.options.record.append(as, { v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } });
-    for (const d of contradicted) {
-      await this.options.record.append(as, { v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } });
-    }
+    // Appended in one turn, in this order, so they are durable in one commit (#22).
+    await Promise.all([
+      this.options.record.append(as, { v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope, answer, ask: ask.handle } }),
+      ...contradicted.map((d) => this.options.record.append(as, { v: 2, id: ulid(now), kind: 'decision.overruled', subject: d.handle, ts: now, data: { decision: d.handle, at: scope } })),
+    ]);
     await this.sync();
     return `decision:${id}`;
   }

@@ -45,7 +45,7 @@ beat asks every second and ticks once that time passes, so a change to your batc
 - With the fix: `passing-after.txt` (both tests in the file pass, the #908 sleep test beside it unchanged), and the
   asks package with #319's suite but its budgets, 90 of 90.
 
-## The runs by hand, after the fix
+## The runs by hand, after the fixes (rerun on the final code)
 
 Both run the real hub, `deep setup`, the real `target/debug/deep-hook` and `deep mcp` through the Claude Code
 stand-ins of tests/acceptance/27 and 321 (no model, no network; HOME is a temp folder; the OS confirmation is the
@@ -89,8 +89,38 @@ failures; of the 31 failing only at head, a rerun at load 2 put each on this box
 BLOCKED. The ones that touch asks, #26 `ask`/`binding`, #39 `session` and #120 `start`, give the same result at base and
 head, test by test. The lint lane's NEW FAIL lines (slots' kits, drift, the app's record reader) are main's.
 
-## The Mac
+## The Mac, at f0b4db39: answering an ask was over its budget
 
-Pending: the owner's Mac runner (Mac15,12, a reference Mac) runs `tests/acceptance/319/budgets.test.ts` and the rest of
-the #319 folder at this change, and `e2e-app.test.ts`, which raises the same asks with the real deep-app window up and
-takes its screenshots.
+The owner's Mac runner (Mac15,12, Apple M3, 16 GB, on AC power, Low Power Mode off, no thermal warning:
+`mac-f0b4db39/machine.txt`) ran #319's budgets at f0b4db39 (`mac-f0b4db39/budgets.txt`):
+
+| Budget | Five runs after a warm-up | Limit | Result |
+|---|---|---|---|
+| create an ask, p50 | 2.268, 2.127, 1.816, 1.989, 1.918 ms | 5 ms | PASS |
+| answer an ask, p50 | 6.532, 5.871, 6.094, 6.014, 6.102 ms | 5 ms | **FAIL** |
+| inbox of 10,000 asks | 0.899, 0.709, 0.659, 0.551, 0.543 ms | 100 ms | PASS |
+
+The rest of #319's suite passed, 19 of 20, with the same answer reading skipped as INCONCLUSIVE
+(`mac-f0b4db39/suite-319.txt`). The app run passed (`mac-f0b4db39/app-run.txt`: the asks wait, the batch shows them,
+the exception is answered together), but its three screenshots are black: the display was asleep
+(`mac-f0b4db39/SCREENSHOTS-NOTE.txt`), so they aren't kept.
+
+**Why answering cost more.** Answering a taste ask appends `ask.answered` and the `decision.created` it saves, and the
+record commits each of those kinds FULL (the design: "a commit that records … a decision, an answer uses
+`synchronous=FULL`", with F_FULLFSYNC on macOS). Each was its own commit, so an answer paid two disk syncs where creating
+an ask, a stream event, pays none. Here, on the same loop as the budget, answer p50 was 7.8 ms and create 1.0 ms, and
+the two appends were 7.6 ms of the 7.8.
+
+**The fix.** FULL appends made in one turn of the event loop now share one FULL commit, in the order they were made, and
+`answer()` appends the answer and its decision (with any overrule) in one turn. Each still goes through `append`, so the
+hub's stream and #23's planted programs, which hook `append`, see both. The agent hears the answer only once both are
+durable. Answer p50 here: 3.8, 3.9, 3.8 ms (create 0.9 to 1.6).
+
+- Failing first: `packages/asks/test/asks.test.ts`, "syncs the record once": two FULL syncs where one is wanted
+  (`failing-first-answer.txt`). It passes with the fix, and both events survive a power cut in the test storage.
+- With the fix: the asks package 73 of 73 and the record package 102 of 102. #14, #1014's projection test, #23, #66,
+  #319 (without its budgets) and #365 pass, except `tests/acceptance/14/ac6-redraft.test.ts` (330 events where it
+  appended 307), which fails the same way with the record change taken out. #318, #320 and #321 pass. #26's and #27's
+  failures (8 in #27's desktop, outcomes, waits and repeat files) are the same with both changes taken out. The hub
+  package's 11 failures are in files that also failed in the earlier `affected.mjs` run, before this change.
+- Still to prove: the budgets on the Mac at this commit, and the app's screenshots with the display awake.
