@@ -279,6 +279,11 @@ byHand.push('tests/acceptance/1458/redraft-ac13/shown.test.ts');
 // #501's files each build deep-show (seal.test.ts three times), export films through the GPU and the encode tool, and run a 600 s soak on the audio output.
 alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
+// #1461's files build deep-drive plain and with env-plants, start real hubs and many replicas; its AC1 and AC14 file and
+// its AC28 file open the real app's window, with Accessibility and Screen Recording, by hand; its AC9 file is timed.
+alone.push('tests/acceptance/1461/');
+byHand.push('tests/acceptance/1461/shell.test.ts', 'tests/acceptance/1461/shown.test.ts');
+timed.push('tests/acceptance/1461/budget.test.ts');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
