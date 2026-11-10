@@ -317,6 +317,14 @@ function noteSize() {
   }
 }
 
+// #2010: the physics build carries no feature or flag that changes its results (scripts/physics-build.mjs).
+function checkPhysicsBuild() {
+  const run = spawnSync(process.execPath, [join(root, 'scripts', 'physics-build.mjs')], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const lines = `${run.stdout ?? ''}`.split('\n').filter(Boolean);
+  if (run.status === 0) report('PASS', 'physics-build', lines.join(' ').replace(/^PASS physics-build: /, ''));
+  else for (const l of lines.length ? lines : [`it didn't run: ${run.error?.message ?? run.stderr}`]) report('FAIL', 'physics-build', l.replace(/^FAIL /, ''), 'Remove the feature or flag the line names from the physics build: rapier3d stays at 0.36.1 with enhanced-determinism, without simd8 or parallel, built for the target\'s baseline features.');
+}
+
 function readConfig() {
   let rules;
   try {
@@ -356,6 +364,7 @@ if (files) {
   checkCards(files);
   noteSize();
 }
+checkPhysicsBuild();
 const order = ['FAIL', 'INVALID', 'BLOCKED', 'PASS', 'NOTE'];
 for (const { line, fix } of results.sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state))) console.log(fix ? `${line}\n  Fix: ${fix}` : line);
 if (results.some(({ state }) => ['FAIL', 'INVALID', 'BLOCKED'].includes(state))) process.exitCode = 1;

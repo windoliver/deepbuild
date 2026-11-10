@@ -182,6 +182,8 @@ impl View {
                 .filter(|row| row["ask"] == event["subject"] && row["status"] != "closed")
             {
                 row["status"] = json!("later");
+                // When it comes back, which the list reads by its clock (#1462).
+                row["until"] = event["data"]["until"].clone();
             }
         } else if let Some((_, outcome)) = CLOSING.iter().find(|(k, _)| *k == kind) {
             // The close rule the rest of the app reads, and the first close to append decides, as in the core.

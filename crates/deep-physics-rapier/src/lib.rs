@@ -6,7 +6,8 @@
 use std::collections::BTreeMap;
 use std::f32::consts::PI;
 
-use deep_canvas_physics::backend::{Backend, BodyState, Checkpoint, Input, State};
+use deep_canvas_physics::backend::{Backend, BodyState, Canonical, Checkpoint, Input, State};
+use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
 use deep_canvas_physics::doc::{
     BodyKind, End, Force, ForceKind, Joint, JointKind, Material, Pose as DocPose, Refusal, Region,
@@ -25,8 +26,48 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
     PhysicsWorld::default()
 }
 
+pub mod fp;
+
 /// The code of a checkpoint refused at restore.
 pub const CHECKPOINT_REFUSED: &str = "physics.checkpoint_refused";
+
+/// `name version f1,f2`, as build.rs writes a resolved crate.
+fn pin(text: &str) -> Pin {
+    let mut w = text.splitn(3, ' ');
+    let mut next = || w.next().unwrap_or_default().to_string();
+    let (name, version, features) = (next(), next(), next());
+    Pin {
+        name,
+        version,
+        features: features
+            .split(',')
+            .filter(|f| !f.is_empty())
+            .map(String::from)
+            .collect(),
+    }
+}
+
+/// This build as cargo resolved it (build.rs): this crate, rapier3d and the crates under it whose
+/// results it depends on, the target triple and rustc.
+pub fn build() -> Build {
+    Build {
+        implementation: env!("CARGO_PKG_NAME").into(),
+        version: env!("CARGO_PKG_VERSION").into(),
+        backend: pin(env!("DEEP_PHYSICS_BACKEND")),
+        pins: env!("DEEP_PHYSICS_PINS")
+            .split(';')
+            .filter(|s| !s.is_empty())
+            .map(pin)
+            .collect(),
+        target: env!("DEEP_PHYSICS_TARGET").into(),
+        rustc: env!("DEEP_PHYSICS_RUSTC").into(),
+    }
+}
+
+/// `x` moved `ulps` f32 values, toward +∞ when positive.
+fn by_ulps(x: f32, ulps: i64) -> f32 {
+    (0..ulps.unsigned_abs()).fold(x, |v, _| if ulps > 0 { v.next_up() } else { v.next_down() })
+}
 
 /// A Rapier world behind the backend interface.
 #[derive(Default)]
@@ -94,6 +135,32 @@ fn spring(hz: f64, zeta: f64) -> (f32, f32) {
 }
 
 impl Rapier {
+    /// Moves body `id`'s canonical field `field` (an index of `FIELDS`) by `ulps` f32 values: the
+    /// one-field shift a golden's locator is proved on (Checkpoint ring). False for no such body.
+    pub fn shift(&mut self, id: &str, field: usize, ulps: i64) -> bool {
+        let Some((_, h)) = self.bodies.iter().find(|(b, _)| b == id) else {
+            return false;
+        };
+        let rb = &mut self.world.bodies[*h];
+        let nudge = |v: Vector, i: usize| {
+            let mut a = [v.x, v.y, v.z];
+            a[i] = by_ulps(a[i], ulps);
+            Vector::new(a[0], a[1], a[2])
+        };
+        match field {
+            0..=2 => rb.set_translation(nudge(rb.translation(), field), true),
+            3..=6 => {
+                let q = rb.rotation();
+                let mut a = [q.x, q.y, q.z, q.w];
+                a[field - 3] = by_ulps(a[field - 3], ulps);
+                rb.set_rotation(Rotation::from_xyzw(a[0], a[1], a[2], a[3]), true);
+            }
+            7..=9 => rb.set_linvel(nudge(rb.linvel(), field - 7), true),
+            _ => rb.set_angvel(nudge(rb.angvel(), field - 10), true),
+        }
+        true
+    }
+
     fn collider(
         &self,
         w: &World,
@@ -498,6 +565,22 @@ impl Backend for Rapier {
             step: self.step,
             bodies,
         }
+    }
+
+    fn canonical(&self) -> Vec<Canonical> {
+        self.bodies
+            .iter()
+            .map(|(id, h)| {
+                let rb = &self.world.bodies[*h];
+                let (p, q, v, w) = (rb.translation(), rb.rotation(), rb.linvel(), rb.angvel());
+                Canonical {
+                    id: id.clone(),
+                    values: [
+                        p.x, p.y, p.z, q.x, q.y, q.z, q.w, v.x, v.y, v.z, w.x, w.y, w.z,
+                    ],
+                }
+            })
+            .collect()
     }
 
     fn checkpoint(&self) -> Checkpoint {
