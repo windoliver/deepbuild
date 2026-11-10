@@ -264,6 +264,8 @@ timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/v
 alone.push('tests/acceptance/500/', 'tests/acceptance/500-oracle/');
 // #532's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome, and read CPU times per frame and per step.
 alone.push('tests/acceptance/532/');
+// #545's files build deep-logic and drive long-lived views frame by frame; ac04 builds deep-show and exports on the GPU.
+alone.push('tests/acceptance/545/', 'tests/acceptance/545-redraft-ac3/', 'tests/acceptance/545-redraft-ac5/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
 alone.push('tests/acceptance/1731/');
 // #1732's files each build deep-show: one file at a time.
