@@ -321,6 +321,13 @@ fn main() {
         if opens {
             load_installed(window, palette, mounts, cx);
         }
+        // An assistive client asks the window what is focused; gpui's view knows, so the window asks it (#1462).
+        #[cfg(target_os = "macos")]
+        // SAFETY: gpui registered its window class when it opened the window above, and this executable is never
+        // unloaded, so the method added to the class stays valid.
+        unsafe {
+            accesskit_macos::add_focus_forwarder_to_window_class("GPUIWindow")
+        };
         cx.activate(true);
     });
 }
@@ -505,6 +512,8 @@ mod notifications {
             let (mut begun, mut active) = (false, false);
             let notifies = held.is_some();
             let mut shown = deep_app::menu_bar_line();
+            // The status item's menu: a line per session with its state's word and mark (#1462).
+            let mut listed: Vec<String> = Vec::new();
             if notifies {
                 read_setting(&mut notifier);
             }
@@ -562,6 +571,14 @@ mod notifications {
                         record::notify_views(cx);
                         super::menu_bar::show_title(&line);
                         shown = line;
+                    }
+                    let lines = record::with_view(|view| {
+                        deep_app::states::menu(&view.table(), deep_app::views::now())
+                    })
+                    .unwrap_or_default();
+                    if lines != listed {
+                        super::menu_bar::show_menu(&lines);
+                        listed = lines;
                     }
                     deep_app::card::tick(now, cx);
                 });
@@ -639,8 +656,8 @@ mod menu_bar {
     use deep_app::brand;
     use objc2::{rc::Retained, AllocAnyThread as _, MainThreadMarker};
     use objc2_app_kit::{
-        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSSound, NSStatusBar,
-        NSStatusItem, NSVariableStatusItemLength,
+        NSApplication, NSBitmapImageRep, NSCellImagePosition, NSImage, NSMenu, NSMenuItem, NSSound,
+        NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
     };
     use objc2_foundation::{NSData, NSSize, NSString};
 
@@ -693,6 +710,26 @@ mod menu_bar {
         });
     }
 
+    /// The status item's menu under the count (#1462): a line per session, its task's title, its state's word and
+    /// its mark, as `states::menu` writes them and the replica reports them.
+    pub fn show_menu(lines: &[String]) {
+        let mtm = MainThreadMarker::new().expect("the menu bar is set from the main thread");
+        let menu = NSMenu::new(mtm);
+        for line in lines {
+            // SAFETY: a plain item with no action, made and added on the main thread.
+            let item = unsafe {
+                NSMenuItem::initWithTitle_action_keyEquivalent(
+                    mtm.alloc::<NSMenuItem>(),
+                    &NSString::from_str(line),
+                    None,
+                    &NSString::from_str(""),
+                )
+            };
+            menu.addItem(&item);
+        }
+        ITEM.with(|item| item.setMenu(Some(&menu)));
+    }
+
     /// Whether the app is the active one.
     pub fn app_active() -> bool {
         let mtm = MainThreadMarker::new().expect("read from the main thread");
@@ -711,6 +748,7 @@ mod menu_bar {
 mod menu_bar {
     pub fn set_dock_icon() {}
     pub fn show_title(_: &str) {}
+    pub fn show_menu(_: &[String]) {}
     pub fn app_active() -> bool {
         false
     }
