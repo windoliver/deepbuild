@@ -27,6 +27,7 @@ mod host;
 mod hub;
 mod input;
 mod jobs;
+mod kept;
 mod kinds;
 mod kit;
 mod media;
@@ -608,6 +609,23 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "costs" => return Some(Call::Costs),
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
+        // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
+        "fingerprint" => return Some(Call::Fingerprint),
+        "draw" => {
+            let output = c.get("output")?.as_str()?;
+            return Some(Call::Draw {
+                doc: doc()?,
+                t: crate::time::eval_time(c.get("t"))?,
+                output: kept::OUTPUTS.into_iter().find(|o| *o == output)?,
+            });
+        }
+        "padded_key" => {
+            let seeds = c.get("seeds")?.as_array().filter(|s| s.len() == 2)?;
+            return Some(Call::PaddedKey {
+                fields: c.get("fields")?.as_u64()?,
+                seeds: [seeds[0].as_u64()?, seeds[1].as_u64()?],
+            });
+        }
         "keys" => {
             return Some(Call::Keys {
                 doc: doc()?,
@@ -2322,6 +2340,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             Some(StartPlanted::Run(p)) => Some(p),
             _ => None,
         },
+        cache: None,
     })
 }
 
@@ -2386,6 +2405,7 @@ mod tests {
             listing: None,
             kinds: None,
             layouts: Default::default(),
+            cache: None,
             run_planted: None,
         }
     }
@@ -2505,7 +2525,10 @@ mod tests {
     #[test]
     fn run_takes_planted_and_costs_once_each_and_nothing_else() {
         let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert!(matches!(start_args(&args(&["run"])), Ok((None, None))));
+        assert!(matches!(
+            start_args(&args(&["run"])),
+            Ok((None, None, None))
+        ));
         assert!(matches!(
             start_args(&args(&[
                 "run",
@@ -2514,6 +2537,7 @@ mod tests {
             ])),
             Ok((
                 Some(StartPlanted::Seal(Fault::EveryDependencyRequired)),
+                None,
                 None
             ))
         ));
@@ -2525,7 +2549,11 @@ mod tests {
                 "--planted",
                 "admits_frame_json"
             ])),
-            Ok((Some(StartPlanted::Seal(Fault::AdmitsFrameJson)), Some(_)))
+            Ok((
+                Some(StartPlanted::Seal(Fault::AdmitsFrameJson)),
+                Some(_),
+                None
+            ))
         ));
         let twin = "treats_every_dependency_required";
         for stray in [
@@ -2535,6 +2563,7 @@ mod tests {
             &["run", "--planted", twin, "extra"],
             &["run", "--planted", twin, "--planted", twin],
             &["run", "--costs", "a", "--costs", "b"],
+            &["run", "--cache", "a", "--cache", "b"],
         ] {
             assert!(start_args(&args(stray)).is_err(), "{stray:?}");
         }
@@ -2687,19 +2716,23 @@ mod tests {
 
 /// The arguments after the command: `--planted <name>` and `--costs <path>`, each at most once,
 /// in either order; an unknown name or a stray argument is bad input.
-fn start_args(args: &[String]) -> Result<(Option<StartPlanted>, Option<String>), ()> {
-    let (mut planted, mut costs) = (None, None);
+type StartArgs = (Option<StartPlanted>, Option<String>, Option<PathBuf>);
+
+fn start_args(args: &[String]) -> Result<StartArgs, ()> {
+    let (mut planted, mut costs, mut cache) = (None, None, None);
     let mut rest = args.get(1..).unwrap_or_default();
     while let [flag, value, more @ ..] = rest {
         match flag.as_str() {
             "--planted" if planted.is_none() => planted = Some(planted_named(value)?),
             "--costs" if costs.is_none() => costs = Some(value.clone()),
+            // #1901: the folder kept output lives in across processes.
+            "--cache" if cache.is_none() => cache = Some(PathBuf::from(value)),
             _ => return Err(()),
         }
         rest = more;
     }
     if rest.is_empty() {
-        Ok((planted, costs))
+        Ok((planted, costs, cache))
     } else {
         Err(())
     }
@@ -2763,6 +2796,8 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             )))
         }
         _ if export_planted(twin).is_some() => export_planted(twin).map(StartPlanted::Run).ok_or(()),
+        "fingerprint_without_sources" => Ok(StartPlanted::Run(Planted::FingerprintWithoutSources)),
+        "key_hashes_raw_bytes" => Ok(StartPlanted::Run(Planted::KeyHashesRawBytes)),
         _ => seams::NetFault::named(twin)
             .map(StartPlanted::Network)
             .ok_or(()),
@@ -2848,7 +2883,7 @@ fn main() {
         let _ = out.flush();
         std::process::exit(code);
     }
-    let Ok((fault, costs)) = start_args(&args) else {
+    let Ok((fault, costs, cache)) = start_args(&args) else {
         let _ = writeln!(out, "{}", bad_input());
         std::process::exit(2);
     };
@@ -2865,7 +2900,7 @@ fn main() {
     };
     // The seal runs before the first line is read: a refused set answers no scenario.
     let startup: &'static Startup = match seal(fault, coefficients) {
-        Ok(startup) => Box::leak(Box::new(startup)),
+        Ok(startup) => Box::leak(Box::new(Startup { cache, ..startup })),
         Err(err) => {
             let mut line = json!({
                 "ok": false,
