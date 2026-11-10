@@ -1447,12 +1447,13 @@ impl Render for Shipped {
                                     },
                                 )
                                 .flex_none()
-                                .pl(sizes().space(1))
+                                // At the right edge, before the state word where the row has one (#1463).
+                                .ml_auto()
+                                .px(sizes().space(1))
                                 .text_color(chrome.ink_secondary)
                             });
                             // An open ask's state is needs you, so its value is that status-map entry.
                             label(ElementId::Name(id.into()), shown)
-                                .justify_between()
                                 .children(default)
                                 .role(Role::Button)
                                 .aria_value(states::State::NeedsYou.entry())
