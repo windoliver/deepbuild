@@ -282,6 +282,10 @@ timed.push('tests/acceptance/501/budgets.test.ts');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
+// #1942's files each start a hub that runs on this Mac's Lima VMs over SSH, through a relay that stalls and drops its
+// connections; its facts refresh and output lag are read against the lane's timing rule.
+alone.push('tests/acceptance/1942/');
+timed.push('tests/acceptance/1942/budgets.test.ts', 'tests/acceptance/1942/stall.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
