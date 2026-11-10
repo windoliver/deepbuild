@@ -1556,6 +1556,47 @@
     }
   },
   {
+    "source": "job.unblock",
+    "kind": "unblock",
+    "fixture": {
+      "ask": {
+        "kind": "unblock",
+        "question": "hosted-upper@1.0.0 sent a paid call for test.hosted to api.example.com:443 under the submission key 5f0c9e2a7b1d4c3e8a6f2b9d0c1e7a4b3d5f6e8c9a0b1c2d3e4f5a6b7c8d9e0f, and its answer never reached DeepBuild, so it isn't made again. Find that call at api.example.com:443?",
+        "options": [
+          {
+            "id": "done",
+            "label": "I did it",
+            "decision": "none"
+          }
+        ],
+        "recommended": "done",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "done",
+        "provisional": false,
+        "owner": "you",
+        "key": "a41d7c0e9b2f3a5c6d8e1f0a2b4c6d8e0f1a3b5c7d9e2f4a6b8c0d1e3f5a7b9c",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "a41d7c0e9b2f3a5c6d8e1f0a2b4c6d8e0f1a3b5c7d9e2f4a6b8c0d1e3f5a7b9c"
+        },
+        "steps": [
+          "Find the call at api.example.com:443 by its submission key 5f0c9e2a7b1d4c3e8a6f2b9d0c1e7a4b3d5f6e8c9a0b1c2d3e4f5a6b7c8d9e0f, which it was sent with as its Idempotency-Key",
+          "To pay for it again instead, delete the call journal ~/.deepbuild/jobs/calls/5f0c9e2a7b1d4c3e8a6f2b9d0c1e7a4b3d5f6e8c9a0b1c2d3e4f5a6b7c8d9e0f/journal.jsonl and run the job again"
+        ],
+        "where": "api.example.com:443, and this machine's ~/.deepbuild/jobs/calls/5f0c9e2a7b1d4c3e8a6f2b9d0c1e7a4b3d5f6e8c9a0b1c2d3e4f5a6b7c8d9e0f/journal.jsonl",
+        "why": "a paid call is never made twice, and this one may have run",
+        "unblocks": [
+          "req:a41d7c0e9b2f3a5c"
+        ],
+        "proves": "the call journal for 5f0c9e2a7b1d4c3e8a6f2b9d0c1e7a4b3d5f6e8c9a0b1c2d3e4f5a6b7c8d9e0f deleted"
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "library.unblock",
     "kind": "unblock",
     "fixture": {

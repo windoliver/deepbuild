@@ -209,7 +209,9 @@ export type Plant =
   | 'box-applies-at-once' | 'box-ignores-revision'
   // #1922's: a job key over the params' text as written, one without the tool's version, and a host whose tool build
   // hashes only the entry file, or adds where the files are, or when they were modified.
-  | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes';
+  | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes'
+  // #1923's: a runner that runs a job's tool again while a job with its key runs, and one that stops the job when a joiner cancels.
+  | 'job-second-call' | 'job-joiner-cancels-job';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -296,6 +298,7 @@ const PLANTS: readonly string[] = [
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members',
   'job-key-params-text', 'job-key-no-version', 'job-build-entry-only', 'job-build-hashes-paths', 'job-build-hashes-mtimes',
+  'job-second-call', 'job-joiner-cancels-job',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

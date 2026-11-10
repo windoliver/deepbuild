@@ -431,7 +431,7 @@ An offline job kind, one per name: its params schema, its outputs, its key (hash
 
 Arrives in R6 · preview · `d1:e0da15adcbf3542d5ca183fe047cf64eae611d74f104b058204f380126bb01af`
 
-A tool for a registered kind, pinned by name@version, its files the program the hub runs outside its process. It joins the kind once it writes each qualification fixture's expected bytes, and stays the build it qualified as.
+A tool for a registered kind, pinned by name@version, its files the program the hub runs outside its process. It joins the kind once it writes each qualification fixture's expected bytes, and stays the build it qualified as. A tool that calls a provider names its one host as `provider` in its manifest's `job_tools` entry; each run gets `call: {provider, key, journal}` on stdin, and the tool appends `{key, provider}` to the journal before its request leaves and `{key, provider, task}` when the provider answers. A key whose journal holds a call and whose outputs aren't kept is never run again: it is BLOCKED with one unblock ask.
 
 | Parameter | Type | Required |
 |---|---|---|

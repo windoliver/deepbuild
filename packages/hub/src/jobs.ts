@@ -9,6 +9,13 @@
 // item only once every output check of the kind passes; a failed check returns that failure, naming the check, and
 // keeps nothing. A paid tool's call waits for one authority ask, whose yes covers that call, or your standing rule for
 // that tool up to a price per run.
+//
+// A tool that calls a provider is never run twice for one key (#1923). It appends its submission key to the key's call
+// journal before its request leaves and the provider's task ID when it answers; the hub reads that journal and never
+// writes it. A key whose journal holds a call and whose outputs aren't kept made a call the hub can't know the fate
+// of: a retry makes no call and is BLOCKED with one unblock ask naming the provider and the key. While a job runs, a
+// second request with its key joins it, starting nothing, and a request that is cancelled leaves it; the job stops
+// only once no request waits on it.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -38,11 +45,13 @@ export interface JobDeps {
   keep(bytes: Uint8Array, source: string): Promise<string>;
   /** Whether the evidence store still holds a hash. */
   has(sha: string): Promise<boolean>;
-  /** Raises the authority ask for one paid call: its handle. */
-  raise(ask: Obj, plan: PlanInput): Promise<string>;
+  /** Raises the authority ask for one paid call, or the unblock ask for a call whose answer was lost (#1923): its handle. */
+  raise(source: 'job.paid' | 'job.unblock', ask: Obj, plan?: PlanInput): Promise<string>;
   plant?: string | undefined;
 }
 interface Cached { outputs: Record<string, string>; build: string }
+/** A job running for its key (#1923): what it will answer, the requests waiting on it, and its stop. */
+interface Running { result: Promise<Obj>; callers: Set<string>; stop: AbortController }
 interface Saved { cache: Record<string, Cached>; rules: Record<string, number> }
 
 export class Jobs {
@@ -52,6 +61,13 @@ export class Jobs {
   private readonly held = new Map<string, string>();
   /** The keys your yes allows, each once. */
   private readonly allowed = new Set<string>();
+  /** The jobs running, by key: a second request with a running job's key joins it and starts nothing (#1923). */
+  private readonly running = new Map<string, Running>();
+  /** How each waiting request leaves its job when its caller cancels. */
+  private readonly leaving = new Map<string, () => void>();
+  /** The unblock ask each lost call's key is BLOCKED on, asked once. */
+  private readonly unblocks = new Map<string, string>();
+  private anonymous = 0;
 
   constructor(private readonly d: JobDeps) {
     const file = join(d.root, 'jobs.json');
@@ -83,8 +99,20 @@ export class Jobs {
     return true;
   }
 
+  /**
+   * A request's caller gone (#1923): it leaves the job it waits on. The job stops only once no request waits on it, so
+   * a joiner's cancel never stops the job for the request that started it.
+   */
+  gone(caller: string): void {
+    this.leaving.get(caller)?.();
+    for (const job of this.running.values()) {
+      if (!job.callers.delete(caller)) continue;
+      if (job.callers.size === 0 || this.d.plant === 'job-joiner-cancels-job') job.stop.abort();
+    }
+  }
+
   /** deep_job's run: done with its outputs by hash and a receipt, held on an ask, refused, or failed naming why. */
-  async run(args: Obj): Promise<Obj> {
+  async run(args: Obj, caller: string = `anonymous#${++this.anonymous}`): Promise<Obj> {
     const host = this.d.host();
     const refused = (reason: string): Obj => ({ status: 'refused', reason });
     if (!host) return refused('the hub has no extension host yet; try again once it is ready');
@@ -119,14 +147,73 @@ export class Jobs {
     const cached = this.saved.cache[key];
     if (cached && (await Promise.all(Object.values(cached.outputs).map((sha) => this.d.has(sha)))).every(Boolean)) return done(cached.outputs, cached.build, 'hit');
 
+    // A running job with this key: this request joins it, passes no gate and starts nothing. The planted runner
+    // job-second-call runs the tool again.
+    const running = this.running.get(key);
+    if (running && this.d.plant !== 'job-second-call') return this.wait(running, caller, true);
+    // A call made for this key, with no job running it and no outputs kept: its answer was lost, and it isn't made again.
+    const made = pinned.provider && !running ? this.called(key) : undefined;
+    if (made) return this.lost(kind, tool, key, made, receipt(pinned.build, 'miss'));
+
     const usd = pinned.descriptor.cost?.usd ?? 0;
     if (usd > 0 && !((this.saved.rules[tool] ?? -1) >= usd)) {
       if (!this.allowed.delete(key)) return { status: 'held', ask: this.asked.get(key) ?? (await this.ask(kind, tool, usd, key)) };
     }
-
+    const stop = new AbortController();
+    const job: Running = { callers: new Set(), stop, result: this.call(host, held, pinned, key, params, bytes, receipt, done, stop.signal) };
+    this.running.set(key, job);
+    void job.result.finally(() => { if (this.running.get(key) === job) this.running.delete(key); });
+    return this.wait(job, caller, false);
+  }
+  /** A request waiting on its job: the job's answer, its receipt saying so when it joined, or `cancelled` once its caller is gone. */
+  private wait(job: Running, caller: string, joined: boolean): Promise<Obj> {
+    job.callers.add(caller);
+    const left = new Promise<Obj>((resolve) => this.leaving.set(caller, () => resolve({ status: 'cancelled', reason: 'the request was cancelled; the job runs on for any other request waiting on it' })));
+    const answer = joined ? job.result.then((r) => (isObj(r.receipt) ? { ...r, receipt: { ...r.receipt, joined: true } } : r)) : job.result;
+    return Promise.race([answer, left]).finally(() => { this.leaving.delete(caller); job.callers.delete(caller); });
+  }
+  /** The key's call journal, which its tool appends to and the hub only reads. */
+  private journal(key: string): string {
+    return join(this.dir(), 'calls', key, 'journal.jsonl');
+  }
+  /** The call the key's journal says went out, if one did: its provider, and the provider's task ID once it answered. */
+  private called(key: string): { provider: string; task?: string } | undefined {
+    let text: string;
+    try { text = readFileSync(this.journal(key), 'utf8'); } catch { return undefined; }
+    let made: { provider: string; task?: string } | undefined;
+    for (const line of text.split('\n')) {
+      let v: unknown;
+      try { v = JSON.parse(line); } catch { continue; }
+      if (!isObj(v) || v.key !== key || typeof v.provider !== 'string') continue;
+      made = typeof v.task === 'string' ? { provider: v.provider, task: v.task } : made ?? { provider: v.provider };
+    }
+    return made;
+  }
+  /** A call whose answer was lost: BLOCKED, with one unblock ask naming the provider and the key, every time. */
+  private async lost(kind: string, tool: string, key: string, { provider, task }: { provider: string; task?: string }, receipt: Obj): Promise<Obj> {
+    const journal = this.journal(key);
+    const cause = `${tool} sent a paid call for ${kind} to ${provider} under the submission key ${key}, and ${task ? `${provider} answered it as task ${task}, but no output of it was kept` : 'its answer never reached DeepBuild'}`;
+    let ask = this.unblocks.get(key);
+    if (!ask) {
+      const ref = sha256Hex(canonicalize({ lost: key }));
+      ask = await this.d.raise('job.unblock', {
+        kind: 'unblock', question: `${cause}, so it isn't made again. Find that call at ${provider}?`,
+        options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', deadline: this.d.now() + DAY,
+        steps: [`Find the call at ${provider} by its submission key ${key}, which it was sent with as its Idempotency-Key`, `To pay for it again instead, delete the call journal ${journal} and run the job again`],
+        where: `${provider}, and this machine's ${journal}`, why: 'a paid call is never made twice, and this one may have run', unblocks: [`req:${ref.slice(0, 16)}`], proves: `the call journal for ${key} deleted`,
+        fallback: 'you', provisional: false, owner: 'you', key: ref, pinned_to: { kind: 'evidence', ref },
+      });
+      this.unblocks.set(key, ask);
+    }
+    return { status: 'BLOCKED', cause, ask, receipt };
+  }
+  /** The tool's one run for a key, its outputs held until the kind's output checks pass, then kept and cached. */
+  private async call(host: Host, held: ReturnType<Host['jobs']>[number], pinned: ReturnType<Host['jobs']>[number]['tools'][number], key: string, params: Record<string, JsonValue>, bytes: Record<string, Uint8Array>, receipt: (build: string, cache: 'hit' | 'miss') => Obj, done: (outputs: Record<string, string>, build: string, cache: 'hit' | 'miss') => Obj, stop: AbortSignal): Promise<Obj> {
+    const { kind } = held;
+    const { tool } = pinned;
     let wrote: Record<string, Uint8Array>;
     try {
-      wrote = await host.runJobTool(tool, kind, params, bytes);
+      wrote = await host.runJobTool(tool, kind, params, bytes, pinned.provider ? { key, journal: this.journal(key) } : undefined, stop);
     } catch (e) {
       return { status: 'failed', reason: `${tool} failed: ${message(e)}; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
     }
@@ -160,7 +247,7 @@ export class Jobs {
     return sha256Hex(canonicalize(key as JsonValue));
   }
   private async ask(kind: string, tool: string, usd: number, key: string): Promise<string> {
-    const ask = await this.d.raise({
+    const ask = await this.d.raise('job.paid', {
       kind: 'authority', question: `Run ${tool} for ${kind} once, at $${usd} a run?`,
       options: [{ id: 'run', label: 'Run it once', decision: 'allow' }, { id: 'decline', label: "Don't run it", decision: 'deny' }],
       recommended: null, deadline: this.d.now() + DAY, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: key },

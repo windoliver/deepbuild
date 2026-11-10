@@ -18,7 +18,12 @@ export interface JobKind {
 }
 export interface JobTool { tool: string; params: Schema; run: { dir: string; entry: string }; qualification: unknown; cost?: { usd: number } }
 /** What an install holds of the job API: the kinds it registered, and its tools, each with the build it qualified as. */
-export interface HeldJobs { kinds: Record<string, JobKind>; tools: { kind: string; tool: string; build: string; descriptor: JobTool }[] }
+export interface HeldJobs { kinds: Record<string, JobKind>; tools: { kind: string; tool: string; build: string; descriptor: JobTool; provider?: string }[] }
+/**
+ * A paid call's run (#1923): the provider's host the tool may reach, its submission key, and the call journal it
+ * appends to, `{key, provider}` before its request leaves and `{key, provider, task}` when the provider answers.
+ */
+export interface JobCall { provider: string; key: string; journal: string }
 /** The planted hosts of #1922 AC6 and AC7, each a build that isn't the digest of the tool's files as installed. */
 export type BuildPlant = 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes';
 
