@@ -58,16 +58,14 @@ pub fn first_field(recorded: &[Canonical], mine: &[Canonical]) -> Option<Value> 
     })
 }
 
-/// The architecture a golden or a run names in its `machine`.
-fn arch_of(v: &Value) -> Option<&str> {
-    v.pointer("/machine/arch").and_then(Value::as_str)
-}
-
 /// Whether a run on `machine` was on the golden's recording architecture (`same`) or another
 /// (`different`), the only thing that makes a run count across machines (Golden: a Linux VM on the
 /// reference Mac reads `machines: same`); `null` when either names no architecture.
 pub fn machines(golden: &Value, machine: &Value) -> Value {
-    match (arch_of(golden), machine.get("arch").and_then(Value::as_str)) {
+    match (
+        golden.pointer("/machine/arch").and_then(Value::as_str),
+        machine.get("arch").and_then(Value::as_str),
+    ) {
         (Some(a), Some(b)) if a == b => json!("same"),
         (Some(_), Some(_)) => json!("different"),
         _ => Value::Null,
@@ -78,10 +76,8 @@ pub fn machines(golden: &Value, machine: &Value) -> Value {
 /// target}`) and the `golden_verify` runs made: for each target it verifies on, a run from that
 /// target on another architecture than the recording machine's decides; else a configured machine
 /// with that target leaves it `PENDING`; else it is `BLOCKED` with one unblock ask naming the target.
-/// A run on the recording architecture never counts, and there is no `PASS` without a run. The
-/// reply's `machines` is `different` when every target has a run that counts, `same` when a target's
-/// only runs were on the recording architecture, else `null`. `None` when the golden names no
-/// target or no recording architecture.
+/// A run on the recording architecture never counts, and there is no `PASS` without a run.
+/// `None` when the golden names no target or no recording architecture.
 pub fn cross(golden: &Value, machines: &[Value], runs: &[Value]) -> Option<Value> {
     let arch = golden.pointer("/machine/arch")?.as_str()?;
     let targets: Vec<&str> = golden
@@ -95,21 +91,13 @@ pub fn cross(golden: &Value, machines: &[Value], runs: &[Value]) -> Option<Value
     }
     let mut verdicts = Vec::new();
     let mut asks = Vec::new();
-    let (mut counted, mut same) = (0, false);
-    for t in targets.iter().copied() {
-        let on_t: Vec<&Value> = runs
-            .iter()
-            .filter(|r| r.get("target").and_then(Value::as_str) == Some(t))
-            .collect();
-        let run = on_t
-            .iter()
-            .copied()
-            .find(|r| arch_of(r).is_some_and(|a| a != arch));
-        if run.is_some() {
-            counted += 1;
-        } else if on_t.iter().any(|r| arch_of(r) == Some(arch)) {
-            same = true;
-        }
+    for t in targets {
+        let run = runs.iter().find(|r| {
+            r.get("target").and_then(Value::as_str) == Some(t)
+                && r.pointer("/machine/arch")
+                    .and_then(Value::as_str)
+                    .is_some_and(|a| a != arch)
+        });
         verdicts.push(match run {
             Some(r) if r.get("verdict").and_then(Value::as_str) == Some("PASS") => "PASS",
             Some(_) => "FAIL",
@@ -130,12 +118,5 @@ pub fn cross(golden: &Value, machines: &[Value], runs: &[Value]) -> Option<Value
         .into_iter()
         .find(|v| verdicts.contains(v))
         .unwrap_or("BLOCKED");
-    let machines = if same {
-        json!("same")
-    } else if counted == targets.len() {
-        json!("different")
-    } else {
-        Value::Null
-    };
-    Some(json!({"ok": true, "verdict": verdict, "machines": machines, "asks": asks}))
+    Some(json!({"ok": true, "verdict": verdict, "asks": asks}))
 }
