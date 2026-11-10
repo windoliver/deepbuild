@@ -1592,10 +1592,14 @@ fn add_text(node: &mut Node, text: String, bounds: [i64; 4]) {
     if node.name.as_deref() == Some(text.as_str()) {
         return;
     }
+    // A run's ink may spill a device pixel past the box that lays it out, as an antialiased "A" does at its left
+    // edge; it is still that box's text (#1459). The outside_frame audit keeps the strict test.
+    let [x, y, w, h] = bounds;
+    let ink = [x + 1, y + 1, (w - 2).max(0), (h - 2).max(0)];
     match node
         .children
         .iter_mut()
-        .find(|child| contains(child.bounds, bounds))
+        .find(|child| contains(child.bounds, ink))
     {
         Some(child) => add_text(child, text, bounds),
         None => node.children.push(Node {
