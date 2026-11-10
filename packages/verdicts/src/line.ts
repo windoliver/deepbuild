@@ -34,6 +34,8 @@ export interface LineState {
   tests?: number;
   /** The verdict's own smallest case and where it points: the cause when no requirement holds it, as a review's finding (#1537). */
   cause?: { smallest: string | null; points_to: string | null };
+  /** The address of the claim's page, which `deep open` takes (#1460); no receipt part without one. */
+  receipt?: string;
 }
 /** Who takes the next step: the agent (a send-back), you (a PASS or something only you can clear) or DeepBuild (checks still to run). */
 type Owner = 'agent' | 'you' | 'DeepBuild';
@@ -78,7 +80,7 @@ function parts(s: LineState): Parts {
     points = failing?.points_to ?? '';
   }
   const tests = s.tests ? `${s.tests} test${s.tests === 1 ? '' : 's'}` : '';
-  return { unverified: unverified.length ? `not verified: ${unverified.join(', ')}` : '', outcome, cause, points, tests, running, owner: `next: ${ownerOf(s.outcome)}`, receipt: 'receipt' };
+  return { unverified: unverified.length ? `not verified: ${unverified.join(', ')}` : '', outcome, cause, points, tests, running, owner: `next: ${ownerOf(s.outcome)}`, receipt: s.receipt ?? '' };
 }
 
 /**

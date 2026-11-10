@@ -10,15 +10,16 @@ use gpui_kit::*;
 use gpui_shell::ShellRuntime;
 use serde_json::{json, Value};
 
+use crate::address::Address;
 use crate::commands::{entries, Entry, Open, Palette, View};
 use crate::views;
 
 /// The pages ⌘K always lists.
 pub fn shipped_pages() -> Vec<Entry> {
-    [("Home", views::HOME), ("Needs you", views::NEEDS_YOU)]
-        .map(|(name, panel)| Entry::Shipped {
+    [("Home", "home"), ("Needs you", "needs-you")]
+        .map(|(name, page)| Entry::Open {
             name: name.to_owned(),
-            panel,
+            address: Address::page(page),
         })
         .into()
 }
@@ -36,17 +37,19 @@ pub fn opener(runtime: Rc<ShellRuntime>) -> Open {
                 }
             })
             .detach();
+            None
         }
-        Entry::Shipped { panel, .. } => views::show_panel(panel, window, cx),
+        Entry::Open { .. } => None,
         Entry::Page { panel, .. } => {
-            let Some(page) = entry.page_props() else {
-                return;
-            };
+            let page = entry.page_props()?;
             #[cfg(feature = "plant-page-drops-param")]
             let page = json!({ "name": page["name"] });
             match crate::mount_page(&runtime, panel, &page, window, cx) {
-                Ok(view) => views::open_page(view.into(), window, cx),
-                Err(error) => eprintln!("deep-app: {} didn't open: {error:#}", entry.name()),
+                Ok(view) => Some(view.into()),
+                Err(error) => {
+                    eprintln!("deep-app: {} didn't open: {error:#}", entry.name());
+                    None
+                }
             }
         }
     })

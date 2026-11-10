@@ -196,6 +196,7 @@ const usage = [
   'deep export --document <file> --still <frame | marker> --out <file.png>   one still of a document, drawn headless with no hub',
   'deep kinds --dump <folder> | --diff <a> <b>   the canvas core\'s whole listing as canonical JSON named by its module-set digest, or two such dumps diffed',
   'deep inbox  your open asks',
+  'deep open <address>   ask/<id>, session/<id>, project/<id> or page/<name> opened in the app, which opens and changes nothing',
   'deep inbox answer <ask> <option>   answer one, once the OS confirms you',
   'deep race <issue>   its sessions race: they settle on the first PASS and raise no "keep which?" ask',
   'deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you',
@@ -234,7 +235,7 @@ const help = asksHelp && !(args[0] === 'backup' && (await import('@deepbuild/hub
 // What a person runs first, then their work, then what developers run (#1455); a command no group names is a developer's.
 const groups: [string, string[]][] = [
   ['Start here', ['setup', 'status', 'inbox', 'doctor', 'off', 'install', 'memory', 'secret', 'update']],
-  ['Your work', ['fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
+  ['Your work', ['open', 'fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
   ['For developers', ['explain', 'run', 'hub', 'mcp', 'env', 'lease', 'show', 'export', 'kinds', 'mcp-exec', 'read', 'find']],
 ];
 const groupOf = (line: string): number => {
@@ -392,6 +393,22 @@ if (help) {
   // Its own entry, as deep mcp's: an agent starts it for each synced server that takes secrets (#148).
   const { mcpExecCommand } = await import('@deepbuild/hub/mcp-exec');
   process.exitCode = await mcpExecCommand(args.slice(1));
+} else if (args[0] === 'open' && args.length === 2) {
+  // Issue #1460: the address goes to the running app over its own socket, so the hub records nothing.
+  const { connect } = await import('node:net');
+  process.exitCode = await new Promise<number>((done) => {
+    const app = connect(join(homedir(), '.deepbuild', 'app.sock'));
+    let reply = '';
+    app.setTimeout(5000, () => app.destroy(Error('timed out')));
+    app.on('connect', () => app.write(`${args[1]}\n`));
+    app.on('data', (data) => { reply += data; });
+    app.on('error', () => { console.error('deep open: the app is not running'); done(1); });
+    app.on('close', (failed) => {
+      if (failed) return;
+      console.log(reply.trim());
+      done(reply.startsWith('opened ') ? 0 : 1);
+    });
+  });
 } else if (args[0] === 'read' || args[0] === 'find') {
   // Read-only over the hub's root (#63), with or without the hub running.
   const { findCommand, readCommand } = await import('@deepbuild/reading');
