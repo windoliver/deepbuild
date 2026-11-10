@@ -178,7 +178,7 @@ async function updateCheck(): Promise<number> {
 // Every command's usage as `deep --help` lists it, a line each, led by the commands it names.
 const usage = [
   'deep doctor [--json] [--prompt]   --prompt also sends each signed-in agent one test prompt, which spends plan usage',
-  'deep status  every session, what needs you first',
+  'deep status [--json]   every session with its detail, ending on what needs you',
   'deep off | on   every gate watch-only, or back, once the OS confirms you',
   'deep explain <recorded session folder> [--json]',
   'deep run --result <run.finished event file>',
@@ -195,7 +195,7 @@ const usage = [
   'deep show --doc <doc ID> --document <file> [--check] [--snap] [--claim <claim>] [--json]   a canvas document drawn in your layer, or in the agent\'s whose process tree runs it',
   'deep export --document <file> --still <frame | marker> --out <file.png>   one still of a document, drawn headless with no hub',
   'deep kinds --dump <folder> | --diff <a> <b>   the canvas core\'s whole listing as canonical JSON named by its module-set digest, or two such dumps diffed',
-  'deep inbox  your open asks',
+  'deep inbox [--json]   your open asks, each question first and its handle last',
   'deep inbox answer <ask> <option>   answer one, once the OS confirms you',
   'deep race <issue>   its sessions race: they settle on the first PASS and raise no "keep which?" ask',
   'deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you',
@@ -228,7 +228,7 @@ const commands = [...new Set(usage.flatMap(commandsOf))];
 // Help never acts (#1359): an agent asks a command for help before it uses it, so -h, --help or help anywhere in its
 // arguments prints that command's usage before anything runs, setup included. Arguments after -- are another program's.
 const helpWords = ['--help', '-h', 'help'];
-const asksHelp = args.length === 0 || (args.includes('--') ? args.slice(0, args.indexOf('--')) : args).some((arg) => helpWords.includes(arg));
+const asksHelp = (args.includes('--') ? args.slice(0, args.indexOf('--')) : args).some((arg) => helpWords.includes(arg));
 // The planted wrong program runs deep backup before its help check, so #1359's table must name it.
 const help = asksHelp && !(args[0] === 'backup' && (await import('@deepbuild/hub')).activePlant() === 'dispatches-before-help');
 // What a person runs first, then their work, then what developers run (#1455); a command no group names is a developer's.
@@ -243,7 +243,7 @@ const groupOf = (line: string): number => {
 };
 function printHelp(): void {
   const lines = usage.filter((line) => commandsOf(line).includes(args[0] ?? ''));
-  if (args.length === 0 || helpWords.includes(args[0]!) || args[0] === '--version') {
+  if (helpWords.includes(args[0]!) || args[0] === '--version') {
     console.log(`${banner()}\nUsage: deep [--help | --version]\n\n${groups.map(([title, names], at) => `${title}:\n${usage
       .filter((line) => groupOf(line) === at)
       .sort((a, b) => names.indexOf(commandsOf(a)[0]!) - names.indexOf(commandsOf(b)[0]!))
@@ -285,7 +285,7 @@ function unsupported(word: string): void {
 // setup's steps without asking. The hub's modules load only then, so a set-up home starts as fast as before (#24's
 // budget). deep env with --root names a dev hub and acts on it alone (#331), or is a usage error, so it sets nothing up
 // in the home.
-const yours = ['status', 'inbox', 'secret', 'off', 'on', 'env', 'install', 'guard', 'memory'];
+const yours = ['', 'status', 'inbox', 'secret', 'off', 'on', 'env', 'install', 'guard', 'memory'];
 const devHub = args[0] === 'env' && args.includes('--root');
 const installed = join(homedir(), '.deepbuild');
 const unfinished = !existsSync(join(installed, 'setup-finished.json')) && (!existsSync(installed) || existsSync(join(installed, 'setup-stopped.json')));
@@ -297,6 +297,10 @@ if (!help && yours.includes(args[0] ?? '') && !devHub && unfinished) {
 
 if (help) {
   printHelp();
+} else if (args.length === 0) {
+  // `deep` alone is the list (#1463): the rows and the one count the app shows, and nothing after them.
+  const { listCommand } = await import('@deepbuild/hub');
+  process.exitCode = await listCommand([]);
 } else if (args[0] === 'doctor') {
   const { doctorCommand } = await import('@deepbuild/hub');
   process.exitCode = await doctorCommand(args.slice(1), telemetryItems);
