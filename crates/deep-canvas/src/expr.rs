@@ -2866,9 +2866,15 @@ mod tests {
         let e = Expr::compile(&deep, &Nothing, 512).unwrap_err();
         assert!(e.why.contains("levels"), "{e}");
         let e = Expr::compile("1 + $", &Nothing, 512).unwrap_err();
-        assert_eq!(e.why, "unexpected `$`");
+        assert_eq!(
+            (e.call.as_str(), e.why.as_str()),
+            ("1 + $", "unexpected `$`")
+        );
         let e = Expr::compile("1 2", &Nothing, 512).unwrap_err();
-        assert_eq!(e.why, "trailing text after the expression");
+        assert_eq!(
+            (e.call.as_str(), e.why.as_str()),
+            ("1 2", "trailing text after the expression")
+        );
         // At every nesting site the cap refuses before the char past it is read.
         for open in ["-", "!", "+", "abs(", "1 ? ", "1 ? 1 : ", "2^", "("] {
             let e = Expr::compile(&format!("{}$", open.repeat(65)), &Nothing, 512).unwrap_err();
@@ -2906,6 +2912,11 @@ mod tests {
         // A sum of k + 1 ones is 2k + 1 nodes; abs around it adds one.
         let sum = |k: usize| format!("{}1", "1+".repeat(k));
         assert!(!over(sum(511)) && over(sum(512)));
+        let e = Expr::compile(&sum(512), &Nothing, 512).unwrap_err();
+        assert_eq!(
+            e.why,
+            "takes more than 1024 nodes as written, twice the cap of 512"
+        );
         assert!(!over(format!("abs({})", sum(511))));
         // A table's name read whole counts one node; read as `p.t + …`, its parts count once.
         assert!(!over(format!("table(p.t, {})", sum(510))));
@@ -2941,6 +2952,8 @@ mod tests {
         for (text, want) in forms {
             assert_eq!(value(text).ok(), Some(want), "{text}");
         }
+        // An `e` with no digits after it is a name, never an exponent.
+        assert!(value("2e + 1").is_ok());
         for (text, call) in [
             ("factorial(2.5) + 1", "factorial(2.5)"),
             ("é + factorial(2.5) + 1", "factorial(2.5)"),

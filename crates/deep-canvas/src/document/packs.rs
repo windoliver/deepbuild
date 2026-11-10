@@ -3324,6 +3324,11 @@ mod tests {
         assert!(postfix(&format!("-{}", chain(511))).is_ok());
         let e = postfix(&format!("--{}", chain(511))).unwrap_err();
         assert!(e.contains("the cap of 1024 tokens"), "{e}");
+        let e = tokenize(&format!("-{} $", chain(511))).unwrap_err();
+        assert_eq!(
+            e, "runs past the cap of 1024 tokens",
+            "the cap before the 1,025th token"
+        );
         let e = postfix(&chain(100_000)).unwrap_err();
         assert!(e.contains("the cap of 1024 tokens"), "{e}");
     }
@@ -3390,6 +3395,7 @@ mod tests {
             "1 % 2 + (1 <= 2) + (0 || 1)",
             "max(1, i ? 2 : 3)",
             "a.b[1] - !c",
+            "(a == b) * (a != b) / (a >= b)",
         ];
         for text in could {
             assert!(could_be_expression(text), "{text}");
