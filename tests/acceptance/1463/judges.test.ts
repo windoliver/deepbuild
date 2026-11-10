@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   afterListFailures, clockFailures, clockOf, countFailures, defaultFieldFailures, downFailures, drawnFailures, endFailures, inboxFailures, leakFailures,
-  notificationFailures, retiredFailures, rowFailures, shapeFailures, stateTable, tableFailures, textRowFailures, todayAt,
+  notificationFailures, rowFailures, shapeFailures, textRowFailures, todayAt,
   type FixtureAsk, type FixtureSession, type Row, type Snapshot,
 } from './helpers.ts';
 
@@ -49,16 +49,8 @@ describe('judges', () => {
     expect(afterListFailures(`Reading the hub at unix:/x\n${text}`, ROWS, 'deep').join()).toMatch(/plumbing/);
   });
 
-  test('tableFailures and retiredFailures: the words of states::TABLE', () => {
-    const table = stateTable();
-    expect(table.map((t) => t.word)).toContain('needs you');
-    expect(tableFailures(ROWS, table, 'r')).toEqual([]);
-    expect(tableFailures([row('session:s3', 'X', 'finished', 'pass')], table, 'r').join()).toMatch(/no word of states::TABLE/);
-    expect(tableFailures([row('session:s3', 'X', 'PASS', 'fail')], table, 'r').join()).toMatch(/the entry pass/);
-    expect(retiredFailures('3 sessions: 2 asks need you, 1 working', table, 'deep')).toEqual([]);
-    expect(retiredFailures('3 sessions: 2 need you, 1 gone quiet', table, 'deep')).toHaveLength(2);
-    expect(retiredFailures('Cart totals · waiting on you', table, 'deep').join()).toMatch(/waiting on you/);
-  });
+  // tableFailures' and retiredFailures' self-test is redraft-judges/table-judges.test.ts's, swapped in: this one held
+  // that `finished` is no word of states::TABLE, which #992's words, the table gains, make untrue.
 
   test('inboxFailures and defaultFieldFailures: the question first, the default, the handle last', () => {
     const line = `Ship the cart page today?  If you don't answer: No, at ${clockOf(ASK.deadline)}  ${ASK.handle}`;
