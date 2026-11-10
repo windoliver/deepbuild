@@ -209,7 +209,9 @@ export type Plant =
   | 'box-applies-at-once' | 'box-ignores-revision'
   // #1922's: a job key over the params' text as written, one without the tool's version, and a host whose tool build
   // hashes only the entry file, or adds where the files are, or when they were modified.
-  | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes';
+  | 'job-key-params-text' | 'job-key-no-version' | 'job-build-entry-only' | 'job-build-hashes-paths' | 'job-build-hashes-mtimes'
+  // #1942's: a host link that drops every connection to a host when one stalls, and one that sends an unknown start again.
+  | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -296,6 +298,7 @@ const PLANTS: readonly string[] = [
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members',
   'job-key-params-text', 'job-key-no-version', 'job-build-entry-only', 'job-build-hashes-paths', 'job-build-hashes-mtimes',
+  'host-link-drops-every-connection', 'host-link-resends-on-reconnect',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

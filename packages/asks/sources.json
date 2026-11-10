@@ -1556,6 +1556,42 @@
     }
   },
   {
+    "source": "host.change",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Let DeepBuild start runs as you on build-01, as user services under your user there?",
+        "options": [
+          {
+            "id": "allow",
+            "label": "Allow on build-01",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "23ff1f2333bbd72ac15a9f7e42c6cd3c3a18bf74d55f6a5de0685c689cfab24f",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "23ff1f2333bbd72ac15a9f7e42c6cd3c3a18bf74d55f6a5de0685c689cfab24f"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
     "source": "library.unblock",
     "kind": "unblock",
     "fixture": {
