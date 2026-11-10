@@ -51,6 +51,3 @@ export function selectJourneys(features: readonly Feature[], paths: readonly str
     withoutJourney: changed.filter((f) => !f.journeys.length).map((f) => f.id),
   };
 }
-
-/** Features no journey proves, across the whole list: what the agent that touches one is asked to propose. */
-export const featuresWithoutJourney = (features: readonly Feature[]): string[] => features.filter((f) => !f.journeys.length).map((f) => f.id);
