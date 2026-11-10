@@ -308,10 +308,14 @@ fn doc(value: Option<&Value>) -> Option<Map<String, Value>> {
 }
 
 /// Whether `kind` is one this binary draws though a module owns it: `vector@1` (the vector
-/// module's) and R1's mark sets, axes and scales (the data module's).
+/// module's), R1's mark sets, axes and scales (the data module's) and `graph@1` (the graph
+/// module's since #494, laid out and routed in `graphs`).
 fn drawn_here(kind: &Value) -> bool {
     let name = kind.as_str().and_then(|k| k.split('@').next());
-    matches!(name, Some("vector" | "marks" | "axis" | "scale" | "tiles.terrain"))
+    matches!(
+        name,
+        Some("vector" | "marks" | "axis" | "scale" | "tiles.terrain" | "graph")
+    )
 }
 
 /// Each imported `vector@1` item by ID (#398).
