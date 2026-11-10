@@ -5,30 +5,39 @@
 // and `deep setup`, `deep waiter` and the doctor's timing relations for Claude Code's hooks (#18); `deep setup --undo`,
 // `deep off`, `deep on`, `deep hub stop` and `deep hub use`, each once the OS confirms you, and `deep status` (#19);
 // `deep backup` and `deep restore`, the record copied through the hub and put back with it stopped (#572).
-import { gatesCommand } from './authority.js';
-import { backupCommand, restoreCommand } from './backup.js';
-import { envCommand } from './env.js';
-import { guardCommand } from './guards.js';
-import { inboxCommand, raceCommand } from './inbox.js';
-import { startCommand } from './start-command.js';
-import { secretCommand } from './secret-command.js';
-import { workspaceCommand } from './workspace-command.js';
-import { fixCommand } from './fix-command.js';
-import { installCommand } from './install.js';
-import { memoryCommand } from './memory.js';
-import { rulesCommand } from './rules.js';
-import { undoCommand } from './undo.js';
-import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
+//
+// Each command loads its own module when it runs, so a command starts with its own modules and none of the others':
+// `deep inbox` without the gate, the record or the YAML parser (#24's budget).
+import type { Item } from './doctor.js';
 
-export { startCommand };
-export { gateCommand } from './gate-command.js';
-export { fixCommand, workspaceCommand, backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, raceCommand, secretCommand, memoryCommand, relationItems, rulesCommand, restoreCommand, setUpFirst, setupCommand, undoCommand, waiterCommand };
-export { numbersCommand, statusCommand } from './status.js';
-export { joinCommand } from './remote.js';
-export { showCommand } from './show.js';
+type Args = readonly string[];
+
+export const gatesCommand = async (off: boolean): Promise<number> => (await import('./authority.js')).gatesCommand(off);
+export const backupCommand = async (args: Args): Promise<number> => (await import('./backup.js')).backupCommand(args);
+export const restoreCommand = async (args: Args): Promise<number> => (await import('./backup.js')).restoreCommand(args);
+export const envCommand = async (args: Args): Promise<number> => (await import('./env.js')).envCommand(args);
+export const guardCommand = async (args: Args): Promise<number> => (await import('./guards.js')).guardCommand(args);
+export const inboxCommand = async (args: Args): Promise<number> => (await import('./inbox.js')).inboxCommand(args);
+export const raceCommand = async (args: Args): Promise<number> => (await import('./inbox.js')).raceCommand(args);
+export const startCommand = async (args: Args): Promise<number> => (await import('./start-command.js')).startCommand(args);
+export const secretCommand = async (args: string[]): Promise<number> => (await import('./secret-command.js')).secretCommand(args);
+export const workspaceCommand = async (args: Args): Promise<number> => (await import('./workspace-command.js')).workspaceCommand(args);
+export const fixCommand = async (args: Args): Promise<number> => (await import('./fix-command.js')).fixCommand(args);
+export const installCommand = async (args: Args): Promise<number> => (await import('./install.js')).installCommand(args);
+export const memoryCommand = async (args: Args): Promise<number> => (await import('./memory.js')).memoryCommand(args);
+export const rulesCommand = async (args: Args): Promise<number> => (await import('./rules.js')).rulesCommand(args);
+export const undoCommand = async (args: Args): Promise<number> => (await import('./undo.js')).undoCommand(args);
+export const setUpFirst = async (cli: string): Promise<number> => (await import('./setup.js')).setUpFirst(cli);
+export const setupCommand = async (cli: string, args: Args = []): Promise<number> => (await import('./setup.js')).setupCommand(cli, args);
+export const waiterCommand = async (): Promise<number> => (await import('./setup.js')).waiterCommand();
+export const gateCommand = async (args: Args): Promise<number> => (await import('./gate-command.js')).gateCommand(args);
+export const numbersCommand = async (args: Args): Promise<number> => (await import('./status.js')).numbersCommand(args);
+export const statusCommand = async (args: Args): Promise<number> => (await import('./status.js')).statusCommand(args);
+export const joinCommand = async (args: Args): Promise<number> => (await import('./remote.js')).joinCommand(args);
+export const showCommand = async (args: Args): Promise<number> => (await import('./show.js')).showCommand(args);
+export const doctorCommand = async (args: Args, also: () => Promise<Item[]>): Promise<number> => (await import('./doctor.js')).doctorCommand(args, also);
+export const doctorItems = async (env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string }): Promise<Item[]> => (await import('./doctor.js')).doctorItems(env, options);
 export { exportCommand, kindsCommand } from './canvas.js';
-export { doctorCommand, doctorItems } from './doctor.js';
 export { activePlant } from './plant.js';
 export { contractAdapter, type DeprecatedNotice, type RpcEntry } from './contracts.js';
 export { rootOf } from './paths.js';
-export { openWikiBuild } from './wiki-build.js';

@@ -19,7 +19,7 @@ const folder = () => join(homedir(), 'deepbuild-shards');
 // What a shard adds once its tests have built their binaries at its path: deep-hook and deep-show, which most alone
 // tests build, took 3.4 GB beside the clone it shares on 2026-11-07; the whole workspace, 6 to 7 GB.
 const SHARD_BYTES = 5e9;
-// The machine's disk floor (#1017's, packages/hub/src/products.ts): no shard is made that would take free space under it.
+// The machine's disk floor (#1017's, packages/hub/src/disk.ts): no shard is made that would take free space under it.
 // DEEP_TEST_SHARD_FLOOR sets it in bytes (tests only), so a test's shards don't hang on the machine's free space.
 const FLOOR = Number(process.env.DEEP_TEST_SHARD_FLOOR ?? 30e9);
 const freeBytes = () => {
