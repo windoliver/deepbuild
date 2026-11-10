@@ -163,6 +163,36 @@ impl Record {
                 .collect(),
         )
     }
+    /// Each emitting item's occurrence list (`<logic ID>.occurrences`), by item ID: every row its
+    /// steps emitted, in step order, each at its step and the step's time. A step run again
+    /// replaces its rows, so a seek or a rollback leaves no copy of a replaced step's.
+    pub fn occurrences(&self, piece: &Piece) -> Map<String, Value> {
+        let mut out = Map::new();
+        for item in piece.items.iter().filter(|i| !i.emits.is_empty()) {
+            let name = format!("{}.occurrences", item.id);
+            let mut list = Vec::new();
+            for (k, (_, arrays)) in &self.steps {
+                for row in arrays.get(&name).and_then(Value::as_array).into_iter().flatten() {
+                    let mut r = json!({"step": k, "t": k * item.step});
+                    if let (Some(o), Some(fields)) = (r.as_object_mut(), row.as_object()) {
+                        o.extend(fields.clone());
+                    }
+                    list.push(r);
+                }
+            }
+            out.insert(item.id.clone(), Value::Array(list));
+        }
+        out
+    }
+    /// The occurrence lists as a seek leaves them: this record's, with each step `again` ran
+    /// replaced by that run's rows.
+    pub fn occurrences_after(&self, again: &[&Record], piece: &Piece) -> Map<String, Value> {
+        let mut steps = self.steps.clone();
+        for r in again {
+            steps.extend(r.steps.iter().map(|(k, v)| (*k, v.clone())));
+        }
+        Record { steps, ..Record::default() }.occurrences(piece)
+    }
     fn checkpoint(&mut self, id: &str, step: i64, deep: u64) {
         let list = self
             .checkpoints
@@ -215,7 +245,12 @@ struct Live {
     checked: Option<i64>,
     /// Steps between checkpoints: `checkpoint.every`, doubled each time the ring passes its budget.
     spacing: i64,
+    /// Restored from a checkpoint: its steps run again steps a bake already ran.
+    rerun: bool,
 }
+
+/// The rows a step emitted, in list order: each its kind's index and its bytes.
+type Rows = Vec<(usize, Vec<u8>)>;
 
 impl Stored {
     fn bytes(&self) -> u64 {
@@ -313,10 +348,15 @@ impl Live {
     fn memory(&mut self) -> &[u8] {
         self.runner.memory("memory").unwrap_or(&[])
     }
-    /// The step hash: the program's globals and the arrays it wrote.
-    fn step_hash(&mut self) -> u64 {
+    /// The step hash: the program's globals, the arrays it wrote and the rows it emitted, each
+    /// after its kind's index (none for a step that emitted none, so an item's hash is as before).
+    fn step_hash(&mut self, rows: &Rows) -> u64 {
         let mut b = self.encoded();
         b.extend(&self.arrays);
+        for (kind, row) in rows {
+            b.extend((*kind as u32).to_le_bytes());
+            b.extend(row);
+        }
         h64(&b)
     }
     /// The full state's hash: the step after the last that ran, memory, globals and arrays.
@@ -418,6 +458,7 @@ impl World {
                 stored: Vec::new(),
                 checked: None,
                 spacing: item.every,
+                rerun: false,
             });
         }
         let published = lives.iter().map(|l| l.arrays.clone()).collect();
@@ -703,7 +744,7 @@ impl World {
             l.prev.clone_from(&l.arrays);
         }
         if l.failed {
-            report(rec, item, k, l, None, 0, Vec::new());
+            report(rec, item, k, l, None, 0, Vec::new(), &Vec::new());
             return;
         }
         // The read region, in declaration order.
@@ -738,16 +779,27 @@ impl World {
         if !fits {
             l.failed = true;
             rec.traps.push(json!({"item": item.id, "step": k, "t": t, "kind": "bounds", "region": "reads", "function": null, "offset": null, "inputs": inputs}));
-            report(rec, item, k, l, None, 0, Vec::new());
+            report(rec, item, k, l, None, 0, Vec::new(), &Vec::new());
             return;
         }
-        l.runner.memory_mut("memory").expect("a memory")[from..from + size]
-            .copy_from_slice(&region);
-        // The bitmap starts each step with the pages the logic module's own writes touched.
-        let mut words = vec![0u64; l.names.pages.len()];
+        let memory = l.runner.memory_mut("memory").expect("a memory");
+        memory[from..from + size].copy_from_slice(&region);
+        // The bitmap starts each step with the pages the logic module's own writes touched: the
+        // read region and each emitted kind's count, zeroed before the step.
+        let mut touched = Vec::new();
         if size > 0 {
-            for p in from as u64 / PAGE..=(from + size - 1) as u64 / PAGE {
-                words[(p / 64) as usize] |= 1 << (p % 64);
+            touched.extend(from as u64 / PAGE..=(from + size - 1) as u64 / PAGE);
+        }
+        let mut at = item.emits_at as usize;
+        for e in &item.emits {
+            memory[at..at + 4].fill(0);
+            touched.push(at as u64 / PAGE);
+            at += e.size() as usize;
+        }
+        let mut words = vec![0u64; l.names.pages.len()];
+        for p in touched {
+            if let Some(w) = words.get_mut((p / 64) as usize) {
+                *w |= 1 << (p % 64);
             }
         }
         let names = l.names.clone();
@@ -789,12 +841,26 @@ impl World {
                 .zip(offset)
                 .and_then(|(f, o)| source(item, &self.planted, f, o));
             rec.traps.push(json!({"item": item.id, "step": k, "t": t, "kind": kind, "function": function, "offset": offset, "inputs": inputs, "source": src}));
-            report(rec, item, k, l, None, fuel, pages);
+            report(rec, item, k, l, None, fuel, pages, &Vec::new());
             return;
+        }
+        let memory = l.runner.memory("memory").expect("a memory");
+        let mut rows = match emitted(item, memory, &self.planted) {
+            Ok(rows) => rows,
+            // A count past its kind's max_per_step traps as any trap does: no row is dropped.
+            Err((kind, count)) => {
+                l.failed = true;
+                rec.traps.push(json!({"item": item.id, "step": k, "t": t, "kind": "occurrences", "occurrence": kind, "count": count, "function": null, "offset": null, "inputs": inputs}));
+                report(rec, item, k, l, None, fuel, pages, &Vec::new());
+                return;
+            }
+        };
+        if self.planted.seek_repeats_occurrences && l.rerun {
+            rows.extend(rows.clone());
         }
         let w = item.writes_at as usize;
         let n = l.arrays.len();
-        let mut fresh = l.runner.memory("memory").expect("a memory")[w..w + n].to_vec();
+        let mut fresh = memory[w..w + n].to_vec();
         if self.planted.replay_changes_step_37 && k == 37 && i == 0 {
             changed(item, &mut fresh);
         }
@@ -806,8 +872,8 @@ impl World {
             .expect("a list")
             .extend(ranges(item, k, &l.arrays, &fresh));
         l.arrays = fresh;
-        let h = l.step_hash();
-        report(rec, item, k, l, Some(h), fuel, pages);
+        let h = l.step_hash(&rows);
+        report(rec, item, k, l, Some(h), fuel, pages, &rows);
     }
 
     /// The nearest checkpoint every item's ring holds at or before step `k`.
@@ -901,6 +967,7 @@ impl World {
                 .filter(|(x, _)| *x == i)
                 .map_or(item.bytes.as_slice(), |(_, b)| b);
             let mut live = World::load(bytes, item, &memory, &s.globals)?;
+            live.rerun = true;
             live.next = c;
             live.ran = s.ran;
             live.last = c - 1;
@@ -953,6 +1020,7 @@ impl World {
             stored: Vec::new(),
             checked: None,
             spacing: item.every,
+            rerun: false,
         })
     }
 
@@ -1066,8 +1134,38 @@ fn ranges(item: &Item, k: i64, old: &[u8], new: &[u8]) -> Vec<Value> {
     out
 }
 
+/// The rows a step wrote to the item's emit region, each kind's in declaration order and sorted by
+/// (a, b) with ties in the order the program wrote them; or the first kind whose count passes its
+/// `max_per_step`, and the count.
+fn emitted(item: &Item, memory: &[u8], planted: &Planted) -> Result<Rows, (String, u32)> {
+    let mut rows = Vec::new();
+    let mut at = item.emits_at as usize;
+    for (j, e) in item.emits.iter().enumerate() {
+        let count = u32::from_le_bytes(memory[at..at + 4].try_into().expect("4 bytes"));
+        if count > e.max && !planted.occurrences_keep_cap {
+            return Err((e.kind.clone(), count));
+        }
+        let size = e.row() as usize;
+        let mut kind: Vec<Vec<u8>> = (0..count.min(e.max) as usize)
+            .map(|r| memory[at + 4 + r * size..][..size].to_vec())
+            .collect();
+        let pair = |r: &Vec<u8>| (u32::from_le_bytes(r[..4].try_into().expect("4 bytes")), u32::from_le_bytes(r[4..8].try_into().expect("4 bytes")));
+        if planted.occurrences_sort_ties_by_payload {
+            let payload = |r: &Vec<u8>| e.value(r)["fields"].as_object().map(|o| o.values().filter_map(Value::as_f64).collect::<Vec<_>>()).unwrap_or_default();
+            kind.sort_by(|x, y| pair(x).cmp(&pair(y)).then(payload(x).partial_cmp(&payload(y)).unwrap_or(std::cmp::Ordering::Equal)));
+        } else {
+            kind.sort_by_key(pair);
+        }
+        rows.extend(kind.into_iter().map(|r| (j, r)));
+        at += e.size() as usize;
+    }
+    Ok(rows)
+}
+
 /// What step k of an item left, in the record: its hash, fuel, whether it has failed, the pages it
-/// marked, and its arrays (a failed item's as its last good step left them).
+/// marked, its arrays (a failed item's as its last good step left them) and, for an item that
+/// emits, the rows a clean step emitted as `<logic ID>.occurrences` (a failed step emits none).
+#[allow(clippy::too_many_arguments)]
 fn report(
     rec: &mut Record,
     item: &Item,
@@ -1076,6 +1174,7 @@ fn report(
     hash: Option<u64>,
     fuel: i64,
     pages: Vec<u32>,
+    rows: &Rows,
 ) {
     let (items, arrays) = rec.steps.entry(k).or_default();
     items.insert(item.id.clone(), json!({"hash": hash.map(|h| format!("{h:016x}")), "fuel": fuel, "failed": l.failed, "pages": pages}));
@@ -1087,6 +1186,10 @@ fn report(
             .map(|b| w.ty.value(b))
             .collect();
         arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
+    }
+    if !item.emits.is_empty() && hash.is_some() {
+        let list = rows.iter().map(|(j, r)| item.emits[*j].value(r)).collect();
+        arrays.insert(format!("{}.occurrences", item.id), Value::Array(list));
     }
 }
 

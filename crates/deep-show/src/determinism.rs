@@ -185,6 +185,7 @@ impl Hub<'_> {
                 out: out.to_string_lossy().into_owned(),
                 software: false,
                 readback: false,
+                track: Vec::new(),
             };
             let reply = self.export_run(&job);
             let _ = std::fs::remove_dir_all(&out);
