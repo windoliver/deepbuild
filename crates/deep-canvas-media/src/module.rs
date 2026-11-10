@@ -52,7 +52,7 @@ fn manifest(implementation: &str) -> Manifest {
 pub fn module() -> Module {
     Module {
         manifest: manifest("media"),
-        register: |r| register(r, restore),
+        register: |r| register(r, restore, READER),
     }
 }
 
@@ -60,11 +60,44 @@ pub fn module() -> Module {
 pub fn checkpoint_without_tail() -> Module {
     Module {
         manifest: manifest("media.checkpoint_without_tail"),
-        register: |r| register(r, restore_without_tail),
+        register: |r| register(r, restore_without_tail, READER),
     }
 }
 
-fn register(r: &mut Registrar, restore: fn(&Value) -> Value) {
+/// The planted layout (#501): `export.target@1` declared here instead of in the core.
+pub fn declaring_export_targets() -> Module {
+    Module {
+        manifest: manifest("media"),
+        register: |r| {
+            r.registry(deep_canvas::registry::core_lists::export_target_registry());
+            register(r, restore, READER);
+        },
+    }
+}
+
+/// The planted target (#501): `png`'s fidelity reader is its own writer, media.
+pub fn png_reads_itself() -> Module {
+    Module {
+        manifest: manifest("media"),
+        register: |r| register(r, restore, "media"),
+    }
+}
+
+/// The independent reader of media's export targets: a fresh decode worker.
+const READER: &str = "decode_worker";
+
+fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
+    // The targets the encode job writes (Export: Targets): each held to the document by
+    // export.fidelity on what a fresh decode worker reads back, hidden items left out.
+    for (target, reader) in [("video", READER), ("png", png_reader)] {
+        r.entry(
+            "export.target@1",
+            target,
+            json!({"writer": "media", "fidelity": ["export.fidelity"],
+                   "reader": reader, "hidden": "left_out"}),
+            "R6",
+        );
+    }
     // A bell on a box, so the kit checks a document with strips and an emitter (#427).
     r.fixture("bell", deep_canvas_scene3d::emitters::bell(), None)
         .sidecar(json!({"codes": []}));
@@ -240,4 +273,36 @@ fn av_link(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deep_canvas::registry::lists::schema_fault;
+
+    /// #501: media fills `video` and `png` into `export.target@1`, each passing the core's kit;
+    /// only the planted layout declares the registry here.
+    #[test]
+    fn media_fills_the_video_and_png_export_targets() {
+        let def = deep_canvas::registry::core_lists::export_target_registry();
+        let mut r = Registrar::default();
+        (module().register)(&mut r);
+        assert!(r.registries.is_empty());
+        let targets: Vec<_> = r
+            .entries
+            .iter()
+            .filter(|e| e.registry == "export.target@1")
+            .collect();
+        let names: Vec<&str> = targets.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["video", "png"]);
+        for e in targets {
+            assert_eq!(schema_fault(&def.entry, &e.value, ""), None, "{}", e.name);
+            assert!(def.run_kit(&e.name, &e.value).pass(), "{}", e.name);
+            assert_eq!(e.value["writer"], "media");
+        }
+        let mut planted = Registrar::default();
+        (declaring_export_targets().register)(&mut planted);
+        let declared: Vec<&str> = planted.registries.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(declared, ["export.target@1"]);
+    }
 }

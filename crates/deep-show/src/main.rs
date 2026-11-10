@@ -9,13 +9,16 @@
 
 mod access;
 mod audio;
+mod bake;
 mod ask;
 mod capture;
 mod costs;
 mod efficiency;
 mod familiar;
 mod evidence;
+mod export;
 mod film;
+mod film_viewer;
 mod frames;
 mod function;
 mod gate;
@@ -44,6 +47,7 @@ mod serve;
 mod shaper;
 mod shared;
 mod snapshot;
+mod spawn;
 mod spatial;
 mod terminal;
 #[cfg(feature = "test-machines")]
@@ -226,7 +230,7 @@ fn tame_overflow(line: &str) -> Option<String> {
 }
 
 /// An optional field as `read` takes it: `Some(None)` when it's absent, `None` when `read` refuses it.
-fn optional<T>(value: Option<&Value>, read: impl FnOnce(&Value) -> Option<T>) -> Option<Option<T>> {
+pub(crate) fn optional<T>(value: Option<&Value>, read: impl FnOnce(&Value) -> Option<T>) -> Option<Option<T>> {
     value.map_or(Some(None), |v| read(v).map(Some))
 }
 
@@ -399,6 +403,31 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     };
     match name {
         "revisions" => return Some(Call::Revisions(doc()?)),
+        "session" => {
+            return Some(Call::Session {
+                doc: doc()?,
+                set: c.get("set").cloned().filter(Value::is_object),
+            })
+        }
+        "frame_hash" => {
+            let frames = c.get("frames")?.as_array()?.iter().map(|f| {
+                let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
+                let w = u32::try_from(size[0].as_u64()?).ok()?;
+                let h = u32::try_from(size[1].as_u64()?).ok()?;
+                Some(([w, h], f.get("bytes")?.as_str()?.to_string()))
+            });
+            return Some(Call::FrameHash {
+                frames: frames.collect::<Option<_>>()?,
+                software: match c.get("adapter") {
+                    None => false,
+                    Some(a) => a.as_str()? == "software",
+                },
+            });
+        }
+        "cross_machine" => {
+            let a = c.get("audio")?.as_array().filter(|a| a.len() == 2)?;
+            return Some(Call::CrossMachine([a[0].as_str()?.to_string(), a[1].as_str()?.to_string()]));
+        }
         "input" => {
             return Some(Call::Input {
                 panel: c.get("panel")?.as_str()?.to_string(),
@@ -503,6 +532,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "see" => return Some(Call::See(c.get("panel")?.as_str()?.to_string())),
         "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
+        "viewer" => return Some(Call::Viewer(c.get("panel")?.as_str()?.to_string())),
         "ask" => {
             let pointer = optional(c.get("pointer"), input::point)?;
             return Some(Call::Ask {
@@ -1137,6 +1167,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 *flag = true;
                 None
             }
+            None if export_planted(p).is_some() => export_planted(p),
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1487,9 +1518,12 @@ fn read_line(line: &str) -> Option<(Map<String, Value>, Scenario)> {
 }
 
 fn answer(command: &str, startup: &Startup, line: &str) -> Value {
-    let Some((input, scenario)) = read_line(line) else {
+    let Some((input, mut scenario)) = read_line(line) else {
         return bad_input();
     };
+    if scenario.planted.is_none() {
+        scenario.planted = startup.run_planted;
+    }
     match command {
         "run" => {
             let replies = jobs::around(&scenario, startup, |background| {
@@ -1854,6 +1888,13 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::sandbox::prog());
     #[cfg(feature = "test-leave-out-effects")]
     out.retain(|m| m.manifest.name != "effects");
+    // #501's planted layout: media declares export.target@1, which the core then leaves to it.
+    #[cfg(feature = "test-export-target-in-media")]
+    for m in &mut out {
+        if m.manifest.name == "media" {
+            *m = deep_canvas_media::module::declaring_export_targets();
+        }
+    }
     // #499: a build without the media module, and the test module that probes an asset through
     // the decode worker (or, planted, through media).
     #[cfg(feature = "test-leave-out-media")]
@@ -2171,6 +2212,11 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             }
         }
     }
+    if planted == Some(StartPlanted::Run(Planted::TargetReaderIsWriter)) {
+        for m in held.iter_mut().filter(|m| m.manifest.name == "media") {
+            *m = deep_canvas_media::module::png_reads_itself();
+        }
+    }
     if let Some(StartPlanted::ControlKind(p)) = planted {
         for m in held.iter_mut().filter(|m| m.manifest.name == "input") {
             *m = deep_canvas_input::module::with_test_kind(p);
@@ -2212,6 +2258,9 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
     }
     if cfg!(feature = "test-camera-in-scene3d") {
         registry = registry.plant(Fault::CameraInScene3d);
+    }
+    if cfg!(feature = "test-export-target-in-media") {
+        registry = registry.plant(Fault::ExportTargetInMedia);
     }
     // #412: the fixture ring keeps the bare name the issue gives it (`ring@1`, `ring@2`).
     if cfg!(any(feature = "test-ring-a", feature = "test-ring-b")) {
@@ -2269,6 +2318,10 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             Some(StartPlanted::Layouts(l)) => l,
             _ => Default::default(),
         },
+        run_planted: match planted {
+            Some(StartPlanted::Run(p)) => Some(p),
+            _ => None,
+        },
     })
 }
 
@@ -2305,6 +2358,8 @@ enum StartPlanted {
     /// #308: the test control kind test.dial, which the input module fills under
     /// `test-control-kind`, with a planted program.
     ControlKind(&'static str),
+    /// #501: a run's wrong program given at startup, as the scenario's `planted` would give it.
+    Run(Planted),
 }
 
 #[cfg(test)]
@@ -2313,8 +2368,13 @@ mod tests {
 
     /// The core alone, sealed with no faults. `seal()` is not called: the seal-count test counts its runs.
     fn startup() -> Startup {
+        startup_of(deep_canvas::registry::core())
+    }
+
+    /// A startup holding `sealed`, with no faults; for a test in another module, without `seal()`.
+    pub(crate) fn startup_of(sealed: deep_canvas::registry::Sealed) -> Startup {
         Startup {
-            sealed: deep_canvas::registry::core(),
+            sealed,
             seal_ms: 0.0,
             steps_by_name: false,
             admits_frame_json: false,
@@ -2326,6 +2386,7 @@ mod tests {
             listing: None,
             kinds: None,
             layouts: Default::default(),
+            run_planted: None,
         }
     }
 
@@ -2796,10 +2857,30 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
                 name.to_string().into_boxed_str(),
             )))
         }
+        _ if export_planted(twin).is_some() => export_planted(twin).map(StartPlanted::Run).ok_or(()),
         _ => seams::NetFault::named(twin)
             .map(StartPlanted::Network)
             .ok_or(()),
     }
+}
+
+/// #501's wrong programs, by the names its acceptance suite gives them.
+fn export_planted(name: &str) -> Option<Planted> {
+    Some(match name {
+        "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
+        "span_rounds_start" => Planted::SpanRoundsStart,
+        "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,
+        "range_restarts_timecode" => Planted::RangeRestartsTimecode,
+        "export_starts_then_stops" => Planted::ExportStartsThenStops,
+        "target_exports_selection" => Planted::TargetExportsSelection,
+        "target_writes_baked_channel" => Planted::TargetWritesBakedChannel,
+        "target_reader_is_writer" => Planted::TargetReaderIsWriter,
+        "mixer_linux_one_step" => Planted::MixerLinuxOneStep,
+        "drop_frame_every_tenth_minute" => Planted::DropFrameEveryTenthMinute,
+        "timecode_track_zero" => Planted::TimecodeTrackZero,
+        "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
+        _ => return None,
+    })
 }
 
 /// A hash version by its name: `hash@1` or `hash@2`.
@@ -2948,3 +3029,5 @@ mod idle;
 mod watch;
 #[cfg(target_os = "macos")]
 mod window;
+// #501: the device gate's live output on the default device, for `soak`.
+mod device;

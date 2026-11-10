@@ -17,10 +17,11 @@ import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { isPrCreate, isPrEdit } from './forge.js';
-import { registry } from './hookmap.js';
+import { adapterOf, registry } from './hookmap.js';
+import type { Part } from './context-fit.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
-import { cachedRuleFiles, callPaths, handleOf as ruleHandle, isRuleFile, noticesFor, noticeText, readHeld, repoRoot, RULE_EDITS, rulesInFile, rulesOf, type RuleFile, type RuleFileBefore } from './rules.js';
+import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
 import { dropTestSettings, installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
 import { heavyDenial } from './heavy.js';
@@ -29,7 +30,7 @@ import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Rest
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
-import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
+import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -59,8 +60,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['staged.undo', ['app', 'cli']],
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
-  ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -71,7 +72,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A person added to a project, with a credential of their own (#1337).
   ['person.add', ['cli']],
   // An online model library turned on or off, and your standing rule for it (#1731).
-  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']],
+  ['library.on', ['cli']], ['library.off', ['cli']], ['library.rule', ['cli']], ['job.rule', ['cli']],
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
@@ -155,21 +156,32 @@ const warnings = (ruled: string): string[] =>
  * labelled with its extension. `ruled` is the guard entries' reply: an agent with no context channel, or a reply
  * with no context, gets it as it is.
  */
-function agentReply(agent: string, reply: ExtensionReply, ruled: string): string {
+function agentReply(agent: string, reply: ExtensionReply, ruled: string, fitted?: string): string {
   if (reply.denies.length) return line({ exit: 2, stdout: '', stderr: reply.denies.map((d) => `DeepBuild blocked this: [${d.extension}] ${d.reason}`).join('\n') + '\n' });
   if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return ruled;
-  const additionalContext = [...warnings(ruled), ...reply.context.map((b) => `[${b.extension}] ${b.text}`)].join('\n');
+  const additionalContext = fitted ?? contextParts(reply, ruled).map((p) => p.text).join('\n');
   return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
 }
+/** A warn entry's words, then each extension's block, labelled: the parts of a call's context the cap fits (#1296). */
+const contextParts = (reply: ExtensionReply, ruled: string): Part[] =>
+  [...warnings(ruled).map((text) => ({ name: 'guard warnings', text, keep: true })), ...reply.context.map((b) => ({ name: `${b.extension}'s context`, text: `[${b.extension}] ${b.text}` }))];
 /**
  * The core's reply as the agent's hook output: a block with its reason (a stop sent back, a prompt answered from the
  * record), or context the agent adds at a session's start or a prompt, never a decision; beside either, the one
  * line the chat shows (`systemMessage`, #83). Nothing to say is the hook's empty reply.
  */
-function coreReplyLine(event: string, reply: { context?: string; block?: string; message?: string }, watchPaths?: string[]): string {
+function coreReplyLine(agent: string, event: string, reply: { context?: string; block?: string; message?: string }, watchPaths?: string[]): string {
   const out: Record<string, unknown> = {};
+  // Context goes as the agent's adapter gives it the model (#1296); one that gives none at this event sends nothing.
+  const adapter = adapterOf(agent);
+  const given = reply.context && !reply.block && adapter?.contextReply ? adapter.contextReply(event, reply.context) : undefined;
   if (reply.block) Object.assign(out, { decision: 'block', reason: reply.block });
-  else if (reply.context) out.hookSpecificOutput = { hookEventName: event, additionalContext: reply.context };
+  else if (given) {
+    const json = ((): unknown => { try { return JSON.parse(given.stdout); } catch { return undefined; } })();
+    if (!isObj(json)) return line(given);
+    Object.assign(out, json);
+  }
+  else if (reply.context && !adapter?.contextReply) out.hookSpecificOutput = { hookEventName: event, additionalContext: reply.context };
   // A session's start names the ticker file whose change fires its FileChanged hook: the route a line takes into the
   // terminal while a call still runs (#120).
   if (watchPaths?.length && !reply.block) out.hookSpecificOutput = { hookEventName: event, ...(isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : {}), watchPaths };
@@ -266,13 +278,13 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
   };
 }
 
-function parserPool(given: readonly string[], plant: Plant | undefined): Parsers {
+function parserPool(given: readonly string[], plant: Plant | undefined, dir: string): Parsers {
   // The pool's own list: each scrub's values join it, so a parser started later begins with all its elder was sent.
   const held = [...given];
   const pending = new Map<number, (parsed: Parsed) => void>();
   let n = 0;
   const make = () => {
-    const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
+    const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, dir, ...(plant ? { plant } : {}) }, resourceLimits: YOUNG });
     worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
       pending.get(id)?.(parsed);
       pending.delete(id);
@@ -299,7 +311,7 @@ function parserPool(given: readonly string[], plant: Plant | undefined): Parsers
   };
 }
 /** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
-async function parserInline(held: string[], plant: Plant): Promise<Parsers> {
+async function parserInline(held: string[], plant: Plant, dir: string): Promise<Parsers> {
   const { parseLine } = await import('./hookmap.js');
   const { scrubText } = await import('@deepbuild/evidence');
   return {
@@ -308,7 +320,8 @@ async function parserInline(held: string[], plant: Plant): Promise<Parsers> {
       const parsed = parseLine(line, first, held, plant);
       // A hook line is scrubbed whole, as a hub that scrubs what it reads before keeping any field would.
       if (parsed.kind === 'hook') scrubText(line.toString('utf8'), { held });
-      return parsed;
+      const scoped = parsed.kind === 'hook' ? scopedAt(parsed.meta, dir) : undefined;
+      return scoped ? { ...parsed, scoped } : parsed;
     },
     scrub(values) { held.push(...values); },
     close: async () => undefined,
@@ -463,7 +476,7 @@ class Hub {
     const contract = this.plant === 'contract-major-ahead' ? `${Number(CONTRACT.split('.')[0]) + 1}.0` : CONTRACT;
     this.helloLine = line({ hello: 'deep-hub', start: this.start, contract, features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
     this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub) : coreWorker(options, frame, fatal, asking, acking, scrub);
-    this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant) : parserPool(held, this.plant);
+    this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant, this.root.dir) : parserPool(held, this.plant, this.root.dir);
     this.server.on('connection', (sock) => this.accept(sock));
     // Out of descriptors, the accept loop keeps going: libuv sheds the connections it can't take, and the next one is served.
     this.server.on('error', (error: NodeJS.ErrnoException) => {
@@ -761,7 +774,7 @@ class Hub {
     // The planted wrong program consults your standing rules before the guards: their blocks wait for the gate.
     let ruled = this.plant === 'decision-before-guard' && this.gated(meta, parsed.drafts)?.decided ? EMPTY_REPLY : this.reply(meta);
     // A rule you scoped to paths, at the session's first call inside its scope (#344): its words ride this reply.
-    const notice = meta.watchOnly ? undefined : this.rulesAt(meta, ruled);
+    const notice = meta.watchOnly ? undefined : this.rulesAt(meta, parsed.scoped, ruled);
     if (notice) ruled = withWaits(ruled, meta.event, { context: notice });
     // The long waits (#120): each hook shows the waits its call's start or end, and takes the lines waiting for it.
     if (!meta.watchOnly) {
@@ -955,36 +968,24 @@ class Hub {
 
   /** The scoped rules each session heard since its start, compaction or resume, by rule ID (#344). */
   private rulesHeard = new Map<string, Set<string>>();
-  private ruleFiles = new Map<string, { at: number; files: RuleFile[] }>();
   /**
-   * Your rules at a hook, read here so no call waits on the core (#344): a session's start, compaction or resume lets
+   * Your rules at a hook, said here so no call waits on the core (#344): a session's start, compaction or resume lets
    * each scoped rule be heard once more; a PreToolUse inside a rule's scope carries it once, and an Edit or Write of a
-   * rule file has the file's rules read before it runs. Both go to the core on the hook's meta, to record.
+   * rule file has the file's rules read before it runs. The parser read both (`scoped`); they go to the core on the
+   * hook's meta, to record.
    */
-  private rulesAt(meta: HookMeta, ruled: string): string | undefined {
+  private rulesAt(meta: HookMeta, scoped: Scoped | undefined, ruled: string): string | undefined {
     if (!meta.session || !['claude-code', 'claude', 'codex'].includes(meta.agent)) return undefined;
     if (meta.event === 'SessionStart' || meta.event === 'SessionEnd') { this.rulesHeard.delete(meta.session); return undefined; }
-    if (meta.event !== 'PreToolUse' || !meta.call) return undefined;
-    const repo = repoRoot(meta.cwd);
-    const paths = repo ? callPaths(meta.call.input, meta.cwd, repo) : [];
-    if (!repo || !paths.length) return undefined;
-    try {
-      const files = cachedRuleFiles(this.ruleFiles, repo);
-      const before: RuleFileBefore[] = RULE_EDITS.has(meta.call.tool)
-        ? paths.filter(isRuleFile).map((file) => ({ file, scope: files.find((f) => f.file === file)?.scope ?? 'all', rules: rulesInFile(join(repo, file)) }))
-        : [];
-      if (before.length) this.ruleFiles.delete(repo);
-      // A call blocked before it runs hears nothing.
-      const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
-      const heard = this.rulesHeard.get(meta.session) ?? new Set<string>();
-      this.rulesHeard.set(meta.session, heard);
-      const notices = blocked ? [] : noticesFor(rulesOf({ files, typed: [], held: readHeld(this.root.dir), guards: [] }), paths, meta.agent, heard);
-      if (notices.length || before.length) meta.rules = { notices: notices.map(ruleHandle), ...(before.length ? { before } : {}) };
-      return notices.length ? noticeText(notices) : undefined;
-    } catch (error) {
-      process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`);
-      return undefined;
-    }
+    if (!scoped) return undefined;
+    // A call blocked before it runs hears nothing.
+    const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
+    const heard = this.rulesHeard.get(meta.session) ?? new Set<string>();
+    this.rulesHeard.set(meta.session, heard);
+    const notices = blocked ? [] : scoped.rules.filter((r) => !heard.has(r.id));
+    for (const r of notices) heard.add(r.id);
+    if (notices.length || scoped.before.length) meta.rules = { notices: notices.map(ruleHandle), ...(scoped.before.length ? { before: scoped.before } : {}) };
+    return notices.length ? noticeText(notices) : undefined;
   }
 
   /**
@@ -1062,7 +1063,7 @@ class Hub {
     // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
     const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
     const watch = meta.event === 'SessionStart' && !meta.watchOnly && meta.session && this.watches(meta.agent) ? [this.ticker(meta.session)] : undefined;
-    conn.sock.end(shown || watch ? coreReplyLine(meta.event, shown ?? {}, watch) : EMPTY_REPLY);
+    conn.sock.end(shown || watch ? coreReplyLine(meta.agent, meta.event, shown ?? {}, watch) : EMPTY_REPLY);
   }
 
   /**
@@ -1075,7 +1076,9 @@ class Hub {
     const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
-    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled) : ruled);
+    // Past the agent's cap, the core keeps what doesn't fit and names where to continue (#1296).
+    const fitted = reply?.context.length && !reply.denies.length ? ((await this.core.request({ op: 'context-fit', meta, parts: contextParts(reply, ruled), join: '\n' }).catch(() => undefined)) as string | undefined) : undefined;
+    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled, fitted) : ruled);
   }
 
   /**

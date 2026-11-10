@@ -22,6 +22,11 @@ pub struct Gpu3 {
 }
 
 impl Gpu3 {
+    /// The device it draws on, for the export's frame hashes (#501).
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
     /// The app's GPU, or `None` where there is none to draw 3D on.
     pub fn open() -> Option<Gpu3> {
         let gpu = Gpu::open(Backend::Gpu).ok()?;

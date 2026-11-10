@@ -75,13 +75,13 @@ pub fn check(doc: &Value) -> CheckResult {
 /// build lacks, through `requires.modules`, a kind or a field an absent module evaluates, is
 /// refused with `module_missing` naming the module.
 pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
-    check_by(doc, sealed, &sealed.kinds(), None, &Packs::default())
+    check_by(doc, sealed, sealed.kinds_ref(), None, &Packs::default())
 }
 
 /// [`check_in`] in a build that admitted `packs` (Pack): a document's `packs` resolve through
 /// them, and each recipe instance expands at check into its derived items.
 pub fn check_packed(doc: &Value, sealed: &Sealed, packs: &Packs) -> CheckResult {
-    check_by(doc, sealed, &sealed.kinds(), None, packs)
+    check_by(doc, sealed, sealed.kinds_ref(), None, packs)
 }
 
 /// [`check_in`], estimating a document's cost from `coefficients` rather than the reference
@@ -90,7 +90,7 @@ pub fn check_costed(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -
     check_by(
         doc,
         sealed,
-        &sealed.kinds(),
+        sealed.kinds_ref(),
         Some(coefficients),
         &Packs::default(),
     )

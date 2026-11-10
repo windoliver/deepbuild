@@ -63,6 +63,12 @@ fixtures = []
 # wrong programs DEEP_CHROME_PLANT selects, in no shipped build. Unlike env-plants it builds in release, which the
 # budget run needs.
 chrome-fixture = []
+# Issue #1460's wrong program: a sidebar row click opens its session's page by setting the selection, without the one
+# `open`. In no shipped build.
+plant-row-skips-open = []
+# Issue #1460's wrong program: `open` on an ask pastes one small PNG through the app's hub connection, which the hub
+# keeps as `evidence.stored`. In no shipped build.
+plant-open-writes-event = []
 
 # Issue #337: the gpui-kit spike. Pinned to one gpui-kit commit, since gpui-shell is at
 # milestone M0 and unpublished. No `webview` feature: the app has no web view.
@@ -78,6 +84,8 @@ serde_json = "1"
 # builds its headless context on the platform's text system, so this crate stays outside the
 # canvas text lint's scope: its canvas text goes through deep-text-gpui, which is in it.
 deep-text-gpui = { path = "../deep-text-gpui" }
+# Issue #1458: the chrome's code face is a bundled one, so GPUI's text system is given its bytes.
+deep-text = { path = "../deep-text" }
 # Issue #380: the session line is a stroke of the canvas's marks, painted by deep-marks-gpui.
 deep-marks-gpui = { path = "../deep-marks-gpui" }
 # Issue #326: the look's status map, which every surface draws a state with.

@@ -85,6 +85,8 @@ impl<'a> Bytes<'a> {
 pub enum Kind {
     Video,
     Audio,
+    /// #501: a `tmcd` track, whose one sample is the first frame's number.
+    Timecode,
     Other,
 }
 
@@ -116,6 +118,16 @@ pub struct Entry {
     /// The codec's configuration box (`avcC`, `hvcC` or `esds`) and its body.
     pub config: Option<([u8; 4], Vec<u8>)>,
     pub colr: Option<Colr>,
+    /// #501: a `tmcd` entry's drop-frame flag and its frames per second, rounded up.
+    pub tmcd: Option<(bool, u8)>,
+}
+
+/// #501: a movie's timecode: the first frame's number at `rate` frames a second.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Timecode {
+    pub start_frame: u32,
+    pub drop_frame: bool,
+    pub rate: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -178,6 +190,7 @@ fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
     let kind = match hdlr.get(8..12) {
         Some(b"vide") => Kind::Video,
         Some(b"soun") => Kind::Audio,
+        Some(b"tmcd") => Kind::Timecode,
         _ => Kind::Other,
     };
     let edits = child(trak, b"edts")
@@ -189,7 +202,11 @@ fn track(trak: &[u8], urls: &mut Vec<String>) -> Option<Track> {
         urls.extend(external(dref));
     }
     let stbl = child(minf, b"stbl")?;
-    let entry = child(stbl, b"stsd").and_then(stsd).unwrap_or_default();
+    let mut entry = child(stbl, b"stsd").and_then(stsd).unwrap_or_default();
+    // #501: a rate over 16 bits is left out of an MP4 sample entry; the track's timescale is it.
+    if kind == Kind::Audio && entry.sample_rate == 0 {
+        entry.sample_rate = timescale;
+    }
     let samples = table(stbl).unwrap_or_default();
     Some(Track {
         kind,
@@ -249,13 +266,20 @@ fn stsd(body: &[u8]) -> Option<Entry> {
         ..Entry::default()
     };
     let rest = match &e.kind {
-        b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"mp4v" | b"jpeg" | b"apcn" => {
+        b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"mp4v" | b"jpeg" | b"apcn" | b"ap4h" => {
             let mut b = Bytes(e.body, 24);
             entry.width = b.u16()?;
             entry.height = b.u16()?;
             e.body.get(78..)?
         }
-        b"mp4a" | b"lpcm" | b"sowt" | b"twos" | b"alac" => {
+        b"tmcd" => {
+            let mut b = Bytes(e.body, 12);
+            let drop = b.u32()? & 1 == 1;
+            b.take(8)?;
+            entry.tmcd = Some((drop, b.u8()?));
+            return Some(entry);
+        }
+        b"mp4a" | b"lpcm" | b"fpcm" | b"sowt" | b"twos" | b"alac" => {
             let mut b = Bytes(e.body, 8);
             let version = b.u16()?;
             b.take(6)?;
@@ -403,6 +427,20 @@ fn table(stbl: &[u8]) -> Option<Vec<Sample>> {
         }
     }
     Some(samples)
+}
+
+impl Movie {
+    /// #501: the timecode track's entry and its sample, read from the file's bytes.
+    pub fn timecode(&self, data: &[u8]) -> Option<Timecode> {
+        let t = self.tracks.iter().find(|t| t.kind == Kind::Timecode)?;
+        let (drop_frame, rate) = t.entry.tmcd?;
+        let at = t.samples.first()?.offset as usize;
+        Some(Timecode {
+            start_frame: be32(data.get(at..at.checked_add(4)?)?),
+            drop_frame,
+            rate,
+        })
+    }
 }
 
 impl Track {

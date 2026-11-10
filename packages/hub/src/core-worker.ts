@@ -2,6 +2,7 @@
 // appended events back for subscribers.
 import { parentPort, workerData } from 'node:worker_threads';
 import { Core, type CallContext } from './core.js';
+import type { Part } from './context-fit.js';
 import { ReadOnlyCore, unreadable } from './readonly-core.js';
 import { shedStartup } from './settle.js';
 import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMeta } from './wire.js';
@@ -12,6 +13,8 @@ export type CoreRequest =
   | { op: 'health' }
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
+  // The extensions' context for a call, fitted inside the agent's cap on injected output (#1296).
+  | { op: 'context-fit'; meta: HookMeta; parts: Part[]; join: string }
   | { op: 'tool-gate'; meta: HookMeta; call: Gated }
   | { op: 'permission'; meta: HookMeta; until?: number; inPaseo?: boolean }
   | { op: 'paseo-owner'; meta: HookMeta }
@@ -46,6 +49,7 @@ export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): P
     case 'health': return core.health();
     case 'extension-hook': return core.extensionHook(request.data);
     case 'hook-reply': return core.hookReply(request.meta, request.until);
+    case 'context-fit': return core.fitContext(request.meta, request.parts, request.join);
     case 'tool-gate': return core.toolGate(request.meta, request.call);
     case 'permission': return core.permission(request.meta, request.until, request.inPaseo);
     case 'paseo-owner': return core.paseoOwner(request.meta);

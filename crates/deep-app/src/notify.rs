@@ -17,7 +17,6 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::time::Duration;
 
-use chrono::{Local, TimeZone as _};
 use serde_json::Value;
 
 use crate::record::View;
@@ -453,6 +452,20 @@ pub fn end_notice(table: &Table, sessions: &[String]) -> String {
 
 /// A notification's title: it names DeepBuild and the session's task.
 fn title(table: &Table, session: &str) -> String {
+    // With the list's rows (#1463), the row's project and title: an untitled session reads by its project and agent,
+    // never an ID. The planted app puts the session's ID where its title goes, in a build with env-plants only.
+    if let Some(row) = table.row_of(&format!("session:{session}")) {
+        let text = |key: &str| row[key].as_str().unwrap_or_default().to_owned();
+        let named = if crate::plain::planted("notification-title-id") {
+            session.to_owned()
+        } else {
+            crate::question::visible(&text("title"))
+        };
+        return match row["project"].as_str() {
+            Some(project) => format!("{} · {named}", crate::question::visible(project)),
+            None => named,
+        };
+    }
     format!("DeepBuild · {}", table.title(session))
 }
 
@@ -473,30 +486,19 @@ fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
     // The undo of its default gives it a new deadline.
     let deadline = table.deadline(ask).unwrap_or(now);
     format!(
-        "{}\n{} {} — {} If you don't answer: {label}, {}.",
+        "{}\n{} {} — {} If you don't answer: {label}, at {}.",
         title(table, ask["session"].as_str().unwrap_or_default()),
         states::glyph(states::State::NeedsYou.entry()),
         states::State::NeedsYou.word(),
         question,
-        clock_time(deadline, now),
+        states::moment(deadline, now),
     )
-}
-
-/// When `at` comes, as a clock time in your time zone, with the day when it isn't today's.
-fn clock_time(at: u64, now: u64) -> String {
-    let local = |ms: u64| Local.timestamp_millis_opt(ms as i64).unwrap();
-    let (at, today) = (local(at), local(now).date_naive());
-    let time = at.format("%H:%M");
-    match (at.date_naive() - today).num_days() {
-        0 => format!("at {time}"),
-        1 => format!("tomorrow at {time}"),
-        _ => format!("on {} at {time}", at.format("%a %-d %b")),
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Local, TimeZone as _};
     use serde_json::json;
 
     fn view(events: &[Value]) -> View {

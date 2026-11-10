@@ -1,0 +1,35 @@
+Base 96b462a6 (Merge pull request #2051), run once on 2026-11-09 with:
+  caffeinate -di npx vitest run --root tests/acceptance/1460/redraft-ac3 --no-file-parallelism --testTimeout=600000
+Workspaces built (npm ci --ignore-scripts; npm run build --workspaces), cargo 1.99.1 on PATH. Trimmed: banner, blank lines.
+
+Both tests fail, each at a named assertion or a missing surface, neither in this suite's own code:
+- plain: `expect(failures).toEqual([])` (ac3.test.ts:81): the base's CLI has no `deep open` (exit 2), and the real window
+  has no node with the ask's address or `question-card`.
+- wrong program: the plant can't be built: crates/deep-app/Cargo.toml has no feature plant-open-writes-event.
+
+ ❯ ac3.test.ts (2 tests | 2 failed) 38615ms
+   ❯ AC3 #1460.e8743dab `open` on an ask presents its card unarmed, and the record gains no answer. A planted `open` that writes an event fails, naming the event (2)
+     × AC3 #1460.e8743dab deep open ask/<id> presents the ask's card in the running app, the hub's record gains no event from it, and the ask stays open 33474ms
+     × AC3 #1460.e8743dab (wrong program) plant-open-writes-event, an open that writes an event, fails, naming the event 35ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  ac3.test.ts > AC3 #1460.e8743dab `open` on an ask presents its card unarmed, and the record gains no answer. A planted `open` that writes an event fails, naming the event > AC3 #1460.e8743dab deep open ask/<id> presents the ask's card in the running app, the hub's record gains no event from it, and the ask stays open
+AssertionError: expected [ …(3) ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "deep open ask/01M7270X0CTYARAH8W3KDVAAZR exit 2, stdout \"\", stderr \"Unsupported command \\\"open\\\". Run deep --help for available commands.\\n\"",
++   "after deep open ask/01M7270X0CTYARAH8W3KDVAAZR: no node of the real window has the accessibilityIdentifier ask/01M7270X0CTYARAH8W3KDVAAZR; it has []",
++   "after deep open ask/01M7270X0CTYARAH8W3KDVAAZR: no node of the real window has the accessibilityIdentifier question-card; it has []",
++ ]
+ ❯ ac3.test.ts:81:22
+     81|     expect(failures).toEqual([]);
+ FAIL  ac3.test.ts > AC3 #1460.e8743dab `open` on an ask presents its card unarmed, and the record gains no answer. A planted `open` that writes an event fails, naming the event > AC3 #1460.e8743dab (wrong program) plant-open-writes-event, an open that writes an event, fails, naming the event
+Error: crates/deep-app/Cargo.toml has no feature plant-open-writes-event (README, Pinned 11), so this wrong program can't be built: error: the package 'deep-app' does not contain this feature: plant-open-writes-event
+ ❯ build ../helpers.ts:84:11
+ ❯ ../helpers.ts:96:7
+ ❯ ac3.test.ts:88:21
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  23:51:05
+   Duration  38.76s (tests 100%)

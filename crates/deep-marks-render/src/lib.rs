@@ -308,10 +308,14 @@ fn doc(value: Option<&Value>) -> Option<Map<String, Value>> {
 }
 
 /// Whether `kind` is one this binary draws though a module owns it: `vector@1` (the vector
-/// module's) and R1's mark sets, axes and scales (the data module's).
+/// module's), R1's mark sets, axes and scales (the data module's) and `graph@1` (the graph
+/// module's since #494, laid out and routed in `graphs`).
 fn drawn_here(kind: &Value) -> bool {
     let name = kind.as_str().and_then(|k| k.split('@').next());
-    matches!(name, Some("vector" | "marks" | "axis" | "scale" | "tiles.terrain"))
+    matches!(
+        name,
+        Some("vector" | "marks" | "axis" | "scale" | "tiles.terrain" | "graph")
+    )
 }
 
 /// Each imported `vector@1` item by ID (#398).
@@ -340,7 +344,12 @@ fn check(
         .collect();
     // #467: each terrain recipe expands here into its mark set, its choice fixed by its seed.
     let mut expansions = Vec::new();
-    for (id, item) in doc.get("items").and_then(Value::as_object).into_iter().flatten() {
+    for (id, item) in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         if item.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND) {
             continue;
         }
@@ -464,7 +473,9 @@ fn check(
         // #467 AC6's wrong check compares a band's offsets without the repeat's modulo.
         let unwrapped = twin_parallax;
         let checked = deep_canvas_marks::check::check(&drawn, look, min);
-        let checked = checked.into_iter().filter(|i| !(unwrapped && i.code == "parallax_loop_jump"));
+        let checked = checked
+            .into_iter()
+            .filter(|i| !(unwrapped && i.code == "parallax_loop_jump"));
         let planted = unwrapped.then(|| deep_canvas_marks::fields::loop_issues(doc, false));
         for mut issue in checked.chain(planted.into_iter().flatten()) {
             for id in issue.ids.iter_mut() {
@@ -549,14 +560,19 @@ fn distance_0_03(input: &Map<String, Value>) -> bool {
     input.get("planted").and_then(Value::as_str) == Some("status_distance_0_03")
 }
 
-/// A look's answer: its definition, each theme's roles, and (#417) each theme's opaque roles in
-/// OKLab as resolved.
+/// A look's answer: its definition, each theme's roles, (#417) each theme's opaque roles in OKLab as resolved, and
+/// (#1458) each ink tier's contrast on each fill a row is drawn on.
 fn look_answer(look: &Look, def: Value) -> Value {
     let oklab = |m: &std::collections::BTreeMap<String, [f64; 3]>| {
         Value::Object(m.iter().map(|(r, l)| (r.clone(), json!(l))).collect())
     };
+    let contrast: Vec<Value> = look::ink_pairs(look)
+        .into_iter()
+        .map(|(theme, role, on, ratio)| json!({"theme": theme, "role": role, "on": on, "ratio": ratio}))
+        .collect();
     json!({"ok": true, "look": def, "roles": roles(look),
-           "oklab": {"light": oklab(&look.light_oklab), "dark": oklab(&look.dark_oklab)}})
+           "oklab": {"light": oklab(&look.light_oklab), "dark": oklab(&look.dark_oklab)},
+           "contrast": contrast})
 }
 
 /// A document the check refuses, as a drawing command answers it: the first error's code.
@@ -1212,8 +1228,8 @@ mod graphs;
 pub mod layer;
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(target_os = "macos")]
-mod video;
 mod place;
 mod raster;
 mod status;
+#[cfg(target_os = "macos")]
+mod video;

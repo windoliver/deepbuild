@@ -83,6 +83,7 @@ pub enum Event {
     Key {
         key: String,
         cmd: bool,
+        alt: bool,
     },
     Text(String),
     /// An entry on one of the canvas's view controls (Scope and input classes: view class), the
@@ -597,6 +598,11 @@ impl Scope {
     /// The items the view hides: those the filter names by kind or writer, and outside an
     /// isolated item, its parents and its children, by ID. The document keeps them all.
     pub fn hidden(&self, doc: &Value) -> Vec<String> {
+        // With no filter and no isolation, the usual state, nothing is hidden: no walk.
+        let v = &self.view;
+        if v.kinds.is_empty() && v.writers.is_empty() && v.isolate.is_none() {
+            return Vec::new();
+        }
         let Some(items) = member(doc, "items").and_then(Value::as_object) else {
             return Vec::new();
         };
@@ -1105,7 +1111,7 @@ impl Scope {
                     commit(&mut done);
                 }
             }
-            Event::Key { key, cmd } => {
+            Event::Key { key, cmd, .. } => {
                 match (key.as_str(), cmd) {
                     ("Escape", _) => self.back(),
                     ("k", true) => self.palette = Some(String::new()),
@@ -1294,6 +1300,7 @@ mod tests {
         let esc = Event::Key {
             key: "Escape".into(),
             cmd: false,
+            alt: false,
         };
         s.input(&doc, 2000 * MS, 5, &esc);
         assert_eq!(
@@ -1409,6 +1416,7 @@ mod tests {
         let esc = Event::Key {
             key: "Escape".into(),
             cmd: false,
+            alt: false,
         };
         s.input(&doc, 0, 10, &esc);
         assert!(s.hidden(&doc).is_empty(), "the first Esc ends isolation");

@@ -138,6 +138,11 @@ name = "acceptance_883"
 path = "../../tests/acceptance/883/notifications.rs"
 harness = false
 
+[[test]]
+name = "acceptance_883_ac3_redraft"
+path = "../../tests/acceptance/883/redraft-1458/ac3_tomorrow.rs"
+harness = false
+
 # Issue #992: the sidebar row the app draws for a record, which tests/acceptance/992 compares with `deep status`.
 [[test]]
 name = "acceptance_992_app"

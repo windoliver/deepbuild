@@ -1,0 +1,15 @@
+Base: 96b462a6 (the same tree as 0c4a4ec7). Not built or run there: the surfaces these tests drive don't exist at the
+base, so each test fails for the missing behaviour, not a test mistake.
+
+What is missing in `deep-show run` at the base (crates/deep-show/src/mixdown.rs, crates/deep-canvas-media):
+
+- `media_mix` ignores `transport.frame_rate`, strips' `align` and the document's `cues`, bakes no onsets and answers no
+  `cues`. AC2 (cue.test.ts) fails at "<what>: replies[0]: mix.cues is an object, got undefined".
+- AC4 (onset.test.ts): `align` is ignored, so the strip plays at its declared start 0 and its hit sounds near sample
+  7,212, not within 2,000 samples of the press frame's sample 98,000; the test fails on that assertion.
+- Behind those surfaces: no onsets bake, no cue resolution or BLOCKED cue, no landing on ⌈moment ÷ Δ⌉ · Δ exist
+  anywhere in the base.
+
+Expected at the base: 2 tests, 2 failed, each for that reason.
+The suite type-checks at the base: `node node_modules/typescript/bin/tsc -p tests/acceptance/500/cue/tsconfig.json`
+exits 0.

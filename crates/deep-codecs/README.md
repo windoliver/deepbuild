@@ -12,7 +12,9 @@ A binary that links the crate starts each helper as a copy of itself with the ar
 - `src/mp4.rs`: the ISO base media file format: sample tables, edit lists read as FFmpeg reads them, sample entries, color boxes, data references.
 - `src/color.rs`: the H.264 SPS's video signal, the written rule for untagged color, and RGB conversion by the probe's matrix and range.
 - `src/wav.rs`: our own WAVE reader.
-- `src/apple.rs`: the macOS backend: VideoToolbox decode and encode, AudioToolbox AAC decode, the sandbox.
+- `src/mov.rs`: the header-first MP4 and QuickTime writer for exports: video, float PCM or AAC, timecode (#501).
+- `src/export.rs`: the encode tool's export jobs: `export.part`, `export.join`, `export.png` (#501).
+- `src/apple.rs`: the macOS backend: VideoToolbox decode and encode, AudioToolbox AAC decode and encode, the sandbox.
 - Another platform's backend goes in its own file beside `apple.rs`, chosen by `cfg`.
 - Tests: the acceptance tests in tests/acceptance/498/decode drive the crate through `deep-show run`.
 

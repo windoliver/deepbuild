@@ -97,6 +97,16 @@ const LABEL: &str = include_str!("label.wgsl");
 const RESOLVE: &str = include_str!("resolve.wgsl");
 /// The pass that draws the key light's shadow map, in the frame's shadows place.
 pub const SHADOW_PASS: &str = "scene3d.shadow";
+/// The depth pyramid's declared cost per pixel of the frame (#1637): 0.385 ms at 1920 × 1080
+/// in the city walk, the median of four frames on an M5 Max (Mac17,10).
+pub const PYRAMID_NS_PER_PX: f32 = 0.186;
+/// The camera's occluders drawn depth-only before the pyramid is built from them (#1637).
+pub const OCCLUDER_PASS: &str = "scene3d.occluders";
+/// The occluders: a culled set whose mesh has at most this many indices (64 triangles) draws
+/// into the camera's prepass, so the prepass costs a fraction of the frame it saves.
+const OCCLUDER_INDICES: u32 = 192;
+/// Above this many records an item set is culled on the GPU as an instancer's batch is (#1637).
+const CULLED_ITEMS: usize = 256;
 /// The sky's pipeline, drawn first in the geometry pass behind everything (#422).
 pub const SKY_PASS: &str = "scene3d.sky";
 /// The puffs' pipeline (#422).
@@ -197,6 +207,12 @@ pub struct Planted {
     pub ids_by_compacted_place: bool,
     /// #484: a batch draws the count its last frame's cull read back to the CPU.
     pub count_read_back: bool,
+    /// #1637: the occlusion test reads the pyramid the previous frame's prepass built.
+    pub pyramid_from_previous_frame: bool,
+    /// #1637: the camera's occlusion test also culls the cascades' lists.
+    pub occlusion_in_cascades: bool,
+    /// #1637: the camera's occlusion test also culls the probes' captures.
+    pub occlusion_in_probe_captures: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -209,6 +225,8 @@ pub struct Counts {
     pub instances_written: u32,
     /// Compute culls run this frame: one per batch and view that changed (#484).
     pub culls: u32,
+    /// Whether this frame built the camera's depth pyramid (#1637).
+    pub pyramid: bool,
     /// Indexed indirect draws this frame, one per batch and view drawn (#484).
     pub indirect_draws: u32,
     /// Elements the CPU tested for a view this frame: only ever the reference's (#484).
@@ -1506,18 +1524,23 @@ impl Set {
                 .buffer
                 .as_ref()
                 .expect("a set with members has a buffer");
-            for (i, (new, old)) in self
-                .next
-                .chunks_exact(stride)
-                .zip(self.records.chunks_exact(stride))
-                .enumerate()
-            {
-                if new != old {
-                    deep_gpu::alloc::outside(|| {
-                        device.queue.write_buffer(buffer, (i * stride) as u64, new)
-                    });
+            // Each run of adjacent changed records goes in one write: a write per record made
+            // a staging buffer per record, and a set that moves moves whole.
+            let n = (self.next.len() / stride).min(self.records.len() / stride);
+            let mut run: Option<usize> = None;
+            for i in 0..=n {
+                let at = i * stride..(i + 1) * stride;
+                if i < n && self.next[at.clone()] != self.records[at] {
                     *written += 1;
                     self.revision += 1;
+                    run.get_or_insert(i);
+                } else if let Some(first) = run.take() {
+                    let bytes = &self.next[first * stride..i * stride];
+                    deep_gpu::alloc::outside(|| {
+                        device
+                            .queue
+                            .write_buffer(buffer, (first * stride) as u64, bytes)
+                    });
                 }
             }
         }
@@ -1651,6 +1674,24 @@ pub struct KeptRow {
     pub ids: Vec<u32>,
 }
 
+/// A culled list as its cull last wrote it: its rows, `count` of them.
+fn read_list(device: &Device, view: &cull::View) -> Vec<u32> {
+    let count = read_back(device, "scene3d kept", cull::ARGS, |e, staging| {
+        e.copy_buffer_to_buffer(&view.args, 0, staging, 0, cull::ARGS)
+    })
+    .map_or(0, |b| u32::from_le_bytes([b[4], b[5], b[6], b[7]]));
+    let size = u64::from(count.max(1)) * 4;
+    let kept = read_back(device, "scene3d kept", size, |e, staging| {
+        e.copy_buffer_to_buffer(&view.rows, 0, staging, 0, size)
+    });
+    kept.as_deref()
+        .map_or(&[][..], bytemuck::cast_slice::<u8, u32>)
+        .iter()
+        .take(count as usize)
+        .copied()
+        .collect()
+}
+
 fn view_name(k: usize) -> String {
     match k {
         cull::CAMERA => "view".to_string(),
@@ -1681,6 +1722,8 @@ struct Rows {
     culled: [wgpu::RenderPipeline; 2],
     shadow: wgpu::RenderPipeline,
     cut: Option<wgpu::RenderPipeline>,
+    /// The occluders' depth prepass (#1637), by the faces it culls: none, back, front.
+    prepass: [wgpu::RenderPipeline; 3],
 }
 
 /// The key sun's cascades (#422): one depth layer each, drawn only when its key changes.
@@ -1817,6 +1860,14 @@ pub struct Renderer {
     sources: Vec<cull::Source>,
     /// Draws every batch from the CPU's f64 cull, the reference a GPU frame is judged against.
     cpu_cull: bool,
+    /// #1637: whether the camera's lists are culled by occlusion too (a view's `occlusion: off`
+    /// clears it); the camera's prepass depth and pyramid; and this frame's occluders and tests.
+    occlusion: bool,
+    pyramid: Option<Arc<cull::Pyramid>>,
+    occluders: Vec<(usize, RowDraw)>,
+    occlude_runs: Vec<cull::Occlude>,
+    /// This frame's light probes (#427), whose captures see every solid (#1637's report).
+    probe_ids: Vec<String>,
     capped: bool,
     /// Ambient occlusion's prepass, passes and the solids' group 2 (#418).
     ao: ao::Passes,
@@ -3270,6 +3321,11 @@ impl Renderer {
             cull_runs: Vec::new(),
             sources: Vec::new(),
             cpu_cull: false,
+            occlusion: true,
+            pyramid: None,
+            occluders: Vec::new(),
+            occlude_runs: Vec::new(),
+            probe_ids: Vec::new(),
             capped: false,
             ao,
             scene_module: module.clone(),
@@ -4330,6 +4386,7 @@ impl Renderer {
     /// Takes the frame's scene: the uniforms, each batch's changed records, and the batches
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        self.probe_ids = scene.probes.iter().map(|p| p.id.clone()).collect();
         // Level of detail at this view (#425): a scene whose solids still carry bands or mesh
         // levels draws what scene3d's pure choice resolves them to.
         if leveled(scene) {
@@ -4979,6 +5036,25 @@ impl Renderer {
                 )
             };
             let opaque = mesh(None);
+            let prepass = [None, Some(wgpu::Face::Back), Some(wgpu::Face::Front)].map(|cull| {
+                culled(
+                    d,
+                    samples,
+                    OCCLUDER_PASS,
+                    Some(&shadow_layout),
+                    module,
+                    ("mesh_row_vs", &buffers),
+                    Some(("occluder_fs", &[])),
+                    Some(wgpu::DepthStencilState {
+                        format: DEPTH,
+                        depth_write_enabled: Some(true),
+                        depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                        stencil: Default::default(),
+                        bias: Default::default(),
+                    }),
+                    cull,
+                )
+            });
             let culled = [mesh(Some(wgpu::Face::Back)), mesh(Some(wgpu::Face::Front))];
             let shadow = shadow_pipeline(
                 d,
@@ -4995,13 +5071,17 @@ impl Renderer {
                 culled,
                 shadow,
                 cut: None,
+                prepass,
             });
-            self.compiled += 4;
+            self.compiled += 7;
             self.names.extend([
                 "scene3d.rows",
                 "scene3d.rows_back",
                 "scene3d.rows_front",
                 "scene3d.rows_shadow",
+                OCCLUDER_PASS,
+                "scene3d.occluders_back",
+                "scene3d.occluders_front",
             ]);
         }
         let capped = self.capped;
@@ -5040,16 +5120,45 @@ impl Renderer {
         let plants = self.planted.cull;
         let read_back = self.planted.count_read_back;
         let stale = &self.cascaded.stale;
+        // #1637: the camera's lists are culled by this frame's depth too, unless a view turned it
+        // off or the frame is the CPU's reference; the planted program culls the cascades' too.
+        let occluding = self.occlusion && !self.cpu_cull && !self.planted.forward_z;
+        let occluded = |k: usize| {
+            occluding
+                && (k == cull::CAMERA
+                    || (self.planted.occlusion_in_cascades && k >= cull::CASCADES))
+        };
+        self.occluders.clear();
+        if occluding {
+            if let Some(t) = &self.targets {
+                let samples = self.families.samples;
+                if self
+                    .pyramid
+                    .as_ref()
+                    .is_none_or(|p| p.size != t.size || p.samples != samples)
+                {
+                    self.pyramid = Some(Arc::new(deep_gpu::alloc::outside(|| {
+                        cull::Pyramid::new(&device.device, &rows.kernels, t.size, samples)
+                    })));
+                }
+            }
+            if let Some(p) = &self.pyramid {
+                p.write(&device.queue, &self.camera.0, plants.occlusion_by_centre);
+            }
+        }
         for id in &self.order {
             let Some(batch) = self.batches.get_mut(id) else {
                 continue;
             };
-            for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
+            let sets = batch.solids.iter_mut().map(|s| (s, false));
+            for ((key, set), caster) in sets.chain(batch.casters.iter_mut().map(|s| (s, true))) {
                 let (Some(c), Some(records)) = (set.cull.as_mut(), set.buffer.as_ref()) else {
                     continue;
                 };
                 let item = set.owners.first().and_then(|o| o.split('#').next());
                 let item = item.unwrap_or_default().to_string();
+                // A caster set draws only into the shadow maps, so the camera never tests it.
+                let occluded = |k: usize| occluded(k) && !(caster && k == cull::CAMERA);
                 for (k, clip) in views.iter().enumerate() {
                     let Some(clip) = clip else { continue };
                     // The planted path: this frame draws the count the last one wrote.
@@ -5078,23 +5187,113 @@ impl Renderer {
                             .collect();
                         self.counts.cpu_culled += set.models.len() as u32;
                         c.write_kept(device, &rows.kernels, records, k, &kept);
-                    } else if let Some(run) = c.cull(
-                        device,
-                        &rows.kernels,
-                        records,
-                        k,
-                        clip,
-                        set.revision,
-                        &set.bounds,
-                        plants,
-                        read_back,
-                    ) {
-                        self.counts.culls += 1;
-                        self.cull_runs.push(run);
+                    } else {
+                        let (run, test) = c.cull(
+                            device,
+                            &rows.kernels,
+                            records,
+                            k,
+                            clip,
+                            set.revision,
+                            &set.bounds,
+                            plants,
+                            read_back,
+                            occluded(k) && self.pyramid.is_some(),
+                        );
+                        if let Some(run) = run {
+                            self.counts.culls += 1;
+                            self.cull_runs.push(run);
+                        }
+                        self.occlude_runs.extend(test);
+                    }
+                }
+                // The camera's occluders: low sets drawn from the camera's frustum list.
+                let mesh = self.meshes.get(&key.0);
+                if let (Some(view), Some(mesh)) = (&c.frustum[cull::CAMERA], mesh) {
+                    if occluded(cull::CAMERA) && mesh.count <= OCCLUDER_INDICES {
+                        let faces = ((key.1 >> CULL_SHIFT) as usize).min(2);
+                        self.occluders.push((
+                            faces,
+                            (
+                                mesh.vertices.clone(),
+                                mesh.indices.clone(),
+                                c.records.clone(),
+                                view.rows.clone(),
+                                view.args.clone(),
+                            ),
+                        ));
                     }
                 }
             }
         }
+    }
+
+    /// The camera's occlusion step this frame (#1637): its occluders' depth, the pyramid built
+    /// from it, and each list's test; `None` when no list is culled by occlusion.
+    fn occlusion_job(&mut self) -> Option<Job> {
+        let tests = std::mem::take(&mut self.occlude_runs);
+        let occluders = std::mem::take(&mut self.occluders);
+        if tests.is_empty() {
+            return None;
+        }
+        let pyramid = self.pyramid.clone()?;
+        let pipelines = self.rows.as_ref()?.prepass.clone();
+        let frame = self.frame_bind.clone();
+        let profiler = self.profiler.clone();
+        let previous = self.planted.pyramid_from_previous_frame;
+        self.counts.pyramid = true;
+        Some(Box::new(move |encoder| {
+            // Every clear before the timed passes: on Metal a pass's timestamps read 0 right after one.
+            for t in &tests {
+                t.clear(encoder);
+            }
+            // The planted program tests against what the pyramid holds from the frame before.
+            if previous {
+                for t in &tests {
+                    t.record(encoder, &pyramid);
+                }
+            }
+            timed(&profiler, OCCLUDER_PASS, encoder, |encoder, timestamps| {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(OCCLUDER_PASS),
+                    color_attachments: &[],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &pyramid.depth,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(0.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    }),
+                    timestamp_writes: timestamps,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_bind_group(0, &frame, &[]);
+                for (faces, (vertices, indices, records, rows, args)) in &occluders {
+                    pass.set_pipeline(&pipelines[*faces]);
+                    pass.set_bind_group(4, records, &[]);
+                    pass.set_vertex_buffer(0, vertices.slice(..));
+                    pass.set_vertex_buffer(1, rows.slice(..));
+                    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed_indirect(args, 0);
+                }
+            });
+            match &profiler {
+                Some(p) => {
+                    let p = lock(p);
+                    let q = p.begin_pass_query(cull::PYRAMID_PASS, encoder);
+                    pyramid.record(encoder, q.compute_pass_timestamp_writes());
+                    p.end_query(encoder, q);
+                }
+                None => pyramid.record(encoder, None),
+            }
+            if !previous {
+                for t in &tests {
+                    t.record(encoder, &pyramid);
+                }
+            }
+        }))
     }
 
     /// The frame's uniforms, outlines and shadow, and its atlas pages.
@@ -5533,8 +5732,11 @@ impl Renderer {
         } else {
             self.filter_taps
         };
-        // A batch above the line needs its pipelines before it encodes (#484).
-        if layer.solids.iter().any(|s| s.batch != 0 && !clear(s)) {
+        // A batch above the line needs its pipelines before it encodes (#484), and so may a set
+        // of items above it (#1637).
+        if layer.solids.len() > CULLED_ITEMS
+            || layer.solids.iter().any(|s| s.batch != 0 && !clear(s))
+        {
             self.ensure_rows(device);
         }
         for s in &layer.solids {
@@ -5737,15 +5939,19 @@ impl Renderer {
             set.lower |= s.mask.is_some_and(|m| m.lower);
             set.subsurface |= spreads(s);
             slot.1 = set.count as u32;
-            if slot.0 .3 != 0 {
+            // A set's records share one mesh, so one set of bounds: an instancer's prototype's,
+            // or the items' shape's (#1637).
+            if set.count == 0 {
                 set.bounds = s.mesh.as_ref().map_or([[-0.5; 3], [0.5; 3]], |m| {
                     let b = m.bounds();
                     [b[0].map(f64::from), b[1].map(f64::from)]
                 });
+            }
+            if slot.0.3 != 0 {
                 set.elements.push(s.row);
-                if self.cpu_cull {
-                    set.models.push(s.model);
-                }
+            }
+            if self.cpu_cull {
+                set.models.push(s.model);
             }
             // The planted wrong program writes an element's place in its draw as its ID.
             if by_position {
@@ -5774,9 +5980,19 @@ impl Renderer {
                 let item = o.split('#').next()?;
                 self.sources.iter().find(|s| s.instancer == item)
             });
+            // Items above the line cull as an instancer's batch does (#1637), unless they draw
+            // through a material operator, the lobes' pipeline or the mask caster, which a row
+            // list doesn't.
+            let items = key.3 == 0
+                && key.2 == 0
+                && key.1 & (LOBES_BIT | MASK_BIT) == 0
+                && set.count > CULLED_ITEMS;
+            if key.3 == 0 && !items {
+                set.cull = None;
+            }
             match (&self.rows, self.meshes.get(&key.0), &set.buffer) {
                 (Some(rows), Some(mesh), Some(records))
-                    if key.3 != 0
+                    if (key.3 != 0 || items)
                         && set.cull.as_ref().is_none_or(|c| {
                             c.made_for != made_for || c.from_output() != source.is_some()
                         }) =>
@@ -5889,6 +6105,7 @@ impl Renderer {
                 set.generation,
                 u64::from(set.len()),
                 u64::from(set.cull.as_ref().is_some_and(cull::Culled::from_output)),
+                u64::from(set.cull.is_some()),
             ]);
         }
         for (family, set) in [(10, &batch.lines), (11, &batch.points), (12, &batch.labels)] {
@@ -6257,8 +6474,10 @@ impl Renderer {
     }
 
     /// Every culled list as its cull last wrote it, read once the frame has drawn (#484). Nothing
-    /// a frame draws reads this.
+    /// a frame draws reads this. An instancer's rows only; a probe's capture keeps every element
+    /// (#1637), less those the camera's occlusion test hid under the planted program.
     pub fn read_kept(&self, device: &Device) -> Vec<KeptRow> {
+        let hidden = self.hidden_from_camera(device);
         let mut rows = Vec::new();
         for id in &self.order {
             let Some(batch) = self.batches.get(id) else {
@@ -6266,6 +6485,9 @@ impl Renderer {
             };
             for (key, set) in batch.solids.iter().chain(&batch.casters) {
                 let Some(c) = &set.cull else { continue };
+                if key.3 == 0 {
+                    continue;
+                }
                 let stable: Vec<u32> = set
                     .owners
                     .iter()
@@ -6279,31 +6501,137 @@ impl Renderer {
                 let item = set.owners.first().and_then(|o| o.split('#').next());
                 for (k, view) in c.views.iter().enumerate() {
                     let Some(view) = view else { continue };
-                    let count = read_back(device, "scene3d kept", cull::ARGS, |e, staging| {
-                        e.copy_buffer_to_buffer(&view.args, 0, staging, 0, cull::ARGS)
-                    })
-                    .map_or(0, |b| u32::from_le_bytes([b[4], b[5], b[6], b[7]]));
-                    let size = u64::from(count.max(1)) * 4;
-                    let kept = read_back(device, "scene3d kept", size, |e, staging| {
-                        e.copy_buffer_to_buffer(&view.rows, 0, staging, 0, size)
-                    });
-                    let words = kept
-                        .as_deref()
-                        .map_or(&[][..], bytemuck::cast_slice::<u8, u32>);
                     rows.push(KeptRow {
                         item: item.unwrap_or_default().to_string(),
                         view: view_name(k),
                         batch: batch_name(key),
-                        ids: words
+                        ids: read_list(device, view)
                             .iter()
-                            .take(count as usize)
                             .map(|r| stable.get(*r as usize).copied().unwrap_or(u32::MAX))
+                            .collect(),
+                    });
+                }
+                for probe in &self.probe_ids {
+                    rows.push(KeptRow {
+                        item: item.unwrap_or_default().to_string(),
+                        view: format!("probe:{probe}"),
+                        batch: batch_name(key),
+                        ids: (0..set.count)
+                            .filter_map(|r| {
+                                let o = set.owners.get(r)?;
+                                (!hidden.contains(o)).then(|| stable[r])
+                            })
                             .collect(),
                     });
                 }
             }
         }
         rows
+    }
+
+    /// Which whole solids each pass drew, by ID, read once the frame has drawn (#1637): a culled
+    /// set of items as its list kept them, every other set's solids whole. The camera's passes
+    /// are `view`, the key light's map `key`, cascade k `cascade<k>`, and each probe's capture
+    /// `probe:<id>`, which sees every solid. Nothing a frame draws reads this.
+    pub fn read_kept_items(&self, device: &Device) -> Vec<(String, Vec<String>)> {
+        let hidden = self.hidden_from_camera(device);
+        let mut views: Vec<usize> = vec![cull::CAMERA];
+        if self.shadow.clip.is_some() {
+            views.push(cull::KEY_MAP);
+        }
+        views.extend((0..self.cascaded.list.len()).map(|i| cull::CASCADES + i));
+        let mut out: Vec<(String, Vec<String>)> =
+            views.iter().map(|k| (view_name(*k), Vec::new())).collect();
+        let mut seen = Vec::new();
+        for id in &self.order {
+            let Some(batch) = self.batches.get(id) else {
+                continue;
+            };
+            let sets = batch
+                .solids
+                .iter()
+                .map(|s| (s, false))
+                .chain(batch.casters.iter().map(|s| (s, true)));
+            for ((key, set), caster) in sets {
+                if set.cull.is_some() && key.3 != 0 {
+                    continue;
+                }
+                let owners = &set.owners[..set.count.min(set.owners.len())];
+                seen.extend(owners.iter().cloned());
+                for (slot, k) in views.iter().enumerate() {
+                    // A caster set draws only into the shadow maps.
+                    let drawn: Vec<String> =
+                        match set.cull.as_ref().and_then(|c| c.views[*k].as_ref()) {
+                            _ if caster && *k == cull::CAMERA => Vec::new(),
+                            Some(view) => read_list(device, view)
+                                .iter()
+                                .filter_map(|r| owners.get(*r as usize).cloned())
+                                .collect(),
+                            None => owners.to_vec(),
+                        };
+                    out[slot].1.extend(drawn);
+                }
+            }
+            let clear = &batch.clear.owners[..batch.clear.count.min(batch.clear.owners.len())];
+            seen.extend(clear.iter().cloned());
+            out[0].1.extend(clear.iter().cloned());
+        }
+        for probe in &self.probe_ids {
+            let kept = seen
+                .iter()
+                .filter(|o| !hidden.contains(*o))
+                .cloned()
+                .collect();
+            out.push((format!("probe:{probe}"), kept));
+        }
+        out
+    }
+
+    /// Under the planted program that culls the probes' captures by the camera's occlusion test,
+    /// the solids that test hid this frame: in the camera's frustum list and not in its list.
+    fn hidden_from_camera(&self, device: &Device) -> BTreeSet<String> {
+        let mut hidden = BTreeSet::new();
+        if !self.planted.occlusion_in_probe_captures {
+            return hidden;
+        }
+        for batch in self.order.iter().filter_map(|id| self.batches.get(id)) {
+            for set in batch.solids.values() {
+                let Some(c) = &set.cull else { continue };
+                let (Some(frustum), Some(view)) =
+                    (&c.frustum[cull::CAMERA], &c.views[cull::CAMERA])
+                else {
+                    continue;
+                };
+                let kept: BTreeSet<u32> = read_list(device, view).into_iter().collect();
+                for r in read_list(device, frustum)
+                    .into_iter()
+                    .filter(|r| !kept.contains(r))
+                {
+                    if let Some(o) = set.owners.get(r as usize) {
+                        hidden.insert(o.clone());
+                    }
+                }
+            }
+        }
+        hidden
+    }
+
+    /// What the depth pyramid's pass prices this frame at, in ms, when the frame built one
+    /// (#1637): its declared cost per pixel at the frame's internal size.
+    pub fn declared_ms(&self) -> Vec<(&'static str, f64)> {
+        match (&self.pyramid, self.counts.pyramid) {
+            (Some(p), true) => vec![(
+                cull::PYRAMID_PASS,
+                f64::from(PYRAMID_NS_PER_PX) * f64::from(p.size[0]) * f64::from(p.size[1]) / 1e6,
+            )],
+            _ => Vec::new(),
+        }
+    }
+
+    /// Turns the camera's occlusion cull on or off: off, its lists are the frustum's (a view's
+    /// `occlusion: off`, #1637).
+    pub fn set_occlusion(&mut self, on: bool) {
+        self.occlusion = on;
     }
 
     pub fn counts(&self) -> &Counts {
@@ -6781,14 +7109,21 @@ impl Renderer {
             let profiler = self.profiler.clone();
             jobs.push((
                 CULL_PASS.into(),
-                Box::new(move |encoder| {
-                    timed(&profiler, CULL_PASS, encoder, |encoder, _| {
-                        for run in &runs {
-                            run.record(encoder);
-                        }
-                    })
+                Box::new(move |encoder| match &profiler {
+                    Some(p) => {
+                        let p = lock(p);
+                        let q = p.begin_pass_query(CULL_PASS, encoder);
+                        cull::Run::record_all(&runs, encoder, q.compute_pass_timestamp_writes());
+                        p.end_query(encoder, q);
+                    }
+                    None => cull::Run::record_all(&runs, encoder, None),
                 }),
             ));
+        }
+        // #1637: the camera's occluders, its pyramid and the occlusion tests, before anything draws
+        // from the lists they keep.
+        if let Some(job) = self.occlusion_job() {
+            jobs.push((cull::PYRAMID_PASS.into(), job));
         }
         if let Some(s) = shadow {
             jobs.push((SHADOW_PASS.into(), s));
@@ -7358,6 +7693,9 @@ impl Renderer {
     ) {
         for run in std::mem::take(&mut self.cull_runs) {
             run.record(encoder);
+        }
+        if let Some(job) = self.occlusion_job() {
+            job(encoder);
         }
         let Some(t) = self.targets.as_ref() else {
             return;
@@ -8366,6 +8704,18 @@ impl Module3 {
                 writes: vec!["rows"],
                 resolution: Resolution::Full,
                 ns_per_px: 0.0,
+                determinism: Determinism::SameMachine,
+            },
+            // The camera's occluders and the depth pyramid built from them (#1637): its cost is the
+            // pyramid's, a read of every sample and the levels above.
+            Pass {
+                name: cull::PYRAMID_PASS.into(),
+                place: "compute",
+                order: u32::MAX,
+                reads: vec!["rows"],
+                writes: vec!["rows"],
+                resolution: Resolution::Full,
+                ns_per_px: PYRAMID_NS_PER_PX,
                 determinism: Determinism::SameMachine,
             },
             // The key sun's cascades (#422), each drawn only when its key changed.

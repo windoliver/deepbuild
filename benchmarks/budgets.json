@@ -710,6 +710,17 @@
       "initialReason": "Issue #63 first measurement: the merge base has no reading by reference. One process archives fifty 60-message sessions and one of 1,000 messages, then reads every slice of the long one, of its message 900 and of ten others as deep read does, failing unless each holds at most 8,192 characters and each cursor leads on to the end; p50 includes Node's start and the archive pass. The issue's 200 ms per deep read stays in tests/acceptance/63/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "reading-find",
+      "command": [
+        "node",
+        "benchmarks/reading.mjs",
+        "find"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1515 first measurement: at the merge base deep find reads every archived transcript on every call, with no index. One process archives three hundred 40-message sessions, indexes them as the hub does after an archive pass, then runs deep find ten times each for part of a word, a Greek and a Chinese word, failing unless each finds its seeded message; p50 includes Node's start, the archive pass and the indexing. The issue's 100 ms per search stays in tests/acceptance/1515/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "wiki-build",
       "command": [
         "node",
@@ -965,6 +976,21 @@
         "waves_vertex_ms": 0.1
       },
       "initialReason": "Issue #166 first measurement: the merge base has no water and no such task. A release deep-gpu draws two 1080p stages for 300 frames a side, five runs after a warm-up one, each a fresh process: a 400 m lake of 256 x 256 cells filling the lower half of the frame (four waves, ripples, rain at 50 drops per m2 per s) against the same plate as a plain mirror, and a 10 m plate of 256 x 256 cells seen 300 m away (four waves) against the same plate as a plain mirror, each the difference of the sides' median GPU time, so the mirror's own pass is in both sides. canvas.mjs judge holds the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-occlusion",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "occlusion"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "gpu_fall": 0.7,
+        "pyramid_declared_error": 0.25
+      },
+      "initialReason": "Issue #1637 first measurement: the merge base culls by the frustum alone and has no such task. A release deep-gpu walks the city of tests/acceptance/1637 (20,000 building items, 100,000 instanced street items, the camera 1.7 m above the street for 10 s) at 1920 x 1080, 301 frames at 30 fps, twice a run, the shipped occlusion cull and occlusion: off, their order alternating, five runs after a warm-up one, each a fresh process: p95 GPU time shipped over frustum-only, and the depth pyramid's declared cost against its measured time, medians over the shipped frames. canvas.mjs judge holds both on a reference Mac; tests/acceptance/1637/budgets.test.ts holds the issue's numbers. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "canvas-water-shore",
@@ -1284,6 +1310,27 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #1425 first measurement: at the merge base a panel imports the toolkit itself and loads with no module check. One process loads each of the 12 panels in crates/deep-app/panels through `deep-panel-host run`, which runs the app's loader (the module check, then @deepbuild/panel written where gpui-shell resolves it), and updates each 20 times; p50 includes Node's and the binary's start. The issue's 4 ms per update and 1 ms the check may add to a load stay in tests/acceptance/1425/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "media-soak",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "media-soak"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #501 first measurement: the merge base plays no media document on a real device. One process plays 32 looping voices, each a 2 s stereo tone in the decode worker's hands, live through the device gate on the default output for 5 s of the real clock through `deep-show run`'s soak, failing unless it played, and prints the gate's stats; p50 includes Node's and the binary's start and the 5 s. The issue's no underruns over 10 minutes with 32 voices and the media worker under 200 MB stay in tests/acceptance/501/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-list-700",
+      "command": [
+        "node",
+        "benchmarks/deep-list.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #1463 first measurement: at the merge base deep with no arguments prints help. One process seeds 140 sessions in 7 repos, each with five open asks, starts the hub on it and times five deep runs after a warm-up, failing unless each ends on 700 asks need you; p50 includes the seeding and the hub's start. The issue's 100 ms on 700 rows stays in tests/acceptance/1463/budget.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

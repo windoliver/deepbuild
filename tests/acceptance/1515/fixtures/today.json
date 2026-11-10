@@ -1,0 +1,18 @@
+{
+  "base": "f1e8736e2d38a3fe0835fcba1a3d943e629f4d94",
+  "command": "deep find <query> --json --root <root>, every page, in repo A's folder",
+  "queries": {
+    "thBackoffJit": [
+      "session:sa020c#mg1",
+      "session:sa024x#l33"
+    ],
+    "ανασύνδ": [
+      "session:sa021c#mg1",
+      "session:sa024x#l34"
+    ],
+    "重试": [
+      "session:sa022c#mg1",
+      "session:sa023c#mg1"
+    ]
+  }
+}

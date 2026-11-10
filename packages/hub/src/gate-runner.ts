@@ -489,7 +489,7 @@ export class GateRunner {
     // Each approved check whose own files the claim changed counts as the agent's own, naming them (#33; design: Whose checks count).
     const owns: string[] = [];
     const v = claimVerdict({
-      claim: c.claim, agent: `session:${c.session.replace(/[^0-9A-Za-z]/g, '')}`, repo: c.cwd, task: c.task, commit: c.snapshot, requirements: c.requirements, now: this.o.now(), ...(c.state ? { state: c.state.digests } : {}),
+      claim: c.claim, agent: sessionOf(c.session), repo: c.cwd, task: c.task, commit: c.snapshot, requirements: c.requirements, now: this.o.now(), ...(c.state ? { state: c.state.digests } : {}),
       checks: [...c.entries.values()].map((e) => {
         const { base, why } = this.baseOf(e) ?? {};
         if (why) whys.push(`${e.check.check} ${why}`);
@@ -920,12 +920,12 @@ export class GateRunner {
   }
   /** A claim's slow checks as they were declared, each with the deadline a hold is measured by; null when it has none. */
   slowDeadlines(claim: string): { check: string; deadline_ms: number | null }[] {
-    const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
+    const c = this.claimOf(claim);
     return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale).map((e) => ({ check: e.check.check, deadline_ms: e.check.deadline_ms ?? e.check.expected_ms ?? null })) : [];
   }
   /** A claim's slow checks not started yet, for want of a CPU slot. */
   slowUnstarted(claim: string): string[] {
-    const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
+    const c = this.claimOf(claim);
     return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale && !e.running && !e.waiting && !e.group && !e.runs.length).map((e) => e.check.check) : [];
   }
   /** A claim's slow checks as they stand: whether any is still to end, and each that failed. One a newer claim outdated counts for neither. */
@@ -936,7 +936,7 @@ export class GateRunner {
   /** Resolves once none of a claim's slow checks is running or queued. */
   async slowEnded(claim: string, until: number): Promise<void> {
     while (Date.now() < until) {
-      const c = [...this.claims.values()].flat().find((x) => x.claim === claim);
+      const c = this.claimOf(claim);
       if (!c || ![...c.entries.values()].some((e) => e.lane === 'slow' && !e.stale && e.outcome === null)) return;
       await new Promise((done) => setTimeout(done, 100));
     }
@@ -969,7 +969,7 @@ export class GateRunner {
     const key = `${session}\0${e.check.check}`;
     const older = this.holding.get(key);
     if (older && older.record.started_at === null && older.record.replaced_by === null) writes.push(this.record({ ...older.record, replaced_by: e.commit }, older));
-    const h: Held = { entry: e, why, record: { session: `session:${session.replace(/[^0-9A-Za-z]/g, '')}`, claim: e.claim, check: e.check.check, snapshot: e.commit, held_at: this.o.now(), reason, started_at: null, started_by: null, replaced_by: null } };
+    const h: Held = { entry: e, why, record: { session: sessionOf(session), claim: e.claim, check: e.check.check, snapshot: e.commit, held_at: this.o.now(), reason, started_at: null, started_by: null, replaced_by: null } };
     this.holding.set(key, h);
     writes.push(this.record(h.record, h));
   }
@@ -1039,7 +1039,7 @@ export class GateRunner {
       // Another pump took it, or a newer snapshot did, while this one waited on a checkout.
       if (this.queue.get(key) !== e) continue;
       this.queue.delete(key);
-      const c = [...this.claims.values()].flat().find((x) => x.claim === e.claim)!;
+      const c = this.claimOf(e.claim)!;
       e.running = true;
       try {
         // The slow run gets its own checkout of the snapshot: the fast lane's may be gone by now. A snapshot that can't
@@ -1141,11 +1141,12 @@ export class GateRunner {
   }
   private async staleRun(session: string, run: string, e: Entry): Promise<void> {
     const ts = this.o.now();
-    await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'run.stale', ts, data: { session: `session:${session.replace(/[^0-9A-Za-z]/g, '')}`, run, check: e.check.check, claim: e.claim, newer_claim: e.newer! } });
+    await this.o.append(this.o.core, { v: 1, id: ulid(ts), kind: 'run.stale', ts, data: { session: sessionOf(session), run, check: e.check.check, claim: e.claim, newer_claim: e.newer! } });
   }
   /** A claim's checkout is given back to the service once no run on it is running or queued. */
   private cleanup(c: Claim): void {
-    const busy = [...c.entries.values()].some((e) => e.running || e.waiting || [...this.queue.values()].includes(e));
+    const queued = new Set(this.queue.values());
+    const busy = [...c.entries.values()].some((e) => e.running || e.waiting || queued.has(e));
     if (busy || !c.checkout) return;
     const held = c.checkout;
     c.checkout = null;
@@ -1166,7 +1167,7 @@ export class GateRunner {
     const ts = r.replyAt;
     await this.o.append(this.o.core, {
       v: 1, id: ulid(this.o.now()), kind: 'stop.held', ts,
-      data: { session: `session:${r.session.replace(/[^0-9A-Za-z]/g, '')}`, stop: r.stop, claim: r.claim, total, ...split, code_changing: r.codeChanging, budget_cost: r.budgetCost },
+      data: { session: sessionOf(r.session), stop: r.stop, claim: r.claim, total, ...split, code_changing: r.codeChanging, budget_cost: r.budgetCost },
     });
   }
 }

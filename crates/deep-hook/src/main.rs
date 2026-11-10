@@ -485,7 +485,11 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
 }
 
 /// The heavy.command@1 entry a shell call's command matches (#1015), read from the payload as the agent sent it.
-fn heavy_call(payload: &Value, plant: Option<&str>) -> Option<(heavy::Hit, String)> {
+fn heavy_call(
+    payload: &Value,
+    called: Option<&matcher::Call>,
+    plant: Option<&str>,
+) -> Option<(heavy::Hit, String)> {
     let Some(Value::String(tool)) = member(payload, "tool_name") else {
         return None;
     };
@@ -501,8 +505,15 @@ fn heavy_call(payload: &Value, plant: Option<&str>) -> Option<(heavy::Hit, Strin
         Some(Value::String(cwd)) if Path::new(cwd).is_absolute() => Some(PathBuf::from(cwd)),
         _ => None,
     };
-    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
-    heavy::matched(command, cwd.as_deref(), &home, plant).map(|hit| (hit, command.clone()))
+    // The call the rules were matched on read this same line, in this folder and home: its runs serve.
+    let hit = match called.filter(|call| call.command.as_deref() == Some(command.as_str())) {
+        Some(call) => heavy::matched_in(&call.runs, command, cwd.as_deref(), plant),
+        None => {
+            let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
+            heavy::matched(command, cwd.as_deref(), &home, plant)
+        }
+    };
+    hit.map(|hit| (hit, command.clone()))
 }
 
 /// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
@@ -830,9 +841,14 @@ fn exchange(
     let _ = reader
         .get_ref()
         .set_write_timeout(ack_deadline.map(|_| left.max(Duration::from_millis(1))));
-    let sent = match joined {
-        Some(joined) => remote::hello(joined) + &request,
-        None => request.clone(),
+    // The request goes as it is, lent; only a joined hub's hello makes a second text.
+    let with_hello;
+    let sent: &str = match joined {
+        Some(joined) => {
+            with_hello = remote::hello(joined) + &request;
+            &with_hello
+        }
+        None => &request,
     };
     if let Err(error) = reader.get_mut().write_all(sent.as_bytes()) {
         let late = matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut);
@@ -1227,7 +1243,19 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     }
     // The agent's hook JSON goes as it came: a raw newline in valid JSON is only whitespace, so it becomes a space.
     let payload = if parsed.is_some() {
-        input.trim().replace(['\n', '\r'], " ")
+        // In the text's own buffer, which nothing reads again: a tool's output can pass 1 MiB, and a
+        // second copy of it counts against the hook's memory. A space for a newline keeps it UTF-8.
+        let mut bytes = std::mem::take(&mut input).into_bytes();
+        for b in &mut bytes {
+            if matches!(*b, b'\n' | b'\r') {
+                *b = b' ';
+            }
+        }
+        let mut text = String::from_utf8(bytes).unwrap_or_default();
+        text.truncate(text.trim_end().len());
+        let lead = text.len() - text.trim_start().len();
+        text.drain(..lead);
+        text
     } else {
         quoted(&input)
     };
@@ -1274,7 +1302,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let heavy = parsed
         .as_ref()
         .filter(|_| event == "PreToolUse")
-        .and_then(|p| heavy_call(p, plant.as_deref()));
+        .and_then(|p| heavy_call(p, called.as_ref(), plant.as_deref()));
     let heavy_field = heavy
         .as_ref()
         .map(|(hit, command)| {
@@ -1581,18 +1609,21 @@ fn statusline() -> ExitCode {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default();
+        let mut params = vec![
+            ("agent".into(), Value::String("claude-code".into())),
+            ("account".into(), Value::String(account)),
+            ("rate_limits".into(), limits.clone()),
+        ];
+        // The session the reading is of, as its input names it, so it shows on that session's row alone (#1296).
+        if let Some(Value::String(session)) = status.as_ref().and_then(|s| member(s, "session_id"))
+        {
+            params.push(("session".into(), Value::String(session.clone())));
+        }
         let report = Value::Object(vec![
             ("v".into(), Value::Number(1.0)),
             ("id".into(), Value::String(ulid(now.as_millis()))),
             ("method".into(), Value::String("windows.report".into())),
-            (
-                "params".into(),
-                Value::Object(vec![
-                    ("agent".into(), Value::String("claude-code".into())),
-                    ("account".into(), Value::String(account)),
-                    ("rate_limits".into(), limits.clone()),
-                ]),
-            ),
+            ("params".into(), Value::Object(params)),
         ]);
         // A sender of its own, which nothing waits for: it holds none of the status line's output open.
         if let Ok(me) = env::current_exe() {

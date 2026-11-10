@@ -12,7 +12,7 @@ The GPU layer for 3D and effects (#377): one wgpu device per app drawing offscre
 
 ## What it may import
 
-The bottom of the Rust GPU stack: deep-canvas through its crate root, deep-canvas-seams (the backend type every seam names), wgpu, pollster, serde_json and, on macOS only, the objc2 Metal, IOSurface and CoreVideo bindings. It never imports GPUI, deep-app or a render crate; those depend on it.
+The bottom of the Rust GPU stack: deep-canvas through its crate root, deep-canvas-seams (the backend type every seam names), wgpu, pollster, serde_json and, on macOS only, the objc2 Metal, IOSurface and CoreVideo bindings; in tests only, blake3 (the CPU hash `src/blake3.rs` is checked against). It never imports GPUI, deep-app or a render crate; those depend on it.
 
 ## Deviations
 
@@ -21,4 +21,5 @@ The bottom of the Rust GPU stack: deep-canvas through its crate root, deep-canva
 - `src/alloc.rs`: every build marks wgpu's calls, but only a test build installs the counting allocator that reads the marks, so #379's zero-allocations-per-frame count leaves out what wgpu or the driver allocates.
 - `src/memory.rs`: the `unsafe` reads Metal's own `allocatedSize` through wgpu's HAL, since memory is counted as the device reports it, never a formula; elsewhere a count that needs it is BLOCKED.
 - `src/cache.rs`: the `Planted` caches are wrong programs the acceptance tests must catch, reachable only through a binary's `--planted`.
+- `src/blake3.rs`: the `Planted` frame hash (#501) joins a parent's children in the wrong order, a wrong program a test must catch.
 - `src/encode.rs`: the test pool (feature `test-pool`, never in a shipped build) finishes encodes in a chosen order and the planted pool submits as they arrive, so a test can show the order never reaches the pixels.

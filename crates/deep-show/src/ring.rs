@@ -717,7 +717,11 @@ impl Hub<'_> {
     fn reported_conflicts(&self) -> Vec<Value> {
         match self.planted(Planted::ConflictsUnreported) {
             true => Vec::new(),
-            false => self.ring.conflicts(),
+            false => {
+                let mut conflicts = self.ring.conflicts();
+                conflicts.extend(self.viewer_conflicts());
+                conflicts
+            }
         }
     }
 

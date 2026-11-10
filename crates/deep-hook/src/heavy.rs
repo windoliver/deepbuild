@@ -249,7 +249,16 @@ pub fn denial(command: &str, form: &str, entry: &str) -> String {
 
 /// The entry the line's first heavy program matches, or none.
 pub fn matched(command: &str, cwd: Option<&Path>, home: &Path, plant: Option<&str>) -> Option<Hit> {
-    let runs = shell::runs(command, cwd, home);
+    matched_in(&shell::runs(command, cwd, home), command, cwd, plant)
+}
+
+/// [`matched`] for a line whose runs are read already, as a hook's call is: the reader reads it once.
+pub fn matched_in(
+    runs: &[shell::Run],
+    command: &str,
+    cwd: Option<&Path>,
+    plant: Option<&str>,
+) -> Option<Hit> {
     // Already leased: through `deep lease` or the repo's own lease script.
     let leased =
         |r: &shell::Run| (r.is("deep") && r.words().first() == Some(&"lease")) || r.is("lease");

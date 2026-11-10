@@ -65,6 +65,10 @@ pub const VIEW_INPUTS: [&str; 6] = [
     "locale",
     "reduced_motion",
 ];
+/// The input a `view(<input>)` read term names.
+fn view_input(term: &str) -> Option<&str> {
+    term.strip_prefix("view(")?.strip_suffix(')')
+}
 /// `view(locale)`'s place among [`VIEW_INPUTS`].
 pub const LOCALE: usize = 4;
 /// `view(reduced_motion)`'s place among [`VIEW_INPUTS`].
@@ -86,7 +90,7 @@ pub struct Key(pub [u8; 16]);
 impl Key {
     /// Lower-case hex, 32 digits.
     pub fn hex(&self) -> String {
-        self.0.iter().map(|b| format!("{b:02x}")).collect()
+        canon::hex(&self.0)
     }
 }
 
@@ -215,10 +219,7 @@ impl Hasher {
 
 /// Lower-case hex SHA-256 of `bytes`.
 pub fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    canon::sha256_hex(bytes)
 }
 
 /// The canonical bytes of a value as a key reads it: keys sorted, numbers normalized (−0 as +0,
@@ -662,6 +663,10 @@ impl<'s> Scheduler<'s> {
     /// to different keys commute); returns each hold's node and the key it now holds.
     fn apply_deferred(&mut self, threads: usize) -> Vec<(usize, Option<Key>)> {
         let ops = self.deferred.take().unwrap_or_default();
+        // A wave that changed nothing in the cache, as every clean one, starts no thread.
+        if ops.is_empty() {
+            return Vec::new();
+        }
         let mut by_shard: Vec<Vec<CacheOp>> = (0..SHARDS).map(|_| Vec::new()).collect();
         for op in ops {
             by_shard[Cache::shard(op.key())].push(op);
@@ -1594,17 +1599,17 @@ impl Session {
                     carried.insert((n.op, n.item.map(|i| o.items[i].id.as_str())), n);
                 }
                 // The item a node's `parent` read binds to, if it has one.
-                let parent_of = |l: &Loaded, n: &Node| -> Option<Option<String>> {
+                fn parent_of<'l>(l: &'l Loaded, n: &Node) -> Option<Option<&'l str>> {
                     n.reads.iter().find_map(|b| match b {
                         Bound::Parent(p) => {
-                            Some(p.and_then(|p| l.nodes[p].item.map(|i| l.items[i].id.clone())))
+                            Some(p.and_then(|p| l.nodes[p].item.map(|i| l.items[i].id.as_str())))
                         }
                         _ => None,
                     })
-                };
+                }
                 for k in 0..next.nodes.len() {
-                    let id = next.nodes[k].item.map(|i| next.items[i].id.clone());
-                    if let Some(was) = carried.get(&(next.nodes[k].op, id.as_deref())) {
+                    let id = next.nodes[k].item.map(|i| next.items[i].id.as_str());
+                    if let Some(was) = carried.get(&(next.nodes[k].op, id)) {
                         // A node whose parent read now binds to another item, or to none, as
                         // when its parent was deleted, runs again: nothing it reads changed.
                         let rebound = parent_of(&o, was) != parent_of(&next, &next.nodes[k]);
@@ -1624,7 +1629,8 @@ impl Session {
                     }
                 }
                 for (a, name) in next.array_names.iter().enumerate() {
-                    if let Some(k) = o.array_names.iter().position(|n| n == name) {
+                    // Both lists are the sealed arrays' names, in order.
+                    if let Ok(k) = o.array_names.binary_search(name) {
                         next.array_at[a] = o.array_at[k];
                     }
                 }
@@ -1697,6 +1703,20 @@ impl Session {
                     return None;
                 }
             }
+            // A per-document operator's `applies` reads no item, so it is asked once, not per ID.
+            let documents_alike = ids.is_empty()
+                || s.sealed
+                    .ops
+                    .iter()
+                    .all(|sop| match (sop.op.applies, sop.op.per) {
+                        (Some(f), Per::Document) => {
+                            f(&l.doc, "", &Value::Null) == f(doc, "", &Value::Null)
+                        }
+                        _ => true,
+                    });
+            if !documents_alike {
+                return None;
+            }
             for id in ids {
                 let &at = l.index.get(*id)?;
                 let mut value = items.get(*id)?.clone();
@@ -1715,10 +1735,7 @@ impl Session {
                         .iter()
                         .all(|sop| match (sop.op.applies, sop.op.per) {
                             (Some(f), Per::Item) => f(&l.doc, id, was) == f(doc, id, &value),
-                            (Some(f), Per::Document) => {
-                                f(&l.doc, "", &Value::Null) == f(doc, "", &Value::Null)
-                            }
-                            (None, _) => true,
+                            _ => true,
                         });
                 if !applies_alike {
                     return None;
@@ -2192,7 +2209,10 @@ impl Session {
                 ..
             } => {
                 // Many writers: the array's epoch says whether any of them changed (#896).
-                let many = l.tree_of.get(&(k, r)).and_then(|t| l.trees[*t].array);
+                // Only a read with more than one writer has a tree.
+                let many = (writers.len() > 1)
+                    .then(|| l.tree_of.get(&(k, r)).and_then(|t| l.trees[*t].array))
+                    .flatten();
                 let written = match many {
                     Some(a) => l.array_at[a] > last,
                     None => writers.iter().any(|w| l.nodes[*w].changed_at > last),
@@ -2488,10 +2508,14 @@ impl Session {
                 // Under `hash@2`, many writers enter by their count and the root of the tree over
                 // their keys, which follows a changed writer by its path, not a pass over every
                 // key (#896); `hash@1` keys them one by one, as it always has.
-                Bound::Array { contributions, .. }
-                    if !planted_hash
-                        && self.hash == HashVersion::V2
-                        && l.tree_of.contains_key(&(n, r)) =>
+                Bound::Array {
+                    writers,
+                    contributions,
+                    ..
+                } if !planted_hash
+                    && self.hash == HashVersion::V2
+                    && writers.len() > 1
+                    && l.tree_of.contains_key(&(n, r)) =>
                 {
                     let tree = &l.trees[l.tree_of[&(n, r)]].tree;
                     h.int(tree.len() as i64).key(&tree.root());
@@ -2627,21 +2651,13 @@ impl Session {
         let Some(run) = sealed.ops[node.op].op.run else {
             return ((Vec::new(), None, None, Vec::new()), Vec::new(), Vec::new());
         };
-        let mut tables = BTreeMap::new();
-        for b in &node.reads {
-            if let Bound::Table(name) = b {
-                if let Some((v, _)) = s.tables.get(name) {
-                    tables.insert(name.clone(), v.clone());
-                }
-            }
-        }
         let forgets = s.options.planted.forgets_changes;
         let mut view = View::new(
             self,
             sealed,
             l,
             node,
-            tables,
+            &s.tables,
             s.options.access_log,
             step,
             forgets,
@@ -3213,17 +3229,15 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
 
     // Array epochs, by name.
     let array_names: Vec<String> = sealed.arrays.keys().cloned().collect();
-    let array_index = |name: &str| array_names.iter().position(|n| n == name);
+    let array_index = |name: &str| array_names.binary_search_by(|n| n.as_str().cmp(name)).ok();
 
     // Reads, bound per node.
+    // An operator's nodes are one run of the map, already in item order.
     let nodes_of = |op: usize| -> Vec<usize> {
-        let mut list: Vec<(usize, usize)> = node_of
-            .iter()
-            .filter(|((o, _), _)| *o == op)
-            .map(|((_, item), n)| (item.unwrap_or(0), *n))
-            .collect();
-        list.sort();
-        list.into_iter().map(|(_, n)| n).collect()
+        node_of
+            .range((op, None)..(op + 1, None))
+            .map(|(_, n)| *n)
+            .collect()
     };
     for g in &mut groups {
         let sop = &sealed.ops[g.op];
@@ -3240,7 +3254,7 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
                 "seed" => t.seed = true,
                 "reading" | "input" => t.reading = true,
                 r if r.starts_with("view(") => {
-                    if let Some(k) = VIEW_INPUTS.iter().position(|v| format!("view({v})") == r) {
+                    if let Some(k) = VIEW_INPUTS.iter().position(|v| view_input(r) == Some(*v)) {
                         t.view[k] = true;
                     }
                 }
@@ -3270,7 +3284,7 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
         let (op, item) = (node.op, node.item);
         let sop = &sealed.ops[op];
         let per_doc = sop.op.per == Per::Document;
-        let mut reads = Vec::new();
+        let mut reads = Vec::with_capacity(sop.op.reads.len());
         for read in &sop.op.reads {
             let b = match read.as_str() {
                 "self" if per_doc => Bound::SelfDoc,
@@ -3288,12 +3302,10 @@ fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
                 "reading" => Bound::Reading,
                 "input" => Bound::Input,
                 "asset" => Bound::Asset,
-                r if r.starts_with("view(") => Bound::View(
-                    VIEW_INPUTS
-                        .iter()
-                        .position(|v| format!("view({v})") == r)
-                        .unwrap_or(0),
-                ),
+                r if r.starts_with("view(") => {
+                    let k = VIEW_INPUTS.iter().position(|v| view_input(r) == Some(*v));
+                    Bound::View(k.unwrap_or(0))
+                }
                 r if r.starts_with("table:") => Bound::Table(r["table:".len()..].to_string()),
                 r if r.starts_with("earlier(") => Bound::Earlier(
                     r.trim_start_matches("earlier(")

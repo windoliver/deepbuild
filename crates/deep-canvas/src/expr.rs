@@ -1148,6 +1148,14 @@ impl Expr {
 
     /// The value as a number, with numbers for its vars.
     pub fn eval_num(&self, vars: &[f64]) -> f64 {
+        // A path function calls this per sample: the usual few vars sit on the stack.
+        let mut few = [V::S(0.0); 8];
+        if vars.len() <= few.len() {
+            for (slot, x) in few.iter_mut().zip(vars) {
+                *slot = V::S(*x);
+            }
+            return self.eval(&few[..vars.len()]).num();
+        }
         let v: Vec<V> = vars.iter().map(|x| V::S(*x)).collect();
         self.eval(&v).num()
     }
@@ -1297,9 +1305,19 @@ fn csqrt((a, b): (f64, f64)) -> (f64, f64) {
     (re, if b < 0.0 { -im } else { im })
 }
 
-fn comps(v: V) -> Vec<f64> {
+/// A value's components, on the stack: a slice of at most four numbers.
+struct Comps(u8, [f64; 4]);
+
+impl std::ops::Deref for Comps {
+    type Target = [f64];
+    fn deref(&self) -> &[f64] {
+        &self.1[..self.0 as usize]
+    }
+}
+
+fn comps(v: V) -> Comps {
     let (n, c) = v.comps();
-    c[..n as usize].to_vec()
+    Comps(n, c)
 }
 
 fn vec_of(c: &[f64]) -> V {
@@ -1364,8 +1382,15 @@ fn point(n: &Node, cx: &mut Cx<'_, V>) -> V {
             if s.iter().any(|i| *i >= n) {
                 return V::S(f64::NAN);
             }
-            let out: Vec<f64> = s.iter().map(|i| c[*i as usize]).collect();
-            vec_of(&out)
+            let mut out = [0.0; 4];
+            let n = s.len().min(out.len());
+            for (slot, i) in out.iter_mut().zip(s.iter()) {
+                *slot = c[*i as usize];
+            }
+            if n < s.len() {
+                return V::S(f64::NAN);
+            }
+            vec_of(&out[..n])
         }
         Node::Table(t, x) => {
             let v = point(x, cx);
@@ -1499,7 +1524,7 @@ fn call(f: Fun, a: &[V]) -> V {
             V::S(c0 + (x - a0) / (b0 - a0) * (d0 - c0))
         }
         Fun::Vec(n) => {
-            let c: Vec<f64> = a.iter().flat_map(|v| comps(*v)).collect();
+            let c: Vec<f64> = a.iter().flat_map(|v| comps(*v).to_vec()).collect();
             if c.len() == 1 {
                 return vec_of(&vec![c[0]; n as usize]);
             }
@@ -1580,7 +1605,7 @@ fn call(f: Fun, a: &[V]) -> V {
             V::S(atan2(y, x))
         }
         Fun::Hash => {
-            let c: Vec<f64> = a.iter().flat_map(|v| comps(*v)).collect();
+            let c: Vec<f64> = a.iter().flat_map(|v| comps(*v).to_vec()).collect();
             V::S(noise::hash01(&c))
         }
         Fun::Rand => {

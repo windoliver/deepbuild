@@ -1,0 +1,13 @@
+command (in ~/h1118a/repo): /usr/bin/time -l node ~/h1118a/mainproof/scripts/proof.mjs before > ~/h1118a/logs/runA.log 2>&1
+env: HOME=~/h1118a/home RUSTUP_HOME=~/.rustup CARGO_HOME=~/.cargo npm_config_cache=~/.npm GH_CONFIG_DIR=~/.config/gh GIT_CONFIG_GLOBAL=~/.gitconfig PATH=~/h1118a/shim:<PATH> NPM_LOG=~/h1118a/logs/npm.log E2E_LOG=~/h1118a/logs/e2e.jsonl
+head f17ae5c17665e1693544dcbf8f96df11ee54ff15 merge-base fde376f0f233e5f94bc6b0673f55c8e43983950d status [?? tests/acceptance/1118-e2e/ ]
+start: Mon Nov  9 09:14:52 UTC 2026 |  3:14  up 41 days,  5:40, 1 user, load averages: 5.32 8.59 7.53
+df -k / start: /dev/disk3s1s1 482797652 12940796 75211876 15% 404485 752118760 0% /
+Now drawing from 'AC Power'
+run pid 41000
+exit 1 void 0
+end: Mon Nov  9 09:32:52 UTC 2026 |  3:32  up 41 days,  5:58, 1 user, load averages: 17.80 26.74 23.95
+df -k / end: /dev/disk3s1s1 482797652 12940796 74163648 15% 404485 741636480 0% /
+df free min KB: 35841348
+df -h / after: /dev/disk3s1s1 460Gi 12Gi 71Gi 15% 404k 742M 0% /
+DONE-1118A

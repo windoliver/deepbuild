@@ -2,10 +2,8 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import type { Verdict } from '@deepbuild/conformance';
-import { replaySession } from '../../../adapters/index.mjs';
 // The conformance table, the contracts and the telemetry doctor load only in the commands that use them, so
 // `deep inbox` starts without them (#24's budget).
 
@@ -44,7 +42,7 @@ function banner(): string {
 
 // Why each event of a recorded session was read the way it was: the facts entry that mapped it and
 // the agent version behind it. A live session's ID needs the hub's record, which doesn't exist yet.
-function explain(session: string, json: boolean): number {
+async function explain(session: string, json: boolean): Promise<number> {
   const dir = resolve(session);
   if (!existsSync(join(dir, 'session.json'))) {
     console.error(`deep explain: ${session} is not a recorded session folder; explaining a live session by ID needs the hub's record (#14, #16)`);
@@ -54,6 +52,8 @@ function explain(session: string, json: boolean): number {
   const factsPath = `adapters/${meta.agent}.facts.json`;
   const facts: unknown = JSON.parse(readFileSync(join(root, factsPath), 'utf8'));
   const cases = jsonLines(join(dir, 'events.jsonl'));
+  // The facts engine loads only here, so every other command starts without it.
+  const { replaySession } = await import('../../../adapters/index.mjs');
   const replayed = replaySession({ facts, version: meta.version, payloads: cases.map((recorded) => recorded.payload as Record<string, unknown>), transcript: jsonLines(join(dir, 'transcript.jsonl')) });
   replayed.payloads.forEach(({ events, verified }, index) => {
     const hook = String((cases[index]?.payload as Record<string, unknown>).hook_event_name);
@@ -149,6 +149,7 @@ async function debugBundle(): Promise<number> {
   const dir = join(root, 'debug');
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const path = join(dir, `bundle-${new Date().toISOString().replace(/[:.]/g, '-')}.json.gz`);
+  const { gzipSync } = await import('node:zlib');
   writeFileSync(path, gzipSync(JSON.stringify(bundle)), { mode: 0o600 });
   chmodSync(path, 0o600);
   console.log(path);
@@ -177,7 +178,7 @@ async function updateCheck(): Promise<number> {
 // Every command's usage as `deep --help` lists it, a line each, led by the commands it names.
 const usage = [
   'deep doctor [--json] [--prompt]   --prompt also sends each signed-in agent one test prompt, which spends plan usage',
-  'deep status  every session, what needs you first',
+  'deep status [--json]   every session with its detail, ending on what needs you',
   'deep off | on   every gate watch-only, or back, once the OS confirms you',
   'deep explain <recorded session folder> [--json]',
   'deep run --result <run.finished event file>',
@@ -194,7 +195,8 @@ const usage = [
   'deep show --doc <doc ID> --document <file> [--check] [--snap] [--claim <claim>] [--json]   a canvas document drawn in your layer, or in the agent\'s whose process tree runs it',
   'deep export --document <file> --still <frame | marker> --out <file.png>   one still of a document, drawn headless with no hub',
   'deep kinds --dump <folder> | --diff <a> <b>   the canvas core\'s whole listing as canonical JSON named by its module-set digest, or two such dumps diffed',
-  'deep inbox  your open asks',
+  'deep inbox [--json]   your open asks, each question first and its handle last',
+  'deep open <address>   ask/<id>, session/<id>, project/<id> or page/<name> opened in the app, which opens and changes nothing',
   'deep inbox answer <ask> <option>   answer one, once the OS confirms you',
   'deep race <issue>   its sessions race: they settle on the first PASS and raise no "keep which?" ask',
   'deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you',
@@ -219,7 +221,7 @@ const usage = [
   'deep update --check   whether a newer DeepBuild is out',
   'deep debug bundle   redacted logs, versions and doctor output, for a bug report',
   'deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names',
-  'deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it',
+  'deep find [<query>] [--file <path>] [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it; with --file, of sessions that read or edited it',
 ];
 const commandsOf = (line: string) => /^deep ([a-z-]+(?: \| [a-z-]+)*)/.exec(line)![1]!.split(' | ');
 const commands = [...new Set(usage.flatMap(commandsOf))];
@@ -227,13 +229,13 @@ const commands = [...new Set(usage.flatMap(commandsOf))];
 // Help never acts (#1359): an agent asks a command for help before it uses it, so -h, --help or help anywhere in its
 // arguments prints that command's usage before anything runs, setup included. Arguments after -- are another program's.
 const helpWords = ['--help', '-h', 'help'];
-const asksHelp = args.length === 0 || (args.includes('--') ? args.slice(0, args.indexOf('--')) : args).some((arg) => helpWords.includes(arg));
+const asksHelp = (args.includes('--') ? args.slice(0, args.indexOf('--')) : args).some((arg) => helpWords.includes(arg));
 // The planted wrong program runs deep backup before its help check, so #1359's table must name it.
 const help = asksHelp && !(args[0] === 'backup' && (await import('@deepbuild/hub')).activePlant() === 'dispatches-before-help');
 // What a person runs first, then their work, then what developers run (#1455); a command no group names is a developer's.
 const groups: [string, string[]][] = [
   ['Start here', ['setup', 'status', 'inbox', 'doctor', 'off', 'install', 'memory', 'secret', 'update']],
-  ['Your work', ['fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
+  ['Your work', ['open', 'fix', 'start', 'race', 'workspace', 'join', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug']],
   ['For developers', ['explain', 'run', 'hub', 'mcp', 'env', 'lease', 'show', 'export', 'kinds', 'mcp-exec', 'read', 'find']],
 ];
 const groupOf = (line: string): number => {
@@ -242,7 +244,7 @@ const groupOf = (line: string): number => {
 };
 function printHelp(): void {
   const lines = usage.filter((line) => commandsOf(line).includes(args[0] ?? ''));
-  if (args.length === 0 || helpWords.includes(args[0]!) || args[0] === '--version') {
+  if (helpWords.includes(args[0]!) || args[0] === '--version') {
     console.log(`${banner()}\nUsage: deep [--help | --version]\n\n${groups.map(([title, names], at) => `${title}:\n${usage
       .filter((line) => groupOf(line) === at)
       .sort((a, b) => names.indexOf(commandsOf(a)[0]!) - names.indexOf(commandsOf(b)[0]!))
@@ -284,7 +286,7 @@ function unsupported(word: string): void {
 // setup's steps without asking. The hub's modules load only then, so a set-up home starts as fast as before (#24's
 // budget). deep env with --root names a dev hub and acts on it alone (#331), or is a usage error, so it sets nothing up
 // in the home.
-const yours = ['status', 'inbox', 'secret', 'off', 'on', 'env', 'install', 'guard', 'memory'];
+const yours = ['', 'status', 'inbox', 'secret', 'off', 'on', 'env', 'install', 'guard', 'memory'];
 const devHub = args[0] === 'env' && args.includes('--root');
 const installed = join(homedir(), '.deepbuild');
 const unfinished = !existsSync(join(installed, 'setup-finished.json')) && (!existsSync(installed) || existsSync(join(installed, 'setup-stopped.json')));
@@ -296,13 +298,17 @@ if (!help && yours.includes(args[0] ?? '') && !devHub && unfinished) {
 
 if (help) {
   printHelp();
+} else if (args.length === 0) {
+  // `deep` alone is the list (#1463): the rows and the one count the app shows, and nothing after them.
+  const { listCommand } = await import('@deepbuild/hub');
+  process.exitCode = await listCommand([]);
 } else if (args[0] === 'doctor') {
   const { doctorCommand } = await import('@deepbuild/hub');
   process.exitCode = await doctorCommand(args.slice(1), telemetryItems);
 } else if (args.length === 1 && args[0] === '--version') {
   console.log(version());
 } else if (args[0] === 'explain' && args[1] && args.slice(2).every((arg) => arg === '--json')) {
-  process.exitCode = explain(args[1], args.includes('--json'));
+  process.exitCode = await explain(args[1], args.includes('--json'));
 } else if (args[0] === 'hub') {
   // Its own entry, loaded only for hub commands: every other command starts without the hub's modules, and the
   // running hub without the other commands'.
@@ -391,6 +397,22 @@ if (help) {
   // Its own entry, as deep mcp's: an agent starts it for each synced server that takes secrets (#148).
   const { mcpExecCommand } = await import('@deepbuild/hub/mcp-exec');
   process.exitCode = await mcpExecCommand(args.slice(1));
+} else if (args[0] === 'open' && args.length === 2) {
+  // Issue #1460: the address goes to the running app over its own socket, so the hub records nothing.
+  const { connect } = await import('node:net');
+  process.exitCode = await new Promise<number>((done) => {
+    const app = connect(join(homedir(), '.deepbuild', 'app.sock'));
+    let reply = '';
+    app.setTimeout(5000, () => app.destroy(Error('timed out')));
+    app.on('connect', () => app.write(`${args[1]}\n`));
+    app.on('data', (data) => { reply += data; });
+    app.on('error', () => { console.error('deep open: the app is not running'); done(1); });
+    app.on('close', (failed) => {
+      if (failed) return;
+      console.log(reply.trim());
+      done(reply.startsWith('opened ') ? 0 : 1);
+    });
+  });
 } else if (args[0] === 'read' || args[0] === 'find') {
   // Read-only over the hub's root (#63), with or without the hub running.
   const { findCommand, readCommand } = await import('@deepbuild/reading');

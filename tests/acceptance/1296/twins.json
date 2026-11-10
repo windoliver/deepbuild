@@ -1,0 +1,6 @@
+{
+  "#1296.f8f2af0a": ["statusline-user-settings-only", "plants-ignored"],
+  "#1296.51fd7de6": ["window-unknown-as-zero", "window-carried-from-other-repo", "plants-ignored"],
+  "#1296.edc2bba0": ["sends-block-whole", "plants-ignored"],
+  "#1296.8af9a270": ["block-as-postcompact-stdout", "block-as-stderr-exit-0"]
+}

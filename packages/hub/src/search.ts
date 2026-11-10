@@ -3,13 +3,69 @@
 // reads only what belongs to no session. The wiki is never the index's to vouch for (#355): the default index is
 // SQLite FTS5 over the claims in force, in the ledger; any other is an index@1 fill rebuilt from the pages' claim
 // lines. Either way each hit's quote, marks and sources come from the claim's record, which also drops a claim out
-// of the caller's scope, superseded or rolled back.
+// of the caller's scope, superseded or rolled back. Past sessions (#1515) come last: the archived messages of the
+// calling session's own repo, found through the archive's index, each marked as history and never a check result.
+import { execFile } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { parseClaimLine } from '@deepbuild/record';
+import { CAP } from '@deepbuild/reading';
+import { foldText, parseClaimLine, type FoundMessage } from '@deepbuild/record';
 
-interface Hit { source: string; quote: string; outside?: boolean; known?: string; proof?: number; sources?: unknown[]; as_of?: number; reading?: unknown; status?: 'current' | 'STALE' }
+interface Hit {
+  source: string; quote: string; outside?: boolean; known?: string; proof?: number; sources?: unknown[]; as_of?: number; reading?: unknown; status?: 'current' | 'STALE';
+  /** A past session's message (#1515): history, never a check result; its agent, its session's last date, whose words it holds, and what moved on since. */
+  history?: true; agent?: string | null; date?: string | null; from?: 'you' | 'agent' | 'outside'; task?: string; changed?: string[];
+}
+/** What the record and the branch head say of a past session (#1515). */
+export interface PastSession { agent: string | null; date: number | null; changed: string[]; task?: string }
+
+type Raw = (sql: string, params: readonly (string | number | bigint | null)[]) => Promise<unknown[]>;
+const REVERTS = /This reverts commit ([0-9a-f]{7,40})/g;
+/**
+ * What the record and each worktree's branch head say of past sessions (#1515): the agent, when the session last
+ * worked, its task withdrawn or reverted, and the files its reads and edits touched that a commit after it changed,
+ * one `git log` per worktree. A task is reverted when a commit on the branch head reverts one of the session's own
+ * commits, as `git revert` words it. A session's own commits never count as a change, and a worktree git can't read
+ * tells nothing.
+ */
+export async function aboutSessions(raw: Raw, ids: readonly string[]): Promise<Map<string, PastSession>> {
+  const out = new Map<string, PastSession>();
+  if (!ids.length) return out;
+  const marks = ids.map(() => '?').join(', ');
+  const rows = (await raw(`SELECT s.id, s.agent, s.worktree, (SELECT max(ts) FROM events e WHERE e.session_id = s.id AND e.kind NOT IN ('transcript.archived', 'session.state', 'session.gone')) AS ended,
+    EXISTS (SELECT 1 FROM attempts a JOIN tasks t ON t.task_ref = a.task_ref WHERE a.session_id = s.id AND t.state = 'withdrawn') AS withdrawn FROM sessions s WHERE s.id IN (${marks})`, ids)) as { id: string; agent: string | null; worktree: string | null; ended: number | null; withdrawn: number }[];
+  const ownBy = new Map<string, string[]>();
+  for (const r of (await raw(`SELECT session_id AS session, sha FROM commits WHERE session_id IN (${marks})`, ids)) as { session: string; sha: string }[]) ownBy.set(r.session, [...(ownBy.get(r.session) ?? []), r.sha]);
+  const own = new Set([...ownBy.values()].flat());
+  const files = new Map<string, Set<string>>();
+  for (const t of (await raw(`SELECT DISTINCT e.session_id AS session, p.value AS path FROM events e JOIN json_each(e.data, '$.paths') p WHERE e.session_id IN (${marks})
+    AND e.kind IN ('tool.before', 'tool.after') AND json_extract(e.data, '$.kind') IN ('read', 'edit', 'write')`, ids)) as { session: string; path: string }[]) files.set(t.session, (files.get(t.session) ?? new Set()).add(t.path));
+  const byWorktree = new Map<string, typeof rows>();
+  for (const r of rows) byWorktree.set(r.worktree ?? '', [...(byWorktree.get(r.worktree ?? '') ?? []), r]);
+  for (const [worktree, group] of byWorktree) {
+    const since = Math.min(...group.map((r) => r.ended ?? 0));
+    const log = worktree ? await new Promise<string>((done) => execFile('git', ['-C', worktree, 'log', '--no-merges', '--relative', '--name-only', '--format=%x00%H %ct%x01%B%x01', `--since=@${Math.floor(since / 1000)}`, 'HEAD'], { timeout: 2000, maxBuffer: 16 * 1024 * 1024 }, (error, out) => done(error ? '' : String(out)))) : '';
+    const commits = log.split('\0').slice(1).map((c) => {
+      const [head, body, names] = c.split('\x01');
+      const [sha, ct] = head!.split(' ');
+      return { sha: sha!, at: Number(ct) * 1000, reverts: [...(body ?? '').matchAll(REVERTS)].map((m) => m[1]!), names: new Set((names ?? '').split('\n').filter(Boolean)) };
+    });
+    for (const r of group) {
+      const changed: string[] = [];
+      for (const path of files.get(r.id) ?? []) {
+        const name = relative(worktree, path);
+        const by = worktree && !name.startsWith('..') && !isAbsolute(name) ? commits.find((c) => c.at > (r.ended ?? Infinity) && !own.has(c.sha) && c.names.has(name)) : undefined;
+        if (by) changed.push(`${name} changed at ${by.sha.slice(0, 12)}, after this session`);
+      }
+      const mine = ownBy.get(r.id) ?? [];
+      const revert = commits.find((c) => c.reverts.some((p) => mine.some((sha) => sha.startsWith(p))));
+      const task = [...(r.withdrawn ? ['withdrawn: you rejected its task'] : []), ...(revert ? [`reverted: ${revert.sha.slice(0, 12)} reverts its commit`] : [])].join('; ');
+      out.set(r.id, { agent: r.agent, date: r.ended, changed, ...(task ? { task } : {}) });
+    }
+  }
+  return out;
+}
 interface Claim { id: string; page: string; source: string; text: string }
 interface IndexHit { claim: string; page: string; quote: string; source: string; [mark: string]: unknown }
 /** index@1's surface, as packages/conformance/src/slots/wiki-index.ts defines it; a fill that runs elsewhere answers later. */
@@ -138,12 +194,39 @@ interface SearchIn {
   covers(scope: string): boolean;
   /** A planted wrong program: the index's marks stand, and nothing is dropped. */
   trustsIndex?: boolean;
+  /**
+   * Past sessions the call reads (#1515): its own repo's archived sessions, narrowed to those that touched the file
+   * it names; `messages` finds theirs through the archive's index and `about` tells of each session on the reply.
+   */
+  past?: { sessions: readonly string[]; messages(terms: readonly (readonly string[])[], sessions: readonly string[]): Promise<FoundMessage[]>; about(sessions: readonly string[]): Promise<Map<string, PastSession>> };
+  /** Where a reply cut at the cap continues: a `next` an earlier reply gave. */
+  cursor?: string;
   /** The readings the query finds, each with its source and as-of time (#45). */
   readings(query: string): Promise<{ reading: { id: string; subject: string | null; value: unknown; unit: string }; source: string; as_of: number; status: 'current' | 'STALE' }[]>;
 }
 
-/** Every hit for the query, each citing its source: the wiki's and the spec's, then the session's own, then decisions, newest first. */
-export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: number; note?: string }> {
+/** Whose words a message holds, read from the record: a tool's result is outside content when the record says so, and otherwise the agent's tool's. */
+const whose = (m: FoundMessage): 'you' | 'agent' | 'outside' => (m.tool !== undefined ? (m.outside ? 'outside' : 'agent') : m.role === 'user' && !m.outside ? 'you' : 'agent');
+/** The quote of a long message: around the first word it was found by. */
+function around(text: string, wanted: readonly string[]): string {
+  const lower = text.toLowerCase();
+  const at = Math.max(0, Math.min(...wanted.map((w) => lower.indexOf(w)).filter((i) => i >= 0)));
+  const start = at > QUOTE / 2 ? at - 80 : 0;
+  return `${start ? '…' : ''}${text.slice(start, start + QUOTE)}`.slice(0, QUOTE);
+}
+/** The past sessions' messages holding every word, newest session first, each marked as history. */
+async function pastHits(past: NonNullable<SearchIn['past']>, wanted: readonly string[]): Promise<(Hit & { session: string })[]> {
+  if (!past.sessions.length) return [];
+  // Each word as the index folds text, composed or not, so a match the words find is among what the index gives.
+  const terms = wanted.map((w) => [...new Set([foldText(w), foldText(w.normalize('NFD'))])]);
+  const found = (await past.messages(terms, past.sessions)).filter((m) => holds(m.text, wanted));
+  const order = new Map(past.sessions.map((id, i) => [id, i]));
+  return found.map((m, i) => ({ m, i })).sort((x, y) => order.get(x.m.session)! - order.get(y.m.session)! || x.i - y.i)
+    .map(({ m }) => ({ session: m.session, source: `session:${m.session.replace(/[^0-9A-Za-z]/g, '')}#${m.id}`, quote: around(m.text, wanted), history: true, from: whose(m) }));
+}
+
+/** Every hit for the query, each citing its source: the wiki's and the spec's, then the session's own, then decisions, newest first, then past sessions. */
+export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: number; next?: string; note?: string }> {
   const wanted = words(input.query);
   if (!wanted.length) return { hits: [], more: 0, note: NO_WORDS };
   const hits: Hit[] = await wikiHits(input.index ? await input.index.search(input.query) : await ledgerSearch(input, wanted), input);
@@ -178,6 +261,26 @@ export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: numb
     text.split('\n').forEach((line, i) => { if (holds(line, wanted)) hits.push({ source: `${file}#L${i + 1}`, quote: line.trim().slice(0, QUOTE) }); });
   }
   const numbers: Hit[] = (await input.readings(input.query)).map(({ reading, source, as_of, status }) => ({ source, as_of, reading, status, quote: `${status === 'STALE' ? 'STALE ' : ''}${reading.id}${reading.subject ? ` ${reading.subject}` : ''}: ${reading.value === null ? 'unknown' : String(reading.value)} ${reading.unit}`.slice(0, QUOTE) }));
-  const all = [...hits, ...record, ...numbers, ...decided];
-  return { hits: all.slice(0, MAX_HITS), more: Math.max(0, all.length - MAX_HITS) };
+  const history = input.past ? await pastHits(input.past, wanted) : [];
+  const all: Hit[] = [...hits, ...record, ...numbers, ...decided, ...history];
+  const from = input.cursor === undefined ? 0 : Number(/^h(\d+)$/.exec(input.cursor)?.[1] ?? NaN);
+  if (!Number.isSafeInteger(from) || from > all.length) return { hits: [], more: 0, note: `No reply continues at ${input.cursor}.` };
+  const page = all.slice(from, from + MAX_HITS);
+  // A past session's hit says what the record and its branch head tell of that session, read for this reply's hits only.
+  const told = input.past ? await input.past.about([...new Set(page.flatMap((h) => ('session' in h ? [h.session as string] : [])))]) : new Map<string, PastSession>();
+  const shown = page.map((h) => {
+    if (!('session' in h)) return h;
+    const { session, ...hit } = h as Hit & { session: string };
+    const about = told.get(session);
+    return { ...hit, agent: about?.agent ?? null, date: about?.date ? new Date(about.date).toISOString() : null, ...(about?.task ? { task: about.task } : {}), ...(about?.changed.length ? { changed: about.changed } : {}) };
+  });
+  // The reply reaches the agent as JSON, under #63's cap: what doesn't fit goes by cursor.
+  let used = JSON.stringify({ hits: [], more: 0, next: `h${'9'.repeat(10)}` }).length;
+  let n = 0;
+  for (; n < shown.length; n++) {
+    used += JSON.stringify(shown[n]).length + 1;
+    if (used > CAP && n > 0) break;
+  }
+  const end = from + n;
+  return { hits: shown.slice(0, n), more: Math.max(0, all.length - end), ...(end < all.length ? { next: `h${end}` } : {}) };
 }

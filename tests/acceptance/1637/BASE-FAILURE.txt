@@ -1,0 +1,8 @@
+At base a3efe5c8 (Mac17,10, M5 Max, 64 GB), on 2026-11-08, the GPU tests were not run: the one-minute load was about 250 on 18 cores, so deep-gpu was not built. The surfaces they enter don't exist there: no `occlusion` field on view3d, no `kept_items` or `declared_ms` on a frame, no `scene3d.depth_pyramid` pass, none of the four planted names. Each GPU test's first check reads `kept_items` (walk, this-frame, bounds, shadows) or `scene3d.depth_pyramid` in `passes_ms` (budgets), which the base doesn't report, so each should fail there on that named assertion; this was not observed. The timing test would read INCONCLUSIVE on this Mac today in any case: the perf lane's judgeLimit says its thermal state is "fair", not "nominal".
+
+Run: `npx tsc -p tests/acceptance/1637/tsconfig.json` passes (TypeScript 5.9.3, vitest 5.0.5, @types/node 24.19.2, the repo's pins, in a scratch copy of the folder with the base's tsconfig.json and package.json). `npx vitest run --root tests/acceptance/1637 budgets.test.ts -t 'perf lane records'`, in a scratch copy holding the base's benchmarks/budgets.json and scripts/, fails on its assertion:
+
+  AssertionError: benchmarks/budgets.json has a task whose reason names #1637: expected 0 to be greater than 0
+   ❯ budgets.test.ts:88:88
+
+The fixture's numbers were checked by a scratch CPU ray cast over boxes (not kept): about 30,400 elements and items in the frustum at 0 s and 7.5 s with 85 and 92 seen at 960 px; none of 363 rays reaching the statue; about 980 points of its shadow in view and in sun without it; the ray to the bench's centre meeting the bin's 0.22 m core and about 780 points of the bench's ends showing; the cut's pre-cut frame no deeper than 7.0 m; street#77777 the first thing on the ray to it after the cut.

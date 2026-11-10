@@ -20,7 +20,7 @@ import { isControl, plantControls, removeControls, unheld, type Control } from '
 import { listSource, unrun, type Listed } from './listing.js';
 import { evidence, goTest, nodeTest, under, vitest, type Listing, type Ran, type Reported } from './report.js';
 import { seededBy, type Seeded } from './seeded.js';
-import { absent, DOES_NOTHING, filtersIn, GO_TEST, hiddenChild, maskOf, programsIn, scriptOf, untraced, type Spawned } from './shell.js';
+import { absent, DOES_NOTHING, filtersIn, firstLine, GO_TEST, hiddenChild, maskOf, programsIn, scriptOf, untraced, type Spawned } from './shell.js';
 
 export type { Seeded } from './seeded.js';
 
@@ -120,7 +120,7 @@ const PYTHON_FILE = /^python\d+(\.\d+)*$/;
 /** A `#!` script's interpreter, by its absolute path, or null. */
 function interpreterOf(path: string): string | null {
   try {
-    const head = readFileSync(path, 'latin1').slice(0, 200).split('\n')[0] ?? '';
+    const head = firstLine(path);
     const first = head.startsWith('#!') ? head.slice(2).trim().split(/\s+/)[0] : undefined;
     return first?.startsWith('/') && existsSync(first) ? first : null;
   } catch { return null; }
