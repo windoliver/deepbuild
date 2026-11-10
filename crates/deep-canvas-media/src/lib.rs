@@ -28,8 +28,11 @@ pub const FLICKS: i64 = 705_600_000;
 /// from the item showing its occurrence's body, and one that starts voices at the child flick;
 /// and #1818's, which the mix and deep_query read: a limiter reading sample peaks only, a
 /// hard-knee compressor, a mix without latency compensation, a pitch ignoring its semitones, a
-/// send always tapped post, a delay emptied at a seek, and a missing loudness target read as 0.
-pub const PLANTED: [&str; 14] = [
+/// send always tapped post, a delay emptied at a seek, and a missing loudness target read as 0;
+/// and #1819's, which deep-show's model bakes read: a tracker that answers 120 BPM whatever its
+/// record holds, an activity bake that thresholds level instead of the model's probabilities, and
+/// a visemes bake with no lead.
+pub const PLANTED: [&str; 17] = [
     "av_link_compares_start_only",
     "av_link_start_only",
     "sample_peak_meter",
@@ -44,6 +47,9 @@ pub const PLANTED: [&str; 14] = [
     "send_always_post",
     "delay_empties_line_at_seek",
     "loudness_target_defaults_to_zero",
+    "beats_fixed_120",
+    "activity_level_threshold",
+    "visemes_no_lead",
 ];
 
 static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
