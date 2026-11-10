@@ -821,12 +821,14 @@ export class AskTasks {
     return out;
   }
   /** What SessionStart sends again after a compaction or a resume: the open asks' requirement IDs, in one short block. */
-  async brief(session: string, thread: string | undefined): Promise<string | undefined> {
+  async brief(session: string, thread: string | undefined): Promise<{ text: string; ids: string[] } | undefined> {
     const rows = await this.lockedIn(session, thread).catch(() => []);
     if (!rows.length) return undefined;
     // The planted wrong program sends each requirement's whole text, not its ID alone.
     const said = (q: { id: string; text?: string; refuted_by?: string }) => (this.o.plant === 'brief-full-text' ? `${q.id} (${String(q.text)}; refuted by ${String(q.refuted_by)})` : q.id);
-    const lines = rows.map((r) => `- ${String(r.task_ref)}: ${(JSON.parse(String(r.requirements)) as { id: string }[]).map(said).join(', ')}`);
-    return `DeepBuild: the open asks in this thread and their requirements (deep_status shows each one):\n${lines.join('\n')}`;
+    const asks = rows.map((r) => ({ task: String(r.task_ref), reqs: JSON.parse(String(r.requirements)) as { id: string }[] }));
+    const lines = asks.map((a) => `- ${a.task}: ${a.reqs.map(said).join(', ')}`);
+    // Each requirement by its handle too, for the record of what a reply cut to fit kept inline (#1296).
+    return { text: `DeepBuild: the open asks in this thread and their requirements (deep_status shows each one):\n${lines.join('\n')}`, ids: asks.flatMap((a) => a.reqs.map((q) => `req:${a.task}#${q.id}`)) };
   }
 }

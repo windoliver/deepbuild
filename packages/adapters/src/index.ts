@@ -10,7 +10,7 @@ import { claudeParts, codexParts, paseoParts, piParts } from './shipped.js';
 import type { Adapter, AdapterParts, AdapterRegistry, Drift, JsonObject } from './types.js';
 
 export type {
-  Adapter, AdapterCaps, AdapterEvent, AdapterParts, AdapterRegistry, DoctorItem, Drift, HookRequestLine, JsonObject, Mapped, PermissionAnswer, Reading,
+  Adapter, AdapterCaps, AdapterEvent, AdapterParts, AdapterRegistry, DoctorItem, Drift, HookOutput, HookRequestLine, JsonObject, Mapped, PermissionAnswer, Reading,
   SessionRoute, Skill, StopCause, StopReading, TurnUsage, Unsupported,
 } from './types.js';
 
@@ -71,6 +71,8 @@ export function factsAdapter(facts: JsonValue, parts: AdapterParts): Adapter {
   for (const operation of OPERATIONS) if (parts[operation]) (adapter as unknown as Record<string, unknown>)[operation] = parts[operation];
   if (parts.permissionReply) adapter.permissionReply = parts.permissionReply;
   if (parts.routeAtStart) adapter.routeAtStart = parts.routeAtStart;
+  const { contextReply } = parts;
+  if (contextReply) adapter.contextReply = (event, text) => contextReply(event, text, facts);
   return adapter;
 }
 

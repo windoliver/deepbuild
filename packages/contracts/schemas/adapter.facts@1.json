@@ -1,6 +1,6 @@
 {
   "title": "adapter.facts@1",
-  "description": "An agent's facts as data: the versions it covers, and per section what the core reads, each naming the core rule that reads it and its conformance case. No core rule branches on the agent's name; a new agent fills a file.",
+  "description": "An agent's facts as data: the versions it covers, and per section what the core reads, each naming the core rule that reads it and its conformance case. No core rule branches on the agent's name; a new agent fills a file. Refrozen with what reaches the model from a hook's output (`contextOutput`) and its two rules (#1296).",
   "x-since": "R1",
   "x-stability": "stable",
   "type": "object",
@@ -1104,6 +1104,85 @@
       ],
       "additionalProperties": false
     },
+    "contextOutput": {
+      "type": "object",
+      "description": "What reaches the model from a hook's output (#1296): the cap on the text a hook injects, in characters, the preview the agent shows past it, the versions these hold for and where they are stated, and per hook event where each output goes: model (into its context), user (shown to you only), debug (the debug log only) or none.",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "capChars": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The most characters of one hook's injected output the model reads inline."
+        },
+        "previewChars": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Past the cap, the characters of preview shown beside the file the output is saved to."
+        },
+        "versions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/version"
+          },
+          "description": "The versions the cap, the preview and the channels below hold for."
+        },
+        "source": {
+          "$ref": "#/$defs/text",
+          "description": "Where they are stated, with the version read."
+        },
+        "events": {
+          "type": "object",
+          "description": "Per hook event, where each of its outputs goes.",
+          "propertyNames": {
+            "pattern": "^[A-Z][A-Za-z]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "additionalContext": {
+                "$ref": "#/$defs/reach"
+              },
+              "systemMessage": {
+                "$ref": "#/$defs/reach"
+              },
+              "stdout": {
+                "$ref": "#/$defs/reach"
+              },
+              "stderr": {
+                "$ref": "#/$defs/reach"
+              },
+              "stderrOnBlock": {
+                "$ref": "#/$defs/reach"
+              }
+            },
+            "required": [
+              "additionalContext",
+              "systemMessage",
+              "stdout",
+              "stderr",
+              "stderrOnBlock"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "capChars",
+        "previewChars",
+        "versions",
+        "source",
+        "events"
+      ],
+      "additionalProperties": false
+    },
     "classifyStop": {
       "$ref": "#/$defs/operation"
     },
@@ -1418,6 +1497,21 @@
     "version": {
       "type": "string",
       "pattern": "^[0-9A-Za-z][0-9A-Za-z.+-]*$"
+    },
+    "reach": {
+      "type": "string",
+      "enum": [
+        "model",
+        "user",
+        "debug",
+        "none"
+      ],
+      "x-closure": {
+        "closed": "each value is a place a hook's output goes that the agent's documentation states, and the hub and the conformance kit act on each",
+        "reopens": "a new major of this schema",
+        "mark": "exhaustive"
+      },
+      "description": "Where a hook's output goes: into the model's context, shown to you only, the debug log only, or nowhere."
     },
     "textMap": {
       "type": "object",
@@ -1738,6 +1832,14 @@
     {
       "id": "delivery-confirmed-from-transcript",
       "rule": "Delivery confirmed from the transcript: an acknowledgement counts only with the transcript's sign of it."
+    },
+    {
+      "id": "block-only-where-it-reaches-model",
+      "rule": "A block the model needs goes out only on an output the facts mark as reaching the model: never as plain stdout at an event whose stdout reaches only the debug log, such as PostCompact."
+    },
+    {
+      "id": "no-block-on-stderr-at-exit-0",
+      "rule": "A block the model needs never goes out as stderr on exit 0, which the model never sees."
     }
   ]
 }
