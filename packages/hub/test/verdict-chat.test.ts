@@ -30,7 +30,7 @@ describe('statusAnswer', () => {
   it('with a claim the first line is its verdict line, timed from the verdict; the time reads in s, m, h or d', () => {
     const claim = { task: 'task:T', session: facts.session, created: 10_000, checks: [], state: { outcome: 'PASS' as const, requirements: [{ req: 'req:D#R1', outcome: 'PASS' as const, smallest: null, points_to: null }], running: [] } };
     const a = statusAnswer({ ...claim, verdictAt: 95_000 }, { ...facts, agent: 'codex' });
-    expect(a.split('\n')[0]).toBe('PASS 1/1 · next: you · receipt (for 5s) · needs you: 2');
+    expect(a.split('\n')[0]).toBe('PASS 1/1 · next: you (for 5s) · needs you: 2');
     expect(a).toContain('resume: codex resume 0b1dba30-7d4e-4c66-83df-ce84df27db32');
     expect(statusAnswer({ ...claim, verdictAt: 0 }, { ...facts, now: 7_200_000 })).toContain('(for 2h)');
     expect(statusAnswer({ ...claim, verdictAt: 0 }, { ...facts, now: 2 * 86_400_000 })).toContain('(for 2d)');

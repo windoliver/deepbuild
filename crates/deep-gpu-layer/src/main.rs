@@ -14,6 +14,7 @@
 #[cfg(feature = "test-meter")]
 mod allocations;
 mod blur;
+mod budget;
 mod calibrate;
 mod columns;
 mod compare;
@@ -268,6 +269,11 @@ pub enum Planted {
     IdsByCompactedRow,
     RowAsElement,
     DispatchWithoutGuard,
+    /// #1637's wrong programs (tests/acceptance/1637/README.md: Planted programs).
+    PyramidFromPreviousFrame,
+    OcclusionByCentre,
+    OcclusionInCascades,
+    OcclusionInProbeCaptures,
     IdsIgnoreMask,
     CutsColorOnly,
     SoftNoiseFromFrame,
@@ -314,6 +320,14 @@ pub enum Planted {
     // added to the whole diffuse.
     SubsurfaceAcrossParts,
     SubsurfaceAddsToDiffuse,
+    // #486: a lobe output multiplies its field; occlusion scales the direct light and emission
+    // too; core.bump@1 ignores the tangent's handedness; coat_normal bends the base lobes too;
+    // the check admits a lobe the material lacks, which the frame it first runs compiles.
+    LobeOutputScalesField,
+    OcclusionScalesDirect,
+    BumpIgnoresHandedness,
+    CoatNormalBendsBase,
+    MissingLobeTurnedOn,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -337,6 +351,10 @@ pub enum Planted {
     KeepsLatestError,
     ReopensTightLoop,
     ResizeLeavesRendering,
+    /// #1899's wrong programs (tests/acceptance/1899/README.md: Planted programs).
+    RepeatsLastReading,
+    DropsUnresolvedFrames,
+    LadderActsInBudgetRun,
 }
 
 impl Planted {
@@ -483,6 +501,10 @@ impl Planted {
             "ids_by_compacted_row" => Planted::IdsByCompactedRow,
             "row_as_element" => Planted::RowAsElement,
             "dispatch_without_guard" => Planted::DispatchWithoutGuard,
+            "pyramid_from_previous_frame" => Planted::PyramidFromPreviousFrame,
+            "occlusion_by_centre" => Planted::OcclusionByCentre,
+            "occlusion_in_cascades" => Planted::OcclusionInCascades,
+            "occlusion_in_probe_captures" => Planted::OcclusionInProbeCaptures,
             "ids_ignore_mask" => Planted::IdsIgnoreMask,
             "cut_color_only" => Planted::CutsColorOnly,
             "soft_noise_from_frame" => Planted::SoftNoiseFromFrame,
@@ -521,6 +543,11 @@ impl Planted {
             "flakes_by_pixel" => Planted::FlakesByPixel,
             "subsurface_across_parts" => Planted::SubsurfaceAcrossParts,
             "subsurface_adds_to_diffuse" => Planted::SubsurfaceAddsToDiffuse,
+            "lobe_output_scales_field" => Planted::LobeOutputScalesField,
+            "occlusion_scales_direct" => Planted::OcclusionScalesDirect,
+            "bump_ignores_handedness" => Planted::BumpIgnoresHandedness,
+            "coat_normal_bends_base" => Planted::CoatNormalBendsBase,
+            "missing_lobe_turned_on" => Planted::MissingLobeTurnedOn,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,
@@ -540,6 +567,9 @@ impl Planted {
             "keeps_latest_error" => Planted::KeepsLatestError,
             "reopens_tight_loop" => Planted::ReopensTightLoop,
             "resize_leaves_rendering" => Planted::ResizeLeavesRendering,
+            "repeats_last_reading" => Planted::RepeatsLastReading,
+            "drops_unresolved_frames" => Planted::DropsUnresolvedFrames,
+            "ladder_acts_in_budget_run" => Planted::LadderActsInBudgetRun,
             _ => return None,
         })
     }
@@ -796,6 +826,7 @@ impl App {
             Some("spike2d") => marks2d::spike2d(self, out, call),
             Some("film2d") => film::film2d(self, out, call),
             Some("canonical") => live::canonical(self, out, call),
+            Some("frame_budget") => budget::call(self, call),
             Some("adapter") => timing::adapter(self),
             Some("tick") => timing::tick(self, call),
             #[cfg(feature = "test-meter")]

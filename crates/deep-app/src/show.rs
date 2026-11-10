@@ -20,10 +20,6 @@ use serde_json::{json, Value};
 use crate::hub::{HubClient, HubError};
 use deep_text_gpui::{measure, paint_label, Label};
 
-/// The outline around an agent's layer, and its name tab, in px.
-const OUTLINE_PX: f32 = 1.;
-const NAME_TAB: f32 = 18.;
-
 /// One layer as the panel composes it: its panel's bounds, its picture and the name its outline shows.
 type Composed = ([f32; 4], Option<Arc<RenderImage>>, Option<String>);
 
@@ -310,6 +306,7 @@ impl Render for CanvasPanel {
             .collect();
         let chrome = crate::chrome::of(window);
         let (muted, ground) = (chrome.ink_secondary, chrome.ground);
+        let s = crate::chrome::sizes();
         div().size_full().child(
             canvas(
                 move |_, window, _| {
@@ -336,18 +333,19 @@ impl Render for CanvasPanel {
                                     *panel,
                                     px(0.),
                                     transparent_black(),
-                                    px(OUTLINE_PX),
+                                    s.hairline,
                                     muted,
                                     BorderStyle::Solid,
                                 ));
+                                // The name's tab: the label with a step of space each side, a line tall.
                                 let label = Label::new(name.clone());
                                 let tab = Bounds {
                                     origin: panel.origin,
-                                    size: size(measure(&label).width + px(12.), px(NAME_TAB)),
+                                    size: size(measure(&label).width + s.space(1), s.body.line),
                                 };
                                 w.paint_quad(gpui_kit::fill(tab, muted));
                                 paint_label(
-                                    panel.origin + point(px(6.), px(1.)),
+                                    panel.origin + point(s.space(0), s.hairline),
                                     &label,
                                     ground,
                                     w,

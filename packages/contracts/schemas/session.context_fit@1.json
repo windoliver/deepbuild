@@ -1,0 +1,146 @@
+{
+  "title": "session.context_fit@1",
+  "description": "What a hook reply injected past the cap the agent's facts set on injected output (#1296): which parts went inline and which went by handle, the cap, the block's size and the handle the rest is at. Only the core appends it, and only for a reply it cut to fit.",
+  "x-since": "R1",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "session.context_fit"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^session:[0-9A-Za-z]+$",
+      "description": "The session the reply went to."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The hook event the reply answered, such as SessionStart."
+        },
+        "cap": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The cap on injected output, in characters, from the agent's facts."
+        },
+        "chars": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The characters of the whole block before it was cut."
+        },
+        "inline": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": "The parts that went inline, by name, such as rules or requirement IDs."
+        },
+        "inline_ids": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "description": "The handles of what went inline: each rule's, such as rule:typed<id>, and each open ask's requirement, req:<task>#<id>."
+        },
+        "by_handle": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": "The parts that went by handle, by name."
+        },
+        "handle": {
+          "type": "string",
+          "pattern": "^ev:[0-9a-f]{64}$",
+          "description": "The evidence file the parts by handle are in, read with deep read."
+        }
+      },
+      "required": [
+        "event",
+        "cap",
+        "chars",
+        "inline",
+        "inline_ids",
+        "by_handle",
+        "handle"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,51 @@
+#1458 AC13 redraft at the base 2721ca7b, with only this folder added. One run, 2026-11-09 23:52-23:53 local, on macOS.
+Node v24.22.2 and cargo 1.99.1. The workspaces were built (npm ci; npm run build --workspaces). The load average was about 32.
+The process had Accessibility and Screen Recording (#1454's probe access: {"ax":true,"screen":true}). The screen was unlocked.
+
+  DA1458_SCREENS=<scratch>/screens caffeinate -di npx vitest run --root tests/acceptance/1458/redraft-ac13 --testTimeout=600000
+
+Result: 1 failed. It reads INCONCLUSIVE, not PASS, for the expected reason: no taste call is recorded. Every page was reached on
+the real window, and all 24 pictures and run.json were written. No page was missing from the tree, and none failed to take a
+size or a press. ⌘K posted to the PID opened, and its Home entry took the press.
+
+ FAIL  shown.test.ts > #1458 shown to you > AC13 the check run takes each shipped page from the real app at 960 × 640 and
+       1512 × 982, in light and dark, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they look right
+AssertionError: INCONCLUSIVE: AC13: no taste call is recorded for these screenshots (TASTE.json holds none); this is not a pass
+ ❯ shown.test.ts:187:64
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  60.98s
+
+The pictures from this run, as it printed them. They are not kept in the repo; the hashes are this base app's:
+  agents-1512x982-dark.png  6eef409ff793c6bc236ba184181bbaff06257b3a8ef834df06c8c37ff489a047
+  agents-1512x982-light.png  6690f5bd15be55ab2664ecfa59ce9337ec402a67e0f699b53a9b233e362bb8cb
+  agents-960x640-dark.png  4e97addf275a0147af31ded79f3e34861fb597856ed28fd98f059807d185bbf5
+  agents-960x640-light.png  fbbd0991e3fa460bbe9f813eff933996425f5ecf972601621c5fe97229da7e2d
+  home-1512x982-dark.png  60f062874f534b6bdc388d9a8f91afe5735542a9dd0f0dc2c55d605c3e5d35e0
+  home-1512x982-light.png  f281e517efd8c93ebe4f623d40fc3c6c1acda2b6b2540faa8878aefd9e430ddb
+  home-960x640-dark.png  4dec9f6f2c02beaef30101fa34cf7c2008e6dcc41b3343b951d56a8edb3aad49
+  home-960x640-light.png  cef73314f4c7441467e7f7c4e6da56d10b5d9fc36d91c81877e92fb61283b9c6
+  needs-you-1512x982-dark.png  6cc57d2187c9b0b911ec78e5307ad069c81d9a4f854cbab7d56166a35811a3c1
+  needs-you-1512x982-light.png  22e3de39e4a4a5258319658ef2a49400172db2c26ddc60341cccce0bef172c4b
+  needs-you-960x640-dark.png  cdc6fcbe09dec2b37f052c6fef5acd14e0a6b2687154bb0aaf7624fa0bc2631f
+  needs-you-960x640-light.png  def697aef19c7093c3328ee843a0ffb2e4ec9aaaa28fe3cc525e10db3ba26fe8
+  question-card-1512x982-dark.png  48120e96dcdaa38cd23e7ea19b8b7369020b5e2084feae6d30fffa4f8de31c9c
+  question-card-1512x982-light.png  eed604a6a024af49638d3e6a9d2ecb6cf8dbbe17a83892e7a8dd7a90ea742b07
+  question-card-960x640-dark.png  a86cd5efdaeceac875abb6345b21fae424b577af13c77cdd61493b16173da628
+  question-card-960x640-light.png  aeb3c24ac2979fa1ccf1dceed5c7f9f61bf30018daa6ea1cddac542030e17f91
+  run.json  a310ee033a3663bb64c744a905a47ae8fda0870725ceffbefe12c5e5a8bd9f04
+  session-1512x982-dark.png  480a97cc710fbc54eef6c968ab12ca5679475c37c13861af63ecd3a4093c0579
+  session-1512x982-light.png  0d004dbea18f9ee7b37f7e648c53a1fe0cbfccc20994a5472fb7897a3f753e87
+  session-960x640-dark.png  0219e7b0ef782f7869edfaa5ed5149b8317203c149419c05f704c53df597e9e0
+  session-960x640-light.png  7ad4de36856be4bce292aae37229f79d6a2de5762924463e6419ee02be6fa64c
+  welcome-1512x982-dark.png  0bcbec47559ce3c9c0893597381db8a729711492a7308ee7ab67f011a3a60c22
+  welcome-1512x982-light.png  ee1a6fa67336c3da937055c5a4a4a13ab3c6e349ac17bac0a0d74dcc56ac7e0e
+  welcome-960x640-dark.png  cb81ec0b72b7fd7bbd8a6e37ee93364225186960aa7c7afc9a1d0023ec09f19b
+  welcome-960x640-light.png  e2fba3c5878d09ea87586378d6f0482072de1158664c437b5d5de9040e00bf5c
+
+After the run, three pictures were opened only to confirm the state each was taken in, not to judge them:
+question-card-960x640-dark showed the card over Needs you, in dark; home-1512x982-light showed Home with ⌘K closed;
+session-960x640-light showed Header layout's page.
+
+Not seen here: the PASS and looks_wrong paths. They need a recorded call, and TASTE.json stays null. tsc on the file was clean,
+with a scratch tsconfig extending the repo's.

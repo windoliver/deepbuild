@@ -1,0 +1,35 @@
+// A test plug-in that registers the job kind test.upper a second time (#1922 AC4; README, The surface under test), with
+// an output check of its own, test.upper_rival, so nothing it registers but the kind is another plug-in's. As
+// test/upper-rival its manifest says nothing of the first; as test/upper-heir it says it replaces test.upper. It
+// registers no tool.
+const PARAMS = {
+  type: 'object',
+  properties: { case: { enum: ['upper', 'lower'] }, trim: { type: 'boolean', default: false } },
+  required: ['case'],
+  additionalProperties: false,
+};
+const FIXTURES = [
+  { name: 'fx-greeting', params: { case: 'upper' }, inputs: { text: 'hello' }, expect: { text: 'HELLO' } },
+  { name: 'fx-sentence', params: { case: 'upper' }, inputs: { text: 'Done right, 42 times' }, expect: { text: 'DONE RIGHT, 42 TIMES' } },
+  { name: 'fx-route', params: { case: 'upper' }, inputs: { text: 'route 66' }, expect: { text: 'ROUTE 66' } },
+];
+
+interface Spec { outputs?: Record<string, string> }
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerCheck('test.upper_rival', async (spec: Spec) => {
+    const text = Buffer.from(String(spec?.outputs?.text ?? ''), 'base64').toString('utf8');
+    const lower = /[a-z]/.test(text);
+    return {
+      outcome: lower ? 'failed' : 'passed', testsRun: 1, evidence: [], read: [], mask: null,
+      failures: lower ? [{ test: 'test.upper_rival', file: 'index.ts', line: 1, stack: null, assertion: true, message: `test.upper_rival: ${JSON.stringify(text)} holds a lower-case letter` }] : [],
+    };
+  });
+  await deep.registerJob('test.upper', {
+    schema: { params: PARAMS, inputs: { text: { media: 'text/plain' } } },
+    outputs: { text: { media: 'text/plain' } },
+    key: ['tool', 'params', 'inputs'],
+    output_checks: ['test.upper_rival'],
+    qualification: { fixtures: FIXTURES },
+  });
+}

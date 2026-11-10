@@ -49,7 +49,7 @@ describe('#1337 what a person\'s credential can do', () => {
     const conn = await owner(w);
     try {
       const sub = (await conn.call('stream.subscribe', { after: 0 }, 30_000)).id;
-      const streamed = (): string[] => conn.received.flatMap((r) => (r.json?.id === sub && r.json.event ? [String((r.json.event as { id: string }).id)] : []));
+      const streamed = (): string[] => conn.received.flatMap((r) => (r.json && r.json.id === sub && r.json.event ? [String((r.json.event as { id: string }).id)] : []));
       for (const deadline = Date.now() + 15_000; !project.sent.every((s) => streamed().includes(s.id)) && Date.now() < deadline;) await sleep(200);
       for (const s of project.sent) expect(streamed(), `the owner's stream lacks event ${s.id} (${s.event}) of the project`).toContain(s.id);
       for (const s of personal.sent) expect(streamed(), `the owner's stream carried event ${s.id} (${s.event}) of bob's own folder`).not.toContain(s.id);

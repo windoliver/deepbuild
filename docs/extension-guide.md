@@ -416,6 +416,28 @@ Calls an action output the package uses, through its edge: a read runs, and a ch
 | `name` | string, `^[a-z][a-z0-9_.-]*@[1-9][0-9]*$` | yes |
 | `input` | object | yes |
 
+### `deep.registerJob`
+
+Arrives in R6 · preview · `d1:2f59a429c37a1668d10da0e96e9a002f3583d9dd8ab1691283758c94ac4f55c6`
+
+An offline job kind, one per name: its params schema, its outputs, its key (hash of the tool's name@version, the canonical params and each input's hash), the output checks an output passes before any item names it, and the fixtures a tool must qualify on.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `kind` | string, `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$` | yes |
+| `job` | object | yes |
+
+### `deep.registerJobTool`
+
+Arrives in R6 · preview · `d1:5d582e90a4ba9fbcfeaba21aa699f1f2af376f9ac3bf395fd61a544ee8229a7e`
+
+A tool for a registered kind, pinned by name@version, its files the program the hub runs outside its process. It joins the kind once it writes each qualification fixture's expected bytes, and stays the build it qualified as. A tool that calls a provider names its one host as `provider` in its manifest's `job_tools` entry; each run gets `call: {provider, key, journal}` on stdin, and the tool appends `{key, provider}` to the journal before its request leaves and `{key, provider, task}` when the provider answers. A key whose journal holds a call and whose outputs aren't kept is never run again: it is BLOCKED with one unblock ask.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `kind` | string, `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$` | yes |
+| `tool` | object | yes |
+
 ### `deep.fetch`
 
 In R1 · preview · `d1:045034db4b5007472e621322e9c6b122fdec4cbe6c8d393c93fc688c6103c556`
@@ -492,5 +514,7 @@ Each kind of thing a package registers fills a slot: its interface with a frozen
 | `deep.registerRoute` | - | `route@1` | many | `route@1` | `no-status`, `answers-any-method`, `get-changes-state` | R1 |
 | `deep.registerIndex` | - | `index@1` | one | `index@1` | `keeps-dropped-source`, `sourceless-hit`, `stale-after-upsert`, `rebuild-is-a-no-op` | R1 |
 | `deep.registerAction` | - | `action@1` | many | `action@1` | `declares-write`, `input-not-a-schema`, `output-not-json` | R2 |
+| `deep.registerJob` | - | `job.kind@1` | one per kind | `job.kind@1` | `names-before-checks` | R6 |
+| `deep.registerJobTool` | - | `job.kind@1` | many per kind | `job.kind@1` | `lowercases-last-letter` | R6 |
 | `deep.registerChannel` | - | `channel@1` | many | `channel@1` | `delivered-without-ack`, `signed-without-signature` | R2 |
 | `deep.registerStateSource` | - | `state-source@1` | many | `state-source@1` | `undo-fails`, `first-read-kept`, `compare-sees-nothing` | R2 |

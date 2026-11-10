@@ -673,9 +673,7 @@ fn mapped(in: MeshOut, n: vec3<f32>, s0: Surface, g: array<vec4<f32>, 2>) -> Map
             let foot = max(length(map_d(2u, g[0]) * size), length(map_d(2u, g[1]) * size));
             spread = mix(1.0, clamp(length(c), 1e-3, 1.0), clamp(foot - 1.0, 0.0, 1.0));
         }
-        let t = normalize(in.tangent.xyz - n * dot(n, in.tangent.xyz));
-        let b = cross(n, t) * select(1.0, -1.0, in.tangent.w < 0.0);
-        out_n = normalize(t * m.x + b * m.y + n * m.z);
+        out_n = tangent_to_world(in, n, m);
     }
     if has_map(3u) {
         let o = fetch(3u, map_occlusion, sampler_occlusion, in.uv, g).r;
@@ -798,7 +796,15 @@ fn lobes(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32, dfg_v: v
     if s.coat > 0.0 {
         let ca = max(s.coat_rough * s.coat_rough, 0.002);
         let fc = (0.04 + 0.96 * fc5) * s.coat;
-        let coat = ggx(nh, ca * ca) * 0.25 / max(vh * vh, 1e-4) * fc;
+        // A coat with its own normal (#486) takes its own n·h, and its n·l where the caller
+        // multiplies by the base's.
+        var cnh = nh;
+        var cnl = 1.0;
+        if coat_bent {
+            cnh = max(dot(coat_n, h), 0.0);
+            cnl = max(dot(coat_n, l), 0.0) / nl;
+        }
+        let coat = ggx(cnh, ca * ca) * 0.25 / max(vh * vh, 1e-4) * fc * cnl;
         diffuse = diffuse * (1.0 - fc);
         spec = spec * (1.0 - fc) + vec3<f32>(coat);
     }
@@ -808,12 +814,38 @@ fn lobes(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32, dfg_v: v
 // ---- the extra lobes (#428; Material): each read only where its part's lobe entry turns it on.
 
 fn lobe(k: u32, i: u32) -> vec4<f32> {
+    if op_lobes_on {
+        return op_lobes[i];
+    }
     return lobe_table[k - 1u].v[i];
 }
 
 // A part's whole lobe entry, read once where a function needs most of it.
 fn entry_of(k: u32) -> array<vec4<f32>, 8> {
+    if op_lobes_on {
+        return op_lobes;
+    }
     return lobe_table[k - 1u].v;
+}
+
+// A material operator's outputs at this pixel (#486; Operator output), which op.wgsl sets before
+// it shades and every other entry leaves off: the part's lobe entry with the lobes it wrote
+// replaced; the occlusion that scales its ambient light; its normal and its coat's normal in
+// tangent space, w 1 where written. `coat_n` is the coat's normal in the world, where it bends.
+var<private> op_lobes: array<vec4<f32>, 8>;
+var<private> op_lobes_on: bool = false;
+var<private> op_occlusion: f32 = 1.0;
+var<private> op_normal: vec4<f32> = vec4<f32>(0.0);
+var<private> op_coat_normal: vec4<f32> = vec4<f32>(0.0);
+var<private> coat_n: vec3<f32> = vec3<f32>(0.0);
+var<private> coat_bent: bool = false;
+
+// A tangent-space normal in the world, in the frame a normal map's is (#423): the tangent made
+// normal to n, and the bitangent cross(n, t) times the frame's handedness.
+fn tangent_to_world(in: MeshOut, n: vec3<f32>, m: vec3<f32>) -> vec3<f32> {
+    let t = normalize(in.tangent.xyz - n * dot(n, in.tangent.xyz));
+    let b = cross(n, t) * select(1.0, -1.0, in.tangent.w < 0.0);
+    return normalize(t * m.x + b * m.y + n * m.z);
 }
 
 // ---- subsurface (#481; Material: subsurface): the lobe takes its weight's share of the part's
@@ -1027,6 +1059,12 @@ const P_FLAKES_BY_PIXEL: u32 = 4096u;
 // its own uniform); the spread light added to the whole diffuse, which keeps all of its share.
 const P_SSS_ACROSS: u32 = 8192u;
 const P_SSS_ADDS: u32 = 16384u;
+// #486's: a lobe output multiplies its field; occlusion scales the direct light and emission too;
+// core.bump@1 reads every tangent as handedness +1; coat_normal bends the base lobes too.
+const P_LOBE_SCALES: u32 = 32768u;
+const P_OCC_DIRECT: u32 = 65536u;
+const P_BUMP_HAND: u32 = 131072u;
+const P_COAT_BASE: u32 = 262144u;
 
 fn planted(bit: u32) -> bool {
     return (lights.count.z & bit) != 0u;
@@ -1182,8 +1220,9 @@ fn extra_lobes(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, s: Surface, a2: f32, df
     if s.coat > 0.0 && !back {
         let ca = max(s.coat_rough * s.coat_rough, 0.002);
         let fc = (0.04 + 0.96 * pow(1.0 - vh, 5.0)) * s.coat;
-        let coat = ggx(max(dot(n, h), 0.0), ca * ca) * 0.25 / max(vh * vh, 1e-4) * fc;
-        out = out * (1.0 - fc) + vec3<f32>(coat) * nl * sp;
+        let cn = select(n, coat_n, coat_bent);
+        let coat = ggx(max(dot(cn, h), 0.0), ca * ca) * 0.25 / max(vh * vh, 1e-4) * fc;
+        out = out * (1.0 - fc) + vec3<f32>(coat) * max(dot(cn, l), 0.0) * sp;
     }
     return out;
 }
@@ -2095,6 +2134,12 @@ struct Share {
 // tested equal against its depth, so each sample a part shows holds that part's share there.
 @fragment
 fn sss_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Share {
+    return share(in, front, false);
+}
+
+// The share at a pixel of `in`, shaded as `keyed` says (a material operator's part asks for the
+// view's key light, as it does in color: #486).
+fn share(in: MeshOut, front: bool, keyed: bool) -> Share {
     let g = array<vec4<f32>, 2>(dpdx(in.uv), dpdy(in.uv));
     let local_n = normalize(cross(dpdx(in.local), dpdy(in.local)) + vec3<f32>(0.0, 1e-9, 0.0));
     let size = vec2<f32>(length(dpdx(in.world)), length(dpdy(in.world))) * 1000.0;
@@ -2105,7 +2150,7 @@ fn sss_fs(in: MeshOut, @builtin(front_facing) front: bool) -> Share {
     }
     sss_pass = true;
     sss_share = vec3<f32>(0.0);
-    _ = shade(in, front, local_n, g, false);
+    _ = shade(in, front, local_n, g, keyed);
     // Christensen and Burley's scaling for the mean-free-path form, searchlight: s = 1.85 − A +
     // 7|A − 0.8|³ with A the lobe's color.
     let a = sss_albedo;
@@ -2158,6 +2203,19 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             m = mapped(in, geometric, m.s, g);
             cutoff = maps.values.z;
         }
+        // A material operator's normal replaces the mapped one, its coat's bends the coat alone,
+        // and its occlusion scales only what the map's does: the ambient light (#486).
+        if op_normal.w > 0.0 {
+            m.n = tangent_to_world(in, geometric, op_normal.xyz);
+        }
+        if op_coat_normal.w > 0.0 {
+            coat_n = tangent_to_world(in, geometric, op_coat_normal.xyz);
+            coat_bent = true;
+            if planted(P_COAT_BASE) {
+                m.n = coat_n;
+            }
+        }
+        m.occlusion = m.occlusion * op_occlusion;
         // Its coverage: the material's alpha (times its base color map's) times the item's
         // opacity (#418). A mask with maps keeps its coverage here, from the map.
         var alpha = m.alpha;
@@ -2205,7 +2263,10 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
             through = transmitted(in, facing, v, s);
         }
-        let raw = d.color + ambient * m.occlusion + m.emission + through;
+        var raw = d.color + ambient * m.occlusion + m.emission + through;
+        if planted(P_OCC_DIRECT) {
+            raw = (d.color + m.emission) * op_occlusion + ambient * m.occlusion + through;
+        }
         let lit = fogged(adjusted(raw, in.op.w), in.world);
         if sss_pass && sw > 0.0 {
             sss_lobe(in, facing, s, m, curved, raw, lit);
@@ -2390,6 +2451,21 @@ fn mesh_cut_fs(in: MeshOut, @builtin(front_facing) front: bool) -> CutTargets {
 fn shadow_fs(in: MeshOut) {
     if ((in.flags & CUT) != 0u && cut_hides(in.world))
         || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x) {
+        discard;
+    }
+}
+
+// The occlusion prepass (#1637): an occluder's depth, for the camera's pyramid. It writes depth
+// only where the opaque pass surely does, so the pyramid never holds a nearer depth than the
+// frame: whatever a cutaway touches, a mask-alpha part and what a band's mask leaves out write
+// none, and a material's back faces none, as the opaque pass discards them.
+@fragment
+fn occluder_fs(in: MeshOut, @builtin(front_facing) front: bool) {
+    let material = (in.flags & MATERIAL) != 0u;
+    if (in.flags & CUT) != 0u
+        || !band_keeps(vec2<u32>(in.pos.xy), in.pick, in.mask.x)
+        || (material && ((in.flags >> 7u) & 3u) == MASK)
+        || (material && front == ((in.flags & MIRRORED) != 0u) && (in.flags & DOUBLE_SIDED) == 0u) {
         discard;
     }
 }

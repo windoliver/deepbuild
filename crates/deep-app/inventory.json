@@ -39,8 +39,7 @@
       "roles": [
         "hover",
         "ink_primary",
-        "ink_secondary",
-        "ink_tertiary"
+        "ink_secondary"
       ],
       "literals": []
     },

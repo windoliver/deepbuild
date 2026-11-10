@@ -1,0 +1,34 @@
+#501 AC10 redraft: how both tests fail at the base 4d219bc2 ("Merge pull request #2101"). A note, not a run.
+
+The suite was not run at the base: there is no #501 implementation to tell apart, and a run would spend a full
+deep-show build on this Mac and one under emulation to show a missing call. What follows is read from the base and
+from one probe of the local image. The suite parses (`vitest list --root tests/acceptance/501-redraft-ac10`: 2 tests in
+1 file) and typechecks (tsc with the first draft's tsconfig settings: clean).
+
+What the base has: `media_mix` (#499) answers with `mix.segments[].wav`; there is no `cross_machine` call, and the
+startup `--planted` argument doesn't know `mixer_linux_one_step` (an unknown name answers bad_input, exit 2).
+
+Expected on this Mac today, both tests, before the base's code is reached on Linux:
+
+  BLOCKED: Docker has no linux/amd64 image deep-501-linux:1.99.1 here, and this suite pulls and builds nothing; make it
+  once with: printf 'FROM rust:1.99.1-slim-bookworm\nRUN apt-get update && apt-get install -y --no-install-recommends
+  g++ libclang-dev && rm -rf /var/lib/apt/lists/*\n' | docker build --platform linux/amd64 -t deep-501-linux:1.99.1 -;
+  this is not a pass
+
+Had the slim image been used as the first draft did, the probe would name its gaps instead of reaching cargo. The probe,
+run once by hand in rust:1.99.1-slim-bookworm (--platform linux/amd64, --pull=never), printed:
+
+  x86_64
+  missing a C++ compiler (c++)
+  missing libclang
+
+With the image in place, at the base:
+
+- Test 1 (the real reading): `media_mix` runs on both machines; the `cross_machine` call is unknown, which the base
+  answers `{"ok":false,"code":"bad_input"}` (main.rs), so the test fails at "the cross-machine audio check: deep-show
+  run answers the scenario ok".
+- Test 2 (the planted mixer): the Linux run refuses the unknown `--planted mixer_linux_one_step` with bad_input, so
+  "the film's sound on linux/amd64 (--planted mixer_linux_one_step)" fails at its exit status or at "answers the
+  scenario ok", before any WAV is compared.
+
+Neither ever reads PASS at the base.

@@ -95,6 +95,18 @@ pub fn at(k: i64, length: i64) -> Option<i64> {
     i64::try_from(i128::from(k) * i128::from(length)).ok()
 }
 
+/// The first audio sample of frame `k` at `hz`: ⌊k × Δ × hz ÷ 705,600,000⌋, formed in i128.
+/// Frame k's audio is the samples `[span_start(k), span_start(k + 1))`.
+pub fn span_start(k: i64, frame_length: i64, hz: u32) -> i64 {
+    let flicks = i128::from(k) * i128::from(frame_length) * i128::from(hz);
+    flicks.div_euclid(i128::from(FLICKS_PER_SECOND)) as i64
+}
+
+/// The time a film shows at `t`: the start of its own frame that holds `t`, at any display rate.
+pub fn film_time(t: i64, start: i64, frame: i64) -> i64 {
+    start + index(t - start, frame) * frame
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,5 +149,23 @@ mod tests {
         assert_eq!(index(-frame - 1, frame), -2);
         assert_eq!(at(195, 88_200_000), Some(17_199_000_000));
         assert_eq!(at(i64::MAX, 2), None);
+    }
+
+    #[test]
+    fn a_frames_audio_span_floors_its_first_sample() {
+        let frame = frame_length(30_000, 1001).unwrap();
+        assert_eq!(span_start(30_000, frame, 48_000), 48_048_000);
+        let starts = [1, 2, 3, 1000].map(|k| span_start(k, frame, 44_100));
+        assert_eq!(starts, [1471, 2942, 4414, 1_471_470]);
+        assert_eq!(span_start(-1, frame, 44_100), -1472);
+    }
+
+    #[test]
+    fn a_film_shows_the_start_of_its_own_frame() {
+        let frame = frame_length(24, 1).unwrap();
+        let third = 7 + 3 * frame;
+        assert_eq!(film_time(third + frame / 2, 7, frame), third);
+        assert_eq!(film_time(third, 7, frame), third);
+        assert_eq!(film_time(6, 7, frame), 7 - frame);
     }
 }

@@ -204,6 +204,13 @@ struct SendWaiting {
     seq: u64,
 }
 
+/// A step's switch or the receipt's Undo pressed by an input that isn't hardware, waiting for the OS (#1462).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SwitchWaiting {
+    Step(usize),
+    Undo,
+}
+
 pub struct Controller {
     model: Model,
     machine: Machine,
@@ -216,6 +223,7 @@ pub struct Controller {
     /// The source of the press held down on Send, until its release.
     send_down: Option<Source>,
     send_waiting: Option<SendWaiting>,
+    switch_waiting: Option<SwitchWaiting>,
     /// What the card says after a refused press, until it arms.
     holding: Option<&'static str>,
     /// An approval was held back because the ask's own steps are off.
@@ -251,6 +259,7 @@ impl Controller {
             focused: None,
             send_down: None,
             send_waiting: None,
+            switch_waiting: None,
             holding: None,
             switch_first: false,
             receipt: None,
@@ -403,7 +412,7 @@ impl Controller {
         }
         if !self.faults.no_default {
             rows.push(Row::Text(format!(
-                "Default: {} · applies {}",
+                "Default: {} · at {}",
                 self.model.default, self.model.applies
             )));
         }
@@ -413,17 +422,21 @@ impl Controller {
             }
             rows.push(Row::Text(format!("{name}: {value}")));
         }
+        // A step is a switch: its state is the node's value and its mark, never a word in its label (#1458).
         for (index, step) in self.model.steps.iter().enumerate() {
-            let label = format!(
-                "{} · {} · {}",
+            let mut label = format!(
+                "{} · {}",
                 step.does,
                 if step.undoable {
                     "can be undone"
                 } else {
                     "can't be undone"
-                },
-                if step.on { "on" } else { "off" }
+                }
             );
+            // #1458's planted switch says its state as a word in its label.
+            if crate::plain::planted("step-state-in-label") {
+                label.push_str(if step.on { " · on" } else { " · off" });
+            }
             rows.push(Row::Step {
                 index,
                 label,
@@ -503,7 +516,10 @@ impl Controller {
         } = input;
         // While the OS asks about one press, no other input the card can't trust counts: the prompt is modal, and
         // one confirmation answers one press.
-        if !source.trusted() && (self.machine.confirming().is_some() || self.send_waiting.is_some())
+        if !source.trusted()
+            && (self.machine.confirming().is_some()
+                || self.send_waiting.is_some()
+                || self.switch_waiting.is_some())
         {
             return Did::Nothing;
         }
@@ -563,20 +579,34 @@ impl Controller {
                     }
                 }
             },
-            // The receipt's Undo and a step's switch change what the card does next, so only hardware works them.
+            // The receipt's Undo and a step's switch change what the card does next: hardware works them, and any
+            // other press once the OS confirms you, as an option's does (#1462).
             Target::Undo => {
-                if phase != Phase::Up || !source.trusted() || self.receipt.is_none() {
+                if phase != Phase::Up || self.receipt.is_none() {
                     return Did::Nothing;
                 }
-                self.receipt = None;
-                self.send_waiting = None;
-                self.machine.undo(t);
-                self.record("undone", now);
-                Did::Undone
+                if !source.trusted() {
+                    self.switch_waiting = Some(SwitchWaiting::Undo);
+                    return Did::NeedsConfirmation(confirm::reason(&self.model.question, "Undo"));
+                }
+                self.undo_answer(t, now)
             }
             Target::Step(index) => {
-                if phase != Phase::Up || !source.trusted() || !shown {
+                if phase != Phase::Up || !shown {
                     return Did::Nothing;
+                }
+                if !source.trusted() {
+                    // #1462's planted card takes hardware alone, as the merge base did.
+                    if cfg!(feature = "plant-step-ignores-press") {
+                        return Did::Nothing;
+                    }
+                    let does = self
+                        .model
+                        .steps
+                        .get(index)
+                        .map_or_else(String::new, |step| step.does.clone());
+                    self.switch_waiting = Some(SwitchWaiting::Step(index));
+                    return Did::NeedsConfirmation(confirm::reason(&self.model.question, &does));
                 }
                 self.toggle_step(index);
                 Did::Switched
@@ -652,6 +682,18 @@ impl Controller {
         if confirmed {
             PASSED_ONCE.store(true, Ordering::SeqCst);
         }
+        // A switch or Undo waits on the OS alone: confirmed, it works once; cancelled, nothing changes.
+        if let Some(waiting) = self.switch_waiting.take() {
+            return match (confirmed, waiting) {
+                (false, _) => Did::Nothing,
+                (true, SwitchWaiting::Step(index)) => {
+                    self.toggle_step(index);
+                    Did::Switched
+                }
+                (true, SwitchWaiting::Undo) if self.receipt.is_some() => self.undo_answer(now, now),
+                (true, SwitchWaiting::Undo) => Did::Nothing,
+            };
+        }
         // The ask's own steps were switched off while the OS asked: the approval waits for its switch again.
         if let Some((_, option)) = self.machine.confirming() {
             if self.is_allow(option) && !self.model.own_on() {
@@ -674,6 +716,15 @@ impl Controller {
             }
         }
         Did::Nothing
+    }
+
+    /// Takes back the answer the receipt shows.
+    fn undo_answer(&mut self, t: u64, now: u64) -> Did {
+        self.receipt = None;
+        self.send_waiting = None;
+        self.machine.undo(t);
+        self.record("undone", now);
+        Did::Undone
     }
 
     /// The app is leaving with the card up: nothing is written. The planted shell answers with the default.

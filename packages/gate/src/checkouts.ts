@@ -191,6 +191,8 @@ export async function openCheckouts(o: CheckoutsOptions): Promise<Checkouts> {
   await mkdir(o.root, { recursive: true });
   const root = await realpath(o.root);
   await Promise.all((await readdir(root)).map((name) => clear(join(root, name))));
+  // An index holder a crash left in the store goes too: only a call under way has one.
+  await Promise.all((await readdir(o.store)).filter((name) => name.startsWith('index-')).map((name) => rm(join(o.store, name), { recursive: true, force: true })));
   const objects = join(o.store, 'objects');
   const live = new Map<string, Live>();
   const works = new WeakMap<Budget, Work>();

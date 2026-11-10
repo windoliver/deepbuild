@@ -124,6 +124,14 @@ export const claudeParts: AdapterParts = {
     const forSession = answer.for === 'session' ? suggested.filter((s) => s.type === 'addRules').map((s) => ({ ...s, destination: 'session' })) : [];
     return { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow', ...(forSession.length ? { updatedPermissions: forSession } : {}) } } };
   },
+  // Context goes as additionalContext where the facts say it reaches the model, else as plain stdout where that does;
+  // an event where neither does gets no reply, since a block there would reach only you or the debug log (#1296).
+  contextReply: (event, text, facts) => {
+    const out = isObject(facts) && isObject(facts.contextOutput) && isObject(facts.contextOutput.events) ? facts.contextOutput.events[event] : undefined;
+    if (!isObject(out)) return undefined;
+    if (out.additionalContext === 'model') return { exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } }), stderr: '' };
+    return out.stdout === 'model' ? { exit: 0, stdout: text, stderr: '' } : undefined;
+  },
 };
 
 export const piParts: AdapterParts = {

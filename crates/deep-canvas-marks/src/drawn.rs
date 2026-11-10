@@ -911,9 +911,9 @@ fn stroked(
             let mut alphas: Vec<(f64, f64)> = Vec::with_capacity(run.points.len());
             let by_light = geometry::weight_at(&weights, &run.points, l, weight);
             let mut s = 0.0;
-            for i in 0..run.points.len() {
+            for (i, &b) in run.points.iter().enumerate() {
                 if i > 0 {
-                    let (a, b) = (run.points[i - 1], run.points[i]);
+                    let a = run.points[i - 1];
                     s += deep_canvas::ops::hypot(b[0] - a[0], b[1] - a[1]);
                 }
                 // Under 1 device px a point draws at 1 px with its alpha scaled by its width (Paint).

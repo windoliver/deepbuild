@@ -1,0 +1,15 @@
+[package]
+name = "deep-canvas-physics"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #2009: the physics canvas module `physics.world@1` (canvas primitives: Physics): the world
+# document's reader with its defaults, what each backend's caps() refuses at check, and the backend
+# interface, over this crate's own types only. Named deep-canvas* so the canvas lint reads it: it
+# depends on no engine, so no Rapier type can cross it. The Rapier backend is deep-physics-rapier.
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

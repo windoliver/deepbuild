@@ -11,7 +11,10 @@ import { createInterface } from 'node:readline';
 const out = mkdtempSync(join(tmpdir(), 'motion-lane-'));
 const child = spawn('target/debug/deep-drive', ['--out', out], { stdio: ['pipe', 'pipe', 'inherit'] });
 const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
-const next = async () => JSON.parse((await lines.next()).value ?? '{}');
+// A deep-drive that can't be started ends the wait for its next line, and the run reads BLOCKED.
+const unstarted = new Promise((_, reject) => child.once('error', (error) => reject(new Error(`deep-drive could not start (${error.code ?? error.message})`))));
+child.stdin.on('error', () => {});
+const next = async () => JSON.parse((await Promise.race([lines.next(), unstarted])).value ?? '{}');
 
 let code = 1;
 try {
@@ -28,7 +31,7 @@ try {
   console.log(`motion: ${reply.claim}; ${reply.pacing}`);
   code = reply.claim === 'PASS' ? 0 : 1;
 } catch (error) {
-  console.log(`motion: BLOCKED: ${error.message}; pacing not measured`);
+  console.log(`BLOCKED motion: ${error.message}; pacing not measured`);
 } finally {
   child.stdin.end();
   rmSync(out, { recursive: true, force: true });
