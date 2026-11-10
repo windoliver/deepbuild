@@ -88,4 +88,4 @@ if (findings.length) {
   console.log(findings.join('\n'));
   process.exit(1);
 }
-console.log(`PASS size: ${over} hand-written source files over ${LIMIT} lines, each at its ceiling${base ? '' : '; no ceilings at a merge base with origin/main to compare with'}`);
+console.log(`PASS size: ${over} hand-written source file${over === 1 ? '' : 's'} over ${LIMIT} lines, each at its ceiling${base ? '' : '; no ceilings at a merge base with origin/main to compare with'}`);
