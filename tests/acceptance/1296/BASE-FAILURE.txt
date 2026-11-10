@@ -1,0 +1,275 @@
+# #1296 acceptance tests on the base (tree of 0c4a4ec7, no implementation of #1296)
+
+$ npm ci && npm run build --workspaces && CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook
+$ node node_modules/vitest/vitest.mjs run tests/acceptance/1296/ --no-file-parallelism --testTimeout=600000
+(the checkout path reads <repo>, the home ~, test temp folders /tmp/<prefix>-<id>; ANSI colors dropped; lines past 1,500 characters cut)
+
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1296/resume.test.ts (2 tests | 2 failed) 33688ms
+   ❯ AC4 #1296.edc2bba0 a planted resume block of 14,000 characters is delivered with every requirement ID and every rule you typed inside the cap, the rest by handle, and the record says which went where (2)
+     × AC4 #1296.edc2bba0 the resume's context holds R1 to R12 and the five typed rules inside 10,000 characters; the AGENTS.md lines that don't fit go by a handle deep read returns; the record names both 33471ms
+     × AC4 #1296.edc2bba0 (wrong program) a hub that sends the block whole (sends-block-whole) lets it be cut to a preview and fails, naming the first missing ID 167ms
+ ❯ tests/acceptance/1296/windows.test.ts (3 tests | 3 failed) 17483ms
+   ❯ AC2 #1296.51fd7de6 a session in the shadowed repo shows its five-hour window as unknown, naming the file; 0% or another repo's reading fails, naming the session; the repo's settings file is untouched (3)
+     × AC2 #1296.51fd7de6 the shadowed repo's session: five-hour window unknown, no percentage, the file named; the other repo's reading shown on its own row; the file byte-identical 17002ms
+     × AC2 #1296.51fd7de6 (wrong program) a hub that shows the unknown window as 0% (window-unknown-as-zero) fails, naming the session 198ms
+     × AC2 #1296.51fd7de6 (wrong program) a hub that carries over another repo's last reading (window-carried-from-other-repo) fails, naming the session 133ms
+ ❯ tests/acceptance/1296/doctor.test.ts (4 tests | 2 failed) 3863ms
+   ❯ AC1 #1296.f8f2af0a a repo's statusLine in .claude/settings.json or .claude/settings.local.json: deep doctor warns claude.statusline_shadowed, naming the file and key, and exits non-zero; OK in a repo without one (4)
+     × AC1 #1296.f8f2af0a a repo whose .claude/settings.json sets statusLine.command: a warning claude.statusline_shadowed naming the file and statusLine, exit non-zero 348ms
+     × AC1 #1296.f8f2af0a a repo whose .claude/settings.local.json sets statusLine.command is reported the same way 325ms
+ ❯ tests/acceptance/1296/kit.test.ts (2 tests | 2 failed) 75ms
+   ❯ AC5 #1296.8af9a270 the conformance kit holds a planted adapter that sends a needed block as stdout on PostCompact or as stderr on exit 0, and fails it, naming the event (2)
+     × AC5 #1296.8af9a270 the kit holds block-as-postcompact-stdout, which sends a needed block as plain stdout on a PostCompact hook; the kit fails it naming PostCompact, and the shipped Claude Code adapter passes those cases 6ms
+     × AC5 #1296.8af9a270 the kit holds block-as-stderr-exit-0, which sends a needed block as stderr on exit 0; the kit fails it naming the hook event, and the shipped Claude Code adapter passes those cases 1ms
+ ❯ tests/acceptance/1296/facts.test.ts (2 tests | 2 failed) 76ms
+   ❯ AC3 #1296.f9371fe0 a facts file without the context-output entry fails the adapter-facts conformance case, naming the field (2)
+     × AC3 #1296.f9371fe0 adapters/claude-code.facts.json has a context-output entry (the 10,000-character cap, the 2,000-character preview, its versions, PostCompact among its events); taken out, node scripts/corpus.mjs check fails naming it 3ms
+     × AC3 #1296.f9371fe0 (control) the same check on the shipped facts has no FAIL line naming the entry 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1296/doctor.test.ts > AC1 #1296.f8f2af0a a repo's statusLine in .claude/settings.json or .claude/settings.local.json: deep doctor warns claude.statusline_shadowed, naming the file and key, and exits non-zero; OK in a repo without one > AC1 #1296.f8f2af0a a repo whose .claude/settings.json sets statusLine.command: a warning claude.statusline_shadowed naming the file and statusLine, exit non-zero
+AssertionError: AC1 deep doctor must warn claude.statusline_shadowed in /tmp/dh19d-<id>/shared, whose /tmp/dh19d-<id>/shared/.claude/settings.json sets statusLine.command; its items: {"item":"hub.socket","agent":"deepbuild","code":"healthy","level":"ok","evidence":"the hub answers at unix:/tmp/dh19d-<id>/h/.deepbuild/hub.sock","fix":"Nothing to do."}
+{"item":"hub.jobs","agent":"deepbuild","code":"healthy","level":"ok","evidence":"none of the hub's 13 jobs has failed 3 times in a row","fix":"Nothing to do."}
+{"item":"app.notifications","agent":"deepbuild","code":"not_checked","level":"skip","evidence":"the app hasn't reported its notification setting since the hub started","fix":"Open DeepBuild, then run deep doctor again."}
+{"item":"hub.disk","agent":"deepbuild","code":"healthy","level":"ok","evidence":"1312.1 GB free where /tmp/dh19d-<id>/h/.deepbuild lives","fix":"Nothing to do."}
+{"item":"hub.service","agent":"deepbuild","code":"not_checked","level":"skip","evidence":"no login service for the hub at /tmp/dh19d-<id>/h/Library/LaunchAgents/com.deepbuild.hub.plist","fix":"Run `deep setup`, which installs it."}
+{"item":"hub.ports","agent":"deepbuild","code":"healthy","level":"ok","evidence":"port 3001 is free on 127.0.0.1 for the next worktree's stack, leased from 3000 up","fix":"Nothing to do."}
+{"item":"claude.hooks","agent":"claude-code","code":"healthy","level":"ok","evidence":"DeepBuild's entries for SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure, Stop, StopFailure, SessionEnd, FileChanged, Notification, Elicitation, ElicitationResult are in /tmp/dh19d-<id>/h/.claude/settings.json","fix":"Nothing to do."}
+{"item":"timing.codex_slow_lane","agent":"codex","code":"healthy","level":"ok","evidence":"slow lane holds: its expected 20 minutes ends at least 5 s before Codex's Stop hook timeout, 45 minutes","fix":"Nothing to do."}
+{"item":"timing.codex_deep_ask","agent":"codex","code":"healthy","level":"ok","evidence":"deep_ask holds: it says still waiting at 55 s, 5 s before the tool_timeout_sec Codex gives DeepBuild's MCP server, 60 s","fix":"Nothing to do."}
+{"item":"timing.stop_hold","agent":"claude-code","code":"healthy","level":"ok","evidence":"stop hold holds: the 60 s hold ends at least 5 s before the Stop hook entry's 600 s timeout","fix":"Nothing to do."}
+{"item":"timing.waiter","agent":"claude-code","code":"healthy","level":"ok","evidence":"waiter holds: the waiter entry's 259200 s timeout covers the longest ask deadline in your settings, 3 days","fix":"Nothing to do."}
+{"item":"timing.deep_ask","agent":"claude-code","code":"healthy","level":"ok","evidence":"deep_ask holds: it says still waiting after 40 s, at least 5 s before Claude Code's MCP tool timeout, the 60 s DeepBuild takes while MCP_TOOL_TIMEOUT isn't set","fix":"Nothing to do."}
+{"item":"timing.stop_continuations","agent":"claude-code","code":"healthy","level":"ok","evidence":"stop continuations hold: DeepBuild sends back at most 8 answers and send-backs through held stops in one Claude Code turn with no tool call between, its cap of 8 consecutive stop-hook continuations; another waits for the next prompt","fix":"Nothing to do."}
+{"item":"timing.asks_and_batches","agent":"claude-code","code":"healthy","level":"ok","evidence":"asks and batches hold: asks show in batches every 8h, and one whose deadline (the longest is 3 days) comes before its next batch shows at once, so none reaches its deadline unseen","fix":"Nothing to do."}
+{"item":"claude.mcp","agent":"claude-code","code":"healthy","level":"ok","evidence":"DeepBuild's MCP server is registered at user scope in ~/.claude.json (~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node <repo>/packages/cli/dist/main.js mcp)","fix":"Nothing to do."}
+{"item":"claude.statusline","agent":"claude-code","code":"healthy","level":"ok","evidence":"the status line forwarder runs in /tmp/dh19d-<id>/h/.claude/settings.json, then your own status line","fix":"Nothing to do."}
+{"item":"codex.hooks","agent":"codex","code":"healthy","level":"ok","evidence":"DeepBuild's entries are in /tmp/dh19d-<id>/h/.codex/hooks.json as setup wrote them","fix":"Nothing to do."}
+{"item":"codex.binary","agent":"codex","code":"healthy","level":"ok","evidence":"/tmp/dh19d-<id>/bin/codex is Codex 0.160.0, which its facts cover","fix":"Nothing to do."}
+{"item":"codex.sign_in","agent":"codex","code":"healthy","level":"ok","evidence":"codex login status exits 0: signed in","fix":"Nothing to do."}
+{"item":"codex.billing","agent":"codex","code":"healthy","level":"ok","evidence":"no API billing variable is set, so Codex sessions use your plan","fix":"Nothing to do."}
+{"item":"claude.binary","agent":"claude-code","code":"healthy","level":"ok","evidence":"/tmp/dh19d-<id>/bin/claude is Claude Code 2.1.308, which its facts cover","fix":"Nothing to do."}
+{"item":"claude.jobs_binary","agent":"claude-code","code":"healthy","level":"ok","evidence":"your sessions and DeepBuild's jobs both run /tmp/dh19d-<id>/bin/claude","fix":"Nothing to do."}
+{"item":"claude.sign_in","agent":"claude-code","code":"healthy","level":"ok","evidence":"signed in by claude.ai, plan max","fix":"Nothing to do."}
+{"item":"claude.token","agent":"claude-code","code":"healthy","level":"ok","evidence":"your sign-in token expires at 2099-01-01T00:00:00.000Z","fix":"Nothing to do; a run planned past then won't start, saying so."}
+{"item":"claude.billing","agent":"claude-code","code":"healthy","level":"ok","evidence":"no API billing variable is set, so Claude Code sessions use your plan","fix":"Nothing to do."}
+{"item":"claude.mods","agent":"claude-code","code":"healthy","level":"ok","evidence":"/tmp/dh19d-<id>/h/.claude loads no mods","fix":"Nothing to do."}
+{"item":"claude.prompt","agent":"claude-code","code":"healthy","level":"ok","evidence":"a test prompt came back: OK","fix":"Nothing to do."}
+{"item":"canvas.gpu","agent":"deepbuild","code":"binary_missing","level":"fail","evidence":"no deep-gpu is built under <repo>/target","fix":"Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again."}
+{"item":"canvas.headless","agent":"deepbuild","code":"render_failed","level":"fail","evidence":"no deep-canvas-render is built under <repo>/target, so nothing can render headless","fix":"Run `cargo build --locked --bin deep-canvas-render`, then `deep doctor` again."}
+{"item":"canvas.verdict","agent":"deepbuild","code":"render_failed","level":"fail","evidence":"the canvas is unhealthy: canvas.gpu failed, canvas.headless failed","fix":"Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again."}
+{"item":"otlp.telemetry","agent":"claude-code","code":"healthy","level":"ok","evidence":"logs: http/protobuf to http://127.0.0.1:4318/","fix":"Nothing: the receiver reads the telemetry Claude Code sends."}
+exit 1, stdout "{\"item\":\"hub.socket\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"the hub answers at unix:/tmp/dh19d-<id>/h/.deepbuild/hub.sock\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"hub.jobs\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"none of the hub's 13 jobs has failed 3 times in a row\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"app.notifications\",\"agent\":\"deepbuild\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"the app hasn't reported its notification setting since the hub started\",\"fix\":\"Open DeepBuild, then run deep doctor again.\"}\n{\"item\":\"hub.disk\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"1312.1 GB free where /tmp/dh19d-<id>/h/.deepbuild lives\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"hub.service\",\"agent\":\"deepbuild\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no login service for the hub at /tmp/dh19d-<id>/h/Library/LaunchAgents/com.deepbuild.hub.plist\",\"fix\":\"Run `deep setup`, which installs it.\"}\n{\"item\":\"hub.ports\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"port 3001 is free on 127.0.0.1 for the next worktree's stack, leased from 3000 up\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"claude.hooks\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"DeepBuild's entries for SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToo …(cut)
+ ❯ shadowed tests/acceptance/1296/doctor.test.ts:45:31
+     43|   const d = await doctor(w.h, ['--prompt'], { cwd: repo, env: plant ? …
+     44|   const shadows = d.items.filter(isShadow);
+     45|   if (!shadows.length) expect.fail(`AC1 deep doctor must warn claude.s…
+       |                               ^
+     46|   const warned = shadows.filter((i) => i.level === 'warn');
+     47|   if (!warned.length) expect.fail(`AC1 claude.statusline_shadowed must…
+ ❯ tests/acceptance/1296/doctor.test.ts:67:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  tests/acceptance/1296/doctor.test.ts > AC1 #1296.f8f2af0a a repo's statusLine in .claude/settings.json or .claude/settings.local.json: deep doctor warns claude.statusline_shadowed, naming the file and key, and exits non-zero; OK in a repo without one > AC1 #1296.f8f2af0a a repo whose .claude/settings.local.json sets statusLine.command is reported the same way
+AssertionError: AC1 deep doctor must warn claude.statusline_shadowed in /tmp/dh19d-<id>/local, whose /tmp/dh19d-<id>/local/.claude/settings.local.json sets statusLine.command; its items: {"item":"hub.socket","agent":"deepbuild","code":"healthy","level":"ok","evidence":"the hub answers at unix:/tmp/dh19d-<id>/h/.deepbuild/hub.sock","fix":"Nothing to do."}
+{"item":"hub.jobs","agent":"deepbuild","code":"healthy","level":"ok","evidence":"none of the hub's 13 jobs has failed 3 times in a row","fix":"Nothing to do."}
+{"item":"app.notifications","agent":"deepbuild","code":"not_checked","level":"skip","evidence":"the app hasn't reported its notification setting since the hub started","fix":"Open DeepBuild, then run deep doctor again."}
+{"item":"hub.disk","agent":"deepbuild","code":"healthy","level":"ok","evidence":"1312.1 GB free where /tmp/dh19d-<id>/h/.deepbuild lives","fix":"Nothing to do."}
+{"item":"hub.service","agent":"deepbuild","code":"not_checked","level":"skip","evidence":"no login service for the hub at /tmp/dh19d-<id>/h/Library/LaunchAgents/com.deepbuild.hub.plist","fix":"Run `deep setup`, which installs it."}
+{"item":"hub.ports","agent":"deepbuild","code":"healthy","level":"ok","evidence":"port 3001 is free on 127.0.0.1 for the next worktree's stack, leased from 3000 up","fix":"Nothing to do."}
+{"item":"claude.hooks","agent":"claude-code","code":"healthy","level":"ok","evidence":"DeepBuild's entries for SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure, Stop, StopFailure, SessionEnd, FileChanged, Notification, Elicitation, ElicitationResult are in /tmp/dh19d-<id>/h/.claude/settings.json","fix":"Nothing to do."}
+{"item":"timing.codex_slow_lane","agent":"codex","code":"healthy","level":"ok","evidence":"slow lane holds: its expected 20 minutes ends at least 5 s before Codex's Stop hook timeout, 45 minutes","fix":"Nothing to do."}
+{"item":"timing.codex_deep_ask","agent":"codex","code":"healthy","level":"ok","evidence":"deep_ask holds: it says still waiting at 55 s, 5 s before the tool_timeout_sec Codex gives DeepBuild's MCP server, 60 s","fix":"Nothing to do."}
+{"item":"timing.stop_hold","agent":"claude-code","code":"healthy","level":"ok","evidence":"stop hold holds: the 60 s hold ends at least 5 s before the Stop hook entry's 600 s timeout","fix":"Nothing to do."}
+{"item":"timing.waiter","agent":"claude-code","code":"healthy","level":"ok","evidence":"waiter holds: the waiter entry's 259200 s timeout covers the longest ask deadline in your settings, 3 days","fix":"Nothing to do."}
+{"item":"timing.deep_ask","agent":"claude-code","code":"healthy","level":"ok","evidence":"deep_ask holds: it says still waiting after 40 s, at least 5 s before Claude Code's MCP tool timeout, the 60 s DeepBuild takes while MCP_TOOL_TIMEOUT isn't set","fix":"Nothing to do."}
+{"item":"timing.stop_continuations","agent":"claude-code","code":"healthy","level":"ok","evidence":"stop continuations hold: DeepBuild sends back at most 8 answers and send-backs through held stops in one Claude Code turn with no tool call between, its cap of 8 consecutive stop-hook continuations; another waits for the next prompt","fix":"Nothing to do."}
+{"item":"timing.asks_and_batches","agent":"claude-code","code":"healthy","level":"ok","evidence":"asks and batches hold: asks show in batches every 8h, and one whose deadline (the longest is 3 days) comes before its next batch shows at once, so none reaches its deadline unseen","fix":"Nothing to do."}
+{"item":"claude.mcp","agent":"claude-code","code":"healthy","level":"ok","evidence":"DeepBuild's MCP server is registered at user scope in ~/.claude.json (~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node <repo>/packages/cli/dist/main.js mcp)","fix":"Nothing to do."}
+{"item":"claude.statusline","agent":"claude-code","code":"healthy","level":"ok","evidence":"the status line forwarder runs in /tmp/dh19d-<id>/h/.claude/settings.json, then your own status line","fix":"Nothing to do."}
+{"item":"codex.hooks","agent":"codex","code":"healthy","level":"ok","evidence":"DeepBuild's entries are in /tmp/dh19d-<id>/h/.codex/hooks.json as setup wrote them","fix":"Nothing to do."}
+{"item":"claude.binary","agent":"claude-code","code":"healthy","level":"ok","evidence":"/tmp/dh19d-<id>/bin/claude is Claude Code 2.1.308, which its facts cover","fix":"Nothing to do."}
+{"item":"claude.jobs_binary","agent":"claude-code","code":"healthy","level":"ok","evidence":"your sessions and DeepBuild's jobs both run /tmp/dh19d-<id>/bin/claude","fix":"Nothing to do."}
+{"item":"claude.sign_in","agent":"claude-code","code":"healthy","level":"ok","evidence":"signed in by claude.ai, plan max","fix":"Nothing to do."}
+{"item":"claude.token","agent":"claude-code","code":"healthy","level":"ok","evidence":"your sign-in token expires at 2099-01-01T00:00:00.000Z","fix":"Nothing to do; a run planned past then won't start, saying so."}
+{"item":"claude.billing","agent":"claude-code","code":"healthy","level":"ok","evidence":"no API billing variable is set, so Claude Code sessions use your plan","fix":"Nothing to do."}
+{"item":"codex.binary","agent":"codex","code":"healthy","level":"ok","evidence":"/tmp/dh19d-<id>/bin/codex is Codex 0.160.0, which its facts cover","fix":"Nothing to do."}
+{"item":"codex.sign_in","agent":"codex","code":"healthy","level":"ok","evidence":"codex login status exits 0: signed in","fix":"Nothing to do."}
+{"item":"codex.billing","agent":"codex","code":"healthy","level":"ok","evidence":"no API billing variable is set, so Codex sessions use your plan","fix":"Nothing to do."}
+{"item":"claude.mods","agent":"claude-code","code":"healthy","level":"ok","evidence":"/tmp/dh19d-<id>/h/.claude loads no mods","fix":"Nothing to do."}
+{"item":"claude.prompt","agent":"claude-code","code":"healthy","level":"ok","evidence":"a test prompt came back: OK","fix":"Nothing to do."}
+{"item":"canvas.gpu","agent":"deepbuild","code":"binary_missing","level":"fail","evidence":"no deep-gpu is built under <repo>/target","fix":"Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again."}
+{"item":"canvas.headless","agent":"deepbuild","code":"render_failed","level":"fail","evidence":"no deep-canvas-render is built under <repo>/target, so nothing can render headless","fix":"Run `cargo build --locked --bin deep-canvas-render`, then `deep doctor` again."}
+{"item":"canvas.verdict","agent":"deepbuild","code":"render_failed","level":"fail","evidence":"the canvas is unhealthy: canvas.gpu failed, canvas.headless failed","fix":"Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again."}
+{"item":"otlp.telemetry","agent":"claude-code","code":"healthy","level":"ok","evidence":"logs: http/protobuf to http://127.0.0.1:4318/","fix":"Nothing: the receiver reads the telemetry Claude Code sends."}
+exit 1, stdout "{\"item\":\"hub.socket\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"the hub answers at unix:/tmp/dh19d-<id>/h/.deepbuild/hub.sock\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"hub.jobs\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"none of the hub's 13 jobs has failed 3 times in a row\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"app.notifications\",\"agent\":\"deepbuild\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"the app hasn't reported its notification setting since the hub started\",\"fix\":\"Open DeepBuild, then run deep doctor again.\"}\n{\"item\":\"hub.disk\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"1312.1 GB free where /tmp/dh19d-<id>/h/.deepbuild lives\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"hub.service\",\"agent\":\"deepbuild\",\"code\":\"not_checked\",\"level\":\"skip\",\"evidence\":\"no login service for the hub at /tmp/dh19d-<id>/h/Library/LaunchAgents/com.deepbuild.hub.plist\",\"fix\":\"Run `deep setup`, which installs it.\"}\n{\"item\":\"hub.ports\",\"agent\":\"deepbuild\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"port 3001 is free on 127.0.0.1 for the next worktree's stack, leased from 3000 up\",\"fix\":\"Nothing to do.\"}\n{\"item\":\"claude.hooks\",\"agent\":\"claude-code\",\"code\":\"healthy\",\"level\":\"ok\",\"evidence\":\"DeepBuild's entries for SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToo …(cut)
+ ❯ shadowed tests/acceptance/1296/doctor.test.ts:45:31
+     43|   const d = await doctor(w.h, ['--prompt'], { cwd: repo, env: plant ? …
+     44|   const shadows = d.items.filter(isShadow);
+     45|   if (!shadows.length) expect.fail(`AC1 deep doctor must warn claude.s…
+       |                               ^
+     46|   const warned = shadows.filter((i) => i.level === 'warn');
+     47|   if (!warned.length) expect.fail(`AC1 claude.statusline_shadowed must…
+ ❯ tests/acceptance/1296/doctor.test.ts:72:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  tests/acceptance/1296/facts.test.ts > AC3 #1296.f9371fe0 a facts file without the context-output entry fails the adapter-facts conformance case, naming the field > AC3 #1296.f9371fe0 adapters/claude-code.facts.json has a context-output entry (the 10,000-character cap, the 2,000-character preview, its versions, PostCompact among its events); taken out, node scripts/corpus.mjs check fails naming it
+AssertionError: adapters/claude-code.facts.json must have a context-output entry (a key named like contextOutput): expected undefined to be defined
+ ❯ tests/acceptance/1296/facts.test.ts:56:119
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  tests/acceptance/1296/facts.test.ts > AC3 #1296.f9371fe0 a facts file without the context-output entry fails the adapter-facts conformance case, naming the field > AC3 #1296.f9371fe0 (control) the same check on the shipped facts has no FAIL line naming the entry
+AssertionError: adapters/claude-code.facts.json must have a context-output entry (a key named like contextOutput): expected undefined to be defined
+ ❯ tests/acceptance/1296/facts.test.ts:73:119
+     71|
+     72|   it(`${AC3} (control) the same check on the shipped facts has no FAIL…
+     73|     expect(path, 'adapters/claude-code.facts.json must have a context-…
+       |                                                                                                                       ^
+     74|     const field = path!.at(-1)!;
+     75|     const { fails } = check(factsFolder(shipped));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  tests/acceptance/1296/kit.test.ts > AC5 #1296.8af9a270 the conformance kit holds a planted adapter that sends a needed block as stdout on PostCompact or as stderr on exit 0, and fails it, naming the event > AC5 #1296.8af9a270 the kit holds block-as-postcompact-stdout, which sends a needed block as plain stdout on a PostCompact hook; the kit fails it naming PostCompact, and the shipped Claude Code adapter passes those cases
+AssertionError: adapter@1 holds a planted adapter named block-as-postcompact-stdout; its fakes are parent-owns-subagent, duplicate-event-id, clock-steps-back, event-after-stop, quiet-reported-finished, thread-dropped, answer-to-other-session, allow-from-suggestion, unparsed-stop-given-cause, acknowledged-without-sign, flag-startTurn-unsupported, flag-steer-unsupported, flag-followUp-unsupported, answer-ignored, turn-in-other-session, steer-to-other-turn, follow-up-immediate, steer-outlives-interrupt, response-to-other-ask, history-empty, drops-permission.request, drops-agent.stop, drops-session.start, drops-tool.after, drops-tool.before, drops-user.ask: expected undefined to be defined
+ ❯ tests/acceptance/1296/kit.test.ts:36:131
+     34|       const kit = adapterKit();
+     35|       const fake = kit.fakes.find((f) => f.name === p.name);
+     36|       expect(fake, `adapter@1 holds a planted adapter named ${p.name};…
+       |                                                                                                                                   ^
+     37|       const report = runKit(kit, fake!.fill, { headless: true });
+     38|       const failing = report.cases.filter((c) => c.outcome === 'FAIL');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  tests/acceptance/1296/kit.test.ts > AC5 #1296.8af9a270 the conformance kit holds a planted adapter that sends a needed block as stdout on PostCompact or as stderr on exit 0, and fails it, naming the event > AC5 #1296.8af9a270 the kit holds block-as-stderr-exit-0, which sends a needed block as stderr on exit 0; the kit fails it naming the hook event, and the shipped Claude Code adapter passes those cases
+AssertionError: adapter@1 holds a planted adapter named block-as-stderr-exit-0; its fakes are parent-owns-subagent, duplicate-event-id, clock-steps-back, event-after-stop, quiet-reported-finished, thread-dropped, answer-to-other-session, allow-from-suggestion, unparsed-stop-given-cause, acknowledged-without-sign, flag-startTurn-unsupported, flag-steer-unsupported, flag-followUp-unsupported, answer-ignored, turn-in-other-session, steer-to-other-turn, follow-up-immediate, steer-outlives-interrupt, response-to-other-ask, history-empty, drops-permission.request, drops-agent.stop, drops-session.start, drops-tool.after, drops-tool.before, drops-user.ask: expected undefined to be defined
+ ❯ tests/acceptance/1296/kit.test.ts:36:131
+     34|       const kit = adapterKit();
+     35|       const fake = kit.fakes.find((f) => f.name === p.name);
+     36|       expect(fake, `adapter@1 holds a planted adapter named ${p.name};…
+       |                                                                                                                                   ^
+     37|       const report = runKit(kit, fake!.fill, { headless: true });
+     38|       const failing = report.cases.filter((c) => c.outcome === 'FAIL');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  tests/acceptance/1296/resume.test.ts > AC4 #1296.edc2bba0 a planted resume block of 14,000 characters is delivered with every requirement ID and every rule you typed inside the cap, the rest by handle, and the record says which went where > AC4 #1296.edc2bba0 the resume's context holds R1 to R12 and the five typed rules inside 10,000 characters; the AGENTS.md lines that don't fit go by a handle deep read returns; the record names both
+Error: AC4 #1296.edc2bba0 the resume's injected context is 14724 characters, past the 10000-character cap, so Claude Code shows the model only its first 2000 characters; the first requirement ID missing from what the model sees is R1
+ ❯ must tests/acceptance/340/flow/helpers.ts:80:18
+     78| }
+     79| export function must(ok: boolean, message: string): asserts ok {
+     80|   if (!ok) throw Error(message);
+       |                  ^
+     81| }
+     82|
+ ❯ deliveredInsideCap tests/acceptance/1296/resume.test.ts:92:3
+ ❯ tests/acceptance/1296/resume.test.ts:114:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  tests/acceptance/1296/resume.test.ts > AC4 #1296.edc2bba0 a planted resume block of 14,000 characters is delivered with every requirement ID and every rule you typed inside the cap, the rest by handle, and the record says which went where > AC4 #1296.edc2bba0 (wrong program) a hub that sends the block whole (sends-block-whole) lets it be cut to a preview and fails, naming the first missing ID
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=sends-block-whole did not start: file://<repo>/packages/hub/dist/plant.js:97
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=sends-block-whole names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:97:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1557:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:316:30
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/340/flow/helpers.ts:287:45
+    285|     sleep(120_000).then(() => undefined),
+    286|   ]);
+    287|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    288|   return { pid: Number(ready.pid ?? child.pid), socket: String(ready.s…
+    289| }
+ ❯ resumed tests/acceptance/1296/resume.test.ts:46:15
+ ❯ tests/acceptance/1296/resume.test.ts:118:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  tests/acceptance/1296/windows.test.ts > AC2 #1296.51fd7de6 a session in the shadowed repo shows its five-hour window as unknown, naming the file; 0% or another repo's reading fails, naming the session; the repo's settings file is untouched > AC2 #1296.51fd7de6 the shadowed repo's session: five-hour window unknown, no percentage, the file named; the other repo's reading shown on its own row; the file byte-identical
+AssertionError: AC2 session dfe39038-6bd9-4954-a504-b77a7c1ab102 in /tmp/dh19d-<id>/w must show its five-hour window: ["  dfe39038  working    claude-code  last seen 15s ago"]
+ ❯ judge tests/acceptance/1296/windows.test.ts:85:28
+     83|   if (!block.length) expect.fail(`${who} must have a row in deep statu…
+     84|   const five = block.filter((l) => FIVE_HOUR.test(l));
+     85|   if (!five.length) expect.fail(`${who} must show its five-hour window…
+       |                            ^
+     86|   const numbered = five.filter((l) => PERCENT.test(l));
+     87|   if (numbered.length) expect.fail(`${who} has no rate_limits, yet its…
+ ❯ tests/acceptance/1296/windows.test.ts:97:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  tests/acceptance/1296/windows.test.ts > AC2 #1296.51fd7de6 a session in the shadowed repo shows its five-hour window as unknown, naming the file; 0% or another repo's reading fails, naming the session; the repo's settings file is untouched > AC2 #1296.51fd7de6 (wrong program) a hub that shows the unknown window as 0% (window-unknown-as-zero) fails, naming the session
+Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=window-unknown-as-zero: file://<repo>/packages/hub/dist/plant.js:97
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=window-unknown-as-zero names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:97:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1557:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:316:30
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/19/doctor/helpers.ts:348:21
+    346|   });
+    347|   const plant = childEnv(h, env).DEEP_HUB_PLANT;
+    348|   if (!ready) throw Error(`BLOCKED: the hub didn't start${plant ? ` wi…
+       |                     ^
+    349|   return { pid: child.pid!, socket: join(rootOf(h.home), 'hub.sock'), …
+    350| }
+ ❯ world tests/acceptance/19/doctor/helpers.ts:557:17
+ ❯ scene tests/acceptance/1296/windows.test.ts:41:13
+ ❯ tests/acceptance/1296/windows.test.ts:101:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  tests/acceptance/1296/windows.test.ts > AC2 #1296.51fd7de6 a session in the shadowed repo shows its five-hour window as unknown, naming the file; 0% or another repo's reading fails, naming the session; the repo's settings file is untouched > AC2 #1296.51fd7de6 (wrong program) a hub that carries over another repo's last reading (window-carried-from-other-repo) fails, naming the session
+Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=window-carried-from-other-repo: file://<repo>/packages/hub/dist/plant.js:97
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=window-carried-from-other-repo names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:97:15)
+    at runHub (file://<repo>/packages/hub/dist/server.js:1557:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:31:28)
+    at file://<repo>/packages/cli/dist/main.js:316:30
+
+Node.js v24.22.0
+
+ ❯ startHub tests/acceptance/19/doctor/helpers.ts:348:21
+    346|   });
+    347|   const plant = childEnv(h, env).DEEP_HUB_PLANT;
+    348|   if (!ready) throw Error(`BLOCKED: the hub didn't start${plant ? ` wi…
+       |                     ^
+    349|   return { pid: child.pid!, socket: join(rootOf(h.home), 'hub.sock'), …
+    350| }
+ ❯ world tests/acceptance/19/doctor/helpers.ts:557:17
+ ❯ scene tests/acceptance/1296/windows.test.ts:41:13
+ ❯ tests/acceptance/1296/windows.test.ts:106:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  11 failed | 2 passed (13)
+   Start at  22:38:43
+   Duration  55.99s (tests 99%)
+
+exit 1
