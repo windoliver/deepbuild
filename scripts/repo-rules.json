@@ -1588,6 +1588,10 @@
           "spec": "* path=../deep-canvas",
           "why": "Issue #380: the registry the effects module registers its passes and fixture through, and the core's ops for its constants."
         },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #486: scene3d's entries of gpu.output@1 and gpu.function@1 (the lobe outputs, occlusion, normal, core.bump@1) and which lobe each output needs, which the operator check types, inlines and refuses by; effects already depends on scene3d as a canvas module."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #380: GPU operators are JSON documents (gpu.step@1); the check reads them and the shipped library writes them."
