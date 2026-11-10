@@ -233,6 +233,8 @@ timed.push('tests/acceptance/1436/ac9-budgets.live.test.ts');
 byHand.push('tests/acceptance/33/next-pr.live.test.ts', 'tests/acceptance/33/spine.live.test.ts');
 timed.push('tests/acceptance/33/budget.test.ts');
 
+// #1515's files each start a hub on a 500-session record, and its budgets must run with nothing beside them.
+alone.push('tests/acceptance/1515/');
 // #1546's files build deep-drive and start replicas; its live file opens the real window on a real hub, by hand.
 alone.push('tests/acceptance/1546/');
 byHand.push('tests/acceptance/1546/ac4-needs-you.live.test.ts');
