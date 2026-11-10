@@ -6,7 +6,9 @@
 //! runs with, over that home's own record, and writes `menu-bar.txt` too (#1002). `--bound` draws the runs' bound values
 //! on the session's return card and in a panel, and writes `bound.json`, each with its bounds (#629). `--window <w>x<h>`
 //! opens that size in points in place of the reference window, as `960x640` for the app's opening size (#1454).
-//! `--panel-kit <dir>` runs `panel@1` on one panel and prints its verdict, for `deep install`.
+//! `--panel-kit <dir>` runs `panel@1` on one panel and prints its verdict, for `deep install`; `--view-kit needs-you@1
+//! <dir>` (or `session.row@1`) runs the kit of the view a package replaces, and `--journey-lint <file>` reads a stored journey's locators for
+//! a word a person reads, each printing its verdict the same way (#1459).
 //! A launch is timed from this process's spawn to the first-frame line it prints. `terminal-colors` draws the look's 16
 //! terminal colors as the app's cell grid does, in the center beside the sidebar; the row flags open the sidebar with
 //! those rows selected and focused (#1003). `--first-screen --click <button>` clicks it and writes `frames.jsonl`, the
@@ -76,6 +78,40 @@ mod replica {
             let verdict = deep_replica::kit::panel(std::path::Path::new(&dir));
             println!("{}", verdict.to_json());
             return i32::from(!verdict.pass);
+        }
+        // Issue #1459: `--view-kit needs-you@1 <dir>`, the kit of the view a package replaces, for `deep install`, and
+        // `--journey-lint <file>`, a stored journey's locators read for a word a person reads. One JSON line each.
+        let mut given = std::env::args().skip(1);
+        match given.next().as_deref() {
+            Some("--view-kit") => {
+                let (Some(kit), Some(dir)) = (given.next(), given.next()) else {
+                    eprintln!("usage: deep-replica --view-kit needs-you@1|session.row@1 <dir>");
+                    return 2;
+                };
+                let dir = std::path::Path::new(&dir);
+                let verdict = match kit.as_str() {
+                    "needs-you@1" => deep_replica::kit::needs_you_view(dir),
+                    "session.row@1" => deep_replica::kit::session_row_view(dir),
+                    _ => {
+                        eprintln!(
+                            "deep-replica: --view-kit runs needs-you@1 or session.row@1, not {kit}"
+                        );
+                        return 2;
+                    }
+                };
+                println!("{}", verdict.to_json());
+                return i32::from(!verdict.pass);
+            }
+            Some("--journey-lint") => {
+                let Some(file) = given.next() else {
+                    eprintln!("usage: deep-replica --journey-lint <file>");
+                    return 2;
+                };
+                let verdict = deep_replica::kit::journey_lint(std::path::Path::new(&file));
+                println!("{}", verdict.to_json());
+                return i32::from(!verdict.pass);
+            }
+            _ => {}
         }
         let (view, out, dark, bound, click, size) =
             match deep_replica::view_args("deep-replica", "dir", true) {

@@ -1,8 +1,8 @@
 //! `deep-live --view <id> --out <file>`: the live capture. Opens the real app window at the
 //! reference window on this Mac, over the same fixture record the replica draws, activates
 //! accessibility the way an assistive client does, and writes the window's accessibility tree
-//! in the snapshot's shape: roles, names and values from GPUI's own AccessKit tree, bounds from
-//! the frames AppKit reports for each node, in whole device pixels.
+//! in the snapshot's shape: roles, names and values from GPUI's own AccessKit tree, and the
+//! identifier and bounds AppKit reports for each node, its bounds in whole device pixels.
 //!
 //! Issue #1546: `deep-live --view <id> --out <file> --watch` shows the real app window on your hub's record instead,
 //! read through the app's one record reader on its tick, sends it no input and forces no frame, and writes one JSON
@@ -292,12 +292,13 @@ mod live {
     }
 
     /// What AppKit reports for one accessibility element: its frame in device pixels inside the
-    /// content view, and the role, title and value an assistive client would read.
+    /// content view, and the role, title, value and identifier an assistive client would read.
     struct Frame {
         bounds: [i64; 4],
         role: String,
         title: Option<String>,
         value: Option<String>,
+        identifier: Option<String>,
         children: Vec<Frame>,
     }
 
@@ -319,6 +320,8 @@ mod live {
         let role: Option<Retained<NSString>> = unsafe { msg_send![node, accessibilityRole] };
         let title: Option<Retained<NSString>> = unsafe { msg_send![node, accessibilityTitle] };
         let value: Option<Retained<AnyObject>> = unsafe { msg_send![node, accessibilityValue] };
+        let identifier: Option<Retained<NSString>> =
+            unsafe { msg_send![node, accessibilityIdentifier] };
         let in_window = window.convertRectFromScreen(screen);
         let local = view.convertRect_fromView(in_window, None);
         let top = if flipped {
@@ -339,6 +342,10 @@ mod live {
             role: role.map(|role| role.to_string()).unwrap_or_default(),
             title: title.map(|title| title.to_string()),
             value: string_of(value),
+            // AppKit gives an element with no author ID an empty identifier.
+            identifier: identifier
+                .map(|identifier| identifier.to_string())
+                .filter(|identifier| !identifier.is_empty()),
             children: children
                 .map(|children| {
                     (0..children.count())
@@ -388,6 +395,8 @@ mod live {
             "window" => "AXGroup",
             "label" => "AXStaticText",
             "button" => "AXButton",
+            // The session chart's line (#1455), as vendor/accesskit_macos/src/node.rs maps Role::Image.
+            "image" => "AXImage",
             other => {
                 return Err(format!(
                     "GPUI role {other} has no AppKit role in the live oracle; add it before trusting a tree with one"
@@ -440,6 +449,8 @@ mod live {
             ));
         }
         node.bounds = frame.bounds;
+        // The identifier is what an assistive client reads, so it is the live tree's `id` (#1459).
+        node.id = frame.identifier.clone();
         for (child, child_frame) in node.children.iter_mut().zip(&frame.children) {
             pair(child, child_frame, at)?;
         }
@@ -462,6 +473,7 @@ mod live {
                 role: snake_case(aria["role"].as_str().ok_or("a node without a role")?),
                 name: aria["label"].as_str().map(str::to_owned),
                 value: aria.get("value").filter(|value| !value.is_null()).cloned(),
+                id: None,
                 bounds: [0; 4],
                 children: node["children"]
                     .as_array()
@@ -475,6 +487,18 @@ mod live {
             })
         }
         Ok((build(root, &value["nodes"])?, value["frame"].clone()))
+    }
+
+    /// The identifier of the element AppKit reports as focused, as an assistive client reads it: none when it has
+    /// none (#1459).
+    fn focused_identifier(view: &NSView) -> Option<String> {
+        let focused: Option<Retained<AnyObject>> =
+            unsafe { msg_send![view, accessibilityFocusedUIElement] };
+        let identifier: Option<Retained<NSString>> =
+            unsafe { msg_send![&*focused?, accessibilityIdentifier] };
+        identifier
+            .map(|identifier| identifier.to_string())
+            .filter(|identifier| !identifier.is_empty())
     }
 
     fn capture(window: &Window) -> Result<Snapshot, String> {
@@ -521,6 +545,7 @@ mod live {
                 role: "AXGroup".into(),
                 title: None,
                 value: None,
+                identifier: None,
                 children: std::mem::take(&mut roots),
             }
         } else if roots.len() == 1 && listed == nodes {
@@ -545,6 +570,9 @@ mod live {
             scale: scale.round() as u32,
             tree,
             items: deep_app::canvas::items(),
+            // deep-live opens no status item, so the title is the line the app sets on its own.
+            menu_bar: deep_app::menu_bar_line(),
+            focus: focused_identifier(&view),
         };
         let mut paired = 0;
         pair(&mut snapshot.tree, &root, &mut paired)?;
@@ -567,6 +595,7 @@ mod live {
                 role: role.into(),
                 name: name.map(str::to_owned),
                 value,
+                id: None,
                 bounds: [0; 4],
                 children,
             }
@@ -584,6 +613,7 @@ mod live {
                 role: role.into(),
                 title: title.map(str::to_owned),
                 value: value.map(str::to_owned),
+                identifier: None,
                 children,
             }
         }
@@ -620,6 +650,15 @@ mod live {
             pair(&mut tree, &root, &mut at).unwrap();
             assert_eq!(at, 3);
             assert_eq!(tree.children[1].bounds, [2, 2, 10, 10]);
+            assert_eq!(tree.children[1].id, None);
+            let (mut tree, mut root) = agreeing();
+            root.children[1].identifier = Some("ask:01A".into());
+            pair(&mut tree, &root, &mut 0).unwrap();
+            assert_eq!(
+                tree.children[1].id.as_deref(),
+                Some("ask:01A"),
+                "AppKit's identifier is the node's id"
+            );
         }
 
         /// Each disagreement AppKit can show, planted alone, is refused at the node it is on.
