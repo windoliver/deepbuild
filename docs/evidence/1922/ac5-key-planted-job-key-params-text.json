@@ -1,0 +1,230 @@
+{
+  "failures": [
+    "reordering the params' keys: must hit the cache and start no process, as the key holds only the params, canonical (keys sorted); it read cache \"miss\", key \"ab276e0cf0b888d496bee1498ac776f28a2ce4d28f610339c9c9a7a40c226b2b\" (the base's \"f3c35649d6cf0775e982d55d85d63ed2bcd5fabeeb0cd12fa306498642659fed\"), 1 processes started",
+    "omitting trim: must hit the cache and start no process, as the key holds only the params, canonical (every default written out); it read cache \"miss\", key \"acf6f6c5d823fc3f7bfde47c9bd7bc18a8d71b13ba1fdce4380f9075d684418f\" (the base's \"f3c35649d6cf0775e982d55d85d63ed2bcd5fabeeb0cd12fa306498642659fed\"), 1 processes started"
+  ],
+  "runs": [
+    {
+      "case": "base",
+      "started": 1,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.0",
+          "key": "f3c35649d6cf0775e982d55d85d63ed2bcd5fabeeb0cd12fa306498642659fed",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "miss",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      }
+    },
+    {
+      "case": "reordering the params' keys",
+      "tool": "upper-b@1.0.0",
+      "params": "{\"trim\":false,\"case\":\"upper\"}",
+      "file": "/private/tmp/dh1922-3I1DvW/proj/in.txt",
+      "started": 1,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.0",
+          "key": "ab276e0cf0b888d496bee1498ac776f28a2ce4d28f610339c9c9a7a40c226b2b",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "miss",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      }
+    },
+    {
+      "case": "omitting trim",
+      "tool": "upper-b@1.0.0",
+      "params": "{\"case\":\"upper\"}",
+      "file": "/private/tmp/dh1922-3I1DvW/proj/in.txt",
+      "started": 1,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.0",
+          "key": "acf6f6c5d823fc3f7bfde47c9bd7bc18a8d71b13ba1fdce4380f9075d684418f",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "miss",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      }
+    },
+    {
+      "case": "re-saving the input with a new modified time",
+      "tool": "upper-b@1.0.0",
+      "params": "{\"case\":\"upper\",\"trim\":false}",
+      "file": "/private/tmp/dh1922-3I1DvW/proj/in.txt",
+      "started": 0,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.0",
+          "key": "f3c35649d6cf0775e982d55d85d63ed2bcd5fabeeb0cd12fa306498642659fed",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "hit",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      }
+    },
+    {
+      "case": "renaming the input file",
+      "tool": "upper-b@1.0.0",
+      "params": "{\"case\":\"upper\",\"trim\":false}",
+      "file": "/private/tmp/dh1922-3I1DvW/proj/renamed.txt",
+      "started": 0,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.0",
+          "key": "f3c35649d6cf0775e982d55d85d63ed2bcd5fabeeb0cd12fa306498642659fed",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "hit",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      }
+    },
+    {
+      "case": "moving the project folder",
+      "tool": "upper-b@1.0.0",
+      "params": "{\"case\":\"upper\",\"trim\":false}",
+      "file": "/private/tmp/dh1922-3I1DvW/proj-moved/renamed.txt",
+      "started": 0,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.0",
+          "key": "f3c35649d6cf0775e982d55d85d63ed2bcd5fabeeb0cd12fa306498642659fed",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "hit",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      }
+    },
+    {
+      "case": "a changed input byte",
+      "tool": "upper-b@1.0.0",
+      "params": "{\"case\":\"upper\",\"trim\":false}",
+      "file": "/private/tmp/dh1922-3I1DvW/proj-moved/renamed.txt",
+      "started": 1,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "69f0fb8cb1d2195340160eb0e4fcf019b4500be11e00fc55f5d3d108b4914d44"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.0",
+          "key": "d46c7d45a64388009b1d76518f37c466a08fa8be2a7f86399a69ab1e1b6fa325",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "miss",
+          "inputs": {
+            "text": "a52d159f262b2c6ddb724a61840befc36eb30c88877a4030b65cbe86298449c9"
+          }
+        }
+      }
+    },
+    {
+      "case": "trim: true",
+      "tool": "upper-b@1.0.0",
+      "params": "{\"case\":\"upper\",\"trim\":true}",
+      "file": "/private/tmp/dh1922-3I1DvW/proj-moved/renamed.txt",
+      "started": 1,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.0",
+          "key": "18bbfa31e8ea1f8a6a082d1bba26558511a0cbfd41586f8e3f4e1e4e84fbfcbe",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "miss",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      }
+    },
+    {
+      "case": "a bump of the tool's version",
+      "tool": "upper-b@1.0.1",
+      "params": "{\"case\":\"upper\",\"trim\":false}",
+      "file": "/private/tmp/dh1922-3I1DvW/proj-moved/renamed.txt",
+      "started": 1,
+      "reply": {
+        "status": "done",
+        "outputs": {
+          "text": {
+            "sha256": "b5d4045c3f466fa91fe2cc6abe79232a1a57cdf104f7a26e716e0a1e2789df78"
+          }
+        },
+        "receipt": {
+          "kind": "test.upper",
+          "tool": "upper-b@1.0.1",
+          "key": "ab718bb196dfc1537e16db59dc2857cd489e886919b8d99ee63b46a68d2e04e9",
+          "build": "d1:0823158f6022952500538308f179f4db9126ea76986a1f000402731c49442876",
+          "cache": "miss",
+          "inputs": {
+            "text": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          }
+        }
+      }
+    }
+  ]
+}
