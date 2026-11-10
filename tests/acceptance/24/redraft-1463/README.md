@@ -1,13 +1,15 @@
-# Blind redraft of #24.bbe12971's listing part: `deep inbox` lists each open ask once, with its kind, session and age
+# Blind redraft of #24.bbe12971's listing and timing: `deep inbox` lists each open ask once, with its kind, session and age, and 30 days of asks in under 300 ms
 
 Written blind at base `32628dba` from issue #24, the design and the base, before and apart from any implementation. The
 implementing agent does not edit these files (AGENTS.md, Proof); a dispute goes to another blind redraft (design: Dogfooding).
 
 The criterion, `#24.bbe12971` (its ID checked: SHA-256 of the trimmed, whitespace-collapsed text starts `bbe12971`): "Budgets, on
 the reference Mac in the local preflight, compared with the merge base: `deep inbox` lists 30 days of asks in under 300 ms". This
-redraft covers only what the suite holds as "deep inbox lists each open ask once, with its kind, session and age, and no closed ask"
-(the caller placed that test in `../answer.test.ts`; at this base it is the first test of `../budgets.test.ts`). The perf-lane task
-and the 300 ms timing stay in `../budgets.test.ts`, as they are.
+redraft covers two of the suite's tests of it: "deep inbox lists each open ask once, with its kind, session and age, and no closed
+ask" (the caller placed that test in `../answer.test.ts`; at this base it is the first test of `../budgets.test.ts`), in
+`listing.test.ts`; and "deep inbox lists 30 days of asks in under 300 ms", the third test of `../budgets.test.ts`, in `timing.test.ts`,
+with each run's listing read in the design's layout as `listing.test.ts` reads it. The perf lane's task test stays in
+`../budgets.test.ts`, as it is.
 
 ## What was read
 
@@ -38,6 +40,10 @@ Node 24.22 or newer. No network, no git, no tmux. It makes its folders under `/t
 with `HOME` there, never touches the real `~/.deepbuild`, and stops only the processes it started, by PID. It was not run when written
 (the Mac is shared and this worktree had no `node_modules`), so neither its passing side nor its failure on the base is verified.
 
+`timing.test.ts` counts only on a reference Mac (Mac15,7 or Mac15,12, by `../helpers.ts`'s `environmentProblem`) on mains power, Low
+Power Mode off and no thermal warning; anywhere else it is skipped as INCONCLUSIVE with the reason, never passed. On a reference Mac its
+seeding of 3,000 asks takes most of its time (the suite's README puts it near 50 s).
+
 ## The surface
 
 `deep inbox`, run by you (a child of the test process, under no agent) against a real hub (`deep hub run`) whose record was seeded
@@ -55,6 +61,8 @@ No hub or CLI module is imported.
    word, in any case; the ask's session ID as a whole token; and its age, how long since the ask was raised, as a whole number of the
    largest of days, hours and minutes that is at least 1, written `2d`, `2 d` or `2 days` (`h`, `hr`, `hours`; `m`, `min`, `minutes`
    likewise), with anything after it, such as `ago`.
+4. With 30 days of asks in the record (the month below), `deep inbox` lists every open one as items 1 and 2 say, in under 300 ms from
+   spawning the command to its exit, on a reference Mac, five runs after a warm-up, by the design's rule for timing results.
 
 ## The fixture
 
@@ -71,20 +79,33 @@ The ages differ in unit, the kinds and sessions differ, so a listing that prints
 expected age is computed at both the spawn and the exit of `deep inbox`, and either is accepted, so a minute that turns while the hub
 starts can't fail it. No question holds a kind word, a session ID or a digit, so each is read only from the line's other fields.
 
+`timing.test.ts` seeds its own month, a copy of `../budgets.test.ts`'s `seedMonth` (a test file can't be imported without running its
+tests): 20 sessions a day for 30 days, `D<day>S<n>`, each raising one ask of each of five kinds (authority, taste, choice, definition,
+exception), the most a session holds before its asks fold, so 3,000 asks on a clock moving through the month. The first 29 days' asks
+take their defaults at their one-day deadlines; the last day's 100 stay open, with three-day deadlines. The copy also keeps each open
+ask's question, `Push D29S<n> authority to origin?` or `Which way for D29S<n> <kind>?`, so each run's listing can be read in the
+design's layout. A seeding that leaves other than 100 open asks throws `BLOCKED: …`.
+
 ## Criterion to tests
 
-| Criterion part | Test (`listing.test.ts`) | Wrong programs it fails on | On the base (predicted, not run) |
+| Criterion part | Test (`listing.test.ts`, `timing.test.ts`) | Wrong programs it fails on | On the base (predicted, not run) |
 |---|---|---|---|
 | each open ask once, no closed ask | `#24.bbe12971 deep inbox lists each open ask once, on one line, and no closed ask` | a listing that misses an open ask, prints one twice, or lists the ask answered on the card | PASS |
 | with its kind, session and age | `#24.bbe12971 each open ask's line shows its kind, its session and its age` | a line without the kind, the session or the age; an age as a clock time or a date, or in a smaller unit (`51h`); one ask's fields on another's line | PASS |
 | the design's layout | `#24.bbe12971 each open ask's line puts its question first and its handle last` | the base's layout, which leads with the handle; a line that leads with the kind or the session | FAIL: the base's line starts `ask:<ULID>  <kind>  <session>  <age>` |
+| 30 days of asks in under 300 ms | `timing.test.ts`: `#24.bbe12971 deep inbox lists 30 days of asks in under 300 ms` | a listing slower than 300 ms by more than the margin in all five runs (FAIL); one that misses an open ask of the month, or lists one off the design's layout, in any run | off a reference Mac: skipped INCONCLUSIVE; on one: FAIL, the base's layout (each line leads with the handle), whatever its time |
 
-A missing prerequisite (no built CLI, a hub that doesn't start, a handle not `ask:<…>`) throws `BLOCKED: …` in `beforeAll`, so every
-test fails, none passes.
+In `listing.test.ts` a missing prerequisite (no built CLI, a hub that doesn't start, a handle not `ask:<…>`) throws `BLOCKED: …` in
+`beforeAll`, so every test fails, none passes. `timing.test.ts` throws `BLOCKED: …` for no built CLI, a hub that doesn't start, or a
+month that leaves other than 100 asks open. Its timing is judged by `../helpers.ts`'s `judge`, imported as it is: PASS only when all five
+runs are within 300 ms, FAIL when all five are over it by more than the margin (the larger of 5% and the runs' spread), INCONCLUSIVE
+(skipped) otherwise.
 
 ## Scope not covered
 
-- The perf lane's task `deep-inbox-30d` and the 300 ms timing: `../budgets.test.ts`, unchanged.
+- The perf lane's task `deep-inbox-30d` ("compared with the merge base"): `../budgets.test.ts`, unchanged.
+- In the month, that the 2,900 defaulted asks aren't listed: `listing.test.ts` holds that a closed ask isn't, and a defaulted ask may
+  show for its undo (`deep inbox undo`), so the timing test doesn't judge it.
 - `deep inbox --json` and the row shape (`id`, `address`, `title`, `entry`, `word`, `why`, `waits_on`, `since`, `actions`): the design names
   them, but this criterion's part is the listing a person reads, and the row shape names no kind or session field to hold them to.
 - The `deepbuild://ask/<id>` link beside each item: allowed after the handle, not required.
@@ -105,3 +126,5 @@ test fails, none passes.
    the spellings above allowed.
 6. **Every open ask is listed**, whether or not its batch has been shown in the app: the design's queued and shown are views of an open
    ask, and the issue says `deep inbox` lists open asks.
+7. **The month is the suite's.** The design states no number of asks a day; `timing.test.ts` keeps `../budgets.test.ts`'s 3,000 asks
+   with the last day's 100 open, so the redraft changes how the listing is read, not the load it is timed on.
