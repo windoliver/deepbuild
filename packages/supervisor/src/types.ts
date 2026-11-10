@@ -65,12 +65,20 @@ export interface StartSpec {
   own_sandbox?: boolean;
   /** Where the caller takes the run's output as it comes, beside the digests in its exit. */
   output?: { stdout(chunk: Buffer): void; stderr(chunk: Buffer): void };
+  /**
+   * What the run may take once started (#1409), each in MiB: `memory_mb` over its whole process tree, read on the
+   * supervisor's scan; `file_mb` for any one file it writes, the kernel's RLIMIT_FSIZE on each of its processes. Past
+   * one, the run is stopped and its exit names the limit.
+   */
+  limits?: { memory_mb: number; file_mb: number };
 }
+/** A run stopped at one of its limits: which, its value (`max`) and, for memory, the reading that passed it, all in MiB. */
+export interface LimitStop { limit: 'memory_mb' | 'file_mb'; max: number; reading?: number }
 export type Started =
   | { run: string; status: 'started'; pid: number; pgid: number; start: string; leases: { kind: string; key: string }[] }
   | { run: string; status: 'BLOCKED'; cause: 'resource'; kind: string };
-/** evidence: SHA-256 (hex) of the bytes the parent read from the process's stdout and stderr. */
-export interface Exit { run: string; code: number | null; signal: NodeJS.Signals | null; evidence: { stdout: string; stderr: string } }
+/** evidence: SHA-256 (hex) of the bytes the parent read from the process's stdout and stderr; `limit`: the run was stopped at one (#1409). */
+export interface Exit { run: string; code: number | null; signal: NodeJS.Signals | null; evidence: { stdout: string; stderr: string }; limit?: LimitStop }
 export interface HostFacts { host: string; platform: NodeJS.Platform; arch: string; cores: number; memory: number }
 export interface Host {
   readonly name: string;
