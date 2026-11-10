@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { fail, Finding } from '@deepbuild/conformance/slot-types';
+import { fail, Finding } from '@deepbuild/conformance/findings';
 import type { CheckContext, CheckResult, Fixture, PlantedFill, Random, RunOutcome, SlotCase, SlotKitImpl, SlotRule } from '@deepbuild/conformance';
 import type { AddedTerm, NumbersFill, NumbersSpec, StatedNumber } from './types.js';
 

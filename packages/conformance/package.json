@@ -11,15 +11,10 @@
       "development": "./src/index.ts",
       "default": "./dist/index.js"
     },
-    "./probe": {
-      "types": "./src/probe.ts",
-      "development": "./src/probe.ts",
-      "default": "./dist/probe.js"
-    },
-    "./slot-types": {
-      "types": "./src/slot-types.ts",
-      "development": "./src/slot-types.ts",
-      "default": "./dist/slot-types.js"
+    "./findings": {
+      "types": "./src/findings.ts",
+      "development": "./src/findings.ts",
+      "default": "./dist/findings.js"
     }
   },
   "bin": { "deep-conformance": "./dist/bin.js" },

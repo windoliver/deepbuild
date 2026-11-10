@@ -1,7 +1,7 @@
 // One run of a numbers check (#87): its queries in the probe's process group, ended at the deadline (runProbe).
 import { fileURLToPath } from 'node:url';
 import type { CheckContext, CheckResult } from '@deepbuild/conformance';
-import { runProbe } from '@deepbuild/conformance/probe';
+import { runProbe } from '@deepbuild/conformance/findings';
 import type { NumbersSpec } from './types.js';
 
 const PROBE = fileURLToPath(new URL('../runtime/probe.mjs', import.meta.url));

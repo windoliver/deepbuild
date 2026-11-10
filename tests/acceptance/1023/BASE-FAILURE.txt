@@ -1,0 +1,152 @@
+Base-commit failure output for tests/acceptance/1023 (issue #1023: a Codex CLI session ended with Ctrl-C records no
+SessionEnd in two runs of three)
+
+Base: f1e8736e (main, "Merge pull request #1742"), worktree clean but for this folder.
+Machine: macOS (arm64), Node v24.22.2, 2026-11-08.
+Built: npm ci && npm run build --workspaces; cargo build --locked -p deep-hook (Rust 1.99.1).
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/1023/tsconfig.json -> exit 0.
+
+Run:   npx vitest run --root tests/acceptance/1023 --no-file-parallelism
+
+Result: 4 failed, 1 skipped (the live file, skipped as BLOCKED unless DEEP_LIVE_1023=1). Every failure is at its
+assertion and for the reason the criterion names, test by test:
+
+ac1-three-ends.test.ts (AC1, 1 failed)
+  - Runs 1 and 3, which fire no SessionEnd, never get a session.end: the base hub records only session.gone when their
+    process exits, and no reading saying Codex fired no SessionEnd. Run 2 passes its part (one session.end, reason
+    "other" from its payload, no second end after its process exits), and no session ended while its own process ran.
+ac2-hub-status.test.ts (AC2, 1 failed)
+  - deep hub status prints hub.health, which has no `sessions` field, so the session never shows closed within 60 s
+    of its process ending ("it shows null"). Before the exit it didn't show closed either, which is the expected half.
+ac2-answer-by-task.test.ts (AC2, 1 failed)
+  - The answer given while the session sat idle after its stop has no delivery outcome at all after the process ended:
+    the base routes an ended Codex session's answer to its task (via on_task, waiting) only when a hook's session.end
+    is on record when the answer comes, and this session has only session.gone. (The test stops at the first answer's
+    assertion; the second answer, given after the 60 s, takes the same route at the base.)
+ac3-planted.test.ts (AC3, 1 failed)
+  - The judge fails the shipped hub on run 1 (no session.end, no reading, not closed in deep hub status), so the planted
+    run never starts. Had it run, the base hub would have refused to start: DEEP_HUB_PLANT=leaves-codex-session-open
+    names no planted program (plant.ts, plantOf).
+
+The run, as vitest printed it (the repo path shown as <repo>; deep hub status's long JSON line cut by the suite):
+
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/1023 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1023
+
+ ❯ ac2-answer-by-task.test.ts (1 test | 1 failed) 84132ms
+   ❯ AC2 #1023.6b9c173d (1)
+     × AC2 #1023.6b9c173d: run 3 with two asks open: the one answered while it sat idle and the one answered after Ctrl-C ended its process both go by its task, neither by a resume 84131ms
+ ❯ ac1-three-ends.test.ts (1 test | 1 failed) 134275ms
+   ❯ AC1 #1023.f4fb4c83 (1)
+     × AC1 #1023.f4fb4c83: three Ctrl-C ends replayed: one session.end each; run 2's reason "other" from its payload; runs 1 and 3 closed by the hub from their process's exit, with a reading saying Codex fired no SessionEnd 134272ms
+ ❯ ac3-planted.test.ts (1 test | 1 failed) 67250ms
+   ❯ AC3 #1023.88d3d827 (1)
+     × AC3 #1023.88d3d827: the judge passes the shipped hub on a Ctrl-C end with no SessionEnd, and fails the planted leaves-codex-session-open, naming the session 67249ms
+ ❯ ac2-hub-status.test.ts (1 test | 1 failed) 75765ms
+   ❯ AC2 #1023.6b9c173d (1)
+     × AC2 #1023.6b9c173d: run 1 replayed: deep hub status doesn't show the session closed while its process runs, and shows it closed within 60 s of Ctrl-C ending it 75763ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-three-ends.test.ts > AC1 #1023.f4fb4c83 > AC1 #1023.f4fb4c83: three Ctrl-C ends replayed: one session.end each; run 2's reason "other" from its payload; runs 1 and 3 closed by the hub from their process's exit, with a reading saying Codex fired no SessionEnd
+AssertionError: AC1 #1023.f4fb4c83: each Ctrl-C end must be read as the session's end, once:
+run 1, session 644a057e-7fe8-4926-9edc-9a7ef5e246b7: 0 session.end on record, not one; its events: task.created, user.ask, tool.before, tool.after, session.state, agent.stop, session.state, claim.made, session.attention, session.gone
+run 1, session 644a057e-7fe8-4926-9edc-9a7ef5e246b7: no reading after its process ended says Codex fired no SessionEnd and the hub closed it from its process's exit; its readings: []
+run 3, session 25b6b55c-fe18-40ea-a99a-f06870184287: 0 session.end on record, not one; its events: task.created, user.ask, tool.before, tool.after, agent.stop, claim.made, session.attention, session.state, session.gone
+run 3, session 25b6b55c-fe18-40ea-a99a-f06870184287: no reading after its process ended says Codex fired no SessionEnd and the hub closed it from its process's exit; its readings: []: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "run 1, session 644a057e-7fe8-4926-9edc-9a7ef5e246b7: 0 session.end on record, not one; its events: task.created, user.ask, tool.before, tool.after, session.state, agent.stop, session.state, claim.made, session.attention, session.gone",
++   "run 1, session 644a057e-7fe8-4926-9edc-9a7ef5e246b7: no reading after its process ended says Codex fired no SessionEnd and the hub closed it from its process's exit; its readings: []",
++   "run 3, session 25b6b55c-fe18-40ea-a99a-f06870184287: 0 session.end on record, not one; its events: task.created, user.ask, tool.before, tool.after, agent.stop, claim.made, session.attention, session.state, session.gone",
++   "run 3, session 25b6b55c-fe18-40ea-a99a-f06870184287: no reading after its process ended says Codex fired no SessionEnd and the hub closed it from its process's exit; its readings: []",
++ ]
+
+ ❯ ac1-three-ends.test.ts:36:114
+     34|       if (ends.length > 1) problems.push(`run ${rp.run}, session ${rp.…
+     35|     }
+     36|     expect(problems, `${AC1}: each Ctrl-C end must be read as the sess…
+       |                                                                                                                  ^
+     37|   }, 300_000);
+     38| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  ac2-answer-by-task.test.ts > AC2 #1023.6b9c173d > AC2 #1023.6b9c173d: run 3 with two asks open: the one answered while it sat idle and the one answered after Ctrl-C ended its process both go by its task, neither by a resume
+AssertionError: AC2 #1023.6b9c173d: session 9d624e3d-f52d-4961-b9f0-7a9913de38a2, ended by Ctrl-C with no SessionEnd: the answer to ask:01M6ZBMG2GBP5R595RGA8QGQ4Z, given while it sat idle after its stop, has delivery outcomes []; it must wait on its task (via on_task, waiting), not on a resume: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ac2-answer-by-task.test.ts:39:114
+     37|       const outcomes = outcomesOf(events, ask.id);
+     38|       const what = `${AC2}: session ${id}, ended by Ctrl-C with no Ses…
+     39|       expect(outcomes.some(onTask), `${what}; it must wait on its task…
+       |                                                                                                                  ^
+     40|       expect(outcomes.filter((o) => o.outcome === 'delivered'), `${wha…
+     41|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  ac2-hub-status.test.ts > AC2 #1023.6b9c173d > AC2 #1023.6b9c173d: run 1 replayed: deep hub status doesn't show the session closed while its process runs, and shows it closed within 60 s of Ctrl-C ending it
+AssertionError: AC2 #1023.6b9c173d: session 28fbfa1a-0333-446a-a4c5-79f375b0d0b9, ended by Ctrl-C with no SessionEnd:
+session 28fbfa1a-0333-446a-a4c5-79f375b0d0b9 doesn't show closed in deep hub status within 60 s of its process ending; it shows null; deep hub status: exit 0, stdout "rough held stops in one Claude Code turn with no tool call between, its cap of 8 consecutive stop-hook continuations; another waits for the next prompt\"},{\"name\":\"asks and batches\",\"holds\":true,\"reading\":\"asks and batches hold: asks show in batches every 8h, and one whose deadline (the longest is 3 days) comes before its next batch shows at once, so none reaches its deadline unseen\"}],\"readings\":[]},\"codex\":{\"relations\":[{\"name\":\"slow lane\",\"holds\":true,\"reading\":\"slow lane holds: its expected 20 minutes ends at least 5 s before Codex's Stop hook timeout, 45 minutes\"},{\"name\":\"deep_ask\",\"holds\":true,\"reading\":\"deep_ask holds: it says still waiting at 55 s, 5 s before the tool_timeout_sec Codex gives DeepBuild's MCP server, 60 s\"}],\"readings\":[],\"trust\":null},\"jobs\":{\"hook-programs\":{\"failing\":null},\"spool\":{\"failing\":null},\"asks\":{\"failing\":null},\"leases\":{\"failing\":null},\"heavy\":{\"failing\":null},\"gone\":{\"failing\":null},\"states\":{\"failing\":null},\"background\":{\"failing\":null},\"supervisor\":{\"failing\":null},\"rules\":{\"failing\":null},\"retention\":{\"failing\":null},\"staging\":{\"failing\":null},\"archived-threads\":{\"failing\":null}},\"process\":{\"openFiles\":32,\"rssBytes\":106034184,\"children\":1}}\n", stderr "": expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "session 28fbfa1a-0333-446a-a4c5-79f375b0d0b9 doesn't show closed in deep hub status within 60 s of its process ending; it shows null; deep hub status: exit 0, stdout \"rough held stops in one Claude Code turn with no tool call between, its cap of 8 consecutive stop-hook continuations; another waits for the next prompt\\\"},{\\\"name\\\":\\\"asks and batches\\\",\\\"holds\\\":true,\\\"reading\\\":\\\"asks and batches hold: asks show in batches every 8h, and one whose deadline (the longest is 3 days) comes before its next batch shows at once, so none reaches its deadline unseen\\\"}],\\\"readings\\\":[]},\\\"codex\\\":{\\\"relations\\\":[{\\\"name\\\":\\\"slow lane\\\",\\\"holds\\\":true,\\\"reading\\\":\\\"slow lane holds: its expected 20 minutes ends at least 5 s before Codex's Stop hook timeout, 45 minutes\\\"},{\\\"name\\\":\\\"deep_ask\\\",\\\"holds\\\":true,\\\"reading\\\":\\\"deep_ask holds: it says still waiting at 55 s, 5 s before the tool_timeout_sec Codex gives DeepBuild's MCP server, 60 s\\\"}],\\\"readings\\\":[],\\\"trust\\\":null},\\\"jobs\\\":{\\\"hook-programs\\\":{\\\"failing\\\":null},\\\"spool\\\":{\\\"failing\\\":null},\\\"asks\\\":{\\\"failing\\\":null},\\\"leases\\\":{\\\"failing\\\":null},\\\"heavy\\\":{\\\"failing\\\":null},\\\"gone\\\":{\\\"failing\\\":null},\\\"states\\\":{\\\"failing\\\":null},\\\"background\\\":{\\\"failing\\\":null},\\\"supervisor\\\":{\\\"failing\\\":null},\\\"rules\\\":{\\\"failing\\\":null},\\\"retention\\\":{\\\"failing\\\":null},\\\"staging\\\":{\\\"failing\\\":null},\\\"archived-threads\\\":{\\\"failing\\\":null}},\\\"process\\\":{\\\"openFiles\\\":32,\\\"rssBytes\\\":106034184,\\\"children\\\":1}}\\n\", stderr \"\"",
++ ]
+
+ ❯ ac2-hub-status.test.ts:20:106
+     18|     const judged = await judgeClosed(hub, id, at, { status: true });
+     19|     const closing = judged.problems.filter((p) => p.includes('deep hub…
+     20|     expect(closing, `${AC2}: session ${id}, ended by Ctrl-C with no Se…
+       |                                                                                                          ^
+     21|     expect(judged.closedMs, `${AC2}: session ${id} must show closed wi…
+     22|   }, 180_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  ac3-planted.test.ts > AC3 #1023.88d3d827 > AC3 #1023.88d3d827: the judge passes the shipped hub on a Ctrl-C end with no SessionEnd, and fails the planted leaves-codex-session-open, naming the session
+AssertionError: AC3 #1023.88d3d827: the shipped hub must close session 26bc8231-c0ac-4847-9eb7-268937cbf30d as AC1 and AC2 ask, or the planted run below proves nothing:
+session 26bc8231-c0ac-4847-9eb7-268937cbf30d: 0 session.end on record, not one; its events: task.created, user.ask, tool.before, tool.after, agent.stop, claim.made, session.attention, session.state, session.gone
+session 26bc8231-c0ac-4847-9eb7-268937cbf30d: no reading after its process ended says Codex fired no SessionEnd and the hub closed it from its process's exit; its readings: []
+session 26bc8231-c0ac-4847-9eb7-268937cbf30d doesn't show closed in deep hub status within 60 s of its process ending; it shows null; deep hub status: exit 0, stdout "rough held stops in one Claude Code turn with no tool call between, its cap of 8 consecutive stop-hook continuations; another waits for the next prompt\"},{\"name\":\"asks and batches\",\"holds\":true,\"reading\":\"asks and batches hold: asks show in batches every 8h, and one whose deadline (the longest is 3 days) comes before its next batch shows at once, so none reaches its deadline unseen\"}],\"readings\":[]},\"codex\":{\"relations\":[{\"name\":\"slow lane\",\"holds\":true,\"reading\":\"slow lane holds: its expected 20 minutes ends at least 5 s before Codex's Stop hook timeout, 45 minutes\"},{\"name\":\"deep_ask\",\"holds\":true,\"reading\":\"deep_ask holds: it says still waiting at 55 s, 5 s before the tool_timeout_sec Codex gives DeepBuild's MCP server, 60 s\"}],\"readings\":[],\"trust\":null},\"jobs\":{\"hook-programs\":{\"failing\":null},\"spool\":{\"failing\":null},\"asks\":{\"failing\":null},\"leases\":{\"failing\":null},\"heavy\":{\"failing\":null},\"gone\":{\"failing\":null},\"states\":{\"failing\":null},\"background\":{\"failing\":null},\"supervisor\":{\"failing\":null},\"rules\":{\"failing\":null},\"retention\":{\"failing\":null},\"staging\":{\"failing\":null},\"archived-threads\":{\"failing\":null}},\"process\":{\"openFiles\":32,\"rssBytes\":113834624,\"children\":1}}\n", stderr "": expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "session 26bc8231-c0ac-4847-9eb7-268937cbf30d: 0 session.end on record, not one; its events: task.created, user.ask, tool.before, tool.after, agent.stop, claim.made, session.attention, session.state, session.gone",
++   "session 26bc8231-c0ac-4847-9eb7-268937cbf30d: no reading after its process ended says Codex fired no SessionEnd and the hub closed it from its process's exit; its readings: []",
++   "session 26bc8231-c0ac-4847-9eb7-268937cbf30d doesn't show closed in deep hub status within 60 s of its process ending; it shows null; deep hub status: exit 0, stdout \"rough held stops in one Claude Code turn with no tool call between, its cap of 8 consecutive stop-hook continuations; another waits for the next prompt\\\"},{\\\"name\\\":\\\"asks and batches\\\",\\\"holds\\\":true,\\\"reading\\\":\\\"asks and batches hold: asks show in batches every 8h, and one whose deadline (the longest is 3 days) comes before its next batch shows at once, so none reaches its deadline unseen\\\"}],\\\"readings\\\":[]},\\\"codex\\\":{\\\"relations\\\":[{\\\"name\\\":\\\"slow lane\\\",\\\"holds\\\":true,\\\"reading\\\":\\\"slow lane holds: its expected 20 minutes ends at least 5 s before Codex's Stop hook timeout, 45 minutes\\\"},{\\\"name\\\":\\\"deep_ask\\\",\\\"holds\\\":true,\\\"reading\\\":\\\"deep_ask holds: it says still waiting at 55 s, 5 s before the tool_timeout_sec Codex gives DeepBuild's MCP server, 60 s\\\"}],\\\"readings\\\":[],\\\"trust\\\":null},\\\"jobs\\\":{\\\"hook-programs\\\":{\\\"failing\\\":null},\\\"spool\\\":{\\\"failing\\\":null},\\\"asks\\\":{\\\"failing\\\":null},\\\"leases\\\":{\\\"failing\\\":null},\\\"heavy\\\":{\\\"failing\\\":null},\\\"gone\\\":{\\\"failing\\\":null},\\\"states\\\":{\\\"failing\\\":null},\\\"background\\\":{\\\"failing\\\":null},\\\"supervisor\\\":{\\\"failing\\\":null},\\\"rules\\\":{\\\"failing\\\":null},\\\"retention\\\":{\\\"failing\\\":null},\\\"staging\\\":{\\\"failing\\\":null},\\\"archived-threads\\\":{\\\"failing\\\":null}},\\\"process\\\":{\\\"openFiles\\\":32,\\\"rssBytes\\\":113834624,\\\"children\\\":1}}\\n\", stderr \"\"",
++ ]
+
+ ❯ ac3-planted.test.ts:20:183
+     18|     const h = makeHome();
+     19|     const shipped = await judgedRun(h, await hubWithSetup(h));
+     20|     expect(shipped.problems, `${AC3}: the shipped hub must close sessi…
+       |                                                                                                                                                                                       ^
+     21|     await cleanup();
+     22|     const p = makeHome();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  4 failed | 1 skipped (5)
+   Start at  21:13:53
+   Duration  364.78s (tests 100%)
+

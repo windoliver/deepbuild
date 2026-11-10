@@ -1,7 +1,7 @@
 // One run of a work check (#68): the kind's work in the probe's process group, ended at the deadline (runProbe).
 import { fileURLToPath } from 'node:url';
 import type { CheckContext, CheckResult } from '@deepbuild/conformance';
-import { runProbe } from '@deepbuild/conformance/probe';
+import { runProbe } from '@deepbuild/conformance/findings';
 import type { WorkKind, WorkSpec } from './types.js';
 
 const PROBE = fileURLToPath(new URL('../runtime/probe.mjs', import.meta.url));

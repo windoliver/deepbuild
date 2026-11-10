@@ -1,5 +1,7 @@
-//! The text snapshot: a tree of accessibility roles, names, values and bounds in whole device
-//! pixels, plus the canvas items drawn. The replica builds it from the elements the views
+//! The text snapshot: a tree of accessibility roles, names, values, author IDs and bounds in whole
+//! device pixels, plus the canvas items drawn, the menu bar's title and the `id` of what holds the keyboard. It is the
+//! one snapshot shape: `deep_drive`'s `see`,
+//! the replica's `--view` and the live capture all write it (#1459). The replica builds it from the elements the views
 //! observe; the live capture builds the same shape from the real window's accessibility tree, so
 //! the two compare node for node.
 
@@ -13,6 +15,9 @@ pub struct Node {
     pub role: String,
     pub name: Option<String>,
     pub value: Option<Value>,
+    /// The element's author ID, which the live tree carries as its accessibility identifier; never drawn or spoken
+    /// (#1459). A row's is its record's: an ask's handle or a session's ID, never its place.
+    pub id: Option<String>,
     /// `[x, y, width, height]` in device pixels, inside the window.
     pub bounds: [i64; 4],
     pub children: Vec<Node>,
@@ -24,6 +29,7 @@ impl Node {
             "role": self.role,
             "name": self.name,
             "value": self.value,
+            "id": self.id,
             "bounds": self.bounds,
             "children": self.children.iter().map(Node::to_json).collect::<Vec<_>>(),
         })
@@ -52,6 +58,11 @@ impl Node {
                 Value::Null => None,
                 other => Some(other.clone()),
             },
+            id: match value.get("id").ok_or("a node without an id key")? {
+                Value::Null => None,
+                Value::String(id) => Some(id.clone()),
+                other => return Err(format!("a node whose id is not text: {other}")),
+            },
             bounds: [bounds[0], bounds[1], bounds[2], bounds[3]],
             // A leaf says so with `[]`; a missing list is missing evidence, not a leaf.
             children: value["children"]
@@ -78,6 +89,10 @@ pub struct Snapshot {
     pub scale: u32,
     pub tree: Node,
     pub items: Vec<(String, Value)>,
+    /// The menu bar's title, the count the app shows there (#1459).
+    pub menu_bar: String,
+    /// The `id` of the node that holds the keyboard; none when nothing with an id does (#1459).
+    pub focus: Option<String>,
 }
 
 impl Snapshot {
@@ -86,6 +101,8 @@ impl Snapshot {
             "window": { "size": self.size, "scale": self.scale },
             "tree": self.tree.to_json(),
             "items": self.items.iter().map(|(id, value)| json!({ "id": id, "value": value })).collect::<Vec<_>>(),
+            "menu_bar": { "title": self.menu_bar },
+            "focus": self.focus,
         })
     }
 
@@ -118,6 +135,16 @@ impl Snapshot {
                     Ok((id.to_owned(), value.clone()))
                 })
                 .collect::<Result<_, &str>>()?,
+            menu_bar: value["menu_bar"]["title"]
+                .as_str()
+                .ok_or("a snapshot without menu_bar.title")?
+                .to_owned(),
+            // Nothing focused is `null`; a missing key is missing evidence.
+            focus: match value.get("focus").ok_or("a snapshot without a focus key")? {
+                Value::Null => None,
+                Value::String(id) => Some(id.clone()),
+                _ => return Err("a snapshot whose focus is not an id".into()),
+            },
         })
     }
 
@@ -152,6 +179,21 @@ pub fn first_difference(a: &Snapshot, b: &Snapshot) -> Option<(usize, String)> {
             ),
         ));
     }
+    if a.menu_bar != b.menu_bar {
+        return Some((
+            0,
+            format!(
+                "the menu bar's title differs: {:?} vs {:?}",
+                a.menu_bar, b.menu_bar
+            ),
+        ));
+    }
+    if a.focus != b.focus {
+        return Some((
+            0,
+            format!("the focus differs: {:?} vs {:?}", a.focus, b.focus),
+        ));
+    }
     let mut index = 0;
     differ(&a.tree, &b.tree, &mut index).err().or_else(|| {
         (a.items != b.items).then(|| {
@@ -170,6 +212,7 @@ fn differ(x: &Node, y: &Node, index: &mut usize) -> Result<(), (usize, String)> 
         ("role", x.role == y.role),
         ("name", x.name == y.name),
         ("value", x.value == y.value),
+        ("id", x.id == y.id),
         ("bounds", x.bounds == y.bounds),
     ] {
         if !same {
@@ -208,6 +251,7 @@ fn describe(node: &Node, field: &str) -> String {
         "role" => node.role.clone(),
         "name" => format!("{:?}", node.name),
         "value" => format!("{:?}", node.value),
+        "id" => format!("{:?}", node.id),
         _ => format!("{:?}", node.bounds),
     }
 }
@@ -253,6 +297,7 @@ pub fn from_observed(window: &Window) -> Snapshot {
                     role: role_name(role),
                     name: element.label().map(str::to_owned),
                     value: element.value().map(|value| json!(value)),
+                    id: author_id(element.path()),
                     bounds: [
                         device(bounds.origin.x),
                         device(bounds.origin.y),
@@ -287,6 +332,7 @@ pub fn from_observed(window: &Window) -> Snapshot {
         role: role_name(Role::Window),
         name: None,
         value: None,
+        id: None,
         bounds: [0, 0, device(viewport.width), device(viewport.height)],
         children: Vec::new(),
     };
@@ -299,6 +345,17 @@ pub fn from_observed(window: &Window) -> Snapshot {
         scale: scale.round() as u32,
         tree: root,
         items: deep_app::canvas::items(),
+        menu_bar: deep_app::menu_bar_line(),
+        focus: deep_app::views::focus_id(window),
+    }
+}
+
+/// An observed element's author ID: its own element ID when that is a name, as `deep_app::views::observed` gives
+/// every element one and sets the same name as its accessibility identifier. A numbered ID, a place, is none.
+pub fn author_id(path: &[ElementId]) -> Option<String> {
+    match path.last()? {
+        ElementId::Name(name) => Some(name.to_string()),
+        _ => None,
     }
 }
 
@@ -361,6 +418,7 @@ mod tests {
             role: role.into(),
             name: Some(name.into()),
             value: None,
+            id: None,
             bounds,
             children: Vec::new(),
         }
@@ -374,10 +432,13 @@ mod tests {
                 role: "window".into(),
                 name: None,
                 value: None,
+                id: None,
                 bounds: [0, 0, 3024, 1964],
                 children,
             },
             items: Vec::new(),
+            menu_bar: "1".into(),
+            focus: None,
         }
     }
 
@@ -409,10 +470,11 @@ mod tests {
             leaf("button", "y", [0, 20, 10, 10]),
         ]);
         type Change = (&'static str, fn(&mut Node));
-        let changes: [Change; 4] = [
+        let changes: [Change; 5] = [
             ("role", |node| node.role = "label".into()),
             ("name", |node| node.name = Some("z".into())),
             ("value", |node| node.value = Some(json!("on"))),
+            ("id", |node| node.id = Some("ask:01A".into())),
             ("bounds", |node| node.bounds[3] = 11),
         ];
         for (field, change) in changes {
@@ -428,15 +490,22 @@ mod tests {
         let (index, why) = first_difference(&a, &b).expect("changed items went unseen");
         assert_eq!(index, 3);
         assert!(why.contains("canvas items"), "{why}");
-        for change in [
-            |s: &mut Snapshot| s.size[0] = 1511,
-            |s: &mut Snapshot| s.scale = 1,
-        ] {
+        type Whole = (&'static str, fn(&mut Snapshot));
+        let wholes: [Whole; 4] = [
+            ("the window differs", |s| s.size[0] = 1511),
+            ("the window differs", |s| s.scale = 1),
+            ("the menu bar's title differs", |s| s.menu_bar = "2".into()),
+            ("the focus differs", |s| {
+                s.focus = Some("session:01A".into())
+            }),
+        ];
+        for (why, change) in wholes {
             let mut b = a.clone();
             change(&mut b);
-            let (index, why) = first_difference(&a, &b).expect("a changed window went unseen");
+            let (index, said) =
+                first_difference(&a, &b).unwrap_or_else(|| panic!("{why} went unseen"));
             assert_eq!(index, 0);
-            assert!(why.contains("the window differs"), "{why}");
+            assert!(said.contains(why), "{said}");
         }
     }
 
@@ -467,8 +536,8 @@ mod tests {
         assert!(why.contains("children"), "{why}");
     }
 
-    /// A snapshot missing a node's children, name or value key, its items, or an item's id or
-    /// value does not read as an empty or unnamed one, and a name that is not text is refused.
+    /// A snapshot missing a node's children, name or value key, its items, an item's id or value, the menu bar's title
+    /// or the focus key does not read as an empty or unnamed one, and a name or focus that is not text is refused.
     #[test]
     fn missing_lists_and_item_fields_are_refused() {
         let mut with_item = snapshot(vec![leaf("label", "x", [0, 0, 10, 10])]);
@@ -476,7 +545,14 @@ mod tests {
         let whole = with_item.to_json();
         assert_eq!(Snapshot::from_json(&whole).unwrap(), with_item);
         type Removal = (&'static str, fn(&mut Value));
-        let removals: [Removal; 8] = [
+        let removals: [Removal; 13] = [
+            ("without menu_bar.title", |json| {
+                json.as_object_mut().unwrap().remove("menu_bar");
+            }),
+            ("without a focus key", |json| {
+                json.as_object_mut().unwrap().remove("focus");
+            }),
+            ("focus is not an id", |json| json["focus"] = json!(7)),
             ("without a name key", |json| {
                 json["tree"].as_object_mut().unwrap().remove("name");
             }),
@@ -485,6 +561,15 @@ mod tests {
                     .as_object_mut()
                     .unwrap()
                     .remove("value");
+            }),
+            ("without an id key", |json| {
+                json["tree"]["children"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("id");
+            }),
+            ("id is not text", |json| {
+                json["tree"]["children"][0]["id"] = json!(7)
             }),
             ("name is not text", |json| {
                 json["tree"]["children"][0]["name"] = json!(7)
@@ -518,7 +603,9 @@ mod tests {
 
     #[test]
     fn json_round_trips_and_roles_are_snake_case() {
-        let a = snapshot(vec![leaf("list_item", "x", [0, 0, 10, 10])]);
+        let mut a = snapshot(vec![leaf("list_item", "x", [0, 0, 10, 10])]);
+        assert_eq!(Snapshot::from_json(&a.to_json()).unwrap(), a);
+        a.focus = Some("question-card".into());
         assert_eq!(Snapshot::from_json(&a.to_json()).unwrap(), a);
         assert_eq!(snake_case("ListBoxOption"), "list_box_option");
         assert_eq!(role_name(Role::Window), "window");
