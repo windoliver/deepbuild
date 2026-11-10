@@ -1276,16 +1276,20 @@ fn list_row(
                 .aria_value(row.entry.to_owned())
                 .flex_none()
                 .w(s.space(3))
-                .h(s.space(3))
+                .h_full()
                 .mr(s.space(1))
                 .flex()
                 .items_center()
                 .child(div().size(s.space(1)).bg(rgb(states::color(row.entry)))),
         )
         .child(
+            // Each slot the row's full height, so the slots read in the row's order, left to right.
             row_slot(&id, "title", title.clone())
                 .flex_1()
                 .min_w_0()
+                .h_full()
+                .flex()
+                .items_center()
                 .truncate()
                 .text_color(ink)
                 // Unread or asking stands out by weight alone: the chrome's face has no medium of its own, so it
@@ -1300,6 +1304,9 @@ fn list_row(
         .child(
             row_slot(&id, "word", row.word.clone())
                 .flex_none()
+                .h_full()
+                .flex()
+                .items_center()
                 .pl(s.space(1))
                 .text_color(chrome.ink_secondary)
                 .child(drawn_word),
@@ -1307,6 +1314,8 @@ fn list_row(
         .child(
             time_slot
                 .flex_none()
+                .h_full()
+                .items_center()
                 .min_w(s.space(5))
                 .pl(s.space(1))
                 .flex()
@@ -1390,10 +1399,14 @@ fn needs_you_heading(
                 .text_color(chrome.ink_secondary)
                 .font_weight(FontWeight::NORMAL)
                 .child(
+                    // As tall as the control beside it, so the two sit on one line in reading order.
                     observed("sidebar-count")
                         .role(Role::Label)
                         .aria_label(name)
                         .aria_value(empty.value())
+                        .min_h(sizes().space(4))
+                        .flex()
+                        .items_center()
                         .children(drawn),
                 )
                 .children((!popped).then(|| {
@@ -1489,7 +1502,8 @@ pub(crate) fn in_lane(content: impl IntoElement, with_box: bool) -> Div {
                 .min_h_0()
                 .flex()
                 .flex_col()
-                .overflow_y_scroll()
+                // The page doesn't scroll yet (#1808): what's past the lane's foot is cut, as the list's rows are.
+                .overflow_hidden()
                 .child(content),
         )
         .children(with_box.then(words_box).flatten().map(|words| {
@@ -2057,7 +2071,7 @@ impl Render for Shipped {
                                 .role(Role::Label)
                                 .aria_label(name)
                                 .w_full()
-                                .h(relative(0.4))
+                                .flex_none()
                                 .border(sizes().hairline)
                                 .border_color(chrome.divider)
                                 .flex()
@@ -2086,7 +2100,9 @@ impl Render for Shipped {
                                     observed("session-line-figure")
                                         .role(Role::Image)
                                         .aria_label(line_name)
-                                        .flex_1()
+                                        // A height of its own: the lane it sits in grows with what it holds (#1461).
+                                        .h(sizes().placed)
+                                        .flex_none()
                                         .w_full()
                                         .child(
                                             canvas::line(

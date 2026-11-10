@@ -267,7 +267,11 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
         .into_iter()
         .map(|ask| (crate::states::handle(ask), ask))
         .collect();
+    let held = crate::held();
     let status = |handle: &str| {
+        if held.as_deref() == Some(handle) {
+            return "held".to_owned();
+        }
         view.inbox
             .iter()
             .find(|ask| ask["ask"] == handle)

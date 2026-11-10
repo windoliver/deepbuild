@@ -54,7 +54,9 @@ pub fn menus() -> Vec<(String, Vec<(String, String)>)> {
 
 /// The menu bar's View menu (#1461): every page, opened by its address. The rest of the menu bar is #1462's.
 pub fn set_menus(cx: &mut App) {
-    let listed = pages().into_iter().map(|(name, address)| (name, address.to_string()));
+    let listed = pages()
+        .into_iter()
+        .map(|(name, address)| (name, address.to_string()));
     MENUS.with(|menus| *menus.borrow_mut() = vec![("View".to_owned(), listed.collect())]);
     let items = pages()
         .into_iter()

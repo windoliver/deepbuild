@@ -240,13 +240,14 @@ fn needs_you() -> Result<HostValue, HostError> {
     ]))
 }
 
+/// The ask a replica's fixture holds, since the record has no event for a hold yet (#1457): none in a shipped build.
 #[cfg(feature = "fixtures")]
-fn held() -> Option<String> {
+pub(crate) fn held() -> Option<String> {
     views::current_state().and_then(|state| state.held.clone())
 }
 
 #[cfg(not(feature = "fixtures"))]
-fn held() -> Option<String> {
+pub(crate) fn held() -> Option<String> {
     None
 }
 
