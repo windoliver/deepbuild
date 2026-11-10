@@ -271,7 +271,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
       else if (message.op === 'later') core.later(message.session, message.cwd, message.text);
       else if (message.op === 'line') void core.line(message.session, message.agent, message.text).catch(() => undefined);
       else if (message.op === 'denied') core.denied(message.session, message.call, { guard: message.guard, label: message.label });
-      else if (message.op === 'call-gone') core.callGone(message.call);
+      else if (message.op === 'call-gone') core.callGone(message.call, message.closed === true);
       else core.unsubscribe(message.sub);
     },
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
@@ -616,7 +616,7 @@ class Hub {
       this.conns.delete(conn);
       for (const sub of conn.subs) this.unsubscribe(conn, sub);
       if (conn.waiter) this.core.post({ op: 'waiter-gone', key: conn.id });
-      for (const call of conn.calls) this.core.post({ op: 'call-gone', call });
+      for (const call of conn.calls) this.core.post({ op: 'call-gone', call, closed: true });
       if (conn === this.notifier) {
         this.notifier = undefined;
         this.core.post({ op: 'notifier-gone' });

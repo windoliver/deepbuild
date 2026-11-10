@@ -306,9 +306,10 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
             .collect();
         // An ask put off with Later goes below the others until it comes back (#1462).
         asks.sort_by_key(|ask| ask.status == "later");
+        // A running job's row (#1925) is drawn under the sessions, not as one.
         let sessions = rows
             .iter()
-            .filter(|row| !text(row, "id").starts_with("ask:"))
+            .filter(|row| text(row, "id").starts_with("session:"))
             .map(|row| {
                 let session = text(row, "session");
                 // #1461's planted app marks a session unread when its agent says anything.

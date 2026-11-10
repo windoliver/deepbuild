@@ -20,7 +20,7 @@ use vello_cpu::kurbo::{Affine, BezPath, Circle, Rect, RoundedRect, Shape};
 use vello_cpu::peniko::{ColorStop, Fill as FillRule, Gradient, ImageSampler};
 use vello_cpu::{
     color::{AlphaColor, Srgb},
-    Image, ImageSource, Level, Pixmap, RenderContext, RenderSettings, Resources,
+    Image, ImageSource, Pixmap, RasterizerSettings, RenderContext, RenderSettings, Resources,
 };
 
 use crate::evidence;
@@ -241,6 +241,9 @@ pub struct Renderer {
     /// #499: each video asset's frame at the time being drawn, by asset, set before a frame is
     /// prepared; an image mark of one draws it in place of a decoded picture.
     pub videos: BTreeMap<String, Arc<Pixmap>>,
+    /// What Vello CPU draws with: the scalar level and the f32 pipeline, as deep-marks-vello pins
+    /// them; only #1897's cross-machine record draws at another setting, which its record names.
+    pub raster_2d: (RenderSettings, RasterizerSettings),
     /// #1485: each image asset the last frame drew, decoded, so the next frame decodes only what's new.
     kept: BTreeMap<String, Arc<Pixmap>>,
 }
@@ -431,6 +434,7 @@ impl Renderer {
             shaper: Shaper::new(),
             resources: Resources::new(),
             videos: BTreeMap::new(),
+            raster_2d: (deep_marks_vello::settings(), deep_marks_vello::rasterizer()),
             kept: BTreeMap::new(),
         }
     }
@@ -532,10 +536,7 @@ impl Renderer {
         ground: Option<Rgb>,
         instanced: &BTreeMap<String, (String, String)>,
     ) -> (Vec<u8>, Vec<Batch>) {
-        let settings = RenderSettings {
-            level: Level::fallback(),
-            num_threads: 0,
-        };
+        let (settings, rasterizer) = self.raster_2d;
         let mut ctx = RenderContext::new_with(size[0], size[1], settings);
         if let Some(g) = ground {
             ctx.set_paint(color(g));
@@ -611,13 +612,9 @@ impl Renderer {
         }
         ctx.flush();
         let mut pixmap = Pixmap::new(size[0], size[1]);
-        // The f32 pipeline, as deep-marks-vello pins it: a build that also enables vello_cpu's
-        // u8 pipeline would otherwise draw on that one, a code or two off (#674).
-        ctx.render_with(
-            &mut pixmap,
-            &mut self.resources,
-            deep_marks_vello::rasterizer(),
-        );
+        // The pipeline named, f32 unless a cross-machine record asks for u8: a build that also
+        // enables vello_cpu's u8 pipeline would otherwise draw on that one, a code or two off (#674).
+        ctx.render_with(&mut pixmap, &mut self.resources, rasterizer);
         (
             pixmap.take_rgba8(vello_cpu::peniko::ImageAlphaType::Alpha),
             batches,
@@ -794,10 +791,16 @@ impl Renderer {
                 opacity,
                 adjust,
                 crop,
+                tile,
                 ..
             } => {
                 let Some(pixmap) = drawn.images.get(asset) else {
                     return;
+                };
+                // #1653: an atlas row shows its cell (its flip bits aren't drawn here yet).
+                let crop = match tile {
+                    Some(t) => t.rect([u32::from(pixmap.width()), u32::from(pixmap.height())]),
+                    None => *crop,
                 };
                 // An item's adjust (#373) reaches every pixel of its image.
                 let adjusted;

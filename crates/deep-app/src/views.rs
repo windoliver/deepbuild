@@ -1140,6 +1140,8 @@ struct Record {
     /// What a session's page shows by its real names (#1348): the session, its issue and branch, and its newest
     /// run's failure whole, its trace included. On a session's page only.
     details: Vec<String>,
+    /// The sidebar's running jobs (#1925), in the list's order: each row's ID, its words and why it is there.
+    jobs: Vec<(String, String, String)>,
 }
 
 /// What the sidebar draws: every session, in the order each first appears, with its task's title and its state.
@@ -1292,11 +1294,32 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
         }
         _ => Vec::new(),
     };
+    // Each running job's row (#1925), as the hub built it: a job whose tool reports no counter says how long it has
+    // run, which reads differently as the clock moves on.
+    let jobs = match kind {
+        Kind::Sidebar => listed
+            .iter()
+            .filter(|row| text(row, "id").starts_with("job:"))
+            .map(|row| {
+                if row["progress"].is_null() {
+                    let since = row["since"].as_u64().unwrap_or(now());
+                    states::changes_after(states::changes_in(now().saturating_sub(since)));
+                }
+                (
+                    text(row, "id"),
+                    states::job_words(row, now()),
+                    text(row, "why"),
+                )
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
     Record {
         open,
         sessions,
         deadlines,
         details,
+        jobs,
     }
 }
 
@@ -2168,6 +2191,41 @@ impl Render for Shipped {
                         }
                     }
                 }
+                // Each running job's row (#1925), after the sessions as the list orders it: its mark, its kind and
+                // its count from its tool's own counter, its time at the right edge, and why under it, quieter. A job
+                // has no page, so the row opens nothing.
+                drawn.extend(
+                    record
+                        .jobs
+                        .iter()
+                        .enumerate()
+                        .map(|(index, (id, words, why))| {
+                            div()
+                                .flex()
+                                .flex_col()
+                                .flex_none()
+                                .child(
+                                    marked(
+                                        ElementId::Name(id.clone().into()),
+                                        "running",
+                                        words.clone(),
+                                    )
+                                    .h(s.space(4))
+                                    .pl(s.space(2))
+                                    .pr(s.space(0)),
+                                )
+                                .child(
+                                    label(("sidebar-job-why", index), why.clone())
+                                        .block()
+                                        .typed(s.small)
+                                        .h(s.small.line)
+                                        .pl(s.space(3))
+                                        .text_color(chrome.ink_secondary)
+                                        .truncate(),
+                                )
+                                .into_any_element()
+                        }),
+                );
                 // #1461's planted plug-in adds a section to the list, its own heading over it.
                 if crate::plain::planted("sidebar-panel-in-list") {
                     for name in page_names() {

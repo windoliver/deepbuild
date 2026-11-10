@@ -35,7 +35,7 @@ import { keychain, ownHome } from './keychain.js';
 import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
 import { sessionStates, statusRows, WAITING_QUIET_MS, type StatusRow } from './status.js';
-import { buildRows, listRows, settle, type Placed } from './rows.js';
+import { buildRows, jobRow, listRows, orderOf, settle, type Placed, type Row, type RunningJob } from './rows.js';
 import { addGuards, blocksCall, provenGuards, writeStanding } from './guards.js';
 import { captureRejected, decisionKey, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -108,6 +108,8 @@ const CODEX_BINARY = /^(?:\S*\/)?codex(?:-[^\s/]+)?(?:\s|$)/;
 /** A Claude Code process: its native binary (`claude`, `claude.exe`, `claude/versions/<version>`) or its npm entry. */
 const CLAUDE_BINARY = /^(?:\S*\/)?claude(?:\.exe)?(?:\s|$)|^\S*\/claude\/versions\/[^\s/]+(?:\s|$)|@anthropic-ai\/claude-code\//;
 const HOUR = 3_600_000;
+/** The least time between two appends of one running job's row (#1925), however fast its tool counts. */
+const JOB_ROW_MS = 1000;
 /** How often open sessions' rollouts are looked for in their agent's archived folder: no hook says one moved (#342). */
 const ARCHIVED_THREADS_MS = 5000;
 /** How often the hub reads what workspaces' verdicts pinned (#67). */
@@ -720,6 +722,10 @@ export class Core {
   /** The list's rows as last appended (#1463), by ID; empty until the record's are read at start, which makes the first pass a backfill. */
   private rows = new Map<string, Placed>();
   private rowsFirst = true;
+  /** Each running job's row (#1925): when it was last appended, and the newer count held until a second has passed. */
+  private readonly jobRows = new Map<string, { at: number; held?: ReturnType<typeof setTimeout> }>();
+  /** The job rows' appends in turn, so a row never leaves the list before its last count is recorded. */
+  private jobRowsAppended: Promise<void> = Promise.resolve();
   /** When each session's agent process last had its start time read, by the watch for processes gone (#992). */
   private readonly startChecked = new Map<string, number>();
   /** How far test.clock has stepped the hub's clock past the wall clock deep-hook stamps hooks by (#965). */
@@ -1068,6 +1074,8 @@ export class Core {
     // The list's rows as last appended (#1463): a record with none yet is a backfill.
     for (const p of await listRows((q) => this.record.raw(q))) this.rows.set(p.row.id, p);
     this.rowsFirst = this.rows.size === 0;
+    // A job's row the last hub left listed (#1925): its tool's run ended with that hub, so the row leaves the list.
+    for (const id of [...this.rows.keys()].filter((id) => id.startsWith('job:'))) this.jobRowAppend(id, null);
     this.statesRead = true;
     this.stateSoon();
     // Each minute every session is read again: a state that changes with time alone (quiet) has no append to say so.
@@ -1171,6 +1179,7 @@ export class Core {
       read: (sha) => this.store.read(sha),
       send: (request, boundary) => this.store.send(request, boundary),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
+      row: (job, running) => this.jobShown(job, running),
     });
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,
@@ -2883,6 +2892,41 @@ export class Core {
       this.touched = 'all';
       throw error;
     }
+  }
+  /**
+   * A running job's row as it now reads (#1925), appended at most once a second however fast its tool counts, with
+   * the newest count always appended in the end; or, once its tool's run has ended, the row leaving the list.
+   */
+  private jobShown(job: RunningJob, running: boolean): void {
+    const id = `job:${job.key}`;
+    const was = this.jobRows.get(id);
+    clearTimeout(was?.held);
+    if (!running) {
+      this.jobRows.delete(id);
+      this.jobRowAppend(id, null);
+      return;
+    }
+    const wait = was ? was.at + JOB_ROW_MS - Date.now() : 0;
+    if (wait > 0) {
+      this.jobRows.set(id, { at: was!.at, held: setTimeout(() => this.jobShown(job, true), wait) });
+      return;
+    }
+    this.jobRows.set(id, { at: Date.now() });
+    this.jobRowAppend(id, jobRow(job));
+  }
+  /** Appends a job's row as row.set@2, or with none its leaving the list, after the job rows' earlier appends. */
+  private jobRowAppend(id: string, row: Row | null): void {
+    this.jobRowsAppended = this.jobRowsAppended.then(async () => {
+      const ts = this.now();
+      if (row) {
+        const placed = { order: orderOf(row), row };
+        await this.append(this.connection('core'), { v: 2, id: ulid(ts), kind: 'row.set', ts, data: { listed: true, order: placed.order, ...row } as unknown as JsonValue });
+        this.rows.set(id, placed);
+      } else if (this.rows.has(id)) {
+        await this.append(this.connection('core'), { v: 2, id: ulid(ts), kind: 'row.set', ts, data: { id, listed: false } });
+        this.rows.delete(id);
+      }
+    }).catch(() => undefined);
   }
   /** The quiet readings a stepped test clock brought due, each quiet period that passed read in turn. */
   private async quietDue(): Promise<void> {
@@ -5053,9 +5097,12 @@ export class Core {
     // The notices it carried wait for the session's next hook (#352).
     this.siblings.gone(id);
   }
-  /** A deep mcp call cancelled, or its connection closed (#1923): it leaves the job it waits on, which stops only once no caller is left. */
-  callGone(call: string): void {
-    this.jobKinds?.gone(call);
+  /**
+   * A deep mcp call cancelled, or its connection `closed` (#1923): it leaves the job it waits on. A cancel stops the job
+   * once no caller is left; a closed session never does, so the job runs on (#1925).
+   */
+  callGone(call: string, closed = false): void {
+    this.jobKinds?.gone(call, closed);
   }
   /** A waiter whose connection closed: Claude Code stopped it, or it exited. */
   waiterGone(key: number): void {

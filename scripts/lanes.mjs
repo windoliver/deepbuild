@@ -250,6 +250,8 @@ alone.push('tests/acceptance/1348/');
 alone.push('tests/acceptance/1455/');
 // #505's files each build deep-canvas-render (and its formula file deep-show): one file at a time.
 alone.push('tests/acceptance/505/', 'tests/acceptance/505-oracle/');
+// #1653's files each build deep-canvas-render and draw with Vello CPU, as #467's do: one file at a time.
+alone.push('tests/acceptance/1653/', 'tests/acceptance/1653-redraft-ac2-flip/');
 // #1479's files build deep-canvas-render and draw with GPUI's offscreen renderer, as #385's do.
 alone.push('tests/acceptance/1479/');
 // #531's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome and count a process's threads.
@@ -310,6 +312,19 @@ alone.push('tests/acceptance/1983/');
 // call, so it runs by hand.
 alone.push('tests/acceptance/1462/', 'tests/acceptance/1462-redraft-ac2/');
 byHand.push('tests/acceptance/1462/shown.test.ts');
+// #1901's files build deep-show; build-digest.test.ts builds it three times, one with a canvas module's source changed
+// for that build and restored after it, so nothing else may build in the checkout while it runs.
+alone.push('tests/acceptance/1901/');
+// #1925's files each start a hub that runs an 80 s encode through the supervisor and read its row to the 2 s batch,
+// and its reopen file starts deep-drive twice: one file at a time.
+alone.push('tests/acceptance/1925/');
+// #408's files each build deep-show (module-label.test.ts with test-glyph-label). Criterion 5 runs from its redraft,
+// which also builds it in release and for Linux x86_64 in a local image with a C++ toolchain and libclang, and times
+// film.layout against the lane's rule; the original criterion-5 file, whose image can't build deep-show, runs by hand.
+alone.push('tests/acceptance/408/crossing.test.ts', 'tests/acceptance/408/overlap-covered.test.ts', 'tests/acceptance/408/cut.test.ts', 'tests/acceptance/408/module-label.test.ts');
+alone.push('tests/acceptance/408-redraft-ac5/');
+timed.push('tests/acceptance/408-redraft-ac5/machines.test.ts');
+byHand.push('tests/acceptance/408/machines.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

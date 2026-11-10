@@ -13,11 +13,13 @@ mod bake;
 mod ask;
 mod capture;
 mod costs;
+mod determinism;
 mod efficiency;
 mod familiar;
 mod evidence;
 mod export;
 mod film;
+mod film_layout;
 mod film_viewer;
 mod frames;
 mod function;
@@ -27,6 +29,7 @@ mod host;
 mod hub;
 mod input;
 mod jobs;
+mod kept;
 mod kinds;
 mod kit;
 mod media;
@@ -424,6 +427,16 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 },
             });
         }
+        "pixel_hash" => {
+            let frames = c.get("frames")?.as_array()?.iter().map(|f| {
+                let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
+                let w = u32::try_from(size[0].as_u64()?).ok()?;
+                let h = u32::try_from(size[1].as_u64()?).ok()?;
+                let format = deep_gpu::pixel_hash::Format::named(f.get("format")?.as_str()?)?;
+                Some(([w, h], format, f.get("bytes")?.as_str()?.to_string()))
+            });
+            return Some(Call::PixelHash(frames.collect::<Option<_>>()?));
+        }
         "cross_machine" => {
             let a = c.get("audio")?.as_array().filter(|a| a.len() == 2)?;
             return Some(Call::CrossMachine([a[0].as_str()?.to_string(), a[1].as_str()?.to_string()]));
@@ -608,6 +621,23 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "costs" => return Some(Call::Costs),
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
+        // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
+        "fingerprint" => return Some(Call::Fingerprint),
+        "draw" => {
+            let output = c.get("output")?.as_str()?;
+            return Some(Call::Draw {
+                doc: doc()?,
+                t: crate::time::eval_time(c.get("t"))?,
+                output: kept::OUTPUTS.into_iter().find(|o| *o == output)?,
+            });
+        }
+        "padded_key" => {
+            let seeds = c.get("seeds")?.as_array().filter(|s| s.len() == 2)?;
+            return Some(Call::PaddedKey {
+                fields: c.get("fields")?.as_u64()?,
+                seeds: [seeds[0].as_u64()?, seeds[1].as_u64()?],
+            });
+        }
         "keys" => {
             return Some(Call::Keys {
                 doc: doc()?,
@@ -1223,6 +1253,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
+                "layout_text_by_kind" => Planted::LayoutTextByKind,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
@@ -1776,6 +1807,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-leave-out-look",
     feature = "test-leave-out-text",
     feature = "test-check-kind",
+    feature = "test-glyph-label",
     feature = "test-leave-out-logic",
     feature = "test-leave-out-data",
     feature = "test-leave-out-sandbox",
@@ -1970,6 +2002,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::deprecated());
     #[cfg(feature = "test-check-kind")]
     out.push(deep_canvas_test_modules::checks());
+    #[cfg(feature = "test-glyph-label")]
+    out.push(deep_canvas_test_modules::label());
     // Issue #185: test.sim@1's implementations, and test module c.
     #[cfg(feature = "test-sim-a")]
     out.push(deep_canvas_test_modules::sim::a());
@@ -2322,6 +2356,7 @@ fn seal(planted: Option<StartPlanted>, costs: Coefficients) -> Result<Startup, B
             Some(StartPlanted::Run(p)) => Some(p),
             _ => None,
         },
+        cache: None,
     })
 }
 
@@ -2386,6 +2421,7 @@ mod tests {
             listing: None,
             kinds: None,
             layouts: Default::default(),
+            cache: None,
             run_planted: None,
         }
     }
@@ -2600,7 +2636,10 @@ mod tests {
     #[test]
     fn run_takes_planted_and_costs_once_each_and_nothing_else() {
         let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert!(matches!(start_args(&args(&["run"])), Ok((None, None))));
+        assert!(matches!(
+            start_args(&args(&["run"])),
+            Ok((None, None, None))
+        ));
         assert!(matches!(
             start_args(&args(&[
                 "run",
@@ -2609,6 +2648,7 @@ mod tests {
             ])),
             Ok((
                 Some(StartPlanted::Seal(Fault::EveryDependencyRequired)),
+                None,
                 None
             ))
         ));
@@ -2620,7 +2660,11 @@ mod tests {
                 "--planted",
                 "admits_frame_json"
             ])),
-            Ok((Some(StartPlanted::Seal(Fault::AdmitsFrameJson)), Some(_)))
+            Ok((
+                Some(StartPlanted::Seal(Fault::AdmitsFrameJson)),
+                Some(_),
+                None
+            ))
         ));
         let twin = "treats_every_dependency_required";
         for stray in [
@@ -2630,6 +2674,7 @@ mod tests {
             &["run", "--planted", twin, "extra"],
             &["run", "--planted", twin, "--planted", twin],
             &["run", "--costs", "a", "--costs", "b"],
+            &["run", "--cache", "a", "--cache", "b"],
         ] {
             assert!(start_args(&args(stray)).is_err(), "{stray:?}");
         }
@@ -2782,19 +2827,23 @@ mod tests {
 
 /// The arguments after the command: `--planted <name>` and `--costs <path>`, each at most once,
 /// in either order; an unknown name or a stray argument is bad input.
-fn start_args(args: &[String]) -> Result<(Option<StartPlanted>, Option<String>), ()> {
-    let (mut planted, mut costs) = (None, None);
+type StartArgs = (Option<StartPlanted>, Option<String>, Option<PathBuf>);
+
+fn start_args(args: &[String]) -> Result<StartArgs, ()> {
+    let (mut planted, mut costs, mut cache) = (None, None, None);
     let mut rest = args.get(1..).unwrap_or_default();
     while let [flag, value, more @ ..] = rest {
         match flag.as_str() {
             "--planted" if planted.is_none() => planted = Some(planted_named(value)?),
             "--costs" if costs.is_none() => costs = Some(value.clone()),
+            // #1901: the folder kept output lives in across processes.
+            "--cache" if cache.is_none() => cache = Some(PathBuf::from(value)),
             _ => return Err(()),
         }
         rest = more;
     }
     if rest.is_empty() {
-        Ok((planted, costs))
+        Ok((planted, costs, cache))
     } else {
         Err(())
     }
@@ -2858,15 +2907,18 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
             )))
         }
         _ if export_planted(twin).is_some() => export_planted(twin).map(StartPlanted::Run).ok_or(()),
+        "fingerprint_without_sources" => Ok(StartPlanted::Run(Planted::FingerprintWithoutSources)),
+        "key_hashes_raw_bytes" => Ok(StartPlanted::Run(Planted::KeyHashesRawBytes)),
         _ => seams::NetFault::named(twin)
             .map(StartPlanted::Network)
             .ok_or(()),
     }
 }
 
-/// #501's wrong programs, by the names its acceptance suite gives them.
+/// #501's wrong programs, and #1897's, by the names their acceptance suites give them.
 fn export_planted(name: &str) -> Option<Planted> {
     Some(match name {
+        "hash_xors_without_position" => Planted::HashXorsWithoutPosition,
         "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
         "span_rounds_start" => Planted::SpanRoundsStart,
         "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,
@@ -2943,7 +2995,7 @@ fn main() {
         let _ = out.flush();
         std::process::exit(code);
     }
-    let Ok((fault, costs)) = start_args(&args) else {
+    let Ok((fault, costs, cache)) = start_args(&args) else {
         let _ = writeln!(out, "{}", bad_input());
         std::process::exit(2);
     };
@@ -2960,7 +3012,7 @@ fn main() {
     };
     // The seal runs before the first line is read: a refused set answers no scenario.
     let startup: &'static Startup = match seal(fault, coefficients) {
-        Ok(startup) => Box::leak(Box::new(startup)),
+        Ok(startup) => Box::leak(Box::new(Startup { cache, ..startup })),
         Err(err) => {
             let mut line = json!({
                 "ok": false,

@@ -286,6 +286,71 @@ pub fn loop_issues(doc: &Map<String, Value>, modulo: bool) -> Vec<deep_canvas::d
     out
 }
 
+/// #1653: what a status binding may not sit under, each naming the bound item: a parallax group
+/// that repeats would draw its status color, or its needs-you state, more than once (Frame and
+/// group: parallax), and a `sort: y` group could slide its status badge under another child
+/// (Frame and group: y sort).
+pub fn status_issues(doc: &Map<String, Value>) -> Vec<deep_canvas::document::Issue> {
+    let Some(items) = doc.get("items").and_then(Value::as_object) else {
+        return Vec::new();
+    };
+    let bindings = doc.get("status_bindings").and_then(Value::as_object);
+    let mut out = Vec::new();
+    for (key, binding) in bindings.into_iter().flatten() {
+        let Some(target) = binding.get("target").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some((id, slot)) = target
+            .strip_prefix("items/")
+            .and_then(|rest| rest.split_once("/params/paint/"))
+        else {
+            continue;
+        };
+        let Some(item) = items.get(id) else {
+            continue;
+        };
+        let path = format!("status_bindings/{key}/target");
+        let repeating = items.iter().find(|(gid, group)| {
+            descends(items, item, gid)
+                && group
+                    .get("params")
+                    .and_then(Value::as_object)
+                    .and_then(|p| Parallax::read(gid, p).ok().flatten())
+                    .is_some_and(|p| p.repeat.iter().any(Option::is_some))
+        });
+        if let Some((gid, _)) = repeating {
+            let mut issue = deep_canvas::document::Issue::error(
+                "parallax_repeats_status",
+                id,
+                path.clone(),
+                serde_json::json!({"item": id, "group": gid, "slot": slot}),
+                "a repeating parallax group would draw its status more than once",
+            );
+            issue.fix =
+                "Move the item out of the repeating group, or drop the group's repeat.".into();
+            out.push(issue);
+        }
+        let parent = item.get("parent").and_then(Value::as_str);
+        let sorted = parent
+            .and_then(|p| items.get(p))
+            .and_then(|g| g.pointer("/params/sort"))
+            .and_then(Value::as_str)
+            == Some("y");
+        if slot == "badge" && sorted {
+            let mut issue = deep_canvas::document::Issue::error(
+                "sort_slides_badge",
+                id,
+                path,
+                serde_json::json!({"item": id, "group": parent}),
+                "a y-sorted group could slide its status badge under another item",
+            );
+            issue.fix = "Move the item out of the y-sorted group.".into();
+            out.push(issue);
+        }
+    }
+    out
+}
+
 /// Whether `item` sits under the group `gid`.
 fn descends(items: &Map<String, Value>, item: &Value, gid: &str) -> bool {
     let mut at = item.get("parent").and_then(Value::as_str);
