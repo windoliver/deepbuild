@@ -5,10 +5,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas_sandbox::link::{self, Object};
 use deep_canvas_sandbox::rewrite::hash;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use crate::Planted;
 
@@ -129,12 +128,12 @@ fn refusal(rule: &str, what: String, extra: Value) -> Value {
     out
 }
 
-/// The libraries `links` reach, each checked against its bytes and its pack, in dependency order
-/// (ties by name), or every refusal.
+/// The libraries `links` reach, each checked against its bytes (as `stored` reads them) and its
+/// pack, in dependency order (ties by name), or every refusal.
 pub fn resolve(
     links: &[(String, String)],
     packs: &[Pack],
-    assets: &Map<String, Value>,
+    stored: &dyn Fn(&str) -> Option<Vec<u8>>,
     planted: &Planted,
 ) -> Result<Vec<Lib>, Vec<Value>> {
     let mut refused = Vec::new();
@@ -158,11 +157,7 @@ pub fn resolve(
         if refused.iter().any(|r: &Value| r["link"] == json!(label)) {
             continue;
         }
-        let bytes = assets
-            .get(&sha)
-            .and_then(Value::as_str)
-            .and_then(|b| B64.decode(b).ok());
-        let Some(bytes) = bytes else {
+        let Some(bytes) = stored(&sha) else {
             refused.push(refusal(
                 "link",
                 format!("the piece carries no library {label} at {sha}"),

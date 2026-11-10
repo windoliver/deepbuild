@@ -25,10 +25,14 @@ use crate::snapshot::{self, Drawn, Unfit};
 pub fn op_issue(i: &OpIssue) -> Issue {
     let what = format!("{} can't evaluate this", i.operator);
     let actual = i.actual.clone().unwrap_or(Value::Null);
-    match &i.item {
+    // #544: a read a logic item doesn't declare names its close declared names as the canvas
+    // does an unknown kind's.
+    let close = actual.get("close").and_then(Value::as_array).into_iter().flatten().map(|n| json!({"name": n})).collect();
+    let issue = match &i.item {
         Some(id) => Issue::error(i.code, id, i.path.clone(), actual, &what),
         None => Issue::envelope(i.code, i.path.clone(), actual, &what),
-    }
+    };
+    Issue { close, ..issue }
 }
 
 /// What the renderer can't draw, as a revision's issue.
@@ -239,6 +243,14 @@ impl<'a> Hub<'a> {
         let Some(session) = self.sessions.get_mut(&e.doc).filter(|_| rev.is_some()) else {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
+        // #544's planted start_on: a run starts at the session's first frame at or after it.
+        if self.scenario.planted == Some(crate::hub::Planted::StartOnAtFirstFrame) && !self.first_frames.contains_key(&e.doc) {
+            self.first_frames.insert(e.doc.clone(), t);
+            if let Some(mut d) = session.document().cloned() {
+                crate::logic::from_first_frame(&mut d, t);
+                session.load(&mut self.sched, &d);
+            }
+        }
         let view = session_view(session, &e.view);
         let _ = self.sched.take_hashes();
         let perturb = e.perturb.as_deref().map(Target::parse);
@@ -398,7 +410,7 @@ impl<'a> Hub<'a> {
     }
 
     /// A PNG of `rgba` in the evidence store, its SHA-256; a store that takes no write is unfit.
-    fn put_png(&self, rgba: Vec<u8>, size: [u16; 2]) -> Result<String, Unfit> {
+    pub(crate) fn put_png(&self, rgba: Vec<u8>, size: [u16; 2]) -> Result<String, Unfit> {
         evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
             code: "evidence_unwritable",
             path: "snapshots".into(),
@@ -468,19 +480,9 @@ impl<'a> Hub<'a> {
         deep_canvas_marks::finish::read_tone_map(def.get("tone_map")).ok()
     }
 
-    /// [`Hub::canonical_png`] of a document with 3D writer layers: its 3D frame at `t` on the GPU,
-    /// the 2D items drawn over it with no ground of their own, as render-back draws it (#1162).
-    pub(crate) fn canonical_png3d(
-        &mut self,
-        doc: &Value,
-        t: i64,
-        drawing: &Painted,
-    ) -> Result<String, Unfit> {
-        let (rgba, size) = self.rgba3d(doc, t, drawing, None)?;
-        self.put_png(rgba, size)
-    }
-
-    /// #501: the raster [`Hub::canonical_png3d`] stores, at `size` when given.
+    /// The raster of a document with 3D writer layers: its 3D frame at `t` on the GPU, the 2D
+    /// items drawn over it with no ground of their own, as render-back draws it (#1162), at
+    /// `size` when given (#501).
     pub(crate) fn rgba3d(
         &mut self,
         doc: &Value,

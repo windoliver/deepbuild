@@ -3,6 +3,10 @@
 //! draws one line above the panel's script, through the canvas's own bound-value text, from the newest reading the
 //! record holds: in ink while fresh, in the look's muted role with its age once past `stale_after`, in ms. The panel
 //! updates it natively: its script renders only when its structure changes.
+//!
+//! Issue #2117: the panel draws again only when what a line shows changes. It keeps what it drew, compares on every
+//! move of the record, and arms one timer for the next moment a shown text changes on its own: a value going stale, or
+//! a stale value's age ticking.
 
 use std::path::Path;
 use std::time::Duration;
@@ -16,8 +20,6 @@ use crate::{chrome, text, views};
 
 /// Flicks in a millisecond, the bound value's clock.
 const FLICKS_PER_MS: i64 = 705_600;
-/// How often a shown value is read again, so one goes stale while it shows.
-const TICK: Duration = Duration::from_secs(1);
 
 /// The panel's bound elements, `(id, bind)`, in the tree's order; none without a `panel.json`.
 pub fn elements(dir: &Path) -> Vec<(String, Value)> {
@@ -76,51 +78,119 @@ fn reading(source: &str) -> Option<(f64, u64)> {
     crate::record::with_view(|view| view.table().value(source)).flatten()
 }
 
+/// What a bound line draws: its text, and whether it is stale.
+type Drawn = Option<(String, bool)>;
+
 /// A plug-in panel's script with its bound values above it.
 pub struct BoundPanel {
     script: AnyView,
     elements: Vec<(String, Value)>,
-    _tick: Task<()>,
+    /// What the last frame drew of each bound line, so a write of the same value draws nothing.
+    drawn: Vec<Drawn>,
+    /// The one timer, due when a shown text next changes on its own; none while nothing will.
+    wake: Option<Task<()>>,
 }
 
 impl BoundPanel {
     pub fn new(script: AnyView, elements: Vec<(String, Value)>, cx: &mut Context<Self>) -> Self {
-        let tick = cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(TICK).await;
+        // #2117's planted panel takes nothing from the reader: a reading shows when it renders for another reason.
+        #[cfg(not(feature = "plant-panel-waits-for-redraw"))]
+        crate::record::on_move(cx, |panel: &mut Self, cx| panel.check(cx));
+        // #2117's planted panel also notifies every second, comparing nothing, as the merge base's did.
+        #[cfg(feature = "plant-panel-ticks")]
+        cx.spawn(async move |this, cx| loop {
+            cx.background_executor().timer(Duration::from_secs(1)).await;
             if this.update(cx, |_, cx| cx.notify()).is_err() {
                 return;
             }
-        });
+        })
+        .detach();
         BoundPanel {
             script,
             elements,
-            _tick: tick,
+            drawn: Vec::new(),
+            wake: None,
         }
+    }
+
+    /// Each bound line as a frame at `now` ms shows it.
+    fn lines(&self, now: u64) -> Vec<Option<Shown>> {
+        self.elements
+            .iter()
+            .map(|(_, bind)| shown(bind, reading(bind["source"].as_str()?), now))
+            .collect()
+    }
+
+    /// Draws again if a line would show other than what's drawn; otherwise waits for the next change.
+    fn check(&mut self, cx: &mut Context<Self>) {
+        let now = views::now();
+        let lines = self.lines(now);
+        if drawn(&lines) != self.drawn {
+            cx.notify();
+        } else {
+            self.arm(&lines, now, cx);
+        }
+    }
+
+    /// Arms the one timer for the earliest moment a shown text changes on its own, or none.
+    fn arm(&mut self, lines: &[Option<Shown>], now: u64, cx: &mut Context<Self>) {
+        // #2117's planted panel arms nothing, so a value grays only when a new reading reaches it.
+        if cfg!(feature = "plant-panel-grays-on-reading") {
+            return;
+        }
+        let due = lines
+            .iter()
+            .flatten()
+            .filter_map(|shown| shown.changes_at)
+            .min()
+            .map(|at| (at.max(0) as u64).div_ceil(FLICKS_PER_MS as u64));
+        self.wake = due.map(|due| {
+            let wait = Duration::from_millis(due.saturating_sub(now).max(1));
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(wait).await;
+                let _ = this.update(cx, |panel, cx| panel.check(cx));
+            })
+        });
     }
 }
 
+/// What each line draws, as compared between frames.
+fn drawn(lines: &[Option<Shown>]) -> Vec<Drawn> {
+    lines
+        .iter()
+        .map(|line| line.as_ref().map(|shown| (shown.text.clone(), shown.stale)))
+        .collect()
+}
+
 impl Render for BoundPanel {
-    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let chrome = chrome::of(window);
         let now = views::now();
-        let lines = self.elements.iter().filter_map(|(id, bind)| {
-            let shown = shown(bind, reading(bind["source"].as_str()?), now)?;
-            let color = if shown.stale {
-                chrome.muted
-            } else {
-                chrome.ink_primary
-            };
-            let label = text::Label {
-                bound: true,
-                ..text::Label::new(shown.text)
-            };
-            Some(
-                div()
-                    .px(sizes().space(1))
-                    .py(sizes().space(0))
-                    .child(text::label(id, label, color, None)),
-            )
-        });
+        let shown = self.lines(now);
+        self.drawn = drawn(&shown);
+        self.arm(&shown, now, cx);
+        let lines = self
+            .elements
+            .iter()
+            .zip(shown)
+            .filter_map(|((id, _), shown)| {
+                let shown = shown?;
+                let color = if shown.stale {
+                    chrome.muted
+                } else {
+                    chrome.ink_primary
+                };
+                let label = text::Label {
+                    bound: true,
+                    ..text::Label::new(shown.text)
+                };
+                Some(
+                    div()
+                        .px(sizes().space(1))
+                        .py(sizes().space(0))
+                        .child(text::label(id, label, color, None)),
+                )
+            });
         div()
             .size_full()
             .flex()

@@ -39,10 +39,10 @@ pub enum State {
     },
 }
 
-/// The table's rows: the word on every surface, its status-map entry, and the words that never name it. The last
-/// three are the states the hub's one reading gives a session that no claim names (#992), which the list's rows carry
-/// (#1463).
-pub const TABLE: [(&str, &str, &[&str]); 14] = [
+/// The table's rows: the word on every surface, its status-map entry, and the words that never name it. Stuck,
+/// flagged and finished are the states the hub's one reading gives a session that no claim names (#992), which the
+/// list's rows carry (#1463); running is a running job's row (#1925).
+pub const TABLE: [(&str, &str, &[&str]); 15] = [
     ("queued", "idle", &[]),
     ("working", "running", &["in progress"]),
     ("says done", "running", &["done"]),
@@ -57,6 +57,7 @@ pub const TABLE: [(&str, &str, &[&str]); 14] = [
     ("stuck", "blocked", &[]),
     ("flagged", "fail", &[]),
     ("finished", "idle", &[]),
+    ("running", "running", &[]),
 ];
 
 impl State {
@@ -164,6 +165,20 @@ pub fn time_at_end(words: &str) -> (&str, Option<&str>) {
             (rest, Some(&words[rest.len() + 1..]))
         }
         _ => (words, None),
+    }
+}
+
+/// A running job's row words after its kind (#1925): its count from its tool's own counter with its time left, as the
+/// hub wrote them; or, when its tool reports no counter, the word running and how long it has run, which a row draws
+/// at its right edge. Never a bar, and never a count its tool didn't report.
+pub fn job_words(row: &Value, now: u64) -> String {
+    let title = row["title"].as_str().unwrap_or_default();
+    match row["progress"].as_str() {
+        Some(progress) => format!("{title} · {progress}"),
+        None => {
+            let ran = now.saturating_sub(row["since"].as_u64().unwrap_or(now));
+            format!("{title} · running {}", span(ran))
+        }
     }
 }
 
@@ -512,6 +527,11 @@ impl Table {
             .collect();
         rows.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
         rows.into_iter().map(|(.., row)| row).collect()
+    }
+
+    /// The list's order key of the row with this ID.
+    pub fn order_of(&self, id: &str) -> Option<String> {
+        self.rows.get(id).map(|(order, _)| order.clone())
     }
 
     /// The list's row with this ID.
@@ -932,6 +952,24 @@ pub fn menu(table: &Table, now: u64) -> Vec<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// #1925: a running job's row shows its tool's count as the hub wrote it; with no counter, the word running and
+    /// how long it has run, in the row's time slot, never a count it wasn't given.
+    #[test]
+    fn a_job_row_counts_only_from_its_tools_counter() {
+        let counted = json!({"title": "test.encode", "progress": "300 of 600 · 40 s left", "since": 0});
+        assert_eq!(
+            job_words(&counted, 45_000),
+            "test.encode · 300 of 600 · 40 s left"
+        );
+        let bare = json!({"title": "test.encode", "since": 1_000});
+        let words = job_words(&bare, 41_000);
+        assert_eq!(words, "test.encode · running 40 s");
+        assert_eq!(
+            time_at_end(&words),
+            ("test.encode · running", Some("40 s"))
+        );
+    }
 
     /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.
     #[test]

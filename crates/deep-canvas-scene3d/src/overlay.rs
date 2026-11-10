@@ -79,7 +79,12 @@ pub fn picture(o: &Overlay) -> Option<Picture> {
     ctx.flush();
     let mut pixmap = Pixmap::new(w, h);
     let mut resources = vello_cpu::Resources::new();
-    ctx.render(&mut pixmap, &mut resources);
+    // The f32 pipeline: deep-show also builds vello_cpu's u8 one (#1897), which `render` would take.
+    let f32_pipeline = vello_cpu::RasterizerSettings {
+        render_mode: vello_cpu::RenderMode::OptimizeQuality,
+        ..Default::default()
+    };
+    ctx.render_with(&mut pixmap, &mut resources, f32_pipeline);
     Some(Picture {
         at,
         size: [w, h],

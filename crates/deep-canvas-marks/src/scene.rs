@@ -615,6 +615,40 @@ pub enum ImageSampling {
     Cubic,
 }
 
+/// #1653: the atlas cell an image draws in place of its whole asset (Mark set: atlas tiles): cell
+/// `index` in row-major order of `cell`-px cells laid from `margin`, `separation` apart, turned by
+/// `flip`'s bits (h 1, v 2, transpose 4; transpose first). Whoever decodes the atlas resolves it
+/// against its width, so a sample never leaves the cell.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AtlasCell {
+    pub index: u64,
+    pub cell: [f64; 2],
+    pub margin: [f64; 2],
+    pub separation: [f64; 2],
+    pub flip: u8,
+}
+
+impl AtlasCell {
+    /// The cell's `[x, y, w, h]` in an atlas of `[width, height]` px, or `None` for a cell the
+    /// atlas doesn't hold.
+    pub fn rect(&self, [width, height]: [u32; 2]) -> Option<[f64; 4]> {
+        let [cw, ch] = self.cell;
+        if cw < 1.0 || ch < 1.0 {
+            return None;
+        }
+        let step = [cw + self.separation[0], ch + self.separation[1]];
+        let columns = ((f64::from(width) - self.margin[0] + self.separation[0]) / step[0]).floor();
+        if columns < 1.0 {
+            return None;
+        }
+        let columns = columns as u64;
+        let (col, row) = (self.index % columns, self.index / columns);
+        let x = self.margin[0] + col as f64 * step[0];
+        let y = self.margin[1] + row as f64 * step[1];
+        (y + ch <= f64::from(height)).then_some([x, y, cw, ch])
+    }
+}
+
 /// A styled span of a text's one shaped run (`runs: [{from, to, role}]`): graphemes `[from, to)`
 /// painted in `role`. It changes no glyph, so the run is shaped once and kerns across it.
 #[derive(Clone, Debug, PartialEq)]
@@ -907,6 +941,8 @@ pub enum Mark {
         opacity: f64,
         /// The item's adjust, applied to every pixel of the image.
         adjust: Adjust,
+        /// #1653: the atlas cell it draws, for a row of an atlas set.
+        tile: Option<AtlasCell>,
     },
 }
 
@@ -1189,6 +1225,7 @@ impl Mark {
                 crop,
                 opacity,
                 adjust,
+                tile,
                 ..
             } => {
                 // An asset enters by its sha256, as every asset does.
@@ -1204,6 +1241,15 @@ impl Mark {
                     c.iter().for_each(|v| {
                         k.number(*v);
                     });
+                }
+                if let Some(t) = tile {
+                    k.text("tile").int(t.index as i64).int(i64::from(t.flip));
+                    [t.cell, t.margin, t.separation]
+                        .iter()
+                        .flatten()
+                        .for_each(|v| {
+                            k.number(*v);
+                        });
                 }
                 k.number(*opacity);
                 if !adjust.is_identity() {
@@ -4111,6 +4157,10 @@ pub enum Planted {
     /// only its min and max.
     DecimateFirstLast,
     DecimateMinMax,
+    /// #1653 AC4's twins: an isometric atlas grid laid out as a square one, and an atlas set
+    /// drawn in row order rather than by centre.
+    AtlasSquareLayout,
+    AtlasRowOrder,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -4144,6 +4194,9 @@ pub fn frame_planted(
     // #467: parallax groups moved to their offset at the record's time, repeats laid out.
     let moved = crate::fields::apply(doc, items, record.pinned)?;
     let items = moved.as_ref().unwrap_or(items);
+    // #1653: terrain drawn as its atlas set, and each animated atlas row at its frame.
+    let tiled = crate::atlas::apply(doc, items, record.pinned)?;
+    let items = tiled.as_ref().unwrap_or(items);
     let bound = bound_texts(doc, items, record)?;
     frame_shown(
         doc,
@@ -4717,7 +4770,8 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 fill: Fill::Solid([255, 255, 255]),
             }]
         }
-        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" => {
+        // A logic item (#544) steps and emits occurrences, and draws nothing.
+        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" | "logic@1" => {
             return Ok(None)
         }
         "star@1" => {
@@ -4834,6 +4888,17 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 ctx.paints.shapes(id, &built, place, paint, &paint_path)?
             }
         }
+        "marks@1" if crate::atlas::is_atlas(params) => {
+            let rows = data::rows(
+                id,
+                item,
+                ctx.items,
+                ctx.row_readings
+                    .get(id.as_str())
+                    .unwrap_or(&data::BoundRows::new()),
+            )?;
+            crate::atlas::marks(id, params, &rows, pos, ctx.planted)?
+        }
         "marks@1" => {
             let drawing = data::mark_set(
                 id,
@@ -4849,7 +4914,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             drawing.marks
         }
         "axis@1" => {
-            let drawing = data::axis(id, item, ctx.items, ctx.palette, pos)?;
+            let drawing = data::axis(id, item, ctx.items, ctx.palette, pos, ctx.size)?;
             fades = drawing.fades;
             drawing.marks
         }
@@ -4901,6 +4966,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 crop: four(params.get("crop")),
                 opacity: num(params.get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0),
                 adjust: Adjust::default(),
+                tile: None,
             }]
         }
         _ => vec![match kind {
@@ -5085,8 +5151,35 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             dir: l.dir,
             elevation: l.elevation,
         });
-    let fx = crate::fx::Fx::read(ctx.palette, paint, &paint_path, light)?;
-    let drawn_marks = with_fx(id, &fx, drawn_marks);
+    let mut fx = crate::fx::Fx::read(ctx.palette, paint, &paint_path, light)?;
+    // #1653: halos on a text, or on each row of a set of texts.
+    let set_of_texts =
+        kind == "marks@1" && params.get("mark").and_then(Value::as_str) == Some("text");
+    let halos = if kind == "text@1" || set_of_texts {
+        crate::fx::halos(
+            ctx.palette,
+            params.get("halo"),
+            &format!("{path}/params/halo"),
+        )?
+    } else {
+        Vec::new()
+    };
+    let drawn_marks = if set_of_texts && !halos.is_empty() {
+        let only = crate::fx::Fx {
+            halos,
+            ..crate::fx::Fx::default()
+        };
+        let rows = with_fx(id, &fx, drawn_marks);
+        rows.into_iter()
+            .flat_map(|d| {
+                let row = d.mark.item().to_string();
+                with_fx(&row, &only, vec![d])
+            })
+            .collect()
+    } else {
+        fx.halos = halos;
+        with_fx(id, &fx, drawn_marks)
+    };
     Ok(Some(Placed {
         keys: Vec::new(),
         layer: layer.to_string(),

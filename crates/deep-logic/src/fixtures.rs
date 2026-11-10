@@ -256,7 +256,7 @@ impl Logic {
             let lib = links::resolve(
                 &[(label.clone(), e.asset.clone())],
                 std::slice::from_ref(&pack),
-                &assets,
+                &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
                 &self.planted,
             )
             .map_err(refused)?
@@ -292,11 +292,16 @@ impl Logic {
             .and_then(Value::as_object)
             .cloned()
             .unwrap_or_default();
-        let lib = links::resolve(&[(label.into(), entry)], &packs, &assets, &self.planted)
-            .map_err(|r| json!({"ok": false, "code": "link_refused", "refusals": r}))?
-            .into_iter()
-            .find(|l| l.label == label)
-            .ok_or_else(|| bad("library"))?;
+        let lib = links::resolve(
+            &[(label.into(), entry)],
+            &packs,
+            &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
+            &self.planted,
+        )
+        .map_err(|r| json!({"ok": false, "code": "link_refused", "refusals": r}))?
+        .into_iter()
+        .find(|l| l.label == label)
+        .ok_or_else(|| bad("library"))?;
         Ok(match self.verify(piece_v, &lib) {
             Err(r) => json!({"ok": true, "verdict": "FAIL", "asks": [], "refusals": r}),
             Ok(_) if lib.agent => {

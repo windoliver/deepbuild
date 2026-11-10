@@ -484,6 +484,55 @@ impl Controller {
         rows
     }
 
+    /// The card's rows on an ask's page (#1461), where the box under it holds your words, the lines that say what
+    /// they do and the send control: every row but those.
+    pub fn page_rows(&self) -> Vec<Row> {
+        self.rows()
+            .into_iter()
+            .filter(|row| match row {
+                Row::Send => false,
+                Row::Text(text) => {
+                    !text.starts_with("Your words: ")
+                        && text != WONT_RUN
+                        && text != ANSWERS_THIS_ASK_ONLY
+                }
+                _ => true,
+            })
+            .collect()
+    }
+
+    /// The box's send control on an ask's page (#1461), saying what the press does: Say no on an approval, whose words
+    /// go as the reason, else Answer; and the lines above it once it holds words.
+    pub fn words_send(&self) -> (&'static str, Vec<&'static str>) {
+        let approval = self.allow_option().is_some();
+        let label = if approval { "Say no" } else { "Answer" };
+        let mut lines = Vec::new();
+        if !self.words.is_empty() || self.image.is_some() {
+            lines.push(ANSWERS_THIS_ASK_ONLY);
+            if approval {
+                lines.push(WONT_RUN);
+            }
+        }
+        (label, lines)
+    }
+
+    /// The card was laid out in `slot` (#1461): a slot that moved, as when the window changed size, presents it
+    /// again, unarmed, where it now is.
+    pub fn placed(&mut self, slot: Slot, now: u64) {
+        if slot == self.slot {
+            return;
+        }
+        self.slot = slot;
+        if matches!(
+            self.machine.state(),
+            State::Presented { .. } | State::Armed { .. }
+        ) {
+            self.machine.present(now, slot);
+            self.send_down = None;
+            self.holding = None;
+        }
+    }
+
     /// The card's text snapshot: every row's words, in reading order.
     pub fn lines(&self) -> Vec<String> {
         self.rows()
@@ -834,7 +883,12 @@ impl Controller {
     /// The answer through Send with no option: your words and image alone, this ask's only, never a decision
     /// and never the plan.
     fn answer_words(&mut self, t: u64, events: &[Value], now: u64) {
-        if self.faults.typed_yes_allows && self.words.trim().eq_ignore_ascii_case("yes") {
+        // #1461's planted page reads words that start with yes as the approval.
+        let reads_yes = crate::plain::planted("words-read-yes")
+            && self.words.trim().to_lowercase().starts_with("yes");
+        if reads_yes
+            || (self.faults.typed_yes_allows && self.words.trim().eq_ignore_ascii_case("yes"))
+        {
             if let Some(index) = self.allow_option() {
                 self.machine.answered();
                 self.answer_option(index, t, events, now);
@@ -1088,6 +1142,41 @@ mod tests {
             "the step was switched off: nothing is sent"
         );
         assert!(card.lines().contains(&SWITCH_FIRST.to_owned()));
+    }
+
+    #[test]
+    fn on_an_asks_page_the_box_holds_the_words_and_says_no_on_an_approval() {
+        let events = vec![approval("P"), taste("B")];
+        let mut push = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
+        assert_eq!(push.words_send(), ("Say no", vec![]));
+        push.type_words("yes, but squash first");
+        assert_eq!(
+            push.words_send(),
+            ("Say no", vec![ANSWERS_THIS_ASK_ONLY, WONT_RUN])
+        );
+        let rows = push.page_rows();
+        assert!(
+            !rows.contains(&Row::Send),
+            "the card draws no Send of its own"
+        );
+        assert!(rows
+            .iter()
+            .all(|r| !r.label().starts_with("Your words") && r.label() != WONT_RUN));
+        let mut taste =
+            Controller::present(&events, "ask:B", NOW, SLOT, Faults::default()).unwrap();
+        taste.type_words("keep it, but smaller");
+        assert_eq!(taste.words_send(), ("Answer", vec![ANSWERS_THIS_ASK_ONLY]));
+        // A moved slot presents it again, unarmed.
+        taste.tick(NOW + ARM_AFTER);
+        assert_eq!(taste.state_name(), "armed");
+        taste.placed(
+            Slot {
+                rect: [10, 10, CARD_SIZE[0], CARD_SIZE[1]],
+                ..SLOT
+            },
+            NOW + ARM_AFTER + 1,
+        );
+        assert_eq!(taste.state_name(), "presented");
     }
 
     #[test]

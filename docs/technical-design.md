@@ -2363,6 +2363,7 @@ Every surface (the sidebar, the line, return cards, the verdict line in the chat
 | stuck | a session blocked on something only you or a service can clear | blocked |  |
 | flagged | a session whose process is gone mid-turn, whose turn ended failed, or whose promised check is due | fail |  |
 | finished | a session whose turn stopped with no claim to judge | idle |  |
+| running | a job whose tool is running, shown with its count from the tool's own counters, such as 300 of 600, and after 30 s its time left; with no counter, how long it has run | running |  |
 
 <a id="parallel"></a>
 

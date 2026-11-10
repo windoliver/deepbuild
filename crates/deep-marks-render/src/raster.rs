@@ -24,7 +24,8 @@ use deep_canvas_marks::scene::{Blend, Drawn, Scope};
 use deep_canvas_marks::story;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
-    bez, brush, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas, Scopes,
+    bez, brush, level_name, rasterizer, rect, sampler, settings, shape, solid, stroke, Canvas,
+    Scopes,
 };
 use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::{Affine, RoundedRect, Shape};
@@ -203,21 +204,6 @@ impl Config {
             },
             ..rasterizer()
         }
-    }
-}
-
-/// A level by its name: `scalar`, `neon`, or the x86 level detected.
-fn level_name(level: Level) -> String {
-    if matches!(level, Level::Fallback(_)) {
-        "scalar".into()
-    } else if level.as_neon().is_some() {
-        "neon".into()
-    } else {
-        format!("{level:?}")
-            .split('(')
-            .next()
-            .unwrap_or("detected")
-            .to_lowercase()
     }
 }
 
@@ -712,13 +698,26 @@ impl<C: Glyphs> Painter<'_, C> {
                 crop,
                 opacity,
                 adjust,
+                tile,
             } => {
                 let looks = (*opacity, adjust);
                 let (pixmap, [w, h]) = match self.kept {
-                    Some(kept) => kept
-                        .borrow_mut()
-                        .pixmap(self.store, hash, *crop, looks, item)?,
-                    None => asset::Kept::default().pixmap(self.store, hash, *crop, looks, item)?,
+                    Some(kept) => kept.borrow_mut().pixmap(
+                        self.store,
+                        hash,
+                        *crop,
+                        tile.as_ref(),
+                        looks,
+                        item,
+                    )?,
+                    None => asset::Kept::default().pixmap(
+                        self.store,
+                        hash,
+                        *crop,
+                        tile.as_ref(),
+                        looks,
+                        item,
+                    )?,
                 };
                 let to = fit.fitted(*bounds, [w, h]);
                 self.ctx.set_paint(
@@ -1490,7 +1489,7 @@ pub fn geometry(
     item: &str,
     t: i64,
     vectors: &crate::Vectors,
-    router: deep_canvas_graph::view::Router,
+    (router, planted): (deep_canvas_graph::view::Router, scene::Planted),
     (look, timing): (Option<&Look>, bool),
     (ctx, color_at): (&crate::formulas::Ctx, Option<&[f64]>),
 ) -> Value {
@@ -1608,7 +1607,7 @@ pub fn geometry(
             match found["kind"].as_str() {
                 Some("marks@1") => {
                     answer["rows"] =
-                        data::rows_report(item, found, &items, &palette).map_err(story)?;
+                        data::rows_report(item, found, &items, &palette, planted).map_err(story)?;
                     if timing {
                         answer["timing"] = json!({"mix_ms": mix_ms(item, found).map_err(story)?});
                     }
