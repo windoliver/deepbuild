@@ -39,7 +39,7 @@ impl ToneMap {
 /// Rec. 709 luma weights, linear light.
 pub const LUMA: [f64; 3] = [0.2126, 0.7152, 0.0722];
 
-/// AgX's inset matrix, rows (three.js's, after Blender's).
+/// AgX's inset matrix, rows.
 pub const AGX_INSET: [[f64; 3]; 3] = [
     [0.856627153315983, 0.0951212405381588, 0.0482516061458583],
     [0.137318972929847, 0.761241990602591, 0.101439036467562],
