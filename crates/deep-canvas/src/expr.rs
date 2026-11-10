@@ -2883,6 +2883,25 @@ mod tests {
         assert!(e.why.contains("the cap of 64 levels"), "{e}");
     }
 
+    #[test]
+    fn the_node_bound_sits_at_twice_the_cap_and_a_name_counts_as_read() {
+        // At cap 512 the parse takes 1,024 nodes as written and refuses the 1,025th.
+        let over = |t: String| {
+            Expr::compile(&t, &Nothing, 512)
+                .err()
+                .is_some_and(|e| e.why.contains("twice the cap of 512"))
+        };
+        // A sum of k + 1 ones is 2k + 1 nodes; abs around it adds one.
+        let sum = |k: usize| format!("{}1", "1+".repeat(k));
+        assert!(!over(sum(511)) && over(sum(512)));
+        assert!(!over(format!("abs({})", sum(511))));
+        // A table's name read whole counts one node; read as `p.t + …`, its parts count once.
+        assert!(!over(format!("table(p.t, {})", sum(510))));
+        assert!(over(format!("table(p.t, {})", sum(511))));
+        assert!(!over(format!("table(p.t + {})", sum(509))));
+        assert!(over(format!("table(p.t + {})", sum(510))));
+    }
+
     struct OneTable;
     impl Resolve for OneTable {
         fn table(&self, name: &str) -> Option<Table> {
