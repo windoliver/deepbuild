@@ -10,8 +10,9 @@ use gpui_kit::base::input::{Input, InputEvent, InputState};
 use gpui_kit::*;
 use serde_json::{json, Value};
 
-use crate::chrome;
+use crate::chrome::{self, sizes};
 use crate::views::observed;
+use crate::views::{control, Control};
 
 /// Sends the box's words to the hub (`box.say`): the proposal and its ask, or `unread`, the one line why nothing was drafted.
 pub type Say = Arc<dyn Fn(&str) -> Result<Value, String> + Send + Sync>;
@@ -175,20 +176,13 @@ impl Render for WordsBox {
                 Some(
                     div()
                         .flex()
-                        .gap_2()
+                        .gap(sizes().space(1))
                         .items_center()
                         .child(line("box-said", format!("Drafted: {question}")))
                         .child(
-                            observed("box-open")
-                                .role(Role::Button)
-                                .aria_label("Open its card")
-                                .px_1()
-                                .rounded_sm()
-                                .hover(|style| style.bg(chrome.hover))
-                                .child("Open its card")
-                                .on_click(move |_, window, cx| {
-                                    crate::card::present_ask(&ask, window, cx)
-                                }),
+                            control("box-open", Control::Plain, "Open its card", chrome).on_click(
+                                move |_, window, cx| crate::card::present_ask(&ask, window, cx),
+                            ),
                         )
                         .into_any_element(),
                 )
@@ -203,15 +197,15 @@ impl Render for WordsBox {
             .flex()
             .flex_col()
             .items_center()
-            .p_2()
-            .border_t_1()
+            .p(sizes().space(1))
+            .border_t(sizes().hairline)
             .border_color(chrome.divider)
             .child(
                 div()
-                    .w(px(560.))
+                    .w(relative(0.8))
                     .flex()
                     .flex_col()
-                    .gap_1()
+                    .gap(sizes().space(0))
                     .children(
                         self.beside
                             .clone()
@@ -220,7 +214,7 @@ impl Render for WordsBox {
                     .child(
                         div()
                             .flex()
-                            .gap_2()
+                            .gap(sizes().space(1))
                             .items_center()
                             // The drafted change is the input's words, its value (#1459's author id).
                             .child(
@@ -229,20 +223,13 @@ impl Render for WordsBox {
                                     .aria_label("Say a change in words")
                                     .aria_value(draft)
                                     .flex_1()
-                                    .h(px(32.))
+                                    .h(sizes().title.line + sizes().space(2))
                                     .child(Input::new(&self.input)),
                             )
                             .child(
-                                observed("box-send")
-                                    .role(Role::Button)
-                                    .aria_label("Send")
-                                    .px_2()
-                                    .rounded_sm()
-                                    .hover(|style| style.bg(chrome.hover))
-                                    .child("Send")
-                                    .on_click(
-                                        cx.listener(|this, _, window, cx| this.send(window, cx)),
-                                    ),
+                                control("box-send", Control::Plain, "Send", chrome).on_click(
+                                    cx.listener(|this, _, window, cx| this.send(window, cx)),
+                                ),
                             ),
                     )
                     .children(said),
