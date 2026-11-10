@@ -40,20 +40,21 @@ was found that asserts nothing or repeats another.
 
 ## Red on main, not from this change
 
-None of these is in `scripts/known-failures.json`. The first belongs to open issues; no open issue names the other
-three.
+None of these is in `scripts/known-failures.json`. The first belongs to open issues #1689 and #1891; the other three
+are filed as #2171, #2172 and #2173.
 
 1. **`tests/agent-name-branches.test.mjs` fails.** Main had three branches past the list; two remain, both at
    `hub/src/status.ts:145` (`row.agent !== 'claude-code' && row.agent !== 'claude'`, from #1296). No fact says where
    an agent's plan windows are read from, and `cursor` and `grok` share Claude Code's adapter, so no cap or fact can
    stand in today. It needs a fact, which is #1689's and #1891's subject.
-2. **`tests/acceptance/323/review.test.ts` AC12 and AC13 fail.** The same two cases fail on a hub built from the
-   base's sources, with the same message: a PR's unresolved review threads give no open item.
-3. **`deep-codecs`' `export::tests::the_same_frames_give_the_same_h264_part` fails when the crate's tests run
-   together** and passes alone, on base and here: two encodes of the same frames differ when other encoder tests run
-   beside them.
-4. **`scripts/repo-rules.mjs` fails its `deps` lane**: `crates/deep-app/Cargo.toml` names `accesskit_macos` with no
-   reason in `scripts/repo-rules.json`.
+2. **`tests/acceptance/323/review.test.ts` AC12 and AC13 fail** (#2171). The same two cases fail on a hub built from
+   the base's sources, with the same message: a PR's unresolved review threads give no open item.
+3. **`deep-codecs`' `export::tests::the_same_frames_give_the_same_h264_part` fails some runs of the crate's tests
+   together** (#2172) and passes alone: two encodes of the same frames differ when other encoder tests run beside
+   them. It failed two whole-crate runs before main was merged, one on base and one here, and passed the one after.
+4. **`scripts/repo-rules.mjs` fails its `deps` lane** (#2173): `crates/deep-app/Cargo.toml` names `accesskit_macos`
+   with no reason in `scripts/repo-rules.json`. Main at `579001dd` adds four more lines of the same kind, for `wat`
+   and `wasmparser` in `tests/acceptance/544/wat` and `545/wat`.
 
 ## Left alone, with reasons
 
@@ -79,6 +80,22 @@ three.
   AGENTS.md.
 - **The larger folds are already issues**: #1904 to #1908 (one GitHub client, rules written once, copies in the hub
   and the extension host, checks-journey's unread fields, Rust helpers), #1891 to #1896 and #1687.
+
+## After merging main
+
+Main was merged once at `579001dd`, 80 commits past the base, with no conflict. Each check below then ran once.
+
+| Check | Result |
+|---|---|
+| `tsc --noEmit` on the root config | exit 0 |
+| `scripts/proof.mjs guard` | PASS, 2 commits checked |
+| `scripts/repo-rules.mjs` | fails as on main: the five `deps` lines above; every other lane passes |
+| `tests/package-deps.test.mjs` | 2 of 2 pass |
+| `tests/agent-name-branches.test.mjs` | fails as on main, on `status.ts:145` alone |
+| `cargo check -p deep-codecs --all-targets` | clean, no warning |
+| `cargo test -p deep-codecs --lib` | 22 of 22 pass |
+| `checks-journey` `units` and `png`, hub `threads` and `codex-hub`, `322/github`, `323/review` | 49 of 51 pass; the two that fail are #2171's |
+| The six edited JavaScript files under `checkJs` | no name unused or not found |
 
 ## Not run
 
