@@ -80,6 +80,10 @@ pub struct Water {
     /// Foam's steepness threshold; 1 is off.
     pub foam: f64,
     pub wake: Option<Wake>,
+    /// Its shore (#268), with the field baked at check, or none.
+    pub shore: Option<crate::shore::Shore>,
+    /// The water's plane at rest: its first part's world y.
+    pub level: f64,
     /// The document's seed, which ripples and rain hash from.
     pub seed: u32,
     /// t in s.
@@ -266,6 +270,8 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         distort,
         foam,
         wake,
+        shore: crate::shore::parse(material, spec.get("shore"))?,
+        level: 0.0,
         seed,
         t,
     })
@@ -312,12 +318,16 @@ pub fn find<'a>(
         else {
             continue;
         };
-        if found.is_none() {
+        let first = found.is_none();
+        if first {
             found = Some(parse(name, spec, seed, t)?);
         }
         if let Some(w) = found.as_mut().filter(|w| w.material == name) {
             w.parts.insert(s.id.clone());
             let corners = crate::scene::corners_of(s);
+            if first {
+                w.level = corners.iter().map(|c| c[1]).sum::<f64>() / corners.len().max(1) as f64;
+            }
             let (xs, zs) = (corners.iter().map(|c| c[0]), corners.iter().map(|c| c[2]));
             w.plates.push((
                 s.id.clone(),

@@ -11,14 +11,16 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
-import { CHECKED, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type Placing, type SliceEntry, type Transcripts } from './learned.js';
+import { findMessages, foldText, refreshIndex, touched, type FoundMessage } from './archive.js';
+import { CHECKED, copyMessages, loadLearned, parseClaimLine, readEvidence, replayCheck, resolveHandle, ROLLERS, placingTranscript, YOURS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type Placing, type SliceEntry, type Transcripts } from './learned.js';
 import { compareReplay, planHash } from './replay.js';
 import { movable, type Refusal } from './lifecycle.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
-export { compareReplay, parseClaimLine, planHash, PROJECTIONS, testStorage, ulid };
+export { compareReplay, foldText, parseClaimLine, planHash, PROJECTIONS, testStorage, ulid };
+export type { FoundMessage };
 export { openTrust, type ProjectTrust } from './trust.js';
 export type { Comparison, Measure, MeasureResult, ReplayPlan, ReplayResult, ReplayRun, TaskPair, Variant } from './replay.js';
 export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
@@ -136,6 +138,12 @@ export interface RecordStore {
   resolve(handle: string): Promise<Resolved | undefined>;
   /** A session's archived transcript, through its newest transcript.archived link; undefined for a session none links (#1098). */
   transcript(session: string): Promise<Message[] | undefined>;
+  /** Brings the archive's text index up to each session's newest transcript copy, from the evidence (#1515). */
+  indexTranscripts(): Promise<void>;
+  /** Archived messages whose text, folded as `foldText` folds it, holds every term (each a list of forms, any one will do), through the index (#1515). */
+  findMessages(terms: readonly (readonly string[])[], sessions?: readonly string[]): Promise<FoundMessage[]>;
+  /** The sessions whose recorded reads and edits touched a file (#1515): a relative path inside each session's worktree or under `cwd`. */
+  touched(file: string, cwd?: string): Promise<{ session: string; path: string }[]>;
   /**
    * Keeps a file in the evidence store as the core, recorded as evidence.stored under the connection's project, so
    * a learned change can cite it by its `ev:` handle and reach the repo the file is from (#355).
@@ -304,6 +312,8 @@ class SqliteRecord implements RecordStore {
   private readonly placing: Placing = new Map();
   /** The rollback running now, which the next one waits for. */
   private rolling: Promise<unknown> = Promise.resolve();
+  /** The archive index's refresh running now (#1515), which the next one waits for, and a close too. */
+  private indexing: Promise<void> = Promise.resolve();
   /** Set when a projection an older version made had other columns: the open replays the log before any read. */
   readonly stale: boolean;
 
@@ -843,6 +853,22 @@ class SqliteRecord implements RecordStore {
     return row?.transcript ? placingTranscript(this.options.evidence, this.placing, row.transcript) : undefined;
   }
 
+  indexTranscripts(): Promise<void> {
+    // One refresh at a time; each commits a session's rows on its own, so appends go between them.
+    this.indexing = this.indexing.catch(() => undefined).then(() => refreshIndex(this.db, (sha) => copyMessages(this.options.evidence, sha), (work) => this.backend.commit(this.db, 'normal', work), () => this.closing !== undefined));
+    return this.indexing;
+  }
+
+  async findMessages(terms: readonly (readonly string[])[], sessions?: readonly string[]): Promise<FoundMessage[]> {
+    await this.settle();
+    return findMessages(this.db, terms, sessions, (session) => this.transcript(session));
+  }
+
+  async touched(file: string, cwd?: string): Promise<{ session: string; path: string }[]> {
+    await this.settle();
+    return touched(this.db, file, cwd);
+  }
+
   async keep(connection: Connection, file: { bytes: Uint8Array; kind: string; source: string }): Promise<string> {
     if (!this.evidenceWriter) throw new RecordError('storage', 'the record was opened without an evidence store');
     const put = await this.evidenceWriter.put({ bytes: file.bytes, kind: file.kind, source: file.source, redaction: 'complete', license: { name: 'own', allows: [] } });
@@ -914,6 +940,7 @@ class SqliteRecord implements RecordStore {
     return this.closing;
   }
   private async stop(): Promise<void> {
+    await this.indexing.catch(() => undefined);
     while (this.inFlight || this.queue.length || this.scheduled) await new Promise<void>((resolve) => setImmediate(resolve));
     const lost = this.db.prepare('INSERT OR IGNORE INTO lost_sessions (session) VALUES (?)');
     const put = this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value');
@@ -957,6 +984,9 @@ export interface RecordReader {
   sessions(): Promise<{ id: string; agent: string | null; worktree: string | null; branch: string | null; transcript: string }[]>;
   /** Handles `deep find` searches besides transcripts: your decisions in force, and evidence that is neither media nor a transcript. */
   findable(): Promise<string[]>;
+  /** As RecordStore's: through the index the hub keeps, and each session it doesn't hold from its transcript (#1515). */
+  findMessages(terms: readonly (readonly string[])[], sessions?: readonly string[]): Promise<FoundMessage[]>;
+  touched(file: string, cwd?: string): Promise<{ session: string; path: string }[]>;
   close(): void;
 }
 export function openRecordReader(options: { path: string; evidence?: EvidenceStore }): RecordReader {
@@ -971,6 +1001,8 @@ export function openRecordReader(options: { path: string; evidence?: EvidenceSto
       ...(db.prepare("SELECT id FROM decisions WHERE state = 'active' ORDER BY created, id").all() as { id: string }[]).map((r) => `decision:${r.id}`),
       ...(db.prepare("SELECT hash FROM evidence WHERE type NOT IN ('png', 'jpeg', 'mp4') AND kind != 'transcript' ORDER BY hash").all() as { hash: string }[]).map((r) => `ev:${r.hash}`),
     ],
+    findMessages: (terms, sessions) => findMessages(db, terms, sessions, (session) => sessionTranscript(db, options.evidence, transcripts, session)),
+    touched: async (file, cwd) => touched(db, file, cwd),
     close: () => db.close(),
   };
 }

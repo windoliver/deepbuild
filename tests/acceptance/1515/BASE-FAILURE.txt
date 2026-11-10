@@ -1,0 +1,100 @@
+# tests/acceptance/1515 on the base commit f1e8736e2d38a3fe0835fcba1a3d943e629f4d94 (origin/main), 2026-11-09T06:38Z, Mac17,10 Apple M5 Max
+# npx vitest run --root tests/acceptance/1515 --no-file-parallelism --reporter=verbose
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1515
+
+ × search.test.ts > AC1 #1515.50f29297 deep_search from a Codex session of repo A returns the error string's message in a Claude Code session of repo A, with its handle and its agent 109064ms
+   → in 60 s deep_search "PoolTimeoutError: connection pool exhausted after 30000ms" from Codex session 01a1581d38207b628f4f78c8526d0080 of repo A never returned session:sa010c#merr
+ × search.test.ts > AC2 #1515.82f04bac the same call from a Codex session of repo B returns no hit from repo A 1ms
+   → in 60 s deep_search "PoolTimeoutError: connection pool exhausted after 30000ms" from Codex session 01a1581d38207b628f4f78c8526d0080 of repo A never returned session:sa010c#merr
+ × search.test.ts > AC3 #1515.c41b7667 deep find --file src/retry.ts lists only the sessions whose tool events touched it 17146ms
+   → deep find --file src/retry.ts exits 0: 2 Usage: deep find <query> [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]
+
+ × search.test.ts > AC4 #1515.c5a02456 the hit of a session whose file changed at a later commit says so; the one whose file is unchanged doesn't 0ms
+   → in 60 s deep_search "PoolTimeoutError: connection pool exhausted after 30000ms" from Codex session 01a1581d38207b628f4f78c8526d0080 of repo A never returned session:sa010c#merr
+ × search.test.ts > AC5 #1515.c84a0fbf the hit from a page WebFetch returned reads as outside content, never your words 2ms
+   → in 60 s deep_search "PoolTimeoutError: connection pool exhausted after 30000ms" from Codex session 01a1581d38207b628f4f78c8526d0080 of repo A never returned session:sa010c#merr
+ ✓ search.test.ts > AC8 #1515.03d88b61 deep find returns today's hits for part of a word, a Greek and a Chinese query 45936ms
+ × search.test.ts > AC6 #1515.adbdb642 deleting the index and rebuilding it from the evidence returns the same hits, in the same order 1ms
+   → in 60 s deep_search "PoolTimeoutError: connection pool exhausted after 30000ms" from Codex session 01a1581d38207b628f4f78c8526d0080 of repo A never returned session:sa010c#merr
+ × budgets.test.ts > AC7 #1515.c1a2b880 the perf lane has a #1515 task, a first measurement, valid against the merge base's budgets, and it runs 670ms
+   → benchmarks/budgets.json has a task whose initialReason names issue #1515: expected [] to not deeply equal []
+ × budgets.test.ts > AC7 #1515.c1a2b880 on the reference Mac, deep_search from a Codex session of repo A over the 500-session record answers in under 100 ms at p95 45105ms
+   → deep_search "PoolTimeoutError: connection pool exhausted after 30000ms" returns session:sa010c#merr, so what is timed searches past sessions: []: expected [] to include 'session:sa010c#merr'
+stdout | budgets.test.ts > AC7 #1515.c1a2b880 on the reference Mac, deep find over the 500-session record returns in under 100 ms beyond the CLI's own start
+#1515 deep find over 500 sessions beyond the CLI's start, a reading: 9820.9 ms
+
+ ↓ budgets.test.ts > AC7 #1515.c1a2b880 on the reference Mac, deep find over the 500-session record returns in under 100 ms beyond the CLI's own start 59675ms [INCONCLUSIVE (not measured: not a reference Mac: Mac17,10 / Apple M5 Max / 64 GiB; the reading above is not judged)]
+ ↓ golden.test.ts > records today's deep find hits on the fixture at f1e8736e
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC7 #1515.c1a2b880 the perf lane has a #1515 task, a first measurement, valid against the merge base's budgets, and it runs
+AssertionError: benchmarks/budgets.json has a task whose initialReason names issue #1515: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ budgets.test.ts:35:114
+     33|   validateBudgets(current, JSON.parse(execFileSync('git', ['show', `${…
+     34|   const tasks = current.tasks.filter((t) => /#1515\b/.test(String(t.in…
+     35|   expect(tasks.map((t) => t.id), 'benchmarks/budgets.json has a task w…
+       |                                                                                                                  ^
+     36|   for (const task of tasks) {
+     37|     const [command, ...args] = task.command;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  budgets.test.ts > AC7 #1515.c1a2b880 on the reference Mac, deep_search from a Codex session of repo A over the 500-session record answers in under 100 ms at p95
+AssertionError: deep_search "PoolTimeoutError: connection pool exhausted after 30000ms" returns session:sa010c#merr, so what is timed searches past sessions: []: expected [] to include 'session:sa010c#merr'
+ ❯ budgets.test.ts:48:170
+     46|   const want = handleOf('E1', 'merr');
+     47|   const first = await a.past(ERR);
+     48|   expect(first.hits.map((h) => h.source), `deep_search "${ERR}" return…
+       |                                                                                                                                                                          ^
+     49|   if (problem) ctx.skip(`INCONCLUSIVE (not measured: ${problem})`);
+     50|   const queries = [ERR, WHOSE_WORD, COMMON_WORD, AGENT_WORD];
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  search.test.ts > AC1 #1515.50f29297 deep_search from a Codex session of repo A returns the error string's message in a Claude Code session of repo A, with its handle and its agent
+ FAIL  search.test.ts > AC2 #1515.82f04bac the same call from a Codex session of repo B returns no hit from repo A
+ FAIL  search.test.ts > AC4 #1515.c5a02456 the hit of a session whose file changed at a later commit says so; the one whose file is unchanged doesn't
+ FAIL  search.test.ts > AC5 #1515.c84a0fbf the hit from a page WebFetch returned reads as outside content, never your words
+ FAIL  search.test.ts > AC6 #1515.adbdb642 deleting the index and rebuilding it from the evidence returns the same hits, in the same order
+Error: in 60 s deep_search "PoolTimeoutError: connection pool exhausted after 30000ms" from Codex session 01a1581d38207b628f4f78c8526d0080 of repo A never returned session:sa010c#merr
+ ❯ until search.test.ts:36:38
+     34|   for (;;) {
+     35|     if (await probe()) return;
+     36|     if (Date.now() > deadline) throw Error(`in 60 s ${what}`);
+       |                                      ^
+     37|     await new Promise((r) => setTimeout(r, 500));
+     38|   }
+ ❯ searching search.test.ts:45:3
+ ❯ search.test.ts:57:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  search.test.ts > AC3 #1515.c41b7667 deep find --file src/retry.ts lists only the sessions whose tool events touched it
+Error: deep find --file src/retry.ts exits 0: 2 Usage: deep find <query> [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]
+
+ ❯ find helpers.ts:393:29
+    391|     const r = await run(NODE, [CLI, 'find', ...args, ...(cursor === un…
+    392|     runs.push(r);
+    393|     if (r.code !== 0) throw Error(`deep find ${args.join(' ')} exits 0…
+       |                             ^
+    394|     let value: Line;
+    395|     try { value = JSON.parse(r.stdout) as Line; } catch { throw Error(…
+ ❯ search.test.ts:86:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+
+ Test Files  2 failed | 1 skipped (3)
+      Tests  8 failed | 1 passed | 2 skipped (11)
+   Start at  22:38:41
+   Duration  331.10s (tests 98%, import 1%, transform 1%)
+
+    Isolate  3 workers spawned · ~15.14s startup each (spawn + environment, per file)
+             at least ~30.29s faster with isolate: false — reuses workers across files instead of one per file
+

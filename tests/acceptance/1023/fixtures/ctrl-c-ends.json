@@ -1,0 +1,43 @@
+{
+  "schema": "dh1023.ends@1",
+  "recorded": "reconstructed",
+  "note": "Reconstructed, not recorded: no recording of a Ctrl-C end exists in adapters/corpus/codex/0.160.0. Each payload is written from the Codex 0.160.0 hook input schemas (adapters/codex-schemas, openai/codex rust-v0.160.0, Apache-2.0, copyright OpenAI) and the issue's record: run 2 recorded session.end {reason: other}; runs 1 and 3 recorded none, their last events the turn's. {session}, {transcript}, {cwd}, {turn} and {call} are filled at each replay.",
+  "codex": "0.160.0",
+  "surface": "terminal",
+  "runs": [
+    {
+      "run": 1,
+      "process": { "ends": "SIGINT", "after": "Stop" },
+      "hooks": [
+        { "session_id": "{session}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "SessionStart", "model": "gpt-reserve", "permission_mode": "default", "source": "startup" },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "UserPromptSubmit", "model": "gpt-reserve", "permission_mode": "default", "prompt": "Print the date, then stop." },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "PreToolUse", "model": "gpt-reserve", "permission_mode": "default", "tool_name": "Bash", "tool_input": { "command": "date" }, "tool_use_id": "{call}" },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "PostToolUse", "model": "gpt-reserve", "permission_mode": "default", "tool_name": "Bash", "tool_input": { "command": "date" }, "tool_use_id": "{call}", "tool_response": "Sun Nov  1 10:00:00 UTC 2026\n" },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "Stop", "model": "gpt-reserve", "permission_mode": "default", "stop_hook_active": false, "last_assistant_message": "Done." }
+      ]
+    },
+    {
+      "run": 2,
+      "process": { "ends": "SIGINT", "after": "SessionEnd" },
+      "hooks": [
+        { "session_id": "{session}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "SessionStart", "model": "gpt-reserve", "permission_mode": "default", "source": "startup" },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "UserPromptSubmit", "model": "gpt-reserve", "permission_mode": "default", "prompt": "List the folder, then stop." },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "PreToolUse", "model": "gpt-reserve", "permission_mode": "default", "tool_name": "Bash", "tool_input": { "command": "ls" }, "tool_use_id": "{call}" },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "PostToolUse", "model": "gpt-reserve", "permission_mode": "default", "tool_name": "Bash", "tool_input": { "command": "ls" }, "tool_use_id": "{call}", "tool_response": "README.md\n" },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "Stop", "model": "gpt-reserve", "permission_mode": "default", "stop_hook_active": false, "last_assistant_message": "Done." },
+        { "session_id": "{session}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "SessionEnd", "reason": "other" }
+      ]
+    },
+    {
+      "run": 3,
+      "process": { "ends": "SIGINT", "after": "Stop" },
+      "hooks": [
+        { "session_id": "{session}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "SessionStart", "model": "gpt-reserve", "permission_mode": "default", "source": "startup" },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "UserPromptSubmit", "model": "gpt-reserve", "permission_mode": "default", "prompt": "Show the git status, then stop." },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "PreToolUse", "model": "gpt-reserve", "permission_mode": "default", "tool_name": "Bash", "tool_input": { "command": "git status --short" }, "tool_use_id": "{call}" },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "PostToolUse", "model": "gpt-reserve", "permission_mode": "default", "tool_name": "Bash", "tool_input": { "command": "git status --short" }, "tool_use_id": "{call}", "tool_response": "" },
+        { "session_id": "{session}", "turn_id": "{turn}", "transcript_path": "{transcript}", "cwd": "{cwd}", "hook_event_name": "Stop", "model": "gpt-reserve", "permission_mode": "default", "stop_hook_active": false, "last_assistant_message": "Done." }
+      ]
+    }
+  ]
+}

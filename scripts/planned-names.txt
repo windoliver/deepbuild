@@ -1,3 +1,4 @@
 # Names a `deep` command or agent tool an open issue plans before the design holds it, one a line as
 # `<name> #<issue>`: the name as the issue writes it, and the open issue that plans it. The design links and names
 # lane (#1329) passes a planned name, and fails an entry whose issue is closed or no longer names it.
+deep waiter #1814

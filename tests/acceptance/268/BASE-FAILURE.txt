@@ -1,0 +1,51 @@
+# #268's tests run against the base, commit 42319109, before any implementation
+#
+# Built and run in a clean export of the base (git archive 42319109 | tar -x), not in this checkout, whose crates an
+# implementer was already editing: deep-gpu built there by cargo build --locked --bin deep-gpu (toolchain 1.99.1,
+# CARGO_INCREMENTAL=0, CARGO_PROFILE_DEV_DEBUG=0, its own target folder), this folder copied in, run with
+#   npx vitest run --root tests/acceptance/268 <files> --no-file-parallelism --testTimeout=3600000
+# on an Apple Silicon Mac, Nov 9 2026. Every test fails, each for the expected reason:
+# - foam.test.ts: the unknown target foam is refused (targets are final, …, depth and reflection); the planted name
+#   shore_field_from_centre doesn't exist (bad_input).
+# - calm.test.ts: shore is an unread field, so the swell is at full height by the quay (1.0000 × the closed form at
+#   0, 10 and 20 m); the planted name shore_calm_ignores_field doesn't exist (bad_input).
+# - field.test.ts: no shore row (call field shore unread); the moving piles and the 2,500 × 2,100-cell field are
+#   drawn instead of refused. Its channel, clip and physics controls with shore none and the static pile are drawn.
+
+## foam.test.ts and calm.test.ts (the summary and each failure's first lines)
+
+ RUN  v5.0.5 <clean base checkout>/tests/acceptance/268
+     × #268.ed64c4a9 with foam width 0.5 and breakup 0, foam covers all 64 band pixels between 0.05 and 0.4 m from the pile and none of 64 beyond 0.7 m 2618ms
+     × #268.ed64c4a9 with breakup 0.5 none of the 64 pixels beyond 0.7 m shows foam, and the breakup clears some of the band 626ms
+     × #268.ed64c4a9 a planted field measured from the pile's centre (--planted shore_field_from_centre) leaves the band bare and fails, naming the material 18ms
+#268.2a540142: at 0 m the amplitude is 0.39674 m, 1.0000 × the closed form's 0.39674 m (want 0.25)
+#268.2a540142: at 10 m the amplitude is 0.39674 m, 1.0000 × the closed form's 0.39674 m (want 0.625)
+#268.2a540142: at 20 m the amplitude is 0.39674 m, 1.0000 × the closed form's 0.39674 m (want 1)
+     × #268.2a540142 at 0, 10 and 20 m from the quay the amplitude over one period is 0.25, 0.625 and 1 times the closed form within 1 mm 67278ms
+     × #268.2a540142 a planted scale that ignores the field (--planted shore_calm_ignores_field) leaves the amplitude at 1 by the quay and fails, naming the material 19ms
+ FAIL  calm.test.ts > #268.2a540142 the swell lies calmer by the quay as the field says > #268.2a540142 at 0, 10 and 20 m from the quay the amplitude over one period is 0.25, 0.625 and 1 times the closed form within 1 mm
+AssertionError: the calm factor by the quay: material quay-water: at 0 m from the quay (x 0.05 m) the height's amplitude over one period is 0.39674 m, 1.0000 times the closed form's 0.39674 m, not 0.25 times within 1 mm; material quay-water: at 10 m from the quay (x 10 m) the height's amplitude over one period is 0.39674 m, 1.0000 times the closed form's 0.39674 m, not 0.625 times within 1 mm: expected [ …(2) ] to deeply equal []
+ FAIL  calm.test.ts > #268.2a540142 the swell lies calmer by the quay as the field says > #268.2a540142 a planted scale that ignores the field (--planted shore_calm_ignores_field) leaves the amplitude at 1 by the quay and fails, naming the material
+AssertionError: deep-gpu run --planted shore_calm_ignores_field exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+ FAIL  foam.test.ts > #268.ed64c4a9 shore foam covers a band around the pile and nothing past it > #268.ed64c4a9 with foam width 0.5 and breakup 0, foam covers all 64 band pixels between 0.05 and 0.4 m from the pile and none of 64 beyond 0.7 m
+AssertionError: the pile with shore was answered, not refused: {"code":"bad_input","reason":"targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth and reflection"}: expected 'bad_input' to be undefined
+ FAIL  foam.test.ts > #268.ed64c4a9 shore foam covers a band around the pile and nothing past it > #268.ed64c4a9 with breakup 0.5 none of the 64 pixels beyond 0.7 m shows foam, and the breakup clears some of the band
+AssertionError: the pile with shore was answered, not refused: {"code":"bad_input","reason":"targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth and reflection"}: expected 'bad_input' to be undefined
+ FAIL  foam.test.ts > #268.ed64c4a9 shore foam covers a band around the pile and nothing past it > #268.ed64c4a9 a planted field measured from the pile's centre (--planted shore_field_from_centre) leaves the band bare and fails, naming the material
+AssertionError: deep-gpu run --planted shore_field_from_centre exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+## field.test.ts, after its refusal test was reordered to check every drawn control first
+
+ RUN  v5.0.5 <clean base checkout>/tests/acceptance/268
+     × #268.a0c77147 moving the pile 1 m between revisions changes the field's key, and the field equals a clean bake 2768ms
+     × #268.a0c77147 a pile a channel, a clip, physics or logic moves is refused at check, naming it 3711ms
+     × #268.a0c77147 a field past 2,048 × 2,048 cells at its cell is refused at check, naming the count 1253ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  field.test.ts > #268.a0c77147 the shore field is keyed by its items, baked clean, and refused when they move or it is too large > #268.a0c77147 moving the pile 1 m between revisions changes the field's key, and the field equals a clean bake
+AssertionError: the first revision: frame 0's shore is an object, got undefined: expected false to be true // Object.is equality
+ FAIL  field.test.ts > #268.a0c77147 the shore field is keyed by its items, baked clean, and refused when they move or it is too large > #268.a0c77147 a pile a channel, a clip, physics or logic moves is refused at check, naming it
+AssertionError: the shore whose items hold pile-keyed is refused at check: {"frames":[{"frame":0,"settled":true,"samples":{"drawn":1,"settling":false},"resident":[],"frame_seq":0,"pixel_hash":"461b7c7d7959555e1fdb35afa78dade3c921258f321d7660a26f94f70c0f27c4"}],"passes":[{"name":"scene3d.geometry","reads":[],"writes":["linear","ids","depth"]},{"name":"scene3d.output","reads":["linear"],"writes":["final"]}],"status":{"shows":false,"look":"document","distance":null,"guard":null,"marks":[],"legend":[]},"surface":{"internal_scale":1,"upscale":"none","sharpen":0.2,"size_px":[64,64],"internal_px":[64
+ FAIL  field.test.ts > #268.a0c77147 the shore field is keyed by its items, baked clean, and refused when they move or it is too large > #268.a0c77147 a field past 2,048 × 2,048 cells at its cell is refused at check, naming the count
+AssertionError: the 250 m × 210 m plate at cell 0.1 is refused at check: {"frames":[{"frame":0,"settled":true,"samples":{"drawn":1,"settling":false},"resident":[],"frame_seq":0,"pixel_hash":"3297eae188e7dab65826ef52571131119aba0d9fef154183a383caeb2cb183ab"}],"passes":[{"name":"scene3d.geometry","reads":[],"writes":["linear","ids","depth"]},{"name":"scene3d.output","reads":["linear"],"writes":["final"]}],"status":{"shows":false,"look":"document","distance":null,"guard":null,"marks":[],"legend":[]},"surface":{"internal_scale":1,"upscale":"none","sharpen":0.2,"size_px":[64,64],"internal_px":[64,
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
