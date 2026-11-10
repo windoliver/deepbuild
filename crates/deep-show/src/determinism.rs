@@ -106,7 +106,8 @@ impl Hub<'_> {
         json!({"outcome": "hashed", "hashes": hashes, "adapter": {"name": adapter, "software": false}})
     }
 
-    /// A canonical render's GPU pixel hash: its RGBA8 rows hashed on the GPU, 16 bytes read back.
+    /// A canonical render's GPU pixel hash: its RGBA8 rows hashed on the GPU, only the 16 bytes
+    /// read back.
     pub(crate) fn render_hash(&mut self, rgba: &[u8], size: [u16; 2]) -> Result<String, String> {
         let planted = self.hash_planted();
         let dev = self
@@ -119,8 +120,7 @@ impl Hub<'_> {
         }
         // One pipeline for every render the hub hashes, so hashing adds only its pass (#405).
         let pass = self.hash_pass.get_or_insert_with(|| PixelHash::new(&dev.device, planted));
-        let h = pass.hash(&dev.device, &dev.queue, rgba, size, Format::Rgba8);
-        Ok(hex(h.gpu))
+        Ok(hex(pass.sums(&dev.device, &dev.queue, rgba, size, Format::Rgba8)))
     }
 
     /// `determinism` with `compare: cross_machine`: this machine's record at `at_times`, drawn at
