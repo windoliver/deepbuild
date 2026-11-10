@@ -158,7 +158,9 @@ impl Track {
         k.checked_sub(1).map(|k| &self.entries[list[k]])
     }
 
-    /// The planted lookup: the same answer by scanning the whole track.
+    /// The planted lookup: the same answer by scanning the whole track. `last` walks every entry,
+    /// which is the plant, so it stays.
+    #[allow(clippy::double_ended_iterator_last)]
     pub fn last_at_scanning(&self, control: &str, t: i64) -> Option<&Entry> {
         self.entries
             .iter()

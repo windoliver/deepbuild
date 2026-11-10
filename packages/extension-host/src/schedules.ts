@@ -119,7 +119,8 @@ export function cadenceOf(c: unknown): Cadence {
   const d = (typeof c === 'object' && c !== null ? c : {}) as { every?: unknown; cron?: unknown };
   if (d.every !== undefined && d.cron === undefined && Number.isSafeInteger(d.every) && (d.every as number) >= 1000) return { every: d.every as number };
   if (d.cron !== undefined && d.every === undefined && typeof d.cron === 'string') {
-    parseCron(d.cron);
+    // A line that parses can still name a date that never comes, such as February 31: it must have a time.
+    nextCron(parseCron(d.cron), 0);
     return { cron: d.cron };
   }
   throw Error('a cadence is every so many ms (at least 1000), or a cron line, one of the two');

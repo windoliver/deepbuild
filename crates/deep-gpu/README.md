@@ -6,7 +6,7 @@ The GPU layer for 3D and effects (#377): one wgpu device per app drawing offscre
 
 ## Where new code goes
 
-- One module per concern under `src/`, declared in `src/lib.rs`: `device.rs`, `ring.rs` and `surface.rs` (device, slots and fences, handoff storage), `view.rs` and `render.rs` (views and render modules), `encode.rs`, `upload.rs`, `compile.rs`, `guard.rs`, `meter.rs`, `memory.rs`, `cache.rs`, `alloc.rs`; and `seam.rs`, the GPU seam (#140): its backend, the tier's feature table, the quirk table (`quirks.json`, reviewed data) and the adapter it picks.
+- One module per concern under `src/`, declared in `src/lib.rs`: `device.rs`, `ring.rs` and `surface.rs` (device, slots and fences, handoff storage), `view.rs` and `render.rs` (views and render modules), `encode.rs`, `upload.rs`, `compile.rs`, `guard.rs`, `meter.rs`, `frame_budget.rs` (the frame-budget check's five-run verdict, #1899), `memory.rs`, `cache.rs`, `alloc.rs`; and `seam.rs`, the GPU seam (#140): its backend, the tier's feature table, the quirk table (`quirks.json`, reviewed data) and the adapter it picks.
 - Tests: unit tests in a `#[cfg(test)]` module beside the code; render logic that needs no GPU in `tests/noop.rs`, the noop lane (`cargo test -p deep-gpu` on wgpu's noop backend). Pixel and budget proofs are in tests/acceptance/377 and 379, through `deep-gpu` (crates/deep-gpu-layer).
 - What a render module draws goes in its render crate (deep-scene3d-render, deep-effects-render); the proof binary's calls go in crates/deep-gpu-layer.
 

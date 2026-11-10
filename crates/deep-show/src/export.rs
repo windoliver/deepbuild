@@ -79,7 +79,7 @@ impl Hub<'_> {
         for k in shard.frames.clone() {
             let t = k * shard.frame;
             let (mut px, size) = self.export_frame(&mut sched, &mut session, doc, t, shard.size, shard.opaque).map_err(unfit)?;
-            for p in px.chunks_exact_mut(4) {
+            for p in px.as_chunks_mut::<4>().0 {
                 p.swap(0, 2);
             }
             let path = dir.join(format!("{k:06}.bgra"));
@@ -714,8 +714,8 @@ fn wav_samples(bytes: &[u8]) -> Option<(u32, u16, Vec<f32>)> {
     }
     let ((tag, channels, rate, bits), data) = (fmt?, data?);
     let samples = match (tag, bits) {
-        (3, 32) => data.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect(),
-        (1, 16) => data.chunks_exact(2).map(|c| f32::from(i16::from_le_bytes([c[0], c[1]])) / 32_768.0).collect(),
+        (3, 32) => data.as_chunks::<4>().0.iter().map(|c| f32::from_le_bytes(*c)).collect(),
+        (1, 16) => data.as_chunks::<2>().0.iter().map(|c| f32::from(i16::from_le_bytes(*c)) / 32_768.0).collect(),
         _ => return None,
     };
     Some((rate, channels, samples))

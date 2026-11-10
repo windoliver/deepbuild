@@ -794,8 +794,8 @@ fn normals(scene: &Scene, from_faces: bool) -> Read {
         };
         let mut face_of: Vec<Option<V3>> = vec![None; m.positions.len()];
         if from_faces {
-            for t in m.indices.chunks_exact(3) {
-                let [a, b, c] = [0, 1, 2].map(|k| m.positions[t[k] as usize]);
+            for t in m.indices.as_chunks::<3>().0 {
+                let [a, b, c] = t.map(|i| m.positions[i as usize]);
                 let n = unit(cross(sub(b, a), sub(c, a)));
                 for &v in t {
                     face_of[v as usize].get_or_insert(n);
@@ -832,8 +832,8 @@ fn tangents(scene: &Scene) -> Read {
         let n = m.positions.len();
         let (mut tan, mut bit) = (vec![[0.0; 3]; n], vec![[0.0; 3]; n]);
         if m.tangents.is_empty() {
-            for t in m.indices.chunks_exact(3) {
-                let [a, b, c] = [0, 1, 2].map(|k| t[k] as usize);
+            for t in m.indices.as_chunks::<3>().0 {
+                let [a, b, c] = t.map(|i| i as usize);
                 let (e1, e2) = (
                     sub(m.positions[b], m.positions[a]),
                     sub(m.positions[c], m.positions[a]),

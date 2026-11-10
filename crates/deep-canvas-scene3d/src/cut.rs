@@ -365,10 +365,10 @@ mod tests {
             [0.0, 1.0, 0.0, 3.0],
         ];
         let i = crate::scene::matmul(&inverse(&m), &m);
-        for r in 0..3 {
-            for c in 0..4 {
+        for (r, row) in i.iter().enumerate() {
+            for (c, got) in row.iter().enumerate() {
                 let want = if r == c { 1.0 } else { 0.0 };
-                assert!((i[r][c] - want).abs() < 1e-12);
+                assert!((got - want).abs() < 1e-12);
             }
         }
     }

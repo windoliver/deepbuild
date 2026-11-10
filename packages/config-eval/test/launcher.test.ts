@@ -60,6 +60,21 @@ it("reads the real agents' replies, tokens and 5-hour window, and the judge's gr
   expect(report.usage.plan_share).toBeCloseTo(0.02, 9);
 }, 60_000);
 
+it('keeps a grade the judge left null missing, never a zero', async () => {
+  // Failed on a launcher that read `"score": null` as the number 0: an output the judge could not score counted
+  // as a measured zero against its side.
+  const w = world(0);
+  writeFileSync(join(w.box, 'bin', 'codex'), `#!/bin/sh
+cat > /dev/null
+echo '{"type":"item.completed","item":{"type":"agent_message","text":"{\\"grades\\":[{\\"label\\":\\"A\\",\\"score\\":0.9},{\\"label\\":\\"B\\",\\"score\\":null}]}"}}'
+echo '{"type":"turn.completed","usage":{"input_tokens":5,"output_tokens":5}}'
+`);
+  const report = await runEval({ plan: w.plan(600_000), tasks: w.tasks, root: join(w.box, 'work'), env: w.env });
+  const grades = report.runs.map((r) => r.metrics.grade);
+  expect(grades).toContain(0.9);
+  expect(grades).toContain(null);
+}, 60_000);
+
 it('ends a run when its CLI exits, though a helper outside its process group still holds its output', async () => {
   // Failed on a launcher that waited for the output to close, which the helper held for its 30 seconds.
   const w = world(0);

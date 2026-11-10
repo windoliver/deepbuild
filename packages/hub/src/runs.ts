@@ -447,7 +447,9 @@ export class Runs {
       tail.ended = true;
       for (const wake of tail.wake.splice(0)) wake();
       setTimeout(() => this.tails.delete(run.run), 60_000).unref();
-    });
+    })
+      // The journal still holds the run, so the next start recovers it.
+      .catch((error: unknown) => process.stderr.write(`deep hub: ${run.run}'s finish wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
     return run.run;
   }
   /** run.output (#1942): a run's stdout from byte `from`, once there is some or it has ended, base64; `deep run follow` reads it. */
@@ -483,7 +485,7 @@ export class Runs {
       if (lives) return;
       clearInterval(look);
       await this.keptEnded(run);
-    }), 1000);
+    }).catch((error: unknown) => process.stderr.write(`deep hub: ${run.run}'s finish wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`)), 1000);
     look.unref();
   }
   /** No hub read a kept run's exit, so it finishes unjudged, as stopped: never passed on an exit nobody saw. */
