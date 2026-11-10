@@ -1,0 +1,11 @@
+{
+  "criterion": "#268.f8d9db3f",
+  "by": "you",
+  "screenshots": [
+    "23315218fb21d844f0e036c82ef9292686ceb0b669b76e2d42dfba0f5b722e68",
+    "58933e1266284fdd0b178eae92aef37e1924629cd5e647c6dc2f4fdaccef9c67",
+    "8e80a9eacf49f46b233a366d9e0ce2fdde4427d68bbbcea57891b1aae96beef0"
+  ],
+  "call": "looks_right",
+  "note": "Made by Claude on 2026-11-09 at the owner's request in the session ('you validate for me'), not by the owner's own eye. The first pile shot looked wrong (a flat opaque ring) and the foam shader was changed before this call. The test's quay camera stands over the quay looking away, so the quay is out of frame; docs/evidence/268/extra-quay-calm.png and extra-quay-uncalmed.png (camera at (12, 3.5, 9) toward (3, 0, 0), fov 55, calm near 0.25 vs near 1) show calm flattening the swell beside the face. Setting call to looks_wrong overturns it."
+}

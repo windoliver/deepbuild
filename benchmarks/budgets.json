@@ -967,6 +967,20 @@
       "initialReason": "Issue #166 first measurement: the merge base has no water and no such task. A release deep-gpu draws two 1080p stages for 300 frames a side, five runs after a warm-up one, each a fresh process: a 400 m lake of 256 x 256 cells filling the lower half of the frame (four waves, ripples, rain at 50 drops per m2 per s) against the same plate as a plain mirror, and a 10 m plate of 256 x 256 cells seen 300 m away (four waves) against the same plate as a plain mirror, each the difference of the sides' median GPU time, so the mirror's own pass is in both sides. canvas.mjs judge holds the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "canvas-water-shore",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "water-shore"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "shore_lake_gpu_ms": 0.5
+      },
+      "initialReason": "Issue #268 first measurement: the merge base has no shore on water and no such task. A release deep-gpu draws #166's 400 m lake filling the lower half of a 1080p frame with its shore on (twelve piles, a quay and a floating deck in its collection, cell 0.25, shade 0.5) against the same plate and items as a plain mirror, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time, so the mirror's own pass is in both. The field's bake time is printed as a reading with no limit. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "replica-cold-start",
       "command": [
         "node",
