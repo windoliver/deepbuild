@@ -24,6 +24,8 @@ export interface Faults {
   allowFromSuggestion?: boolean;
   unparsedStopCause?: boolean;
   noSign?: boolean;
+  contextAsStdout?: boolean;
+  contextAsStderr?: boolean;
   // Declared items.
   dropKind?: string;
   unsupportedFlag?: Flag;
@@ -84,6 +86,13 @@ function fakeFacts(): JsonValue {
       usage: { readBy: 'the turn\'s assistant entries\' usage', covers: 'turn', records: { match: { type: 'assistant' }, has: 'usage' }, take: 'sum', counts: { input: ['usage.input'], cached: ['usage.cached'], output: ['usage.output'] }, exact: true, model: { record: 'model' } },
     }),
     toolKinds: section('a tool call\'s kind by tool name', 'fake/toolKinds/unknown-otherwise', { tools: { Bash: 'shell', Read: 'read', Edit: 'edit' }, otherwise: 'unknown' }),
+    contextOutput: section('which hook outputs reach the model, and the cap on injected text', 'context/reaches-model', {
+      capChars: 10000, previewChars: 2000, versions: [VERSION], source: 'the fake agent\'s own',
+      events: {
+        SessionStart: { additionalContext: 'model', systemMessage: 'user', stdout: 'model', stderr: 'debug', stderrOnBlock: 'user' },
+        PostCompact: { additionalContext: 'none', systemMessage: 'none', stdout: 'debug', stderr: 'debug', stderrOnBlock: 'user' },
+      },
+    }),
   };
 }
 
@@ -114,6 +123,13 @@ export function fakeFill(revision: number, faults: Faults = {}): Fill {
     permissionReply: (answer) => (answer.decision === 'allow' || (faults.allowFromSuggestion && /\b(allow|yes)\b/i.test(`${answer.label ?? ''} ${answer.words ?? ''}`))
       ? { behavior: 'allow' }
       : { behavior: 'deny', ...(answer.words ? { message: answer.words } : {}) }),
+    // Context as additionalContext where it reaches the model; the faults send it as stdout at PostCompact, or as
+    // stderr on exit 0 everywhere (#1296).
+    contextReply: (event, text) => {
+      if (faults.contextAsStderr) return { exit: 0, stdout: '', stderr: text };
+      if (faults.contextAsStdout && event === 'PostCompact') return { exit: 0, stdout: text, stderr: '' };
+      return event === 'SessionStart' ? { exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } }), stderr: '' } : undefined;
+    },
   });
   const adapter = {
     ...base,

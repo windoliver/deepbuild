@@ -254,6 +254,8 @@ alone.push('tests/acceptance/531/', 'tests/acceptance/531-redraft-ac11/', 'tests
 // players and out-of-view readings are timed.
 alone.push('tests/acceptance/499/');
 timed.push('tests/acceptance/499/video/players.test.ts', 'tests/acceptance/499/video/out-of-view.test.ts');
+// #500's files each build deep-show; the bake folder and the Oracle lane bake about 26 minutes of EBU test audio.
+alone.push('tests/acceptance/500/', 'tests/acceptance/500-oracle/');
 // #532's files build deep-logic here and for Linux x86_64 in Docker, start headless Chrome, and read CPU times per frame and per step.
 alone.push('tests/acceptance/532/');
 // #1731's files each start a hub that runs a sandboxed plug-in through the supervisor, against a TLS fixture library.
