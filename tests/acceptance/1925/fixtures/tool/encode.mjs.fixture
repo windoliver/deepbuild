@@ -1,0 +1,34 @@
+// A test.encode tool's entry file (#1925 acceptance; README, The surface under test). The hub runs it with Node, as a
+// process of its own outside the hub, once per cache miss and per qualification fixture, as #1922 runs every job tool:
+// one JSON object on stdin, {params, inputs: {clip: <the input's bytes, base64>}}, and one on stdout at the end,
+// {outputs: {video, log}}, each output's bytes in base64.
+//
+// It writes `frames` frames of the clip, `batch` at a time, batch k due `k * every_ms` after it starts, so its count
+// holds still between batches. After each batch it reports its own counter on stderr, one JSON line,
+// {"progress": {"done": <n>, "total": <frames>}}, and one more at its start; what `done` says is its second file's,
+// counter.mjs. Its `log` output says when each batch was written: "<frames written> <ms since the epoch>" a line, the
+// first line its start, written 0. That log is what the test reads as the frames written at any moment.
+import { counter } from './counter.mjs';
+
+const chunks = [];
+for await (const chunk of process.stdin) chunks.push(chunk);
+const request = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+const { frames, batch, every_ms: every } = request.params;
+const clip = Buffer.from(request.inputs.clip, 'base64').toString('utf8');
+
+const start = Date.now();
+const video = [];
+const log = [`0 ${start}`];
+const report = (written) => process.stderr.write(`${JSON.stringify({ progress: { done: counter(written, frames, Date.now() - start), total: frames } })}\n`);
+report(0);
+let written = 0;
+for (let k = 1; written < frames; k++) {
+  const wait = start + k * every - Date.now();
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+  const n = Math.min(batch, frames - written);
+  for (let i = 0; i < n; i++) video.push(`${clip}#${++written}\n`);
+  log.push(`${written} ${Date.now()}`);
+  report(written);
+}
+const b64 = (text) => Buffer.from(text, 'utf8').toString('base64');
+process.stdout.write(`${JSON.stringify({ outputs: { video: b64(video.join('')), log: b64(`${log.join('\n')}\n`) } })}\n`);

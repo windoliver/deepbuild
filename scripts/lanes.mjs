@@ -308,6 +308,9 @@ byHand.push('tests/acceptance/1462/shown.test.ts');
 // #1901's files build deep-show; build-digest.test.ts builds it three times, one with a canvas module's source changed
 // for that build and restored after it, so nothing else may build in the checkout while it runs.
 alone.push('tests/acceptance/1901/');
+// #1925's files each start a hub that runs an 80 s encode through the supervisor and read its row to the 2 s batch,
+// and its reopen file starts deep-drive twice: one file at a time.
+alone.push('tests/acceptance/1925/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

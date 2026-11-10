@@ -21,7 +21,7 @@
 // writes it. A key whose journal holds a call and whose outputs aren't kept made a call the hub can't know the fate
 // of: a retry makes no call and is BLOCKED with one unblock ask naming the provider and the key. While a job runs, a
 // second request with its key joins it, starting nothing, and a request that is cancelled leaves it; the job stops
-// only once no request waits on it.
+// only once no request waits on it. A request whose session closed leaves it too, but the job runs on (#1925).
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -30,6 +30,7 @@ import type { PlanInput } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { SendBoundary, SendRequest, Receipt } from '@deepbuild/evidence';
 import type { ExtensionHost } from '@deepbuild/extension-host';
+import type { RunningJob } from './rows.js';
 
 type Obj = Record<string, unknown>;
 type Host = Pick<ExtensionHost, 'jobs' | 'jobParams' | 'runJobTool' | 'jobHostReport' | 'runCheck'>;
@@ -59,6 +60,8 @@ export interface JobDeps {
   send(request: SendRequest, boundary: SendBoundary): Promise<Receipt>;
   /** Raises an ask from one of the job API's sources: its handle. */
   raise(source: 'job.paid' | 'job.send' | 'job.unblock', ask: Obj, plan?: PlanInput): Promise<string>;
+  /** Shows a running job's row as it now reads (#1925), or takes it off the list once its tool's run has ended. */
+  row(job: RunningJob, running: boolean): void;
   plant?: string | undefined;
 }
 interface Cached { outputs: Record<string, string>; build: string | null }
@@ -125,13 +128,14 @@ export class Jobs {
   }
 
   /**
-   * A request's caller gone (#1923): it leaves the job it waits on. The job stops only once no request waits on it, so
-   * a joiner's cancel never stops the job for the request that started it.
+   * A request's caller gone (#1923): it leaves the job it waits on. A cancelled request's job stops only once no
+   * request waits on it, so a joiner's cancel never stops the job for the request that started it. A request whose
+   * connection `closed`, its session gone, stops nothing: the job runs on and its row keeps counting (#1925).
    */
-  gone(caller: string): void {
+  gone(caller: string, closed = false): void {
     this.leaving.get(caller)?.();
     for (const job of this.running.values()) {
-      if (!job.callers.delete(caller)) continue;
+      if (!job.callers.delete(caller) || closed) continue;
       if (job.callers.size === 0 || this.d.plant === 'job-joiner-cancels-job') job.stop.abort();
     }
   }
@@ -278,11 +282,21 @@ export class Jobs {
   private async call(host: Host, held: ReturnType<Host['jobs']>[number], pinned: ReturnType<Host['jobs']>[number]['tools'][number], key: string, params: Record<string, JsonValue>, bytes: Record<string, Uint8Array>, receipt: (build: string | null, cache: 'hit' | 'miss') => Obj, done: (outputs: Record<string, string>, build: string | null, cache: 'hit' | 'miss') => Obj, stop: AbortSignal): Promise<Obj> {
     const { kind } = held;
     const { tool } = pinned;
+    // While its tool runs, the job has a row that counts from the tool's own counters (#1925). Nothing here waits on
+    // the caller, so the job runs on when the app or the session that asked for it closes.
+    const job: RunningJob = { key, kind, tool, started: this.d.now() };
+    this.d.row(job, true);
     let wrote: Record<string, Uint8Array>;
     try {
-      wrote = await host.runJobTool(tool, kind, params, bytes, pinned.provider ? { key, journal: this.journal(key) } : undefined, stop);
+      wrote = await host.runJobTool(tool, kind, params, bytes, pinned.provider ? { key, journal: this.journal(key) } : undefined, stop, (counter) => {
+        job.counter = counter;
+        job.at = this.d.now();
+        this.d.row(job, true);
+      });
     } catch (e) {
       return { status: 'failed', reason: `${tool} failed: ${message(e)}; nothing was kept`, receipt: receipt(pinned.build, 'miss') };
+    } finally {
+      this.d.row(job, false);
     }
     const outputs = Object.keys(held.descriptor.outputs);
     const absent = outputs.filter((n) => !wrote[n]);
