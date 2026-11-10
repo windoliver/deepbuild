@@ -1,0 +1,105 @@
+#1409 acceptance tests at the base commit de304b9 (main), run before any implementation of #1409.
+Run on Nov 10, 2026, Node 24.22.2, macOS 27.2 (Darwin 27.2.0), with contracts, record, asks, leases and supervisor
+built. The checkout's absolute path is shown as <repo>.
+
+Command:
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1409 --testTimeout=600000 --no-file-parallelism
+Result: 4 of 5 tests fail, each at a named assertion; exit 1.
+
+Why each fails at the base (StartSpec has no `limits`, so the supervisor ignores it and every run goes unbounded):
+- memory.test.ts AC1: the child lived 11020 ms past 128 MiB, held all 512 MiB and ended on its own.
+- file.test.ts AC2: the writer's file grew to 32 MiB (33554432 bytes), past 8 MiB.
+- check.test.ts AC3: the command check's run was never stopped, so it ended passed, not stopped.
+- under.test.ts AC5: the child under { memory_mb: 128, file_mb: 8 } read its RLIMIT_FSIZE as unlimited: no limit
+  was in force, so the comparison with no limits would prove nothing.
+- none.test.ts AC4 passes, by design: a run with no limits must behave as it does at the base (README, Base run).
+
+Typecheck at the base, expected (`limits` is the field the issue adds):
+  $ node node_modules/typescript/bin/tsc -p tests/acceptance/1409/tsconfig.json
+  tests/acceptance/1409/check.test.ts(17,80): error TS2353: Object literal may only specify known properties, and 'limits' does not exist in type 'StartSpec'.
+
+Output:
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1409
+
+ ❯ memory.test.ts (1 test | 1 failed) 48427ms
+   ❯ AC1 #1409 memory_mb stops a run whose child passes it (1)
+     × AC1 a child allocating 512 MiB against memory_mb 128 is stopped within 1 s of passing it, and the stop names the limit and the reading 48419ms
+ ❯ check.test.ts (1 test | 1 failed) 13151ms
+   ❯ AC3 #1409 a check whose run stopped at a limit reads INCONCLUSIVE (1)
+     × AC3 a command check whose run passes memory_mb 128 ends stopped, which reads INCONCLUSIVE 13147ms
+ ❯ under.test.ts (1 test | 1 failed) 2752ms
+   ❯ AC5 #1409 a run under its limits ends as it would with none (1)
+     × AC5 the allocator and the writer under memory_mb 128 and file_mb 8 get the same exit status and output as with no limits 2748ms
+ ❯ file.test.ts (1 test | 1 failed) 782ms
+   ❯ AC2 #1409 file_mb stops a run whose child writes past it (1)
+     × AC2 a child writing a 32 MiB file against file_mb 8 is stopped at the limit, and the stop names the limit 778ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  check.test.ts > AC3 #1409 a check whose run stopped at a limit reads INCONCLUSIVE > AC3 a command check whose run passes memory_mb 128 ends stopped, which reads INCONCLUSIVE
+AssertionError: the run stopped at its limit ends stopped, not failed or passed (outcome passed, exit {"code":0,"signal":null,"cause":"exit"}, failures []): expected 'passed' to be 'stopped' // Object.is equality
+
+Expected: "stopped"
+Received: "passed"
+
+ ❯ check.test.ts:37:107
+     35|       });
+     36|       const seen = `outcome ${result.outcome}, exit ${JSON.stringify(r…
+     37|       expect(result.outcome, `the run stopped at its limit ends stoppe…
+       |                                                                                                           ^
+     38|       expect(judge('run', result.outcome).verdict, 'a run stopped at a…
+     39|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  file.test.ts > AC2 #1409 file_mb stops a run whose child writes past it > AC2 a child writing a 32 MiB file against file_mb 8 is stopped at the limit, and the stop names the limit
+AssertionError: the writer was stopped at the limit: its file never grew past 8 MiB (33554432 bytes): expected 33554432 to be less than or equal to 8388608
+ ❯ file.test.ts:17:107
+     15|       expect(ran.exit, 'the run ended').not.toBe('running');
+     16|       const size = statSync(join(dir, 'big.bin')).size;
+     17|       expect(size, `the writer was stopped at the limit: its file neve…
+       |                                                                                                           ^
+     18|
+     19|       const [stop] = await w.stops(ran.run, 3000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  memory.test.ts > AC1 #1409 memory_mb stops a run whose child passes it > AC1 a child allocating 512 MiB against memory_mb 128 is stopped within 1 s of passing it, and the stop names the limit and the reading
+AssertionError: the run was stopped within 1 s of passing 128 MiB: the child's last heartbeat came 11020 ms after it passed, holding 512 MiB: expected 11020 to be less than or equal to 1000
+ ❯ memory.test.ts:23:161
+     21|       const passed = stamp(dir, 'passed');
+     22|       const lived = passed === undefined ? 0 : last!.ms - passed;
+     23|       expect(lived, `the run was stopped within 1 s of passing 128 MiB…
+       |                                                                                                                                                                 ^
+     24|
+     25|       const [stop] = await w.stops(ran.run, 3000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  under.test.ts > AC5 #1409 a run under its limits ends as it would with none > AC5 the allocator and the writer under memory_mb 128 and file_mb 8 get the same exit status and output as with no limits
+AssertionError: the allocator's run had its file limit in force: its child's RLIMIT_FSIZE was unlimited: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ under.test.ts:29:146
+     27|         // 8 MiB, or 8 MB: the issue gives sizes in MiB, and the field…
+     28|         const bytes = Number(r.limit);
+     29|         expect(bytes >= 8_000_000 && bytes <= 8 * MIB, `the ${name}'s …
+       |                                                                                                                                                  ^
+     30|         expect(seen(r.none), `the ${name}'s run with no limits ended o…
+     31|         expect(seen(r.under), `the ${name}'s run under its limits ende…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  4 failed | 1 passed (5)
+   Start at  15:44:09
+   Duration  72.64s (tests 97%, import 2%, transform 1%)
+
