@@ -31,6 +31,7 @@ pub mod probe;
 pub mod samples;
 pub mod scene;
 pub mod sets;
+pub mod shore;
 pub mod sky;
 pub mod spatial;
 pub mod spec;

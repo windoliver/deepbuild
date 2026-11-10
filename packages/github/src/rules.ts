@@ -5,7 +5,8 @@
 // such a person makes, moves or deletes a `deep/approved/` tag.
 type Obj = Record<string, unknown>;
 
-const CONTEXT = 'deepbuild/verdict';
+/** The commit status context the gate's verdict is delivered under, and the one the default branch requires. */
+export const CONTEXT = 'deepbuild/verdict';
 /** GitHub's role ID for a repo's admins: the person who lands by hand bypasses through it. */
 const ADMIN = { actor_id: 5, actor_type: 'RepositoryRole', bypass_mode: 'always' };
 

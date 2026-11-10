@@ -269,13 +269,16 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 }
                 shown.as_object().expect("a document is an object").clone()
             }
-            None => hub
-                .current(doc)
-                .expect("a layer on screen has a current revision")
-                .doc
-                .as_object()
-                .expect("a revision is an object")
-                .clone(),
+            None => {
+                let current = &hub
+                    .current(doc)
+                    .expect("a layer on screen has a current revision")
+                    .doc;
+                hub.arranged(doc, current)
+                    .as_object()
+                    .expect("a revision is an object")
+                    .clone()
+            }
         };
         let panel_id = hub.scenario.docs[doc].clone();
         let panel = hub
