@@ -11,16 +11,23 @@ use gpui_kit::base::input::{Input, InputEvent, InputState};
 use gpui_kit::*;
 use serde_json::{json, Value};
 
+use crate::address::{Address, Place};
 use crate::chrome;
 
-actions!(deepbuild, [OpenCommands]);
+actions!(deepbuild, [OpenCommands, Back, Forward]);
 
 /// How tall ⌘K's list grows before it scrolls.
 const LIST_HEIGHT: f32 = 320.;
 
-/// ⌘K opens the list wherever focus is in the app.
+/// ⌘K opens the list wherever focus is in the app. ⌘[ and ⌘] walk the addresses you opened (#1460), except while a
+/// text field or a terminal has the keys, which keep them.
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("cmd-k", OpenCommands, None)]);
+    const WALKS: Option<&str> = Some("Shell && !Input && !Terminal");
+    cx.bind_keys([
+        KeyBinding::new("cmd-k", OpenCommands, None),
+        KeyBinding::new("cmd-[", Back, WALKS),
+        KeyBinding::new("cmd-]", Forward, WALKS),
+    ]);
 }
 
 /// A view as `deep.registerView` gives it: its panel's folder, its pages and its ⌘K commands.
@@ -98,10 +105,10 @@ pub enum Entry {
         name: String,
         action: String,
     },
-    /// A page the app ships, by its panel's name (#1454).
-    Shipped {
+    /// A page the app ships or a session, by its address (#1454, #1460).
+    Open {
         name: String,
-        panel: &'static str,
+        address: Address,
     },
     Page {
         name: String,
@@ -123,7 +130,7 @@ impl Entry {
         match self {
             Entry::Command { name, .. }
             | Entry::Page { name, .. }
-            | Entry::Shipped { name, .. }
+            | Entry::Open { name, .. }
             | Entry::Preference { name, .. } => name,
         }
     }
@@ -134,7 +141,7 @@ impl Entry {
             Entry::Page {
                 page, param, value, ..
             } => Some(json!({"name": page, "params": {param: value}})),
-            Entry::Command { .. } | Entry::Shipped { .. } | Entry::Preference { .. } => None,
+            Entry::Command { .. } | Entry::Open { .. } | Entry::Preference { .. } => None,
         }
     }
 }
@@ -226,8 +233,8 @@ pub fn read_recency(path: &std::path::Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// What opening an entry does: the app runs a command's action and mounts a page.
-pub type Open = Rc<dyn Fn(&Entry, &mut Window, &mut App)>;
+/// What choosing an entry does: the app runs a command's action, and mounts a page's view, which `open` shows.
+pub type Open = Rc<dyn Fn(&Entry, &mut Window, &mut App) -> Option<AnyView>>;
 
 /// ⌘K: a query and the entries it ranks, over the shell.
 pub struct Palette {
@@ -256,7 +263,7 @@ impl Palette {
                 cx.notify();
             }
         });
-        Palette {
+        let palette = Palette {
             entries: entries(views),
             recent,
             query,
@@ -264,13 +271,42 @@ impl Palette {
             back: None,
             open,
             _changed: changed,
-        }
+        };
+        palette.mount(cx);
+        palette
     }
 
     /// What it lists from now on (#1454): the app learns its entries from the hub.
     pub fn set_entries(&mut self, entries: Vec<Entry>, cx: &mut Context<Self>) {
         self.entries = entries;
+        self.mount(cx);
         cx.notify();
+    }
+
+    /// Its pages are how `open` mounts `page/<name>/<value>` (#1460).
+    fn mount(&self, cx: &mut App) {
+        let (entries, open) = (self.entries.clone(), self.open.clone());
+        crate::open::set_mount(
+            Rc::new(move |name, value, window, cx| {
+                let entry = entries.iter().find(|entry| {
+                    matches!(entry, Entry::Page { page, value: v, .. }
+                        if page == name && Some(v.as_str()) == value)
+                })?;
+                open(entry, window, cx)
+            }),
+            cx,
+        );
+    }
+
+    /// What it lists: the entries it was given, then each session by its task's title.
+    fn listed(&self) -> Vec<Entry> {
+        let sessions = crate::views::sidebar()
+            .into_iter()
+            .map(|(id, task, _)| Entry::Open {
+                name: if task.is_empty() { id.clone() } else { task },
+                address: Address::session(&id),
+            });
+        self.entries.iter().cloned().chain(sessions).collect()
     }
 
     /// Shows it with an empty query, its input focused; `back` takes focus again once it hides.
@@ -296,7 +332,20 @@ impl Palette {
         self.recent.retain(|name| name != entry.name());
         self.recent.insert(0, entry.name().to_owned());
         self.hide(window, cx);
-        (self.open)(&entry, window, cx);
+        let address = match &entry {
+            // A command runs, and a preference opens the box with its change drafted: neither is a page.
+            Entry::Command { .. } | Entry::Preference { .. } => {
+                (self.open)(&entry, window, cx);
+                return;
+            }
+            Entry::Open { address, .. } => address.clone(),
+            Entry::Page { page, value, .. } => Address {
+                place: Place::Page,
+                id: page.clone(),
+                parameter: Some(value.clone()),
+            },
+        };
+        crate::open::open(&address, window, cx).ok();
     }
 }
 
@@ -307,7 +356,8 @@ impl Render for Palette {
         }
         let chrome = chrome::of(window);
         let query = self.query.read(cx).value().to_string();
-        let ranked: Vec<Entry> = rank(&query, &self.entries, &self.recent)
+        let listed = self.listed();
+        let ranked: Vec<Entry> = rank(&query, &listed, &self.recent)
             .into_iter()
             .cloned()
             .collect();
@@ -319,10 +369,19 @@ impl Render for Palette {
             .right_0()
             .flex()
             .justify_center()
-            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
-                if event.keystroke.key == "escape" {
-                    this.hide(window, cx);
-                    cx.stop_propagation();
+            .capture_key_down(cx.listener({
+                let first = ranked.first().cloned();
+                move |this, event: &KeyDownEvent, window, cx| {
+                    if event.keystroke.key == "escape" {
+                        this.hide(window, cx);
+                        cx.stop_propagation();
+                    } else if event.keystroke.key == "enter" {
+                        // Return opens the first entry the query ranks, as a click on it does (#1460).
+                        if let Some(entry) = first.clone() {
+                            this.choose(entry, window, cx);
+                        }
+                        cx.stop_propagation();
+                    }
                 }
             }))
             .child(
