@@ -434,6 +434,37 @@ fn noise_fill(p0: vec2<f32>) -> vec3<f32> {
     return mix(u.list[k].rgb, u.list[k + 1u].rgb, t - f32(k));
 }
 
+// Paint: dither fill: the 4 × 4 Bayer matrix, deep_canvas_marks::print's BAYER4, and its 8 × 8.
+const BAYER4: array<u32, 16> = array<u32, 16>(0u, 8u, 2u, 10u, 12u, 4u, 14u, 6u, 3u, 11u, 1u, 9u, 15u, 7u, 13u, 5u);
+
+fn bayer(c: vec2<i32>, n: u32) -> u32 {
+    let x = u32(((c.x % 8) + 8) % 8);
+    let y = u32(((c.y % 8) + 8) % 8);
+    let b = BAYER4[(y % 4u) * 4u + x % 4u];
+    if (n == 4u) {
+        return b;
+    }
+    return 4u * b + select(select(3u, 1u, x >= 4u), select(0u, 2u, x >= 4u), y < 4u);
+}
+
+// An ordered dither between adjacent stops: a pixel takes the next stop where its matrix entry,
+// read at its world (or frame) pixel, is below the step of its gradient or tone. The step and the
+// entry are integers, so every GPU draws the same pixels, and nothing reads time.
+fn dither_fill(px: vec2<f32>, c0: vec4<f32>) -> vec3<f32> {
+    let world = px * u.a.x + u.a.yz;
+    let n = u32(u.b.x);
+    let seg = u32(u.b.y) - 1u;
+    var v = (px.x - u.box_.x) / max(u.box_.z, 1e-6);
+    if (u.b.z > 0.5) {
+        v = tone_at(px, c0);
+    }
+    let along = clamp(v, 0.0, 1.0) * f32(seg);
+    let j = min(u32(floor(along)), seg - 1u);
+    let step = u32(floor((along - f32(j)) * f32(n * n)));
+    let at = vec2<i32>(floor(select(world, px, u.b.w > 0.5)));
+    return select(u.list[j].rgb, u.list[j + 1u].rgb, bayer(at, n) < step);
+}
+
 fn dabs(p: vec2<f32>, h: f32) -> vec4<f32> {
     let size = 1.0 / sqrt(max(u.a.x, 1e-6));
     var out = vec4<f32>(0.0);
@@ -509,6 +540,10 @@ fn shade(px: vec2<f32>, c0: vec4<f32>, p: vec2<f32>) -> vec4<f32> {
                 n = px;
             }
             let c = noise_fill(n);
+            out = vec4<f32>(select(c, decode(c), (u.kind.w & 4u) != 0u), 1.0) * c0.a;
+        }
+        case 9u: {
+            let c = dither_fill(px, c0);
             out = vec4<f32>(select(c, decode(c), (u.kind.w & 4u) != 0u), 1.0) * c0.a;
         }
         case 6u: {
