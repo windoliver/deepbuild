@@ -5,11 +5,12 @@
 // its file applies to), its size in tokens and what enforces it: a guard only while its planted call is denied and its
 // twin allowed, otherwise text only. A rule line an agent's edit removed stays in force here, held, as a proposal to you.
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { RecordStore } from '@deepbuild/record';
 import { callAsYou } from './client.js';
+import type { HookMeta, Scoped } from './wire.js';
 
 type Raw = RecordStore['raw'];
 type Enforcer = { kind: 'guard'; name: string } | { kind: 'text' };
@@ -49,20 +50,29 @@ const tokensOf = (text: string): number =>
 
 /** A glob as rule files write one: `**` any folders, `*` within a name, `?` one character; several apart by commas. */
 function globMatches(glob: string, path: string): boolean {
-  return glob.split(',').map((g) => g.trim()).filter(Boolean).some((g) => {
-    let re = '';
-    for (let i = 0; i < g.length; i++) {
-      const c = g[i]!;
-      if (c === '*' && g[i + 1] === '*') {
-        i++;
-        if (g[i + 1] === '/') { i++; re += '(?:.*/)?'; } else re += '.*';
-      } else if (c === '*') re += '[^/]*';
-      else if (c === '?') re += '[^/]';
-      else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    }
-    return new RegExp(`^${re}$`).test(path.replace(/^\.\//, ''));
-  });
+  let res = GLOBS.get(glob);
+  if (!res) {
+    res = glob.split(',').map((g) => g.trim()).filter(Boolean).map((g) => {
+      let re = '';
+      for (let i = 0; i < g.length; i++) {
+        const c = g[i]!;
+        if (c === '*' && g[i + 1] === '*') {
+          i++;
+          if (g[i + 1] === '/') { i++; re += '(?:.*/)?'; } else re += '.*';
+        } else if (c === '*') re += '[^/]*';
+        else if (c === '?') re += '[^/]';
+        else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+      }
+      return new RegExp(`^${re}$`);
+    });
+    if (GLOBS.size >= 1024) GLOBS.clear();
+    GLOBS.set(glob, res);
+  }
+  const p = path.replace(/^\.\//, '');
+  return res.some((re) => re.test(p));
 }
+/** Each glob's compiled forms, kept for the next call; emptied at 1,024 globs, so a stream of new ones can't grow it. */
+const GLOBS = new Map<string, RegExp[]>();
 /** Whether a rule's scope covers a repo-relative path. */
 const covers = (scope: string, path: string): boolean => scope === 'all' || globMatches(scope, path);
 
@@ -219,7 +229,7 @@ export function noticesFor(rules: readonly Rule[], paths: readonly string[], age
   for (const r of out) heard.add(r.id);
   return out;
 }
-export const noticeText = (rules: readonly Rule[]): string => rules.map((r) => `DeepBuild: a rule you wrote for ${r.scope} (${r.file}): ${r.text}`).join('\n');
+export const noticeText = (rules: readonly Pick<Rule, 'scope' | 'file' | 'text'>[]): string => rules.map((r) => `DeepBuild: a rule you wrote for ${r.scope} (${r.file}): ${r.text}`).join('\n');
 
 /** A repo's rule files, read again at most every few seconds, so a call's notice doesn't walk the tree each time. */
 export function cachedRuleFiles(cache: Map<string, { at: number; files: RuleFile[] }>, repo: string): RuleFile[] {
@@ -240,6 +250,37 @@ export const savePage = (dir: string, lines: readonly string[]): void => writeJs
 export const rulesAppendix = (dir: string) => (page: string): string[] => (page === 'rules' ? readJson<string[]>(pageFile(dir), []) : []);
 export const readHeld = (dir: string): Held[] => readJson<Held[]>(heldFile(dir), []);
 export const saveHeld = (dir: string, held: readonly Held[]): void => writeJson(heldFile(dir), held);
+
+const scopedFiles = new Map<string, { at: number; files: RuleFile[] }>();
+/** The rules of a file list, built once for it and for the held file as it is: `saveHeld` renames a new file in. */
+const scopedBuilt = new WeakMap<RuleFile[], { held: string; rules: Rule[] }>();
+/**
+ * What a PreToolUse's paths meet of your rules (#344), read on the parser's thread, so the event loop walks no folder
+ * and builds no rule: the scoped rules that cover the paths, less the files the session's own agent reads by itself,
+ * and an edited rule file's rules before the call runs. The event loop keeps which of them each session heard.
+ */
+export function scopedAt(meta: HookMeta, dir: string): Scoped | undefined {
+  if (!meta.session || !['claude-code', 'claude', 'codex'].includes(meta.agent) || meta.event !== 'PreToolUse' || !meta.call) return undefined;
+  const repo = repoRoot(meta.cwd);
+  const paths = repo ? callPaths(meta.call.input, meta.cwd, repo) : [];
+  if (!repo || !paths.length) return undefined;
+  try {
+    const files = cachedRuleFiles(scopedFiles, repo);
+    const before = RULE_EDITS.has(meta.call.tool)
+      ? paths.filter(isRuleFile).map((file) => ({ file, scope: files.find((f) => f.file === file)?.scope ?? 'all', rules: rulesInFile(join(repo, file)) }))
+      : [];
+    if (before.length) scopedFiles.delete(repo);
+    let held = 'none';
+    try { const s = statSync(heldFile(dir)); held = `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { /* no rule is held */ }
+    let built = scopedBuilt.get(files);
+    if (!built || built.held !== held) scopedBuilt.set(files, built = { held, rules: rulesOf({ files, typed: [], held: readHeld(dir), guards: [] }) });
+    const rules = noticesFor(built.rules, paths, meta.agent, new Set()).map(({ id, scope, file, text }) => ({ id, scope, file, text }));
+    return rules.length || before.length ? { rules, before } : undefined;
+  } catch (error) {
+    process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`);
+    return undefined;
+  }
+}
 
 /** The repo-relative paths a tool call names: a file, a notebook or a folder, absolute or from the session's folder. */
 export function callPaths(input: Record<string, unknown> | undefined, cwd: string, repo: string): string[] {
