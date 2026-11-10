@@ -197,8 +197,11 @@ export type Plant =
   // #33's: a gate that counts only a drafted spec as approved, so a repo on its maintainer's bootstrap stays watch-only,
   // one that judges a claim on the bootstrap's commands alone, so a PR says Closes past an unproven criterion, and an
   // engine that reads a stopped run, a full disk, a missing stack and an expired credential as FAIL.
-  | 'drafted-spec-only' | 'bootstrap-commands-only' | 'failures-as-fail';
+  | 'drafted-spec-only' | 'bootstrap-commands-only' | 'failures-as-fail'
+  // #1998's: a box that applies a change in words as it drafts it, and one whose approval applies whatever moved since.
+  | 'box-applies-at-once' | 'box-ignores-revision';
 const PLANTS: readonly string[] = [
+  'box-applies-at-once', 'box-ignores-revision',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',

@@ -2132,6 +2132,8 @@ impl Layout {
 pub struct Shell {
     pub dock: Entity<DockArea>,
     commands: Option<Entity<crate::commands::Palette>>,
+    /// The box at the window's foot (#1998).
+    words: Option<Entity<crate::words::WordsBox>>,
     focus_handle: FocusHandle,
     /// Whether the shell draws the window's title bar, as the app's does.
     title_bar: bool,
@@ -2147,6 +2149,7 @@ impl Shell {
         Self {
             dock,
             commands: None,
+            words: None,
             focus_handle: cx.focus_handle(),
             title_bar: false,
         }
@@ -2167,6 +2170,14 @@ impl Shell {
     ) {
         self.commands = Some(palette);
         window.focus(&self.focus_handle, cx);
+        cx.notify();
+    }
+}
+
+impl Shell {
+    /// The box under the views, where you say a change in words (#1998).
+    pub fn set_box(&mut self, words: Entity<crate::words::WordsBox>, cx: &mut Context<Self>) {
+        self.words = Some(words);
         cx.notify();
     }
 }
@@ -2195,6 +2206,7 @@ impl Render for Shell {
             .child(crate::chrome_fx::guards())
             .children(self.title_bar.then(|| title_bar(window)))
             .child(div().flex_1().min_h_0().w_full().child(self.dock.clone()))
+            .children(self.words.clone())
             .children(self.commands.clone())
     }
 }
