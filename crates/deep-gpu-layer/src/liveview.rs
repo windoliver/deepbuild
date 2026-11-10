@@ -350,13 +350,13 @@ impl Timer {
         }
     }
 
-    /// After the frame's work is done: each pass's ticks.
-    pub fn read(&mut self, device: &Device) {
+    /// After the frame's work is done: each pass's ticks, and whether they resolved (#1899).
+    pub fn read(&mut self, device: &Device) -> bool {
         let Some((_, _, read, _)) = &self.query else {
-            return;
+            return false;
         };
         if self.n == 0 {
-            return;
+            return true;
         }
         let size = 16 * self.n as u64;
         let ok = outside(|| {
@@ -378,6 +378,7 @@ impl Timer {
         if ok {
             outside(|| read.unmap());
         }
+        ok
     }
 }
 
