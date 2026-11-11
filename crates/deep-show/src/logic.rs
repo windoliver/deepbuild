@@ -65,6 +65,7 @@ impl Hub<'_> {
     /// from the evidence store, and its rows written to `occurrences.<logic ID>.occurrences`:
     /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
     pub(crate) fn inline_occurrences(&self, form: &mut Value, track: &[Value]) -> Result<(), Issue> {
+        self.inline_worlds(form)?;
         let items: Map<String, Value> = form
             .get("items")
             .and_then(Value::as_object)
@@ -127,7 +128,10 @@ impl Hub<'_> {
                 }
             }
         }
-        doc.insert("arrays".into(), Value::Object(arrays));
+        // #1918: beside the readings of the worlds the document lists.
+        if let Some(all) = doc.entry("arrays").or_insert_with(|| json!({})).as_object_mut() {
+            all.extend(arrays);
+        }
         Ok(())
     }
 }

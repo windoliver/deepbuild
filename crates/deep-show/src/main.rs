@@ -39,6 +39,7 @@ mod mixdown;
 mod modes;
 mod narration;
 mod packs;
+mod physics;
 mod placement;
 mod played;
 #[cfg(feature = "test-accent")]
@@ -674,10 +675,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 pixels: flag("pixels")?,
                 film: flag("film")?,
                 size: px_size(c.get("size"), |_| true)?,
-                arrays: optional(c.get("arrays"), |a| {
-                    a.as_array()?.iter().map(|n| Some(n.as_str()?.to_string())).collect()
-                })?
-                .unwrap_or_default(),
+                arrays: optional(c.get("arrays"), query::names)?.unwrap_or_default(),
+                paths: optional(c.get("paths"), query::names)?.unwrap_or_default(),
                 track: optional(c.get("track"), |t| t.as_array().cloned())?,
             })));
         }
@@ -1867,9 +1866,8 @@ const TEST_BUILD: bool = cfg!(any(
 ));
 
 /// The canvas modules a build of `set` holds (Registry and seal: `build_set`): `core` is text and
-/// look, which every set holds; `r1` adds marks2d, data, graph, record, sheet and motion; `r2`
-/// adds scene3d (#378) and effects (#380); and, under its `test-*` features, the acceptance
-/// READMEs' test canvas modules, with #388's builds that leave text or look out.
+/// look; `r1` adds marks2d, data, graph, record, sheet and motion; `r2` scene3d (#378) and effects
+/// (#380); and, under `test-*` features, the READMEs' test modules and #388's builds without one.
 fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
@@ -1898,7 +1896,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             },
             deep_canvas_record::module::module(),
             deep_canvas_sheet::module::module(),
-            deep_canvas_motion::module::module(),
+            physics::motion(),
         ]);
     }
     if set >= BuildSet::R2 {
@@ -1945,6 +1943,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
         });
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
         out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
+        out.push(physics::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest

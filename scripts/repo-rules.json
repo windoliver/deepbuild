@@ -1203,6 +1203,14 @@
         "deep-logic": {
           "spec": "* path=../deep-logic",
           "why": "Issue #499: the logic module's world, which a live play steps on the transport's clock."
+        },
+        "deep-canvas-physics": {
+          "spec": "* path=../deep-canvas-physics",
+          "why": "Issue #1918: the physics module, physics@1, whose column.source@1 entries the full set seals."
+        },
+        "deep-physics-rapier": {
+          "spec": "* path=../deep-physics-rapier",
+          "why": "Issue #1918: the Rapier backend each world a scene lists bakes on, so its occurrence lists and outputs reach the column view."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -1963,6 +1971,10 @@
         "deep-canvas-physics": {
           "spec": "* path=../deep-canvas-physics",
           "why": "Issue #2009: the world reader, the caps and the backend interface this backend implements, with no copy of its own."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #1918: a world inside a scene reads the paths the scene's channels and drivers write, evaluated by the motion module at each step's time."
         },
         "rapier3d": {
           "spec": "=0.36.1",

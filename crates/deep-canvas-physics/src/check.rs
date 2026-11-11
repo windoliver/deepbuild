@@ -134,14 +134,6 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
         }
     }
     let kinematic = doc.get("mode").and_then(Value::as_str) == Some("kinematic");
-    if kinematic {
-        out.push(Refusal {
-            code: "physics.unsupported",
-            path: "mode".into(),
-            actual: doc["mode"].clone(),
-            what: "kinematic mode isn't run by this backend interface yet; #523 brings it".into(),
-        });
-    }
     for (id, j) in doc
         .get("joints")
         .and_then(Value::as_object)
@@ -164,6 +156,15 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                     "has no {k} joint in dynamic mode (joint {id}); it runs only in kinematic mode"
                 ),
             ));
+        } else if kinematic {
+            out.push(Refusal {
+                code: "physics.unsupported",
+                path: format!("joints/{id}/kind"),
+                actual: j["kind"].clone(),
+                what: format!(
+                    "a {k} joint isn't run by this backend interface yet; #523 brings it"
+                ),
+            });
         }
     }
     out
