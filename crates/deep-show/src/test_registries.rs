@@ -108,6 +108,20 @@ pub fn effects_with_base_steps() -> Module {
     m
 }
 
+/// The effects module of the planted layout `test-gpu-output-in-effects` (#485): it declares
+/// `gpu.output@1` with today's outputs, which the core then leaves to it.
+#[cfg_attr(not(feature = "test-gpu-output-in-effects"), allow(dead_code))]
+pub fn effects_declaring_outputs() -> Module {
+    let mut m = deep_canvas_effects::module::module();
+    m.register = |r| {
+        (deep_canvas_effects::module::module().register)(r);
+        let (def, entries) = deep_canvas::registry::core_lists::gpu_output_registry();
+        r.registry(def);
+        r.entries.extend(entries);
+    };
+    m
+}
+
 /// #501: the writer of a test module's `export.target@1` entry: the frames' BGRA8 rows, one
 /// after another, in one file at `temp`; `None` for a target no test module writes.
 pub(crate) fn write_export(

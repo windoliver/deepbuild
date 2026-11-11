@@ -1,0 +1,16 @@
+Base: c072ff92d. Not built or run there: the surface this lane drives doesn't exist at the base (read from
+crates/deep-show/src/export.rs and crates/deep-canvas/src/document/mod.rs, as tests/acceptance/502/BASE-FAILURE.txt
+says).
+
+- ebur128.test.ts (2 tests: TEST_GLOBAL_LOUDNESS, TEST_LRA): each file's film is presented and exported with PCM
+  sound, and the base's receipt carries no loudness reading: each test fails at its first file with "the PCM export
+  whose master is seq-…: receipt.integrated (LUFS) is a finite number, got undefined". Each reaches that only once the
+  EBU set is read; where it isn't cached and can't be fetched each fails BLOCKED instead, with its unblock line.
+- subtitles.test.ts (3 tests: fate-sub-srt, fate-sub-webvtt, fate-sub-srt-madness-timeshift): the fixture film's
+  document holds `ducking`, which the base's envelope doesn't know, so "the fixture film at 24000/1001: the film is
+  presented" fails; the three tests read that one export and fail the same way. None reaches ffmpeg; without ffmpeg
+  each would fail BLOCKED once it did.
+
+Expected at the base: 5 tests, 5 failed, each for that reason (the missing surface, not a test mistake).
+The lane type-checks at the base: `node node_modules/typescript/bin/tsc -p tests/acceptance/502-oracle/tsconfig.json`
+exits 0.

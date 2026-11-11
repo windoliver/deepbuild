@@ -106,6 +106,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "processors",
     // #544: the media module's spawns (Spawn), which may read a logic item's occurrences.
     "spawns",
+    // #502: the media module's ducking entries (Ducking), each a bus's gain under speech spans.
+    "ducking",
 ];
 
 /// An item's keys (Item and kind), in this slice.

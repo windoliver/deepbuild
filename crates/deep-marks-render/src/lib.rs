@@ -426,7 +426,7 @@ fn check(
     doc: &Map<String, Value>,
     look: Option<&Look>,
     store: Option<&Path>,
-    (twin, distance_0_03, twin_parallax): (Twin, bool, bool),
+    (twin, distance_0_03, twin_parallax, square_sides): (Twin, bool, bool, bool),
     ctx: &formulas::Ctx,
 ) -> (Value, Vectors) {
     let result = deep_canvas::document::check(&Value::Object(doc.clone()));
@@ -451,19 +451,22 @@ fn check(
         if item.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND) {
             continue;
         }
-        match deep_canvas_marks::terrain::expand(id, item) {
+        let planted = match square_sides {
+            true => Planted::TerrainSquareSides,
+            false => Planted::None,
+        };
+        match deep_canvas_marks::terrain::expand(id, item, planted) {
             Ok((name, derived)) => {
                 expansions.push(json!({"instance": id, "derived": {name: derived}}))
             }
             Err(r) => issues.push(deep_canvas::document::Issue::error(
-                r.code,
-                id,
-                r.path,
-                Value::Null,
-                "the terrain recipe can't expand as its params say",
+                r.code, id, r.path, r.actual, &r.message,
             )),
         }
     }
+    // #536: a set that reads a logic array is checked as far as the document fixes it.
+    let (logic_sets, found) = arrays::sets(doc);
+    issues.extend(found);
     let (found, vectors) = deep_canvas_vector::check(doc, |sha| asset::bytes(store, sha), twin);
     issues.extend(found);
     // #406: a quote's raw bytes against its source's, and a formula's numbers.
@@ -542,9 +545,11 @@ fn check(
             .or(doc.get("items"))
         {
             let mut items = deep_canvas_vector::lower_items(items, &vectors, Default::default());
-            // A terrain draws as the atlas set it expands into, which marks2d doesn't check.
-            items.retain(|_, i| {
+            // A terrain draws as the atlas set it expands into, which marks2d doesn't check, and
+            // a set that reads a logic array draws only where the logic module runs.
+            items.retain(|id, i| {
                 i.get("kind").and_then(Value::as_str) != Some(deep_canvas_marks::terrain::KIND)
+                    && !logic_sets.contains(id)
             });
             // #399: graphs draw as marks2d's items, and labels place where the view draws them.
             let items = match graphs::lower(doc, &items, &vectors, Default::default()) {
@@ -782,7 +787,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
-            (skips, near, unwrapped),
+            (skips, near, unwrapped, false),
             &ctx,
         );
         if let Some(refused) = refused_by_check(&checked) {
@@ -803,13 +808,18 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     let straight = input.get("planted").and_then(Value::as_str) == Some("straight_router");
     // #1653 AC4's square layout of an isometric grid, which `geometry` takes.
     let square = input.get("planted").and_then(Value::as_str) == Some("isometric_as_square_grid");
+    // #536's twins: a hex grid's other parity shifted (`geometry`), and the terrain recipe reading
+    // a square grid's sides (`check`).
+    let parity = input.get("planted").and_then(Value::as_str) == Some("hex_shifts_other_parity");
+    let sides = input.get("planted").and_then(Value::as_str) == Some("terrain_reads_square_sides");
     if command == "check" || command == "geometry" {
         if input.get("planted").is_some()
             && skips == Twin::Honest
             && !near
             && !(unwrapped && command == "check")
             && !(straight && command == "geometry")
-            && !(square && command == "geometry")
+            && !((square || parity) && command == "geometry")
+            && !(sides && command == "check")
             && formula_plant.is_none()
         {
             return None;
@@ -819,7 +829,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             look.as_ref().map(|(l, _)| l),
             store_dir.as_deref(),
-            (skips, near, unwrapped),
+            (skips, near, unwrapped, sides && command == "check"),
             &ctx,
         );
         let timing = input.get("timing") == Some(&Value::Bool(true));
@@ -869,10 +879,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     &vectors,
                     (
                         router,
-                        if square {
-                            Planted::AtlasSquareLayout
-                        } else {
-                            Planted::None
+                        match (square, parity) {
+                            (true, _) => Planted::AtlasSquareLayout,
+                            (_, true) => Planted::HexOtherParity,
+                            _ => Planted::None,
                         },
                     ),
                     (look, timing),
@@ -911,7 +921,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &doc,
             Some(&look),
             store_dir.as_deref(),
-            (Twin::Honest, false, false),
+            (Twin::Honest, false, false, false),
             &formulas::Ctx::default(),
         );
         if let Some(refusal) = refused_by_check(&checked) {
@@ -1068,7 +1078,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             &request.doc,
             Some(&request.look),
             request.store.as_deref(),
-            (skips, near, unwrapped),
+            (skips, near, unwrapped, false),
             &request.formulas,
         );
         request.vectors = vectors;
@@ -1362,6 +1372,7 @@ unsafe impl std::alloc::GlobalAlloc for Counting {
     }
 }
 
+mod arrays;
 mod asset;
 mod formulas;
 pub mod gpu;

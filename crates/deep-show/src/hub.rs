@@ -1645,6 +1645,8 @@ impl<'a> Hub<'a> {
 
     /// One call's reply.
     pub fn call(&mut self, call: &Call) -> Value {
+        // #502: a caption set for a frame of the last call draws in no frame of this one.
+        self.renderer.caption = None;
         // #856's planted cache per document: each document's runs are keyed apart.
         if self.startup.run_per_document {
             let doc = match call {

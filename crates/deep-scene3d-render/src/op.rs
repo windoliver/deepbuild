@@ -51,6 +51,9 @@ pub(crate) struct MatOp {
     pub textures: Vec<TexIn>,
     buffer: wgpu::Buffer,
     sampler: wgpu::Sampler,
+    /// With a light response (#485): the flag its returns raise when one is negative or not
+    /// finite, bound after its textures.
+    pub range: Option<wgpu::Buffer>,
 }
 
 impl MatOp {
@@ -72,7 +75,32 @@ impl MatOp {
                 resource: wgpu::BindingResource::TextureView(v),
             });
         }
+        if let Some(range) = &self.range {
+            out.push(wgpu::BindGroupEntry {
+                binding: INPUTS_BINDING + 2 + self.textures.len() as u32,
+                resource: range.as_entire_binding(),
+            });
+        }
         out
+    }
+
+    /// Clears its light responses' range flag before a frame (#485).
+    pub fn clear_range(&self, queue: &wgpu::Queue) {
+        if let Some(range) = &self.range {
+            deep_gpu::alloc::outside(|| queue.write_buffer(range, 0, &[0; 4]));
+        }
+    }
+
+    /// Whether a light response of its returned a negative or non-finite value in the frame
+    /// just drawn: its flag, read back.
+    pub fn range_raised(&self, device: &deep_gpu::device::Device) -> bool {
+        let Some(range) = &self.range else {
+            return false;
+        };
+        crate::read_back(device, "scene3d light response range", 4, |e, staging| {
+            e.copy_buffer_to_buffer(range, 0, staging, 0, 4);
+        })
+        .is_some_and(|b| b[..4] != [0; 4])
     }
 
     /// Whether it reads the opaque scene's copy.
@@ -168,6 +196,15 @@ pub(crate) fn coverage_moves(op: &SolidOp, any_t: bool) -> bool {
     o.inputs.keys().chain(o.steps.keys()).any(|name| time(name))
 }
 
+/// Whether `op` changes nothing its part shades with (#485): no step, no output and no light
+/// response of its own, such as an operator that names only the defaults core.light@1 and
+/// core.ambient@1; its part draws as its material's own.
+pub(crate) fn changes_nothing(op: &SolidOp) -> bool {
+    module::operator_of(&op.id, &op.item)
+        .and_then(|i| graph::read(&i).ok())
+        .is_some_and(|o| o.steps.is_empty() && o.outputs.is_empty() && o.responses.is_empty())
+}
+
 /// Whether a solid's material operator reads the opaque scene's copy (#431).
 pub(crate) fn reads_backdrop(op: &SolidOp) -> bool {
     module::operator_of(&op.id, &op.item)
@@ -184,6 +221,57 @@ pub(crate) fn seed(doc_seed: u64, id: &str) -> u32 {
         h = interp::hash1(h ^ u32::from(b));
     }
     h
+}
+
+/// scene3d.wgsl's lines a material operator's light responses replace (#485): its defaults'
+/// stubs, from this line to [`STUBS_END`].
+const STUBS: &str = "// RESPONSES:";
+const STUBS_END: &str = "// END RESPONSES";
+
+/// What a response's return adds to the light loop (#485; Operator output: light response): as it
+/// is, or, with a negative or non-finite component, 0 with the operator's range flag raised.
+const ANSWERED: &str = "fn answered(c: vec3<f32>) -> vec3<f32> {
+    let bits = bitcast<vec3<u32>>(c) & vec3<u32>(0x7f800000u);
+    if all(bits != vec3<u32>(0x7f800000u)) && all(c >= vec3<f32>(0.0)) {
+        return c;
+    }
+    atomicStore(&op_range, 1u);
+    return vec3<f32>(0.0);
+}
+";
+
+/// scene3d.wgsl with `c`'s light responses in place of the defaults' stubs, its range flag at
+/// `binding` of the operator's group; as it is for an operator with none.
+fn answering(scene: &str, c: &check::Checked, binding: u32) -> Result<String, String> {
+    if c.responses.is_empty() {
+        return Ok(scene.into());
+    }
+    let (Some(a), Some(b)) = (scene.find(STUBS), scene.find(STUBS_END)) else {
+        return Err("scene3d.wgsl's response stubs moved".into());
+    };
+    let mut text = format!(
+        "@group({INPUTS_GROUP}) @binding({binding}) var<storage, read_write> op_range: atomic<u32>;\n{ANSWERED}"
+    );
+    for (name, port) in [("light", "LightIn"), ("ambient", "AmbientIn")] {
+        let has = c.responses.contains_key(name);
+        let body = if has {
+            format!("answered(op_{name}(a))")
+        } else {
+            "vec3<f32>(0.0)".into()
+        };
+        text.push_str(&format!(
+            "const HAS_{}: bool = {has};\nfn response_{name}(a: {port}) -> vec3<f32> {{\n    return {body};\n}}\n",
+            name.to_uppercase()
+        ));
+    }
+    Ok(format!("{}{text}{}", &scene[..a], &scene[b..]))
+}
+
+/// A light's `light_hash` for a light response (#485): its ID's bytes folded through the CPU's
+/// fixed hash, as [`seed`] keys a solid, with no document seed, so a light keeps its hash in
+/// every document.
+pub(crate) fn light_hash(id: &str) -> u32 {
+    id.bytes().fold(interp::hash1(0), |h, b| interp::hash1(h ^ u32::from(b)))
 }
 
 /// Checks and compiles `op` into the renderer's solid pipeline: `scene` is scene3d.wgsl, `groups`
@@ -261,7 +349,11 @@ pub(crate) fn compile(
             ),
         );
     }
-    let source = format!("{scene}\n{snippet}\n{ENTRY}");
+    // Its light responses beside its own function, in place of the defaults' stubs (#485).
+    let answers = emit::responses(&checked, options, &snippet);
+    let range_at = INPUTS_BINDING + 2 + textures.len() as u32;
+    let scene = answering(scene, &checked, range_at)?;
+    let source = format!("{scene}\n{snippet}\n{answers}\n{ENTRY}");
     let mut entries = crate::maps::layout_entries();
     entries.push(buffer_entry(
         INPUTS_BINDING,
@@ -285,6 +377,13 @@ pub(crate) fn compile(
             },
             count: None,
         });
+    }
+    if !checked.responses.is_empty() {
+        entries.push(buffer_entry(
+            range_at,
+            wgpu::ShaderStages::FRAGMENT,
+            wgpu::BufferBindingType::Storage { read_only: false },
+        ));
     }
     let inputs_layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("scene3d material operator"),
@@ -360,7 +459,18 @@ pub(crate) fn compile(
         mipmap_filter: wgpu::MipmapFilterMode::Linear,
         ..Default::default()
     });
+    let range = (!checked.responses.is_empty()).then(|| {
+        d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("scene3d light response range"),
+            size: 4,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        })
+    });
     Ok(MatOp {
+        range,
         pipeline,
         blend,
         blend_late,

@@ -1,7 +1,8 @@
 //! What scene3d fills into the GPU layer's registries (#486; Operator output, Pack graphs and
 //! step functions): a material operator's lobe outputs, `occlusion` and `normal` in
 //! `gpu.output@1`, and `core.bump@1` in `gpu.function@1`; and which lobe each output needs on the
-//! material it shades.
+//! material it shades. #485 adds the light loop's responses `light` and `ambient` and the
+//! `vertex_offset` to `gpu.output@1`, and their defaults `core.light@1` and `core.ambient@1`.
 
 use deep_canvas::registry::Registrar;
 use serde_json::{json, Map, Value};
@@ -55,6 +56,71 @@ pub fn writes(item: &Value, outputs: &[&str]) -> bool {
 /// The WGSL type a material operator writes scene3d's output `name` as, if it is one.
 pub fn output_type(name: &str) -> Option<&'static str> {
     OUTPUTS.iter().find(|o| o.0 == name).map(|o| o.1)
+}
+
+/// The part's own values a light response reads beside the light's (#485: "the operator's own
+/// outputs"): each as the part's operator left it, or its material's where it wrote none.
+const OWN: &[(&str, &str)] = &[
+    ("base_color", "vec3<f32>"),
+    ("alpha", "f32"),
+    ("metallic", "f32"),
+    ("roughness", "f32"),
+    ("specular_level", "f32"),
+];
+
+/// What the core's light loop hands a material's `light` once per shaded light (#485; Operator
+/// output: light response): the shading normal, the direction to the eye and to the light in
+/// view space, the light's radiance after its falloff, IES distribution and receivers, its shadow
+/// (0..1), a hash of its ID, then the part's own values.
+pub const LIGHT_IN: &[(&str, &str)] = &[
+    ("n", "vec3<f32>"),
+    ("v", "vec3<f32>"),
+    ("l", "vec3<f32>"),
+    ("radiance", "vec3<f32>"),
+    ("shadow", "f32"),
+    ("light_hash", "u32"),
+];
+
+/// What it hands `ambient` once per pixel: the irradiance from the environment or the sky after
+/// ambient occlusion, one environment sample along the reflection at the roughness, the normal
+/// and the direction to the eye in view space, then the part's own values.
+pub const AMBIENT_IN: &[(&str, &str)] = &[
+    ("irradiance", "vec3<f32>"),
+    ("env", "vec3<f32>"),
+    ("n", "vec3<f32>"),
+    ("v", "vec3<f32>"),
+];
+
+/// A response's inputs: `ports` then the part's own values.
+pub fn response_in(ports: &[(&'static str, &'static str)]) -> Vec<(&'static str, &'static str)> {
+    ports.iter().chain(OWN).copied().collect()
+}
+
+/// The light loop's two responses: the output each is, its inputs and its default, the core's own
+/// shading, which naming leaves as it is.
+pub const RESPONSES: &[(&str, &[(&str, &str)], &str)] = &[
+    ("light", LIGHT_IN, "core.light@1"),
+    ("ambient", AMBIENT_IN, "core.ambient@1"),
+];
+
+/// The defaults' entries in `gpu.function@1`: their ports, and as their body the core's own WGSL
+/// in the renderer, which no graph can name a step of (the DFG table, the extra lobes).
+fn defaults() -> Vec<(&'static str, Value)> {
+    RESPONSES
+        .iter()
+        .map(|(output, ports, name)| {
+            let ins: Map<String, Value> = response_in(ports)
+                .into_iter()
+                .map(|(k, t)| (k.to_string(), json!(t)))
+                .collect();
+            let value = json!({
+                "signature": {"in": ins, "out": {"radiance": "vec3<f32>"}},
+                "exact": false,
+                "body": {"source": {"wgsl": format!("deep-scene3d-render/scene3d.wgsl#{output}")}},
+            });
+            (*name, value)
+        })
+        .collect()
 }
 
 /// scene3d's step functions, each in a pack function's form `{about, ports, steps}`.
@@ -161,6 +227,18 @@ pub fn register(r: &mut Registrar) {
             json!({"kind": "material", "type": ty, "read_as": ty}),
             SINCE,
         );
+    }
+    // #485: the light loop's responses, each the radiance it reads, and the vertex offset.
+    for name in ["light", "ambient", "vertex_offset"] {
+        r.entry(
+            "gpu.output@1",
+            &format!("material.{name}"),
+            json!({"kind": "material", "type": "vec3<f32>", "read_as": "vec3<f32>"}),
+            SINCE,
+        );
+    }
+    for (name, value) in defaults() {
+        r.entry("gpu.function@1", name, value, SINCE);
     }
     for (name, f) in functions() {
         let steps = f["steps"].as_object().cloned().unwrap_or_default();

@@ -3,7 +3,9 @@
 //! on a square grid or an isometric one, where the centre of cell (cx, cy) with cell [w, h] is
 //! x = (cx − cy) × w ÷ 2, y = (cx + cy) × h ÷ 2, or on a hex grid at its layout's centre (Mark
 //! set: hex grid; the floor #467's terrain recipe lays). Rows draw in order of centre y, then
-//! centre x. A hex grid's picks, hits and edge rules are #536's, and free rows #535's.
+//! centre x. Free rows are #535's. #536: a hex cell's six neighbours, which the terrain recipe's
+//! edge rules read, and its hexagon as its hit area, a point on an edge or a vertex going to the
+//! cell with the smaller (cy, cx).
 //!
 //! An animated row shows frame ⌊t × frame_rate + phase × frames⌋ mod frames, drawn as atlas cell
 //! `tile + frame`: [`apply`] resolves it at the record's time before the frame is built, as the
@@ -27,6 +29,43 @@ pub struct AtlasCell {
     pub margin: [f64; 2],
     pub separation: [f64; 2],
     pub flip: u8,
+    /// #536: a hex grid row's hit area in place of its quad.
+    pub hit: Option<HexArea>,
+}
+
+/// #536: the hexagon a hex cell's w × h quad holds, its hit area: edge i runs from vertex i to
+/// vertex i + 1, counterclockwise on screen from the edge facing +x (pointy) or between +x and −y
+/// (flat), and the cell owns the edges it shares with a neighbour whose (cy, cx) is larger, and
+/// its edges off the grid, so a point on an edge or a vertex hits exactly one cell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HexArea {
+    pub flat: bool,
+    pub owns: [bool; 6],
+}
+
+impl HexArea {
+    /// The vertices as fractions of the quad's width and height from its top-left corner.
+    pub fn outline(&self) -> [[f64; 2]; 6] {
+        if self.flat {
+            [
+                [1.0, 0.5],
+                [0.75, 0.0],
+                [0.25, 0.0],
+                [0.0, 0.5],
+                [0.25, 1.0],
+                [0.75, 1.0],
+            ]
+        } else {
+            [
+                [1.0, 0.75],
+                [1.0, 0.25],
+                [0.5, 0.0],
+                [0.0, 0.25],
+                [0.0, 0.75],
+                [0.5, 1.0],
+            ]
+        }
+    }
 }
 
 impl AtlasCell {
@@ -146,6 +185,33 @@ impl Grid {
             Shape::Hex { flat: true, .. } => [0.75 * w * cx, h * (cy + shifted(cx) / 2.0)],
         }
     }
+
+    /// #536: a hex cell's six neighbours, the cells at distance 1 in cube coordinates, edge 0 to 5
+    /// counterclockwise on screen from the one facing +x (pointy) or between +x and −y (flat);
+    /// `None` off a hex grid.
+    pub fn neighbours(&self, [cx, cy]: [i64; 2]) -> Option<[[i64; 2]; 6]> {
+        let Shape::Hex { flat, odd } = self.shape else {
+            return None;
+        };
+        // Offset coordinates: rows shift on a pointy grid, columns on a flat one.
+        let line = if flat { cx } else { cy };
+        let s = i64::from((line.rem_euclid(2) == 1) == odd);
+        let steps = if flat {
+            [[1, s - 1], [0, -1], [-1, s - 1], [-1, s], [0, 1], [1, s]]
+        } else {
+            [[1, 0], [s, -1], [s - 1, -1], [-1, 0], [s - 1, 1], [s, 1]]
+        };
+        Some(steps.map(|[dx, dy]| [cx + dx, cy + dy]))
+    }
+
+    /// #536: a hex cell's hit area; `None` off a hex grid.
+    pub fn hit_area(&self, cell: [i64; 2]) -> Option<HexArea> {
+        let flat = matches!(self.shape, Shape::Hex { flat: true, .. });
+        let owns = self
+            .neighbours(cell)?
+            .map(|[nx, ny]| (cell[1], cell[0]) < (ny, nx));
+        Some(HexArea { flat, owns })
+    }
 }
 
 fn odd_of(shape: Shape) -> bool {
@@ -212,7 +278,10 @@ pub fn tiles(
         Some(Value::String(p)) if p == "free" => true,
         Some(_) => return Err(refused("bad_doc", format!("{path}/place"))),
     };
-    let grid = Grid::read(params, &path)?;
+    let mut grid = Grid::read(params, &path)?;
+    if let (Shape::Hex { odd, .. }, Planted::HexOtherParity) = (&mut grid.shape, planted) {
+        *odd = !*odd;
+    }
     let size = sized(params);
     if let Some([cols, rs]) = size {
         if rows.keys.len() != cols * rs {
@@ -309,7 +378,10 @@ pub fn marks(
         [0.0, 0.0],
         &format!("{path}/separation"),
     )?;
-    let [w, h] = Grid::read(params, &format!("items/{id}/params"))?.cell;
+    let grid = Grid::read(params, &format!("items/{id}/params"))?;
+    let [w, h] = grid.cell;
+    // A free row isn't a grid cell, and a turned one hits its turned quad.
+    let free = params.get("place").and_then(Value::as_str) == Some("free");
     Ok(tiles(id, params, rows, planted)?
         .into_iter()
         .map(|t| {
@@ -333,6 +405,9 @@ pub fn marks(
                 margin,
                 separation,
                 flip: t.flip,
+                hit: (!free && t.angle == 0.0)
+                    .then(|| grid.hit_area(t.cell.map(|c| c as i64)))
+                    .flatten(),
             }),
         })
         .collect())
@@ -484,6 +559,85 @@ mod tests {
         assert_eq!(g.centre(0.0, 1.0, false), [-16.0, 8.0]);
         assert_eq!(g.centre(2.0, 1.0, false), [16.0, 24.0]);
         assert_eq!(g.centre(1.0, 0.0, true), [32.0, 0.0]);
+    }
+
+    /// #536: each hex neighbour is at cube distance 1 and lies across the edge facing it, so the
+    /// two cells of every shared edge list each other on opposite edges, and exactly one of them,
+    /// the one with the smaller (cy, cx), owns it.
+    #[test]
+    fn hex_neighbours_face_each_other_and_one_owns_each_edge() {
+        let cube = |g: &Grid, [cx, cy]: [i64; 2]| {
+            let Shape::Hex { flat, odd } = g.shape else {
+                unreachable!("a hex grid")
+            };
+            let (line, along) = if flat { (cx, cy) } else { (cy, cx) };
+            let shift = (line
+                - if odd {
+                    line.rem_euclid(2)
+                } else {
+                    -line.rem_euclid(2)
+                })
+                / 2;
+            let (q, r) = if flat {
+                (line, along - shift)
+            } else {
+                (along - shift, line)
+            };
+            [q, r, -q - r]
+        };
+        for (flat, odd) in [(false, true), (false, false), (true, true), (true, false)] {
+            let g = Grid {
+                shape: Shape::Hex { flat, odd },
+                cell: [32.0, 28.0],
+            };
+            for cx in 0..6 {
+                for cy in 0..6 {
+                    let six = g.neighbours([cx, cy]).expect("a hex grid");
+                    let own = g.hit_area([cx, cy]).expect("a hex grid").owns;
+                    for (i, n) in six.iter().enumerate() {
+                        let [a, b] = [cube(&g, [cx, cy]), cube(&g, *n)];
+                        let d = (0..3).map(|k| (a[k] - b[k]).abs()).max();
+                        assert_eq!(d, Some(1), "{flat} {odd}: ({cx}, {cy}) edge {i} → {n:?}");
+                        let back = g.neighbours(*n).expect("a hex grid");
+                        assert_eq!(
+                            back[(i + 3) % 6],
+                            [cx, cy],
+                            "{flat} {odd}: ({cx}, {cy}) edge {i}"
+                        );
+                        let theirs = g.hit_area(*n).expect("a hex grid").owns[(i + 3) % 6];
+                        assert_ne!(own[i], theirs, "{flat} {odd}: ({cx}, {cy}) edge {i}");
+                        assert_eq!(own[i], (cy, cx) < (n[1], n[0]));
+                    }
+                }
+            }
+        }
+        // Counterclockwise on screen: a pointy cell's edge 0 faces +x and edge 1 is up and to the
+        // right; a flat cell's edge 0 is between +x and −y and edge 1 faces −y.
+        let at = |g: &Grid, c: [i64; 2]| g.centre(c[0] as f64, c[1] as f64, false);
+        let pointy = Grid {
+            shape: Shape::Hex {
+                flat: false,
+                odd: true,
+            },
+            cell: [32.0, 28.0],
+        };
+        let n = pointy.neighbours([1, 1]).expect("a hex grid");
+        assert_eq!(
+            [at(&pointy, n[0]), at(&pointy, n[1])],
+            [[80.0, 21.0], [64.0, 0.0]]
+        );
+        let flat = Grid {
+            shape: Shape::Hex {
+                flat: true,
+                odd: true,
+            },
+            cell: [32.0, 28.0],
+        };
+        let n = flat.neighbours([1, 1]).expect("a hex grid");
+        assert_eq!(
+            [at(&flat, n[0]), at(&flat, n[1])],
+            [[48.0, 28.0], [24.0, 14.0]]
+        );
     }
 
     /// #535: a free row scaled 2 about its centre covers twice its cell there, unturned or

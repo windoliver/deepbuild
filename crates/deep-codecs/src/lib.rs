@@ -589,6 +589,12 @@ fn audio(
         })
         .collect();
     let mut samples = match &t.entry.config {
+        // #502: float PCM as an export writes it (`fpcm`, or QuickTime's `lpcm`): 32-bit
+        // little-endian samples, kept as they are.
+        _ if matches!(&t.entry.fourcc, b"fpcm" | b"lpcm") => packets
+            .iter()
+            .flat_map(|p| p.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)))
+            .collect(),
         #[cfg(target_os = "macos")]
         Some((k, esds)) if k == b"esds" => apple::decode_aac(esds, rate, channels, &packets)?,
         _ => return Err(format!("no decoder for {}", codec(&t.entry.fourcc))),
