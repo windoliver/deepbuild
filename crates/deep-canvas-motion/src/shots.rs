@@ -1306,7 +1306,13 @@ impl Plan {
                     _ => union_over(program, doc, &f.keep, r.start, r.end, id)?,
                 };
                 union = Some(u);
-                fit(&base, &u, f.pad, f.fill, frame.place_px(f.place), frame)
+                // #407: a shot's one framed pose is its explicit pose where it sets one (a view
+                // width), else a fit of its kept items (Shot).
+                if s.get("view_width").is_some() {
+                    base
+                } else {
+                    fit(&base, &u, f.pad, f.fill, frame.place_px(f.place), frame)
+                }
             }
             None => base,
         };

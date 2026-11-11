@@ -1,0 +1,86 @@
+{
+  "name": "shelf",
+  "version": "3.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1956 acceptance suite, by an outside owner: shelf.bookcase@3, which keeps the @1-to-@2 step and adds @2-to-@3, setting height = old.shelves * 0.4.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@3": "shelf.bookcase@3.json"
+  },
+  "kinds": {
+    "shelf.bookcase@3": {
+      "minor": 0,
+      "recipe": "shelf.bookcase@3",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "twins": [],
+      "migrate": {
+        "1": {
+          "rename": {
+            "levels": "shelves"
+          },
+          "set": {
+            "depth": "old.width * 0.25"
+          },
+          "drop": []
+        },
+        "2": {
+          "rename": {},
+          "set": {
+            "height": "old.shelves * 0.4"
+          },
+          "drop": []
+        }
+      },
+      "examples": [],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      }
+    }
+  },
+  "corpus": {
+    "1": [
+      "afe093aae5d2354a2d877c0e7f9802179ad7b56846ca623640bbbb28b188a5e3"
+    ],
+    "2": [
+      "39f4fd8102b19bdb765b4b4914d40027997ceea667a978d60fedfd7b6f7a6d90"
+    ],
+    "3": [
+      "4b1207732f8cc5ec23174a2a298166daafeff0b6bc9e2c0c45b6fcd217c8a34d"
+    ]
+  },
+  "assets": [
+    {
+      "path": "corpus/case-1.json",
+      "sha256": "afe093aae5d2354a2d877c0e7f9802179ad7b56846ca623640bbbb28b188a5e3",
+      "size": 2972,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/case-2.json",
+      "sha256": "39f4fd8102b19bdb765b4b4914d40027997ceea667a978d60fedfd7b6f7a6d90",
+      "size": 2997,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/case-3.json",
+      "sha256": "4b1207732f8cc5ec23174a2a298166daafeff0b6bc9e2c0c45b6fcd217c8a34d",
+      "size": 3022,
+      "license": "MIT"
+    }
+  ]
+}

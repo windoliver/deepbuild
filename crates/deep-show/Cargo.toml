@@ -45,6 +45,9 @@ test-check-kind = ["dep:deep-canvas-test-modules"]
 # Issue #408: a test canvas module whose kind's items contribute glyph boxes to the core's
 # glyph-box array, and draw nothing else.
 test-glyph-label = ["dep:deep-canvas-test-modules"]
+# Issue #407: the film audit with a shortest reading hold of 2 s, standing in for a new release's
+# stricter rule; nothing else changes.
+test-hold-min-2s = []
 test-leave-out-logic = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []
@@ -232,6 +235,11 @@ test-steps-in-effects = []
 # layout in which the effects module declares gpu.output@1 instead of the core.
 test-leave-out-scene3d = []
 test-gpu-output-in-effects = []
+# Issue #1918 criterion 3's planted twins (tests/acceptance/1918/README.md): the physics module whose
+# readings entry hands the column view no changed ranges, and a motion module with one more operator
+# that reads the physics module's occurrence list by its array name.
+test-physics-hands-no-changes = []
+test-motion-reads-physics-array = []
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
@@ -253,6 +261,9 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # transport's clock.
 deep-canvas-media = { path = "../deep-canvas-media" }
 deep-logic = { path = "../deep-logic" }
+# Issue #1918: the physics module, physics@1, and the Rapier backend a scene's worlds bake on.
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+deep-physics-rapier = { path = "../deep-physics-rapier" }
 # Issue #380: the shipped effects module, in R2's build set beside scene3d.
 deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }

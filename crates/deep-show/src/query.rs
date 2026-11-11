@@ -98,7 +98,7 @@ fn refused(code: &str) -> Value {
 }
 
 /// `items/<id>/<field…>` split at the item.
-fn item_path(path: &str) -> Option<(&str, &str)> {
+pub(crate) fn item_path(path: &str) -> Option<(&str, &str)> {
     path.strip_prefix("items/")?.split_once('/')
 }
 
@@ -109,6 +109,57 @@ fn at_field<'v>(value: &'v Value, field: &str) -> Option<&'v Value> {
         Value::Object(map) => map.get(part),
         _ => None,
     })
+}
+
+/// Item `id`'s evaluated `field` in `s`: its transform's `at/…`, or one of its fields, with the
+/// keys of what made it (`deep_query`'s read, and #1918's `eval` `paths`).
+pub(crate) fn item_value(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    s: &DocSession,
+    id: &str,
+    field: &str,
+) -> Option<(Value, Vec<Key>)> {
+    let (array, rest) = match field.strip_prefix("at/") {
+        Some(rest) => ("core.transform", rest),
+        None => ("core.fields", field),
+    };
+    let (val, keys) = s.read(sched, array, Some(id))?;
+    let value = match array {
+        "core.transform" => {
+            let t = val.as_typed::<Transform>()?;
+            let at = json!({"pos": t.pos, "rot": t.rot, "scale": t.scale});
+            at_field(&at, rest)?.clone()
+        }
+        _ => at_field(&val.as_typed::<Fields>()?.to_json(), rest)?.clone(),
+    };
+    Some((value, keys))
+}
+
+/// #1918: each item path's value in `s` (`eval`'s `paths`), read as `deep_query` reads one, null
+/// for a path it can't read.
+pub(crate) fn values(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    s: &DocSession,
+    paths: &[String],
+) -> Value {
+    let read = |p: &String| {
+        let (id, field) = item_path(p)?;
+        item_value(sched, s, id, field).map(|(v, _)| v)
+    };
+    Value::Object(
+        paths
+            .iter()
+            .map(|p| (p.clone(), read(p).unwrap_or(Value::Null)))
+            .collect(),
+    )
+}
+
+/// A list of names (`eval`'s `arrays` and `paths`).
+pub(crate) fn names(v: &Value) -> Option<Vec<String>> {
+    v.as_array()?
+        .iter()
+        .map(|n| Some(n.as_str()?.to_string()))
+        .collect()
 }
 
 /// One key for a value several nodes made: the node's own key when one made it.
@@ -184,22 +235,28 @@ impl Hub<'_> {
             };
             (row.rev, row.doc.clone())
         };
-        let result = check_packed(&document, &self.startup.sealed, &self.packs);
-        let skipped = crate::verdict::unknown_items(&result.notices);
-        let mut drawn = crate::verdict::without(
-            &crate::packs::drawn(&document, &result.expansions),
-            &skipped,
-        );
-        self.keep_instances(&document, &result.expansions, &mut drawn);
-        let _ = self.inline_tables(&mut drawn);
-        let _ = self.inline_vectors(&mut drawn);
-        self.inline_programs(&mut drawn);
+        let (drawn, expansions) = self.drawn_of(&document);
         Some(Revision {
             rev,
             doc: document,
             drawn,
-            expansions: result.expansions,
+            expansions,
         })
+    }
+
+    /// What a document draws: its recipe instances expanded and kept, items of a kind this build
+    /// doesn't know left out, and its tables, vectors and logic programs inlined; with its
+    /// expansions.
+    pub(crate) fn drawn_of(&self, document: &Value) -> (Value, Vec<Expansion>) {
+        let result = check_packed(document, &self.startup.sealed, &self.packs);
+        let skipped = crate::verdict::unknown_items(&result.notices);
+        let mut drawn =
+            crate::verdict::without(&crate::packs::drawn(document, &result.expansions), &skipped);
+        self.keep_instances(document, &result.expansions, &mut drawn);
+        let _ = self.inline_tables(&mut drawn);
+        let _ = self.inline_vectors(&mut drawn);
+        self.inline_programs(&mut drawn);
+        (drawn, result.expansions)
     }
 
     /// Puts each recipe instance back beside its derived items, its params filled with its
@@ -554,19 +611,7 @@ impl Hub<'_> {
         if let Some(read) = self.status_value(doc, path) {
             return read;
         }
-        let (array, rest) = match field.strip_prefix("at/") {
-            Some(rest) => ("core.transform", rest),
-            None => ("core.fields", field),
-        };
-        let (val, keys) = s.read(&self.sched, array, Some(id))?;
-        let value = match array {
-            "core.transform" => {
-                let t = val.as_typed::<Transform>()?;
-                let at = json!({"pos": t.pos, "rot": t.rot, "scale": t.scale});
-                at_field(&at, rest)?.clone()
-            }
-            _ => at_field(&val.as_typed::<Fields>()?.to_json(), rest)?.clone(),
-        };
+        let (value, keys) = item_value(&self.sched, s, id, field)?;
         Some((value, one_key(&keys, s.hash())))
     }
 

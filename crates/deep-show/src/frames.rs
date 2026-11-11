@@ -342,6 +342,9 @@ impl<'a> Hub<'a> {
                 .collect();
             reply["arrays"] = Value::Object(read);
         }
+        if !e.paths.is_empty() {
+            reply["values"] = crate::query::values(&self.sched, evaluated, &e.paths);
+        }
         if self.startup.test_build {
             reply["access"] = json!(report
                 .access

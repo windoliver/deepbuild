@@ -19,11 +19,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
+use super::pack_kinds::check_kinds;
 use super::{member, Issue};
 use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
+pub mod deps;
 pub mod module_fields;
 
 /// The most derived items one repeat makes (Recipe: cost).
@@ -51,6 +53,12 @@ pub struct Planted {
     pub each_by_count: bool,
     /// #2015: a repeat over faces walks the part's triangles (the elements function's plant).
     pub each_per_triangle: bool,
+    /// #1956: the pack check of a kind's migration stops at its first fault.
+    pub migration_first_fault: bool,
+    /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
+    pub orphan_drops: bool,
+    /// #1961: that load hands the broken-out ID to the new expansion, which writes it.
+    pub orphan_hands_id: bool,
 }
 
 /// A planted expander's walk over an instance's inputs (#202).
@@ -213,7 +221,7 @@ impl KindRule {
 }
 
 /// What a kind rule's expression resolves through: the build's `ease@1`, when it has one.
-struct RuleScope<'a>(&'a Sealed);
+pub(super) struct RuleScope<'a>(pub(super) &'a Sealed);
 
 impl crate::expr::Resolve for RuleScope<'_> {
     fn eases(&self) -> Result<(), String> {
@@ -232,6 +240,8 @@ pub const MAX_DEPTH: usize = 4;
 pub struct Pack {
     pub id: PackId,
     pub requires_modules: BTreeMap<String, String>,
+    /// `requires.packs`: each pack it builds on, at an exact version (#1957).
+    pub requires_packs: Vec<deps::Dep>,
     /// By `pack.name`.
     pub recipes: BTreeMap<String, Recipe>,
     /// `d1:` SHA-256 of the manifest's canonical form: a version's bytes, frozen.
@@ -307,7 +317,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
             "a canvas module's name or kind family; a pack names its own",
         ));
     }
-    let mut requires_modules = BTreeMap::new();
+    let (mut requires_modules, mut requires_packs) = (BTreeMap::new(), Vec::new());
     if let Some(requires) = fields.get("requires") {
         match requires.as_object() {
             None => issues.push(bad("requires", requires.clone(), "not an object")),
@@ -374,11 +384,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
                                 }
                             }
                         },
-                        "packs" => issues.push(bad(
-                            "requires/packs",
-                            value.clone(),
-                            "pack dependencies land with the pack versions task",
-                        )),
+                        "packs" => requires_packs = deps::read(value, &id, &mut issues),
                         other => issues.push(Issue::envelope(
                             "unknown_field",
                             format!("requires/{other}"),
@@ -413,6 +419,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         }
         Some(other) => issues.push(bad("recipes", other.clone(), "not an object")),
     }
+    deps::undeclared(manifest, &id, &requires_packs, &mut issues);
     // Providers, layouts' validators and program entries are programs the sandbox module admits
     // and runs (#238): a build without it refuses them, whatever `requires.modules` says.
     for key in ["providers", "layouts"] {
@@ -438,10 +445,14 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => BTreeMap::new(),
         Some(a) => check_aliases(a, &mut issues),
     };
-    let kinds = match fields.get("kinds") {
-        None => BTreeMap::new(),
-        Some(k) => super::pack_kinds::check_kinds(&id, k, &recipes, &assets, sealed, &mut issues),
-    };
+    let kinds = check_kinds(
+        &id,
+        fields,
+        &recipes,
+        &assets,
+        (sealed, planted),
+        &mut issues,
+    );
     for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
         issues.extend(module_fields::check(sealed, manifest, key));
     }
@@ -451,6 +462,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
     Ok(Pack {
         id,
         requires_modules,
+        requires_packs,
         recipes,
         digest: digest(manifest),
         entries,
@@ -665,6 +677,7 @@ const PACK_KEYS: &[&str] = &[
     "providers",
     "layouts",
     "kinds",
+    "corpus",
 ];
 
 /// The canvas module that admits and runs a pack's programs (#238).
@@ -1313,7 +1326,7 @@ fn read_lets(
 }
 
 /// Why `value` is no value of `input`, if it isn't.
-fn input_fault(input: &Input, value: &Value) -> Option<String> {
+pub(super) fn input_fault(input: &Input, value: &Value) -> Option<String> {
     let range = |n: f64| -> Option<String> {
         let below = input.min.is_some_and(|min| n < min);
         let above = input.max.is_some_and(|max| n > max);
@@ -1412,10 +1425,13 @@ impl Packs {
         if let Some(key) = &key {
             *self.checks.entry(key.clone()).or_default() += 1;
         }
-        // The pack check, then each kind's kit (#202), which checks documents of the pack.
+        // The pack check, its place in the pack graph (#1957), then each kind's kit (#202), which
+        // checks documents of the pack beside the versions it requires.
         let checked = check_pack(manifest, sealed, self.planted).and_then(|mut pack| {
+            deps::cycle(self, &pack)?;
             if !pack.kinds.is_empty() {
-                super::pack_kinds::kit(&mut pack, sealed, self.planted)?;
+                let alone = deps::store(self, &pack);
+                super::pack_kinds::kit(&mut pack, sealed, alone)?;
             }
             Ok(pack)
         });
@@ -1468,7 +1484,7 @@ fn manifest_id(manifest: &Value) -> Option<String> {
 /// The packs a document resolved: by name, for a kind's `<pack>` half.
 #[derive(Clone, Debug, Default)]
 pub struct Resolved<'a> {
-    by_name: BTreeMap<String, &'a Pack>,
+    pub(super) by_name: BTreeMap<String, &'a Pack>,
     /// The sealed modules' elements functions by builder kind (`family.name`), which a repeat
     /// over elements counts by (#2015).
     elements: BTreeMap<String, registry::Elements>,
@@ -1536,7 +1552,7 @@ pub fn resolve<'a>(
         ));
         return out;
     };
-    let mut seen: BTreeMap<String, String> = BTreeMap::new();
+    let (mut seen, mut listed) = (BTreeMap::new(), BTreeMap::new());
     for (i, entry) in entries.iter().enumerate() {
         let path = format!("packs/{i}");
         let Some((text, id)) = entry
@@ -1591,46 +1607,16 @@ pub fn resolve<'a>(
                 &format!("pack `{}` at version {} is not in this build; the document is refused whole, and never drawn with another version", id.id, id.version),
             );
             // The instances that need it.
-            issue.ids = member(doc, "items")
-                .and_then(Value::as_object)
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter(|(_, item)| {
-                            super::kind_text(item)
-                                .and_then(|k| k.split_once('.'))
-                                .is_some_and(|(family, _)| family == id.name)
-                        })
-                        .map(|(item_id, _)| item_id.clone())
-                        .collect()
-                })
-                .unwrap_or_default();
+            issue.ids = deps::instances(doc, &id.name);
             issues.push(issue);
             continue;
         };
-        for (module, range) in &pack.requires_modules {
-            let Some(sealed) = sealed else { break };
-            let Some(parsed) = Range::parse(range) else {
-                continue;
-            };
-            if sealed.module(module).is_none() {
-                issues.push(Issue::envelope(
-                    "module_missing",
-                    format!("{path}/requires/modules/{module}"),
-                    json!(range),
-                    &format!("pack `{text}` requires the {module} module, which this build lacks"),
-                ));
-            } else if !sealed.satisfies(module, &parsed) {
-                issues.push(Issue::envelope(
-                    "out_of_range",
-                    format!("{path}/requires/modules/{module}"),
-                    json!(range),
-                    &format!("pack `{text}` requires the {module} module at {range}; this build has another"),
-                ));
-            }
-        }
+        deps::modules(pack, text, &path, sealed, issues);
+        listed.insert(id.name.clone(), path);
         out.by_name.insert(id.name.clone(), pack);
     }
+    // What the listed packs require, as if the document listed it (#1957).
+    deps::close(&mut out, &listed, doc, packs, sealed, issues);
     out
 }
 
@@ -1657,6 +1643,9 @@ pub struct Expansion {
     pub derived: Map<String, Value>,
     /// The derived IDs a patch broke out, which the instance no longer writes.
     pub broken_out: Vec<String>,
+    /// Each `broken_out` entry, by its index there, that this version no longer derives: the
+    /// writer's own item, raised as `derived_orphan` (Pack: migrations as data; #1961).
+    pub orphaned: Vec<(usize, String)>,
     /// The recipe's channels, each targeting a derived item, by `<instance>.<channel>[.<k>]`.
     pub channels: Map<String, Value>,
 }
@@ -2001,12 +1990,32 @@ fn expand_one(
         // Planted (#202): the inputs walked in another order than the recipe's.
         inputs = walk(inputs);
     }
+    // Broken-out items this version no longer derives (#1961): each stays the writer's own.
+    let mut orphaned = Vec::new();
+    // The planted loaders' orphans (#1961): dropped, or handed to the new expansion.
+    let mut handed = Vec::new();
     let broken_out: Vec<String> = match member(&item, "broken_out") {
         None => Vec::new(),
         Some(Value::Array(list)) => {
             let mut out = Vec::new();
             for (i, v) in list.iter().enumerate() {
                 match v.as_str() {
+                    // Broken out under an earlier version that derived it: the writer holds it,
+                    // it stays listed so a later version that derives it again never writes it.
+                    Some(s)
+                        if !derives(recipe, id, s)
+                            && items.contains_key(s)
+                            && s.strip_prefix(id).is_some_and(|r| r.starts_with('.')) =>
+                    {
+                        if planted.orphan_drops {
+                            items.shift_remove(s);
+                        } else if planted.orphan_hands_id {
+                            handed.push(s.to_string());
+                        } else {
+                            out.push(s.to_string());
+                            orphaned.push((i, s.to_string()));
+                        }
+                    }
                     Some(s) if derives(recipe, id, s) => {
                         // Broken out, so the writer holds it: a list entry with no item behind
                         // it would make the recipe's output vanish.
@@ -2544,6 +2553,20 @@ fn expand_one(
             channels.insert(cid, out);
         }
     }
+    // Planted (#1961): each orphaned ID goes to the new derived item at its index, in the
+    // writer's item's place.
+    for orphan in handed {
+        let index = orphan.rsplit_once('.').map_or("", |(_, i)| i);
+        let heir = derived_items
+            .iter()
+            .find(|(d, _)| d.rsplit_once('.').is_some_and(|(_, i)| i == index))
+            .map(|(_, fields)| fields.clone());
+        if let Some(mut fields) = heir {
+            fields["id"] = json!(orphan);
+            fields["name"] = json!(orphan);
+            derived_items.insert(orphan, fields);
+        }
+    }
     // Written only once the whole expansion went through: a refused instance writes nothing.
     for (derived_id, fields) in &derived_items {
         items.insert(derived_id.clone(), fields.clone());
@@ -2556,6 +2579,7 @@ fn expand_one(
         items: derived,
         derived: derived_items,
         broken_out,
+        orphaned,
         channels,
     })
 }
