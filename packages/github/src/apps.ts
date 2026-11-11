@@ -18,6 +18,11 @@ interface AppToken { token: string; expires: number; permissions: Permissions; l
 const SESSION: Permissions = { contents: 'write', pull_requests: 'write', issues: 'write', metadata: 'read' };
 /** What the gate's token needs to post a verdict. */
 const GATE: Permissions = { statuses: 'write', metadata: 'read' };
+/**
+ * What the gate's landing token needs (#1331): merge a pull request the gate passed, through the ruleset's
+ * `pull_request` bypass for the gate's app, and close the issue it landed. Never statuses: those are the other token's.
+ */
+const LANDING: Permissions = { contents: 'write', pull_requests: 'write', issues: 'write', metadata: 'read' };
 /** A gate token is used again until this long before GitHub stops taking it. */
 const SPARE_MS = 5 * 60_000;
 
@@ -64,15 +69,15 @@ export async function revoke(api: string, token: string): Promise<void> {
   await call(api, 'DELETE', '/installation/token', token);
 }
 
-/** The gate's token for a repo, minted once and used again until shortly before it expires. */
-export function gateTokens(api: string, app: () => AppKey | undefined): (repo: string) => Promise<string | undefined> {
+/** The gate's token for a repo, minted once and used again until shortly before it expires; `landing` for its landing token (#1331). */
+export function gateTokens(api: string, app: () => AppKey | undefined, landing = false): (repo: string) => Promise<string | undefined> {
   const kept = new Map<string, AppToken & { app: number }>();
   return async (repo) => {
     const a = app();
     if (!a) return undefined;
     const have = kept.get(repo);
     if (have && have.app === a.app_id && have.expires - SPARE_MS > Date.now()) return have.token;
-    const made = await mint(api, a, repo, GATE);
+    const made = await mint(api, a, repo, landing ? LANDING : GATE);
     kept.set(repo, { ...made, app: a.app_id });
     return made.token;
   };
