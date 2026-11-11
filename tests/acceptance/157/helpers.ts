@@ -467,7 +467,7 @@ export function ffprobeJson(args: string[]): JsonObject {
   return JSON.parse(execFileSync(ffmpegTools().ffprobe, ['-v', 'error', '-of', 'json', ...args], { encoding: 'utf8', maxBuffer: 1 << 30 })) as JsonObject;
 }
 export function ffmpegOut(args: string[]): Buffer {
-  return execFileSync(ffmpegTools().ffmpeg, ['-hide_banner', '-v', 'error', '-nostdin', ...args], { maxBuffer: 1 << 31, stdio: ['ignore', 'pipe', 'pipe'] });
+  return execFileSync(ffmpegTools().ffmpeg, ['-hide_banner', '-v', 'error', '-nostdin', ...args], { maxBuffer: 2 ** 31, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 const ratOf = (text: string): { n: bigint; d: bigint } => { const m = /^(\d+)\/(\d+)$/.exec(text); if (!m) throw Error(`not a rational: ${text}`); return { n: BigInt(m[1]!), d: BigInt(m[2]!) }; };
 export interface FfFrames { tb: { n: bigint; d: bigint }; frames: { pts: bigint; key: boolean }[] }
