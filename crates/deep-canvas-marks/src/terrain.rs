@@ -3,37 +3,54 @@
 //! takes a tile whose labels match what its neighbors give it, and among equal candidates the one
 //! a hash of the seed and the cell's own key picks, so adding a cell never reseeds another. An
 //! edge, side or corner with no neighbor expects the cell's own terrain.
+//!
+//! #536: on a hex grid the rules are `edges_6`. Edge i of a cell of terrain T expects its
+//! neighbor's terrain N where N comes before T in `precedence`, and T otherwise; square rules are
+//! refused, naming the rule, and a cell no tile matches is refused, naming the cell and the six
+//! labels it wanted. The cells are fixed at check, so cells that read a logic array are refused.
 
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::scene::{num, Refused};
+use crate::atlas::Grid;
+use crate::scene::{num, Planted, Refused};
 
 /// The recipe's kind.
 pub const KIND: &str = "tiles.terrain@1";
 
-fn bad(path: String) -> Refused {
-    Refused {
-        code: "bad_doc",
-        path,
+/// Why a recipe can't expand: its code and path, and for the check's issue what was found and a
+/// message naming it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Refusal {
+    pub code: &'static str,
+    pub path: String,
+    pub actual: Value,
+    pub message: String,
+}
+
+impl From<Refusal> for Refused {
+    fn from(r: Refusal) -> Refused {
+        Refused {
+            code: r.code,
+            path: r.path,
+        }
     }
 }
 
-/// The neighbor offsets a rule reads, in the order a tile lists its labels.
-fn neighbors(shape: &str, hex: &Map<String, Value>, rules: &str, cx: i64, cy: i64) -> Vec<[i64; 2]> {
-    if shape == "hex" {
-        let flat = hex.get("orient").and_then(Value::as_str) == Some("flat");
-        let odd = hex.get("offset").and_then(Value::as_str) != Some("even");
-        // Offset coordinates: rows shift on a pointy grid, columns on a flat one.
-        let line = if flat { cx } else { cy };
-        let shifted = (line.rem_euclid(2) == 1) == odd;
-        let s = i64::from(shifted);
-        return if flat {
-            vec![[1, s - 1], [0, -1], [-1, s - 1], [-1, s], [0, 1], [1, s]]
-        } else {
-            vec![[1, 0], [s, -1], [s - 1, -1], [-1, 0], [s - 1, 1], [s, 1]]
-        };
+fn bad(path: String) -> Refusal {
+    Refusal {
+        code: "bad_doc",
+        path,
+        actual: Value::Null,
+        message: "the terrain recipe can't expand as its params say".into(),
     }
+}
+
+/// The square rules, which a hex grid refuses.
+const SQUARE_RULES: [&str; 3] = ["corners_and_sides", "corners", "sides"];
+
+/// The neighbor offsets a square rule reads, in the order a tile lists its labels.
+fn square_neighbors(rules: &str) -> Vec<[i64; 2]> {
     let sides = [[0, -1], [1, 0], [0, 1], [-1, 0]];
     let corners = [[1, -1], [1, 1], [-1, 1], [-1, -1]];
     match rules {
@@ -52,16 +69,48 @@ fn pick(seed: &Value, cx: i64, cy: i64, n: usize) -> usize {
 }
 
 /// The `marks@1` set an instance `id` of the recipe expands into, as `<id>.tiles`.
-pub fn expand(id: &str, item: &Value) -> Result<(String, Value), Refused> {
+/// `planted` may read a square grid's four sides as a hex cell's neighbours (#536 AC2's twin).
+pub fn expand(id: &str, item: &Value, planted: Planted) -> Result<(String, Value), Refusal> {
     let path = format!("items/{id}/params");
     let params = item
         .get("params")
         .and_then(Value::as_object)
         .ok_or_else(|| bad(path.clone()))?;
     let grid = params.get("grid").and_then(Value::as_object).ok_or_else(|| bad(format!("{path}/grid")))?;
-    let shape = grid.get("shape").and_then(Value::as_str).unwrap_or("square");
-    let hex = grid.get("hex").and_then(Value::as_object).cloned().unwrap_or_default();
-    let rules = params.get("rules").and_then(Value::as_str).unwrap_or("corners_and_sides");
+    let on_hex = grid.get("shape").and_then(Value::as_str) == Some("hex");
+    // #536: a hex grid's layout gives each cell's six neighbours (Mark set: hex grid).
+    let hex = match on_hex {
+        true => Some(Grid::read(params, &path).map_err(|r| Refusal {
+            code: r.code,
+            ..bad(r.path)
+        })?),
+        false => None,
+    };
+    let rules = params
+        .get("rules")
+        .and_then(Value::as_str)
+        .unwrap_or(if on_hex { "edges_6" } else { "corners_and_sides" });
+    if on_hex && rules != "edges_6" {
+        return Err(Refusal {
+            code: "bad_doc",
+            path: format!("{path}/rules"),
+            actual: json!(rules),
+            message: if SQUARE_RULES.contains(&rules) {
+                format!("{rules} is a square grid's rule; a hex grid takes edges_6")
+            } else {
+                format!("{rules} isn't a rule a hex grid takes; it takes edges_6")
+            },
+        });
+    }
+    // #536: the terrains in the order an edge takes its neighbor's, first wins; a terrain it
+    // doesn't list comes before none.
+    let precedence: Vec<&str> = match params.get("precedence") {
+        None => Vec::new(),
+        Some(Value::Array(l)) if l.iter().all(Value::is_string) => {
+            l.iter().filter_map(Value::as_str).collect()
+        }
+        Some(_) => return Err(bad(format!("{path}/precedence"))),
+    };
     let seed = params.get("seed").cloned().unwrap_or(Value::Null);
     if seed.is_null() {
         // Only a seeded hash fixes a choice (Mark set: atlas tiles: never an unseeded generator).
@@ -91,14 +140,17 @@ pub fn expand(id: &str, item: &Value) -> Result<(String, Value), Refused> {
         return Err(bad(format!("{path}/tiles")));
     }
     let mut cells = std::collections::BTreeMap::new();
-    for (i, c) in params
-        .get("cells")
-        .and_then(Value::as_array)
-        .ok_or_else(|| bad(format!("{path}/cells")))?
-        .iter()
-        .enumerate()
-    {
-        let at = format!("{path}/cells/{i}");
+    let cells_at = format!("{path}/cells");
+    let Some(list) = params.get("cells").and_then(Value::as_array) else {
+        return Err(Refusal {
+            message: "the terrain recipe's cells are a list of [cx, cy, terrain] fixed at check; \
+                      they can't read a logic array or anything else that changes at run time"
+                .into(),
+            ..bad(cells_at)
+        });
+    };
+    for (i, c) in list.iter().enumerate() {
+        let at = format!("{cells_at}/{i}");
         let l = c.as_array().filter(|l| l.len() == 3).ok_or_else(|| bad(at.clone()))?;
         let (Some(cx), Some(cy), Some(terrain)) = (
             num(l.first()).map(|v| v as i64),
@@ -109,24 +161,54 @@ pub fn expand(id: &str, item: &Value) -> Result<(String, Value), Refused> {
         };
         cells.insert((cx, cy), terrain.to_string());
     }
+    let rank = |t: &str| precedence.iter().position(|p| *p == t);
     let (mut xs, mut ys, mut picked) = (Vec::new(), Vec::new(), Vec::new());
     for (&(cx, cy), own) in &cells {
-        let want: Vec<&str> = neighbors(shape, &hex, rules, cx, cy)
+        let around: Vec<[i64; 2]> = match hex.and_then(|g| g.neighbours([cx, cy])) {
+            Some(_) if planted == Planted::TerrainSquareSides => {
+                let [r, u, l, d] = [[cx + 1, cy], [cx, cy - 1], [cx - 1, cy], [cx, cy + 1]];
+                vec![r, u, u, l, d, d]
+            }
+            Some(six) => six.to_vec(),
+            None => square_neighbors(rules).iter().map(|[dx, dy]| [cx + dx, cy + dy]).collect(),
+        };
+        let want: Vec<&str> = around
             .iter()
-            .map(|[dx, dy]| cells.get(&(cx + dx, cy + dy)).map_or(own.as_str(), String::as_str))
+            .map(|[nx, ny]| match cells.get(&(*nx, *ny)) {
+                None => own.as_str(),
+                // #536: a neighbor's terrain only where it comes before the cell's own.
+                Some(n) if on_hex => match (rank(n), rank(own)) {
+                    (Some(a), Some(b)) if a < b => n.as_str(),
+                    _ => own.as_str(),
+                },
+                Some(n) => n.as_str(),
+            })
             .collect();
         let mut candidates: Vec<u64> = tiles
             .iter()
             .filter(|(_, t, labels)| t == own && labels.iter().map(String::as_str).eq(want.iter().copied()))
             .map(|(tile, ..)| *tile)
             .collect();
+        if candidates.is_empty() && on_hex {
+            return Err(Refusal {
+                code: "ref_unresolved",
+                path: cells_at,
+                actual: json!({"cell": [cx, cy], "terrain": own, "labels": want}),
+                message: format!(
+                    "no tile matches cell ({cx}, {cy}): it wants terrain {own} with edges [{}]",
+                    want.join(", ")
+                ),
+            });
+        }
         if candidates.is_empty() {
             candidates = tiles.iter().filter(|(_, t, _)| t == own).map(|(tile, ..)| *tile).collect();
         }
         if candidates.is_empty() {
-            return Err(Refused {
+            return Err(Refusal {
                 code: "ref_unresolved",
-                path: format!("{path}/cells"),
+                actual: json!({"cell": [cx, cy], "terrain": own}),
+                message: format!("no tile has cell ({cx}, {cy})'s terrain {own}"),
+                ..bad(cells_at)
             });
         }
         xs.push(cx);
@@ -153,7 +235,7 @@ pub fn expand(id: &str, item: &Value) -> Result<(String, Value), Refused> {
 
 /// The set [`expand`] gives, as a frame draws it (#1653): its columns as f64 data.
 pub fn drawn(id: &str, item: &Value) -> Result<(String, Value), Refused> {
-    let (name, mut set) = expand(id, item)?;
+    let (name, mut set) = expand(id, item, Planted::None).map_err(Refused::from)?;
     if let Some(Value::Object(columns)) = set.pointer_mut("/params/columns") {
         for column in columns.values_mut() {
             let values: Vec<f64> = column
@@ -191,8 +273,8 @@ mod tests {
                 .unwrap();
             c["tile"][i].clone()
         };
-        let (_, before) = expand("floor", &floor(&[[0, 0], [1, 0], [0, 1]])).unwrap();
-        let (_, after) = expand("floor", &floor(&[[5, 5], [0, 0], [1, 0], [0, 1]])).unwrap();
+        let (_, before) = expand("floor", &floor(&[[0, 0], [1, 0], [0, 1]]), Planted::None).unwrap();
+        let (_, after) = expand("floor", &floor(&[[5, 5], [0, 0], [1, 0], [0, 1]]), Planted::None).unwrap();
         for [x, y] in [[0, 0], [1, 0], [0, 1]] {
             assert_eq!(tile_of(&before, x, y), tile_of(&after, x, y));
         }

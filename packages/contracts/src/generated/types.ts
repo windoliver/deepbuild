@@ -3552,6 +3552,25 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
+/** ask.taken_over@1 */
+export interface AskTakenOver {
+  v: 1;
+  id: string;
+  kind: "ask.taken_over";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    device: string;
+    revision: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** attempt.started@1 */
 export interface AttemptStarted {
   v: 1;
@@ -3719,6 +3738,16 @@ export interface ChannelDelivered {
         id: string;
         label: string;
       }>;
+      plan?: {
+        hash: string;
+        steps: Array<{
+          does: string;
+          changes: Array<string>;
+          undo: string;
+          public: boolean;
+          cost: number;
+        }>;
+      };
       revision: number;
       hub: string;
       refused: string | null;
@@ -3749,7 +3778,7 @@ export interface ChannelRefused {
     channel: string;
     thread_key: string;
     answer: string;
-    field?: "device" | "ask" | "revision" | "card_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id" | "method" | "once" | "params";
+    field?: "device" | "ask" | "revision" | "card_hash" | "plan_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id" | "method" | "once" | "params";
     reason: string;
   };
   evidence?: Array<string>;
@@ -5019,7 +5048,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -7045,6 +7074,27 @@ export interface RunStartedV3 {
     command?: string;
     stand_ins?: Array<string>;
     withheld: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.stopped_at_limit@1 */
+export interface RunStoppedAtLimit {
+  v: 1;
+  id: string;
+  kind: "run.stopped_at_limit";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    limit: "memory_mb" | "file_mb";
+    max: number;
+    reading?: number;
   };
   evidence?: Array<string>;
 }

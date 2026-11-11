@@ -1,0 +1,46 @@
+#2026's AC3 redraft on 33b9dc48c: base 6e55e58412f3d4c554314e5bc9b31ed9fc4fa335 plus the first draft's suite, before any
+#2026 code.
+
+Machine:   Mac17,10 (Apple M5 Max), macOS 27.2, logged in with the display unlocked (deep-live's window showed).
+Toolchain: Node v24.22.2; cargo 1.99.1 (5f94df478 2026-08-27).
+Prepared:  npm ci; npm run build --workspaces; then under one `node scripts/throttle.mjs build --wait 120` grant,
+           scripts/lease cargo build --locked -q -p deep-hook --bin deep-hook, -p deep-replica --features env-plants
+           (deep-replica, deep-live), and plain (CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0). Load averages
+           300 to 860 on 18 cores while it queued and built; `rust-objcopy` warned it couldn't strip (no libLLVM.dylib),
+           a warning only.
+Command:   NO_COLOR=1 npx vitest run --root tests/acceptance/2026-redraft-ac3 --no-file-parallelism --testTimeout=600000 --silent=false
+           npx tsc -p tests/acceptance/2026-redraft-ac3/tsconfig.json   (clean, exit 0)
+
+Run 1, 17:59:20 to 17:59:37 PST, load 366 to 377: 3 failed, BLOCKED, not the expected reason.
+    Error: BLOCKED: deep-live --watch exited (SIGKILL) before its ready line:
+  ../2026/helpers.ts `appBins` had copied deep-live over $TMPDIR/da2026-bin-501/deep-live-plain in place, a file an
+  earlier run (14:26) had executed. That copy died at exec with 137; the same bytes copied to a new file ran, and
+  target/debug/deep-live ran; `codesign -v` passed on both. macOS kills a signed binary rewritten in place once it has
+  run. The test now removes those four copies before it builds (README, Run it); nothing else changed before run 2.
+
+Run 2, 18:00:54 to 18:01:33 PST, load 322 to 380, the reported run: 3 failed, for the expected reason.
+  The scenario ran on the real window up to the replay: deep-hook spooled A's PermissionRequest with the hub stopped,
+  the hub started, the app reconnected (a frame at the hub's new log_pos), B's 20 hooks landed, each newer than the
+  spooled request by ID and seq (checked from the record), the app's frames reached the 20th's log_pos, the spool went
+  back, and the hub's stream showed the replayed request by its ID at log_pos 35. Then:
+
+  × a permission request spooled while the hub was down shows in Needs you within 1 s of its replay, after 20 newer events
+    AssertionError: expected [ Array(1) ] to deeply equal []
+    + "Needs you never showed an ask for the permission request 01M745D0D4PYB9NBKKR4XN2Q8C of session
+       07d395fb-6f68-4cf8-b8c6-a4a95b2ab9bc (`npm publish --tag next`), spooled while the hub was down: the hub
+       replayed it at log_pos 35, after B's 20 events, but raised no ask for it: no ask.created of session
+       07d395fb-6f68-4cf8-b8c6-a4a95b2ab9bc reached the hub's stream in the 15 s after the replay"
+
+  × a reader that keeps its place by event ID in the hub's spool replay (replay-keeps-place-by-id) never shows the ask, and fails naming it
+  × a reader that keeps its place by event ID in the hub's asks core (asks-keep-place-by-id) never shows the ask, and fails naming it
+    AssertionError: the clean run already fails AC3, so the plant can't be told from it: expected [ Array(1) ] to deeply equal []
+    (the same failure as above; the clean run is held once and shared)
+
+  The expected reason: at the base no ask is raised for a replayed permission request. The replay goes through the
+  core's hook path as a replayed hook (packages/hub/src/spool.ts, core.ts `handleHook`), and only a live
+  PermissionRequest reaches `permission`, which raises an ask only when a saved decision covers it or the prompt shows
+  in paseo (core.ts `permission`, #18). The home declared setup's ask settings (`draftAskSettings`), so a missing
+  deadline or default isn't why. Neither plant name exists at the base, and the hub refuses a name it doesn't know, so
+  the plants could not run; each plant's test stopped at its premise before starting a planted hub.
+
+Not run here: the timing branch (no ask showed), and either plant against a hub that raises the ask.

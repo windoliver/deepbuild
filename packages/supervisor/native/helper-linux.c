@@ -4,7 +4,10 @@
 //
 //   helper scan <marker>...     every process whose root holds the run's marker directory, /run/deep/<marker>, which
 //                               bubblewrap makes in the run's own mount namespace and no fork, exec, setsid or empty
-//                               environment sheds: one line each, "<marker> <pid> <ppid> <pgid>".
+//                               environment sheds: one line each, "<marker> <pid> <ppid> <pgid> <bytes>", <bytes> its
+//                               resident set (#1409).
+//   helper limit <bytes> <program> [<arg>...]
+//                               execs <program> with RLIMIT_FSIZE at <bytes> (#1409), as the macOS helper does.
 //   helper probe <file> <op> <arg> ...
 //                               the seam suite's sandboxed process: tries each operation and appends one JSON line per
 //                               try to <file>: read <path>, write <path>, tcp <port> (on 127.0.0.1), tfo <port> (the
@@ -52,6 +55,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -96,7 +100,12 @@ static int scan(int count, char **markers) {
       // "pid (comm) state ppid pgrp ...": the comm may hold spaces and parentheses, so read past its last ')'.
       char *close = got ? strrchr(got, ')') : NULL;
       int ppid = 0, pgid = 0;
-      if (close && sscanf(close + 1, " %*c %d %d", &ppid, &pgid) == 2) printf("%s %ld %d %d\n", markers[m], pid, ppid, pgid);
+      // Its resident pages, the second field of statm.
+      unsigned long long pages = 0;
+      snprintf(path, sizeof path, "/proc/%ld/statm", pid);
+      FILE *statm = fopen(path, "r");
+      if (statm) { if (fscanf(statm, "%*u %llu", &pages) != 1) pages = 0; fclose(statm); }
+      if (close && sscanf(close + 1, " %*c %d %d", &ppid, &pgid) == 2) printf("%s %ld %d %d %llu\n", markers[m], pid, ppid, pgid, pages * (unsigned long long)sysconf(_SC_PAGESIZE));
     }
   }
   closedir(proc);
@@ -1008,14 +1017,27 @@ static int confine(void) {
   return serve(&spec, listener, child);
 }
 
+// ---- limit (#1409): `ulimit -f` in bytes, then the program.
+
+static int limit(const char *bytes, char **argv) {
+  char *end;
+  unsigned long long n = strtoull(bytes, &end, 10);
+  struct rlimit fsize = { (rlim_t)n, (rlim_t)n };
+  if (*end || setrlimit(RLIMIT_FSIZE, &fsize) != 0) { perror("helper limit"); return 2; }
+  execvp(argv[0], argv);
+  perror(argv[0]);
+  return 127;
+}
+
 #include "pty.c"
 
 int main(int argc, char **argv) {
   if (argc >= 2 && strcmp(argv[1], "scan") == 0) return scan(argc - 2, argv + 2);
+  if (argc >= 4 && strcmp(argv[1], "limit") == 0) return limit(argv[2], argv + 3);
   if (argc >= 2 && strcmp(argv[1], "landlock") == 0) { printf("%d\n", landlock_abi()); return 0; }
   if (argc >= 2 && strcmp(argv[1], "confine") == 0) return confine();
   if (argc >= 9 && strcmp(argv[1], "pty") == 0) return host(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), argv[6], argv[7], argv + 8);
-  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | landlock | confine (DEEP_CONFINE) | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <protocol> <lock> <plants> <program> [<arg>...]\n"); return 2; }
+  if (argc < 3) { fprintf(stderr, "usage: helper scan <marker>... | limit <bytes> <program> [<arg>...] | landlock | confine (DEEP_CONFINE) | probe <file> <op> <arg>... | devices <file> | pty <dir> <cols> <rows> <protocol> <lock> <plants> <program> [<arg>...]\n"); return 2; }
   out = fopen(argv[2], "a");
   if (!out) { perror(argv[2]); return 2; }
   if (strcmp(argv[1], "devices") == 0) return devices();

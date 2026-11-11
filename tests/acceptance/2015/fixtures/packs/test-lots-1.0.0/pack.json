@@ -1,0 +1,15 @@
+{
+  "name": "lots",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A 3D test pack: one post per face of a builder's top part, so it needs the scene3d canvas module.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "scene3d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "lots.post@1": "lots.post@1.json"
+  }
+}

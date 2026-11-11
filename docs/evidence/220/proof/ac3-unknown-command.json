@@ -1,0 +1,14 @@
+{
+  "status": "failed",
+  "check": "typeset.unknown_command",
+  "outcome": "failed",
+  "reason": "typst-mitex@1.0.0's output fails typeset's output check typeset.unknown_command (failed: typeset.unknown_command {\"at\":[0,3],\"command\":\"\\\\ce\"}); nothing was kept, so no item can name it",
+  "receipt": {
+    "kind": "typeset",
+    "tool": "typst-mitex@1.0.0",
+    "key": "6bb75699d578af244d55f3137efc2631f2a5e29725622151657f753a22d28e46",
+    "build": "d1:eb3c129e90ffa523eb362a946725a82700856f35968aa7f5d0459e2ee11e068b",
+    "cache": "miss",
+    "inputs": {}
+  }
+}

@@ -22,7 +22,6 @@ use deep_gpu::device::Device;
 use deep_marks_render::gpu::{Options, Vello2d};
 use deep_scene3d_render::status::{Guard, Stage};
 use serde_json::{json, Map, Value};
-use wgpu::util::DeviceExt as _;
 
 use crate::drawn::{self, Page};
 use crate::opframe::{f32_bytes, read_texture};
@@ -172,7 +171,7 @@ fn scale_of(graph: &Value) -> f64 {
 }
 
 /// A new target of the compositor.
-fn target(device: &wgpu::Device, size: [u32; 2], format: wgpu::TextureFormat) -> wgpu::Texture {
+fn target(device: &deep_gpu::counted::Wgpu, size: [u32; 2], format: wgpu::TextureFormat) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("group target"),
         size: whole(size),
@@ -242,7 +241,7 @@ fn member(d: &Drawn, members: &[String]) -> bool {
 }
 
 fn pipeline(
-    device: &wgpu::Device,
+    device: &deep_gpu::counted::Wgpu,
     layout: &wgpu::PipelineLayout,
     module: &wgpu::ShaderModule,
     entry: &str,
@@ -277,7 +276,7 @@ fn pipeline(
 
 /// The composite's bind group: its uniform and its three textures.
 fn bound(
-    device: &wgpu::Device,
+    device: &deep_gpu::counted::Wgpu,
     layout: &wgpu::BindGroupLayout,
     words: &[u8],
     textures: [&wgpu::TextureView; 3],
@@ -384,7 +383,7 @@ pub struct Picture {
 }
 
 impl Groups {
-    pub fn new(device: &wgpu::Device) -> Groups {
+    pub fn new(device: &deep_gpu::counted::Wgpu) -> Groups {
         let source = format!("{}\n{}", blend::WGSL, include_str!("groups.wgsl"));
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("groups"),
@@ -1152,7 +1151,7 @@ impl Groups {
     /// Writes the finished layer into `view`, premultiplied and sRGB-encoded.
     fn resolve(
         &mut self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         encoder: &mut wgpu::CommandEncoder,
         layer: &wgpu::TextureView,
         view: &wgpu::TextureView,
@@ -1166,7 +1165,7 @@ impl Groups {
     #[allow(clippy::too_many_arguments)]
     fn resolve_as(
         &mut self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         encoder: &mut wgpu::CommandEncoder,
         layer: &wgpu::TextureView,
         view: &wgpu::TextureView,
@@ -1481,7 +1480,7 @@ impl Groups {
     /// The composed layer into `view`, premultiplied and sRGB-encoded.
     pub fn finish(
         &mut self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         encoder: &mut wgpu::CommandEncoder,
         done: &wgpu::Texture,
         view: &wgpu::TextureView,

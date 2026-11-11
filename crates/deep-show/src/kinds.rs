@@ -535,12 +535,96 @@ impl Hub<'_> {
     pub fn kinds_listing(&self) -> Listing {
         let sealed = &self.startup.sealed;
         let planted = self.kinds_planted();
-        listing(
+        let mut l = listing(
             sealed,
             planted,
             self.registries_reply(),
             &self.scenario.plugin_entries,
-        )
+        );
+        // #202: each installed pack's recipe-backed kinds, as entries of kind@1.
+        if planted != Some(Planted::ListingWithoutPackEntries) {
+            let head = l.rows[0].clone();
+            for row in self.pack_kind_rows() {
+                let mut e = row.entry;
+                if let (Some(t), Some(h)) = (row.example, e["example"].as_str()) {
+                    l.examples.insert(h.to_string(), t);
+                }
+                one_shape(&mut e, &head, sealed, planted);
+                if let Some(list) = l.rows[0]["entries"].as_array_mut() {
+                    list.push(e);
+                }
+            }
+        }
+        l
+    }
+
+    /// Each admitted pack's kinds backed by recipes (Pack: kinds in any pack): its schema from its
+    /// recipe's inputs, its example by hash, its kit's result and its cost at defaults beside its
+    /// largest counts over its params' extremes.
+    fn pack_kind_rows(&self) -> Vec<KindRow> {
+        let mut out = Vec::new();
+        for pack in self.packs.all() {
+            let id = pack.id.text();
+            let origin = if self.pack_authors.contains_key(&id) {
+                "agent"
+            } else {
+                "pack"
+            };
+            for (name, kind) in &pack.kinds {
+                let Some(recipe) = pack.recipes.get(&kind.recipe) else {
+                    continue;
+                };
+                let properties: Map<String, Value> = recipe
+                    .inputs
+                    .iter()
+                    .map(|(n, i)| {
+                        let ty = match i.ty.as_str() {
+                            "number" => "number",
+                            "integer" => "integer",
+                            "bool" => "boolean",
+                            "text" | "ID" | "choice" => "string",
+                            "records" | "vec3" | "range" => "array",
+                            _ => "object",
+                        };
+                        let mut s = json!({"type": ty, "default": i.default});
+                        if let Some(lo) = i.min {
+                            s["minimum"] = json!(lo);
+                        }
+                        if let Some(hi) = i.max {
+                            s["maximum"] = json!(hi);
+                        }
+                        if !i.options.is_empty() {
+                            s["enum"] = json!(i.options);
+                        }
+                        (n.clone(), s)
+                    })
+                    .collect();
+                let schema = json!({"type": "object", "properties": properties, "required": [], "additionalProperties": false});
+                // Its first example, by the hash its pack lists it under.
+                let example = kind.examples.first().map(|(sha, _)| sha.clone());
+                let shape = json!({"schema": schema, "pack": id, "recipe": kind.recipe});
+                let since = pack.id.version.to_string();
+                let e = json!({
+                    "name": name, "registry": "kind@1", "origin": origin, "pack": id,
+                    "recipe": kind.recipe, "minor": kind.minor, "binds": "author",
+                    "schema": schema,
+                    "example": example,
+                    "examples": kind.examples.iter().map(|(sha, _)| sha.clone()).collect::<Vec<_>>(),
+                    "since": since, "digest": entry_digest("kind@1", name, &shape, &since),
+                    "children": kind.children, "capabilities": kind.capabilities,
+                    "rules": kind.rules.iter().map(|r| json!({"code": r.code, "expr": r.expr.text})).collect::<Vec<_>>(),
+                    "kit": kind.kit,
+                    "cost": {"class": kind.class.name(), "at_defaults": kind.at_defaults, "at_extremes": kind.at_extremes},
+                    "description": format!("{name}, a kind backed by the recipe {} of {id}", kind.recipe),
+                });
+                let text = example.and_then(|sha| kind.texts.get(&sha).cloned());
+                out.push(KindRow {
+                    entry: e,
+                    example: text,
+                });
+            }
+        }
+        out
     }
 
     /// `{"call": "deep_kinds", …}`.
@@ -636,6 +720,7 @@ impl Hub<'_> {
             .and_then(|(a, b)| Some((a.parse::<usize>().ok()?, b.parse::<usize>().ok()?)))
             .unwrap_or((0, 0));
         let mut out = l.header.clone();
+        out["packs"] = self.packs_listed();
         let mut size = out.to_string().len() + 64;
         let mut page: Vec<Value> = Vec::new();
         let mut next = None;
@@ -677,6 +762,30 @@ impl Hub<'_> {
             out["next"] = json!(n);
         }
         out
+    }
+
+    /// The packs installed here (#1720), each with its version and origin, its recipes and the
+    /// kind each of its words maps to.
+    fn packs_listed(&self) -> Value {
+        let packs: Vec<Value> = self
+            .packs
+            .all()
+            .map(|p| {
+                let recipes: Vec<String> = p
+                    .recipes
+                    .values()
+                    .map(|r| format!("{}@{}", r.id, r.major))
+                    .collect();
+                let aliases: Map<String, Value> = p
+                    .aliases
+                    .iter()
+                    .map(|(word, a)| (word.clone(), a["target"].clone()))
+                    .collect();
+                json!({"pack": p.id.id, "version": p.id.version.to_string(),
+                       "origin": self.pack_origin(&p.id.text()), "recipes": recipes, "aliases": aliases})
+            })
+            .collect();
+        Value::Array(packs)
     }
 
     /// A word from a familiar-names pack installed here: the kind it maps to and the conversion

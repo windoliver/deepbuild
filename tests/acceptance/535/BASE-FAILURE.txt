@@ -1,0 +1,82 @@
+#535 acceptance suite at the base, 7c5e1cc8d (Merge pull request #2184), before any implementation.
+
+The whole suite was run once there, with `deep-show` built by the suite (`cargo build --locked --bin deep-show`, the
+default full set, and `--features test-leave-out-logic` for ac5; toolchain 1.99.1) and #544's assembler built into
+target/acceptance-535-wat:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 \
+    scripts/lease npx vitest run --root tests/acceptance/535 --testTimeout=600000 --no-file-parallelism
+
+(scripts/lease ran it unleased: no `deep` on PATH and no built CLI.) Test Files 7 failed (7); Tests 18 failed (18). Every
+test fails on an assertion its file names, because the behaviour is missing, not because of the test: no crash, no
+timeout, no missing fixture. `npx tsc --noEmit -p tests/acceptance/535` exits 0. Nothing was written to
+docs/evidence/535 (criterion 7 fails before it takes its pictures).
+
+Before that run, the harness was checked against the base's real components (a probe, not committed): every program
+assembles, passes the logic module's check and runs (a film document holding only its logic item is presented with no
+issue: layer96, narrow, actors, keeper, counts, flock); the door's references (data columns cx, cy, tile with a written
+`n`, no logic) are presented and drawn, and all 48 of their cells read their tile at the suite's sample pixels; the
+96 x 96 layer drawn the same way from data columns reads all 9,216 cells right at the suite's sample pixels; criterion
+2's code atlas drawn at the base spells each row's tile at its pixel, 4,464 among them; the ground is (255, 255, 255);
+and the reference image item is presented, drawn unturned at the base (over [68, 18] to [100, 34] px, since the base's
+2D marks don't draw `at.rot`), where the criterion's turned pose is [76, 10] to [92, 42].
+
+At the base every document that reads a logic array is refused at check with `out_of_range` at
+`items/<set>/params/n` (the data module wants a written `n`; it reads no `{array}` column, `alive`, `grid.size` or free
+row), and every scenario that names one of the five planted twins is answered {"ok":false,"code":"bad_input"}.
+
+ac1-layer.test.ts (2 failed of 2)
+- honest: ac1-layer.test.ts:77 `presented`: "the 96 x 96 layer is presented: [{... "code":"out_of_range", ...
+  "path":"items/layer/params/n" ...}]: expected 'refused' to be 'presented'". The remap count, the cells and the
+  full-remap comparison come after.
+- hand_over_drops_last_range: ac1-layer.test.ts:100 `runShow`: "deep-show run answers the scenario ok (it takes the
+  planted hand_over_drops_last_range); got {"ok":false,"code":"bad_input"}: expected false to be true".
+
+ac2-narrowing.test.ts (3 failed of 3)
+- u16 at row 12: ac2-narrowing.test.ts:78 (narrowRun, :74) `presented`: "the narrowing fixture is presented: [...
+  "path":"items/drift/params/n" ...]: expected 'refused' to be 'presented'".
+- −1 as u8 and NaN as f32: ac2-narrowing.test.ts:85 (narrowRun, :74), the same refusal.
+- narrowing_wraps: ac2-narrowing.test.ts:98 `runShow`: "... (it takes the planted narrowing_wraps); got
+  {"ok":false,"code":"bad_input"}".
+
+ac3-alive.test.ts (2 failed of 2)
+- honest: ac3-alive.test.ts:102 (judgePool) `presented`: "the pool is presented: [... "path":"items/pool/params/n"
+  ...]: expected 'refused' to be 'presented'".
+- dead_rows_hidden_from_drawing_only: ac3-alive.test.ts:106 (judgePool) `runShow`: "... got
+  {"ok":false,"code":"bad_input"}".
+
+ac4-door.test.ts (3 failed of 3)
+- played from 0: ac4-door.test.ts:83 (doorRun, :79) `presented`: "the door is presented: [...
+  "path":"items/house/params/n" ...]: expected 'refused' to be 'presented'". The two references before it, drawn with
+  no logic, were presented.
+- seeked: ac4-door.test.ts:89 (doorRun, :79), the same refusal.
+- keeps_rows_across_seek: ac4-door.test.ts:95 `runShow`: "... got {"ok":false,"code":"bad_input"}".
+
+ac5-refusals.test.ts (4 failed of 4)
+- 9,216 and 9,215: ac5-refusals.test.ts:48 `refusedNaming`: "an error issue names the set mismatch and tile and flip,
+  or grid.big and grid.short; the errors: [... "code":"out_of_range", ... "path":"items/mismatch/params/n" ...]:
+  expected 0 to be greater than 0". The base refuses the set, but for its missing `n`, naming neither column.
+- unwritten array: ac5-refusals.test.ts:54 `refusedNaming`: "an error issue names the set ghost and tile; the errors:
+  [... "path":"items/ghost/params/n" ...]: expected 0 to be greater than 0".
+- vec2 without part: ac5-refusals.test.ts:60 `refusedNaming`: "an error issue names the set spots and x; the errors:
+  [... "path":"items/spots/params/n" ...]: expected 0 to be greater than 0".
+  (Each test's control, presented, comes after its refusal; at the base the control is refused the same way.)
+- the build without logic: ac5-refusals.test.ts:72 "with module_missing naming logic: [{... "code":"out_of_range",
+  ... "path":"items/layer/params/n" ...}]: expected false to be true". The build seals (the scenario is answered ok and
+  the document refused), but not with module_missing naming logic.
+
+ac6-free-rows.test.ts (3 failed of 3)
+- one instanced draw: ac6-free-rows.test.ts:60 (swarmRun, :56) `presented`: "the 3,000 free rows is presented: [...
+  "path":"items/free/params/n" ...]: expected 'refused' to be 'presented'".
+- the pose: ac6-free-rows.test.ts:68 (swarmRun, :56), the same refusal.
+- turns_about_corner: ac6-free-rows.test.ts:77 (swarmRun) `runShow`: "... got {"ok":false,"code":"bad_input"}".
+
+ac7-taste.test.ts (1 failed of 1)
+- ac7-taste.test.ts:46 `presented`: "the 96 x 96 layer is presented: [... "path":"items/layer/params/n" ...]: expected
+  'refused' to be 'presented'". Nothing is drawn, so no picture is written and no call is read; once drawn, the test
+  is INCONCLUSIVE until tests/acceptance/535/TASTE.json records a call on this run's pictures.
+
+Not shown at the base, since nothing that reads a logic array is drawn: that each planted twin, once it exists, fails
+its criterion's check naming what the criterion names (frame 1.000 s and row 9215; units row 12 and step 30; row 20;
+cell (5, 3) and 1.000 s; row 0 (free#0)). Those failures come from the same judgement code that passes the honest
+program: ac1 `fullRemapFailures`, ac2 `rowFailures`, ac3 `judgePool`, ac4 `doorFailures`, ac6 `poseFailures`.

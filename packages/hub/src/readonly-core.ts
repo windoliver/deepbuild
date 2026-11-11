@@ -76,7 +76,7 @@ export class ReadOnlyCore {
   permission(): Promise<{ decision: 'none' }> { return Promise.resolve({ decision: 'none' }); }
   paseoOwner(): Promise<string | null> { return Promise.resolve(null); }
   paseoAppAnswer(): Promise<Obj> { return Promise.resolve({}); }
-  subscribe(): Promise<void> { return Promise.resolve(); }
+  subscribe(): Promise<{ head?: number; snapshot?: true }> { return Promise.resolve({}); }
   waitsState(): Promise<{ history: [string, number][]; sessions: never[] }> { return Promise.resolve({ history: [], sessions: [] }); }
   lockLost(): void {}
   stop(): Promise<void> { return Promise.resolve(); }

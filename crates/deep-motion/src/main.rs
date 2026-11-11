@@ -14,7 +14,7 @@ use deep_canvas_motion::clock::{meets, run, Mode, Rect, View};
 use deep_canvas_motion::curve::Ease;
 use deep_canvas::expr::Scope;
 use deep_canvas_motion::doc::{feel_of, Feel, Refused};
-use deep_canvas_motion::eval::{frame_with, position, Validity};
+use deep_canvas_motion::eval::{frame_with, position, shown_doc, Validity};
 use deep_canvas_motion::follow::Source;
 use deep_canvas_motion::input::Entry;
 use deep_canvas_motion::insert::insert;
@@ -84,6 +84,11 @@ fn planted_of(v: Option<&Value>) -> Option<Planted> {
             "pan_ignores_angle" => Planted::PanIgnoresAngle,
             "match_framer_ignores_match" => Planted::MatchFramerIgnoresMatch,
             "kick_fresh_per_frame" => Planted::KickFreshPerFrame,
+            "stage_glide_moves_target_only" => Planted::StageGlideMovesTargetOnly,
+            "take_apart_all_at_once" => Planted::TakeApartAllAtOnce,
+            "framer_ignores_apart" => Planted::FramerIgnoresApart,
+            "readout_reads_document" => Planted::ReadoutReadsDocument,
+            "assembly_value_from_previous_frame" => Planted::AssemblyValueFromPreviousFrame,
             _ => return None,
         },
         Some(_) => return None,
@@ -202,6 +207,9 @@ fn eval_line(input: &Map<String, Value>) -> Value {
     else {
         return bad_input();
     };
+    // #504: without an `input`, the `track` is the program's input track too, so its sliders'
+    // entries move the drivers that read them.
+    let (listed, arrives) = if input.contains_key("input") { (listed, arrives) } else { (track.clone(), vec![i64::MIN; track.len()]) };
     // #497: the entries that arrive later than the first frame wait; the rest are on the track.
     let first = times.first().copied().unwrap_or(i64::MIN);
     let mut waiting: Vec<(i64, Entry)> = Vec::new();
@@ -245,7 +253,10 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         if linear {
             feel.ease = Ease::Linear;
         }
-        program.with_inputs(feel, &track).ok_or_else(bad_input)
+        // #504: without a #417 `track`, the program's own track (`input`, or the document's
+        // inline one) moves its toggles and stages under the look's feel.
+        let moves = if input.contains_key("track") { track.clone() } else { program.options.input.clone() };
+        program.with_inputs(feel, &moves).ok_or_else(bad_input)
     };
     let mut program = match build(&entries) {
         Ok(p) => p,
@@ -422,6 +433,10 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         if let Some(boxes) = program.boxes(f.doc_t).filter(|b| !b.is_empty()) {
             frame["boxes"] = json!(boxes);
         }
+        let readouts = readouts_json(doc, &program, &state);
+        if !readouts.is_empty() {
+            frame["readouts"] = Value::Object(readouts);
+        }
         frames.push(frame);
         previous = Some(t);
     }
@@ -442,11 +457,12 @@ fn eval_line(input: &Map<String, Value>) -> Value {
         .map(|c| json!({"id": c.id, "from": c.from, "to": c.to, "t": c.at}))
         .collect();
     let mut answer = json!({"ok": true, "order": program.order_names, "frames": frames, "markers": markers, "cuts": cuts, "hash": hash});
-    // #493: each shot's one framed pose and the kept items' union it fit.
-    if let Some(plan) = program.shots.as_ref().filter(|p| !p.shots.is_empty()) {
+    // #493: each shot's one framed pose and the kept items' union it fit; #504 a stage's shots too.
+    if let Some(plan) = program.shots.as_ref().filter(|p| !p.shots.is_empty() || p.stage.iter().any(Option::is_some)) {
         answer["shots"] = plan
             .shots
             .iter()
+            .chain(plan.stage.iter().flatten())
             .map(|s| {
                 let union = s.union.map_or(Value::Null, |u| json!({"lo": u[0], "hi": u[1]}));
                 (s.id.clone(), json!({"framed": s.framed.to_json(Some(&s.id)), "union": union}))
@@ -502,7 +518,8 @@ fn film_of(input: &Map<String, Value>, program: &Program) -> Option<Film> {
 
 /// Each camera's pose at t, as the frame reports it (#493: the pose it is drawn through, its
 /// kick applied), and the sub-samples motion blur averages inside a declared move. A camera no
-/// timeline shot writes keeps a stage's target (#417).
+/// timeline shot writes shows its stage shot's pose (#504), gliding from the pose shown; one
+/// whose params aren't a pose reports its stage's target alone (#417).
 fn cameras_json(program: &Program, state: &State, stage: &[(String, [f64; 3])], t: i64, film: &Film) -> Map<String, Value> {
     let Some(plan) = program.shots.as_ref() else {
         return stage.iter().map(|(id, target)| (id.clone(), json!({"target": target}))).collect();
@@ -516,14 +533,9 @@ fn cameras_json(program: &Program, state: &State, stage: &[(String, [f64; 3])], 
                 return (id.clone(), json!({"target": target}));
             };
             let shown = plan.shown(c, t, &at);
-            let mut pose = shown.pose;
-            if shown.shot.is_none() {
-                let d = [target[0] - pose.target[0], target[1] - pose.target[1], target[2] - pose.target[2]];
-                pose.target = *target;
-                pose.position = [pose.position[0] + d[0], pose.position[1] + d[1], pose.position[2] + d[2]];
-            }
-            let name = shown.shot.map(|s| plan.shots[s].id.as_str());
-            let mut out = pose.to_json(name);
+            let staged = shown.stage.and_then(|s| plan.stage[s].as_ref()).map(|s| s.id.as_str());
+            let name = shown.shot.map(|s| plan.shots[s].id.as_str()).or(staged);
+            let mut out = shown.pose.to_json(name);
             if let Some((angle, samples)) = film.blur {
                 let subs = plan.blur(c, t, &at, angle, samples);
                 if !subs.is_empty() {
@@ -539,6 +551,22 @@ fn cameras_json(program: &Program, state: &State, stage: &[(String, [f64; 3])], 
             }
             (id.clone(), out)
         })
+        .collect()
+}
+
+/// #504: each readout's text as the frame shows it: every `text@1` with a `template`, by its ID,
+/// and the card's `readout` under `card`, each filled from the values the frame evaluates
+/// (`eval::shown_doc`). A template a slot of which reads nothing shows nothing.
+fn readouts_json(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
+    let shown = shown_doc(doc, program, state);
+    let texts = doc.get("items").and_then(Value::as_object).into_iter().flatten().filter_map(|(id, item)| {
+        let text = item.get("kind").and_then(Value::as_str) == Some("text@1");
+        Some((id.clone(), item.pointer("/params/template")?.as_str().filter(|_| text)?))
+    });
+    let card = doc.get("card").and_then(|c| c.get("readout")).and_then(Value::as_str).map(|t| ("card".to_string(), t));
+    texts
+        .chain(card)
+        .filter_map(|(id, template)| Some((id, json!(deep_canvas::template::expand(&shown, template).ok()?))))
         .collect()
 }
 

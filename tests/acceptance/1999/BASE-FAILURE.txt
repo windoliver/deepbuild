@@ -1,0 +1,67 @@
+#1999 at the base: commit a04378eb2 with this folder added, nothing else, on a Mac at load 69 to 119, Node 24.22.0 (fnm),
+cargo 1.99.1, run once. deep-hook built with `scripts/lease cargo build --locked -p deep-hook`; the workspaces built with
+npm run build --workspaces.
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1999 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+7 tests: 7 failed, 0 passed, 6.9 s. Claim and verdict IDs are this run's.
+
+The world was built for real at the base: deep setup ran against a live hub, the Claude Code stand-in edited total.ts,
+claimed through deep_claim, recorded its open item through deep_open_item, got the FAIL and PASS verdicts through
+test.verdict, stopped with its own words, and changes.read answered before and after the hub restarted, listing both
+verdicts. What the base lacks is every sentence (README, Pinned 1 to 3).
+
+sentences.test.ts, each failing at its assertion:
+
+  × AC1 #1999.e525e035 a change shows one plain sentence that names the file it wrote, holds none of the agent's words,
+    and reads the same after the hub restarts
+    AssertionError: expected [ Array(1) ] to deeply equal []
+    + "the change claim:01M73RBSBVKGDM1C3F2TK1XTVY shows no plain sentence: its sentence is undefined"
+    ❯ sentences.test.ts:18:35
+
+  × AC1 #1999.e525e035 each verdict shows one plain sentence with its state's word (sent back, then PASS), none of the
+    agent's words, the same after the hub restarts
+    AssertionError: expected [ …(2) ] to deeply equal []
+    + "the FAIL verdict 01M73RBSDMTF0THM73NK6Y7FGQ on claim:01M73RBSBVKGDM1C3F2TK1XTVY shows no plain sentence: its sentence is undefined"
+    + "the PASS verdict 01M73RBSE1K6ASGECCNY3V4W7C on claim:01M73RBSBVKGDM1C3F2TK1XTVY shows no plain sentence: its sentence is undefined"
+    ❯ sentences.test.ts:22:36
+
+  × AC1 #1999.e525e035 an open item shows one plain sentence saying what is open in the item's words, none of the
+    agent's last words, the same after the hub restarts
+    AssertionError: expected [ Array(1) ] to deeply equal []
+    + "the open item \"the refund path has no test yet\" of claim:01M73RBSBVKGDM1C3F2TK1XTVY isn't shown: changes.read
+       lists no open_items for the change (README, Pinned 3): undefined"
+    ❯ sentences.test.ts:26:37
+
+  × AC1 #1999.e525e035 the sentences were made, and the agents' CLIs on PATH saw no headless model call from the hub's
+    start to the last read
+    AssertionError: every kind shows a sentence, so "no model call" is said of sentences that were made:
+      expected [ …(4) ] to deeply equal []
+    + "the change claim:01M73RBSBVKGDM1C3F2TK1XTVY shows no sentence"
+    + "the FAIL verdict 01M73RBSDMTF0THM73NK6Y7FGQ shows no sentence"
+    + "the PASS verdict 01M73RBSE1K6ASGECCNY3V4W7C shows no sentence"
+    + "the open item \"the refund path has no test yet\" shows no sentence"
+    ❯ sentences.test.ts:31:120
+    The model-call half never ran: the base makes no sentence, so it calls no model for one.
+
+wrong-programs.test.ts, each BLOCKED (a plain error, nothing judged): the base's hub refuses a plant its list doesn't
+name and never starts. These plants are this suite's (README, Pinned 4).
+
+  × AC1 #1999.e525e035 (wrong program) sentence-from-agent-text: ...
+    Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=sentence-from-agent-text (README, Pinned 4: the
+    implementation adds it to the hub's plant list): ... Error: DEEP_HUB_PLANT=sentence-from-agent-text names no
+    planted program at plantOf (packages/hub/dist/plant.js:104:15)
+  × AC1 #1999.e525e035 (wrong program) sentence-from-model: ...
+    Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=sentence-from-model ... names no planted program
+  × AC1 #1999.e525e035 (wrong program) open-item-no-sentence: ...
+    Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=open-item-no-sentence ... names no planted program
+
+A probe run at the base (not kept; the same world, printing what it read) showed what the judges rest on:
+- changes.read's produced.files listed the session's folder's total.ts by its absolute path, and its line read
+  "PASS 2/2 · 1 test · next: you · session/<8>/<claim>", so the two planted verdicts are the claim's.
+- calls.log held only `claude plugin list --json` and `claude auth status`, both from deep setup; no headless call.
+  So the no-model judge, which counts only `claude -p`/`--print` and `codex exec`/`e`, sees nothing at the base that a
+  correct implementation would have to avoid.
+
+Not seen at the base: any sentence, any open_items list on a change, or any plant's world. The judges' wrong-program
+paths (the agent's words, the model call, the item with no sentence) are untried against any implementation.

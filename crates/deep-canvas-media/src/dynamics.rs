@@ -213,6 +213,8 @@ pub struct Limiter {
     phases: Vec<[f64; TAPS]>,
     /// The planted limiter: it reads sample peaks only.
     sample_peaks: bool,
+    /// #502: whether it has cut a sample since this was last cleared.
+    pub cut: bool,
     pub state: LimiterState,
 }
 
@@ -227,6 +229,7 @@ impl Limiter {
             release: coefficient(spec.release, rate),
             phases: interpolator(oversample),
             sample_peaks,
+            cut: false,
             state: LimiterState {
                 n: 0,
                 hist: [
@@ -313,6 +316,7 @@ impl Limiter {
             } else {
                 1.0
             };
+            self.cut |= g != 1.0;
             frame[0] = if g == 1.0 {
                 x[0]
             } else {

@@ -8,7 +8,6 @@ use std::collections::BTreeMap;
 
 use deep_canvas_marks::fx::{self, Part, Shape};
 use deep_gpu::device::Device;
-use wgpu::util::DeviceExt as _;
 
 const ENTRIES: [&str; 13] = [
     "cov", "shift", "blur", "dilate", "lin", "outside_moved", "mul", "glow", "distance", "height",

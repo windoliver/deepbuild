@@ -1,0 +1,56 @@
+#1820 closure proof summary — base a04378eb2fd34a6c7df923a6077e77c996153752
+Raw output: /tmp/deepbuild-1820-proof/ (local, not required to understand the committed summaries)
+
+PASS builds:
+  npm run build --workspaces
+  cargo build --locked -p deep-show -p deep-hook
+PASS acceptance and regression strict typechecks
+PASS rustfmt --check --edition 2021 crates/deep-show/src/packs.rs
+PASS final whitespace check
+
+Adopted acceptance definition:
+  tests/acceptance/1820/ original non-export files plus unchanged export-redraft/
+  25 passing acceptance checks, no failure or skip
+  prior export draft retained at reports/issue-1820/superseded-export.test.ts.fixture
+  SHA-256 04568cf7a02b783abbb510cc26c0762e14a4e995f00cf55cc2c2c8d809e42b30
+  adopted export.test.ts SHA-256 97549bcc4f136a16627eafbfbce54ed0285b49bb3c8c83c2ebce7d4b1a15cbe1
+  disposition: reports/issue-1820/export-disposition.md
+
+Clean-base comparison, same tests/tools:
+  base: pack installation fails (no readable deepbuild.json for a data pack)
+  change: 36 tests passed = 25 issue checks + 8 library checks + 3 Source checks
+  base: 91 unlisted diagnostics + 11 known
+  change: 89 unlisted diagnostics + 11 known
+  multiset difference (change minus base): ZERO introduced diagnostics
+  two base-only entries: environment-kit lsof failures
+  overall affected still FAIL on inherited findings; never described as PASS
+  exact diagnostic comparison: reports/issue-1820/base-comparison.json
+
+Interrupted attempt retained:
+  completed regression JSONL: 57 pass, one 5000ms timeout, one Linux-only skip
+  affected process hit tool deadline while non-light lint jobs waited for build grant
+  timeout ran once isolated, unchanged, and passed
+  previously unstarted acceptance files then ran; neither timeout nor assertions changed
+  combined observed distinct results: 91 pass, one Linux Secret Service INCONCLUSIVE on macOS
+  reports/issue-1820/test-results.json retains both attempts and their outcomes
+
+Production wrong-program evidence (not judge-only self-checks):
+  retains-mismatch: fails removal assertion (bad bytes kept in downloads/*.part)
+  wrong-pack-rule: fails naming acme/voices fetched under acme/sounds' rule
+  offline-per-asset: fails one-unblock assertion (two asks)
+  changing-export: fails byte-identical re-export assertion on actual PNG files
+  all source mutations restored; no test changed
+  restored mutant targets: 6 pass; restored export redraft: 4 pass
+
+Actual export checks:
+  v1 exports red, v2 blue; real PNG pixels tested
+  changed upstream + offline: v1 repeats byte-identically twice, no requests/asks
+  missing version: no PNG and named refusal
+  unfetched offline asset: two exports BLOCKED, no PNG, exactly one unblock ask
+
+No WIDE or INCONCLUSIVE lines in completed scoped issue run. Full import-graph selection,
+full preflight, timed/manual/platform suites, live providers and release budgets were not
+all run. No baseline or validator was edited to label inherited failures as passing.
+
+Issue criteria are proven; PR #2192 may say Closes #1820. This does not claim a green
+repository-wide preflight or merge the PR automatically.

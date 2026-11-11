@@ -23,46 +23,6 @@ const MAX_STATES: usize = 4096;
 /// The look's cap on reachable feature sets, and a session's on operator pipelines.
 pub const CAP: usize = 32;
 
-/// Sets `value` at `path` (`items/<id>/params/…`) in `doc`, making the objects on the way.
-fn set_path(doc: &mut Value, path: &str, value: Value) {
-    let mut at = doc;
-    let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
-    for (k, p) in parts.iter().enumerate() {
-        if !at.is_object() {
-            *at = json!({});
-        }
-        let o = at.as_object_mut().expect("made above");
-        if k + 1 == parts.len() {
-            o.insert((*p).to_string(), value);
-            return;
-        }
-        at = o.entry((*p).to_string()).or_insert_with(|| json!({}));
-    }
-}
-
-/// One op of a variant's patch on a payload: `set` a path, `create` an item, `delete` one.
-fn apply_op(doc: &mut Value, op: &Value) {
-    match op["op"].as_str() {
-        Some("set") => {
-            if let Some(path) = op["path"].as_str() {
-                set_path(doc, path, op["value"].clone());
-            }
-        }
-        Some("create") => {
-            let item = &op["item"];
-            if let (Some(id), Some(items)) = (item["id"].as_str(), doc["items"].as_object_mut()) {
-                items.insert(id.to_string(), item.clone());
-            }
-        }
-        Some("delete") => {
-            if let (Some(id), Some(items)) = (op["id"].as_str(), doc["items"].as_object_mut()) {
-                items.remove(id);
-            }
-        }
-        _ => {}
-    }
-}
-
 /// The value a toggle writes where it binds: its range's or options' entry for off and on, or the
 /// bool itself.
 fn toggle_value(control: &Value, on: bool) -> Value {
@@ -83,7 +43,7 @@ pub fn applied(payload: &Value, choices: &Choices) -> Value {
                 let on = value.and_then(Value::as_bool).unwrap_or(false);
                 let v = toggle_value(c, on);
                 for b in c["binds"].as_array().into_iter().flatten().filter_map(Value::as_str) {
-                    set_path(&mut doc, b, v.clone());
+                    deep_canvas::document::variants::set_path(&mut doc, b, v.clone());
                 }
             }
             Some("choice") => {
@@ -94,19 +54,7 @@ pub fn applied(payload: &Value, choices: &Choices) -> Value {
             _ => {}
         }
     }
-    let sets: BTreeMap<&String, &Value> = payload["variants"].as_object().into_iter().flatten().collect();
-    for (set, spec) in sets {
-        let name = picked.get(set).cloned().or_else(|| spec["default"].as_str().map(String::from));
-        let option = spec["options"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|o| o["name"].as_str() == name.as_deref());
-        for op in option.map(|o| &o["patch"]).and_then(Value::as_array).into_iter().flatten() {
-            apply_op(&mut doc, op);
-        }
-    }
-    doc
+    deep_canvas::document::variants::applied(&doc, &picked)
 }
 
 /// Every combination of the controls' values a viewer can reach: each toggle off and on, each
