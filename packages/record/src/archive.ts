@@ -12,10 +12,11 @@ import type { Message } from './learned.js';
 export interface FoundMessage extends Message { session: string }
 
 /**
- * A character lowercased for matching, as `deep find` matches: a final sigma is a sigma. The index holds each
- * message's text folded so, a character at a time, so a substring of the folded text is exactly a match.
+ * A text lowercased for matching, as `deep find` matches: a final sigma is a sigma. The index holds each
+ * message's text folded so, which is the text each of its characters lowercased alone would give, so a substring
+ * of the folded text is exactly a match.
  */
-export const foldText = (text: string): string => [...text].map((ch) => ch.toLowerCase().replace(/ς/g, 'σ')).join('');
+export const foldText = (text: string): string => text.toLowerCase().replace(/ς/g, 'σ');
 
 /** #884's word rule: the words a query asks for are runs of letters and digits in any script, lowercased. */
 export const queryWords = (text: string): string[] => text.normalize('NFC').toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
