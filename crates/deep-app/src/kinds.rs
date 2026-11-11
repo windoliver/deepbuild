@@ -166,7 +166,7 @@ pub fn find<'a>(events: &'a [Value], handle: &str) -> Option<&'a Value> {
 
 /// The asks shown together with `handle` in a batch of several, in batch order: the latest `ask.batched` the core
 /// wrote listing it, the one whose order an approval's `steps` index (an agent's batch is never one).
-fn batch_of(events: &[Value], handle: &str) -> Vec<String> {
+pub(crate) fn batch_of(events: &[Value], handle: &str) -> Vec<String> {
     events
         .iter()
         .rev()

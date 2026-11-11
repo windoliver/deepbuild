@@ -117,4 +117,7 @@ pub trait Backend {
     /// Loads `checkpoint`, or refuses one another backend or version wrote, naming both, and
     /// loads nothing.
     fn restore(&mut self, checkpoint: &Checkpoint) -> Result<(), Box<Refusal>>;
+    /// #2014: how far along the unit `dir` the ray from `from` first meets a shape of the world
+    /// as built or last stepped, within `max` m; none when it meets nothing.
+    fn ray(&self, from: [f64; 3], dir: [f64; 3], max: f64) -> Option<f64>;
 }
