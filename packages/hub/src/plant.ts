@@ -84,6 +84,9 @@ export type Plant =
   // counting the open asks a second time itself; deep inbox leaving out each ask's default; and the hub leaking every
   // session's asks into an agent's deep_status.
   | 'status-second-order' | 'status-own-word' | 'status-unread-flipped' | 'deep-second-count' | 'inbox-no-default' | 'status-row-leak'
+  // #2018's: a `--why` built from a reading of its own, a BLOCKED row that names no one and no evidence, and a
+  // reading that tries the stale row before needs you.
+  | 'why-second-reading' | 'blocked-bare' | 'stale-before-ask'
   // #1455's: a doctor that prints a fix under a healthy item.
   | 'doctor-healthy-fix'
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
@@ -250,6 +253,7 @@ const PLANTS: readonly string[] = [
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
   'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'status-row-leak',
+  'why-second-reading', 'blocked-bare', 'stale-before-ask',
   'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',

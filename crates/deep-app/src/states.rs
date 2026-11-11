@@ -529,6 +529,22 @@ impl Table {
         rows.into_iter().map(|(.., row)| row).collect()
     }
 
+    /// The hub's count of a session's open asks (#2018): the list's ask rows that are its, where the hub built the
+    /// list, else the asks of it that no event closed.
+    pub fn asks_of(&self, session: &str) -> usize {
+        if self.listed {
+            return self
+                .rows
+                .values()
+                .filter(|(_, row)| {
+                    row["id"].as_str().is_some_and(|id| id.starts_with("ask:"))
+                        && row["session"] == session
+                })
+                .count();
+        }
+        self.open_asks(Some(session)).len()
+    }
+
     /// The list's order key of the row with this ID.
     pub fn order_of(&self, id: &str) -> Option<String> {
         self.rows.get(id).map(|(order, _)| order.clone())
@@ -557,6 +573,13 @@ impl Table {
     }
 
     pub fn title(&self, session: &str) -> String {
+        // The session's one name (#2018): its row's, as the hub built it, the same on every surface.
+        if let Some(title) = self
+            .row_of(&format!("session:{session}"))
+            .and_then(|row| row["title"].as_str())
+        {
+            return crate::question::visible(title);
+        }
         let title = self
             .titles
             .get(session)
@@ -582,6 +605,18 @@ impl Table {
     /// with "process gone mid-turn" for a process gone; then a claim's state, if the session's newest stop made one.
     /// A session with no `session.state` yet reads as [`Table::state`] does, but for its stop's claim, which it keeps.
     pub fn row(&self, session: &str, now: u64) -> (String, &'static str) {
+        // The hub's row (#1463), the one reading of the session (#2018): its word and its entry, read no second way.
+        if let Some(row) = self.row_of(&format!("session:{session}")) {
+            let word = row["word"].as_str().unwrap_or_default();
+            // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
+            if crate::plain::planted("waiting-as-working") && word == "needs you" {
+                return ("working".to_owned(), "running");
+            }
+            return (
+                word.to_owned(),
+                entry_of(row["entry"].as_str().unwrap_or_default()),
+            );
+        }
         // The claim the row adds is its stop's, which only later work hides.
         let shown = match self.sessions.get(session) {
             Some(own) if self.open_asks(Some(session)).is_empty() => own.read(own.work),
@@ -593,6 +628,22 @@ impl Table {
         };
         // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
         let planted = crate::plain::planted("waiting-as-working");
+        // A claim's word the core recorded as the session's state (#2018) is the row's, with the table's entry: the
+        // app adds no reading of the claim of its own beside it.
+        if let Some((word, entry, _)) = TABLE.iter().find(|(word, ..)| {
+            *word == listed
+                && ![
+                    "needs you",
+                    "stuck",
+                    "flagged",
+                    "working",
+                    "finished",
+                    "quiet",
+                ]
+                .contains(word)
+        }) {
+            return ((*word).to_owned(), entry);
+        }
         let (word, entry) = match listed.as_str() {
             _ if planted && cause == "waiting" => ("working".to_owned(), "running"),
             "needs you" => ("needs you".to_owned(), "needs_you"),
@@ -627,8 +678,23 @@ impl Table {
         self.sessions.get(session).map_or(&[], |s| &s.readings)
     }
 
-    /// Every session in the record, in the order each first appears, with its task's title and its state.
+    /// Every session in the record, with its name and its state: in the list's one order where the hub built the
+    /// list's rows (#1463, #2018), else in the order each first appears.
     pub fn every_session(&self) -> Vec<(String, String, State)> {
+        if self.listed {
+            return self
+                .list()
+                .into_iter()
+                .filter_map(|row| row["id"].as_str()?.strip_prefix("session:"))
+                .map(|session| {
+                    (
+                        session.to_owned(),
+                        self.title(session),
+                        self.state(session),
+                    )
+                })
+                .collect();
+        }
         self.order
             .iter()
             .map(|session| (session.clone(), self.title(session), self.state(session)))

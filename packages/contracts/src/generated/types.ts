@@ -7431,6 +7431,25 @@ export interface SessionGone {
   evidence?: Array<string>;
 }
 
+/** session.named@1 */
+export interface SessionNamed {
+  v: 1;
+  id: string;
+  kind: "session.named";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    name: string;
+    by: "you" | "agent";
+  };
+  evidence?: Array<string>;
+}
+
 /** session.never_started@1 */
 export interface SessionNeverStarted {
   v: 1;
@@ -7646,6 +7665,25 @@ export interface SessionState {
   data: {
     state: "needs you" | "stuck" | "flagged" | "working" | "finished" | "quiet";
     cause: "ask" | "gone" | "waiting" | "stuck" | "promised" | "failed" | "quiet" | "interrupted" | "finished" | "working";
+  };
+  evidence?: Array<string>;
+}
+
+/** session.state@2 */
+export interface SessionStateV2 {
+  v: 2;
+  id: string;
+  kind: "session.state";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    state: "needs you" | "stuck" | "flagged" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "stale" | "says done" | "working" | "queued" | "PASS" | "finished" | "quiet";
+    cause: "ask" | "gone" | "waiting" | "words" | "stuck" | "promised" | "failed" | "sent_back" | "blocked" | "invalid" | "inconclusive" | "stale" | "says_done" | "working" | "queued" | "pass" | "interrupted" | "finished" | "quiet";
   };
   evidence?: Array<string>;
 }

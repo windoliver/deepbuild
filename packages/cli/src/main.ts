@@ -179,6 +179,7 @@ async function updateCheck(): Promise<number> {
 const usage = [
   'deep doctor [--json] [--prompt]   --prompt also sends each signed-in agent one test prompt, which spends plan usage',
   'deep status [--json]   every session with its detail, ending on what needs you',
+  'deep status <session> --why [--json]   why that session reads as it does: the one sentence, each record fact it was read from, and what each higher state lacked',
   'deep off | on   every gate watch-only, or back, once the OS confirms you',
   'deep explain <recorded session folder> [--json]',
   'deep run --result <run.finished event file>',
