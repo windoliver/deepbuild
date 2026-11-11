@@ -76,7 +76,7 @@ pub(crate) struct Stage {
 }
 
 fn texture(
-    device: &wgpu::Device,
+    device: &deep_gpu::counted::Wgpu,
     label: &str,
     size: [u32; 2],
     format: wgpu::TextureFormat,
@@ -105,7 +105,7 @@ impl Stage {
     /// reusing `kept`'s textures where they fit.
     pub fn ensure(
         kept: Option<Stage>,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         format: wgpu::TextureFormat,
         size: [u32; 2],
         covs: usize,
@@ -144,7 +144,7 @@ impl Stage {
     /// Records the finish from the stage's source into `target`, with each separation's coverage.
     pub fn record(
         &self,
-        device: &wgpu::Device,
+        device: &deep_gpu::counted::Wgpu,
         encoder: &mut wgpu::CommandEncoder,
         printing: &Printing,
         target: &wgpu::TextureView,
@@ -186,8 +186,8 @@ impl Stage {
 
 /// An f32 RGBA texture read back, rows top-down, `w × h × 16` bytes.
 pub(crate) fn read_f32(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
+    device: &deep_gpu::counted::Wgpu,
+    queue: &deep_gpu::counted::Queue,
     texture: &wgpu::Texture,
     size: [u32; 2],
 ) -> Result<Vec<u8>, String> {
@@ -227,7 +227,7 @@ pub(crate) fn read_f32(
 
 /// A mapped buffer's rows, each `width` bytes of a `row`-byte stride.
 pub(crate) fn map_rows(
-    device: &wgpu::Device,
+    device: &deep_gpu::counted::Wgpu,
     buffer: &wgpu::Buffer,
     row: usize,
     width: usize,

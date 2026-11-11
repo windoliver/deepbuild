@@ -1,0 +1,20 @@
+# Nine wrong copies of scripts/fetch-lock.mjs, one change each, run against the blind suite (node --test 'tests/acceptance/1824/*.test.mjs')
+
+refetches-cached: skips no cached file (if (found === row.sha256) continue; → if (false) continue;)
+  3 failed, 5 passed; failing: #1824.512f9fb8 AC1, #1824.a44b9f7f AC2
+trusts-size: never hashes a cached file (found = await hashOf(file) → found = (await hashOf(file)) && row.sha256)
+  2 failed, 6 passed; failing: #1824.a44b9f7f AC2
+ignores-network-flag: fetches with the network not allowed (allowed = DEEP_FETCH_NETWORK === '1' → allowed = true)
+  1 failed, 7 passed; failing: #1824.a44b9f7f AC2
+blocked-exits-0: exits 0 while BLOCKED (if (blocked || failed) return 1; → if (failed) return 1;)
+  1 failed, 7 passed; failing: #1824.a44b9f7f AC2
+no-unblock-line: prints no unblock ask (if (blocked) say(UNBLOCK); → (removed))
+  1 failed, 7 passed; failing: #1824.a44b9f7f AC2
+lint-any-ref: passes a URL with no commit (else if (!…COMMIT.test(part)) → else if (false))
+  1 failed, 7 passed; failing: #1824.f985f5df AC3
+lint-no-size: passes a row with no size (if (!Number.isSafeInteger(size) …) → if (false))
+  1 failed, 7 passed; failing: #1824.f985f5df AC3
+lint-no-sha: passes a row with no sha256 (if (… !SHA256.test(sha256)) → if (false))
+  1 failed, 7 passed; failing: #1824.f985f5df AC3
+fetches-unlisted: fetches a URL the lock does not list (if (unlisted.length) return 1; → if (false) return 1;)
+  1 failed, 7 passed; failing: #1824.f985f5df AC3

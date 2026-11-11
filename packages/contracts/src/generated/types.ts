@@ -3552,6 +3552,25 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
+/** ask.taken_over@1 */
+export interface AskTakenOver {
+  v: 1;
+  id: string;
+  kind: "ask.taken_over";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    device: string;
+    revision: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** attempt.started@1 */
 export interface AttemptStarted {
   v: 1;
@@ -3719,6 +3738,16 @@ export interface ChannelDelivered {
         id: string;
         label: string;
       }>;
+      plan?: {
+        hash: string;
+        steps: Array<{
+          does: string;
+          changes: Array<string>;
+          undo: string;
+          public: boolean;
+          cost: number;
+        }>;
+      };
       revision: number;
       hub: string;
       refused: string | null;
@@ -3749,7 +3778,7 @@ export interface ChannelRefused {
     channel: string;
     thread_key: string;
     answer: string;
-    field?: "device" | "ask" | "revision" | "card_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id" | "method" | "once" | "params";
+    field?: "device" | "ask" | "revision" | "card_hash" | "plan_hash" | "hub" | "at" | "signature" | "answer" | "account_link_id" | "method" | "once" | "params";
     reason: string;
   };
   evidence?: Array<string>;
@@ -7045,6 +7074,27 @@ export interface RunStartedV3 {
     command?: string;
     stand_ins?: Array<string>;
     withheld: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.stopped_at_limit@1 */
+export interface RunStoppedAtLimit {
+  v: 1;
+  id: string;
+  kind: "run.stopped_at_limit";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    limit: "memory_mb" | "file_mb";
+    max: number;
+    reading?: number;
   };
   evidence?: Array<string>;
 }

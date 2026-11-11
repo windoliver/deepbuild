@@ -229,8 +229,8 @@ export interface RuntimeEnvironment {
 
 export interface ExtensionHost {
   install(from: InstallFrom): Promise<Installed>;
-  /** The channels of the packages loaded and started (#65), each by name with what it reaches. */
-  channels(): { name: string; kind: 'device' | 'chat' | 'email' | 'text'; extension: string }[];
+  /** The channels of the packages loaded and started (#65), each by name with what it reaches and whether it draws a plan's steps (#1580). */
+  channels(): { name: string; kind: 'device' | 'chat' | 'email' | 'text'; steps: boolean; extension: string }[];
   /** A live state source by its registered name (#67): what a workspace's touch reads through. */
   stateSource(name: string): Promise<Omit<StateSource, 'fixture'>>;
   /** You are in this project (#67): its packs, as `.deepbuild/packs.json` names them, install and load if you trust it; an untrusted project's stay out, none installed, none run. */
@@ -351,6 +351,12 @@ export interface ExtensionHost {
   libraryCall(name: string, op: 'search' | 'fetch', arg: unknown): Promise<{ value: unknown; noAnswer: boolean }>;
   /** A file a library's fetch named, downloaded through its source by the hub (#1731); `status` null when its host gave no answer. */
   libraryFile(name: string, path: string): Promise<{ status: number; bytes: Uint8Array } | { status: null; why: string }>;
+  /** Pack and library assets use the same resumable Source download, never a package's network client. */
+  assetFile(source: { pack: string; url: string } | { library: string; path: string }, spec: { file: string; sha256: string; size: number; kept: string }): Promise<string>;
+  /** Reachability without requesting any asset byte, before the networked job's authority ask. */
+  assetOnline(pack: string, url: string): Promise<boolean>;
+  /** A pack's license file, read through the Source block after the job is authorized. */
+  assetTerms(pack: string, url: string): Promise<string>;
   /** Every source call this host made, with its secrets stripped. */
   recording(): Recording;
   /** The readings the record holds of a source with an as-of time in the window, both ends in, in as-of order. */
@@ -603,8 +609,8 @@ interface Ext {
   routes: Set<string>;
   /** The adapter names it registered. */
   adapters: Set<string>;
-  /** The channels it registered (#65), by name, with what each reaches; their deliver and receive stay with the package. */
-  channels: Map<string, ChannelKind>;
+  /** The channels it registered (#65), by name, with what each reaches and whether it draws a plan's steps (#1580); their deliver and receive stay with the package. */
+  channels: Map<string, { kind: ChannelKind; steps: boolean }>;
   /** The state sources it registered (#67), by name; their read, compare, undo and fixture stay with the package. */
   stateSources: string[];
   /** The index it registered, by name, with the kit revision it declares, and how the host reaches it once loaded. */
@@ -1130,6 +1136,35 @@ class Host implements ExtensionHost {
       if (e instanceof NoAnswer) return { status: null, why: e.message };
       throw e;
     }
+  }
+  private packSource(pack: string, value: string): { name: string; path: string; source: LibraryDecl } {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) throw Error(`${pack}: an asset URL must be https with no credentials or fragment`);
+    return { name: `ext.pack_${sha256Hex(new TextEncoder().encode(`${pack}\n${url.host}`))}.assets`, path: `${url.pathname}${url.search}`, source: { host: url.host, secret: null, auth: null, quota: { per_minute: 600, per_day: 100_000 }, timeout: WORK_CALL_MS } };
+  }
+  async assetFile(source: { pack: string; url: string } | { library: string; path: string }, spec: { file: string; sha256: string; size: number; kept: string }): Promise<string> {
+    if ('library' in source) {
+      const { ext, library } = this.libraryOf(source.library);
+      return this.sources.download(ext.entry.id, source.library, library, source.path, spec);
+    }
+    const p = this.packSource(source.pack, source.url);
+    return this.sources.download(source.pack, p.name, p.source, p.path, spec);
+  }
+  async assetOnline(pack: string, value: string): Promise<boolean> {
+    const p = this.packSource(pack, value);
+    try {
+      await this.sources.workFetch(pack, p.name, p.source, { method: 'CONNECT', path: '/' }, { timeout: 2000 });
+      return true;
+    } catch (e) {
+      if (e instanceof NoAnswer) return false;
+      throw e;
+    }
+  }
+  async assetTerms(pack: string, url: string): Promise<string> {
+    const p = this.packSource(pack, url);
+    const answer = await this.sources.workFetch(pack, p.name, p.source, { method: 'GET', path: p.path }, { timeout: p.source.timeout });
+    if (answer.status !== 200) throw Error(`${pack}: license ${url} answered ${answer.status}`);
+    return answer.body;
   }
   /** A work source's run is BLOCKED while its package isn't loaded or the secret it needs isn't held. */
   private async blockedWork(decl: ScheduleDecl): Promise<string | null> {
@@ -1756,9 +1791,9 @@ class Host implements ExtensionHost {
     return this.packsOf(project).filter((e) => e.live).flatMap((e) => [...e.views.keys()].map((name) => ({ name, extension: e.entry.id, commands: e.commands.get(name) ?? [] })));
   }
 
-  /** The channels of the packages loaded and started (#65): each by name, with what it reaches. */
-  channels(): { name: string; kind: ChannelKind; extension: string }[] {
-    return [...this.exts.values()].filter((e) => e.live && e.ask).flatMap((e) => [...e.channels].map(([name, kind]) => ({ name, kind, extension: e.entry.id })));
+  /** The channels of the packages loaded and started (#65): each by name, with what it reaches and whether it draws a plan's steps (#1580). */
+  channels(): { name: string; kind: ChannelKind; steps: boolean; extension: string }[] {
+    return [...this.exts.values()].filter((e) => e.live && e.ask).flatMap((e) => [...e.channels].map(([name, c]) => ({ name, ...c, extension: e.entry.id })));
   }
   /** One send or read of a loaded channel, its context's fetch the caller's; bounded, and never unloading it. */
   async channel(name: string, op: 'deliver', item: ChannelItem, ctx: ChannelCtx): Promise<ChannelDelivered>;
@@ -2285,7 +2320,7 @@ class Host implements ExtensionHost {
     // Each channel it registers is held to channel@1's kit (#65), its code running where conformance runs it.
     const kitted: string[] = [];
     try {
-      for (const [name, kind] of ext.channels) {
+      for (const [name, { kind }] of ext.channels) {
         const { runKit, slotKits } = await import('@deepbuild/conformance');
         const kit = slotKits().find((k) => k.slot === CHANNEL) as SlotKit<ChannelFill> | undefined;
         if (!kit) { kitted.push(`the conformance package ships no ${CHANNEL} kit, so its channel ${name} is unkitted`); continue; }
@@ -2826,13 +2861,14 @@ class Host implements ExtensionHost {
         return null;
       }
       case 'deep.registerChannel': {
-        const [name, channel] = args as [unknown, { slot?: unknown; revision?: unknown; kind?: unknown } | null | undefined];
+        const [name, channel] = args as [unknown, { slot?: unknown; revision?: unknown; kind?: unknown; steps?: unknown } | null | undefined];
         if (typeof name !== 'string' || !ADAPTER_NAME.test(name)) throw Error(`deep.registerChannel takes the channel's name first, one lower-case word, not ${JSON.stringify(name)}`);
         if (channel?.slot !== CHANNEL || !Number.isSafeInteger(channel.revision) || (channel.revision as number) < 1) throw Error(`deep.registerChannel: ${name} declares itself a ${CHANNEL} fill, with the kit revision it was built against`);
         if (!CHANNEL_KINDS.includes(channel.kind as ChannelKind)) throw Error(`deep.registerChannel: ${name}'s kind is one of ${CHANNEL_KINDS.join(', ')}`);
         const owner = conformance ? undefined : [...this.exts.values()].find((e) => e !== ext && e.channels.has(name));
         if (owner) throw Error(`the channel ${name} is already registered by ${owner.entry.id}`);
-        ext.channels.set(name, channel.kind as ChannelKind);
+        // Only a channel that says it draws a plan's steps gets a card with a plan to answer (#1580).
+        ext.channels.set(name, { kind: channel.kind as ChannelKind, steps: channel.steps === true });
         return null;
       }
       case 'deep.registerStateSource': {
