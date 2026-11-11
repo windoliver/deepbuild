@@ -1507,6 +1507,8 @@ struct Set {
     elements: Vec<u32>,
     models: Vec<[[f64; 4]; 3]>,
     cull: Option<cull::Culled>,
+    /// The records [`Set::write`] changed and hasn't uploaded: the first and one past the last.
+    run: Option<(usize, usize)>,
 }
 
 impl Set {
@@ -1593,7 +1595,8 @@ impl Set {
         members_changed
     }
 
-    /// Writes record `i` alone when it changed, the set's members as they were.
+    /// Takes record `i` when it changed, the set's members as they were. [`Set::flush`] uploads
+    /// it, with the neighbours that changed beside it in one write.
     fn write(&mut self, device: &Device, i: usize, record: &[u8], written: &mut u32) {
         let at = i * self.stride;
         let Some(old) = self.records.get_mut(at..at + record.len()) else {
@@ -1601,11 +1604,27 @@ impl Set {
         };
         if old != record {
             old.copy_from_slice(record);
-            if let Some(buffer) = &self.buffer {
-                deep_gpu::alloc::outside(|| device.queue.write_buffer(buffer, at as u64, record));
+            match self.run {
+                Some((first, end)) if end == i => self.run = Some((first, i + 1)),
+                _ => {
+                    self.flush(device);
+                    self.run = Some((i, i + 1));
+                }
             }
             *written += 1;
             self.revision += 1;
+        }
+    }
+
+    /// Uploads the run of changed records [`Set::write`] gathered.
+    fn flush(&mut self, device: &Device) {
+        if let (Some((first, end)), Some(buffer)) = (self.run.take(), &self.buffer) {
+            let bytes = &self.records[first * self.stride..end * self.stride];
+            deep_gpu::alloc::outside(|| {
+                device
+                    .queue
+                    .write_buffer(buffer, (first * self.stride) as u64, bytes)
+            });
         }
     }
 
@@ -1816,6 +1835,7 @@ struct Uniforms {
     display: Written,
     internal: Written,
     tone: Written,
+    shadow: Written,
 }
 
 pub struct Renderer {
@@ -1878,6 +1898,7 @@ pub struct Renderer {
     sky_pipeline: Option<wgpu::RenderPipeline>,
     /// This frame's puffs, back to front, and their pipeline once compiled (#422).
     puffs: Option<(wgpu::Buffer, u32)>,
+    puff_records: Set,
     puff_pipeline: Option<wgpu::RenderPipeline>,
     /// The see-through solids' pipelines, blend and add, each compiled the first time a batch
     /// draws one.
@@ -2027,6 +2048,9 @@ pub struct Renderer {
     /// The linear image this frame's output pass reads when passes between geometry and output
     /// wrote one (#418's `pre_tone`); `None`, the linear target.
     pre_tone: Option<wgpu::TextureView>,
+    /// The output pass's bind group over a post module's own target, with that target and the
+    /// covered mask it binds.
+    post_bind: Option<(wgpu::TextureView, wgpu::TextureView, wgpu::BindGroup)>,
 }
 
 /// The pass that draws thin lines and outlines at full size after the upscale (#386).
@@ -3367,6 +3391,7 @@ impl Renderer {
             sky: false,
             sky_pipeline: None,
             puffs: None,
+            puff_records: Set::default(),
             puff_pipeline: None,
             solid_layout: mesh_layout.clone(),
             maps,
@@ -3483,6 +3508,7 @@ impl Renderer {
             low_bytes: None,
             outlines,
             pre_tone: None,
+            post_bind: None,
         }
     }
 
@@ -4721,7 +4747,12 @@ impl Renderer {
                 mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
                 true
             }
-            None => false,
+            None => {
+                if let Some(m) = self.mirrorer.as_mut() {
+                    m.rest();
+                }
+                false
+            }
         };
         // #465: the flare's sources at t, at the internal size the targets draw.
         self.flaring = match &scene.flare {
@@ -4760,7 +4791,12 @@ impl Renderer {
                 );
                 true
             }
-            None => false,
+            None => {
+                if let Some(f) = self.flarer.as_mut() {
+                    f.rest();
+                }
+                false
+            }
         };
         self.log_new();
     }
@@ -5191,6 +5227,13 @@ impl Renderer {
                     &mut written,
                 );
             }
+        }
+        for set in self
+            .batches
+            .values_mut()
+            .flat_map(|b| b.solids.values_mut())
+        {
+            set.flush(device);
         }
         self.counts.instances_written += written;
         self.counts.replayed += scene.layers.len() as u32;
@@ -5766,9 +5809,11 @@ impl Renderer {
             light_frame.light[3] = -1.0;
             Self::cut_casts(&self.planted, scene, &mut light_frame);
             deep_gpu::alloc::outside(|| {
-                device
-                    .queue
-                    .write_buffer(&self.shadow.buffer, 0, bytemuck::bytes_of(&light_frame))
+                device.queue.write_changed(
+                    &self.shadow.buffer,
+                    &self.written.shadow,
+                    bytemuck::bytes_of(&light_frame),
+                )
             });
         }
         let (map, white, contrast) = match look.tone_map {
@@ -7470,16 +7515,31 @@ impl Renderer {
             };
             let (more, source) = post.jobs(device, &frame);
             jobs.extend(more);
-            if let Some(view) = &source {
-                bind = self.output_bind(&device.device, view);
+            // The geometry's own target binds as the targets bound it, and the target a post
+            // handed last frame as that frame bound it; no other frame's is kept.
+            let kept = match (&source, &self.post_bind) {
+                (Some(view), Some((v, c, b))) if v == view && *c == self.covered.1 => {
+                    Some(b.clone())
+                }
+                _ => None,
+            };
+            match (&source, kept) {
+                (Some(view), _) if *view == t.linear_view => self.post_bind = None,
+                (Some(_), Some(b)) => bind = b,
+                (Some(view), None) => {
+                    bind = self.output_bind(&device.device, view);
+                    self.post_bind = Some((view.clone(), self.covered.1.clone(), bind.clone()));
+                }
+                (None, _) => self.post_bind = None,
             }
             self.pre_tone = source;
         } else {
             self.pre_tone = None;
+            self.post_bind = None;
         }
         // #465: the flare, added into the linear image the output reads.
         if let (true, Some(f), Some(t)) =
-            (self.flaring, self.flarer.as_ref(), self.targets.as_ref())
+            (self.flaring, self.flarer.as_mut(), self.targets.as_ref())
         {
             let into = self
                 .pre_tone
@@ -8035,9 +8095,11 @@ impl Renderer {
             (0..3).map(|i| (p.pos[i] - eye[i]).powi(2)).sum::<f64>()
         };
         all.sort_by(|a, b| d2(b).total_cmp(&d2(a)).then_with(|| a.id.cmp(&b.id)));
-        let records: Vec<PuffRecord> = all
-            .iter()
-            .map(|p| PuffRecord {
+        // A record holds nothing of the camera: a frame whose puffs keep their order writes none,
+        // and one that reorders them writes them into the buffer it has.
+        self.puff_records.begin();
+        for p in &all {
+            let record = PuffRecord {
                 center: v4(p.pos, p.radius),
                 shape: [
                     p.aspect as f32,
@@ -8051,15 +8113,11 @@ impl Renderer {
                     p.near_fade as f32,
                     (u32::from(p.sun) | u32::from(p.ambient) << 1) as f32,
                 ],
-            })
-            .collect();
-        let buffer = device.device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("scene3d puffs"),
-                contents: bytemuck::cast_slice(&records),
-                usage: wgpu::BufferUsages::VERTEX,
-            },
-        );
+            };
+            self.puff_records.push(&p.id, bytemuck::bytes_of(&record));
+        }
+        // No draw key names the puffs' buffer, and their writes aren't a batch's instance records.
+        self.puff_records.finish(device, &mut 0, &mut 0);
         if self.puff_pipeline.is_none() {
             let blend = wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING;
             let targets = [
@@ -8099,7 +8157,11 @@ impl Renderer {
             self.compiled += 1;
             self.names.push(PUFF_PASS);
         }
-        self.puffs = Some((buffer, records.len() as u32));
+        self.puffs = self
+            .puff_records
+            .buffer
+            .clone()
+            .map(|buffer| (buffer, all.len() as u32));
     }
 
     /// The sky's draw this frame, when it has one (#422).
