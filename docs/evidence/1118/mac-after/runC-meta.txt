@@ -1,0 +1,26 @@
+input: ~/h1118a/repo head f17ae5c17665e1693544dcbf8f96df11ee54ff15 origin/main fde376f0f233e5f94bc6b0673f55c8e43983950d merge-base fde376f0f233e5f94bc6b0673f55c8e43983950d status [?? tests/acceptance/1118-e2e/ ]
+command (in ~/h1118a/repo): /usr/bin/time -l node scripts/proof.mjs before > runCn.log 2>&1
+env: HOME=~/h1118c/home RUSTUP_HOME=~/.rustup CARGO_HOME=~/.cargo npm_config_cache=~/.npm GH_CONFIG_DIR=~/.config/gh GIT_CONFIG_GLOBAL=~/.gitconfig PATH=~/h1118a/shim:~/.nvm/versions/node/v24.22.0/bin:~/.cargo/bin:/usr/sbin:/usr/bin:/bin:/sbin NPM_LOG=~/h1118c/logs/npm.log E2E_LOG=~/h1118c/logs/e2e.jsonl (CARGO_TARGET_DIR unset)
+== C1 start: Wed Nov 11 04:54:16 UTC 2026 | 22:54  up 43 days,  1:19, 2 users, load averages: 6.36 7.60 5.24
+C1 df -k start: /dev/disk3s1s1 482797652 12940796 108523808 11% 404485 1085238080 0% /
+Now drawing from 'AC Power'
+C1 run pid 99325
+C1 exit 1 void 0
+C1 end: Wed Nov 11 05:12:17 UTC 2026 | 23:12  up 43 days,  1:37, 2 users, load averages: 15.15 21.05 17.08
+C1 df -k end: /dev/disk3s1s1 482797652 12940796 67243456 17% 404485 672434560 0% /
+C1 df free min KB: 67243456
+C1 time:      1040.00 real      6146.88 user       516.37 sys
+C1 proof: wall time 1039.0 s
+== C2 start: Wed Nov 11 05:13:17 UTC 2026 | 23:13  up 43 days,  1:38, 2 users, load averages: 7.02 17.62 16.07
+C2 df -k start: /dev/disk3s1s1 482797652 12940796 67239632 17% 404485 672396320 0% /
+Now drawing from 'AC Power'
+C2 run pid 43324
+C2 exit 1 void 0
+C2 end: Wed Nov 11 05:15:17 UTC 2026 | 23:15  up 43 days,  1:40, 2 users, load averages: 4.04 12.98 14.42
+C2 df -k end: /dev/disk3s1s1 482797652 12940796 67274288 17% 404485 672742880 0% /
+C2 df free min KB: 67239632
+C2 time:       117.31 real       214.88 user        44.47 sys
+C2 proof: wall time 117.1 s
+bays before delete:  44G
+deleted ~/h1118c/home/deepbuild-bays; df -h after: /dev/disk3s1s1 460Gi 12Gi 102Gi 11% 404k 1.1G 0% /
+DONE-RUNC

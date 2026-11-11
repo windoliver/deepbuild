@@ -48,7 +48,7 @@ import { badDeadline, type Host as RunHost, type Supervisor } from '@deepbuild/s
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { cycleThrough, dependents, graph, refusal, resolve, servedAt, type Piece, type UseRow } from './compose.js';
 import { packageDigest } from './digest.js';
-import type { BuildPlant, HeldJobs, JobCall, JobCounter, Weight } from './job-kinds.js';
+import type { BuildPlant, HeldJobs, JobBytes, JobCall, JobCounter, Weight } from './job-kinds.js';
 import { Jobs, JobTools, type Answer, type JobListing } from './jobs.js';
 export type { JobListing } from './jobs.js';
 import { AdapterRouting, type Delivered } from './adapter-routing.js';
@@ -336,7 +336,7 @@ export interface ExtensionHost {
    * that calls a provider is given `call`, its submission key and journal, and may reach that provider; `stop` ends its run (#1923).
    * `watch` hears each counter the tool reports as it runs (#1925).
    */
-  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>>;
+  runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>>;
   /** What a tool off the machine's host reports before a call (#1924): the weight files it holds, by hash, and its capabilities. */
   jobHostReport(tool: string, kind: string): Promise<{ weights: Weight[]; capabilities: string[] }>;
   /** One search or fetch of a loaded library source (#1731), its calls the hub's; `noAnswer` when one got none. */
@@ -675,7 +675,7 @@ class Host implements ExtensionHost {
   jobParams(kind: string, value: unknown): Record<string, JsonValue> {
     return this.jobTools.jobParams(kind, value);
   }
-  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
+  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
     return this.jobTools.runJobTool(tool, kind, params, inputs, call, stop, watch);
   }
   async jobHostReport(tool: string, kind: string): Promise<{ weights: Weight[]; capabilities: string[] }> {

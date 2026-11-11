@@ -179,8 +179,8 @@ export class Runs {
     }
     const aside = keepAside(this.o.journalFile, bytes, this.o.now());
     // The core's run.started@3 carries what a run runs; an earlier one can't be run again from the record, and no
-    // other writer's start or finish counts.
-    const rows = (await this.o.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND NOT EXISTS
+    // other writer's start or finish counts. A root plan's run (#1945) is never the hub's to run.
+    const rows = (await this.o.raw(`SELECT s.data FROM events s WHERE s.kind = 'run.started' AND s.writer = 'core' AND s.v >= 3 AND json_extract(s.data, '$.ask') IS NULL AND NOT EXISTS
       (SELECT 1 FROM events f WHERE f.kind = 'run.finished' AND f.writer = 'core' AND json_extract(f.data, '$.run') = json_extract(s.data, '$.run')) ORDER BY s.log_pos`)) as { data: string }[];
     // The reading first, then the journal written again: a cut in between finds it damaged and rebuilds it again.
     const now = this.o.now();

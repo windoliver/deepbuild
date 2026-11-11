@@ -1,0 +1,40 @@
+Base a04378eb2. NOT RUN: the machine was shared and loaded, so these notes are read from the base's code, not from a run.
+Each note names the assertion the test stops at on the base, or why it passes there and what wrong program it fails on instead.
+
+explains.test.ts
+
+1. "#504.3b622b2f never appears in Needs you: …"
+   Expected on the base: PASS. deep_show raises no ask (packages/hub/src/core.ts show(), 6819, and recordRevision(), 6968, append
+   only doc.patched), and inbox.read (inbox(), 6154) is built from the asks table and its rows alone, so it names no doc ID.
+   Its wrong program is test 5's planted hub.
+
+2. "#504.3b622b2f never feeds a verdict: …"
+   Expected on the base: PASS. deep_claim records claim.made and runs nothing (claim(), 7354); deep_show and `deep show` append no
+   run.* or verdict.* (show(), recordRevision()); changes.read (change(), 6072) reads runs and verdicts from the record; and
+   `deep show --check --claim` answers INCONCLUSIVE for a document the claim's deliverables don't name
+   (crates/deep-show/src/hub.rs verdict(), 2614-2626, with the world file's `claims` entry, deliverables []).
+   Its wrong program is test 6's planted hub.
+
+3. "#504.3b622b2f shows beside an opened ask: …"
+   Fails at: expect(besideFailures(flow, obs), 'ask.card for ask:<id>').toEqual([])
+   with the one failure "ask.card's reply for ask:<id> holds no beside list, the agents' figures and films shown on the ask (its
+   keys: …)": askCard() (core.ts 6191) returns the asks core's Card (packages/asks/src/index.ts 139-174) plus question, and no
+   `beside`.
+
+4. "#504.3b622b2f shows in the receipt's explains-never-proves section: …"
+   Fails at: expect(explainsFailures(flow, obs), 'changes.read for claim:<id>').toEqual([])
+   with the one failure "changes.read's change for claim:<id> holds no explains section, the agents' figures and films shown on the
+   claim (its keys: claim, runs, verdicts, line, second, checks, asks, produced, next_issue)": change() (core.ts 6096) returns
+   exactly those keys.
+
+5. "#504.3b622b2f a hub planted with figure-in-needs-you, …"
+   Fails at: openWorld(PLANT_NEEDS_YOU) -> #806's startHub, which throws
+   "BLOCKED: the hub didn't start with DEEP_HUB_PLANT=figure-in-needs-you: …": server.ts 1449 calls plantOf(), which throws
+   "DEEP_HUB_PLANT=figure-in-needs-you names no planted program" (packages/hub/src/plant.ts 313-316).
+
+6. "#504.3b622b2f a hub planted with figure-feeds-verdict, …"
+   Fails at: openWorld(PLANT_VERDICT) -> startHub, "BLOCKED: the hub didn't start with DEEP_HUB_PLANT=figure-feeds-verdict: …",
+   for the same reason.
+
+Tests 1 to 4 share one world built in the describe's beforeAll; if that world can't be built (a hub that doesn't start, a deep_show
+that isn't presented, a deep_ask that files no ask), all four fail there with a message starting "BLOCKED:", never pass.

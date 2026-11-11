@@ -49,7 +49,7 @@ pub enum PlayPath {
 
 /// What [`Hub::evaluate`] leaves: the last frame's drawing, its nodes' results, and each video
 /// image item's frame.
-pub(crate) type Evaluated = (Painted, Vec<Value>, Map<String, Value>);
+pub(crate) type Evaluated = (Painted, Vec<Value>, Map<String, Value>, Map<String, Value>);
 
 /// A `determinism` call.
 pub struct Determinism {
@@ -59,6 +59,9 @@ pub struct Determinism {
     pub at_times: Option<Vec<i64>>,
     /// #1897: on this machine by the GPU pixel hash, or a cross-machine record.
     pub compare: Compare,
+    /// #504: the call's own run replays the session's input track and picks; a check's run
+    /// (the verdict's) reads the saved revision alone.
+    pub session: bool,
 }
 
 /// One of this issue's calls, parsed; `None` is `bad_input`.
@@ -155,6 +158,7 @@ pub fn parse_call(name: &str, c: &Map<String, Value>) -> Option<Call> {
                 play,
                 at_times,
                 compare,
+                session: true,
             }))
         }
         _ => None,
@@ -470,7 +474,7 @@ impl Hub<'_> {
     /// operator steps, a change (Frame clock and scheduler: never unasked). With `presented`
     /// (#501), each vsync's display time, the time it evaluates and the hash of the frame shown.
     pub fn play(&mut self, doc: &str, display_hz: u32, to: i64, presented: bool) -> Value {
-        let document = match self.current_doc(doc) {
+        let document = match self.current_doc(doc).map(|d| self.played(doc, &d)) {
             Ok(doc) => doc,
             Err(reply) => return reply,
         };
@@ -539,7 +543,8 @@ impl Hub<'_> {
     /// reached by seeking to it, each on a fresh scheduler and session, as canonical renders
     /// and node results.
     pub fn determinism(&mut self, d: &Determinism) -> Value {
-        let document = match self.current_doc(&d.doc) {
+        let current = self.current_doc(&d.doc);
+        let document = match current.map(|doc| if d.session { self.played(&d.doc, &doc) } else { doc }) {
             Ok(doc) => doc,
             Err(reply) => return reply,
         };
@@ -629,7 +634,9 @@ impl Hub<'_> {
                 json!({"operator": n.operator, "module": n.module, "item": n.item, "result": n.result})
             })
             .collect();
-        Ok((drawing, nodes, video))
+        // #1967: each cell grid as the last frame shows it.
+        let cells = crate::terminal::grid_blocks(&sched, &session);
+        Ok((drawing, nodes, video, cells))
     }
 
     /// One side of a comparison: [`Hub::evaluate`]'s last frame as its canonical render (the
@@ -643,7 +650,7 @@ impl Hub<'_> {
         seek: bool,
     ) -> Result<Value, String> {
         let started = std::time::Instant::now();
-        let (drawing, nodes, video) = self.evaluate(doc, view, times, seek)?;
+        let (drawing, nodes, video, cells) = self.evaluate(doc, view, times, seek)?;
         let (rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
             // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
             self.rgba3d(doc, times.last().copied().unwrap_or(0), &drawing, None)
@@ -663,6 +670,9 @@ impl Hub<'_> {
         let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing});
         if !video.is_empty() {
             side["video"] = Value::Object(video);
+        }
+        if !cells.is_empty() {
+            side["cells"] = Value::Object(cells);
         }
         Ok(side)
     }

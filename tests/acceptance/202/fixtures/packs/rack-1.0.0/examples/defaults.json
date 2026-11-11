@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "A rack at its defaults",
+  "description": "A rack at its defaults: one rack.unit@1 item, an example of the #202 acceptance suite's packs.",
+  "size": [
+    320,
+    360
+  ],
+  "packs": [
+    "acme/rack@1.0.0"
+  ],
+  "items": {
+    "x1": {
+      "id": "x1",
+      "kind": "rack.unit@1",
+      "name": "X1",
+      "order": "a0",
+      "params": {}
+    }
+  }
+}

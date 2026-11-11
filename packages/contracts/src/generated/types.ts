@@ -4418,6 +4418,75 @@ export interface DefinitionLocked {
   evidence?: Array<string>;
 }
 
+/** definition.locked@10 */
+export interface DefinitionLockedV10 {
+  v: 10;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+      targets?: Array<string>;
+      paid?: "live call" | "hosted browser run" | "model job";
+      runs?: number;
+      held_out?: Array<{
+        files: { [key: string]: string };
+      }>;
+      timing?: boolean;
+      settled_by?: "budget-window";
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.locked@2 */
 export interface DefinitionLockedV2 {
   v: 2;
@@ -5408,6 +5477,33 @@ export interface HookTemplate {
   } };
 }
 
+/** host.changed@1 */
+export interface HostChanged {
+  v: 1;
+  id: string;
+  kind: "host.changed";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    host: string;
+    change: string;
+    changes: Array<string>;
+    undo: string | null;
+    grant: "you" | "root";
+    fingerprint: Array<{
+      target: string;
+      sha256: string | null;
+    }>;
+    ask: string | null;
+    run: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** hub.stopped@1 */
 export interface HubStopped {
   v: 1;
@@ -5534,6 +5630,35 @@ export interface JobRecorded {
       ref: string;
       sha256?: string;
     }>;
+  };
+  evidence?: Array<string>;
+}
+
+/** landing.made@1 */
+export interface LandingMade {
+  v: 1;
+  id: string;
+  kind: "landing.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    step: "judged" | "sent_back" | "held" | "landed" | "stopped" | "joined";
+    repo: string;
+    pr: number;
+    issue: number;
+    head: string | null;
+    main: string | null;
+    commit: string | null;
+    tree: string | null;
+    claim: string | null;
+    outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "none";
+    files: Array<string>;
+    open: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -6941,6 +7066,48 @@ export interface RunFinishedV2 {
   evidence?: Array<string>;
 }
 
+/** run.finished@3 */
+export interface RunFinishedV3 {
+  v: 3;
+  id: string;
+  kind: "run.finished";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    outcome: "passed" | "failed" | "ran_nothing" | "missing" | "overran" | "stopped" | "uncounted";
+    tests_run: number;
+    passed: number;
+    runs: number;
+    evidence: Array<string>;
+    check: string;
+    assertion: string | null;
+    expected: string | null;
+    actual: string | null;
+    step: string | null;
+    points_to: string | null;
+    findings: Array<string>;
+    environment: string;
+    key?: {
+      id: string;
+      stem: string;
+      paths: Array<string>;
+      claim: string;
+      session: string;
+      base: boolean;
+      withheld: boolean;
+      plain: boolean;
+    };
+    exit?: number | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.kept@1 */
 export interface RunKept {
   v: 1;
@@ -7074,6 +7241,53 @@ export interface RunStartedV3 {
     command?: string;
     stand_ins?: Array<string>;
     withheld: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** run.started@4 */
+export interface RunStartedV4 {
+  v: 4;
+  id: string;
+  kind: "run.started";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    claim?: string;
+    commit?: string;
+    host: string;
+    needs: {
+      cores: number;
+      memory_mb: number;
+      stack_slot: number;
+      gpus: number;
+      expected_ms: number | null;
+    };
+    lane: "fast" | "slow";
+    argv: Array<string>;
+    cwd: string;
+    env: { [key: string]: string };
+    grant: {
+      read?: Array<string>;
+      write?: Array<string>;
+      hosts?: Array<string>;
+      sockets?: Array<string>;
+      listen?: Array<string>;
+      run_as_you?: boolean;
+    };
+    deadline_ms: number | null;
+    environment?: boolean;
+    command?: string;
+    stand_ins?: Array<string>;
+    withheld: Array<string>;
+    ask?: string;
   };
   evidence?: Array<string>;
 }
@@ -7481,6 +7695,25 @@ export interface SessionGone {
   evidence?: Array<string>;
 }
 
+/** session.named@1 */
+export interface SessionNamed {
+  v: 1;
+  id: string;
+  kind: "session.named";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    name: string;
+    by: "you" | "agent";
+  };
+  evidence?: Array<string>;
+}
+
 /** session.never_started@1 */
 export interface SessionNeverStarted {
   v: 1;
@@ -7696,6 +7929,25 @@ export interface SessionState {
   data: {
     state: "needs you" | "stuck" | "flagged" | "working" | "finished" | "quiet";
     cause: "ask" | "gone" | "waiting" | "stuck" | "promised" | "failed" | "quiet" | "interrupted" | "finished" | "working";
+  };
+  evidence?: Array<string>;
+}
+
+/** session.state@2 */
+export interface SessionStateV2 {
+  v: 2;
+  id: string;
+  kind: "session.state";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    state: "needs you" | "stuck" | "flagged" | "sent back" | "BLOCKED" | "INVALID" | "INCONCLUSIVE" | "stale" | "says done" | "working" | "queued" | "PASS" | "finished" | "quiet";
+    cause: "ask" | "gone" | "waiting" | "words" | "stuck" | "promised" | "failed" | "sent_back" | "blocked" | "invalid" | "inconclusive" | "stale" | "says_done" | "working" | "queued" | "pass" | "interrupted" | "finished" | "quiet";
   };
   evidence?: Array<string>;
 }

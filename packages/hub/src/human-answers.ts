@@ -10,6 +10,7 @@ import { type RecordStore } from '@deepbuild/record';
 import { type Checkouts } from '@deepbuild/gate';
 
 import { listRows } from './rows.js';
+import type { HubCanvas } from './hub-canvas.js';
 
 import { dropKept, syncRejected } from './memory.js';
 import { AskTasks } from './ask-tasks.js';
@@ -43,6 +44,7 @@ readonly root: Root;
 readonly checkouts: Checkouts;
 readonly runs: Runs;
 readonly tasks: AskTasks;
+readonly canvasSide: Pick<HubCanvas, "explainsOf">;
  };
  events: Pick<HubEvents, "connection" | "appendCore" | "appendReading" | "append">;
 
@@ -116,7 +118,10 @@ export class HumanAnswers {
     const url = this.options.settings.plant === 'link-from-agent-url' ? /https?:\/\/\S+/.exec(question)?.[0] : undefined;
     // The card's revision, which an answer from this copy names (#1580).
     const revision = (await this.cards(handle)).get(handle)?.revision ?? 1;
-    return { ...card, question, revision, ...(opens ? { opens } : {}), ...(url ? { link: url } : {}) };
+    // #504: what the agent drew on the ask shows beside it when you open it, as an explanation; never an ask itself.
+    // `explains` is the first blind draft's name for the same list (tests/acceptance/504/ac2-explains.test.ts).
+    const beside = await this.options.services.canvasSide.explainsOf(handle);
+    return { ...card, question, revision, ...(opens ? { opens } : {}), ...(url ? { link: url } : {}), beside, explains: beside };
   }
 
   /**

@@ -1,0 +1,29 @@
+At base 7c5e1cc8 (an arm64 Mac, 18 cores), on 2026-11-10, the suite's test files were not run: each builds deep-show with cargo, and the one-minute load was 284, so this job built no Rust. A debug build of the base's own deep-show (`cargo build --locked --bin deep-show --no-default-features --features full`, nothing changed) was made outside this folder. A scratch vitest file (not kept) put every fixture document of helpers.ts through that binary's `run`, with the suite's own scenario and calls. Lines marked "observed" are what that binary answered; lines marked "read" come from the base's code.
+
+Every test fails at an assertion that names the missing surface or behaviour. None fails in the test file itself: the judges' self-checks, which run first and need no binary, pass.
+
+- ac1-prune-same-points.test.ts
+  - Both tests fail at "the garden (instancers fed by from: distribute): the check raises no error". Observed: the show is refused (`outcome: "refused"`) with two errors, `{check: "document.validate", code: "unknown_field", path: "items/loose/params/from", what: "instance@1.0 does not define `from`"}` and the same at `items/shrubs/params/from`. The reversed document is refused the same way (observed).
+  - Past that, observed: the `geometry` call answers `{code: "no_revision"}`; and on a document that is presented, `geometry` of an instancer answers `{code: "ref_unresolved", path: "items/<instancer>"}`, so the test would fail at "the geometry call answers for the instancer shrubs".
+  - The second test never reaches its BLOCKED leg at the base: it fails first, as above.
+
+- ac2-rest-on.test.ts
+  - The first test fails at "rest_on (on: table) puts the vase on the table's true shape, within 2 mm", with "the vase at y 1.2 is 0.3534830913120639 m from the table's true shape: a gap past 0.002 m". Observed: the document is presented with no issue (the base's rest_on ignores `on`), `deep_query` of items/vase/at/pos answers `[-0.3, 1.2, 0]`, the place as written, and the verdict's row is FAIL with `geometry.floating` naming `vase`. Read: the base's rest_on rests an item on a ground plane, `{ground, bottom, offset, max_drop}` (crates/deep-canvas-motion/src/constraint.rs).
+  - The second test fails at "the vase rests on the table once the revision is checked", for the same reason. Behind it, observed: the six frames' `ran` are 0, 1, 1, 1, 1, 1, so "nothing per frame" fails too: the base's constraint runs in every frame. The same scene with the constraint left out has `ran` 0 in every frame (observed), so a correct program can meet the assertion.
+
+- ac3-poisson.test.ts
+  - The first two tests fail at "the stones on the plate (an instancer fed by from: distribute): the check raises no error" and "the stones with density 0 over the left half (…): the check raises no error". Observed: each show is refused with `unknown_field` at `items/stones/params/from`, as above.
+  - The third test fails at "deep-show run refused the scenario (its planted program is distribute_stops_after_10_points)". Observed: the answer is `{"ok": false, "code": "bad_input"}`; the same scenario without `planted` is `ok: true`. The base has no planted program of that name.
+
+That no refusal is unrelated to the criteria was checked this way (observed): each scatter document with its `from` replaced by three written rows (`ids`, `pos`) is presented at the base with no issue, in both sibling orders, and the `geometry` call reads the plate as built: bounds (−5, 0, −5) to (5, 0, 5) for the 10 × 10 m plate, and a 1 × 1 m and a 4 × 4 m plate moved to their centres by `at.pos`. So the plate, the hidden prototypes, the instancer and the agent's form are all accepted, and `from` is the one thing refused. The density expression can't be checked at the base, since `from` is refused whole; `max`, `sign` and the swizzle `.x` are in the base's function list (read: crates/deep-canvas/src/expr.rs).
+
+The base's geometry audit was checked on criterion 2's fixture with the vase written in place and no constraint (observed): PASS with the vase's centre at y 0.823831; FAIL `geometry.floating` at y 0.8265 and at 1.1287 (the bounds-on-bounds place); FAIL `geometry.overlap` at y 0.8205 ("table passes 0.0031 m into vase") and at 0.817414 (the lowest-point place, "0.0060 m"). So a correct rest passes the audit and each wrong program in the README fails it.
+
+Type-check: `npx tsc -p tests/acceptance/2013/tsconfig.json` exits 0, and so does the oracle folder's (the repo's pinned TypeScript and vitest 5.0.5, Node 24.22.0).
+
+The scratch file also ran the judges and computed the fixtures' numbers:
+- The 0.5 m lattice over the plate has 441 points, least distance 0.5 m, and no empty disc. With its 12 points within 1.0 m of (2.25, 2.25) removed, the judge finds the disc at (2.25, 2.25), its nearest point 1.0607 m away. Ten points in a row 0.5 m apart pass the distance rule and leave an empty disc. A triangular lattice at 0.5 m (492 points) leaves none.
+- Two 1.2 m boxes 0.5 m apart pass 0.7 m into each other; two 0.3 m boxes 0.5 m apart, or 0.36 m apart along both x and z, don't touch.
+- The vase rests with its centre at y 0.8238311512796284 (gap 0). As written, at y 1.2, it is 0.3535 m from the table; on the ground plane, 0.5241 m; on the table's bounds (top at y 1.0287044), 0.2865 m; with its lowest point on the surface under its centre (y 0.7174134), it passes 6.03 mm into the table.
+
+One leftover is still in this folder: `tests/acceptance/2013/scratch-tmp/` (the scratch file, emptied to a stub that fails as BLOCKED, and vitest's cache). The session's shell refused the delete. It isn't part of the suite; remove it before the suite runs: `rm -r tests/acceptance/2013/scratch-tmp`.

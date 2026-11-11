@@ -1,0 +1,28 @@
+{
+  "id": "costly.unit",
+  "version": "1.0",
+  "title": "Unit",
+  "license": "MIT",
+  "author": "the #202 acceptance suite",
+  "description": "One test.weight@1 item, which the test canvas module test.weight costs at 0.20 ms of CPU a frame.",
+  "inputs": {},
+  "steps": {
+    "weight": {
+      "op": "item",
+      "kind": "test.weight@1",
+      "params": {},
+      "at": {
+        "pos": [
+          10,
+          10,
+          0
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "parts": [
+      "weight"
+    ]
+  }
+}

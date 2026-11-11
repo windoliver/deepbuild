@@ -75,6 +75,58 @@ export class HubCanvas {
     return (this.canvasCore ??= new Canvas(this.options.root.evidence));
   }
 
+  /** The documents the hub minted for a claim or an ask (`handle`), as the world file names them (`on`, or `for`). */
+  private mintedOn(handle: string): string[] {
+    const docs = this.worldFile.read().docs;
+    return Object.entries(isObj(docs) ? docs : {}).filter(([, d]) => isObj(d) && (d.on === handle || d.for === handle)).map(([id]) => id);
+  }
+
+  /**
+   * #504's planted hubs: one that puts an agent's figure or film in Needs you, raising an ask for you that names it,
+   * and one that takes it as proof, recording a verdict on the claim it was shown on.
+   */
+  private async plantedFigure(doc: string, rev: number, hash: string): Promise<void> {
+    const plant = this.options.plant;
+    if (plant !== 'figure-in-needs-you' && plant !== 'figure-feeds-verdict') return;
+    const docs = this.worldFile.read().docs;
+    const spec = isObj(docs) ? docs[doc] : undefined;
+    const on = isObj(spec) ? String(spec.on ?? spec.for ?? '') : '';
+    if (!on) return;
+    const ts = this.options.now();
+    if (plant === 'figure-in-needs-you') {
+      const [asked] = (await this.options.record().raw(`SELECT v, data FROM events WHERE kind = 'ask.created' ORDER BY log_pos DESC LIMIT 1`)) as { v: number; data: string }[];
+      if (!asked) return;
+      const data = { ...(JSON.parse(asked.data) as Obj), question: `Look at doc:${doc} before it goes on` };
+      await this.options.events.append(this.options.events.connection('core'), { v: Number(asked.v), id: ulid(ts), kind: 'ask.created', ts, data: data as JsonValue });
+    } else if (on.startsWith('claim:')) {
+      const id = ulid(ts);
+      const commit = '0'.repeat(40);
+      await this.options.events.append(this.options.events.connection('core'), {
+        v: 1, id, kind: 'verdict.made', ts, subject: on,
+        data: { outcome: 'PASS', verdict: `verdict:${id}`, claim: on, reasons: [], requirements: [], smallest: null, points_to: null, commit,
+          key: { commit, doc_revisions: [`doc:${doc}@${rev}:${hash}`], check_digests: [], state_digests: [], environment: 'test', tools: [] } } as JsonValue,
+      });
+    }
+  }
+
+  /**
+   * The documents an agent drew through deep_show on those the hub minted for a claim or an ask (`handle`), each at
+   * its latest revision (#504): a figure or a film explains and never proves, so this list sits in a receipt's
+   * explains-never-proves section and beside an opened ask, and never in Needs you or a verdict.
+   */
+  async explainsOf(handle: string): Promise<{ doc: string; rev: number; hash: string }[]> {
+    const minted = new Set(this.mintedOn(handle).map((id) => `doc:${id}`));
+    if (!minted.size) return [];
+    const rows = (await this.options.record().raw(`SELECT data FROM events WHERE kind = 'doc.patched' ORDER BY log_pos`)) as { data: string | Obj }[];
+    const latest = new Map<string, { doc: string; rev: number; hash: string }>();
+    for (const { data } of rows) {
+      const d = (typeof data === 'string' ? JSON.parse(data) : data) as { doc?: string; rev?: number; hash?: string; writer?: string };
+      if (d.writer !== 'agent' || typeof d.doc !== 'string' || !minted.has(d.doc)) continue;
+      latest.set(d.doc, { doc: d.doc.slice(4), rev: Number(d.rev), hash: String(d.hash) });
+    }
+    return [...latest.values()];
+  }
+
   async canvasCall(call: Obj): Promise<Obj> {
     return (await this.canvas().call(await this.canvasWorld(), call)).reply;
   }
@@ -240,6 +292,7 @@ export class HubCanvas {
       } as JsonValue,
     });
     this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
+    if (writer.kind === 'agent') await this.plantedFigure(String(p.doc), Number(p.rev), hash);
     await this.staleOnRevision(String(p.doc), { rev: Number(p.rev), hash });
   }
 

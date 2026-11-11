@@ -1,7 +1,7 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
 import type { StopJudgingPort, SessionMemoryPort, SessionStatePort, McpOperationsPort, HubControlPort } from './hub-ports.js';
 import { execFile } from 'node:child_process';
-import { constants } from 'node:fs';
+import { constants, realpathSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 
 import { subjectKey, type Asks, type Delivery, type Resolver } from '@deepbuild/asks';
@@ -151,6 +151,16 @@ export class AnswerDelivery {
 
   /** Held stops, each woken when an answer for its session is ready to deliver. */
   readonly waiting = new Map<string, Set<() => void>>();
+
+  /** A change that no longer merges goes back to its own attempt (#1331): each session that worked its issue hears it, and no person is asked. */
+  async landingSendBack(r: { checkout: string; issue: number; pr: number; files: string[]; text: string }): Promise<void> {
+    const rows = (await this.options.services.record.raw(`SELECT DISTINCT json_extract(data, '$.session') AS session FROM events WHERE kind = 'start.session' AND json_extract(data, '$.run') IN
+      (SELECT subject FROM events WHERE kind = 'start.started' AND json_extract(data, '$.issue') = ? AND json_extract(data, '$.repo') = ?)`, [r.issue, realpathSync(r.checkout)])) as { session: string | null }[];
+    for (const { session } of rows) {
+      const live = session ? this.options.state().live.get(session) : undefined;
+      if (session && live) { this.later(session, live.cwd, r.text); this.offer(session); }
+    }
+  }
 
   /** Words for an agent whose hooks take no context: carried by its next prompt. */
   later(session: string, cwd: string, text: string): void {

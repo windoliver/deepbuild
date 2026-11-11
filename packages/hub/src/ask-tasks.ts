@@ -124,7 +124,7 @@ const issueNumber = (source_id: string): number | undefined => { const m = /(\d+
 
 // ---- Definitions handed to the kernel, and the work source's readings.
 
-interface Requirement { expected_ms?: number; deadline_ms?: number; runs?: number; held_out?: HeldOut[]; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind; timing?: boolean }
+interface Requirement { settled_by?: typeof BUDGET_WINDOW; expected_ms?: number; deadline_ms?: number; runs?: number; held_out?: HeldOut[]; id: string; text: string; source_line: string; refuted_by: string; check: string | null; check_sha256: string | null; on_base: string; asserts: string[]; depth: string; oracle: string; near_misses: string[]; author: Author; surface: Surface | null; stand_in?: { surface: Surface; hash: string }; references?: { path: string; sha256: string }[]; command?: string; criterion?: string; targets?: string[]; paid?: PaidKind; timing?: boolean }
 interface Author { handle: string; role: string; automated?: boolean }
 /** A held-out variant of a check (#1018): the files written over the claim's checkout for a run of its own, kept by digest. */
 interface HeldOut { files: Record<string, string> }
@@ -154,6 +154,8 @@ interface Early { claim: string; session: string; agent: string; cwd: string }
 /** The roles whose text can remove or waive a requirement; an automated account's never does, whatever its membership. */
 const TRUSTED = new Set(['you', 'owner', 'collaborator']);
 const trusted = (a: Author): boolean => TRUSTED.has(a.role) && a.automated !== true;
+/** What alone settles a requirement no check of a claim can (#1331): the scheduled budget window, on a reference Mac. */
+export const BUDGET_WINDOW = 'budget-window';
 /** The kinds of spend a check can cost (#325). */
 const PAID = new Set<string>(['live call', 'hosted browser run', 'model job']);
 /** Where each definition's drafted checks are kept, behind the `.deepbuild/` guard. */
@@ -410,6 +412,8 @@ export class AskTasks {
         ...(typeof r.runs === 'number' ? { runs: r.runs } : {}), ...(Array.isArray(r.held_out) ? { held_out: await this.heldOut(r.held_out as Obj[], String(r.id)) } : {}),
         // A check that costs money says what it spends on (#325), so the lock prices it.
         ...(check && PAID.has(String(r.paid)) ? { paid: r.paid as PaidKind } : {}),
+        // One only the scheduled budget window settles (#1331) has no check of its own, and never holds a landing.
+        ...(!check && r.settled_by === BUDGET_WINDOW ? { settled_by: BUDGET_WINDOW } : {}),
       });
     }
     // A waiver counts only from you or a repo collaborator; any other's leaves the requirement in, and makes the
@@ -478,7 +482,7 @@ export class AskTasks {
     let fresh = true;
     try {
       await this.o.append(this.o.connection(session, agent), {
-        v: 9, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
+        v: 10, id: derivedId(at, `${definition.task_ref}:${handed}:lock`), kind: 'definition.locked', ts,
         data: { definition: handed, ...definition, hash: this.hashOf(definition) } as unknown as JsonValue,
       });
     } catch (error) {
@@ -638,6 +642,28 @@ export class AskTasks {
       }
     }
     return made;
+  }
+  /**
+   * A change's claim on its merge with the default branch's head (#1331): the issue's task, opened once from its
+   * reading and locked from its handed definition or its criteria, claimed on `cwd`'s HEAD, the merge commit, by
+   * `session`, a session of the lander's own for this judgement. Answers the claim, or undefined when nothing locked.
+   */
+  async landing(r: { session: string; cwd: string; item: WorkItem; at: number }): Promise<{ claim: string; task: string } | undefined> {
+    const task_ref = `task:${letters(r.item.source_id)}`;
+    const thread = `land:${r.item.source_id}`;
+    if (!(await this.o.raw(`SELECT 1 FROM tasks WHERE task_ref = ? LIMIT 1`, [task_ref])).length) {
+      await this.opened({ session: r.session, agent: 'claude-code', cwd: r.cwd, thread, task_ref, text: `Land ${r.item.source_id}`, prompt: `land:${letters(r.item.source_id)}`, at: r.at, item: r.item });
+      await this.locking.get(r.session);
+    }
+    const [locked] = (await this.o.raw(`SELECT 1 FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [task_ref])) as unknown[];
+    if (!locked) return undefined;
+    return { claim: await this.judge(r.session, 'claude-code', r.cwd, task_ref), task: task_ref };
+  }
+  /** The requirements of a task's locked definition: each by its handle, its text and what alone settles it (#1331). */
+  async lockedRequirements(task_ref: string): Promise<{ req: string; text: string; settled_by: string | null }[]> {
+    const [row] = (await this.o.raw(`SELECT requirements FROM definitions WHERE task_ref = ? AND state = 'locked' LIMIT 1`, [task_ref])) as { requirements: string }[];
+    const stored = row ? JSON.parse(row.requirements) as Requirement[] : [];
+    return stored.map((r, i) => ({ req: `req:${letters(task_ref)}#${/^R[1-9][0-9]*$/.test(r.id) ? r.id : `R${i + 1}`}`, text: r.text, settled_by: r.settled_by ?? null }));
   }
   /**
    * Whether a workspace task's verdict stands (#67). Another task's stop doesn't claim it again: a workspace runs again

@@ -25,6 +25,7 @@ import { Forge, parsePrUrl } from './forge.js';
 
 import { LogReads } from './log-reads.js';
 import type { Libraries } from './libraries.js';
+import type { HubCanvas } from './hub-canvas.js';
 
 import { copySynced, synced, type Durable } from './vfs.js';
 import { refuse, Refused, refusal, ulid, type CoreOptions } from './wire.js';
@@ -43,6 +44,7 @@ readonly log: LogReads;
 readonly now: () => number;
 readonly durable: Durable;
 readonly libraries: Libraries | undefined;
+readonly canvasSide: Pick<HubCanvas, "explainsOf">;
  };
  events: Pick<HubEvents, "appendCore" | "append" | "connection">;
 kernel: Pick<HubRuntime, "blocked" | "jobs">;
@@ -176,7 +178,10 @@ export class HubReadings {
       for (const item of (await this.options.services.record.raw(`SELECT text FROM open_items WHERE task_ref = ? AND closed IS NULL ORDER BY opened`, [state.task])) as { text: string }[]) {
         open_items.push(this.options.settings.plant === 'open-item-no-sentence' ? { text: item.text } : { text: item.text, sentence: await say(openItemSentence(item.text)) });
       }
-      return { change: { claim, sentence, runs, verdicts, open_items, line, second, checks: state.checks, asks, produced: { pr: url ?? null, files, pages: [] }, next_issue } };
+      // #504: the figures and films the agent drew on the claim explain the change and never prove it: listed after the
+      // state is judged, and read by nothing that judges.
+      const explains = await this.options.services.canvasSide.explainsOf(`claim:${id}`);
+      return { change: { claim, sentence, runs, verdicts, open_items, line, second, checks: state.checks, asks, produced: { pr: url ?? null, files, pages: [] }, next_issue, explains } };
     });
   }
 

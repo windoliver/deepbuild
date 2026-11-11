@@ -19,6 +19,7 @@ mod familiar;
 mod evidence;
 mod export;
 mod film;
+mod film_audit;
 mod film_layout;
 mod geometry_audit;
 mod film_viewer;
@@ -39,7 +40,9 @@ mod mixdown;
 mod modes;
 mod narration;
 mod packs;
+mod physics;
 mod placement;
+mod played;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod query;
@@ -368,6 +371,7 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
             None => None,
             Some(p) => Some(p.as_str()?.to_string()),
         },
+        track: optional(c.get("track"), |t| t.as_array().cloned())?.unwrap_or_default(),
         t: match c.get("t") {
             None => 0,
             Some(t) => flicks(t.as_str()?)?,
@@ -672,10 +676,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 pixels: flag("pixels")?,
                 film: flag("film")?,
                 size: px_size(c.get("size"), |_| true)?,
-                arrays: optional(c.get("arrays"), |a| {
-                    a.as_array()?.iter().map(|n| Some(n.as_str()?.to_string())).collect()
-                })?
-                .unwrap_or_default(),
+                arrays: optional(c.get("arrays"), query::names)?.unwrap_or_default(),
+                paths: optional(c.get("paths"), query::names)?.unwrap_or_default(),
+                track: optional(c.get("track"), |t| t.as_array().cloned())?,
             })));
         }
         "frames" => {
@@ -997,6 +1000,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let docs = entries(input, "docs", |d| {
         Some(d.get("panel")?.as_str()?.to_string())
     })?;
+    let docs_for = entries(input, "docs", |d| match d.get("for") {
+        None => Some(None),
+        Some(f) => Some(Some(f.as_str()?.to_string())),
+    })?
+    .into_iter()
+    .filter_map(|(d, f)| Some((d, f?)))
+    .collect();
     let seeds = entries(input, "docs", |d| Some(d.get("document").cloned()))?
         .into_iter()
         .filter_map(|(id, seed)| Some((id, seed?)))
@@ -1116,6 +1126,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             session,
             deliverables: strings(c.get("deliverables"))?,
             requirements,
+            brief: match c.get("brief") {
+                None => None,
+                Some(b) => Some(b.as_object().map(|_| b.clone())?),
+            },
         })
     })?;
     let size_field = |k: &str| match input.get(k) {
@@ -1195,7 +1209,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #1732's wrong programs live in the motion module's arrangement solve.
                 || deep_canvas_motion::arrange::PLANTED.contains(p)
                 || *p == deep_canvas_motion::module::UNDECLARED_KIND_ACCEPTED
+                || deep_canvas_motion::module::PLANTED.contains(p)
                 || deep_canvas_marks::arrays::PLANTED.contains(p)
+                // #1967's wrong programs live in the cells module's playback and conversion.
+                || deep_canvas_cells::recording::PLANTED.contains(p)
         })
         .map(str::to_string);
     // #433's wrong programs are twins of the familiar@1 pack.
@@ -1225,6 +1242,15 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "reply_without_digest" => Planted::ReplyWithoutDigest,
                 "reads_wasm_bytes" => Planted::ReadsWasmBytes,
                 "start_on_at_first_frame" => Planted::StartOnAtFirstFrame,
+                "board_runs_program_per_frame" => Planted::BoardRunsProgramPerFrame,
+                "figure_feeds_verdict" => Planted::FigureFeedsVerdict,
+                "reload_rebuilds_every_part" => Planted::ReloadRebuildsEveryPart,
+                "sweep_poses_assemblies_at_rest" => Planted::SweepPosesAssembliesAtRest,
+                "pick_selects_item" => Planted::PickSelectsItem,
+                "variant_pick_writes_revision" => Planted::VariantPickWritesRevision,
+                "variant_export_final_choice" => Planted::VariantExportFinalChoice,
+                "readout_reads_defaults" => Planted::ReadoutReadsDefaults,
+                "plugin_code_per_frame" => Planted::PluginCodePerFrame,
                 "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
                 "diffs_whole_document" => Planted::DiffsWholeDocument,
                 "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
@@ -1273,12 +1299,26 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
                 "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
                 "layout_text_by_kind" => Planted::LayoutTextByKind,
+                "verdict_counts_new_issues" => Planted::VerdictCountsNewIssues,
+                "flicker_counts_single_changes" => Planted::FlickerCountsSingleChanges,
+                "flicker_whole_view_mean" => Planted::FlickerWholeViewMean,
+                "cites_empty_passes" => Planted::CitesEmptyPasses,
                 "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
                 "each_seeds_by_element_count" => Planted::EachSeedsByElementCount,
                 "each_face_per_triangle" => Planted::EachFacePerTriangle,
                 "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
+                "orphan_load_drops_broken_out" => Planted::OrphanLoadDropsBrokenOut,
+                "orphan_load_hands_id_to_expansion" => Planted::OrphanLoadHandsIdToExpansion,
+                "expansion_cache_without_recipe_version" => {
+                    Planted::ExpansionCacheWithoutRecipeVersion
+                }
                 "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
                 "packs_keyed_by_name" => Planted::PacksKeyedByName,
+                "counts_agent_rule_as_cover" => Planted::OwnRuleCountsAsCover,
+                "recipe_rules_twice" => Planted::RulesEvaluatedTwice,
+                "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
+                "expander_hash_map_order" => Planted::ExpandsInHashOrder,
+                "migration_stops_at_first_fault" => Planted::MigrationFirstFault,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
@@ -1460,6 +1500,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             })
             .collect::<Option<_>>()?,
     };
+    let notes = packs::notes(input.get("notes"))?;
     // #200: the hub's installed slot fills, each `{slot, fill, kit}`.
     let installed = match input.get("installed") {
         None => Vec::new(),
@@ -1506,6 +1547,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     Some(Scenario {
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
+        notes,
         installed,
         plugin_entries,
         gallery: optional(input.get("gallery"), |g| Some(PathBuf::from(g.as_str()?)))?,
@@ -1514,6 +1556,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         processes,
         panels,
         docs,
+        docs_for,
         record,
         runs,
         claims,
@@ -1842,9 +1885,8 @@ const TEST_BUILD: bool = cfg!(any(
 ));
 
 /// The canvas modules a build of `set` holds (Registry and seal: `build_set`): `core` is text and
-/// look, which every set holds; `r1` adds marks2d, data, graph, record, sheet and motion; `r2`
-/// adds scene3d (#378) and effects (#380); and, under its `test-*` features, the acceptance
-/// READMEs' test canvas modules, with #388's builds that leave text or look out.
+/// look; `r1` adds marks2d, data, graph, record, sheet and motion; `r2` scene3d (#378) and effects
+/// (#380); and, under `test-*` features, the READMEs' test modules and #388's builds without one.
 fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
@@ -1873,7 +1915,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             },
             deep_canvas_record::module::module(),
             deep_canvas_sheet::module::module(),
-            deep_canvas_motion::module::module(),
+            physics::motion(),
         ]);
     }
     if set >= BuildSet::R2 {
@@ -1920,6 +1962,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
         });
         // Issue #308: controls and the input track's handling, with control@1; #535: logic's arrays.
         out.extend([deep_canvas_input::module::module(), deep_logic::module()]);
+        out.push(physics::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest

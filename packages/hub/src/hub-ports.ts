@@ -240,6 +240,8 @@ export interface SessionStatePort {
   mcpHello(parent: { pid: number; start: string } | undefined, paseo?: string): Promise<string | null>;
   sessionRows(seen?: string): Promise<Record<string, unknown>[]>;
   rowsSeen(role: string, detail: boolean): Promise<Obj>;
+  renameSession(params: Obj): Promise<Obj>;
+  whySeen(role: string, params: Obj): Promise<Obj>;
   sessionWindow(params: Obj): void;
   statusSeen(role: string): Promise<StatusRow[]>;
   seenBy(role: string): string;

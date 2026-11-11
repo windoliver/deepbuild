@@ -21,6 +21,7 @@ import { type RecordStore } from '@deepbuild/record';
 import { type Checkouts } from '@deepbuild/gate';
 
 import { Acceptance } from './acceptance.js';
+import type { Landing } from './landing.js';
 import { type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 
 import { ClaudeSettings } from './claude-settings.js';
@@ -89,6 +90,7 @@ export interface HubControlOptions {
     readonly record: RecordStore;
     readonly now: () => number;
     readonly acceptance: Acceptance;
+    readonly landing: Landing;
     readonly runner: Runner;
     readonly checkKinds: CheckKinds;
     readonly canvasSide: HubCanvas;
@@ -110,7 +112,7 @@ export interface HubControlOptions {
   };
   delivery: () => Pick<AnswerDeliveryPort, "note" | "openOffers" | "placed" | "saveOffered" | "sendBack" | "stopWaiting" | "switches" | "waitAnswer">;
   judging: () => Pick<StopJudgingPort, "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
-  state: () => Pick<SessionStatePort, "agentAbove" | "entered" | "liveOf" | "notAnAgent" | "rowsSeen" | "seeRow" | "seenBy" | "sessionRows" | "sessionWindow" | "sessions" | "startOf" | "states" | "statesSettled" | "statusSeen">;
+  state: () => Pick<SessionStatePort, "agentAbove" | "entered" | "liveOf" | "notAnAgent" | "renameSession" | "whySeen" | "rowsSeen" | "seeRow" | "seenBy" | "sessionRows" | "sessionWindow" | "sessions" | "startOf" | "states" | "statesSettled" | "statusSeen">;
   memory: () => Pick<SessionMemoryPort, "lessons" | "memoryAct" | "sessionRules" | "syncRules" | "syncStanding">;
   mcp: () => Pick<McpOperationsPort, "checksOf">;
   transcripts: () => Pick<TranscriptsPort, "backfill">;
@@ -209,6 +211,11 @@ export class HubControl {
       // The app's action table (#1462): Later on an ask, and Pause on a session's row.
       case 'ask.later': return this.human.putOff(params);
       case 'session.pause': return this.human.pauseSession(params);
+      case 'session.rename': return this.options.state().renameSession(params);
+      // Why a session reads as it does (#2018), behind the state pass under way, as rows.read is.
+      case 'row.why':
+        this.options.schedule.replayLate();
+        return (this.options.schedule.replaying ?? Promise.resolve()).then(() => this.options.schedule.queue(async () => undefined)).then(() => this.options.state().statesSettled()).then(() => this.options.services.log.reflecting(() => this.options.state().whySeen(context.role, params)));
       // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
       case 'status.read':
         this.options.schedule.replayLate();
@@ -229,6 +236,10 @@ export class HubControl {
       case 'run.output': return this.options.services.runs.output(params);
       case 'host.list': return { hosts: this.options.services.hosts.names().map((name) => ({ name })) };
       case 'host.facts': return this.options.services.hosts.facts(params.host, params.refresh === true);
+      // A root plan you said yes to, for `deep host run`, and what its run left on the host (#1945).
+      case 'host.plan': return this.options.services.hosts.plan(params.ask);
+      case 'host.ran': return this.options.services.hosts.ran(params.ask, params.run);
+      case 'host.changes': return this.options.services.hosts.changes(params.host);
       case 'start.approve': return this.options.services.sessionStarts.approve(params, context);
       case 'start.session':
         if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
@@ -268,6 +279,10 @@ export class HubControl {
       case 'acceptance.status': return this.options.services.acceptance.status(params);
       case 'acceptance.dispute': return this.options.services.acceptance.dispute(params);
       case 'acceptance.ended': return this.options.services.acceptance.ended(params).then(() => ({ ended: true }));
+      // Landing in turn (#1331): `deep land judge`, `deep land` and `deep work --once`, from your own terminal.
+      case 'land.judge': return this.work.workspaceCall(() => this.options.services.landing.judgeAll(String(params.repo ?? '')));
+      case 'land.round': return this.work.workspaceCall(() => this.options.services.landing.land(String(params.repo ?? '')));
+      case 'work.once': return this.work.workspaceCall(() => this.options.services.landing.workOnce(String(params.repo ?? ''), Array.isArray(params.issues) ? params.issues.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : []));
       case 'job.submit': return this.options.services.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.options.services.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.options.services.runner.list() };

@@ -11,7 +11,7 @@ import type { Supervisor } from '@deepbuild/supervisor';
 import type { Entry, Ext, Manifest } from './host-types.js';
 import { CORE, HostFiles, message, within } from './host-shared.js';
 import { NODE_HOME, NODE_LIBS } from './node-runtime.js';
-import { buildOf, counterOf, kindOf, paramsOf, toolOf, urlOf, type HeldJobs, type JobCall, type JobCounter, type JobKind, type JobTool, type Weight } from './job-kinds.js';
+import { buildOf, counterOf, encodedInputs, fixtureInputs, kindOf, paramsOf, toolOf, urlOf, type HeldJobs, type JobBytes, type JobCall, type JobCounter, type JobKind, type JobTool, type Weight } from './job-kinds.js';
 const PAGE = 1000;
 interface JobsOptions {
   record: RecordStore; now(): number; runner: Runner | undefined;
@@ -121,7 +121,7 @@ export class Jobs {
 
 /** How long one run of a job tool may take (#1922), and the most it may write on stdout. */
 const JOB_MS = 120_000;
-const JOB_OUT = 16 * 1024 * 1024;
+const JOB_OUT = 64 * 1024 * 1024; // #154: a 60 s stereo 24-bit stem, as base64, passes 16 MiB
 /** The longest stderr line read for a counter (#1925); a counter's line is far shorter. */
 const COUNTER_LINE = 4096;
 /** A tool's answer, `{outputs}` with each output's bytes in base64, as bytes by name. */
@@ -160,7 +160,7 @@ export class JobTools {
     return paramsOf(held.descriptor.schema.params, value);
   }
 
-  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
+  async runJobTool(tool: string, kind: string, params: Record<string, JsonValue>, inputs: JobBytes, call?: Omit<JobCall, 'provider'>, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
     const { folder, held } = this.jobTool(tool, kind);
     if (held.provider && !call) throw Error(`${tool} calls ${held.provider}, so its run needs its submission key and call journal`);
     return this.runTool(folder, held.descriptor, params, inputs, held.provider && call ? { provider: held.provider, ...call } : undefined, stop, watch);
@@ -209,8 +209,8 @@ export class JobTools {
    * that calls a provider is also given `call` (#1923), and may reach that one host and write its call journal's folder.
    * Its counters come as lines on stderr while it runs (`counterOf`), each handed to `watch` (#1925); its other text is its own.
    */
-  private async runTool(folder: string, tool: JobTool, params: Record<string, JsonValue>, inputs: Record<string, Uint8Array>, call?: JobCall, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
-    const input = Buffer.from(JSON.stringify({ params, inputs: Object.fromEntries(Object.entries(inputs).map(([n, b]) => [n, Buffer.from(b).toString('base64')])), ...(call ? { call } : {}) }));
+  private async runTool(folder: string, tool: JobTool, params: Record<string, JsonValue>, inputs: JobBytes, call?: JobCall, stop?: AbortSignal, watch?: (counter: JobCounter) => void): Promise<Record<string, Uint8Array>> {
+    const input = Buffer.from(JSON.stringify({ params, inputs: encodedInputs(inputs), ...(call ? { call } : {}) }));
     // A tool off the machine (#1924): one POST of the same object to its URL, answered the same way.
     if ('url' in tool.run) return outputsOf(tool.tool, await this.hostCall(tool.tool, new URL(tool.run.url), 'POST', input.toString('utf8')));
     const { supervisor } = this.options;
@@ -279,7 +279,7 @@ export class JobTools {
         const scratch = provider ? join(this.options.home, 'jobs', 'qualify', ulid(this.options.now())) : undefined;
         try {
           const call = provider && scratch ? { provider, key: sha256Hex(canonicalize({ qualification: f.name, kind, tool })), journal: join(scratch, 'journal.jsonl') } : undefined;
-          wrote = await this.runTool(entry.folder, descriptor, paramsOf(held.schema.params, f.params), Object.fromEntries(Object.entries(f.inputs).map(([n, t]) => [n, Buffer.from(t, 'utf8')])), call);
+          wrote = await this.runTool(entry.folder, descriptor, paramsOf(held.schema.params, f.params), fixtureInputs(held.schema.inputs, f.inputs), call);
         } catch (e) {
           return refuse(`${entry.id}'s tool ${tool} fails ${kind}'s qualification at the fixture ${f.name}: ${message(e)}`);
         } finally {

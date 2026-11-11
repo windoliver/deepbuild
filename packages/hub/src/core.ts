@@ -20,6 +20,7 @@ import { openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/ga
 
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
+import { Landing } from './landing.js';
 import { openRunner, type JobRecord, type JobSpec, type Runner } from '@deepbuild/runner';
 import { openSupervisor, openUnder, type Host, type Supervisor } from '@deepbuild/supervisor';
 
@@ -159,14 +160,14 @@ export class Core {
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readstopping = () => this.stopping;
-    this.mcp = new McpOperations({ settings: this.options, services: lazyServices({ sessionStarts: () => this.sessionStarts, canvasSide: () => this.canvasSide, replicas: () => this.replicas, extensions: () => this.extensions, holds: () => this.holds, record: () => this.record, numbers: () => this.numbers, root: () => this.root, asks: () => this.asks, now: () => this.now, raw: () => this.raw, runs: () => this.runs, stacks: () => this.stacks }), control: () => this.control, state: () => this.state, judging: () => this.judging, delivery: () => this.delivery, events: { connection: (writer, extra) => this.connection(writer, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get blocked() { return readblocked(); }, get stopping() { return readstopping(); } }, schedule: { get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting), askingNow: () => this.askingNow(), wakeable: (waits, key, ms) => this.wakeable(waits, key, ms) } });
+    this.mcp = new McpOperations({ settings: this.options, services: lazyServices({ sessionStarts: () => this.sessionStarts, hosts: () => this.hosts, canvasSide: () => this.canvasSide, replicas: () => this.replicas, extensions: () => this.extensions, holds: () => this.holds, record: () => this.record, numbers: () => this.numbers, root: () => this.root, asks: () => this.asks, now: () => this.now, raw: () => this.raw, runs: () => this.runs, stacks: () => this.stacks }), control: () => this.control, state: () => this.state, judging: () => this.judging, delivery: () => this.delivery, events: { connection: (writer, extra) => this.connection(writer, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get blocked() { return readblocked(); }, get stopping() { return readstopping(); } }, schedule: { get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting), askingNow: () => this.askingNow(), wakeable: (waits, key, ms) => this.wakeable(waits, key, ms) } });
   }
   private wireHubControl(): void {
     const readready = () => this.ready;
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readjobs = () => this.jobs;
-    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
+    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, landing: () => this.landing, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
   }
 
   private transcriptReader!: TranscriptReader;
@@ -234,6 +235,8 @@ export class Core {
   private runner!: Runner;
   /** The blind acceptance job (#1328): the runner's one kind that writes, before an issue's first attempt. */
   private acceptance!: Acceptance;
+  /** Landing in turn (#1331): each repo's changes onto its default branch, one at a time. */
+  private landing!: Landing;
   /** Sessions started without your Send, under a run you approved (#1330). */
   private sessionStarts!: Starts;
   /** Setup's wiki build (#356). */
@@ -514,7 +517,12 @@ export class Core {
       },
       learn: async () => { await this.wikiBuild.build(); await syncRejected(this.raw, this.root.dir); },
     });
-    this.hosts = new Hosts({ root: this.root.dir, now: this.now, plant: options.plant, raise: async (ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), 'host.change', ask, plan); } });
+    this.hosts = new Hosts({
+      root: this.root.dir, now: this.now, plant: options.plant, raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan); },
+      append: (kind, data, extra) => this.appendCore(kind, data, extra), raw: (query, params) => this.record.raw(query, params),
+      // Bytes as the host gave them, so their hash is the hash of what was read there (#1945).
+      put: async (bytes, kind, source) => (await this.control.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind, source, redaction: 'complete', license: { name: 'local', allows: [] } }), kind)).sha256,
+    });
   }
 
   private wireRunServices(): void {
@@ -822,6 +830,17 @@ export class Core {
         return (await readIssue(fetch, owner, name, n, undefined))?.[0];
       },
     });
+    // Landing in turn (#1331): the forge's reads and merges with your login, the verdict's status with the gate's identity.
+    this.landing = new Landing({
+      root: this.root.dir, api: this.options.forge ?? 'https://api.github.com', plant: this.options.plant,
+      repoOf: (remote) => this.providers.forge.repoOf(remote),
+      token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
+      gateToken: (repo) => this.gateToken(repo), gateApp: () => this.forgeApp('gate'),
+      landingToken: (repo) => (this.landingTokens ??= this.providers.forge.gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate'), true))(repo),
+      judge: (r) => this.judging.judgeLanding(r),
+      sendBack: (r) => this.delivery.landingSendBack(r),
+      appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
+    });
     // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'), ...plant });
@@ -976,6 +995,8 @@ export class Core {
     return { app_id: app.app_id as number, key: () => keychain(service) };
   }
   private gateTokens?: (repo: string) => Promise<string | undefined>;
+  /** The gate's landing tokens (#1331), minted in this process and kept only in its memory, as its status tokens are. */
+  private landingTokens?: (repo: string) => Promise<string | undefined>;
   /** The gate's token for a repo: minted in this process, kept only in its memory. */
   private gateToken(repo: string): Promise<string | undefined> {
     return (this.gateTokens ??= this.providers.forge.gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate')))(repo);

@@ -1,0 +1,98 @@
+# The base run of tests/acceptance/1967, at 07b63844 ("Merge pull request #2257"), Nov 10, 2026, on this Mac.
+#
+#   NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1967 --no-file-parallelism --testTimeout=900000
+#   npx tsc -p tests/acceptance/1967/tsconfig.json   -> exit 0
+#
+# deep-show built (cargo build --locked --bin deep-show, 37 min under load); every test fails for the missing behaviour:
+# - import.test.ts: the decode worker refuses the recording, `unreadable` "not a format the worker reads": no asset of
+#   kind terminal, no probe.terminal.
+# - play.test.ts, live.test.ts: `deep show` refuses the board, `bad_doc` at items/run/params/frame/cells ("cells.grid
+#   can't evaluate this"): the cells module's operator reads only `frame`, so no grid plays a recording, and no
+#   determinism side carries a `cells` block. play.test.ts runs its document once and rethrows that failure to its
+#   other three tests (0 ms each).
+# - live.test.ts got as far as the document: its live half passed at the base (#402's terminal fed the chunks up to
+#   1.0 s shows step 1 in its pen, and the grid comparison told the pen-less, fed-past and cursor-moved live grids
+#   apart), so the failure is the recording's grid alone.
+# The lease script found no `deep` and ran the command unleased (its first line below). Long lines are cut at 400
+# characters, and the Expected/Received diff of the first failure is dropped.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/1967 --no-file-parallelism --testTimeout=900000` runs unleased
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1967
+
+ ❯ play.test.ts (4 tests | 4 failed) 7576ms
+   ❯ AC1 a terminal recording played in a cell grid (4)
+     × AC1 at 1.0 s the grid shows only `step 1`, played and seeked: its row in bold gold on navy, nothing under it, the cursor at the start of row 1; the render shows step 1 but not step 2; a planted grid that shows every patch whatever t fails 1943ms
+     × AC1 at 2.0 s the grid shows both lines, played and seeked: `step 1` as before and `step 2` underlined in turquoise on the default background, the cursor at the start of row 2; a planted seek that skips the patches after its keyframe fails 0ms
+     × AC1 the same cells whether played or seeked: at every time read, the seeked grid equals the played one cell for cell (grapheme, colors, attributes, link), row for row and in its cursor, and the two renders are the same picture; a planted seek that skips the patches after its keyframe fails, naming 2.0 s 0ms
+     × AC1 the recording plays at its own times: before 0.5 s nothing, from 0.5 s exactly `step 1`, from 1.5 s exactly both lines, played and seeked, at 0.25 s, 0.5 s and one flick before it, 0.75 s, 1.5 s and one flick before it, and 1.75 s; a planted import that stamps each patch at the nearest whole second fails, naming 0.5 s and 1.5 s 0ms
+ ❯ import.test.ts (1 test | 1 failed) 5660ms
+   ❯ SCOPE a terminal recording is an asset, converted at import in the decode worker (1)
+     × SCOPE media_import of the recording answers kind terminal by its hash, probe.terminal {cols 20, rows 4, span 1.5 s, keyframes 2}, a named and versioned decoder, from a process that isn't deep-show's 2186ms
+ ❯ live.test.ts (1 test | 1 failed) 5126ms
+   ❯ AC1 a terminal recording played in a cell grid, against a live grid (1)
+     × AC1 the grid at 1.0 s, played and seeked, equals a live terminal's grid fed the same bytes up to 1.0 s, cell for cell, row for row and in its cursor; the same comparison tells apart a live grid without the pen, one fed past 1.0 s and one whose cursor moved 2075ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  import.test.ts > SCOPE a terminal recording is an asset, converted at import in the decode worker > SCOPE media_import of the recording answers kind terminal by its hash, probe.terminal {cols 20, rows 4, span 1.5 s, keyframes 2}, a named and versioned decoder, from a process that isn't deep-show's
+AssertionError: media_import's asset: {"refused":{"code":"unreadable","why":"not a format the worker reads"},"worker":{"pid":46380},"core":"core@0.0.0","set_digest":"0aac98f10a25dcaef5fad99a63b2def0e4de054cbe67bde45c86ad09cafe70c9"} is an object, got undefined: expected false to be true // Object.is equality
+
+
+ ❯ obj helpers.ts:30:71
+     28| }
+     29| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     30|   expect(isObject(value), `${what} is an object, got ${show(value)}`).…
+       |                                                                       ^
+     31|   return value as JsonObject;
+     32| }
+ ❯ import.test.ts:25:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  live.test.ts > AC1 a terminal recording played in a cell grid, against a live grid > AC1 the grid at 1.0 s, played and seeked, equals a live terminal's grid fed the same bytes up to 1.0 s, cell for cell, row for row and in its cursor; the same comparison tells apart a live grid without the pen, one fed past 1.0 s and one whose cursor moved
+AssertionError: the recording in a cell grid: the document is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"bad_doc","severity":"error","ids":["run"],"path":"items/run/params/frame/cells","actual":null,"what":"cells.grid can't evaluate this","fix":"See the issue."}],"issues_evidence":"df0b066205883911d18b2552eefd0001200956c5f7efaa1de7b28232e7f7c8ad","snapshots"
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ playAndSeek helpers.ts:345:93
+    343|   const what = `the recording in a cell grid${planted ? ` (planted ${p…
+    344|   const { replies } = runShow(bin, docScenario(evidence, [present(docu…
+    345|   expect(replies[0]!['outcome'], `${what}: the document is presented: …
+       |                                                                                             ^
+    346|   return comparedOf(replies[1]!, `${what}: determinism`);
+    347| }
+ ❯ live.test.ts:39:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  play.test.ts > AC1 a terminal recording played in a cell grid > AC1 at 1.0 s the grid shows only `step 1`, played and seeked: its row in bold gold on navy, nothing under it, the cursor at the start of row 1; the render shows step 1 but not step 2; a planted grid that shows every patch whatever t fails
+ FAIL  play.test.ts > AC1 a terminal recording played in a cell grid > AC1 at 2.0 s the grid shows both lines, played and seeked: `step 1` as before and `step 2` underlined in turquoise on the default background, the cursor at the start of row 2; a planted seek that skips the patches after its keyframe fails
+ FAIL  play.test.ts > AC1 a terminal recording played in a cell grid > AC1 the same cells whether played or seeked: at every time read, the seeked grid equals the played one cell for cell (grapheme, colors, attributes, link), row for row and in its cursor, and the two renders are the same picture; a planted seek that skips the patches after its keyframe fails, naming 2.0 s
+ FAIL  play.test.ts > AC1 a terminal recording played in a cell grid > AC1 the recording plays at its own times: before 0.5 s nothing, from 0.5 s exactly `step 1`, from 1.5 s exactly both lines, played and seeked, at 0.25 s, 0.5 s and one flick before it, 0.75 s, 1.5 s and one flick before it, and 1.75 s; a planted import that stamps each patch at the nearest whole second fails, naming 0.5 s and 1
+AssertionError: the recording in a cell grid: the document is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"bad_doc","severity":"error","ids":["run"],"path":"items/run/params/frame/cells","actual":null,"what":"cells.grid can't evaluate this","fix":"See the issue."}],"issues_evidence":"df0b066205883911d18b2552eefd0001200956c5f7efaa1de7b28232e7f7c8ad","snapshots"
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ playAndSeek helpers.ts:345:93
+    343|   const what = `the recording in a cell grid${planted ? ` (planted ${p…
+    344|   const { replies } = runShow(bin, docScenario(evidence, [present(docu…
+    345|   expect(replies[0]!['outcome'], `${what}: the document is presented: …
+       |                                                                                             ^
+    346|   return comparedOf(replies[1]!, `${what}: determinism`);
+    347| }
+ ❯ run play.test.ts:24:29
+ ❯ play.test.ts:36:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  6 failed (6)
+   Start at  23:53:15
+   Duration  19.94s (tests 96%, transform 2%, import 1%)
+
+vitest exit 1
+tsc exit 0

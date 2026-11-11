@@ -6,7 +6,10 @@ import { backgrounded } from './hub-shared.js';
 import type { Questions } from './questions.js';
 import { STOP_HOLD_MS } from './claude-settings.js';
 
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { liveFetch, readIssue, recordedFetch } from './github-source.js';
+import type { Outcome } from './landing.js';
 
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -18,7 +21,7 @@ import { type EvidenceStore } from '@deepbuild/evidence';
 import { type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
 import { type RecordStore } from '@deepbuild/record';
 
-import { endsEmpty, freshCount, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallCount, type StallRule } from '@deepbuild/gate';
+import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallCount, type StallRule } from '@deepbuild/gate';
 
 import { type LeaseTable } from '@deepbuild/leases';
 
@@ -70,7 +73,10 @@ import { docCheckIn, docCommand, docSpec } from './doc-checks.js';
 import { refuse, Refused, refusal, ulid, type CoreOptions, type HookMeta } from './wire.js';
 import type { Live, Counter, Routes } from './session-types.js';
 
-import { DAY, sql, letters, COMPLETION_PROMPTS, unseenTools, type Obj, isObj, misjudged, watching, waitingOn, READS, OWN_TURN } from "./hub-shared.js";
+import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, isObj, misjudged, watching, waitingOn, READS, OWN_TURN } from "./hub-shared.js";
+
+/** How long a landing's judgement waits for its verdict (#1331). */
+const VERDICT_WAIT_MS = 30 * 60_000;
 
 export interface StopJudgingOptions {
   settings: CoreOptions;
@@ -1376,6 +1382,51 @@ export class StopJudging {
       this.outsideBuilds.set(cwd, built);
     }
     return built;
+  }
+
+  /**
+   * A change judged on its merge with the default branch's head (#1331): the issue's task, opened once from its
+   * reading, claims the merge commit in a worktree of its own, as `session` did a stop; its slow checks start, and its
+   * verdict is read once made. Each check whose key the merge didn't change carries from the run that made it (#1018).
+   */
+  async judgeLanding(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string }[] } | undefined> {
+    const [owner, name] = r.repo.split('/') as [string, string];
+    const fetch = this.options.settings.github ? recordedFetch(this.options.settings.github) : liveFetch(this.options.settings.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+    // A reading with no revision time is revised by its text: the definition still names the issue it locked from.
+    const readings = (await readIssue(fetch, owner, name, r.issue, this.options.settings.plant).catch(() => undefined))?.map((x) => (x.updated ? x : { ...x, updated: sha256Hex(new TextEncoder().encode(x.body)) }));
+    if (!readings?.[0]) throw Error(`issue #${r.issue} of ${r.repo} couldn't be read, so its change can't be judged`);
+    const item = { ...readings[0], readings };
+    // A worktree of the checkout's repo at the merge commit: the claim's folder, removed once its verdict is read.
+    const tree = join(this.options.services.root.dir, 'landing', 'trees', letters(r.session));
+    mkdirSync(dirname(tree), { recursive: true });
+    await new Promise<void>((done, fail) => execFile('git', ['-C', r.checkout, 'worktree', 'add', '--quiet', '--detach', '--force', tree, r.commit], { env: gitEnv() }, (error) => (error ? fail(error) : done())));
+    // The checkout's installs serve the claim's checks: a link, which the gate's checkouts clone from where it points.
+    for (const dep of ['node_modules', '.venv']) if (existsSync(join(r.checkout, dep)) && !existsSync(join(tree, dep))) symlinkSync(join(r.checkout, dep), join(tree, dep));
+    try {
+      this.options.state().live.set(r.session, { agent: 'claude-code', cwd: tree, last: this.options.services.now(), calls: new Map(), wakeups: [], crons: new Map(), background: new Map(), looping: false, turn: 0, judged: false });
+      const made = await this.options.services.tasks.landing({ session: r.session, cwd: tree, item, at: this.options.services.now() });
+      if (!made) return undefined;
+      await this.lanes.get(made.claim)?.catch(() => undefined);
+      // Nothing sends this claim on: its slow checks start now, as a turn's end starts them.
+      await this.options.services.gate.turnEnded(made.claim, [], this.options.services.now(), { session: r.session, origin: 'person', due: null, starter: 'claim' }).catch(() => undefined);
+      // The verdict the core recorded, once the gate's is no longer pending: what the poster posts and the record keeps.
+      const until = Date.now() + VERDICT_WAIT_MS;
+      for (;;) {
+        await this.verdictWrites.get(made.claim)?.catch(() => undefined);
+        const v = this.options.services.gate.verdictOf(made.claim);
+        const [row] = v && v.outcome !== 'pending' ? (await this.options.services.record.raw(`SELECT outcome, requirements FROM verdicts WHERE claim_id = ? ORDER BY created DESC LIMIT 1`, [made.claim.slice(6)])) as { outcome: Outcome; requirements: string | null }[] : [];
+        if (row) {
+          const settled = new Map((await this.options.services.tasks.lockedRequirements(made.task)).map((q) => [q.req, q]));
+          const reqs = (JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string }[]).map((q) => ({ req: q.req, text: settled.get(q.req)?.text ?? q.req, settled_by: settled.get(q.req)?.settled_by ?? null, outcome: q.outcome }));
+          return { claim: made.claim, outcome: row.outcome, requirements: reqs };
+        }
+        if (Date.now() > until) return undefined;
+        await new Promise((done) => setTimeout(done, 200));
+      }
+    } finally {
+      this.options.state().live.delete(r.session);
+      await new Promise<void>((done) => execFile('git', ['-C', r.checkout, 'worktree', 'remove', '--force', tree], { env: gitEnv() }, () => done()));
+    }
   }
 
   /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why. */

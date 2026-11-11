@@ -933,7 +933,9 @@ pub fn text_spec_in(
             Some(Value::String(o)) if o == "mask" => true,
             Some(_) => return refuse("bad_doc", format!("{path}/params/overflow")),
         },
-        bound: shown.is_some() || params.get("numerals").and_then(Value::as_str) == Some("tabular"),
+        // #407: localized copy shows as text does, never as a bound number.
+        bound: shown.is_some_and(|s| s.bound != COPY)
+            || params.get("numerals").and_then(Value::as_str) == Some("tabular"),
         align: match params.get("align").and_then(Value::as_str) {
             None | Some("start") => Align::Start,
             Some("center") => Align::Center,
@@ -3226,7 +3228,7 @@ fn bound_ids(doc: &Map<String, Value>, items: &Map<String, Value>) -> Result<Vec
         }
     }
     for (id, item) in items {
-        if counter_of(item).is_some() || template_of(item).is_some() {
+        if counter_of(item).is_some() || template_of(item).is_some() || copy_key(item).is_some() {
             ids.push(id.clone());
         }
     }
@@ -3271,6 +3273,17 @@ pub fn bound_text(
     text_at(doc, items, id, item, record, locale)
 }
 
+/// What a [`Shown`] from localized copy is bound to.
+const COPY: &str = "copy";
+
+/// #407: a text@1's copy key (`copy: key`, into `data.copy[locale]`), when it shows localized
+/// copy in place of its own text.
+pub fn copy_key(item: &Value) -> Option<&str> {
+    let p = item.get("params")?;
+    p.get("text").is_none().then_some(())?;
+    p.get("copy")?.as_str()
+}
+
 /// [`bound_text`] among a frame's evaluated `items`, which anchors and drivers read.
 pub fn text_at(
     doc: &Map<String, Value>,
@@ -3280,6 +3293,26 @@ pub fn text_at(
     record: &Record,
     locale: &str,
 ) -> Result<Option<Shown>, Refused> {
+    // #407: localized copy: the key's string in the locale's table, else the document's own
+    // locale's, else nothing.
+    if let Some(key) = copy_key(item) {
+        let in_locale = |l: &str| doc.get("data")?.get("copy")?.get(l)?.get(key)?.as_str();
+        let text = in_locale(locale)
+            .or_else(|| {
+                doc.get("locale")
+                    .and_then(Value::as_str)
+                    .and_then(in_locale)
+            })
+            .unwrap_or_default()
+            .to_string();
+        return Ok(Some(Shown {
+            bound: COPY.into(),
+            text,
+            stale: false,
+            age: None,
+            changes_at: None,
+        }));
+    }
     if let Some(template) = template_of(item) {
         // A template shows each slot's value at its own precision (Text `text@1`, `template`).
         // A keyed data value shows as the frame evaluated it (`params/data/<name>`, motion@1).
@@ -3303,7 +3336,20 @@ pub fn text_at(
         }
         let path = format!("items/{id}/params/template");
         let mut text = String::new();
-        let at_t = Value::Object(data.map(|d| ("data".to_string(), d)).into_iter().collect());
+        let mut at_t = Value::Object(data.map(|d| ("data".to_string(), d)).into_iter().collect());
+        // #504: a control's value and an assembly's as the frame evaluated them, over the
+        // document's own (a control's default before any entry).
+        for section in ["controls", "assemblies"] {
+            let mut entries = doc.get(section).cloned().unwrap_or_else(|| json!({}));
+            if let Some(shown) = item.pointer(&format!("/params/shown/{section}")).and_then(Value::as_object) {
+                for (k, v) in shown {
+                    if let Some(Value::Object(e)) = entries.get_mut(k) {
+                        e.insert("value".into(), v["value"].clone());
+                    }
+                }
+            }
+            at_t[section] = entries;
+        }
         for part in template::parts(template).or_else(|_| refuse("ref_unresolved", path.clone()))? {
             match part {
                 template::Part::Words(w) => text.push_str(w),
@@ -3768,11 +3814,15 @@ fn scopes_of(
     palette: &Palette,
     mattes: &BTreeMap<String, Arc<Vec<Drawn>>>,
 ) -> Result<BTreeMap<String, Vec<Scope>>, Refused> {
+    // #504: a parent that names an assembly ends the chain of item scopes; the motion module
+    // composes the assembly's transform.
+    let assembly = |id: &str| doc.get("assemblies").and_then(|a| a.get(id)).is_some();
     let parent = |id: &str| {
         items
             .get(id)
             .and_then(|i| i.get("parent"))
             .and_then(Value::as_str)
+            .filter(|p| !assembly(p))
             .map(str::to_string)
     };
     let shown =
@@ -4865,8 +4915,8 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 fill: Fill::Solid([255, 255, 255]),
             }]
         }
-        // A logic item (#544) steps and emits occurrences, and draws nothing.
-        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" | "logic@1" => {
+        // A logic item (#544) steps and emits occurrences, and a score (#154) sounds: neither draws.
+        "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1" | "logic@1" | "score.music@1" => {
             return Ok(None)
         }
         "star@1" => {

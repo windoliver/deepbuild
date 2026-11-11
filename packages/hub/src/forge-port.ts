@@ -23,5 +23,5 @@ export interface SessionCredentials {
 }
 export interface ForgeProvider extends SessionCredentials {
   open(options: ForgeOptions): ForgeObserver;
-  gateTokens(api: string, app: () => AppKey | undefined): (repo: string) => Promise<string | undefined>;
+  gateTokens(api: string, app: () => AppKey | undefined, landing?: boolean): (repo: string) => Promise<string | undefined>;
 }

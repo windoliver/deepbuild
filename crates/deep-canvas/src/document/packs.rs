@@ -19,19 +19,28 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
+use super::pack_kinds::check_kinds;
 use super::{member, Issue};
 use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
+pub mod deps;
 pub mod module_fields;
 
 /// The most derived items one repeat makes (Recipe: cost).
 pub const MAX_REPEAT: u64 = 1024;
 
-/// The planted wrong programs of #306's acceptance criteria, each off by default.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// The planted wrong programs of #306's and #202's acceptance criteria, each off by default.
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Planted {
+    /// #202: the `kind_rules` check evaluates a pack kind's recipe rules a second time.
+    pub rules_twice: bool,
+    /// #202: the kind kit tests each kind at its defaults only, never at its params' extremes.
+    pub kit_defaults_only: bool,
+    /// #202: an expander that walks an instance's inputs in this order, not the recipe's. The
+    /// core holds no hash map (canvas lint), so the caller plants one.
+    pub walk_inputs: Option<WalkInputs>,
     /// Seeds derived items by expansion order, not by `(instance, step, index)`.
     pub seed_by_order: bool,
     /// A re-expansion writes over a broken-out item.
@@ -44,7 +53,16 @@ pub struct Planted {
     pub each_by_count: bool,
     /// #2015: a repeat over faces walks the part's triangles (the elements function's plant).
     pub each_per_triangle: bool,
+    /// #1956: the pack check of a kind's migration stops at its first fault.
+    pub migration_first_fault: bool,
+    /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
+    pub orphan_drops: bool,
+    /// #1961: that load hands the broken-out ID to the new expansion, which writes it.
+    pub orphan_hands_id: bool,
 }
+
+/// A planted expander's walk over an instance's inputs (#202).
+pub type WalkInputs = fn(Map<String, Value>) -> Map<String, Value>;
 
 /// `owner/name@major.minor.patch`, as a document's `packs` entry names a pack version.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -163,24 +181,39 @@ pub struct Recipe {
 pub struct KindRule {
     pub code: String,
     pub expr: crate::expr::Expr,
+    pub at: At,
     pub fix: String,
+}
+
+/// When a kind rule reads its instance (Pack: kind rules): at rest, at each of its times in
+/// flicks, or bounded over a sweep.
+#[derive(Clone, Debug, PartialEq)]
+pub enum At {
+    Rest,
+    Times(Vec<i64>),
+    Sweep,
 }
 
 /// The issue code a failed kind rule raises; its JSON names the rule's own code.
 pub const KIND_RULE: &str = "kind_rule";
 
+/// A param's number as a rule reads it: a bool as 0 or 1, anything else NaN.
+pub(super) fn rule_number(value: Option<&Value>) -> f64 {
+    match value {
+        Some(Value::Number(v)) => v.as_f64().unwrap_or(f64::NAN),
+        Some(Value::Bool(b)) => f64::from(u8::from(*b)),
+        _ => f64::NAN,
+    }
+}
+
 impl KindRule {
     /// Whether the rule holds for an instance's inputs.
-    fn holds(&self, inputs: &Map<String, Value>) -> bool {
+    pub(super) fn holds(&self, inputs: &Map<String, Value>) -> bool {
         let vars: Vec<f64> = self
             .expr
             .vars
             .iter()
-            .map(|n| match inputs.get(n) {
-                Some(Value::Number(v)) => v.as_f64().unwrap_or(f64::NAN),
-                Some(Value::Bool(b)) => f64::from(u8::from(*b)),
-                _ => f64::NAN,
-            })
+            .map(|n| rule_number(inputs.get(n)))
             .collect();
         let v = self.expr.eval_num(&vars);
         v.is_finite() && v != 0.0
@@ -188,7 +221,7 @@ impl KindRule {
 }
 
 /// What a kind rule's expression resolves through: the build's `ease@1`, when it has one.
-struct RuleScope<'a>(&'a Sealed);
+pub(super) struct RuleScope<'a>(pub(super) &'a Sealed);
 
 impl crate::expr::Resolve for RuleScope<'_> {
     fn eases(&self) -> Result<(), String> {
@@ -207,6 +240,8 @@ pub const MAX_DEPTH: usize = 4;
 pub struct Pack {
     pub id: PackId,
     pub requires_modules: BTreeMap<String, String>,
+    /// `requires.packs`: each pack it builds on, at an exact version (#1957).
+    pub requires_packs: Vec<deps::Dep>,
     /// By `pack.name`.
     pub recipes: BTreeMap<String, Recipe>,
     /// `d1:` SHA-256 of the manifest's canonical form: a version's bytes, frozen.
@@ -217,6 +252,8 @@ pub struct Pack {
     /// A familiar-names pack's words (Pack: math@1's `aliases`): each word, the kind it maps to
     /// and the conversion the pack states for it, `{target, conversion, renamed_from?}`, by word.
     pub aliases: BTreeMap<String, Value>,
+    /// Its kinds backed by recipes, by `<pack>.<name>@<major>`, each with its kit's result (#202).
+    pub kinds: BTreeMap<String, super::pack_kinds::PackKind>,
 }
 
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
@@ -280,7 +317,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
             "a canvas module's name or kind family; a pack names its own",
         ));
     }
-    let mut requires_modules = BTreeMap::new();
+    let (mut requires_modules, mut requires_packs) = (BTreeMap::new(), Vec::new());
     if let Some(requires) = fields.get("requires") {
         match requires.as_object() {
             None => issues.push(bad("requires", requires.clone(), "not an object")),
@@ -347,11 +384,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
                                 }
                             }
                         },
-                        "packs" => issues.push(bad(
-                            "requires/packs",
-                            value.clone(),
-                            "pack dependencies land with the pack versions task",
-                        )),
+                        "packs" => requires_packs = deps::read(value, &id, &mut issues),
                         other => issues.push(Issue::envelope(
                             "unknown_field",
                             format!("requires/{other}"),
@@ -386,6 +419,7 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         }
         Some(other) => issues.push(bad("recipes", other.clone(), "not an object")),
     }
+    deps::undeclared(manifest, &id, &requires_packs, &mut issues);
     // Providers, layouts' validators and program entries are programs the sandbox module admits
     // and runs (#238): a build without it refuses them, whatever `requires.modules` says.
     for key in ["providers", "layouts"] {
@@ -411,6 +445,14 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => BTreeMap::new(),
         Some(a) => check_aliases(a, &mut issues),
     };
+    let kinds = check_kinds(
+        &id,
+        fields,
+        &recipes,
+        &assets,
+        (sealed, planted),
+        &mut issues,
+    );
     for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
         issues.extend(module_fields::check(sealed, manifest, key));
     }
@@ -420,10 +462,12 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
     Ok(Pack {
         id,
         requires_modules,
+        requires_packs,
         recipes,
         digest: digest(manifest),
         entries,
         aliases,
+        kinds,
     })
 }
 
@@ -632,6 +676,8 @@ const PACK_KEYS: &[&str] = &[
     "assets",
     "providers",
     "layouts",
+    "kinds",
+    "corpus",
 ];
 
 /// The canvas module that admits and runs a pack's programs (#238).
@@ -1062,79 +1108,18 @@ fn read_rules(
     let bad = |at: &str, actual: Value, what: &str| {
         Issue::envelope("out_of_range", format!("{path}/{at}"), actual, what)
     };
-    let mut rules = Vec::new();
-    let list = match fields.get("rules") {
-        None => return rules,
-        Some(Value::Array(list)) => list,
-        Some(other) => {
-            issues.push(bad("rules", other.clone(), "not a list of rules"));
-            return rules;
-        }
+    let rules = match fields.get("rules") {
+        None => return Vec::new(),
+        Some(list) => read_rule_list(
+            pack,
+            list,
+            inputs,
+            sealed,
+            &format!("{path}/rules"),
+            false,
+            issues,
+        ),
     };
-    for (i, r) in list.iter().enumerate() {
-        let at = format!("rules/{i}");
-        let code = r.get("code").and_then(Value::as_str).unwrap_or_default();
-        if !code
-            .strip_prefix(&format!("{pack}."))
-            .is_some_and(well_named)
-        {
-            issues.push(bad(
-                &format!("{at}/code"),
-                json!(code),
-                &format!("a kind rule's code is `{pack}.<rule>`"),
-            ));
-            continue;
-        }
-        if r.get("at").and_then(Value::as_str) != Some("rest") {
-            issues.push(bad(
-                &format!("{at}/at"),
-                r.get("at").cloned().unwrap_or(Value::Null),
-                "a kind rule reads its instance at rest",
-            ));
-            continue;
-        }
-        let Some(text) = r.get("expr").and_then(Value::as_str) else {
-            issues.push(bad(
-                &format!("{at}/expr"),
-                r.get("expr").cloned().unwrap_or(Value::Null),
-                "a kind rule's expr is text",
-            ));
-            continue;
-        };
-        let expr = match crate::expr::Expr::compile(text, &RuleScope(sealed), 256) {
-            Ok(e) => e,
-            Err(e) => {
-                let actual = json!({"rule": code, "call": e.call, "module": e.missing});
-                issues.push(match &e.missing {
-                    Some(module) => Issue::envelope(
-                        "module_missing",
-                        format!("{path}/{at}/expr"),
-                        actual,
-                        &format!("rule `{code}` reads `{}`, and ease@1 is the `{module}` module's, which this build lacks", e.call),
-                    ),
-                    None => bad(&format!("{at}/expr"), actual, &e.why),
-                });
-                continue;
-            }
-        };
-        if let Some(n) = expr.vars.iter().find(|n| !inputs.contains_key(*n)) {
-            issues.push(bad(
-                &format!("{at}/expr"),
-                json!(text),
-                &format!("rule `{code}` reads `{n}`, which is no input of the recipe"),
-            ));
-            continue;
-        }
-        rules.push(KindRule {
-            code: code.to_string(),
-            expr,
-            fix: r
-                .get("fix")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
-        });
-    }
     // The kind kit: each rule's planted twin must fail it.
     let twins = fields
         .get("twins")
@@ -1178,6 +1163,132 @@ fn read_rules(
     rules
 }
 
+/// A list of kind rules at `path`, each `{code: "<pack>.<rule>", expr, at, fix}` over `inputs`.
+/// A recipe's rules read their instance at rest (#490); a pack kind's also at `[time]` (each a
+/// count of flicks or a time literal in seconds) or over a `sweep` (#202).
+pub(super) fn read_rule_list(
+    pack: &str,
+    list: &Value,
+    inputs: &BTreeMap<String, Input>,
+    sealed: &Sealed,
+    path: &str,
+    timed: bool,
+    issues: &mut Vec<Issue>,
+) -> Vec<KindRule> {
+    let bad = |at: &str, actual: Value, what: &str| {
+        Issue::envelope("out_of_range", format!("{path}/{at}"), actual, what)
+    };
+    let mut rules = Vec::new();
+    let Some(list) = list.as_array() else {
+        issues.push(Issue::envelope(
+            "out_of_range",
+            path.to_string(),
+            list.clone(),
+            "not a list of rules",
+        ));
+        return rules;
+    };
+    for (i, r) in list.iter().enumerate() {
+        let at = format!("{i}");
+        let code = r.get("code").and_then(Value::as_str).unwrap_or_default();
+        if !code
+            .strip_prefix(&format!("{pack}."))
+            .is_some_and(well_named)
+        {
+            issues.push(bad(
+                &format!("{at}/code"),
+                json!(code),
+                &format!("a kind rule's code is `{pack}.<rule>`"),
+            ));
+            continue;
+        }
+        let when = match r.get("at") {
+            Some(Value::String(s)) if s == "rest" => At::Rest,
+            Some(Value::String(s)) if timed && s == "sweep" => At::Sweep,
+            Some(Value::Array(times)) if timed && !times.is_empty() => {
+                match times.iter().map(rule_time).collect::<Option<Vec<i64>>>() {
+                    Some(t) => At::Times(t),
+                    None => {
+                        issues.push(bad(
+                            &format!("{at}/at"),
+                            json!(times),
+                            "a time is a count of flicks or seconds such as `1.5s`",
+                        ));
+                        continue;
+                    }
+                }
+            }
+            other => {
+                issues.push(bad(
+                    &format!("{at}/at"),
+                    other.cloned().unwrap_or(Value::Null),
+                    if timed {
+                        "a kind rule reads its instance at rest, at a list of times or over a sweep"
+                    } else {
+                        "a kind rule reads its instance at rest"
+                    },
+                ));
+                continue;
+            }
+        };
+        let Some(text) = r.get("expr").and_then(Value::as_str) else {
+            issues.push(bad(
+                &format!("{at}/expr"),
+                r.get("expr").cloned().unwrap_or(Value::Null),
+                "a kind rule's expr is text",
+            ));
+            continue;
+        };
+        let expr = match crate::expr::Expr::compile(text, &RuleScope(sealed), 256) {
+            Ok(e) => e,
+            Err(e) => {
+                let actual = json!({"rule": code, "call": e.call, "module": e.missing});
+                issues.push(match &e.missing {
+                    Some(module) => Issue::envelope(
+                        "module_missing",
+                        format!("{path}/{at}/expr"),
+                        actual,
+                        &format!("rule `{code}` reads `{}`, and ease@1 is the `{module}` module's, which this build lacks", e.call),
+                    ),
+                    None => bad(&format!("{at}/expr"), actual, &e.why),
+                });
+                continue;
+            }
+        };
+        if let Some(n) = expr.vars.iter().find(|n| !inputs.contains_key(*n)) {
+            issues.push(bad(
+                &format!("{at}/expr"),
+                json!(text),
+                &format!("rule `{code}` reads `{n}`, which is no input of the recipe"),
+            ));
+            continue;
+        }
+        rules.push(KindRule {
+            code: code.to_string(),
+            expr,
+            at: when,
+            fix: r
+                .get("fix")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+        });
+    }
+    rules
+}
+
+/// A pack kind's rule time: a count of flicks, or a time literal in seconds.
+fn rule_time(value: &Value) -> Option<i64> {
+    match value {
+        Value::Number(n) => n.as_i64(),
+        Value::String(s) => crate::grammar::Time::parse(s)
+            .ok()?
+            .resolve(&crate::grammar::TimeContext::default())
+            .ok(),
+        _ => None,
+    }
+}
+
 fn read_lets(
     value: Option<&Value>,
     path: &str,
@@ -1215,7 +1326,7 @@ fn read_lets(
 }
 
 /// Why `value` is no value of `input`, if it isn't.
-fn input_fault(input: &Input, value: &Value) -> Option<String> {
+pub(super) fn input_fault(input: &Input, value: &Value) -> Option<String> {
     let range = |n: f64| -> Option<String> {
         let below = input.min.is_some_and(|min| n < min);
         let above = input.max.is_some_and(|max| n > max);
@@ -1279,6 +1390,11 @@ impl Packs {
         }
     }
 
+    /// Holds `pack` as admitted, unchecked: the kind kit's own store of the pack it checks.
+    pub(super) fn insert(&mut self, pack: Pack) {
+        self.by_id.insert(pack.id.text(), pack);
+    }
+
     /// Takes back an admitted version a later half of its pack check refused (#238: its programs).
     pub fn withdraw(&mut self, key: &str) {
         self.by_id.remove(key);
@@ -1309,7 +1425,17 @@ impl Packs {
         if let Some(key) = &key {
             *self.checks.entry(key.clone()).or_default() += 1;
         }
-        let pack = match check_pack(manifest, sealed, self.planted) {
+        // The pack check, its place in the pack graph (#1957), then each kind's kit (#202), which
+        // checks documents of the pack beside the versions it requires.
+        let checked = check_pack(manifest, sealed, self.planted).and_then(|mut pack| {
+            deps::cycle(self, &pack)?;
+            if !pack.kinds.is_empty() {
+                let alone = deps::store(self, &pack);
+                super::pack_kinds::kit(&mut pack, sealed, alone)?;
+            }
+            Ok(pack)
+        });
+        let pack = match checked {
             Ok(pack) => pack,
             Err(issues) => {
                 let missing: Vec<Issue> = issues
@@ -1358,7 +1484,7 @@ fn manifest_id(manifest: &Value) -> Option<String> {
 /// The packs a document resolved: by name, for a kind's `<pack>` half.
 #[derive(Clone, Debug, Default)]
 pub struct Resolved<'a> {
-    by_name: BTreeMap<String, &'a Pack>,
+    pub(super) by_name: BTreeMap<String, &'a Pack>,
     /// The sealed modules' elements functions by builder kind (`family.name`), which a repeat
     /// over elements counts by (#2015).
     elements: BTreeMap<String, registry::Elements>,
@@ -1378,8 +1504,18 @@ impl<'a> Resolved<'a> {
         let major: u64 = major.parse().ok()?;
         let (family, _) = full.split_once('.')?;
         let pack = *self.by_name.get(family)?;
+        // A pack kind resolves to the recipe that backs it (#202).
+        if let Some(k) = pack.kinds.get(kind) {
+            return pack.recipes.get(&k.recipe).map(|r| (pack, r));
+        }
         let recipe = pack.recipes.get(full)?;
         (recipe.major == major).then_some((pack, recipe))
+    }
+
+    /// The pack kind `<pack>.<name>@<major>` names, if its pack declares one (#202).
+    pub fn kind(&self, kind: &str) -> Option<&'a super::pack_kinds::PackKind> {
+        let (family, _) = kind.split_once('.')?;
+        self.by_name.get(family)?.kinds.get(kind)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -1416,7 +1552,7 @@ pub fn resolve<'a>(
         ));
         return out;
     };
-    let mut seen: BTreeMap<String, String> = BTreeMap::new();
+    let (mut seen, mut listed) = (BTreeMap::new(), BTreeMap::new());
     for (i, entry) in entries.iter().enumerate() {
         let path = format!("packs/{i}");
         let Some((text, id)) = entry
@@ -1471,46 +1607,16 @@ pub fn resolve<'a>(
                 &format!("pack `{}` at version {} is not in this build; the document is refused whole, and never drawn with another version", id.id, id.version),
             );
             // The instances that need it.
-            issue.ids = member(doc, "items")
-                .and_then(Value::as_object)
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter(|(_, item)| {
-                            super::kind_text(item)
-                                .and_then(|k| k.split_once('.'))
-                                .is_some_and(|(family, _)| family == id.name)
-                        })
-                        .map(|(item_id, _)| item_id.clone())
-                        .collect()
-                })
-                .unwrap_or_default();
+            issue.ids = deps::instances(doc, &id.name);
             issues.push(issue);
             continue;
         };
-        for (module, range) in &pack.requires_modules {
-            let Some(sealed) = sealed else { break };
-            let Some(parsed) = Range::parse(range) else {
-                continue;
-            };
-            if sealed.module(module).is_none() {
-                issues.push(Issue::envelope(
-                    "module_missing",
-                    format!("{path}/requires/modules/{module}"),
-                    json!(range),
-                    &format!("pack `{text}` requires the {module} module, which this build lacks"),
-                ));
-            } else if !sealed.satisfies(module, &parsed) {
-                issues.push(Issue::envelope(
-                    "out_of_range",
-                    format!("{path}/requires/modules/{module}"),
-                    json!(range),
-                    &format!("pack `{text}` requires the {module} module at {range}; this build has another"),
-                ));
-            }
-        }
+        deps::modules(pack, text, &path, sealed, issues);
+        listed.insert(id.name.clone(), path);
         out.by_name.insert(id.name.clone(), pack);
     }
+    // What the listed packs require, as if the document listed it (#1957).
+    deps::close(&mut out, &listed, doc, packs, sealed, issues);
     out
 }
 
@@ -1537,6 +1643,9 @@ pub struct Expansion {
     pub derived: Map<String, Value>,
     /// The derived IDs a patch broke out, which the instance no longer writes.
     pub broken_out: Vec<String>,
+    /// Each `broken_out` entry, by its index there, that this version no longer derives: the
+    /// writer's own item, raised as `derived_orphan` (Pack: migrations as data; #1961).
+    pub orphaned: Vec<(usize, String)>,
     /// The recipe's channels, each targeting a derived item, by `<instance>.<channel>[.<k>]`.
     pub channels: Map<String, Value>,
 }
@@ -1877,12 +1986,36 @@ fn expand_one(
         }
         inputs.insert(name.clone(), value);
     }
+    if let Some(walk) = planted.walk_inputs {
+        // Planted (#202): the inputs walked in another order than the recipe's.
+        inputs = walk(inputs);
+    }
+    // Broken-out items this version no longer derives (#1961): each stays the writer's own.
+    let mut orphaned = Vec::new();
+    // The planted loaders' orphans (#1961): dropped, or handed to the new expansion.
+    let mut handed = Vec::new();
     let broken_out: Vec<String> = match member(&item, "broken_out") {
         None => Vec::new(),
         Some(Value::Array(list)) => {
             let mut out = Vec::new();
             for (i, v) in list.iter().enumerate() {
                 match v.as_str() {
+                    // Broken out under an earlier version that derived it: the writer holds it,
+                    // it stays listed so a later version that derives it again never writes it.
+                    Some(s)
+                        if !derives(recipe, id, s)
+                            && items.contains_key(s)
+                            && s.strip_prefix(id).is_some_and(|r| r.starts_with('.')) =>
+                    {
+                        if planted.orphan_drops {
+                            items.shift_remove(s);
+                        } else if planted.orphan_hands_id {
+                            handed.push(s.to_string());
+                        } else {
+                            out.push(s.to_string());
+                            orphaned.push((i, s.to_string()));
+                        }
+                    }
                     Some(s) if derives(recipe, id, s) => {
                         // Broken out, so the writer holds it: a list entry with no item behind
                         // it would make the recipe's output vanish.
@@ -1929,21 +2062,7 @@ fn expand_one(
     if !ok {
         return None;
     }
-    // The core's `kind_rules` check, at rest: each rule the instance's params make read 0.
-    for rule in &recipe.rules {
-        if !rule.holds(&inputs) {
-            let mut issue = Issue::error(
-                KIND_RULE,
-                id,
-                at("params"),
-                json!({"rule": rule.code, "expr": rule.expr.text}),
-                &format!("the instance breaks {}'s rule `{}`", recipe.id, rule.code),
-            );
-            issue.severity = "warning";
-            issue.fix = rule.fix.clone();
-            issues.push(issue);
-        }
-    }
+    // Its rules are the core's `kind_rules` check's, once per instance after expansion (#202).
     if let Some(fields) = items.get_mut(id).and_then(Value::as_object_mut) {
         fields.insert("params".into(), Value::Object(inputs.clone()));
     }
@@ -2434,6 +2553,20 @@ fn expand_one(
             channels.insert(cid, out);
         }
     }
+    // Planted (#1961): each orphaned ID goes to the new derived item at its index, in the
+    // writer's item's place.
+    for orphan in handed {
+        let index = orphan.rsplit_once('.').map_or("", |(_, i)| i);
+        let heir = derived_items
+            .iter()
+            .find(|(d, _)| d.rsplit_once('.').is_some_and(|(_, i)| i == index))
+            .map(|(_, fields)| fields.clone());
+        if let Some(mut fields) = heir {
+            fields["id"] = json!(orphan);
+            fields["name"] = json!(orphan);
+            derived_items.insert(orphan, fields);
+        }
+    }
     // Written only once the whole expansion went through: a refused instance writes nothing.
     for (derived_id, fields) in &derived_items {
         items.insert(derived_id.clone(), fields.clone());
@@ -2446,6 +2579,7 @@ fn expand_one(
         items: derived,
         derived: derived_items,
         broken_out,
+        orphaned,
         channels,
     })
 }
@@ -3253,6 +3387,11 @@ mod tests {
             "a recipe's keys"
         );
         assert_eq!(keys(&defs["step"]), sorted(STEP_KEYS), "a step's keys");
+        assert_eq!(
+            keys(&defs["kind"]),
+            sorted(super::super::pack_kinds::KIND_KEYS),
+            "a pack kind's keys"
+        );
         assert_eq!(
             list(&defs["step"]["properties"]["op"]),
             STEP_OPS,
