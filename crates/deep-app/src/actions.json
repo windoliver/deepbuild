@@ -14,6 +14,7 @@
     { "name": "Open", "verb": "Open", "target": "session", "key": "cmd-o", "variant_of": null },
     { "name": "Pause", "verb": "Pause", "target": "session", "key": "cmd-.", "variant_of": null },
     { "name": "Write to it", "verb": "Write", "target": "session", "key": null, "variant_of": null },
+    { "name": "Rename", "verb": "Rename", "target": "session", "key": null, "variant_of": null },
     { "name": "Later", "verb": "Put off", "target": "ask", "key": "cmd-l", "variant_of": null },
     { "name": "Copy title", "verb": "Copy", "target": "session", "key": null, "variant_of": null },
     { "name": "Copy link", "verb": "Copy", "target": "session", "key": null, "variant_of": null },

@@ -2365,6 +2365,10 @@ Every surface (the sidebar, the line, return cards, the verdict line in the chat
 | finished | a session whose turn stopped with no claim to judge | idle |  |
 | running | a job whose tool is running, shown with its count from the tool's own counters, such as 300 of 600, and after 30 s its time left; with no counter, how long it has run | running |  |
 
+A session's state is the first matching row of one ordered table over record facts, which one function in the hub reads for every surface: needs you for an open ask; flagged for a process gone mid-turn; needs you for a permission prompt showing, or for your words whose delivery stalled or timed out; stuck; flagged for a promised check that is due or a turn that ended failed; then its newest claim, as sent back, BLOCKED, INVALID, INCONCLUSIVE, stale or says done; working; queued; PASS; finished; quiet. So a session with an open ask and a stale verdict reads needs you everywhere, and every session reads exactly one state, the same after a hub restart and after a replay to the same `log_pos`. Every row that isn't PASS says whom it waits for and what it needs, and a BLOCKED, INVALID or INCONCLUSIVE row with no open ask names who can clear it and the evidence it leaves open, never the bare word. The same call that picks the state gives its why: `deep status <session> --why` prints the one sentence with the table's row that matched, each record fact that row read (event kind, time and `log_pos`) and, for each row above it, the fact it lacked. A row's time in its state moves only when work changes hands, never on a change to its name.
+
+Each session has one name on every surface: the name you gave it, else its task's title, else the agent's own session title, else the first line of its first prompt cut to 60 characters. Its short ID shows only to tell apart two rows that would otherwise read the same. Rename in the Session menu puts the caret in the title on the session's page, and Return saves the name, recorded as `session.named`.
+
 <a id="parallel"></a>
 
 ## Parallel sessions and plan limits

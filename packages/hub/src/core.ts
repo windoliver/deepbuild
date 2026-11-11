@@ -36,7 +36,7 @@ import { keychain, ownHome } from './keychain.js';
 import { recordedHome, codexRelations, holdsFor, modified, readTrust, saveTrust, sessionHomes, stopTimeoutS, trustProblems } from './codex-settings.js';
 import { codexReadings, heartbeatsGone, loopsCovered, standingReadings, stands, uncoveredLoops } from './codex-loops.js';
 import { sessionStates, statusRows, WAITING_QUIET_MS, type StatusRow } from './status.js';
-import { buildRows, jobRow, listRows, orderOf, settle, type Placed, type Row, type RunningJob } from './rows.js';
+import { buildRows, distinctTitles, jobRow, listRows, orderOf, settle, whyOf, type Placed, type Row, type RunningJob } from './rows.js';
 import { addGuards, blocksCall, provenGuards, writeStanding } from './guards.js';
 import { captureRejected, decisionKey, dropKept, guardOf, keepLesson, lessonsOf, rejectedDirections, repoFolders, revives, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
 import { AskTasks, type WorkItem } from './ask-tasks.js';
@@ -737,6 +737,8 @@ export class Core {
   private touched: Set<string> | 'all' = 'all';
   /** The list's rows as last appended (#1463), by ID; empty until the record's are read at start, which makes the first pass a backfill. */
   private rows = new Map<string, Placed>();
+  /** Each session row's name before any short ID tells it from a twin (#2018), by row ID. */
+  private readonly names = new Map<string, string>();
   private rowsFirst = true;
   /** Each running job's row (#1925): when it was last appended, and the newer count held until a second has passed. */
   private readonly jobRows = new Map<string, { at: number; held?: ReturnType<typeof setTimeout> }>();
@@ -2717,6 +2719,8 @@ export class Core {
     else if (meta.event === 'PostCompact' || meta.event === 'SessionEnd') this.compacting.delete(meta.session);
     // Kept under the hook's own ID, so the copy deep-hook spooled when the hub was late is known at its replay.
     if (verified && meta.reading && !again) void this.appendReading(meta.session, meta.agent, meta.reading, meta.id).catch(() => undefined);
+    // The agent's own title for the session (#2018), when its hook says a new one; a subagent's hook names no session.
+    if (verified && meta.fields?.session_title && !meta.fields.agent_id) void this.agentTitled(meta.session, meta.agent, meta.fields.session_title).catch(() => undefined);
     // The record reads these states from the hook events themselves; only unknown, below, is the core's to append.
     // A person's status question changes none: answered from the record it runs no model, and let through (an
     // answer waiting, or DeepBuild off) it shows its state at its next hook, as the record's row does.
@@ -2914,7 +2918,16 @@ export class Core {
       // The list's rows (#1463): each that changed, and each ask's that left the list, in the same batch.
       // The open asks are the asks core's inbox projection, by its one close rule (#2026).
       const inbox = (await this.asks.inbox()).filter((a) => a.status !== 'closed').map((a) => a.ask);
-      const built = await buildRows(query, readings, inbox);
+      const named = await buildRows(query, readings, inbox);
+      // Each session's one name (#2018), with its short ID only where another session's row would read the same: a
+      // row whose twin came or went is set again with it, though nothing else of it changed.
+      for (const r of named) if (r.id.startsWith('session:')) this.names.set(r.id, r.title);
+      const titles = distinctTitles(this.names);
+      const fresh = new Set(named.map((r) => r.id));
+      const built = [
+        ...named.map((r) => (titles.has(r.id) ? { ...r, title: titles.get(r.id)! } : r)),
+        ...[...titles].flatMap(([id, title]) => { const was = this.rows.get(id)?.row; return was && !fresh.has(id) && was.title !== title ? [{ ...was, title }] : []; }),
+      ];
       const changed = settle(this.rows, built, this.rowsFirst);
       const open = new Set(built.filter((r) => r.id.startsWith('ask:')).map((r) => r.id));
       const left = [...this.rows.keys()].filter((id) => id.startsWith('ask:') && !open.has(id));
@@ -2925,7 +2938,7 @@ export class Core {
           const state = `${r.state}/${r.cause}`;
           if (this.states.get(r.id) === state) return;
           const ts = this.now();
-          await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
+          await this.append(this.connection('core', { session: r.id, ...(r.agent ? { agent: r.agent } : {}) }), { v: 2, id: ulid(ts), kind: 'session.state', ts, subject: `session:${letters(r.id)}`, data: { state: r.state, cause: r.cause } });
           this.states.set(r.id, state);
         }),
         ...changed.map(async (p) => {
@@ -5891,6 +5904,11 @@ export class Core {
       // The app's action table (#1462): Later on an ask, and Pause on a session's row.
       case 'ask.later': return this.putOff(params);
       case 'session.pause': return this.pauseSession(params);
+      case 'session.rename': return this.renameSession(params);
+      // Why a session reads as it does (#2018), behind the state pass under way, as rows.read is.
+      case 'row.why':
+        this.replayLate();
+        return (this.replaying ?? Promise.resolve()).then(() => this.queue(async () => undefined)).then(() => this.statesSettled()).then(() => this.log.reflecting(() => this.whySeen(context.role, params)));
       // A hook that ended before this read is in the row: one deep-hook spooled is replayed first, and one acknowledged has its turn on the core's queue.
       case 'status.read':
         this.replayLate();
@@ -6823,6 +6841,55 @@ export class Core {
     const ts = this.now();
     await this.append(this.connection('core', { session }), { v: 1, id: ulid(ts), kind: 'session.paused', ts, subject: `session:${letters(session)}`, data: {} });
     return { session, paused: true };
+  }
+
+  /**
+   * Rename from the Session menu (#2018): the name you gave a session, which every surface shows first. Recorded as
+   * the core, as Pause is; it is no sign of the session, so its row's time in its state stays.
+   */
+  private async renameSession(params: Obj): Promise<Obj> {
+    const { session } = params;
+    if (typeof session !== 'string' || !letters(session)) throw refuse('type', '/params/session', 'Name the session by its ID.', session);
+    const name = typeof params.name === 'string' ? params.name.split(/\r?\n/)[0]!.trim() : '';
+    if (!name || name.length > 512) throw refuse('type', '/params/name', 'Give the session a name of 1 to 512 characters, on one line.', params.name);
+    await this.named(session, name, 'you');
+    return { session, name };
+  }
+  /** The agent's own title for a session, from its hook (#2018): recorded once each time it changes. */
+  private async agentTitled(session: string, agent: string, title: string): Promise<void> {
+    if (!this.agentTitles.has(session)) {
+      const [last] = (await this.record.raw("SELECT json_extract(data, '$.name') AS name FROM events WHERE kind = 'session.named' AND session_id = ? AND json_extract(data, '$.by') = 'agent' ORDER BY log_pos DESC LIMIT 1", [session])) as { name: string }[];
+      this.agentTitles.set(session, last?.name ?? '');
+    }
+    if (this.agentTitles.get(session) === title) return;
+    this.agentTitles.set(session, title);
+    await this.named(session, title, 'agent', agent);
+  }
+  private readonly agentTitles = new Map<string, string>();
+  private async named(session: string, name: string, by: 'you' | 'agent', agent?: string): Promise<void> {
+    const ts = this.now();
+    await this.append(this.connection('core', { session, ...(agent ? { agent } : {}) }), { v: 1, id: ulid(ts), kind: 'session.named', ts, subject: `session:${letters(session)}`, data: { name, by } });
+  }
+
+  /**
+   * Why a session reads as it does (#2018): its row, the row of the state table that matched, each record fact that
+   * row read and, for each row above it, the fact it lacked, from the same call that picks every session's state.
+   */
+  private async whySeen(role: string, params: Obj): Promise<Obj> {
+    const query = (q: string) => this.record.raw(q);
+    const rows = () => [...this.rows.values()].map((p) => p.row);
+    let found = await whyOf(query, this.now(), String(params.session ?? ''), rows());
+    // A row the clock alone moved since its last pass, as one gone quiet, is set first: the row and its why agree.
+    const listed = (id: string) => this.rows.get(id)?.row;
+    if (!('refused' in found) && (found.word !== listed(found.id)?.word || found.why !== listed(found.id)?.why)) {
+      if (this.touched !== 'all') this.touched.add(found.id.slice('session:'.length));
+      await this.recordStates().catch(() => undefined);
+      found = await whyOf(query, this.now(), found.id, rows());
+    }
+    if ('refused' in found) throw refuse('not_found', '/params/session', found.refused, params.session);
+    const seen = role.startsWith('person:') ? this.seenBy(role) : '';
+    if (seen && !(await this.record.raw(`SELECT 1 FROM events WHERE session_id = ?${seen} LIMIT 1`, [found.id.slice('session:'.length)])).length) throw refuse('not_found', '/params/session', 'No session of yours has that ID.', params.session);
+    return found as unknown as Obj;
   }
 
   private async runCommand(params: Obj): Promise<Obj> {

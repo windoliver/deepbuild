@@ -106,6 +106,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['session.wait', ['cli', 'mcp']], ['session.delivered', ['mcp']], ['session.stop_waiting', ['mcp']],
   // Your words into a session from the app, a note or a page's box, recorded from: app by their request ID (#340).
   ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
+  // A session's name from the Session menu's Rename, and why a session reads as it does, for `deep status <session> --why` (#2018).
+  ['session.rename', ['app']], ['row.why', ['app', 'cli', 'person']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
   // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).

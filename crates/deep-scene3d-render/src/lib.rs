@@ -1507,6 +1507,8 @@ struct Set {
     elements: Vec<u32>,
     models: Vec<[[f64; 4]; 3]>,
     cull: Option<cull::Culled>,
+    /// The records [`Set::write`] changed and hasn't uploaded: the first and one past the last.
+    run: Option<(usize, usize)>,
 }
 
 impl Set {
@@ -1593,7 +1595,8 @@ impl Set {
         members_changed
     }
 
-    /// Writes record `i` alone when it changed, the set's members as they were.
+    /// Takes record `i` when it changed, the set's members as they were. [`Set::flush`] uploads
+    /// it, with the neighbours that changed beside it in one write.
     fn write(&mut self, device: &Device, i: usize, record: &[u8], written: &mut u32) {
         let at = i * self.stride;
         let Some(old) = self.records.get_mut(at..at + record.len()) else {
@@ -1601,11 +1604,27 @@ impl Set {
         };
         if old != record {
             old.copy_from_slice(record);
-            if let Some(buffer) = &self.buffer {
-                deep_gpu::alloc::outside(|| device.queue.write_buffer(buffer, at as u64, record));
+            match self.run {
+                Some((first, end)) if end == i => self.run = Some((first, i + 1)),
+                _ => {
+                    self.flush(device);
+                    self.run = Some((i, i + 1));
+                }
             }
             *written += 1;
             self.revision += 1;
+        }
+    }
+
+    /// Uploads the run of changed records [`Set::write`] gathered.
+    fn flush(&mut self, device: &Device) {
+        if let (Some((first, end)), Some(buffer)) = (self.run.take(), &self.buffer) {
+            let bytes = &self.records[first * self.stride..end * self.stride];
+            deep_gpu::alloc::outside(|| {
+                device
+                    .queue
+                    .write_buffer(buffer, (first * self.stride) as u64, bytes)
+            });
         }
     }
 
@@ -1816,6 +1835,7 @@ struct Uniforms {
     display: Written,
     internal: Written,
     tone: Written,
+    shadow: Written,
 }
 
 pub struct Renderer {
@@ -1878,6 +1898,7 @@ pub struct Renderer {
     sky_pipeline: Option<wgpu::RenderPipeline>,
     /// This frame's puffs, back to front, and their pipeline once compiled (#422).
     puffs: Option<(wgpu::Buffer, u32)>,
+    puff_records: Set,
     puff_pipeline: Option<wgpu::RenderPipeline>,
     /// The see-through solids' pipelines, blend and add, each compiled the first time a batch
     /// draws one.
@@ -2027,6 +2048,9 @@ pub struct Renderer {
     /// The linear image this frame's output pass reads when passes between geometry and output
     /// wrote one (#418's `pre_tone`); `None`, the linear target.
     pre_tone: Option<wgpu::TextureView>,
+    /// The output pass's bind group over a post module's own target, with that target and the
+    /// covered mask it binds.
+    post_bind: Option<(wgpu::TextureView, wgpu::TextureView, wgpu::BindGroup)>,
 }
 
 /// The pass that draws thin lines and outlines at full size after the upscale (#386).
@@ -3367,6 +3391,7 @@ impl Renderer {
             sky: false,
             sky_pipeline: None,
             puffs: None,
+            puff_records: Set::default(),
             puff_pipeline: None,
             solid_layout: mesh_layout.clone(),
             maps,
@@ -3483,6 +3508,7 @@ impl Renderer {
             low_bytes: None,
             outlines,
             pre_tone: None,
+            post_bind: None,
         }
     }
 
@@ -4721,7 +4747,12 @@ impl Renderer {
                 mirrorer.prepare(device, scene, m, look, &self.picks, overlay);
                 true
             }
-            None => false,
+            None => {
+                if let Some(m) = self.mirrorer.as_mut() {
+                    m.rest();
+                }
+                false
+            }
         };
         // #465: the flare's sources at t, at the internal size the targets draw.
         self.flaring = match &scene.flare {
@@ -4760,7 +4791,12 @@ impl Renderer {
                 );
                 true
             }
-            None => false,
+            None => {
+                if let Some(f) = self.flarer.as_mut() {
+                    f.rest();
+                }
+                false
+            }
         };
         self.log_new();
     }
@@ -5191,6 +5227,13 @@ impl Renderer {
                     &mut written,
                 );
             }
+        }
+        for set in self
+            .batches
+            .values_mut()
+            .flat_map(|b| b.solids.values_mut())
+        {
+            set.flush(device);
         }
         self.counts.instances_written += written;
         self.counts.replayed += scene.layers.len() as u32;
@@ -5766,9 +5809,11 @@ impl Renderer {
             light_frame.light[3] = -1.0;
             Self::cut_casts(&self.planted, scene, &mut light_frame);
             deep_gpu::alloc::outside(|| {
-                device
-                    .queue
-                    .write_buffer(&self.shadow.buffer, 0, bytemuck::bytes_of(&light_frame))
+                device.queue.write_changed(
+                    &self.shadow.buffer,
+                    &self.written.shadow,
+                    bytemuck::bytes_of(&light_frame),
+                )
             });
         }
         let (map, white, contrast) = match look.tone_map {
@@ -7470,16 +7515,31 @@ impl Renderer {
             };
             let (more, source) = post.jobs(device, &frame);
             jobs.extend(more);
-            if let Some(view) = &source {
-                bind = self.output_bind(&device.device, view);
+            // The geometry's own target binds as the targets bound it, and the target a post
+            // handed last frame as that frame bound it; no other frame's is kept.
+            let kept = match (&source, &self.post_bind) {
+                (Some(view), Some((v, c, b))) if v == view && *c == self.covered.1 => {
+                    Some(b.clone())
+                }
+                _ => None,
+            };
+            match (&source, kept) {
+                (Some(view), _) if *view == t.linear_view => self.post_bind = None,
+                (Some(_), Some(b)) => bind = b,
+                (Some(view), None) => {
+                    bind = self.output_bind(&device.device, view);
+                    self.post_bind = Some((view.clone(), self.covered.1.clone(), bind.clone()));
+                }
+                (None, _) => self.post_bind = None,
             }
             self.pre_tone = source;
         } else {
             self.pre_tone = None;
+            self.post_bind = None;
         }
         // #465: the flare, added into the linear image the output reads.
         if let (true, Some(f), Some(t)) =
-            (self.flaring, self.flarer.as_ref(), self.targets.as_ref())
+            (self.flaring, self.flarer.as_mut(), self.targets.as_ref())
         {
             let into = self
                 .pre_tone
@@ -8035,9 +8095,11 @@ impl Renderer {
             (0..3).map(|i| (p.pos[i] - eye[i]).powi(2)).sum::<f64>()
         };
         all.sort_by(|a, b| d2(b).total_cmp(&d2(a)).then_with(|| a.id.cmp(&b.id)));
-        let records: Vec<PuffRecord> = all
-            .iter()
-            .map(|p| PuffRecord {
+        // A record holds nothing of the camera: a frame whose puffs keep their order writes none,
+        // and one that reorders them writes them into the buffer it has.
+        self.puff_records.begin();
+        for p in &all {
+            let record = PuffRecord {
                 center: v4(p.pos, p.radius),
                 shape: [
                     p.aspect as f32,
@@ -8051,15 +8113,11 @@ impl Renderer {
                     p.near_fade as f32,
                     (u32::from(p.sun) | u32::from(p.ambient) << 1) as f32,
                 ],
-            })
-            .collect();
-        let buffer = device.device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("scene3d puffs"),
-                contents: bytemuck::cast_slice(&records),
-                usage: wgpu::BufferUsages::VERTEX,
-            },
-        );
+            };
+            self.puff_records.push(&p.id, bytemuck::bytes_of(&record));
+        }
+        // No draw key names the puffs' buffer, and their writes aren't a batch's instance records.
+        self.puff_records.finish(device, &mut 0, &mut 0);
         if self.puff_pipeline.is_none() {
             let blend = wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING;
             let targets = [
@@ -8099,7 +8157,11 @@ impl Renderer {
             self.compiled += 1;
             self.names.push(PUFF_PASS);
         }
-        self.puffs = Some((buffer, records.len() as u32));
+        self.puffs = self
+            .puff_records
+            .buffer
+            .clone()
+            .map(|buffer| (buffer, all.len() as u32));
     }
 
     /// The sky's draw this frame, when it has one (#422).
@@ -9225,5 +9287,260 @@ mod tests {
         );
         let raised = device.take_raised();
         assert!(raised.is_empty(), "the device raised: {raised:?}");
+    }
+
+    /// A scene document of `items` in one layer, each stamped with its ID, name, order and layer.
+    fn stamped(
+        items: &[(&str, serde_json::Value)],
+        channels: serde_json::Value,
+    ) -> serde_json::Value {
+        let mut map = serde_json::Map::new();
+        for (k, (id, item)) in items.iter().enumerate() {
+            let mut item = item.clone();
+            item["id"] = json!(id);
+            item["name"] = json!(id);
+            item["order"] = json!(format!("a{k:03}"));
+            item["layer"] = json!("main");
+            map.insert((*id).into(), item);
+        }
+        json!({
+            "format": 1, "profile": "scene", "title": "T", "size": [128, 96], "camera": "cam",
+            "transport": {"span": "60s"}, "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+            "items": map, "channels": channels,
+        })
+    }
+
+    fn orbiting_camera() -> (serde_json::Value, serde_json::Value) {
+        (
+            json!({"kind": "camera@1", "params": {"projection": "perspective", "target": [0, 0.8, 0], "orbit": {"azimuth": 30, "elevation": 20, "distance": 14}, "fov": 45, "near": 0.1, "far": 500}}),
+            json!({"orbit": {"target": "items/cam/params/orbit/azimuth", "type": "f32", "keys": {"k0": {"t": "0s", "value": 30, "interp": "linear"}, "k1": {"t": "60s", "value": 390, "interp": "linear"}}}}),
+        )
+    }
+
+    /// What the device made and wrote while `frame` ran.
+    fn counted(device: &Device, frame: impl FnOnce()) -> deep_gpu::counted::Reading {
+        let before = device.device.counts().read();
+        frame();
+        device.device.counts().read().since(before)
+    }
+
+    /// Frames 1 to 5 of `doc`, each prepared whole and its jobs recorded into a slot as the GPU
+    /// layer's view does: what the device made and wrote in each.
+    fn played(
+        doc: &serde_json::Value,
+        mut post: Option<&mut dyn Post>,
+    ) -> Vec<deep_gpu::counted::Reading> {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let look =
+            Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap();
+        let mut labels = Labels::new();
+        let mut frames = Frames::new(doc, &look, &mut labels).unwrap();
+        let mut renderer = Renderer::new(&device, Planted::default());
+        let slot = texture2d(
+            &device.device,
+            "test slot",
+            [128, 96],
+            FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        )
+        .create_view(&Default::default());
+        let mut out = Vec::new();
+        for n in 0..6i64 {
+            frames
+                .at(
+                    n * 705_600_000 / 60,
+                    [128, 96],
+                    &Default::default(),
+                    &mut labels,
+                )
+                .unwrap();
+            let made = counted(&device, || {
+                renderer.prepare(&device, frames.scene(), &look);
+                let mut encoder = device.device.create_command_encoder(&Default::default());
+                let post = post.as_deref_mut().map(|p| p as &mut dyn Post);
+                for (_, job) in renderer.jobs(&device, &slot, post, None) {
+                    job(&mut encoder);
+                }
+                device.queue.submit([encoder.finish()]);
+            });
+            if n > 0 {
+                out.push(made);
+            }
+        }
+        let raised = device.take_raised();
+        assert!(raised.is_empty(), "the device raised: {raised:?}");
+        out
+    }
+
+    /// Canvas primitives, Frame budget: bind groups and buffers created in each frame after the
+    /// first are counted. Puffs, a mirror's overlay and a flare bind what they made at the first.
+    #[test]
+    fn a_frame_after_the_first_makes_no_buffer_and_no_bind_group_for_puffs_a_mirror_and_a_flare() {
+        let (cam, channels) = orbiting_camera();
+        let puff = |x: f64, seed: u32| json!({"kind": "puff@1", "at": {"pos": [x, 9.0, -20.0]}, "params": {"radius": 5, "aspect": 1.6, "density": 1, "bright": 1, "seed": seed}});
+        let doc = stamped(
+            &[
+                ("cam", cam),
+                (
+                    "sky",
+                    json!({"kind": "sky@1", "params": {"top": [0.15, 0.3, 0.75, 1], "low": [0.45, 0.6, 0.85, 1], "ambient_top": [0.25, 0.25, 0.25], "ambient_low": [0.1, 0.1, 0.1]}}),
+                ),
+                (
+                    "sun",
+                    json!({"kind": "light.sun@1", "params": {"illuminance": 3, "color": [1, 1, 1], "shadow": false}, "at": {"rot": [-45, 30, 0]}}),
+                ),
+                (
+                    "lamp",
+                    json!({"kind": "light.point@1", "params": {"power": 40, "radius": 0.05, "color": [1, 0.9, 0.8], "shadow": false}, "at": {"pos": [0.8, 2.6, -1]}}),
+                ),
+                (
+                    "floor_mat",
+                    json!({"kind": "material@1", "params": {"base_color": [0.05, 0.05, 0.06, 1], "metallic": 0, "roughness": 0.2, "mirror": {"strength": 1, "blur": 0, "plane": "floor"}}}),
+                ),
+                (
+                    "box_mat",
+                    json!({"kind": "material@1", "params": {"base_color": [0.7, 0.45, 0.3, 1], "roughness": 0.6}}),
+                ),
+                (
+                    "floor",
+                    json!({"kind": "plate@1", "params": {"grid": [1, 1], "size": [40, 40]}, "at": {"pos": [0, 0, 0]}, "material": "floor_mat"}),
+                ),
+                (
+                    "box",
+                    json!({"kind": "mark.box@1", "params": {"size": [0.7, 0.7, 0.7]}, "at": {"pos": [3, 0.35, 0]}, "material": "box_mat"}),
+                ),
+                (
+                    "flare",
+                    json!({"kind": "effect@1", "params": {"kind": "flare", "flare": {"from": "lights", "ghosts": 8, "halo": 0.05, "streak": {"count": 6, "length": 0.25, "anamorphic": false}, "starburst": {"blades": 6}, "intensity": 1}}}),
+                ),
+                ("puff0", puff(-12.0, 0)),
+                ("puff1", puff(0.0, 1)),
+                ("puff2", puff(12.0, 2)),
+            ],
+            channels,
+        );
+        for (n, made) in played(&doc, None).iter().enumerate() {
+            assert_eq!(
+                (made.buffers, made.bind_groups),
+                (0, 0),
+                "frame {}: buffers and bind groups made",
+                n + 1
+            );
+        }
+    }
+
+    /// A post module's passes hand the output pass the target it reads: the one it handed last
+    /// frame, or the geometry's own, binds as it did then.
+    #[test]
+    fn a_frame_after_the_first_makes_no_bind_group_for_the_output_of_a_post_module() {
+        struct Hands(Option<wgpu::TextureView>);
+        impl Post for Hands {
+            fn shadows(&self) -> bool {
+                false
+            }
+            fn jobs(
+                &mut self,
+                _: &Device,
+                frame: &PostFrame<'_>,
+            ) -> (Vec<(String, Job)>, Option<wgpu::TextureView>) {
+                let view = self.0.clone().unwrap_or_else(|| frame.linear.clone());
+                (Vec::new(), Some(view))
+            }
+        }
+        let (cam, channels) = orbiting_camera();
+        let doc = stamped(
+            &[
+                ("cam", cam),
+                (
+                    "box",
+                    json!({"kind": "mark.box@1", "params": {"size": 1, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [0, 0.5, 0]}}),
+                ),
+            ],
+            channels,
+        );
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let own = texture2d(
+            &gpu.device().device,
+            "test post",
+            [128, 96],
+            LINEAR,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        )
+        .create_view(&Default::default());
+        for (what, mut post) in [
+            ("its own target", Hands(Some(own))),
+            ("the geometry's", Hands(None)),
+        ] {
+            for (n, made) in played(&doc, Some(&mut post)).iter().enumerate() {
+                assert_eq!(
+                    made.bind_groups,
+                    0,
+                    "handing {what}, frame {}: bind groups made",
+                    n + 1
+                );
+            }
+        }
+    }
+
+    /// wgpu stages each queue write in a buffer of its own, so the records a frame moves go in
+    /// one write per run of neighbours, as a whole prepare's do.
+    #[test]
+    fn a_frame_that_moves_neighbouring_records_writes_them_in_one_write() {
+        let slide = |id: &str| {
+            (
+                format!("slide-{id}"),
+                json!({"target": format!("items/{id}/at/pos/1"), "type": "f32", "keys": {"k0": {"t": "0s", "value": 0.5, "interp": "linear"}, "k1": {"t": "60s", "value": 5, "interp": "linear"}}}),
+            )
+        };
+        let part = |x: f64| json!({"kind": "mark.box@1", "params": {"size": 1, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [x, 0.5, 0.0]}});
+        let ids = ["a", "b", "c", "d"];
+        let channels: serde_json::Map<String, serde_json::Value> =
+            ids.iter().map(|id| slide(id)).collect();
+        let mut items = vec![("cam", orbiting_camera().0)];
+        items.extend(
+            ids.iter()
+                .enumerate()
+                .map(|(k, id)| (*id, part(k as f64 * 2.0 - 3.0))),
+        );
+        let doc = stamped(&items, serde_json::Value::Object(channels));
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let look =
+            Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap();
+        let mut labels = Labels::new();
+        let mut frames = Frames::new(&doc, &look, &mut labels).unwrap();
+        let moved = frames
+            .moved()
+            .expect("transforms stay on the fast path")
+            .to_vec();
+        assert_eq!(moved.len(), 4, "the four sliding boxes: {moved:?}");
+        let mut playing = Renderer::new(&device, Planted::default());
+        frames
+            .at(0, [128, 96], &Default::default(), &mut labels)
+            .unwrap();
+        playing.prepare(&device, frames.scene(), &look);
+        for n in [1i64, 17, 600] {
+            frames
+                .at(
+                    n * 705_600_000 / 60,
+                    [128, 96],
+                    &Default::default(),
+                    &mut labels,
+                )
+                .unwrap();
+            let made = counted(&device, || {
+                playing.prepare_moved(&device, frames.scene(), &look, &moved)
+            });
+            assert_eq!(
+                playing.counts().instances_written,
+                4,
+                "frame {n}: the four moved records"
+            );
+            assert_eq!(made.writes, 1, "frame {n}: queue writes");
+            let mut whole = Renderer::new(&device, Planted::default());
+            whole.prepare(&device, frames.scene(), &look);
+            assert_eq!(records(&playing), records(&whole), "frame {n}");
+        }
     }
 }
