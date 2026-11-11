@@ -186,7 +186,7 @@ fn register_compiling(
     r.array("motion.next", "i64", "document", "time", "items");
     r.operator("clock", "items", &["motion.program", "t"], &["motion.next"])
         .document()
-        .applies(has_motion)
+        .applies(has_clock)
         .run(clock);
     r.operator(
         "channels",
@@ -283,6 +283,21 @@ fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
         doc.get(*s)
             .and_then(Value::as_object)
             .is_some_and(|m| !m.is_empty())
+    })
+}
+
+/// A `rest_on` that names `on` (#2013): it rests its owner on true shapes at check.
+pub fn rests_at_check(constraint: &Value) -> bool {
+    constraint.get("kind").and_then(Value::as_str) == Some("rest_on") && constraint.get("on").is_some()
+}
+
+/// A document with motion a frame's time can change: any section's entry but a rest solved at
+/// check, which alone gives a frame nothing to evaluate (Constraint: rest_on).
+fn has_clock(doc: &Value, _: &str, _: &Value) -> bool {
+    SECTIONS.iter().any(|s| {
+        doc.get(*s)
+            .and_then(Value::as_object)
+            .is_some_and(|m| m.values().any(|entry| *s != "constraints" || !rests_at_check(entry)))
     })
 }
 

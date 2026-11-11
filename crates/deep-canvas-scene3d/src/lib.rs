@@ -8,6 +8,7 @@ pub mod clusters;
 pub mod curve;
 pub mod cut;
 pub mod deviation;
+pub mod distribute;
 pub mod emitters;
 pub mod fixtures;
 pub mod flare;
@@ -29,9 +30,11 @@ pub mod module;
 pub mod overlay;
 pub mod poly;
 pub mod probe;
+pub mod rest;
 pub mod samples;
 pub mod scene;
 pub mod sets;
+pub mod shapes;
 pub mod shore;
 pub mod sky;
 pub mod spatial;
@@ -43,7 +46,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 20] = [
+pub const PLANTED: [&str; 21] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -66,4 +69,6 @@ pub const PLANTED: [&str; 20] = [
     // its own advance.
     "outline_ignores_fill_rule",
     "extrude_own_advance",
+    // #2013: a scatter whose sampler stops after 10 points.
+    distribute::STOPS_AFTER_10,
 ];

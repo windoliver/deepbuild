@@ -15,81 +15,8 @@ use serde_json::{json, Value};
 /// The check kind.
 pub const GEOMETRY_AUDIT: &str = "geometry.audit";
 
-fn apply(m: &Affine3, p: V3) -> V3 {
-    let mut out = [0.0; 3];
-    for (i, o) in out.iter_mut().enumerate() {
-        *o = m[i][0] * p[0] + m[i][1] * p[1] + m[i][2] * p[2] + m[i][3];
-    }
-    out
-}
-
-fn column(m: &Affine3, j: usize) -> V3 {
-    [m[0][j], m[1][j], m[2][j]]
-}
-
 fn norm(v: V3) -> f64 {
     deep_canvas::ops::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
-}
-
-/// The box `[lo, hi]` in a part's own space, placed by `m`.
-fn placed_box(m: &Affine3, lo: V3, hi: V3) -> Shape {
-    let c = apply(m, [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0, (lo[2] + hi[2]) / 2.0]);
-    let mut axes = [[0.0; 3]; 3];
-    let mut half = [0.0; 3];
-    for j in 0..3 {
-        let col = column(m, j);
-        let l = norm(col);
-        half[j] = l * (hi[j] - lo[j]).abs() / 2.0;
-        axes[j] = if l > 0.0 { [col[0] / l, col[1] / l, col[2] / l] } else { [0.0; 3] };
-        if l == 0.0 {
-            axes[j][j] = 1.0;
-        }
-    }
-    Shape::Obb { c, axes, half }
-}
-
-fn v3(v: &Value) -> Option<V3> {
-    let a = v.as_array()?;
-    Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?, a.get(2)?.as_f64()?])
-}
-
-/// A part's true shape from its builder's pieces (`true_shape`, in its own space) placed by `m`:
-/// a sphere, a box, capsules along its path (whose first and last points are its ends), or the
-/// box around its mesh where nothing simpler is exact.
-fn built_shapes(doc: &Value, item: &Value, mesh: &deep_canvas_scene3d::geom::Mesh, m: &Affine3) -> (Vec<Shape>, Vec<V3>) {
-    let [lo, hi] = mesh.bounds();
-    let scale = (0..3).map(|j| norm(column(m, j))).fold(0.0, f64::max);
-    let mut ends = Vec::new();
-    let mut shapes = Vec::new();
-    for piece in &mesh.true_shape {
-        if let Some(b) = piece.get("sphere") {
-            let c = b.get("centre").and_then(v3).unwrap_or([0.0; 3]);
-            let r = b.get("radius").and_then(Value::as_f64).unwrap_or(0.0);
-            shapes.push(Shape::Ball { c: apply(m, c), r: r * scale });
-            continue;
-        }
-        if let Some(c) = piece.get("capsules") {
-            let r = c.get("radius").and_then(Value::as_f64).unwrap_or(0.0) * scale;
-            let path = deep_canvas_scene3d::builders::path(doc, item.pointer("/params/path"));
-            if let Some(p) = path.filter(|p| p.points.len() > 1) {
-                let pts: Vec<V3> = p.points.iter().map(|q| apply(m, *q)).collect();
-                if !p.closed {
-                    ends = vec![pts[0], pts[pts.len() - 1]];
-                }
-                shapes.extend(pts.windows(2).map(|w| Shape::Capsule { a: w[0], b: w[1], r }));
-                continue;
-            }
-        }
-        let (blo, bhi) = match piece.get("box") {
-            Some(b) => (b.get("min").and_then(v3).unwrap_or(lo), b.get("max").and_then(v3).unwrap_or(hi)),
-            None => (lo, hi),
-        };
-        shapes.push(placed_box(m, blo, bhi));
-    }
-    if shapes.is_empty() {
-        shapes.push(placed_box(m, lo, hi));
-    }
-    (shapes, ends)
 }
 
 /// Every solid part of `doc` at `t` (flicks), as the audit reads it: its true shape placed in the
@@ -103,35 +30,45 @@ pub(crate) fn solids_at(doc: &Value, t: i64, moved: &BTreeSet<String>) -> Result
         if item.get("visible") == Some(&Value::Bool(false)) {
             continue;
         }
-        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-        let size = item.pointer("/params/size").and_then(v3).unwrap_or([1.0; 3]);
-        let half = [size[0] / 2.0, size[1] / 2.0, size[2] / 2.0];
-        let (shapes, ends) = match kind {
-            "mark.box@1" | "mark.cylinder@1" => (vec![placed_box(m, [-half[0], -half[1], -half[2]], half)], Vec::new()),
-            "mark.sphere@1" => {
-                let r = (0..3).map(|j| norm(column(m, j)) * half[j]).fold(0.0, f64::max);
-                (vec![Shape::Ball { c: apply(m, [0.0; 3]), r }], Vec::new())
+        // #419's stand-in for the physics module: each body a ball at the bake's position.
+        if item.get("kind").and_then(Value::as_str) == Some("fixture.world@1") {
+            let params = item.get("params").cloned().unwrap_or(Value::Null);
+            let w = deep_canvas_scene3d::fixtures::bake(&params, &format!("items/{id}/params"))
+                .map_err(|r| format!("{} at {}", r.code, r.path))?;
+            for (b, p) in w.bodies.iter().zip(w.at(t)) {
+                out.push(Solid { id: format!("{id}#{}", b.id), shapes: vec![Shape::Ball { c: p, r: b.radius }], ends: Vec::new(), moved: true });
             }
-            // #419's stand-in for the physics module: each body a ball at the bake's position.
-            "fixture.world@1" => {
-                let params = item.get("params").cloned().unwrap_or(Value::Null);
-                let w = deep_canvas_scene3d::fixtures::bake(&params, &format!("items/{id}/params"))
-                    .map_err(|r| format!("{} at {}", r.code, r.path))?;
-                for (b, p) in w.bodies.iter().zip(w.at(t)) {
-                    out.push(Solid { id: format!("{id}#{}", b.id), shapes: vec![Shape::Ball { c: p, r: b.radius }], ends: Vec::new(), moved: true });
+            continue;
+        }
+        // #2013: an instancer's elements, each its prototype's true shape at the element's place,
+        // so a scatter that leaves overlaps fails here (Attribute and field: distribute).
+        if item.get("kind").and_then(Value::as_str) == Some("instance@1") {
+            let rows = scene::elements_at(doc, t, id, None).map_err(|r| format!("{} at {}", r.code, r.path))?.unwrap_or_default();
+            let identity = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]];
+            let protos: Vec<Vec<Shape>> = item
+                .pointer("/params/of")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .map(|p| {
+                    let found = p.as_str().and_then(|p| placed.iter().find(|(x, _, _)| x == p));
+                    found
+                        .and_then(|(p, proto, _)| deep_canvas_scene3d::shapes::of(doc, p, proto, &identity, secs).ok().flatten())
+                        .map_or_else(Vec::new, |(s, _)| s)
+                })
+                .collect();
+            for r in &rows {
+                let at = scene::matmul(m, &r.at());
+                let shapes: Vec<Shape> = protos.get(r.proto).into_iter().flatten().map(|s| deep_canvas_scene3d::shapes::placed(s, &at)).collect();
+                if !shapes.is_empty() {
+                    out.push(Solid { id: format!("{id}#{}", r.id), shapes, ends: Vec::new(), moved: moved.contains(id) });
                 }
-                continue;
             }
-            k if deep_canvas_scene3d::builders::KINDS.contains(&k) => {
-                let run = deep_canvas_scene3d::stack::Run::default();
-                let built = deep_canvas_scene3d::build::built(doc, id, item, &run, secs)
-                    .map_err(|p| format!("out_of_range at items/{id}/{p}"))?;
-                let Some(mesh) = built.mesh.filter(|m| m.triangles() > 0) else {
-                    continue;
-                };
-                built_shapes(doc, item, &mesh, m)
-            }
-            _ => continue,
+            continue;
+        }
+        // The true shape rest_on rests on (#2013), so the audit confirms the contact it made.
+        let Some((shapes, ends)) = deep_canvas_scene3d::shapes::of(doc, id, item, m, secs)? else {
+            continue;
         };
         out.push(Solid { id: id.clone(), shapes, ends, moved: moved.contains(id) });
     }
