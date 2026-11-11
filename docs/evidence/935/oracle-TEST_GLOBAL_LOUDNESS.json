@@ -1,0 +1,131 @@
+[
+  {
+    "file": "seq-3341-1-16bit.wav",
+    "id": "global_0",
+    "target": -21,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/global_0/variants/0/takes/0",
+        "actual": {
+          "integrated": -22.95355485141741,
+          "target": -21,
+          "tolerance": 1
+        },
+        "what": "sounds/global_0/variants/0/takes/0 reads -22.95 LUFS, outside ±1 LU of its target -21 LUFS"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-2-16bit.wav",
+    "id": "global_1",
+    "target": -31,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/global_1/variants/0/takes/0",
+        "actual": {
+          "integrated": -32.95985890772079,
+          "target": -31,
+          "tolerance": 1
+        },
+        "what": "sounds/global_1/variants/0/takes/0 reads -32.96 LUFS, outside ±1 LU of its target -31 LUFS"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-3-16bit-v02.wav",
+    "id": "global_2",
+    "target": -21,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/global_2/variants/0/takes/0",
+        "actual": {
+          "integrated": -23.014141652725463,
+          "target": -21,
+          "tolerance": 1
+        },
+        "what": "sounds/global_2/variants/0/takes/0 reads -23.01 LUFS, outside ±1 LU of its target -21 LUFS"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-4-16bit-v02.wav",
+    "id": "global_3",
+    "target": -21,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/global_3/variants/0/takes/0",
+        "actual": {
+          "integrated": -23.014141652725463,
+          "target": -21,
+          "tolerance": 1
+        },
+        "what": "sounds/global_3/variants/0/takes/0 reads -23.01 LUFS, outside ±1 LU of its target -21 LUFS"
+      },
+      {
+        "code": "audio.gen.onset",
+        "path": "sounds/global_3/variants/0/takes/0",
+        "actual": {
+          "lead": 10.000020833333334,
+          "sample": 480001,
+          "limit": 0.01
+        },
+        "what": "sounds/global_3/variants/0/takes/0 is silent for its first 10000.0 ms (its first sample at −60 dBFS is 480001), past the 10 ms onset limit"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-5-16bit-v02.wav",
+    "id": "global_4",
+    "target": -21,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/global_4/variants/0/takes/0",
+        "actual": {
+          "integrated": -22.9790291410032,
+          "target": -21,
+          "tolerance": 1
+        },
+        "what": "sounds/global_4/variants/0/takes/0 reads -22.98 LUFS, outside ±1 LU of its target -21 LUFS"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-7_seq-3342-5-24bit.wav",
+    "id": "global_5",
+    "target": -21,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/global_5/variants/0/takes/0",
+        "actual": {
+          "integrated": -22.98615880485231,
+          "target": -21,
+          "tolerance": 1
+        },
+        "what": "sounds/global_5/variants/0/takes/0 reads -22.99 LUFS, outside ±1 LU of its target -21 LUFS"
+      }
+    ]
+  },
+  {
+    "file": "seq-3341-2011-8_seq-3342-6-24bit-v02.wav",
+    "id": "global_6",
+    "target": -21,
+    "issues": [
+      {
+        "code": "audio.gen.level",
+        "path": "sounds/global_6/variants/0/takes/0",
+        "actual": {
+          "integrated": -22.99782024105965,
+          "target": -21,
+          "tolerance": 1
+        },
+        "what": "sounds/global_6/variants/0/takes/0 reads -23.00 LUFS, outside ±1 LU of its target -21 LUFS"
+      }
+    ]
+  }
+]

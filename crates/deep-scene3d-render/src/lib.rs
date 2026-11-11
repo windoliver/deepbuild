@@ -236,6 +236,8 @@ pub struct Counts {
     /// Batches replayed from an earlier encoding.
     pub replayed: u32,
     pub instances_written: u32,
+    /// #1921: per instancer, the element IDs whose records this frame wrote to the GPU.
+    pub element_uploads: BTreeMap<String, Vec<u32>>,
     /// Compute culls run this frame: one per batch and view that changed (#484).
     pub culls: u32,
     /// Whether this frame built the camera's depth pyramid (#1637).
@@ -1509,6 +1511,8 @@ struct Set {
     cull: Option<cull::Culled>,
     /// The records [`Set::write`] changed and hasn't uploaded: the first and one past the last.
     run: Option<(usize, usize)>,
+    /// The records the last [`Set::finish`] wrote, by index (#1921).
+    uploaded: Vec<usize>,
 }
 
 impl Set {
@@ -1542,6 +1546,7 @@ impl Set {
         }
         let stride = self.stride.max(16);
         let members_changed = self.new_owners.is_some() || self.buffer.is_none();
+        self.uploaded.clear();
         if members_changed {
             if self.buffer.is_none() || self.capacity < self.count {
                 self.capacity = self.count.max(1);
@@ -1562,6 +1567,7 @@ impl Set {
                 deep_gpu::alloc::outside(|| device.queue.write_buffer(buffer, 0, &self.next));
             }
             *written += self.count as u32;
+            self.uploaded.extend(0..self.count);
             self.revision += 1;
             if let Some(owners) = self.new_owners.take() {
                 self.owners = owners;
@@ -1579,6 +1585,7 @@ impl Set {
                 let at = i * stride..(i + 1) * stride;
                 if i < n && self.next[at.clone()] != self.records[at] {
                     *written += 1;
+                    self.uploaded.push(i);
                     self.revision += 1;
                     run.get_or_insert(i);
                 } else if let Some(first) = run.take() {
@@ -1630,6 +1637,15 @@ impl Set {
 
     fn len(&self) -> u32 {
         self.owners.len() as u32
+    }
+
+    /// The `<instancer>#<id>` owners of the records the last [`Set::finish`] wrote (#1921).
+    fn uploaded_elements(&self) -> impl Iterator<Item = (&str, u32)> {
+        let owners = self.uploaded.iter().filter_map(|i| self.owners.get(*i));
+        owners.filter_map(|o| {
+            let (item, e) = o.rsplit_once('#')?;
+            Some((item, e.parse().ok()?))
+        })
     }
 }
 
@@ -6254,6 +6270,10 @@ impl Renderer {
         batch.casters.retain(|_, set| set.count > 0);
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
             set.finish(device, &mut next, &mut written);
+            for (item, e) in set.uploaded_elements().filter(|_| key.3 != 0) {
+                let uploads = self.counts.element_uploads.entry(item.into());
+                uploads.or_default().push(e);
+            }
             // A batch's cull is made once for its records and how many it holds (#484).
             let made_for = (set.generation, set.count as u32);
             let source = set.owners.first().and_then(|o| {
@@ -6417,7 +6437,17 @@ impl Renderer {
         let bundle = self.encode(device, &layer.id);
         let batch = self.batches.get_mut(&layer.id).expect("made above");
         batch.bundle = Some(bundle);
-        self.counts.encoded.push((layer.id.clone(), layer.items()));
+        // An instancer's elements draw as its instanced batch, which names the instancer (#1921).
+        let elements: BTreeSet<&str> = layer
+            .solids
+            .iter()
+            .filter(|s| s.batch != 0)
+            .filter_map(|s| Some(s.id.rsplit_once('#')?.0))
+            .collect();
+        let mut items = layer.items();
+        items.retain(|i| !elements.contains(i.split('#').next().unwrap_or(i)));
+        items.extend(elements.into_iter().map(String::from));
+        self.counts.encoded.push((layer.id.clone(), items));
     }
 
     /// After a frame that drew per-pixel items (#424): how many fragments it wrote, and whether

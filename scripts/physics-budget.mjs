@@ -7,6 +7,7 @@
 // timed. The surface is tests/acceptance/2011/README.md's.
 //
 // Usage: node scripts/physics-budget.mjs [--planted times_only_app] < {"world", "steps", "reference_mac": {"app", "web"}}
+// (#1921: or `"scene"` with `"world"` the ID of a world it lists, which every deep-physics call takes as given).
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -26,8 +27,9 @@ const planted = args.length === 2 && args[0] === '--planted' && args[1] === 'tim
 if (args.length && !planted) badInput();
 let request;
 try { request = JSON.parse(readFileSync(0, 'utf8')); } catch { badInput(); }
-const { world, steps, reference_mac: reference } = request ?? {};
-if (typeof world !== 'object' || world === null || !Number.isSafeInteger(steps) || steps < 1
+const { world, scene, steps, reference_mac: reference } = request ?? {};
+const doc = scene === undefined ? world : scene?.worlds?.[world];
+if (typeof doc !== 'object' || doc === null || !Number.isSafeInteger(steps) || steps < 1
   || typeof reference?.app !== 'boolean' || typeof reference?.web !== 'boolean') badInput();
 
 const target = process.env.CARGO_TARGET_DIR ? resolve(root, process.env.CARGO_TARGET_DIR) : join(root, 'target');
@@ -50,12 +52,13 @@ const call = (c) => {
   if (r.status !== 0) { process.stderr.write(`deep-physics failed: ${r.stderr}\n`); process.exit(1); }
   return JSON.parse(r.stdout);
 };
-const checked = call({ call: 'check', world });
+const subject = scene === undefined ? { world } : { scene, world };
+const checked = call({ call: 'check', ...subject });
 if (checked.issues?.length) {
   process.stdout.write(`${JSON.stringify({ ok: false, issues: checked.issues })}\n`);
   process.exit(0);
 }
-const limit = world.budget?.step_p95 ?? 2;
+const limit = doc.budget?.step_p95 ?? 2;
 
 /** The nearest-rank 95th percentile of `ms`. */
 const p95 = (ms) => [...ms].sort((a, b) => a - b)[Math.ceil(0.95 * ms.length) - 1];
@@ -78,12 +81,12 @@ function judged(host, targetTriple, engine, timed) {
 const blocked = (what) => ({ verdict: 'BLOCKED', target: null, engine: null, profile: 'release', runs: [], loads: [], slowest: null, reason: what, what: null });
 
 function timeApp() {
-  call({ call: 'time', world, steps }); // the untimed warm-up
+  call({ call: 'time', ...subject, steps }); // the untimed warm-up
   const timed = [];
   let triple;
   for (let i = 0; i < RUNS; i++) {
     const start = loadavg()[0];
-    const r = call({ call: 'time', world, steps });
+    const r = call({ call: 'time', ...subject, steps });
     const end = loadavg()[0];
     if (!r.ok) { process.stderr.write(`deep-physics time: ${JSON.stringify(r)}\n`); process.exit(1); }
     triple = r.target;
@@ -97,7 +100,7 @@ function timeApp() {
 const PAGE = `<!doctype html><meta charset="utf-8"><title>#2011 step budget</title><script type="module">
 const post = (path, body) => fetch(path, { method: 'POST', body: JSON.stringify(body) });
 try {
-  const { world, steps, runs } = await (await fetch('/request.json')).json();
+  const { subject, steps, runs } = await (await fetch('/request.json')).json();
   const { instance } = await WebAssembly.instantiate(await (await fetch('/physics.wasm')).arrayBuffer(), {});
   const e = instance.exports;
   const line = (c) => {
@@ -112,7 +115,7 @@ try {
   };
   const out = [];
   for (let run = 0; run <= runs; run++) {
-    const built = line({ call: 'time_build', world });
+    const built = line({ call: 'time_build', ...subject });
     if (!built.ok) throw Error(JSON.stringify(built));
     if (run > 0) await post('/mark', { run, at: 'start' });
     const ms = [];
@@ -157,7 +160,7 @@ async function timeWeb() {
     }
     const send = (type, data) => { res.writeHead(200, { ...headers, 'content-type': type }); res.end(data); };
     if (req.url === '/' || req.url === '/index.html') send('text/html', PAGE);
-    else if (req.url === '/request.json') send('application/json', JSON.stringify({ world, steps, runs: RUNS }));
+    else if (req.url === '/request.json') send('application/json', JSON.stringify({ subject, steps, runs: RUNS }));
     else if (req.url === '/physics.wasm') send('application/wasm', wasm);
     else { res.writeHead(404, headers); res.end(); }
   });

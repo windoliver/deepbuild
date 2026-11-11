@@ -4,6 +4,7 @@
 // claim, its newest claim's line, the one its chat showed (#669). `deep numbers` reads the hub's readings.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { codeWords } from '@deepbuild/contracts';
 import { billingMode } from '@deepbuild/readings';
 import { shadowedBy, topLevel } from './claude-settings.js';
 import { call } from './client.js';
@@ -36,6 +37,8 @@ export const OLDER_SET = 'Runs the older set:';
 /** A Claude Code session's five-hour window where the repo's own status line shadows the forwarder (#1296). */
 export const UNREAD_WINDOW = '5 h · unknown:';
 export const NEWER_SET = 'Runs the current set:';
+/** A stop's cause in words, from the one list every view reads (#2029); a cause the list doesn't know reads as unknown's. */
+const causeWords = (cause: string): string => codeWords('stop.cause', cause) ?? codeWords('stop.cause', 'unknown')!;
 /** The most tool calls a finished turn lists; the rest are counted on one line. */
 const CALLS_SHOWN = 20;
 
@@ -115,7 +118,7 @@ interface Rule { rule: string; state: State; cause: Cause; lacks: string; match(
 
 const ago = (ms: number | null, now: number): string => (ms === null ? 'a while' : elapsed(now - ms));
 const recent = (f: SessionFacts, now: number): boolean => now - (f.last_seen ?? 0) <= QUIET_MS;
-const causeOf = (f: SessionFacts): string => (f.stopCause ? ` (${f.stopCause})` : '');
+const causeOf = (f: SessionFacts): string => (f.stopCause ? ` (${causeWords(f.stopCause)})` : '');
 /** Its agent's process gone while a turn was under way: one that stopped, failed or got stuck first had ended its turn. */
 const goneMidTurn = (f: SessionFacts): boolean => f.gone !== undefined && !['finished', 'failed', 'stuck'].includes(f.status);
 /** A row for a claim's verdict: the session's newest claim, judged `outcome` by a verdict still in force. */

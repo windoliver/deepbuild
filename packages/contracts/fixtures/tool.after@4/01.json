@@ -10,12 +10,13 @@
   "data": {
     "kind": "shell",
     "paths": [],
-    "command": "npm test",
+    "command": "git push origin main",
     "call": "toolu_01A9cE3Kq7mZ",
-    "outcome": "ok",
-    "nested": {
-      "complete": false,
-      "calls": 256
-    }
+    "outcome": "failed",
+    "exit_code": 1,
+    "signature": "sig:9c41e07a2b5d8f13",
+    "cause": "command_failed",
+    "owner": "agent",
+    "error": "! [rejected] main -> main (fetch first)"
   }
 }

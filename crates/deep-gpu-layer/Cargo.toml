@@ -58,6 +58,9 @@ deep-scene3d-render = { path = "../deep-scene3d-render" }
 # Issue #423: the run's decode worker, which makes a material's maps ready for the GPU.
 deep-codecs = { path = "../deep-codecs" }
 deep-canvas-effects = { path = "../deep-canvas-effects" }
+# Issue #1921: a scene's physics worlds, baked so their outputs write its instancers' columns.
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+deep-physics-rapier = { path = "../deep-physics-rapier" }
 deep-effects-render = { path = "../deep-effects-render" }
 wgpu-profiler = "0.28"
 # Issue #464: the indexed operator's class, computed from its module.

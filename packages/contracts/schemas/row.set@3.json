@@ -1,7 +1,7 @@
 {
   "title": "row.set@3",
-  "description": "One row of the list every reader shows (#1463), a running job's row among them (#1925), and the one flag a session row shows beside its word (#2019): the app's list, deep, deep status, deep inbox and deep_drive's see read these rows and no other reading. The core builds each row in one place and appends this kind when the row changes, or with listed false when it leaves the list. It is read from the record and is never evidence.",
-  "x-since": "R1",
+  "description": "One row of the list every reader shows (#1463), a running job's row among them (#1925), and a working session's with what its turn is doing now (#2021): the app's list, deep, deep status, deep inbox and deep_drive's see read these rows and no other reading. The core builds each row in one place and appends this kind when the row changes, or with listed false when it leaves the list. It is read from the record and is never evidence.",
+  "x-since": "R6",
   "x-stability": "stable",
   "x-feeds": [
     "rows"
@@ -210,79 +210,30 @@
         "progress": {
           "type": "string",
           "maxLength": 256,
-          "description": "A running job's count from its tool's own counter, such as 300 of 600 or 42%, with its time left once the job has run 30 s, such as 300 of 600 \u00b7 40 s left (#1925). Absent when its tool reports no counter: a reader shows how long it has run from since."
+          "description": "A running job's count from its tool's own counter, such as 300 of 600 or 42%, with its time left once the job has run 30 s, such as 300 of 600 · 40 s left (#1925). Absent when its tool reports no counter: a reader shows how long it has run from since."
         },
-        "flag": {
+        "doing": {
           "type": "object",
-          "description": "The one flag a session row shows in its right slot beside its word (#2019): never a state, at most one, the first that applies in the order interrupted, retrying, repeating, watch-only, unpushed; absent when none applies.",
+          "description": "What a working session's turn is doing now (#2021), built only from the hook facts of its latest tool event: the step's words, a verb in its tense and its object, such as Running npm; when that event came, ms since the Unix epoch; and whether the step is over, so a reader writes 2 min ago after it rather than how long it has run. Absent when no tool event of the turn says.",
           "properties": {
-            "code": {
+            "words": {
               "type": "string",
-              "enum": [
-                "interrupted",
-                "retrying",
-                "repeating",
-                "watch-only",
-                "unpushed"
-              ],
-              "description": "Which flag it is.",
-              "x-closure": {
-                "closed": "the flags a row can carry beside its word",
-                "reopens": "a minor that adds a flag",
-                "mark": "exhaustive"
-              }
+              "minLength": 1,
+              "maxLength": 8192
             },
-            "text": {
-              "type": "string",
-              "maxLength": 8192,
-              "description": "The one line its slot shows, from record facts, with no age in it: a reader says how long from since."
-            },
-            "since": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 0,
-              "maximum": 9007199254740991,
-              "description": "Since when the flag applies, ms since the Unix epoch; null when the record gives no time."
-            },
-            "fix": {
-              "type": "string",
-              "maxLength": 8192,
-              "description": "What clears it, where something you can do does."
-            },
-            "doing": {
-              "type": "string",
-              "maxLength": 8192,
-              "description": "interrupted: what its turn last ran, the command or the MCP tool."
-            },
-            "until": {
+            "at": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 9007199254740991,
-              "description": "interrupted: when it can pick up, ms since the Unix epoch, as the agent's own record of the limit names it."
+              "maximum": 9007199254740991
             },
-            "cause": {
-              "type": "string",
-              "maxLength": 8192,
-              "description": "retrying: the cause the agent's retry record names, in words."
-            },
-            "count": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 1000000,
-              "description": "retrying: the retries so far; repeating: the alike failures in a row."
-            },
-            "command": {
-              "type": "string",
-              "maxLength": 8192,
-              "description": "repeating: the command, or the MCP server and tool, that failed alike."
+            "ago": {
+              "type": "boolean"
             }
           },
           "required": [
-            "code",
-            "text",
-            "since"
+            "words",
+            "at",
+            "ago"
           ],
           "additionalProperties": false
         }

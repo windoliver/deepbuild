@@ -1,6 +1,6 @@
 {
   "title": "tool.after@4",
-  "description": "A tool call ended: ok at its PostToolUse, or failed at its PostToolUseFailure, with an error signature, its cause and who can act on it. @4 adds an MCP call's arguments as a hash (`args`), so a call repeated with the same arguments is told from one with others (#2019).",
+  "description": "A tool call ended: ok at its PostToolUse, or failed at its PostToolUseFailure, with an error signature, its cause, who can act on it and the target's first error line.",
   "x-since": "R1",
   "x-stability": "stable",
   "x-feeds": [
@@ -163,6 +163,12 @@
               ],
               "additionalProperties": false,
               "description": "The agent's bounded record of the calls this call made."
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "A failed call's first error line from its target, as its failure hook reports it: the agent's own exit line left out, whitespace runs made one space, scrubbed as evidence is and clamped to 300 characters; absent when the failure names none."
             }
           },
           "required": [
@@ -277,6 +283,12 @@
               ],
               "additionalProperties": false,
               "description": "The agent's bounded record of the calls this call made."
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "A failed call's first error line from its target, as its failure hook reports it: the agent's own exit line left out, whitespace runs made one space, scrubbed as evidence is and clamped to 300 characters; absent when the failure names none."
             }
           },
           "required": [
@@ -391,6 +403,12 @@
               ],
               "additionalProperties": false,
               "description": "The agent's bounded record of the calls this call made."
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "A failed call's first error line from its target, as its failure hook reports it: the agent's own exit line left out, whitespace runs made one space, scrubbed as evidence is and clamped to 300 characters; absent when the failure names none."
             }
           },
           "required": [
@@ -505,6 +523,12 @@
               ],
               "additionalProperties": false,
               "description": "The agent's bounded record of the calls this call made."
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "A failed call's first error line from its target, as its failure hook reports it: the agent's own exit line left out, whitespace runs made one space, scrubbed as evidence is and clamped to 300 characters; absent when the failure names none."
             }
           },
           "required": [
@@ -619,6 +643,12 @@
               ],
               "additionalProperties": false,
               "description": "The agent's bounded record of the calls this call made."
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "A failed call's first error line from its target, as its failure hook reports it: the agent's own exit line left out, whitespace runs made one space, scrubbed as evidence is and clamped to 300 characters; absent when the failure names none."
             }
           },
           "required": [
@@ -733,6 +763,12 @@
               ],
               "additionalProperties": false,
               "description": "The agent's bounded record of the calls this call made."
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "A failed call's first error line from its target, as its failure hook reports it: the agent's own exit line left out, whitespace runs made one space, scrubbed as evidence is and clamped to 300 characters; absent when the failure names none."
             }
           },
           "required": [
@@ -858,11 +894,11 @@
               "additionalProperties": false,
               "description": "The agent's bounded record of the calls this call made."
             },
-            "args": {
+            "error": {
               "type": "string",
-              "pattern": "^[0-9a-f]{64}$",
+              "minLength": 1,
               "maxLength": 8192,
-              "description": "The SHA-256 of the call's arguments as canonical JSON, never the arguments themselves."
+              "description": "A failed call's first error line from its target, as its failure hook reports it: the agent's own exit line left out, whitespace runs made one space, scrubbed as evidence is and clamped to 300 characters; absent when the failure names none."
             }
           },
           "required": [
@@ -979,6 +1015,12 @@
               ],
               "additionalProperties": false,
               "description": "The agent's bounded record of the calls this call made."
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "A failed call's first error line from its target, as its failure hook reports it: the agent's own exit line left out, whitespace runs made one space, scrubbed as evidence is and clamped to 300 characters; absent when the failure names none."
             }
           },
           "required": [

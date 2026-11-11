@@ -996,6 +996,18 @@ impl Hub<'_> {
             take_back(shared, &patched);
             return Outcome::Refused(refusals);
         }
+        // #935: a strip or spawn template naming a generated sound's asset before its audio.gen
+        // passes; only a document that declares `sounds` is read again.
+        if shared.doc.get("sounds").is_some() {
+            let now = shared.doc.clone();
+            let unpassed = self.unpassed_sounds(&now);
+            let shared = self.shared.get_mut(&call.doc).expect("open");
+            if !unpassed.is_empty() {
+                take_back(shared, &patched);
+                return Outcome::Refused(unpassed);
+            }
+        }
+        let shared = self.shared.get_mut(&call.doc).expect("open");
         let kept = carried(&issues, &allowed, planted);
         // The marks module checks what the patch wrote, and counts what it costs.
         let cost = match marks_check(

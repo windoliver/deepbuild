@@ -7,20 +7,25 @@
   "scope": "you",
   "ts": 1762790400000,
   "data": {
-    "id": "job:3f1c9a0e7b2d4c6e8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f",
+    "id": "session:7c4d5e60-2018-4222-8333-444455552021",
     "listed": true,
-    "order": "0|4|0001762790360000|job:3f1c9a0e7b2d4c6e8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f",
-    "title": "test.encode",
-    "project": null,
-    "session": "",
-    "agent": null,
+    "order": "0|1|shop|3|0000001760013451|session:7c4d5e60-2018-4222-8333-444455552021",
+    "address": "session/7c4d5e60-2018-4222-8333-444455552021",
+    "title": "Fix the cart total",
+    "project": "shop",
+    "session": "7c4d5e60-2018-4222-8333-444455552021",
+    "agent": "claude-code",
     "entry": "running",
-    "word": "running",
-    "why": "encode-a@1.0.0 runs it, and it keeps running when the app or the session closes",
-    "waits_on": null,
-    "since": 1762790360000,
+    "word": "working",
+    "why": "at work",
+    "waits_on": "agent",
+    "since": 1760013451000,
     "actions": [],
     "unread": false,
-    "progress": "300 of 600 · 40 s left"
+    "doing": {
+      "words": "Running npm",
+      "at": 1760013491000,
+      "ago": false
+    }
   }
 }
