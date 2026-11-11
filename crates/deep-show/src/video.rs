@@ -15,6 +15,8 @@ use serde_json::{json, Map, Value};
 use vello_cpu::Pixmap;
 
 use crate::hub::{Hub, Planted};
+use deep_canvas::budget::{self, Class};
+use deep_canvas::document::Issue;
 
 /// A video stream as its probe gives it.
 #[derive(Clone)]
@@ -24,6 +26,8 @@ pub struct Stream {
     timescale: i64,
     matrix: String,
     range: String,
+    /// Width and height in px.
+    size: [u64; 2],
 }
 
 impl Stream {
@@ -106,6 +110,7 @@ impl Hub<'_> {
                     .as_str()
                     .unwrap_or("limited")
                     .to_string(),
+                size: [v["size"][0].as_u64().unwrap_or(0), v["size"][1].as_u64().unwrap_or(0)],
             })
         })();
         self.media.video.streams.insert(sha.to_string(), s.clone());
@@ -193,5 +198,33 @@ impl Hub<'_> {
             pictures.insert(sha, frame.picture);
         }
         (block, pictures)
+    }
+
+    /// #503 (Marks in 3D): each point set `from: video` whose video the store holds, at check. It
+    /// draws (w ÷ step) × (h ÷ step) points, at most 1,048,576, the compute elements of a showpiece
+    /// or an export, the only classes that draw them; more, or another class, is refused, naming
+    /// the item.
+    pub(crate) fn point_sets_checked(&mut self, doc: &Value) -> Vec<Issue> {
+        const ELEMENTS: u64 = 1 << 20;
+        let class = budget::of(doc).map(|(c, _)| c);
+        let sets: Vec<(String, String, u64)> = (doc["items"].as_object().into_iter().flatten())
+            .filter(|(_, i)| i["kind"] == "mark.point@1")
+            .filter_map(|(id, i)| {
+                let v = i.pointer("/params/from/video")?;
+                Some((id.clone(), v["asset"].as_str()?.to_string(), v["step"].as_u64().unwrap_or(1).max(1)))
+            })
+            .collect();
+        let mut issues = Vec::new();
+        for (id, sha, step) in sets {
+            let Some([w, h]) = self.stream(&sha).map(|s| s.size) else { continue };
+            let points = (w / step) * (h / step);
+            if matches!(class, Some(Class::Showpiece | Class::Export)) && points <= ELEMENTS {
+                continue;
+            }
+            let actual = json!({"points": points, "size": [w, h], "step": step, "elements": ELEMENTS, "class": doc.pointer("/budget/class")});
+            let what = "a point set from a video draws (w ÷ step) × (h ÷ step) points, at most the 1,048,576 compute elements of a showpiece or an export";
+            issues.push(Issue::error("over_budget", &id, format!("items/{id}/params/from/video"), actual, what));
+        }
+        issues
     }
 }
