@@ -1,0 +1,16 @@
+{
+  "issue": 537,
+  "criterion": "#537.7f9c9403",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in the plan approved in session on 2026-11-11 (\"Approving this plan delegates that call, as on #535\")",
+  "when": "2026-11-11T21:38:25Z",
+  "screenshots": {
+    "slot3-live-gen1.png": "6039f570a63b9a7dbb6cf7129de4fe4c26a68437f04683733f5c5cfbaa009fad",
+    "slot3-off.png": "e66ae8f4ca16ee083bf8d2ca7d3f3cd436dd8e9561f3ae2b4ad87892fb4ab129",
+    "slot3-live-gen2.png": "6039f570a63b9a7dbb6cf7129de4fe4c26a68437f04683733f5c5cfbaa009fad",
+    "fog-overlay.png": "267bc418e702154b78db51177de0e68ddc5cdaa82858163268c9ec03993ec10b",
+    "line-segments.png": "d810bd1b8f68e9f709c9718f3c06201b91fc386a433e61d49c38652b4753921f",
+    "slot-and-fog.apng": "77b75f04397df36cf46469544c91f23fd9742f3113a0800e164164e9249f8cf1"
+  },
+  "note": "Units: 16 boxes in a 4 x 4 grid at step 49; at step 55 slot 3 (top right, x 6, z -6) is gone and the other 15 unchanged; at step 60 all 16 again, the same picture as step 49 since only slot 3's element ID changes (units#3.2). Fog: the whole 128 m plate in the fog role's color but a 9 x 9 cell square at cells 60 to 68 each way (px 480 to 552 at 8 px a metre) in the plate's own green, edges sharp. Line: 32 sand segments in 4 columns by 8 rows, each 4 m long, shifted 3.125 m along +x at step 50. Pictures sent in the session; checked against the fixtures, not judged by any criterion's test."
+}
