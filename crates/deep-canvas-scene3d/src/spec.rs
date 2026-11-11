@@ -276,15 +276,11 @@ fn extras(kind: &str) -> Vec<P> {
                 json!([0, 0, 1]),
             ),
         ],
-        "plate@1" => vec![p(
-            "height",
-            "field, m",
-            "m",
-            Value::Null,
-            G,
-            json!(0),
-            json!({"wave": {"amplitude": 0.1, "wavelength": 1}}),
-        )],
+        "plate@1" => vec![
+            p("height", "field, m", "m", Value::Null, G, json!(0), json!({"wave": {"amplitude": 0.1, "wavelength": 1}})),
+            // #2014: a terrain plate's height field, size and spacing (Builder plate: terrain).
+            p("terrain", "terrain", "m", Value::Null, G, json!({"height": 0, "size": [4, 4]}), json!({"height": "position.x * 0.25", "size": [4, 4], "spacing": 0.5})),
+        ],
         _ => Vec::new(),
     }
 }

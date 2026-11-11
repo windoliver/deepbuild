@@ -21,14 +21,17 @@ pub const GEOMETRY_AUDIT: &str = "geometry.audit";
 pub enum Planted {
     SamplesOnly,
     OverlapsOnly,
+    /// #1700's, in the shape readings (`geometry.shape`).
+    Shape(crate::geometry::shape::Planted),
 }
 
-/// A wrong program of the audit's by the name its acceptance suite gives it.
+/// A wrong program of the audit's, or of the shape readings', by the name its acceptance suite
+/// gives it.
 pub(crate) fn planted(name: &str) -> Option<crate::hub::Planted> {
     Some(crate::hub::Planted::Audit(match name {
         "sweep_audits_samples_only" => Planted::SamplesOnly,
         "audit_checks_overlaps_only" => Planted::OverlapsOnly,
-        _ => return None,
+        _ => Planted::Shape(crate::geometry::shape::planted(name)?),
     }))
 }
 

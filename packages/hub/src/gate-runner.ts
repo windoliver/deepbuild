@@ -289,7 +289,8 @@ export class GateRunner {
    */
   private async carry(c: Claim, e: Entry, dir: string): Promise<'carried' | { wait: Promise<void> } | null> {
     // #33's planted gate reads no result it had for a head whose inputs didn't change: each claim's runs stand alone.
-    if (this.onStack(e, dir) || this.o.plant === 'empty-commit-run-alone') return null;
+    // #1331's planted lander runs every check again on a moved head, so nothing carries across its judgements.
+    if (this.onStack(e, dir) || this.o.plant === 'empty-commit-run-alone' || (this.o.plant === 'lander-reruns-all' && c.session.startsWith('land'))) return null;
     const stem = await this.stemOf(c, e, null);
     for (const g of await this.shared.find(e.check.check, stem, dir)) {
       if (this.unread.has(g.id)) continue;

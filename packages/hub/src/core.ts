@@ -3,7 +3,7 @@
 // retention, and answers the socket's methods. It runs in a worker thread of its own, so a disk sync, a run's
 // output or a backfill never holds up the event loop that acknowledges hooks.
 import { execFile } from 'node:child_process';
-import { appendFileSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
+import { appendFileSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { access, chmod, copyFile, mkdir, open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { writtenOf as wikiWritten } from '@deepbuild/wiki';
 import { UsageTail } from '@deepbuild/readings';
@@ -21,10 +21,11 @@ import { citedEvidence, openExtensionHost, openTrust, type ExtensionHost, type P
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers as stackHealthy, composeKind, downStack, environmentOf, keysOf, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, WarmStack } from '@deepbuild/env-local';
-import { endsEmpty, freshCount, judgeStop, leftOpen, openCheckouts, priceDefinition, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
+import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, openCheckouts, priceDefinition, toldToRun, unitless, validityGate, type Checkouts, type PaidKind, type SessionLog, type StallCount, type StallRule, type TaskListFacts } from '@deepbuild/gate';
 import { piAcceptsReplaced } from './plant.js';
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
+import { Landing, type Outcome } from './landing.js';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { alive as running, openSupervisor, openUnder, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, recordVerdict, verdict as claimVerdict, verdictHash, verdictLine, type Prediction, type Result, type RunOutcome } from '@deepbuild/verdicts';
@@ -122,6 +123,8 @@ const DAY = 24 * HOUR;
 const sql = (text: string): string => text.replace(/'/g, "''");
 /** A session ID as a handle holds it: letters and digits only. */
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
+/** How long a landing's judgement waits for its verdict (#1331). */
+const VERDICT_WAIT_MS = 30 * 60_000;
 /** How long before its default a later ask comes back (#1462): an hour, drafted. */
 const LATER_BEFORE_MS = 60 * 60 * 1000;
 /** A rules block as pieces, one per line under its head: a rule you typed must reach the model inline (#1296). */
@@ -532,6 +535,8 @@ export class Core {
   private runner!: Runner;
   /** The blind acceptance job (#1328): the runner's one kind that writes, before an issue's first attempt. */
   private acceptance!: Acceptance;
+  /** Landing in turn (#1331): each repo's changes onto its default branch, one at a time. */
+  private landing!: Landing;
   /** Sessions started without your Send, under a run you approved (#1330). */
   private sessionStarts!: Starts;
   /** Setup's wiki build (#356). */
@@ -1189,6 +1194,16 @@ export class Core {
         return (await readIssue(fetch, owner, name, n, undefined))?.[0];
       },
     });
+    // Landing in turn (#1331): the forge's reads and merges with your login, the verdict's status with the gate's identity.
+    this.landing = new Landing({
+      root: this.root.dir, api: this.options.forge ?? 'https://api.github.com', plant: this.options.plant,
+      token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
+      gateToken: (repo) => this.gateToken(repo), gateApp: () => this.forgeApp('gate'),
+      landingToken: (repo) => (this.landingTokens ??= gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate'), true))(repo),
+      judge: (r) => this.judgeLanding(r),
+      sendBack: (r) => this.landingSendBack(r),
+      appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
+    });
     // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'), ...plant });
@@ -1333,6 +1348,8 @@ export class Core {
     return { app_id: app.app_id as number, key: () => keychain(service) };
   }
   private gateTokens?: (repo: string) => Promise<string | undefined>;
+  /** The gate's landing tokens (#1331), minted in this process and kept only in its memory, as its status tokens are. */
+  private landingTokens?: (repo: string) => Promise<string | undefined>;
   /** The gate's token for a repo: minted in this process, kept only in its memory. */
   private gateToken(repo: string): Promise<string | undefined> {
     return (this.gateTokens ??= gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate')))(repo);
@@ -5955,6 +5972,10 @@ export class Core {
       case 'acceptance.status': return this.acceptance.status(params);
       case 'acceptance.dispute': return this.acceptance.dispute(params);
       case 'acceptance.ended': return this.acceptance.ended(params).then(() => ({ ended: true }));
+      // Landing in turn (#1331): `deep land judge`, `deep land` and `deep work --once`, from your own terminal.
+      case 'land.judge': return this.workspaceCall(() => this.landing.judgeAll(String(params.repo ?? '')));
+      case 'land.round': return this.workspaceCall(() => this.landing.land(String(params.repo ?? '')));
+      case 'work.once': return this.workspaceCall(() => this.landing.workOnce(String(params.repo ?? ''), Array.isArray(params.issues) ? params.issues.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : []));
       case 'job.submit': return this.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.runner.status(String(params.job));
       case 'job.list': return { jobs: await this.runner.list() };
@@ -8067,6 +8088,59 @@ export class Core {
     await this.runs.ended(run);
     const [row] = (await this.record.raw(`SELECT outcome FROM runs WHERE id = ?`, [run.slice(4)])) as { outcome: string | null }[];
     return row?.outcome ?? 'stopped';
+  }
+  /**
+   * A change judged on its merge with the default branch's head (#1331): the issue's task, opened once from its
+   * reading, claims the merge commit in a worktree of its own, as `session` did a stop; its slow checks start, and its
+   * verdict is read once made. Each check whose key the merge didn't change carries from the run that made it (#1018).
+   */
+  private async judgeLanding(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string }[] } | undefined> {
+    const [owner, name] = r.repo.split('/') as [string, string];
+    const fetch = this.options.github ? recordedFetch(this.options.github) : liveFetch(this.options.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
+    // A reading with no revision time is revised by its text: the definition still names the issue it locked from.
+    const readings = (await readIssue(fetch, owner, name, r.issue, this.options.plant).catch(() => undefined))?.map((x) => (x.updated ? x : { ...x, updated: sha256Hex(new TextEncoder().encode(x.body)) }));
+    if (!readings?.[0]) throw Error(`issue #${r.issue} of ${r.repo} couldn't be read, so its change can't be judged`);
+    const item = { ...readings[0], readings };
+    // A worktree of the checkout's repo at the merge commit: the claim's folder, removed once its verdict is read.
+    const tree = join(this.root.dir, 'landing', 'trees', letters(r.session));
+    mkdirSync(dirname(tree), { recursive: true });
+    await new Promise<void>((done, fail) => execFile('git', ['-C', r.checkout, 'worktree', 'add', '--quiet', '--detach', '--force', tree, r.commit], { env: gitEnv() }, (error) => (error ? fail(error) : done())));
+    // The checkout's installs serve the claim's checks: a link, which the gate's checkouts clone from where it points.
+    for (const dep of ['node_modules', '.venv']) if (existsSync(join(r.checkout, dep)) && !existsSync(join(tree, dep))) symlinkSync(join(r.checkout, dep), join(tree, dep));
+    try {
+      this.live.set(r.session, { agent: 'claude-code', cwd: tree, last: this.now(), calls: new Map(), wakeups: [], crons: new Map(), background: new Map(), looping: false, turn: 0, judged: false });
+      const made = await this.tasks.landing({ session: r.session, cwd: tree, item, at: this.now() });
+      if (!made) return undefined;
+      await this.lanes.get(made.claim)?.catch(() => undefined);
+      // Nothing sends this claim on: its slow checks start now, as a turn's end starts them.
+      await this.gate.turnEnded(made.claim, [], this.now(), { session: r.session, origin: 'person', due: null, starter: 'claim' }).catch(() => undefined);
+      // The verdict the core recorded, once the gate's is no longer pending: what the poster posts and the record keeps.
+      const until = Date.now() + VERDICT_WAIT_MS;
+      for (;;) {
+        await this.verdictWrites.get(made.claim)?.catch(() => undefined);
+        const v = this.gate.verdictOf(made.claim);
+        const [row] = v && v.outcome !== 'pending' ? (await this.record.raw(`SELECT outcome, requirements FROM verdicts WHERE claim_id = ? ORDER BY created DESC LIMIT 1`, [made.claim.slice(6)])) as { outcome: Outcome; requirements: string | null }[] : [];
+        if (row) {
+          const settled = new Map((await this.tasks.lockedRequirements(made.task)).map((q) => [q.req, q]));
+          const reqs = (JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string }[]).map((q) => ({ req: q.req, text: settled.get(q.req)?.text ?? q.req, settled_by: settled.get(q.req)?.settled_by ?? null, outcome: q.outcome }));
+          return { claim: made.claim, outcome: row.outcome, requirements: reqs };
+        }
+        if (Date.now() > until) return undefined;
+        await new Promise((done) => setTimeout(done, 200));
+      }
+    } finally {
+      this.live.delete(r.session);
+      await new Promise<void>((done) => execFile('git', ['-C', r.checkout, 'worktree', 'remove', '--force', tree], { env: gitEnv() }, () => done()));
+    }
+  }
+  /** A change that no longer merges goes back to its own attempt (#1331): each session that worked its issue hears it, and no person is asked. */
+  private async landingSendBack(r: { checkout: string; issue: number; pr: number; files: string[]; text: string }): Promise<void> {
+    const rows = (await this.record.raw(`SELECT DISTINCT json_extract(data, '$.session') AS session FROM events WHERE kind = 'start.session' AND json_extract(data, '$.run') IN
+      (SELECT subject FROM events WHERE kind = 'start.started' AND json_extract(data, '$.issue') = ? AND json_extract(data, '$.repo') = ?)`, [r.issue, realpathSync(r.checkout)])) as { session: string | null }[];
+    for (const { session } of rows) {
+      const live = session ? this.live.get(session) : undefined;
+      if (session && live) { this.later(session, live.cwd, r.text); this.offer(session); }
+    }
   }
   /**
    * A promotion's health check (#1334): one fixture claim, a requirement its one check covers and a passing run of

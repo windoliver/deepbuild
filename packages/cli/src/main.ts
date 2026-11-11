@@ -189,6 +189,8 @@ const usage = [
   'deep hub stop [--root <folder>]',
   'deep hub use --root <folder>   this worktree\'s sessions to a dev hub, once the OS confirms you',
   'deep fix <id>   work from an item at a source you switched on, such as LIN-42',
+  'deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes one at a time in the order they came',
+  'deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set: an earlier PR joins as its issue\'s attempt',
   'deep workspace new <topic> [--folder <path>] | move <id> <folder> | revert <id> <commit> | diff <id> | drift <id>   a home for work outside a repo',
   'deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you',
   'deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins\' actions',
@@ -242,7 +244,7 @@ const help = asksHelp && !(args[0] === 'backup' && (await import('@deepbuild/hub
 // What a person runs first, then their work, then what developers run (#1455); a command no group names is a developer's.
 const groups: [string, string[]][] = [
   ['Start here', ['setup', 'status', 'inbox', 'doctor', 'off', 'install', 'memory', 'secret', 'update']],
-  ['Your work', ['open', 'fix', 'start', 'race', 'workspace', 'join', 'person', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug', 'host', 'library', 'pack', 'job']],
+  ['Your work', ['open', 'fix', 'start', 'race', 'land', 'work', 'workspace', 'join', 'person', 'gate', 'rules', 'session', 'guard', 'undo', 'numbers', 'backup', 'restore', 'debug', 'host', 'library', 'pack', 'job']],
   ['For developers', ['explain', 'run', 'hub', 'mcp', 'env', 'lease', 'show', 'export', 'kinds', 'mcp-exec', 'read', 'find']],
 ];
 const groupOf = (line: string): number => {
@@ -305,6 +307,8 @@ if (!help && yours.includes(args[0] ?? '') && !devHub && unfinished) {
 
 const hubCommands = {
   env: 'envCommand', gate: 'gateCommand', start: 'startCommand', inbox: 'inboxCommand', secret: 'secretCommand', race: 'raceCommand', fix: 'fixCommand',
+  // Landing in turn (#1331).
+  land: 'landCommand', work: 'workCommand',
   workspace: 'workspaceCommand', numbers: 'numbersCommand', show: 'showCommand', export: 'exportCommand', status: 'statusCommand', install: 'installCommand',
   undo: 'undoCommand',
   // A project's hub on another machine, joined with the repo link and an invite (#1338).

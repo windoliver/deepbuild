@@ -54,6 +54,17 @@ fn v3(v: &Value) -> Option<V3> {
     ])
 }
 
+/// #2014: a terrain plate's true shape, the surface its samples make split as they are drawn,
+/// moved by `m`'s translation (a plate is ground: nothing turns or scales it); none for another
+/// item.
+fn terrain(item: &Value, m: &Affine3) -> Result<Option<Shape>, String> {
+    let Some(params) = item.get("params").filter(|p| crate::terrain::of_params(p).is_some()) else {
+        return Ok(None);
+    };
+    let t = crate::terrain::build(params, false)?;
+    Ok(Some(Shape::Heights(std::sync::Arc::new(t.heights(apply(m, [0.0; 3]))))))
+}
+
 /// A part's true shape from its builder's pieces (`true_shape`, in its own space) placed by `m`:
 /// a sphere, a box, capsules along its path (whose first and last points are its ends), or the
 /// box around its mesh where nothing simpler is exact.
@@ -63,6 +74,9 @@ pub fn built(
     mesh: &crate::geom::Mesh,
     m: &Affine3,
 ) -> (Vec<Shape>, Vec<V3>) {
+    if let Ok(Some(surface)) = terrain(item, m) {
+        return (vec![surface], Vec::new());
+    }
     let [lo, hi] = mesh.bounds();
     let scale = (0..3).map(|j| norm(column(m, j))).fold(0.0, f64::max);
     let mut ends = Vec::new();
@@ -143,6 +157,11 @@ pub fn of(
                 Vec::new(),
             )
         }
+        // #2014: a terrain plate's surface, with no mesh built.
+        "plate@1" if item.get("params").and_then(crate::terrain::of_params).is_some() => {
+            let surface = terrain(item, m).map_err(|p| format!("out_of_range at items/{id}/{p}"))?;
+            (surface.into_iter().collect(), Vec::new())
+        }
         k if crate::builders::KINDS.contains(&k) => {
             let run = crate::stack::Run::default();
             let made = crate::build::built(doc, id, item, &run, secs)
@@ -187,5 +206,6 @@ pub fn placed(shape: &Shape, m: &Affine3) -> Shape {
             b: apply(m, *b),
             r: r * scale,
         },
+        Shape::Heights(h) => Shape::Heights(std::sync::Arc::new(h.moved(apply(m, [0.0; 3])))),
     }
 }

@@ -1136,6 +1136,39 @@ fn outline(
             (0..4).map(|i| (c[i], c[(i + 1) % 4])).collect()
         }
         Shape::Convex { points, .. } => hull_edges(points),
+        // #2014's height field: its sample grid, rows along +Z and columns along +X, centred.
+        Shape::Heightfield {
+            cols,
+            rows,
+            heights,
+            scale,
+        } => {
+            let along = |i: usize, n: usize, s: f64| {
+                if n > 1 {
+                    s * (i as f64 / (n - 1) as f64 - 0.5)
+                } else {
+                    0.0
+                }
+            };
+            let at = |r: usize, c: usize| {
+                let h = heights.get(r * cols + c).copied().unwrap_or(0.0);
+                [
+                    along(c, *cols, scale[0]),
+                    h * scale[1],
+                    along(r, *rows, scale[2]),
+                ]
+            };
+            let mut l = Vec::new();
+            for (r, c) in (0..*rows).flat_map(|r| (0..*cols).map(move |c| (r, c))) {
+                if c + 1 < *cols {
+                    l.push((at(r, c), at(r, c + 1)));
+                }
+                if r + 1 < *rows {
+                    l.push((at(r, c), at(r + 1, c)));
+                }
+            }
+            l
+        }
         Shape::Mesh {
             vertices,
             triangles,
@@ -1191,11 +1224,20 @@ mod tests {
         let world = json!({"kind": "physics.world@1", "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
             "shapes": {"ball": {"kind": "sphere", "radius": 0.5}}, "contact_materials": {"m": {"density": 100}},
             "bodies": {"ball": {"kind": "dynamic", "pose": {"pos": [0, 10, 0]}, "shapes": [{"shape": "ball", "contact_material": "m"}]}}});
-        let read = physics_shapes(&json!({"worlds": {"lab": world}}), 705_600_000 / 2).expect("drawn");
+        let read =
+            physics_shapes(&json!({"worlds": {"lab": world}}), 705_600_000 / 2).expect("drawn");
         let y = read.rows[0]["pos"][1].as_f64().expect("a position");
-        assert!((y - (10.0 - 0.5 * 9.81 * 0.25)).abs() < 0.05, "fallen to {y} m at 0.5 s");
+        assert!(
+            (y - (10.0 - 0.5 * 9.81 * 0.25)).abs() < 0.05,
+            "fallen to {y} m at 0.5 s"
+        );
         assert_eq!(read.lines.len(), 3 * 32, "three great circles");
         let off = |p: V3| (dot(sub(p, [0.0, y, 0.0]), sub(p, [0.0, y, 0.0])).sqrt() - 0.5).abs();
-        assert!(read.lines.iter().all(|(a, b)| off(*a) < 1e-9 && off(*b) < 1e-9), "on the ball at t");
+        assert!(
+            read.lines
+                .iter()
+                .all(|(a, b)| off(*a) < 1e-9 && off(*b) < 1e-9),
+            "on the ball at t"
+        );
     }
 }

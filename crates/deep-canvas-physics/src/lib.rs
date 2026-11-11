@@ -14,3 +14,4 @@ pub mod occurrence;
 pub mod pairs;
 pub mod query;
 pub mod roles;
+pub mod written;
