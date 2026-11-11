@@ -1,0 +1,13 @@
+At base 7c5e1cc8 (an arm64 Mac, 18 cores), on 2026-11-10, this lane's test file was not run: it builds deep-show with cargo, and the one-minute load was 284, so this job built no Rust. A debug build of the base's own deep-show (`--features full`, nothing changed) was made outside this folder, and a scratch vitest file (not kept) put this lane's documents through its `run` with the #2013 suite's helpers. "Observed" is what that binary answered.
+
+Both tests fail at an assertion that names the missing surface, not in the test file: the judges' self-checks, which run first and need no binary, pass.
+
+- test_mindist fails at "the unit plate at radius 0.08 (an instancer fed by from: distribute): the check raises no error". Observed for the 1 × 1 m plate with `min_distance: 0.08, max: 50`: the show is refused (`outcome: "refused"`) with `{check: "document.validate", code: "unknown_field", path: "items/stones/params/from", what: "instance@1.0 does not define `from`"}`. The other four radii's documents differ only in `min_distance` and weren't each put through.
+
+- test_fill_space fails at "the plate over [0, 1]² (an instancer fed by from: distribute): the check raises no error", for the same refusal. Observed for the 4 × 4 m plate on [1.1, 5.1]² with `min_distance: 0.2` and for a 10 × 10 m plate with `min_distance: 0.5`; the [0, 1]² and [−5, 5]² documents at 0.2 differ from those only in size and `min_distance`.
+
+That nothing else is refused (observed): each of those documents with `from` replaced by three written rows is presented at the base with no issue, and the `geometry` call reads the 1 × 1 m plate with its world at (0.5, 0, 0.5) and the 4 × 4 m plate at (3.1, 0, 3.1).
+
+Criterion 1's row is BLOCKED (README: Sources); it has no test, so nothing of it runs or passes here.
+
+Type-check: `npx tsc -p tests/acceptance/2013-oracle/tsconfig.json` exits 0.
