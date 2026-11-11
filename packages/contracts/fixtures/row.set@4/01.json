@@ -1,0 +1,31 @@
+{
+  "v": 4,
+  "id": "01K9QZ6V2T8M4R1N5P7W3X9Y0A",
+  "kind": "row.set",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1762790400000,
+  "data": {
+    "id": "session:7c4d5e60-2018-4222-8333-444455552021",
+    "listed": true,
+    "order": "0|1|shop|3|0000001760013451|session:7c4d5e60-2018-4222-8333-444455552021",
+    "address": "session/7c4d5e60-2018-4222-8333-444455552021",
+    "title": "Fix the cart total",
+    "project": "shop",
+    "session": "7c4d5e60-2018-4222-8333-444455552021",
+    "agent": "claude-code",
+    "entry": "running",
+    "word": "working",
+    "why": "at work",
+    "waits_on": "agent",
+    "since": 1760013451000,
+    "actions": [],
+    "unread": false,
+    "doing": {
+      "words": "Running npm",
+      "at": 1760013491000,
+      "ago": false
+    }
+  }
+}

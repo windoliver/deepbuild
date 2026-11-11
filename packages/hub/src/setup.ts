@@ -149,8 +149,10 @@ async function install(cli: string, quiet = false): Promise<Said> {
       },
       'hooks:codex': () => installCodex(root, record, cli, hook),
       'plugin:paseo': () => installPaseo(root, record, onPath('paseo')!, cli, quiet),
+      // pi loads DeepBuild's package in-process (#40), so its sessions reach the hub (#2019).
+      'package:pi': () => installPi(root, onPath('pi')!, quiet),
     };
-    const left: Record<string, string> = { 'hooks:codex': 'Fix the file and run deep setup again.', 'plugin:paseo': "Run deep setup again once paseo's daemon runs." };
+    const left: Record<string, string> = { 'hooks:codex': 'Fix the file and run deep setup again.', 'plugin:paseo': "Run deep setup again once paseo's daemon runs.", 'package:pi': 'Run deep setup again.' };
     for (const row of rows.filter((r) => r.step !== 'history')) {
       const step = steps[key(row)];
       if (!step) throw Error(`the list of steps names ${key(row)}, which setup has no step for`);
@@ -398,6 +400,7 @@ async function undo(): Promise<number> {
     putBack(root, record, userFile, mcpOut),
     ...removeCodex(root, record),
     undoPaseo(root, record),
+    undoPi(root),
   ].filter((n): n is string => n !== undefined);
   // Every other agent file an Agents page sync wrote (#148): its original bytes back where you haven't edited it since.
   const handled = new Set([settingsFile, userFile, join(homedir(), '.paseo', 'config.json')]);
@@ -434,6 +437,27 @@ export function removeCodex(root: string, record = setupRecord(root)): string[] 
   return notes;
 }
 
+/** DeepBuild's pi package (#40), added through pi's own manager at the one version its facts pin, said before it is (#2019); the first `deep` command keeps it off stdout (#1100). */
+function installPi(root: string, pi: string, quiet = false): void {
+  const source = readFacts<{ install: { source: string } }>('pi.facts.json').install.source;
+  if (!quiet) console.log(`pi: + package ${source}, through pi install; deep setup --undo takes it out.`);
+  editConfig(root, (c) => { c.pi = { package: source }; });
+  execFileSync(pi, ['install', source], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 300_000 });
+}
+/** The package setup added taken out through pi's own manager. */
+function undoPi(root: string): string | undefined {
+  let source: unknown;
+  try { source = ((JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as Obj).pi as Obj | undefined)?.package; } catch { return undefined; }
+  const pi = onPath('pi');
+  if (typeof source !== 'string' || !pi) return undefined;
+  try {
+    execFileSync(pi, ['remove', source], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000 });
+  } catch (e) {
+    return `pi didn't remove the package ${source} (${e instanceof Error ? e.message.split('\n')[0] : String(e)}); run pi remove ${source}`;
+  }
+  editConfig(root, (c) => { delete c.pi; });
+  return undefined;
+}
 const paseoConfig = (): string => join(homedir(), '.paseo', 'config.json');
 /**
  * DeepBuild's paseo plugin (#55), added through paseo's own manager at the one version its facts pin, said before

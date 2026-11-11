@@ -285,7 +285,7 @@ pub struct World {
 mod heightfield;
 mod reads;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
-pub use reads::{Output, Read, Solve, READS};
+pub use reads::{probe_pose, probe_shape, Output, Read, Solve, READS};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[

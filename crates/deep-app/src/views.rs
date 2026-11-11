@@ -1651,6 +1651,11 @@ fn list_row(
     } else {
         format!("{} {title} · {}", states::glyph(row.entry), row.word)
     };
+    // Its one flag beside its word (#2019), with what it says: the row is one line, so its name holds the rest.
+    let name = match &row.flag {
+        Some(flag) => format!("{name} · {}: {}", flag.code, flag.text),
+        None => name,
+    };
     let id = if ask && cfg!(feature = "plant-row-index-ids") {
         format!("ask-{}", row.id.len())
     } else {
@@ -1786,6 +1791,17 @@ fn list_row(
                 .text_color(chrome.ink_secondary)
                 .child(drawn_word),
         )
+        // The flag, at most one, in the right slot beside the word (#2019): never a state, so in the word's ink.
+        .children(row.flag.as_ref().map(|flag| {
+            row_slot(&id, "flag", format!("{}: {}", flag.code, flag.text))
+                .flex_none()
+                .h_full()
+                .flex()
+                .items_center()
+                .pl(s.space(1))
+                .text_color(chrome.ink_secondary)
+                .child(flag.code.clone())
+        }))
         .child(
             time_slot
                 .flex_none()
@@ -2139,6 +2155,7 @@ impl Render for Shipped {
                         why: String::new(),
                         doing: None,
                         hooks: (0, None),
+                        flag: None,
                     }));
                 }
                 let popped = crate::open::popped(cx) == Some(Kind::NeedsYou);
@@ -2707,14 +2724,16 @@ impl Render for Shipped {
                 // Why it reads as it does, in plain words, under its title (#1348, #1461).
                 // Where the hub built the session's row, its word, entry and why are that row's (#2018): the one
                 // reading, on its page as in the list.
-                // What its turn is doing now, at the top of its page (#2021): the row's line, read the one way.
+                // What its turn is doing now, at the top of its page (#2021): the row's line, read the one way; and its
+                // flag beside its word, in full: what it says and its fix (#2019).
                 type Read = (
                     Vec<String>,
                     Vec<String>,
                     Option<[String; 3]>,
                     Option<crate::list::Doing>,
+                    Option<String>,
                 );
-                let (problem, readings, listed, doing): Read = crate::record::with_view(|view| {
+                let (problem, readings, listed, doing, flagged): Read = crate::record::with_view(|view| {
                     let table = view.table();
                     let problem = crate::plain::problem(&table, &session)
                         .map(|(happened, next)| vec![happened, next])
@@ -2725,7 +2744,17 @@ impl Render for Shipped {
                             .map(|key| row[key].as_str().unwrap_or_default().to_owned())
                     });
                     let doing = row.and_then(|row| crate::list::doing_of(view, row, &session, now));
-                    (problem, table.readings(&session).to_vec(), listed, doing)
+                    let flagged = row.and_then(|row| {
+                        let flag = &row["flag"];
+                        let code = flag["code"].as_str()?;
+                        let fix = flag["fix"].as_str().filter(|fix| !fix.is_empty());
+                        Some(format!(
+                            "{code}: {}{}",
+                            flag["text"].as_str().unwrap_or_default(),
+                            fix.map(|fix| format!(". {fix}")).unwrap_or_default()
+                        ))
+                    });
+                    (problem, table.readings(&session).to_vec(), listed, doing, flagged)
                 })
                 .unwrap_or_default();
                 let reads = |id: &'static str, name: &str| match &listed {
@@ -2763,6 +2792,11 @@ impl Render for Shipped {
                     .children(doing.map(|doing| label("session-doing", doing.line(now)).h_auto()))
                     .children(why.map(|line| {
                         label("session-why", crate::question::visible(&line))
+                            .h_auto()
+                            .text_color(chrome.ink_secondary)
+                    }))
+                    .children(flagged.map(|line| {
+                        label("session-flag", crate::question::visible(&line))
                             .h_auto()
                             .text_color(chrome.ink_secondary)
                     }))
@@ -3233,8 +3267,38 @@ fn agents_page(
         .as_ref()
         .and_then(|id| waiting.iter().find(|s| s["id"] == id.as_str()))
         .map(|s| review_panel(s, &name_of, chrome, cx));
-    page.overflow_y_scroll()
-        .child(page_title(title("agents-title", "Agents")))
+    // Whether each agent's sessions reach DeepBuild, from its newest agent.reach (#2019): one waiting for its first
+    // session says so, and one whose sessions can't reach DeepBuild says why, with its fix.
+    let reach = crate::record::with_view(|view| view.table().agents().to_vec())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(agent, r)| {
+            let text = |key: &str| r[key].as_str().unwrap_or_default().to_owned();
+            let [how, fix] = match r["state"].as_str() {
+                Some("waiting") => ["Waits for its first session".to_owned(), String::new()],
+                Some("unreachable") => [
+                    format!("Its sessions can't reach DeepBuild: {}", text("why")),
+                    text("fix"),
+                ],
+                _ => ["Its sessions reach DeepBuild".to_owned(), String::new()],
+            };
+            let name = r["name"].as_str().unwrap_or(&agent).to_owned();
+            agents_row(
+                ElementId::Name(format!("agent:{agent}").into()),
+                [name, how, fix],
+                chrome,
+            )
+        })
+        .collect::<Vec<_>>();
+    let page = page
+        .overflow_y_scroll()
+        .child(page_title(title("agents-title", "Agents")));
+    // The planted wrong program draws the page's title alone.
+    if crate::plain::planted("agents-title-only") {
+        return page;
+    }
+    page.child(section("agents-reach-title", "How each agent reaches DeepBuild"))
+        .children(reach)
         .child(label(
             "agents-installed",
             format!("Installed: {}", named(true)),

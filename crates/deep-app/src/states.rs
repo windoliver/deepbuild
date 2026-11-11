@@ -396,6 +396,8 @@ pub struct Table {
     listed: bool,
     /// Each session's project, from the first event that names one (#1462): the list's heading it goes under.
     projects: HashMap<String, String>,
+    /// Each agent the Agents page lists, as its newest agent.reach says it (#2019), in the order the record first names them.
+    agents: Vec<(String, Value)>,
 }
 
 /// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
@@ -520,6 +522,15 @@ impl Table {
                 }
             }
         }
+        if kind == "agent.reach" {
+            let data = &event["data"];
+            if let Some(agent) = data["agent"].as_str() {
+                match self.agents.iter_mut().find(|(id, _)| id == agent) {
+                    Some(newest) => newest.1 = data.clone(),
+                    None => self.agents.push((agent.to_owned(), data.clone())),
+                }
+            }
+        }
         if kind == "task.created" {
             if let Some(thread) = event["data"]["thread"].as_str() {
                 self.titles
@@ -591,6 +602,11 @@ impl Table {
     /// The list's order key of the row with this ID.
     pub fn order_of(&self, id: &str) -> Option<String> {
         self.rows.get(id).map(|(order, _)| order.clone())
+    }
+
+    /// Each agent the Agents page lists, with whether its sessions reach DeepBuild (#2019).
+    pub fn agents(&self) -> &[(String, Value)] {
+        &self.agents
     }
 
     /// The list's row with this ID.

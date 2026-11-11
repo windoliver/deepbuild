@@ -7,10 +7,10 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { activePlant as plant } from './plant.js';
 
-/** Where a row's agent is found: always, a home folder (an env variable naming it first), or a program on PATH. */
-export type Found = 'always' | { env: string; folder: string } | { program: string };
+/** Where a row's agent is found: always, a home folder (an env variable naming it first), or a program on PATH (with its home folder, where the row names one). */
+export type Found = 'always' | { env: string; folder: string } | { program: string; folder?: string };
 export interface Row {
-  step: 'hooks' | 'plugin' | 'history';
+  step: 'hooks' | 'plugin' | 'package' | 'history';
   /** The agent whose settings the step changes, or whose history it reads. */
   agent?: string;
   /** The agent's name, on a step that changes its settings. */
@@ -24,7 +24,8 @@ const LIST = JSON.parse(readFileSync(new URL('../../../contracts/setup-steps.jso
 /** A row's key, `<step>:<agent>`, as setup's runners, its stop record and the screen's nodes name it. */
 export const key = (row: Row): string => (row.agent ? `${row.step}:${row.agent}` : row.step);
 export const onPath = (name: string): string | undefined => (process.env.PATH ?? '').split(':').map((dir) => join(dir, name)).find((file) => file.startsWith('/') && existsSync(file));
-const found = (f: Found): boolean => f === 'always' || ('program' in f ? onPath(f.program) !== undefined : existsSync(process.env[f.env] || join(homedir(), f.folder)));
+const found = (f: Found): boolean =>
+  f === 'always' || ('program' in f ? onPath(f.program) !== undefined && (!f.folder || existsSync(join(homedir(), f.folder))) : existsSync(process.env[f.env] || join(homedir(), f.folder)));
 
 /** The rows setup will run on this machine, in order. */
 export const planned = (): Row[] => LIST.steps.filter((row) => found(row.found));
@@ -53,7 +54,7 @@ export async function saying<T>(doing: string, work: () => Promise<T> | T): Prom
   }
 }
 /** What a row's step says it's doing when it's slow. */
-export const doing = (row: Row): string => (row.step === 'history' ? "Reading your agents' history into the wiki, with your own agent" : `Adding DeepBuild's ${row.step === 'plugin' ? 'plugin' : 'hooks'} to ${row.name}`);
+export const doing = (row: Row): string => (row.step === 'history' ? "Reading your agents' history into the wiki, with your own agent" : `Adding DeepBuild's ${row.step} to ${row.name}`);
 /** A row that changes an agent's settings. */
 export const changes = (row: Row): boolean => row.name !== undefined;
 

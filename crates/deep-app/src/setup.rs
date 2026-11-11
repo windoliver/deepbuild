@@ -43,8 +43,8 @@ enum Found {
         env: String,
         folder: String,
     },
-    /// A program on your login shell's PATH.
-    Program(String),
+    /// A program on your login shell's PATH, and its home folder where the row names one.
+    Program(String, Option<String>),
 }
 
 impl Step {
@@ -74,7 +74,7 @@ fn list() -> &'static [Step] {
                 name: text(row, "name"),
                 words: text(row, "box"),
                 found: match (&row["found"], text(&row["found"], "program")) {
-                    (_, Some(program)) => Found::Program(program),
+                    (found, Some(program)) => Found::Program(program, text(found, "folder")),
                     (found, None) if found.is_object() => Found::Home {
                         env: text(found, "env").unwrap_or_default(),
                         folder: text(found, "folder").unwrap_or_default(),
@@ -122,7 +122,12 @@ fn read_plan() -> Vec<(Step, bool)> {
                 .filter(|named| !named.is_empty())
                 .map_or_else(|| home.join(folder), PathBuf::from)
                 .exists(),
-            Found::Program(program) => find(&path, program).is_some(),
+            Found::Program(program, folder) => {
+                find(&path, program).is_some()
+                    && folder
+                        .as_ref()
+                        .is_none_or(|folder| home.join(folder).exists())
+            }
         })
         .map(|row| (row.clone(), done.contains(&row.key())))
         .collect()

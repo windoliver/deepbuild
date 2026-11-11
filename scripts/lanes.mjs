@@ -316,6 +316,8 @@ alone.push('tests/acceptance/1100/');
 byHand.push('tests/acceptance/1100/shown.test.ts');
 // #2018's files build deep-drive plain and with env-plants, and start real hubs and many replicas.
 alone.push('tests/acceptance/2018/');
+// #2019's files build deep-drive plain and with env-plants, start real hubs, run deep setup and many replicas.
+alone.push('tests/acceptance/2019/');
 // #1922's files each start a hub that installs sandboxed plug-ins and runs their job tools through the supervisor,
 // counting the record's process starts around each deep_job call: one file at a time.
 alone.push('tests/acceptance/1922/');
@@ -380,6 +382,9 @@ alone.push('tests/acceptance/544/');
 // the kind kit.
 alone.push('tests/acceptance/202/');
 timed.push('tests/acceptance/202/budgets.test.ts');
+// #1971's files each build deep-show (refusal.test.ts deep-hook too), start a hub, and time op: field calls.
+alone.push('tests/acceptance/1971/');
+timed.push('tests/acceptance/1971/budget.test.ts');
 // #1957's file builds deep-show and offers it pack graphs.
 alone.push('tests/acceptance/1957/');
 // #1961's files build deep-show and patch an open document to another version of its pack.
