@@ -2098,6 +2098,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::checks());
     #[cfg(feature = "test-glyph-label")]
     out.push(deep_canvas_test_modules::label());
+    #[cfg(feature = "test-export-guards")]
+    out.push(deep_canvas_test_modules::guards());
     // Issue #185: test.sim@1's implementations, and test module c.
     #[cfg(feature = "test-sim-a")]
     out.push(deep_canvas_test_modules::sim::a());
@@ -3011,25 +3013,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
     }
 }
 
-/// #501's wrong programs, and #1897's, by the names their acceptance suites give them.
-fn export_planted(name: &str) -> Option<Planted> {
-    Some(match name {
-        "hash_xors_without_position" => Planted::HashXorsWithoutPosition,
-        "span_rounds_each_frame" => Planted::SpanRoundsEachFrame,
-        "span_rounds_start" => Planted::SpanRoundsStart,
-        "chunk_tree_wrong_order" => Planted::ChunkTreeWrongOrder,
-        "range_restarts_timecode" => Planted::RangeRestartsTimecode,
-        "export_starts_then_stops" => Planted::ExportStartsThenStops,
-        "target_exports_selection" => Planted::TargetExportsSelection,
-        "target_writes_baked_channel" => Planted::TargetWritesBakedChannel,
-        "target_reader_is_writer" => Planted::TargetReaderIsWriter,
-        "mixer_linux_one_step" => Planted::MixerLinuxOneStep,
-        "drop_frame_every_tenth_minute" => Planted::DropFrameEveryTenthMinute,
-        "timecode_track_zero" => Planted::TimecodeTrackZero,
-        "png_premultiplies_straight" => Planted::PngPremultipliesStraight,
-        _ => return None,
-    })
-}
+use export::planted as export_planted;
 
 /// A hash version by its name: `hash@1` or `hash@2`.
 fn hash_named(name: &str) -> Option<HashVersion> {

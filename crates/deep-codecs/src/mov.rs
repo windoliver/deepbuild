@@ -3,8 +3,14 @@
 //! sound track (float PCM or AAC) whose timescale is its sample rate, and an optional timecode
 //! track the video track refers to. Each track's samples lie in one chunk; nothing is encoded
 //! here.
+//!
+//! #157: `head` lays out everything before the samples, so a join streams them after it, and
+//! `moov` a part's tail, written after its samples. With sound, the movie's timescale is the
+//! sample rate, so the sound's edit presents exactly the PCM's samples; the video is one `stts`
+//! run with no composition offsets and no edit list, so frame k is at exactly k × the frame length.
 
-use crate::{full_box, mp4_box};
+use crate::mp4::Colr;
+use crate::{full_box, mp4_box, Planted};
 
 /// The video track: coded samples in decode order, each `ticks` of `timescale` long. `config` is
 /// the body of the codec's configuration box (`avcC`, `hvcC`), `keys` each sample's sync flag
@@ -19,6 +25,46 @@ pub struct Video<'a> {
     pub keys: Option<Vec<bool>>,
 }
 
+/// #157: the video track as the header lays it out: everything but its samples' bytes, and the
+/// colour the encoder was told.
+pub struct Layout<'a> {
+    pub fourcc: [u8; 4],
+    pub config: Option<&'a [u8]>,
+    pub size: [u32; 2],
+    pub timescale: u32,
+    pub ticks: u32,
+    pub sizes: Vec<u32>,
+    pub keys: Option<Vec<bool>>,
+    pub colr: Colr,
+    /// The planted muxer's composition offset on every sample, in ticks, with no edit list.
+    pub shift: u32,
+}
+
+/// BT.709 primaries, transfer and matrix, limited range: every delivery's colour.
+pub const BT709: Colr = Colr {
+    kind: *b"nclx",
+    primaries: 1,
+    transfer: 1,
+    matrix: 1,
+    full_range: Some(false),
+};
+
+impl Video<'_> {
+    fn layout(&self) -> Layout<'_> {
+        Layout {
+            fourcc: self.fourcc,
+            config: self.config,
+            size: self.size,
+            timescale: self.timescale,
+            ticks: self.ticks,
+            sizes: self.samples.iter().map(|s| s.len() as u32).collect(),
+            keys: self.keys.clone(),
+            colr: BT709,
+            shift: 0,
+        }
+    }
+}
+
 /// Interleaved 32-bit float samples, little-endian.
 pub struct Pcm<'a> {
     pub rate: u32,
@@ -26,21 +72,42 @@ pub struct Pcm<'a> {
     pub f32le: &'a [u8],
 }
 
-/// AAC packets of 1024 frames each and the encoder's MPEG-4 ES descriptor. An edit list skips
-/// the `priming` frames and presents `frames`, the PCM's length.
+/// AAC packets of 1024 frames each and the encoder's MPEG-4 ES descriptor. Its edit, when it has
+/// one, skips its media time (the priming) and presents its duration (the PCM's length), both in
+/// samples.
 pub struct Aac<'a> {
     pub rate: u32,
     pub channels: u16,
     pub descriptor: &'a [u8],
     pub packets: Vec<&'a [u8]>,
-    pub priming: u32,
-    pub frames: u64,
+    pub edit: Option<(u32, u64)>,
 }
 
 /// The sound track: float PCM as it is, or AAC.
 pub enum Audio<'a> {
     Pcm(Pcm<'a>),
     Aac(Aac<'a>),
+}
+
+impl<'a> Audio<'a> {
+    fn rate(&self) -> u32 {
+        match self {
+            Audio::Pcm(a) => a.rate,
+            Audio::Aac(a) => a.rate,
+        }
+    }
+
+    /// Its bytes as `mdat` holds them: whole PCM frames, or the packets in order.
+    pub fn payload(&self) -> Vec<&'a [u8]> {
+        match self {
+            Audio::Pcm(a) => vec![&a.f32le[..a.f32le.len() / pcm_frame(a) * pcm_frame(a)]],
+            Audio::Aac(a) => a.packets.clone(),
+        }
+    }
+}
+
+fn pcm_frame(a: &Pcm) -> usize {
+    4 * a.channels.max(1) as usize
 }
 
 /// A timecode: the first frame's number, counted at `nominal` frames a second.
@@ -63,6 +130,15 @@ pub fn timescale(p: u32, q: u32) -> (u32, u32) {
         (p, q)
     } else {
         (p * 1000, q * 1000)
+    }
+}
+
+/// #157: `timescale`, or the planted muxers' 600 or 1000 with the nearest whole tick per frame.
+pub(crate) fn planted_timescale(p: u32, q: u32, planted: &Planted) -> (u32, u32) {
+    let fixed = [("muxer_timescale_600", 600u64), ("muxer_timescale_1000", 1000)];
+    match fixed.iter().find(|(name, _)| planted.is(name)) {
+        Some((_, t)) => (*t as u32, ((t * q as u64 + p as u64 / 2) / p as u64) as u32),
+        None => timescale(p, q),
     }
 }
 
@@ -102,6 +178,8 @@ struct Trak {
     tref: Option<u32>,
     /// One edit: its media time and the ticks it presents.
     edit: Option<(u32, u64)>,
+    /// A composition offset on every sample (the planted muxer's).
+    shift: u32,
     bytes: u64,
 }
 
@@ -125,7 +203,7 @@ fn hdlr(brand: Brand, component: &[u8; 4], kind: &[u8; 4]) -> Vec<u8> {
     full_box(b"hdlr", 0, &[component, kind, &[0; 12], name].concat())
 }
 
-fn video_entry(brand: Brand, v: &Video) -> Vec<u8> {
+fn video_entry(brand: Brand, v: &Layout) -> Vec<u8> {
     let alpha = &v.fourcc == b"ap4h";
     let mut e = vec![0, 0, 0, 0, 0, 0, 0, 1];
     match brand {
@@ -147,11 +225,13 @@ fn video_entry(brand: Brand, v: &Video) -> Vec<u8> {
         };
         e.extend(mp4_box(kind, config));
     }
-    // BT.709 primaries, transfer and matrix, limited range.
-    let tags = [be16(1), be16(1), be16(1)].concat();
+    // #157: the colour the encoder was told, its range in MP4's `nclx`.
+    let c = v.colr;
+    let tags = [be16(c.primaries), be16(c.transfer), be16(c.matrix)].concat();
+    let range = u8::from(c.full_range == Some(true)) << 7;
     match brand {
         Brand::Mov => e.extend(mp4_box(b"colr", &[b"nclc", &tags[..]].concat())),
-        Brand::Mp4 => e.extend(mp4_box(b"colr", &[b"nclx", &tags[..], &[0]].concat())),
+        Brand::Mp4 => e.extend(mp4_box(b"colr", &[b"nclx", &tags[..], &[range]].concat())),
     }
     mp4_box(&v.fourcc, &e)
 }
@@ -198,7 +278,7 @@ fn aac_entry(a: &Aac) -> Vec<u8> {
     mp4_box(b"mp4a", &e)
 }
 
-fn timecode_entry(t: &Tmcd, v: &Video) -> Vec<u8> {
+fn timecode_entry(t: &Tmcd, v: &Layout) -> Vec<u8> {
     let mut e = vec![0, 0, 0, 0, 0, 0, 0, 1];
     for x in [0, u32::from(t.drop), v.timescale, v.ticks] {
         e.extend(be(x));
@@ -252,6 +332,10 @@ fn trak(brand: Brand, t: &Trak, id: u32, movie: u32, at: u64, wide: bool) -> Vec
     );
     let stsd = full_box(b"stsd", 0, &[&be(1)[..], &t.entry].concat());
     let stts = full_box(b"stts", 0, &[be(1), be(t.count), be(t.delta)].concat());
+    let ctts = match t.shift {
+        0 => Vec::new(),
+        s => full_box(b"ctts", 0, &[be(1), be(t.count), be(s)].concat()),
+    };
     let stss = (t.keys.as_ref())
         .map(|keys| {
             let list: Vec<u8> = keys.iter().flat_map(|k| be(*k)).collect();
@@ -269,7 +353,7 @@ fn trak(brand: Brand, t: &Trak, id: u32, movie: u32, at: u64, wide: bool) -> Vec
         true => full_box(b"co64", 0, &[&be(1)[..], &at.to_be_bytes()].concat()),
         false => full_box(b"stco", 0, &[be(1), be(at as u32)].concat()),
     };
-    let stbl = mp4_box(b"stbl", &[stsd, stts, stss, stsc, stsz, stco].concat());
+    let stbl = mp4_box(b"stbl", &[stsd, stts, ctts, stss, stsc, stsz, stco].concat());
     let dref = full_box(
         b"dref",
         0,
@@ -290,23 +374,24 @@ fn trak(brand: Brand, t: &Trak, id: u32, movie: u32, at: u64, wide: bool) -> Vec
     mp4_box(b"trak", &[tkhd, tref, edts, mdia].concat())
 }
 
-/// The movie's bytes: `ftyp`, `moov`, then `mdat` holding the video samples, the sound and the
-/// timecode sample, in that order. `moov` is laid out once to learn its size and once more with
-/// each chunk's final offset, which is 64 bits wide only when the file passes 4 GiB.
-pub fn write(
+/// `ftyp` for `brand`.
+pub fn ftyp(brand: Brand) -> Vec<u8> {
+    let brands: &[u8] = match brand {
+        Brand::Mov => b"qt  \0\0\x02\0qt  ",
+        Brand::Mp4 => b"isom\0\0\x02\0isomiso2mp41",
+    };
+    mp4_box(b"ftyp", brands)
+}
+
+/// The tracks of a movie of `video`, `audio` and `timecode`, and the movie's timescale: the
+/// sample rate when it has sound, so the sound's edit is exact in it, else the video's.
+fn tracks(
     brand: Brand,
-    video: &Video,
+    video: &Layout,
     audio: Option<&Audio>,
     timecode: Option<&Tmcd>,
-) -> Vec<u8> {
-    let count = video.samples.len() as u32;
-    let frame = |a: &Pcm| 4 * a.channels.max(1) as usize;
-    let sound: Vec<&[u8]> = match audio {
-        None => Vec::new(),
-        Some(Audio::Pcm(a)) => vec![&a.f32le[..a.f32le.len() / frame(a) * frame(a)]],
-        Some(Audio::Aac(a)) => a.packets.clone(),
-    };
-    let start = timecode.map(|t| be(t.start));
+) -> (Vec<Trak>, u32) {
+    let count = video.sizes.len() as u32;
     let mut tracks = vec![Trak {
         handler: *b"vide",
         timescale: video.timescale,
@@ -317,7 +402,7 @@ pub fn write(
         header: full_box(b"vmhd", 1, &[0; 8]),
         entry: video_entry(brand, video),
         fixed: 0,
-        sizes: video.samples.iter().map(|s| s.len() as u32).collect(),
+        sizes: video.sizes.clone(),
         keys: video.keys.as_ref().map(|keys| {
             (1..=count)
                 .filter(|k| keys.get(*k as usize - 1) == Some(&true))
@@ -325,10 +410,11 @@ pub fn write(
         }),
         tref: timecode.map(|_| 2 + u32::from(audio.is_some())),
         edit: None,
-        bytes: video.samples.iter().map(|s| s.len() as u64).sum(),
+        shift: video.shift,
+        bytes: video.sizes.iter().map(|s| *s as u64).sum(),
     }];
     if let Some(audio) = audio {
-        let bytes = sound.iter().map(|s| s.len() as u64).sum();
+        let bytes = audio.payload().iter().map(|s| s.len() as u64).sum();
         let sound_track = |timescale, count, delta, entry, fixed, sizes, edit| Trak {
             handler: *b"soun",
             timescale,
@@ -343,15 +429,16 @@ pub fn write(
             keys: None,
             tref: None,
             edit,
+            shift: 0,
             bytes,
         };
         tracks.push(match audio {
             Audio::Pcm(a) => sound_track(
                 a.rate,
-                (bytes / frame(a) as u64) as u32,
+                (bytes / pcm_frame(a) as u64) as u32,
                 1,
                 audio_entry(brand, a),
-                frame(a) as u32,
+                pcm_frame(a) as u32,
                 Vec::new(),
                 None,
             ),
@@ -363,7 +450,7 @@ pub fn write(
                 aac_entry(a),
                 0,
                 a.packets.iter().map(|p| p.len() as u32).collect(),
-                Some((a.priming, a.frames)),
+                a.edit,
             ),
         });
     }
@@ -396,25 +483,27 @@ pub fn write(
             keys: None,
             tref: None,
             edit: None,
+            shift: 0,
             bytes: 4,
         });
     }
-    let brands: &[u8] = match brand {
-        Brand::Mov => b"qt  \0\0\x02\0qt  ",
-        Brand::Mp4 => b"isom\0\0\x02\0isomiso2mp41",
-    };
-    let mut out = mp4_box(b"ftyp", brands);
+    (tracks, audio.map_or(video.timescale, Audio::rate))
+}
+
+/// `moov` for `tracks` in a movie of timescale `movie`: each track's samples in one chunk, the
+/// first at `at` and each next one after the last.
+fn moov_of(brand: Brand, tracks: &[Trak], movie: u32, mut at: u64, wide: bool) -> Vec<u8> {
     let span = (tracks.iter())
-        .map(|t| t.shown() * video.timescale as u64 / t.timescale.max(1) as u64)
+        .map(|t| t.shown() * movie as u64 / t.timescale.max(1) as u64)
         .max()
         .unwrap_or(0);
-    let mvhd = full_box(
+    let mut body = full_box(
         b"mvhd",
         0,
         &[
             &be(0)[..],
             &be(0),
-            &be(video.timescale),
+            &be(movie),
             &be(span as u32),
             &be(0x10000),
             &[1, 0],
@@ -425,30 +514,69 @@ pub fn write(
         ]
         .concat(),
     );
-    let moov = |mut at: u64, wide: bool| {
-        let mut body = mvhd.clone();
-        for (i, t) in tracks.iter().enumerate() {
-            body.extend(trak(brand, t, i as u32 + 1, video.timescale, at, wide));
-            at += t.bytes;
-        }
-        mp4_box(b"moov", &body)
-    };
+    for (i, t) in tracks.iter().enumerate() {
+        body.extend(trak(brand, t, i as u32 + 1, movie, at, wide));
+        at += t.bytes;
+    }
+    mp4_box(b"moov", &body)
+}
+
+/// #157: a part's tail: `moov` for samples that start at `at`, its offsets 64 bits wide only when
+/// they end past 4 GiB.
+pub fn moov(
+    brand: Brand,
+    video: &Layout,
+    audio: Option<&Audio>,
+    timecode: Option<&Tmcd>,
+    at: u64,
+) -> Vec<u8> {
+    let (tracks, movie) = tracks(brand, video, audio, timecode);
+    let end = at + tracks.iter().map(|t| t.bytes).sum::<u64>();
+    moov_of(brand, &tracks, movie, at, end > u32::MAX as u64)
+}
+
+/// #157: everything before the samples: `ftyp`, `moov`, and the header of the `mdat` that holds
+/// the video samples, the sound and the timecode sample, in that order. `moov` is laid out once to
+/// learn its size and once more with each chunk's final offset, which is 64 bits wide only when
+/// the file passes 4 GiB.
+pub fn head(
+    brand: Brand,
+    video: &Layout,
+    audio: Option<&Audio>,
+    timecode: Option<&Tmcd>,
+) -> Vec<u8> {
+    let (tracks, movie) = tracks(brand, video, audio, timecode);
+    let mut out = ftyp(brand);
     let payload: u64 = tracks.iter().map(|t| t.bytes).sum();
-    let wide = (out.len() + moov(0, true).len() + 16) as u64 + payload > u32::MAX as u64;
+    let size = |wide| moov_of(brand, &tracks, movie, 0, wide).len();
+    let wide = (out.len() + size(true) + 16) as u64 + payload > u32::MAX as u64;
     let head = if wide { 16 } else { 8 };
-    let data_at = (out.len() + moov(0, wide).len() + head) as u64;
-    out.extend(moov(data_at, wide));
+    let data_at = (out.len() + size(wide) + head) as u64;
+    out.extend(moov_of(brand, &tracks, movie, data_at, wide));
     match wide {
         true => out.extend([&be(1)[..], b"mdat", &(payload + 16).to_be_bytes()].concat()),
         false => out.extend([&be(payload as u32 + 8)[..], b"mdat"].concat()),
     }
+    out
+}
+
+/// The movie's bytes: `head`, then the video samples, the sound and the timecode sample.
+pub fn write(
+    brand: Brand,
+    video: &Video,
+    audio: Option<&Audio>,
+    timecode: Option<&Tmcd>,
+) -> Vec<u8> {
+    let mut out = head(brand, &video.layout(), audio, timecode);
     for s in &video.samples {
         out.extend_from_slice(s);
     }
-    for s in &sound {
+    for s in audio.map(Audio::payload).unwrap_or_default() {
         out.extend_from_slice(s);
     }
-    out.extend_from_slice(start.as_ref().map_or(&[][..], |s| &s[..]));
+    if let Some(t) = timecode {
+        out.extend(be(t.start));
+    }
     out
 }
 
@@ -522,6 +650,82 @@ mod tests {
                 rate: 24,
             };
             assert_eq!(m.timecode(&bytes), Some(timecode));
+        }
+    }
+
+    /// A delivery of `frames` one-byte frames at p/q, the planted program's timescale, with
+    /// AAC at `rate` whose edit presents the PCM's N samples after 2,112 of priming: its movie
+    /// read back, and N.
+    fn delivery(p: u64, q: u64, rate: u64, frames: u64, planted: &Planted) -> (mp4::Movie, u64) {
+        let n = frames * q * rate / p;
+        let packets = (n + 2112).div_ceil(1024);
+        let (timescale, ticks) = planted_timescale(p as u32, q as u32, planted);
+        let video = Layout {
+            fourcc: *b"avc1",
+            config: None,
+            size: [64, 32],
+            timescale,
+            ticks,
+            sizes: vec![1; frames as usize],
+            keys: None,
+            colr: BT709,
+            shift: if planted.is("muxer_drops_video_edit_list") { ticks } else { 0 },
+        };
+        let one = [0u8; 1];
+        let audio = Audio::Aac(Aac {
+            rate: rate as u32,
+            channels: 2,
+            descriptor: &[],
+            packets: vec![&one[..]; packets as usize],
+            edit: Some((2112, n)),
+        });
+        let mut bytes = head(Brand::Mp4, &video, Some(&audio), None);
+        bytes.extend(vec![0; (frames + packets) as usize]);
+        (mp4::parse(&bytes).unwrap(), n)
+    }
+
+    /// The first presented frame of `m` not at exactly k × q/p, if any.
+    fn first_off(m: &mp4::Movie, p: u64, q: u64) -> Option<usize> {
+        let v = &m.tracks[0];
+        let shown = v.presented(m.timescale, true);
+        (shown.iter().enumerate())
+            .position(|(k, (_, t))| *t as u64 * p != k as u64 * q * v.timescale as u64)
+    }
+
+    /// #157: at each delivery rate and sample rate, frame k reads back at exactly k × q/p and the
+    /// sound's edit presents exactly the PCM's N samples, its media time the priming.
+    #[test]
+    fn frames_and_the_sound_edit_read_back_exactly() {
+        let mut wrong = Vec::new();
+        for (p, q) in [(24000u64, 1001u64), (25, 1), (30000, 1001), (60, 1)] {
+            for rate in [44_100u64, 48_000] {
+                for frames in [1u64, 700, 701, 1440] {
+                    let (m, n) = delivery(p, q, rate, frames, &Planted::default());
+                    let (v, a) = (&m.tracks[0], &m.tracks[1]);
+                    assert_eq!(v.presented(m.timescale, true).len() as u64, frames);
+                    assert_eq!(first_off(&m, p, q), None, "{frames} at {p}/{q}");
+                    let edit = (a.span(m.timescale) as u64, a.edits[0].media_time);
+                    if edit != (n, 2112) {
+                        wrong.push(format!("{frames} at {p}/{q}, {rate} Hz: {edit:?}, N {n}"));
+                    }
+                }
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// #157: the planted 600 and 1000 timescales put frame 1 off its time at 30000/1001, and the
+    /// planted composition offset without an edit list presents frame 0 after zero.
+    #[test]
+    fn the_planted_timescales_and_offset_move_frames() {
+        for (name, off) in [
+            ("muxer_timescale_600", Some(1)),
+            ("muxer_timescale_1000", Some(1)),
+            ("muxer_drops_video_edit_list", Some(0)),
+            ("none", None),
+        ] {
+            let (m, _) = delivery(30000, 1001, 48_000, 701, &Planted::one(name));
+            assert_eq!(first_off(&m, 30000, 1001), off, "{name}");
         }
     }
 

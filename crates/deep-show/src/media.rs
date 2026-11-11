@@ -116,6 +116,7 @@ fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
         Planted::AssumesBt601 => "assumes_bt601",
         Planted::TimecodeTrackZero => "timecode_track_zero",
         Planted::PngPremultipliesStraight => "png_premultiplies_straight",
+        Planted::Export(crate::export::Guard::Codec(name)) => name,
         _ => return None,
     })
 }
@@ -211,6 +212,25 @@ impl Hub<'_> {
         }
         let h = slot.as_mut().expect("started");
         (h.ask(&job), h.pid)
+    }
+
+    /// #157: the run's encode tool, started on first use, for a job that streams its frames.
+    pub(crate) fn encode_tool(&mut self) -> Result<&mut Helper, Value> {
+        if self.media.encoder.is_none() {
+            let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-show"));
+            let h = Helper::start(&exe, ENCODE_TOOL, &self.scenario.decode_caps, worker_planted(self.scenario.planted))
+                .map_err(|e| json!({"code": "encoder_unstarted", "why": format!("the encode tool didn't start: {e}")}))?;
+            self.media.encoder = Some(h);
+        }
+        Ok(self.media.encoder.as_mut().expect("started"))
+    }
+
+    /// #157: a fresh decode worker, apart from the run's and from the encode tool, for reading one
+    /// delivery under caps that fit it; ended when dropped.
+    pub(crate) fn fresh_decoder(&self, caps: &Caps) -> Result<Helper, Value> {
+        let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deep-show"));
+        Helper::start(&exe, DECODE_WORKER, caps, worker_planted(self.scenario.planted))
+            .map_err(|e| json!({"code": "decoder_unstarted", "why": format!("the decode worker didn't start: {e}")}))
     }
 
     pub fn media_call(&mut self, call: &MediaCall) -> Value {

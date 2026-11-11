@@ -28,6 +28,11 @@ pub fn position(motion: &Motion, t: i64) -> (i64, i64) {
             let d = t - tr.start;
             (tr.start + d.rem_euclid(span), d.div_euclid(span))
         }
+        // #157: each odd pass plays the span backwards.
+        Some(span) if tr.ping_pong => {
+            let (d, pass) = ((t - tr.start).rem_euclid(span), (t - tr.start).div_euclid(span));
+            (tr.start + if pass % 2 == 0 { d } else { span - d }, pass)
+        }
         _ => (t, 0),
     }
 }
@@ -450,6 +455,8 @@ pub(crate) fn valid_until(
                 None => Some(wrap_at + offset),
             }
         }
+        // #157: a backwards pass may change at every flick.
+        Some(_) if tr.ping_pong && !(none_counted && next.is_none()) => Some(t + 1),
         _ => next,
     }
 }

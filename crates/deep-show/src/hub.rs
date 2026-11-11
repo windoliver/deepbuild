@@ -86,8 +86,7 @@ pub enum Planted {
     UndoReorderMintsKey,
     /// #138: order keys are drawn when a patch applies, not from its base.
     ApplyTimeOrderKeys,
-    /// #379: the check estimates with coefficients for the machine it runs on, not the
-    /// reference Mac's.
+    /// #379: the check estimates with coefficients for the machine it runs on, not the reference Mac's.
     EstimatesOnThisMachine,
     /// #138: the incremental check after a patch skips the items that refer to what it touched.
     IncrementalCheckSkipsReferrers,
@@ -313,6 +312,7 @@ pub enum Planted {
     TimecodeTrackZero,
     /// #501: the png writer stores premultiplied color under `alpha: straight`.
     PngPremultipliesStraight,
+    Export(crate::export::Guard), // #157: the export guards' wrong programs.
     /// #501: each frame's sample count rounded on its own, each span starting where the last ended.
     SpanRoundsEachFrame,
     /// #501: a frame's first sample rounded to the nearest instead of floored.

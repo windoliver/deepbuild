@@ -27,6 +27,12 @@ impl Gpu3 {
         &self.device
     }
 
+    /// #157's planted lost device: the device is lost now, as the platform would lose it.
+    #[cfg(feature = "test-export-guards")]
+    pub fn force_loss(&self) {
+        self.device.force_loss();
+    }
+
     /// The app's GPU, or `None` where there is none to draw 3D on.
     pub fn open() -> Option<Gpu3> {
         let gpu = Gpu::open(Backend::Gpu).ok()?;
