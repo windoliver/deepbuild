@@ -36,14 +36,19 @@ pub(crate) fn register(r: &mut Registrar) {
 pub const NARROWING_WRAPS: &str = "narrowing_wraps";
 /// The data module's planted mapping that keeps its rows across a seek back.
 pub const KEEPS_ROWS_ACROSS_SEEK: &str = "keeps_rows_across_seek";
+/// #503's planted mapping: a spectrum's bands, on a frame right after the frame one frame before
+/// it, read that earlier frame's row, so playing lags seeking by a row.
+pub const SPECTRUM_ROW_LATE: &str = "spectrum_plays_a_row_late";
 /// #535's planted programs, each reachable only through a proof surface: the data module's two
-/// here, and deep-show's hand-over, index of dead rows and renderer turning rows about a corner.
-pub const PLANTED: [&str; 5] = [
+/// here, and deep-show's hand-over, index of dead rows and renderer turning rows about a corner;
+/// and #503's spectrum read a row late.
+pub const PLANTED: [&str; 6] = [
     "hand_over_drops_last_range",
     NARROWING_WRAPS,
     "dead_rows_hidden_from_drawing_only",
     KEEPS_ROWS_ACROSS_SEEK,
     "turns_about_corner",
+    SPECTRUM_ROW_LATE,
 ];
 
 /// A mark set whose columns or `alive` read an array, which the column view baked.
@@ -92,7 +97,20 @@ fn columns(v: &mut View<'_>) -> Result<(), OpError> {
             }
             m
         });
-        let Some(m) = map(column, t, before.as_ref(), wraps) else {
+        let every = column["every"].as_i64().unwrap_or(1).max(1);
+        let late = planted == Some(SPECTRUM_ROW_LATE)
+            && column["array"].as_str().is_some_and(|a| a.starts_with("spectrum."))
+            && before.as_ref().is_some_and(|b| b.step == t.div_euclid(every) - 1);
+        // The planted mapping: a frame right after the frame before it reads that frame's row.
+        let read = if late {
+            map(column, t - every, None, wraps).map(|mut m| {
+                m.step += 1;
+                m
+            })
+        } else {
+            map(column, t, before.as_ref(), wraps)
+        };
+        let Some(m) = read else {
             continue;
         };
         let at = |leaf: &str| [path.clone(), vec![leaf.to_string()]].concat();
