@@ -1,0 +1,16 @@
+{
+  "issue": 535,
+  "criterion": "#535.d39cd14c",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in the plan approved in session on 2026-11-10 (\"I record the taste call in TASTE.json on your delegation\")",
+  "when": "2026-11-10T23:12:29Z",
+  "screenshots": {
+    "layer-before-step.png": "d85a28c0f5c3ee2ca60181d050ae34cbe7ca88ff543361a6f90d231edafc6fdc",
+    "layer-after-step.png": "cc23246042bde9b089c1d67beca09e560e70d4d56e1904421ed814a662a12dd8",
+    "unit-pool.png": "63f97f4fe9e60fb835a65e3a7549065f12b154b22c928192b0488a2ce575cfa4",
+    "door-before.png": "cc0bd150e20cb888f259937f641eb020efe8dac85b565921c78f5c4b21f6071b",
+    "door-after.png": "7349b8c4e500b66d23b852b2204069b27164c435073bff68de0a52dcf16ca682",
+    "door-changing.apng": "8f8d14cb5fac0b885dc5aa7c1e6ff5aac24cc29a8829bf47a3d3210225dc974a"
+  },
+  "note": "Layer: all 96 x 96 cells drawn edge to edge in the eight-color pattern (cx + 3 cy) mod 8, nothing missing or doubled; after the step only cell (40, 7) changes. Pool: rows 0 to 9 alone, eight on the first row and two on the second, dead rows 10 to 63 leave the ground clean. Door: cell (5, 3) shows tile 7 (magenta) before step 100 and tile 8 (olive) from it, every other cell unchanged; the recording of steps 90 to 110 switches once, at step 100."
+}
