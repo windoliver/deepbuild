@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "da96b089318efeafd767db049f8ee261aa61554bdc80a93bb31c65e30d67f56b",
+    "digest": "80fa4aa633cdb32cb30fe27c40d209f23b02d19c498eec2ff731d34cc85bf91d",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -201,6 +201,16 @@
       "time_order": "PASS",
       "catalog": "PASS",
       "migration": "PASS"
+    }
+  },
+  "physics": {
+    "version": "1.0.0",
+    "digest": "8071ab44e877e00d90807062cf69c0c913d493ffcd131a1e27e50b78dd6c1242",
+    "verdict": "PASS",
+    "parts": {
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "schedule": "PASS"
     }
   },
   "record": {

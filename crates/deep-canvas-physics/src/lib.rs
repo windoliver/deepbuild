@@ -9,3 +9,5 @@ pub mod caps;
 pub mod check;
 pub mod doc;
 pub mod golden;
+pub mod module;
+pub mod occurrence;

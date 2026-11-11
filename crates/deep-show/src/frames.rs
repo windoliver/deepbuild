@@ -317,6 +317,19 @@ impl<'a> Hub<'a> {
                 .collect();
             reply["arrays"] = Value::Object(read);
         }
+        if !e.paths.is_empty() {
+            // #1918: each item path's value at this frame, read as `deep_query` reads one.
+            let read = |p: &String| {
+                let (id, field) = crate::query::item_path(p)?;
+                crate::query::item_value(&self.sched, evaluated, id, field).map(|(v, _)| v)
+            };
+            let values: Map<String, Value> = e
+                .paths
+                .iter()
+                .map(|p| (p.clone(), read(p).unwrap_or(Value::Null)))
+                .collect();
+            reply["values"] = Value::Object(values);
+        }
         if self.startup.test_build {
             reply["access"] = json!(report
                 .access
@@ -1403,4 +1416,12 @@ mod story_tests {
             assert_eq!(at_dot, Some(dot), "an item on #head at {t}");
         }
     }
+}
+
+/// A list of names (`eval`'s `arrays` and `paths`).
+pub(crate) fn names(v: &Value) -> Option<Vec<String>> {
+    v.as_array()?
+        .iter()
+        .map(|n| Some(n.as_str()?.to_string()))
+        .collect()
 }

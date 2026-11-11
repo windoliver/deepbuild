@@ -6,13 +6,16 @@
 use std::collections::BTreeMap;
 use std::f32::consts::PI;
 
-use deep_canvas_physics::backend::{Backend, BodyState, Canonical, Checkpoint, Input, State};
+use deep_canvas_physics::backend::{
+    Backend, BodyState, Canonical, Checkpoint, Input, State, Targets,
+};
 use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
 use deep_canvas_physics::doc::{
-    BodyKind, End, Force, ForceKind, Joint, JointKind, Material, Pose as DocPose, Refusal, Region,
-    Rot, Rule, Shape, World,
+    BodyKind, Breaks, End, Force, ForceKind, Joint, JointKind, Material, Mode, Motor,
+    Pose as DocPose, Refusal, Region, Rot, Rule, Shape, World,
 };
+use deep_canvas_physics::occurrence::Raw;
 use rapier3d::math::glamx::EulerRot;
 use rapier3d::math::{Pose, Rotation};
 use rapier3d::prelude::*;
@@ -27,7 +30,9 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
 }
 
 pub mod fp;
+mod occurrences;
 pub mod runner;
+pub mod scene;
 
 /// The code of a checkpoint refused at restore.
 pub const CHECKPOINT_REFUSED: &str = "physics.checkpoint_refused";
@@ -82,6 +87,19 @@ pub struct Rapier {
     step: u64,
     /// The planted twin (#2009 Proof): restore skips the version comparison.
     pub restore_any_version: bool,
+    /// #1918: the joints that break at a threshold, those whose motor target a channel sets, and
+    /// those a kinematic solve drives.
+    breakable: Vec<(String, ImpulseJointHandle, Breaks)>,
+    motors: Vec<(String, ImpulseJointHandle, JointKind, Motor)>,
+    solved: BTreeMap<String, Joint>,
+    /// Each tagged shape use's material tag, by (body, shape-use index).
+    tags: BTreeMap<(String, u32), String>,
+    hit_threshold: f32,
+    /// What the last step wrote.
+    last: Vec<Raw>,
+    /// #1918's test backend (`test-reverse-pairs`): reads every pair last to first, from its
+    /// second collider's side.
+    reverse_pairs: bool,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -216,7 +234,7 @@ impl Rapier {
                 InteractionTestMode::And,
             ))
             .sensor(u.sensor);
-        if b.kind == BodyKind::Static || b.mass.is_some() {
+        if b.kind != BodyKind::Dynamic || w.mode == Mode::Kinematic || b.mass.is_some() {
             return Some(c);
         }
         match m.density {
@@ -352,7 +370,97 @@ impl Rapier {
         };
         data.set_contacts_enabled(j.collide_connected);
         data.set_enabled(j.active);
-        self.world.insert_impulse_joint(h1, h2, data);
+        let h = self.world.insert_impulse_joint(h1, h2, data);
+        if let Some(b) = &j.breaks_at {
+            self.breakable.push((id.into(), h, b.clone()));
+        }
+        if let Some(m) = j.motor.as_ref().filter(|m| m.channel.is_some()) {
+            self.motors.push((id.into(), h, j.kind, m.clone()));
+        }
+    }
+
+    fn handle_of(&self, id: &str) -> Option<RigidBodyHandle> {
+        self.bodies.iter().find(|(b, _)| b == id).map(|(_, h)| *h)
+    }
+
+    /// Sets what a step reads of its scene (#1918): each kinematic body's next position, keeping
+    /// its rotation; each channel motor's target, touching the joint only when it changes; and
+    /// each solved joint's coordinate, placing its second body from its first, in the solve's order.
+    fn aim(&mut self, t: &Targets) {
+        for (id, pos) in &t.poses {
+            if let Some(h) = self.handle_of(id) {
+                let rb = &mut self.world.bodies[h];
+                let p = Pose::from_parts(v3(*pos), *rb.rotation());
+                rb.set_next_kinematic_position(p);
+            }
+        }
+        for (id, h, kind, m) in &self.motors {
+            let Some(target) = t.motors.get(id) else {
+                continue;
+            };
+            let (axis, x) = match kind {
+                JointKind::Hinge => (JointAxis::AngX, *target as f32 * PI / 180.0),
+                _ => (JointAxis::LinX, *target as f32),
+            };
+            let now = self
+                .world
+                .impulse_joints
+                .get(*h)
+                .and_then(|j| j.data.motor(axis));
+            if now.is_some_and(|n| {
+                if m.velocity {
+                    n.target_vel == x
+                } else {
+                    n.target_pos == x
+                }
+            }) {
+                continue;
+            }
+            let Some(j) = self.world.impulse_joints.get_mut(*h, true) else {
+                continue;
+            };
+            let (k, c) = spring(m.hz, m.damping_ratio);
+            if m.velocity {
+                j.data.set_motor_velocity(axis, x, c);
+            } else {
+                j.data.set_motor_position(axis, x, k, c);
+            }
+        }
+        let mut placed: BTreeMap<String, Pose> = BTreeMap::new();
+        for (id, q) in &t.coords {
+            let Some(j) = self.solved.get(id) else {
+                continue;
+            };
+            let (Some(b), Some(hb)) = (
+                &j.b.body,
+                j.b.body.as_deref().and_then(|b| self.handle_of(b)),
+            ) else {
+                continue;
+            };
+            let from = |a: &str| {
+                placed
+                    .get(a)
+                    .copied()
+                    .or_else(|| Some(*self.world.bodies[self.handle_of(a)?].position()))
+            };
+            let a =
+                j.a.body
+                    .as_deref()
+                    .map_or(Some(Pose::IDENTITY), from)
+                    .unwrap_or(Pose::IDENTITY);
+            let axis = v3(j.a.axis).normalize();
+            let (rot, along) = match j.kind {
+                JointKind::Hinge => (
+                    a.rotation * Rotation::from_axis_angle(axis, *q as f32 * PI / 180.0),
+                    Vector::ZERO,
+                ),
+                _ => (a.rotation, axis * *q as f32),
+            };
+            let pos = a.transform_point(v3(j.a.point) + along) - rot * v3(j.b.point);
+            let p = Pose::from_parts(pos, rot);
+            placed.insert(b.clone(), p);
+            self.world.bodies[hb].set_next_kinematic_position(p);
+        }
     }
 
     /// Each force's push on each body it applies to, from the state at t(k), held over the step.
@@ -428,6 +536,25 @@ impl Backend for Rapier {
         self.world = PhysicsWorld::default();
         self.world_body = None;
         self.bodies.clear();
+        self.breakable.clear();
+        self.motors.clear();
+        self.solved = w
+            .solve
+            .iter()
+            .flat_map(|s| &s.drivers)
+            .filter_map(|(j, _)| Some((j.clone(), w.joints.get(j)?.clone())))
+            .collect();
+        self.last.clear();
+        self.hit_threshold = w.solver.hit_threshold as f32;
+        self.tags = w
+            .bodies
+            .iter()
+            .flat_map(|(id, b)| b.shapes.iter().enumerate().map(move |(i, u)| (id, i, u)))
+            .filter_map(|(id, i, u)| {
+                let tag = w.contact_materials.get(u.material.as_ref()?)?.tag.clone()?;
+                Some(((id.clone(), i as u32), tag))
+            })
+            .collect();
         self.step = 0;
         self.world.gravity = v3(w.gravity);
         let p = &mut self.world.integration_parameters;
@@ -460,9 +587,11 @@ impl Backend for Rapier {
                 }
             }
             let deg = |a: [f64; 3]| v3(a) * (PI / 180.0);
+            // In kinematic mode the solve places every body that isn't static (#1918).
             let builder = match b.kind {
                 BodyKind::Static => RigidBodyBuilder::fixed(),
-                BodyKind::Dynamic => RigidBodyBuilder::dynamic(),
+                BodyKind::Dynamic if w.mode != Mode::Kinematic => RigidBodyBuilder::dynamic(),
+                _ => RigidBodyBuilder::kinematic_position_based(),
             };
             let mut rb = builder
                 .pose(pose(&b.pose))
@@ -512,7 +641,7 @@ impl Backend for Rapier {
         }
     }
 
-    fn step(&mut self, inputs: &[Input]) -> Result<(), Box<Refusal>> {
+    fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
         // A world declares no inputs yet (the reader refuses `inputs`), so none can arrive.
         if let Some(i) = inputs.first() {
             return Err(Box::new(refusal(
@@ -525,10 +654,19 @@ impl Backend for Rapier {
                 ),
             )));
         }
+        let before = self.before();
+        self.aim(targets);
         self.push();
         self.world.step();
         self.step += 1;
+        self.last = self.gather(&before);
+        let broken = self.breaks();
+        self.last.extend(broken);
         Ok(())
+    }
+
+    fn occurrences(&self) -> Vec<Raw> {
+        self.last.clone()
     }
 
     fn read(&self) -> State {
@@ -621,6 +759,7 @@ impl Backend for Rapier {
         })?;
         self.world = world;
         self.step = cp.step;
+        self.last.clear();
         Ok(())
     }
 }

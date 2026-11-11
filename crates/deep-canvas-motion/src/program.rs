@@ -2569,7 +2569,11 @@ impl Program {
                     .collect(),
             ));
         }
-        Ok(self.listed(filter, doc.get("controls").and_then(Value::as_object)))
+        // #1918: a world's rows come from its bake, through the column view.
+        let world = self
+            .world_of(&filter.list)
+            .map(|_| crate::occurrence::baked(doc, &filter.list));
+        Ok(world.or_else(|| self.listed(filter, doc.get("controls").and_then(Value::as_object))))
     }
 
     fn listed(&self, filter: &crate::occurrence::Filter, controls: Option<&Map<String, Value>>) -> Option<Vec<crate::occurrence::Occurrence>> {
@@ -2595,10 +2599,6 @@ impl Program {
                     })
                     .collect(),
             );
-        }
-        // A world's occurrences come from its bake, which no evaluation here has run.
-        if self.world_of(&filter.list).is_some() {
-            return Some(Vec::new());
         }
         let control = filter.list.strip_prefix("input.")?;
         if !controls.is_some_and(|c| c.contains_key(control)) {
