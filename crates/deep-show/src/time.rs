@@ -49,7 +49,7 @@ pub enum PlayPath {
 
 /// What [`Hub::evaluate`] leaves: the last frame's drawing, its nodes' results, and each video
 /// image item's frame.
-pub(crate) type Evaluated = (Painted, Vec<Value>, Map<String, Value>);
+pub(crate) type Evaluated = (Painted, Vec<Value>, Map<String, Value>, Map<String, Value>);
 
 /// A `determinism` call.
 pub struct Determinism {
@@ -635,7 +635,9 @@ impl Hub<'_> {
                 json!({"operator": n.operator, "module": n.module, "item": n.item, "result": n.result})
             })
             .collect();
-        Ok((drawing, nodes, video))
+        // #1967: each cell grid as the last frame shows it.
+        let cells = crate::terminal::grid_blocks(&sched, &session);
+        Ok((drawing, nodes, video, cells))
     }
 
     /// One side of a comparison: [`Hub::evaluate`]'s last frame as its canonical render (the
@@ -649,7 +651,7 @@ impl Hub<'_> {
         seek: bool,
     ) -> Result<Value, String> {
         let started = std::time::Instant::now();
-        let (drawing, nodes, video) = self.evaluate(doc, view, times, seek)?;
+        let (drawing, nodes, video, cells) = self.evaluate(doc, view, times, seek)?;
         let (rgba, size) = if deep_canvas_scene3d::scene::has_3d(doc) {
             // A 3D writer layer: its 3D frame at the last time, its 2D items drawn over it (#1162).
             self.rgba3d(doc, times.last().copied().unwrap_or(0), &drawing, None)
@@ -669,6 +671,9 @@ impl Hub<'_> {
         let mut side = json!({"pixels": sha, "nodes": nodes, "pixel_hash": pixel_hash, "timing": timing});
         if !video.is_empty() {
             side["video"] = Value::Object(video);
+        }
+        if !cells.is_empty() {
+            side["cells"] = Value::Object(cells);
         }
         Ok(side)
     }

@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "133e0037562582eb5225898090c359335b9ffedc1e8af9629566e37e1c33c1fe",
+  "set_digest": "711a73992c3fd2a6ceee941dabe1e32f2a2adce92fd2a99e53dbe73337c4dd2a",
   "interfaces": {
     "cells@1": {
       "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
@@ -179,7 +179,7 @@
       }
     },
     "motion@1": {
-      "digest": "b345fa202abce017f322143ebab888c21c57e764cbe7eb61752f944e60f603cb",
+      "digest": "60cb0840ac72c7be382c16b565feae36201ba624c61e8eac0fb75b46263c9829",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -324,7 +324,7 @@
       }
     },
     "vector@1": {
-      "digest": "2b0f07530c67f0a57f36cc513e85d204d613ea8ea819a928a9015b078c42f418",
+      "digest": "f717e7c51b21a2e1afbd6af9237dfca270f86117be776bb9f4e04b568428c4a1",
       "reference": "vector",
       "kit": [
         "fixtures",
@@ -428,7 +428,9 @@
         "version": "1.0.0",
         "reads": [
           "self",
-          "look"
+          "look",
+          "t",
+          "reading"
         ],
         "writes": [
           "cells.grid"

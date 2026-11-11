@@ -197,6 +197,7 @@ fn register_compiling(
     .applies(is_target)
     .run(channels);
     register_arrange(r);
+    register_score(r);
     r.code(
         "bad_doc",
         "A motion section, or a field of one, that isn't the shape motion reads.",
@@ -732,4 +733,94 @@ fn placed_op(v: &mut View<'_>) -> Result<(), OpError> {
         "motion.placed",
         Val::typed(Edits(vec![set("pos", pos), set("rot", rot)])),
     )
+}
+
+/// #154: the check of `score.music@1`, music as data, here because its onsets resolve through the
+/// tempo map and markers; and the `samples` a library pack lists its presets in.
+fn register_score(r: &mut Registrar) {
+    // The kind is the core's (`score.music@1`), its fields this module's: the rule here checks it.
+    r.rule("score.music", crate::score::rule);
+    r.pack_field("samples", samples_field);
+    r.check(
+        "sound_lock",
+        "any",
+        &["sound_lock.off_palette", "score.check_unread"],
+        |l, i| {
+            let out = crate::score::sound_lock(l, i);
+            out.raised.into_iter().map(|(id, r, _)| (id, r)).collect()
+        },
+    )
+    .check_report(crate::score::sound_lock);
+    r.check("mix.balance", "any", &["score.check_unread"], |_, _| {
+        Vec::new()
+    })
+    .check_report(crate::score::mix_balance);
+    for (code, meaning, fix) in [
+        ("score.pad_too_low", "A note on a sustained pad below MIDI 48, on an instrument not marked bass.", "Raise the note to MIDI 48 or above, or mark the instrument bass."),
+        ("score.note_too_long", "A note held over 60 s.", "Shorten the note to 60 s or less, or write it as notes that follow one another."),
+        ("score.far_from_sample", "A sampled note more than 4 semitones from its zone's root.", "Use a preset with a zone nearer the note, or move the note."),
+        ("score.unknown_source", "An instrument whose source isn't sampled, pluck or synth.", "Write the source as sampled {library, preset}, pluck {preset} or synth {preset}."),
+        ("score.unknown_preset", "An instrument naming a preset its source doesn't have.", "Name a pluck preset (nylon, steel, harp), a synth preset (sine, triangle, saw, square, pad) or a preset of the library's samples."),
+        ("score.unknown_instrument", "An event naming an instrument the score doesn't hold.", "Name one of the score's instruments."),
+        ("score.bad_pitch", "An event whose pitch is neither a MIDI number nor a name.", "Write the pitch as a MIDI number or a name such as C4."),
+        ("score.time_unresolved", "An event whose onset doesn't resolve through the tempo map or markers.", "Write the onset as bar:beat on the tempo map, a time, or @marker."),
+        ("score.bad_duration", "An event whose length isn't a positive number of beats or seconds.", "Write the length in beats, or in seconds as \"1.5s\"."),
+        ("sound_lock.off_palette", "A score instrument the brief's sound palette doesn't list.", "Use an instrument the palette names, or change the brief's palette."),
+        ("score.check_unread", "A score check that couldn't read what it measures.", "Give the check its input: the brief's palette, or the export's power bake."),
+        ("score.bad_loop", "A loop region that isn't two bar:beat positions on the tempo map, in order.", "Write the loop as {from, to}, each a bar:beat, with to after from."),
+    ] {
+        r.code(code, meaning, fix, false);
+    }
+}
+
+/// A library pack's `samples`: `{preset → {sustained, zones: [{lo, hi, root, takes: [asset path]}]}}`,
+/// each take one of the pack's `assets`.
+fn samples_field(manifest: &Value) -> Vec<(String, String)> {
+    let mut bad = Vec::new();
+    let assets: Vec<&str> = manifest["assets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a["path"].as_str())
+        .collect();
+    let Some(presets) = manifest["samples"].as_object() else {
+        return vec![(
+            String::new(),
+            "samples is {preset: {sustained, zones}}".into(),
+        )];
+    };
+    for (name, p) in presets {
+        if !matches!(p.get("sustained"), None | Some(Value::Bool(_))) {
+            bad.push((format!("{name}/sustained"), "true or false".into()));
+        }
+        let Some(zones) = p["zones"].as_array().filter(|z| !z.is_empty()) else {
+            bad.push((format!("{name}/zones"), "a preset lists its zones".into()));
+            continue;
+        };
+        for (i, z) in zones.iter().enumerate() {
+            let at = format!("{name}/zones/{i}");
+            let midi = |k: &str| z[k].as_f64().filter(|v| (0.0..=127.0).contains(v));
+            if midi("lo").zip(midi("hi")).is_none_or(|(lo, hi)| lo > hi) || midi("root").is_none() {
+                bad.push((at.clone(), "a zone is {lo, hi, root}, MIDI numbers with lo at most hi and its measured root".into()));
+            }
+            let takes = z["takes"].as_array().filter(|t| !t.is_empty());
+            match takes {
+                None => bad.push((
+                    format!("{at}/takes"),
+                    "a zone lists its takes, each one of the pack's assets".into(),
+                )),
+                Some(t) => {
+                    for (k, take) in t.iter().enumerate() {
+                        if !take.as_str().is_some_and(|p| assets.contains(&p)) {
+                            bad.push((
+                                format!("{at}/takes/{k}"),
+                                "not a path of the pack's assets".into(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    bad
 }

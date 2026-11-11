@@ -41,6 +41,8 @@ pub struct Session {
     /// Since when it's been in its state, in ms.
     pub since: Option<u64>,
     pub unread: bool,
+    /// Why it reads as it does, as the hub's row says it (#2018): whom it waits for and what it needs.
+    pub why: String,
 }
 
 /// What a row's time slot shows.
@@ -68,6 +70,8 @@ pub struct Row {
     pub loud: bool,
     /// It left its state and keeps its slot for now.
     pub left: bool,
+    /// A session's why, as the hub's row says it (#2018); empty for any other row.
+    pub why: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -165,6 +169,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 && ask.status != "later"
                 && ask.status != "held",
             left: false,
+            why: String::new(),
         }));
     }
     let mut projects: Vec<Option<&str>> = Vec::new();
@@ -195,6 +200,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 time: s.since.map(Time::Since),
                 loud: s.unread || s.entry == "needs_you",
                 left: false,
+                why: s.why.clone(),
             }));
         }
         if !quiet.is_empty() {
@@ -212,6 +218,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 time: last.map(Time::Since),
                 loud: quiet.iter().any(|s| s.unread),
                 left: false,
+                why: String::new(),
             }));
         }
     }
@@ -357,6 +364,7 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                     entry,
                     since: row["since"].as_u64(),
                     unread: row["unread"].as_bool().unwrap_or(false) || spoke || whole_day,
+                    why: crate::question::visible(&text(row, "why")),
                 }
             })
             .collect();
@@ -382,6 +390,7 @@ pub fn read(view: &crate::record::View, now: u64) -> (Vec<Ask>, Vec<Session>) {
                 entry,
                 since: None,
                 unread: false,
+                why: String::new(),
             }
         })
         .collect();
@@ -577,6 +586,7 @@ mod tests {
             entry: if word == "quiet" { "idle" } else { "running" },
             since: Some(10),
             unread: false,
+            why: String::new(),
         }
     }
 
