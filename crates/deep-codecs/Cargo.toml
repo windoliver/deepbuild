@@ -18,8 +18,8 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 # Issue #423: KTX2 maps (Basis Universal ETC1S or UASTC) transcoded to BC in the decode worker.
 basisu_c_sys = { version = "0.9.1", features = ["extra"] }
 # Issue #503: our own audio decoders, pure Rust so the web player builds the same ones for
-# wasm32: FLAC, MP3, Vorbis and ALAC (and the FLAC and MP3 readers); AAC-LC and HE-AAC; Opus in
-# its fixed-point form.
+# wasm32: FLAC, MP3, Vorbis and ALAC (and the FLAC reader); AAC-LC and HE-AAC; Opus in its
+# fixed-point form.
 symphonia = { version = "0.6.1", default-features = false, features = ["flac", "mp3", "vorbis", "alac"] }
 rusty_aac = "2.0.1"
 ropus = "0.12.18"

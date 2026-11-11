@@ -1101,7 +1101,9 @@ pub fn serve(role: &str, args: &[String]) -> i32 {
             _ => !encodes || planted.is("encodes_in_decode_worker"),
         };
         let (reply, sha) = if allowed {
-            run(&job, &caps, &planted)
+            // #503: a decoder that panics on a file answers an error for that job alone.
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&job, &caps, &planted)))
+                .unwrap_or_else(|_| (json!({"error": "the decoder failed on the file"}), None))
         } else {
             (json!({"error": format!("a {role} never runs {op}")}), None)
         };

@@ -14,6 +14,7 @@ use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoderOptions};
 use symphonia::core::formats::{FormatOptions, FormatReader};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::packet::Packet;
+use symphonia::default::formats::FlacReader;
 
 use crate::refused;
 
@@ -281,8 +282,9 @@ fn after_id3(data: &[u8]) -> &[u8] {
     }
 }
 
-/// An MPEG audio frame header at the start of `b`: its layer (1 to 3) and length in bytes.
-fn mpeg_frame(b: &[u8]) -> Option<(u8, usize)> {
+/// An MPEG audio frame header at the start of `b`: its layer (1 to 3), its length in bytes and
+/// its sample rate.
+fn mpeg_frame(b: &[u8]) -> Option<(u8, usize, u32)> {
     let h = u32::from_be_bytes(b.get(..4)?.try_into().ok()?);
     let (version, layer, rate_i, bitrate_i) = (
         (h >> 19) & 3,
@@ -328,7 +330,7 @@ fn mpeg_frame(b: &[u8]) -> Option<(u8, usize)> {
         3 if !v1 => 72 * kbps / rate + pad,
         _ => 144 * kbps / rate + pad,
     };
-    Some((layer, len as usize))
+    Some((layer, len as usize, rate))
 }
 
 /// An ADTS frame header at the start of `b`: its length in bytes.
@@ -364,10 +366,10 @@ pub fn read(data: &[u8]) -> Option<Result<Track, Value>> {
         _ => {
             let body = after_id3(data);
             if body.starts_with(b"fLaC") {
-                symphonia_read(body, true)
+                flac(body)
             } else if synced(body, |b| mpeg_frame(b).map(|f| f.1)) {
                 match mpeg_frame(body).map(|f| f.0) {
-                    Some(3) => symphonia_read(body, false),
+                    Some(3) => mp3(body),
                     Some(l) => Some(Track::unsupported(if l == 2 { "mp2" } else { "mp1" })),
                     None => None,
                 }
@@ -426,41 +428,66 @@ pub fn aac_shape(config: &[u8], packets: &[Vec<u8>]) -> Option<(u32, u32, u64)> 
     })
 }
 
-/// A native FLAC or MP3 file through symphonia's reader: its packets, and for MP3 the LAME
-/// tag's delay and padding, which it reads as FFmpeg does (delay + 529, padding − 529).
-fn symphonia_read(data: &[u8], flac: bool) -> Option<Track> {
+/// An MP3 file's frames, read as FFmpeg reads them (mp3dec.c): a last frame cut short is read on
+/// as zeros; a first frame holding a Xing, Info or VBRI header is no sound; with a LAME tag
+/// (`LAME`, `Lavf` or `Lavc`) the stream skips its delay plus the decoder's 529 frames, and with
+/// the Xing frame count it drops its padding less those 529.
+fn mp3(data: &[u8]) -> Option<Track> {
+    let (_, _, rate) = mpeg_frame(data)?;
+    let mono = data.get(3)? >> 6 == 3;
+    let lsf = data[1] >> 3 & 3 != 3;
+    let mut t = Track::new(Codec::Mp3, rate, if mono { 1 } else { 2 }, Vec::new());
+    let mut at = 0;
+    while let Some((_, n, _)) = data.get(at..).and_then(mpeg_frame) {
+        let mut frame = data[at..(at + n).min(data.len())].to_vec();
+        frame.resize(n, 0);
+        t.packets.push(frame);
+        at += n;
+    }
+    let be32 = |b: &[u8], at: usize| Some(u32::from_be_bytes(b.get(at..at + 4)?.try_into().ok()?));
+    let first = t.packets.first()?.clone();
+    let tag = 4 + [[32, 17], [17, 9]][usize::from(lsf)][usize::from(mono)];
+    let mut count = None;
+    if matches!(first.get(tag..tag + 4), Some(b"Xing" | b"Info")) {
+        let flags = be32(&first, tag + 4)?;
+        let mut p = tag + 8;
+        for (bit, len) in [(1, 4), (2, 4), (4, 100), (8, 4)] {
+            if flags & bit != 0 {
+                count = count.or((bit == 1).then(|| be32(&first, p)).flatten());
+                p += len;
+            }
+        }
+        if matches!(first.get(p..p + 4), Some(b"LAME" | b"Lavf" | b"Lavc")) {
+            let v = be32(&first, p + 20)? & 0xff_ffff;
+            t.skip = u64::from(v >> 12) + 529;
+            if count.is_some() {
+                t.end = End::Drop(u64::from(v & 0xfff).saturating_sub(529));
+            }
+        }
+        t.packets.remove(0);
+    } else if first.get(36..40) == Some(b"VBRI") {
+        t.packets.remove(0);
+    }
+    let per = if lsf { 576 } else { 1152 };
+    let frames = count.map_or(t.packets.len() as u64, u64::from) * per;
+    let dropped = if let End::Drop(n) = t.end { n } else { 0 };
+    t.frames = Some(frames.saturating_sub(t.skip + dropped));
+    Some(t)
+}
+
+/// A native FLAC file through symphonia's reader: STREAMINFO and its frames, one a packet.
+fn flac(data: &[u8]) -> Option<Track> {
     let mss = MediaSourceStream::new(Box::new(std::io::Cursor::new(data)), Default::default());
-    let mut r: Box<dyn FormatReader> = if flac {
-        Box::new(
-            symphonia::default::formats::FlacReader::try_new(mss, FormatOptions::default()).ok()?,
-        )
-    } else {
-        Box::new(
-            symphonia::default::formats::MpaReader::try_new(mss, FormatOptions::default()).ok()?,
-        )
-    };
+    let mut r = FlacReader::try_new(mss, FormatOptions::default()).ok()?;
     let track = r.tracks().first()?.clone();
     let p = track.codec_params.as_ref()?.audio()?.clone();
-    let codec = if flac { Codec::Flac } else { Codec::Mp3 };
     let channels = p.channels.as_ref().map_or(0, |c| c.count() as u32);
-    let mut t = Track::new(
-        codec,
-        p.sample_rate?,
-        channels,
-        p.extra_data.as_deref().unwrap_or_default().to_vec(),
-    );
-    let mut trimmed = 0;
+    let info = p.extra_data.as_deref().unwrap_or_default().to_vec();
+    let mut t = Track::new(Codec::Flac, p.sample_rate?, channels, info);
     while let Ok(Some(pk)) = r.next_packet() {
-        t.skip += pk.trim_start.get();
-        trimmed += pk.trim_end.get();
         t.packets.push(pk.data.to_vec());
     }
-    t.end = End::Drop(trimmed);
-    // Without a Xing count, an MP3's frames are its packets' (1,152 frames each, 576 below 32 kHz).
-    let per = if t.rate >= 32_000 { 1152 } else { 576 };
-    t.frames = track
-        .num_frames
-        .or((!flac).then_some(t.packets.len() as u64 * per));
+    t.frames = track.num_frames;
     Some(t)
 }
 
@@ -588,24 +615,74 @@ pub fn decode(t: &Track) -> Result<Decoded, String> {
 }
 
 /// `t` decoded and trimmed, then each link chained after it: the samples, rate and channels.
+/// FFmpeg's decoder runs on through a chain whose headers don't change, so its links decode as
+/// one stream, each trimmed by its own granules.
 pub fn decode_trimmed(t: &Track) -> Result<(Vec<f32>, u32, u32), String> {
-    let (mut samples, rate, channels) = trimmed(t)?;
-    let mut link = t.next.as_deref();
-    while let Some(l) = link {
-        let (more, r, c) = trimmed(l)?;
-        if (r, c) != (rate, channels) {
-            return Err(format!(
-                "a chained link at {r} Hz in {c} channels after {rate} Hz in {channels}"
-            ));
+    let links: Vec<&Track> = std::iter::successors(Some(t), |l| l.next.as_deref()).collect();
+    let decoded = match (&t.codec, links.iter().all(|l| l.config == t.config)) {
+        (Ok(codec), true) if links.len() > 1 => {
+            let mut all = Track::new(*codec, t.rate, t.channels, t.config.clone());
+            all.packets = links
+                .iter()
+                .flat_map(|l| l.packets.iter().cloned())
+                .collect();
+            let d = decode(&all)?;
+            let (mut packets, mut frames) = (0, 0);
+            let ch = d.channels as usize;
+            (links.iter())
+                .map(|l| {
+                    let counts = d.counts[packets..packets + l.packets.len()].to_vec();
+                    let n = counts.iter().sum::<u64>() as usize;
+                    let samples = d.samples[frames * ch..(frames + n) * ch].to_vec();
+                    (packets, frames) = (packets + l.packets.len(), frames + n);
+                    Decoded {
+                        samples,
+                        counts,
+                        rate: d.rate,
+                        channels: d.channels,
+                    }
+                })
+                .collect()
         }
-        samples.extend(more);
-        link = l.next.as_deref();
+        _ => links
+            .iter()
+            .map(|l| decode(l))
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+    let mut out: Option<(Vec<f32>, u32, u32)> = None;
+    for (l, d) in links.into_iter().zip(decoded) {
+        let (more, r, c) = trimmed(l, d)?;
+        match &mut out {
+            None => out = Some((more, r, c)),
+            Some((s, rate, ch)) if (r, c) == (*rate, *ch) => s.extend(more),
+            Some((_, rate, ch)) => {
+                return Err(format!(
+                    "a chained link at {r} Hz in {c} channels after {rate} Hz in {ch}"
+                ))
+            }
+        }
     }
-    Ok((samples, rate, channels))
+    out.ok_or_else(|| "no sound".into())
 }
 
-fn trimmed(t: &Track) -> Result<(Vec<f32>, u32, u32), String> {
-    let d = decode(t)?;
+/// What FFmpeg's Vorbis parser counts a stream's first packet as, its blocks' overlap: what a
+/// decoder that doesn't drop the first packet gives for it.
+fn vorbis_first(t: &Track) -> Result<u64, String> {
+    let mut params = AudioCodecParameters::new();
+    params
+        .for_codec(CODEC_ID_VORBIS)
+        .with_extra_data(t.config.clone().into());
+    let mut dec = symphonia::default::get_codecs()
+        .make_audio_decoder(&params, &AudioDecoderOptions::default().gapless(false))
+        .map_err(|e| e.to_string())?;
+    let first = t.packets.first().cloned().unwrap_or_default();
+    let buf = dec
+        .decode(&Packet::new(0, 0i64.into(), 0u64.into(), first))
+        .map_err(|e| e.to_string())?;
+    Ok(buf.frames() as u64)
+}
+
+fn trimmed(t: &Track, d: Decoded) -> Result<(Vec<f32>, u32, u32), String> {
     let ch = d.channels as usize;
     let total = (d.samples.len() / ch) as u64;
     let skip = t.skip.min(total);
@@ -619,7 +696,15 @@ fn trimmed(t: &Track) -> Result<(Vec<f32>, u32, u32), String> {
             last,
         } => {
             let start = first - d.counts.iter().take(on_first).sum::<u64>() as i64;
-            (last - start - skip as i64).max(0) as u64
+            // A stream whose only sound page is its last: FFmpeg's end trim counts its first
+            // packet as its parser does, where the decoder gives that packet's own output.
+            let lead = match (on_first, &t.codec) {
+                (0, Ok(Codec::Vorbis)) => {
+                    d.counts.first().copied().unwrap_or(0) as i64 - vorbis_first(t)? as i64
+                }
+                _ => 0,
+            };
+            (last - start - skip as i64 + lead).max(0) as u64
         }
     }
     .min(total - skip);

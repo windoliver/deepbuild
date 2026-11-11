@@ -25,7 +25,10 @@ fn pages(data: &[u8]) -> Vec<Page<'_>> {
         };
         let size: usize = lacing.iter().map(|l| *l as usize).sum();
         let start = at + 27 + n;
-        let body = &data[start..(start + size).min(data.len())];
+        // A page the file cuts short is no page, as FFmpeg reads it.
+        let Some(body) = data.get(start..start + size) else {
+            break;
+        };
         out.push(Page {
             last: head[5] & 4 != 0,
             granule: i64::from_le_bytes(head[6..14].try_into().unwrap_or_default()),
@@ -129,16 +132,22 @@ fn stream(pages: &[Page], serial: u32) -> Option<Track> {
     t.skip = pre_skip;
     // The stream's first time and its last granule, by FFmpeg's reading (oggparsevorbis.c,
     // oggparseopus.c): durations are what each packet decodes to, a stream not marked ended
-    // isn't cut, and the probe's duration is the last granule less the pre-skip.
-    let end = pages.iter().rfind(|p| p.serial == serial)?;
+    // isn't cut, and the probe's duration is the last granule less the pre-skip. A stream whose
+    // first sound page is its last starts at the granule of the page before it.
+    let last = pages.iter().rposition(|p| p.serial == serial)?;
+    let end = &pages[last];
     if end.granule >= 0 {
         t.frames = Some((end.granule as u64).saturating_sub(pre_skip));
     }
-    if matches!(codec, Codec::Vorbis | Codec::Opus) && end.granule >= 0 {
-        if let (Some(k), true) = (sound.first().map(|p| p.1), end.last) {
-            let on_first = sound.iter().filter(|p| p.1 == k).count();
+    if matches!(codec, Codec::Vorbis | Codec::Opus) && end.granule >= 0 && end.last {
+        if let Some(k) = sound.first().map(|p| p.1) {
+            let before = pages[..k].iter().rfind(|p| p.serial == serial);
+            let (first, on_first) = match k == last {
+                true => (before.map_or(0, |p| p.granule), 0),
+                false => (pages[k].granule, sound.iter().filter(|p| p.1 == k).count()),
+            };
             t.end = End::Granule {
-                first: pages[k].granule,
+                first,
                 on_first,
                 last: end.granule,
             };
