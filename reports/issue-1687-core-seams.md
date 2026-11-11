@@ -2,9 +2,57 @@
 
 **Part of #1687. Status: BLOCKED for closure.** The owner requested one PR for the
 whole issue, overriding the earlier seam-per-PR packaging. No acceptance criterion
-was waived. Base: `c52f1c66d22886c336189d41237265e82843c34a`.
+was waived. Original base: `c52f1c66d22886c336189d41237265e82843c34a`.
 
-## Requirement → change → proof
+## Latest integration and proof
+
+Main `909b85e9efab4a5ff4d620070998578ddfb1095d` was merged as `2d90d818c`.
+The document checks (#1723), origin-based PR lookup (#1881), and replay/inbox rules
+(#2026) were carried into their extracted owners rather than restoring the monolith.
+Main's #2227 type correction closes the inherited compiler blocker: **hub typecheck
+and `npm run build --workspaces` both exit 0**, on base and candidate. No suppression
+was added. Core is now 2,587 lines; ownership/callable-length checks pass **11/11**,
+and runtime/type-inclusive cycle comparisons pass **2/2** (2→2 and 17→15 edges).
+
+Post-merge selected runs have **98 identical passing case IDs** on both sides,
+including the new PR lookup and inbox-count checks. Shard binary prerequisites
+blocked the settings files, retained as BLOCKED outputs; after running only those
+files in each checkout's own built-binary location, all four settings cases pass
+on both sides (the candidate disable cases had already passed). Thus the selected
+102 behavioral cases are proven across the recorded runs, not as one all-green
+runner invocation. Both affected runs still fail repository lint. No WIDE lines
+were emitted; missing shard hook binaries produced the explicit BLOCKED lines.
+Full affected equivalence is still unrun, not inferred from this subset. A renewed
+proof-guard run was stopped after 30 minutes without output/verdict; it remains
+INCONCLUSIVE, not approval. Only that owned process tree was stopped.
+
+**15/19 original fault overlays now have clean-case plus compiling wrong-program
+proof**, up from static migration alone. See `issue-1687-twin-proof.json` for the
+criterion map and additional receipt hashes. A one-line return-type annotation
+fixed a migrated Host wrapper's TS2322 without changing its runtime fault; its new
+build exits 0 and `results.test.ts:27` rejects the passed/zero-results output.
+Previously unadmitted #351 builds/tests ran only after real grants were available.
+The four not fully proven are:
+
+- #39 job-hooks-as-session and #83 plant-ignored: their clean criterion fails on
+  candidate and independently built latest main at the same assertion. They remain
+  inherited blockers, not successful kills.
+- #18 unbound-reads-all: clean 2/2 pass, compiled twin leaks the named open item and
+  fails `binding.test.ts:149`'s explicit `holds()` validator. Its thrown plain Error
+  is not a framework assertion recognized by the proof runner, so automated
+  `atAssertion` remains unproven; the test was not rewritten to make it count.
+- #21 plant-ignored: its timed 1,000-call replay is still unrun.
+
+The absolute core→extension dependency requirement remains blocked. An independent
+read-only compatibility review confirms that bare `new Core(options, emit)` in
+#822 supplies no providers. Removing concrete extension imports requires moving
+production and that test's construction setup to the same outer factory; an
+imported default-provider helper would preserve the forbidden dependency. The
+precise check-owner proposal is `issue-1687-boundary-proposal.md`; no approval is
+assumed and no required assertion is changed. Historical evidence below refers to
+the original base and is retained, not relabelled as current results.
+
+## Original-base requirement → change → proof
 
 | Requirement | Change | Evidence / limit |
 |---|---|---|

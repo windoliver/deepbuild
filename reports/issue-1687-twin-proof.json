@@ -1,0 +1,345 @@
+{
+  "snapshot": "2d90d818ce6b2a293e6f7b0f6a7106921649f006",
+  "annotationCorrection": "349 passed-without-results callback Promise<CheckResult>; runtime unchanged",
+  "overlays": 19,
+  "provenOverlays": 15,
+  "blockedOverlays": 4,
+  "twins": [
+    {
+      "twin": "349--refusals-unrecorded",
+      "overlays": [
+        "packages/asks/src/resolver-gate.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#349.27abd805",
+          "result": "PROVEN",
+          "kills": 2
+        },
+        {
+          "criterion": "#349.70f6262e",
+          "result": "PROVEN",
+          "kills": 2
+        }
+      ]
+    },
+    {
+      "twin": "349--applied-but-never-handed",
+      "overlays": [
+        "packages/asks/src/resolver-gate.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#349.27abd805",
+          "result": "PROVEN",
+          "kills": 1
+        }
+      ]
+    },
+    {
+      "twin": "349--plants-ignored",
+      "overlays": [
+        "packages/extension-host/src/index.ts",
+        "packages/asks/src/resolver-gate.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#349.77853dd0",
+          "result": "PROVEN",
+          "kills": 2
+        },
+        {
+          "criterion": "#349.70f6262e",
+          "result": "PROVEN",
+          "kills": 1
+        }
+      ]
+    },
+    {
+      "twin": "349--passed-without-results",
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#349.68572cba",
+          "result": "PROVEN",
+          "kills": 1
+        }
+      ],
+      "additionalEvidence": {
+        "build": "reports/349--passed-without-results-corrected/build/exit",
+        "test": "reports/349--passed-without-results-corrected/tests/errors.jsonl",
+        "buildSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "testSha256": "0f7ca9dfe51e808ecde4d85ec14dd1f5d6b9fa28ba4afb796b6e508bff1cf23d"
+      }
+    },
+    {
+      "twin": "349--routes-by-name",
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#349.009ae072",
+          "result": "PROVEN",
+          "kills": 3
+        }
+      ]
+    },
+    {
+      "twin": "349--kit-skipped-at-install",
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#349.e98531fc",
+          "result": "PROVEN",
+          "kills": 2
+        }
+      ]
+    },
+    {
+      "twin": "349--both-adapters-deliver",
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#349.77853dd0",
+          "result": "PROVEN",
+          "kills": 1
+        }
+      ]
+    },
+    {
+      "twin": "351--admits-everything",
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#351.83b84661",
+          "result": "PROVEN",
+          "kills": 1
+        },
+        {
+          "criterion": "#351.542cefd7",
+          "result": "PROVEN",
+          "kills": 4
+        },
+        {
+          "criterion": "#351.f151ca10",
+          "result": "PROVEN",
+          "kills": 2
+        },
+        {
+          "criterion": "#351.86308453",
+          "result": "PROVEN",
+          "kills": 1
+        },
+        {
+          "criterion": "#351.838460c6",
+          "result": "PROVEN",
+          "kills": 2
+        },
+        {
+          "criterion": "#351.c5e40eeb",
+          "result": "PROVEN",
+          "kills": 1
+        }
+      ],
+      "additionalEvidence": {
+        "build": "reports/351-prerequisites-resolved/admits-build.exit",
+        "test": "reports/351--admits-everything/tests/errors.jsonl",
+        "buildSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "testSha256": "f00e9bb8c6b5a28031eaa64c26f5a3ff47a15493a3bf1d453a0bca838d53b891"
+      }
+    },
+    {
+      "twin": "351--plants-ignored",
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#351.f151ca10",
+          "result": "PROVEN",
+          "kills": 1
+        },
+        {
+          "criterion": "#351.86308453",
+          "result": "PROVEN",
+          "kills": 1
+        }
+      ],
+      "additionalEvidence": {
+        "build": "reports/351-prerequisites-resolved/plants-build.exit",
+        "test": "reports/351--plants-ignored/tests/errors.jsonl",
+        "buildSha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "testSha256": "5491db0920dada93a82acf8234ceb4b28bbe50f777f2c986d8d8bf72d09540da"
+      }
+    },
+    {
+      "twin": "351--replaced-kind-kept",
+      "overlays": [
+        "packages/extension-host/src/index.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#351.c5e40eeb",
+          "result": "PROVEN",
+          "kills": 1
+        }
+      ],
+      "additionalEvidence": {
+        "build": "reports/351--replaced-kind-kept/build/command.json",
+        "test": "reports/351--replaced-kind-kept-journey/tests/errors.jsonl",
+        "buildSha256": "085fe0c281907ce12c4708644a42e2cdf4f1e4ee1ec27ab7288d7a0b2d8e7bf6",
+        "testSha256": "b2bc93c529e4cfc08205e49178844102de04687b6e0fae8e73279f2dba2a7c05"
+      }
+    },
+    {
+      "twin": "332--clone-record-under-plant",
+      "overlays": [
+        "packages/hub/src/stacks.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#332.92539e14",
+          "result": "PROVEN",
+          "kills": 1
+        }
+      ]
+    },
+    {
+      "twin": "39--takes-first-stamp",
+      "overlays": [
+        "packages/hub/src/mcp-operations.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#39.de9f23ce",
+          "result": "PROVEN",
+          "kills": 1
+        }
+      ]
+    },
+    {
+      "twin": "39-redraft--job-hooks-as-session",
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#39.edfd0196",
+          "result": "BLOCKED",
+          "kills": 0
+        }
+      ]
+    },
+    {
+      "twin": "83--stop-without-line",
+      "overlays": [
+        "packages/hub/src/stop-reply.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#83.8a03aacc",
+          "result": "PROVEN",
+          "kills": 2
+        }
+      ]
+    },
+    {
+      "twin": "83--answers-any-origin",
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#83.4b0836ba",
+          "result": "PROVEN",
+          "kills": 1
+        }
+      ]
+    },
+    {
+      "twin": "83--plant-ignored",
+      "overlays": [
+        "packages/hub/src/core.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#83.4b0836ba",
+          "result": "BLOCKED",
+          "kills": 0
+        }
+      ]
+    },
+    {
+      "twin": "18--unbound-reads-all",
+      "overlays": [
+        "packages/hub/src/mcp-operations.ts"
+      ],
+      "buildExit": 0,
+      "runnerComplete": true,
+      "criteria": [
+        {
+          "criterion": "#18.7f5b2ce8",
+          "result": "BLOCKED",
+          "kills": 0
+        }
+      ],
+      "observed": "Clean 2/2 pass; twin fails explicit holds() criterion validator at binding.test.ts:149 on leaked session items. Error is not framework AssertionError; proof-runner atAssertion remains unproven."
+    },
+    {
+      "twin": "21--plant-ignored",
+      "overlays": [
+        "packages/hub/src/spool.ts"
+      ],
+      "buildExit": null,
+      "runnerComplete": false,
+      "criteria": [
+        {
+          "criterion": "#21.9a5768d4",
+          "result": "BLOCKED",
+          "kills": 0
+        }
+      ]
+    }
+  ]
+}
