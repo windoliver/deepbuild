@@ -83,7 +83,7 @@ export type Plant =
   // #1463's: deep status listing the rows in reverse, naming needs you "need you", flipping every row's unread; deep
   // counting the open asks a second time itself; deep inbox leaving out each ask's default; and the hub leaking every
   // session's asks into an agent's deep_status.
-  | 'status-second-order' | 'status-own-word' | 'status-unread-flipped' | 'deep-second-count' | 'inbox-no-default' | 'status-row-leak'
+  | 'status-second-order' | 'status-own-word' | 'status-unread-flipped' | 'deep-second-count' | 'inbox-no-default' | 'inbox-adds-unread' | 'status-row-leak'
   // #1455's: a doctor that prints a fix under a healthy item.
   | 'doctor-healthy-fix'
   // #303's: a task for every first prompt or mid-turn message, hashes blind to text or check bytes, a role read from
@@ -223,6 +223,11 @@ export type Plant =
   | 'job-host-down-done'
   // #1942's: a host link that drops every connection to a host when one stalls, and one that sends an unknown start again.
   | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect'
+  // #1945's: a `deep host run` that runs the script where the agent wrote it, a host's first run with no lingering, and a
+  // root plan that lists a package with install scripts as fully undoable.
+  | 'root-plan-runs-agent-path' | 'host-skips-lingering' | 'host-package-fully-undoable'
+  // #504's: a hub that puts an agent's figure or film in Needs you, and one that takes it as proof of the claim.
+  | 'figure-in-needs-you' | 'figure-feeds-verdict'
   // #2026's: a spool replay that takes a request as recorded once any newer ID is, and an asker that keeps its place by
   // the newest hook ID it read: each leaves a spooled permission request with no ask.
   | 'replay-keeps-place-by-id' | 'asks-keep-place-by-id';
@@ -256,7 +261,7 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
-  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'status-row-leak',
+  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak',
   'doctor-healthy-fix',
   'first-prompt-always-task', 'midturn-always-task', 'hash-ids-only', 'hash-check-paths', 'role-from-text', 'claim-on-tool-calls',
   'runs-disk-bytes',
@@ -316,6 +321,8 @@ const PLANTS: readonly string[] = [
   'job-host-asks-again', 'job-host-sends-early', 'job-weights-call-anyway', 'job-weights-not-keyed',
   'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done',
   'host-link-drops-every-connection', 'host-link-resends-on-reconnect',
+  'root-plan-runs-agent-path', 'host-skips-lingering', 'host-package-fully-undoable',
+  'figure-in-needs-you', 'figure-feeds-verdict',
   'replay-keeps-place-by-id', 'asks-keep-place-by-id',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {

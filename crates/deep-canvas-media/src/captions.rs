@@ -17,6 +17,10 @@ pub struct Limits {
     pub min_dur: i64,
     pub max_dur: i64,
     pub gap_frames: i64,
+    /// #407: a half-width character (ASCII letters, digits, spaces and punctuation, and the
+    /// half-width forms) counts as half a character toward `max_chars`, as the Japanese and
+    /// Korean guides count them.
+    pub half_width: bool,
 }
 
 /// A shipped caption profile: its limits, the locales it names, and where each value was read.
@@ -27,34 +31,134 @@ pub struct Profile {
     pub sources: &'static [(&'static str, &'static str, &'static str)],
 }
 
+/// The general rules every netflix profile here takes: 5/6 s to 7 s per caption, 2-frame gaps.
+const GENERAL: [(&str, &str, &str); 2] = [
+    ("2 lines maximum; 5/6 of a second to 7 seconds per subtitle event", "Netflix, Timed Text Style Guide: General Requirements, 1 and 4", "2026-11-10"),
+    ("a minimum of 2 frames between subtitles", "Netflix, Timed Text Style Guide: Subtitle Timing Guidelines, 5", "2026-11-10"),
+];
+
 /// The shipped caption profiles, in the order a document's locale picks one.
-pub const PROFILES: [Profile; 1] = [Profile {
-    name: "netflix-en-adult",
-    limits: Limits {
-        max_chars: 42,
-        max_lines: 2,
-        max_cps_milli: 20_000,
-        min_dur: FLICKS * 5 / 6,
-        max_dur: FLICKS * 7,
-        gap_frames: 2,
+pub const PROFILES: [Profile; 4] = [
+    Profile {
+        name: "netflix-en-adult",
+        limits: Limits {
+            max_chars: 42,
+            max_lines: 2,
+            max_cps_milli: 20_000,
+            min_dur: FLICKS * 5 / 6,
+            max_dur: FLICKS * 7,
+            gap_frames: 2,
+            half_width: false,
+        },
+        locales: &["en"],
+        sources: &[
+            ("42 characters per line; adult programs up to 20 characters per second", "Netflix, English (USA) Timed Text Style Guide, I.2 and I.14", "2026-11-10"),
+            GENERAL[0],
+            GENERAL[1],
+        ],
     },
-    locales: &["en"],
-    sources: &[
-        ("42 characters per line; adult programs up to 20 characters per second", "Netflix, English (USA) Timed Text Style Guide, I.2 and I.14", "2026-11-10"),
-        ("2 lines maximum; 5/6 of a second to 7 seconds per subtitle event", "Netflix, Timed Text Style Guide: General Requirements, 1 and 4", "2026-11-10"),
-        ("a minimum of 2 frames between subtitles", "Netflix, Timed Text Style Guide: Subtitle Timing Guidelines, 5", "2026-11-10"),
-    ],
-}];
+    // #407: the CJK profiles, read from each language's guide on the date given.
+    Profile {
+        name: "netflix-zh-hans",
+        limits: Limits {
+            max_chars: 16,
+            max_lines: 2,
+            max_cps_milli: 9_000,
+            min_dur: FLICKS * 5 / 6,
+            max_dur: FLICKS * 7,
+            gap_frames: 2,
+            half_width: false,
+        },
+        locales: &["zh", "zh-Hans", "zh-CN", "zh-SG"],
+        sources: &[
+            ("16 characters per line", "Netflix, Chinese (Simplified) Timed Text Style Guide, 1 (change log to 2025-07-04)", "2026-11-10"),
+            ("maximum two lines", "Netflix, Chinese (Simplified) Timed Text Style Guide, 10", "2026-11-10"),
+            ("adult programs up to 9 characters per second", "Netflix, Chinese (Simplified) Timed Text Style Guide, 14", "2026-11-10"),
+            GENERAL[0],
+            GENERAL[1],
+        ],
+    },
+    Profile {
+        name: "netflix-ja",
+        limits: Limits {
+            max_chars: 13,
+            max_lines: 2,
+            max_cps_milli: 4_000,
+            min_dur: FLICKS / 2,
+            max_dur: FLICKS * 7,
+            gap_frames: 2,
+            half_width: true,
+        },
+        locales: &["ja"],
+        sources: &[
+            ("horizontal subtitles: maximum 13 full-width characters per line; half-width characters count as 0.5", "Netflix, Japanese Timed Text Style Guide, I.5 (change log to 2025-12-19)", "2026-11-10"),
+            ("maximum two lines", "Netflix, Japanese Timed Text Style Guide, I.14", "2026-11-10"),
+            ("up to 4 characters per second", "Netflix, Japanese Timed Text Style Guide, I.19", "2026-11-10"),
+            ("minimum duration 500 ms per subtitle event", "Netflix, Japanese Timed Text Style Guide, I.9", "2026-11-10"),
+            GENERAL[0],
+            GENERAL[1],
+        ],
+    },
+    Profile {
+        name: "netflix-ko",
+        limits: Limits {
+            max_chars: 16,
+            max_lines: 2,
+            max_cps_milli: 12_000,
+            min_dur: FLICKS * 5 / 6,
+            max_dur: FLICKS * 7,
+            gap_frames: 2,
+            half_width: true,
+        },
+        locales: &["ko"],
+        sources: &[
+            ("16 characters per line; Latin characters, spaces and punctuation count as 0.5 character", "Netflix, Korean Timed Text Style Guide, I.2 (change log to 2025-07-07)", "2026-11-10"),
+            ("maximum two lines", "Netflix, Korean Timed Text Style Guide, I.11", "2026-11-10"),
+            ("adult programs up to 12 characters per second", "Netflix, Korean Timed Text Style Guide, I.15", "2026-11-10"),
+            GENERAL[0],
+            GENERAL[1],
+        ],
+    },
+];
 
 /// The profile named `name`.
 pub fn profile(name: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.name == name)
 }
 
-/// The first shipped profile that names `locale`, by its language.
+/// The first shipped profile that names `locale`: by the whole tag, else by its language. A
+/// Traditional Chinese tag (`Hant`, or a TW, HK or MO region) has no profile here, so it never
+/// takes the Simplified one by its language.
 pub fn profile_for(locale: &str) -> Option<&'static Profile> {
-    let language = locale.split(['-', '_']).next().unwrap_or(locale);
-    PROFILES.iter().find(|p| p.locales.iter().any(|l| l.eq_ignore_ascii_case(language)))
+    let names = |l: &str| PROFILES.iter().find(|p| p.locales.iter().any(|x| x.eq_ignore_ascii_case(l)));
+    if let Some(p) = names(locale.replace('_', "-").as_str()) {
+        return Some(p);
+    }
+    let mut subtags = locale.split(['-', '_']);
+    let language = subtags.next().unwrap_or(locale);
+    if subtags.any(|s| ["hant", "tw", "hk", "mo"].contains(&s.to_ascii_lowercase().as_str())) {
+        return None;
+    }
+    names(language)
+}
+
+/// A character the Japanese and Korean guides count as half of one: ASCII letters, digits,
+/// spaces and punctuation, and the half-width forms.
+fn half(c: char) -> bool {
+    matches!(c, ' '..='~' | '\u{FF61}'..='\u{FFDC}' | '\u{FFE8}'..='\u{FFEE}')
+}
+
+impl Limits {
+    /// A line's width toward `max_chars` in half characters: 2 for each grapheme, 1 for a
+    /// half-width one where the profile counts them so.
+    fn halves(&self, text: &str, graphemes: &dyn Fn(&str) -> usize) -> usize {
+        let n = 2 * graphemes(text);
+        if self.half_width {
+            n.saturating_sub(text.chars().filter(|c| half(*c)).count())
+        } else {
+            n
+        }
+    }
 }
 
 impl Limits {
@@ -67,6 +171,7 @@ impl Limits {
             min_dur: block.min_dur.map_or(self.min_dur, |v| v.max(self.min_dur)),
             max_dur: self.max_dur,
             gap_frames: block.gap_frames.map_or(self.gap_frames, |v| v.max(self.gap_frames)),
+            half_width: self.half_width,
         }
     }
 }
@@ -140,13 +245,15 @@ pub fn layout(lines: &[Line], limits: &Limits, frame: i64, graphemes: &dyn Fn(&s
                 return Err(Mismatch { line: line.id.to_string(), words: words.len(), times: times.len() });
             }
         }
-        // Lines, each a run of word indices.
-        let mut rows: Vec<(usize, usize, usize)> = Vec::new();
+        // Lines, each a run of word indices with its graphemes and its width in half characters
+        // (a space is one grapheme, half a character where the profile counts half-widths).
+        let space = limits.halves(" ", &|s: &str| s.chars().count());
+        let mut rows: Vec<(usize, usize, usize, usize)> = Vec::new();
         for (i, w) in words.iter().enumerate() {
-            let n = graphemes(w);
+            let (n, h) = (graphemes(w), limits.halves(w, graphemes));
             match rows.last_mut() {
-                Some(row) if row.2 + 1 + n <= max_chars => *row = (row.0, i + 1, row.2 + 1 + n),
-                _ => rows.push((i, i + 1, n)),
+                Some(row) if row.3 + space + h <= 2 * max_chars => *row = (row.0, i + 1, row.2 + 1 + n, row.3 + space + h),
+                _ => rows.push((i, i + 1, n, h)),
             }
         }
         let mut next = match line.timing {
@@ -209,8 +316,9 @@ pub fn check(captions: &[Caption], limits: &Limits, graphemes: &dyn Fn(&str) -> 
         if length > limits.max_dur {
             fail("max_dur", format!("caption `{}` lasts {:.3} s, over the profile's {:.3} s", c.id, seconds(length), seconds(limits.max_dur)));
         }
-        if let Some(l) = c.lines.iter().find(|l| graphemes(l) > limits.max_chars) {
-            fail("max_chars", format!("caption `{}` has a line of {} characters, over {}: `{l}`", c.id, graphemes(l), limits.max_chars));
+        if let Some(l) = c.lines.iter().find(|l| limits.halves(l, graphemes) > 2 * limits.max_chars) {
+            let width = limits.halves(l, graphemes) as f64 / 2.0;
+            fail("max_chars", format!("caption `{}` has a line of {width} characters, over {}: `{l}`", c.id, limits.max_chars));
         }
     }
     out
@@ -266,8 +374,24 @@ mod tests {
     #[test]
     fn the_shipped_profile_names_its_locale_and_a_source_for_its_values() {
         assert_eq!(profile_for("en-GB").map(|p| p.name), Some("netflix-en-adult"));
-        assert!(profile_for("ja").is_none());
+        assert!(profile_for("th").is_none());
+        // #407: the CJK profiles, and a Traditional Chinese tag that takes none of them.
+        assert_eq!(profile_for("ja").map(|p| p.name), Some("netflix-ja"));
+        assert_eq!(profile_for("ko-KR").map(|p| p.name), Some("netflix-ko"));
+        assert_eq!(profile_for("zh-Hans").map(|p| p.name), Some("netflix-zh-hans"));
+        assert!(profile_for("zh-TW").is_none() && profile_for("zh-Hant").is_none());
         assert!(PROFILES.iter().all(|p| !p.sources.is_empty() && p.sources.iter().all(|(_, page, read)| !page.is_empty() && read.len() == 10)));
+    }
+
+    #[test]
+    fn the_korean_profile_counts_latin_letters_and_spaces_as_half_a_character() {
+        let ko = profile("netflix-ko").unwrap().limits;
+        let cap = |line: &str| Caption { id: "k.1".into(), line: "k".into(), lines: vec![line.into()], chars: line.chars().count(), start: 0, end: 7 * FLICKS };
+        // 10 Hangul (20 halves), a space and 11 Latin letters: 32 halves, 16 characters.
+        let fits = cap("가나다라마바사아자차 abcdefghijk");
+        assert!(check(&[fits], &ko, &count).iter().all(|v| v.limit != "max_chars"));
+        let over = cap("가나다라마바사아자차 abcdefghijkl");
+        assert!(check(&[over], &ko, &count).iter().any(|v| v.limit == "max_chars"));
     }
 
     #[test]

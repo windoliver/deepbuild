@@ -4,6 +4,7 @@
 //! BLAKE3 on the GPU, its audio the mix's samples over the frame's span, the file written by the
 //! target's writer under a temporary name and renamed only when whole.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -39,6 +40,10 @@ impl Hub<'_> {
         size: Option<[u16; 2]>,
         opaque: bool,
     ) -> Result<(Vec<u8>, [u16; 2]), Unfit> {
+        // #504: each variant set's pick at `t`, loaded only on the frame it changes.
+        crate::played::load_at(sched, session, doc, t);
+        let shown = crate::played::at(doc, t);
+        let doc = shown.as_ref();
         session.frame(sched, t, &default_view(doc));
         let (_, pictures) = self.videos_at(doc, t, true);
         self.renderer.videos = pictures;
@@ -421,6 +426,17 @@ impl Hub<'_> {
             ".{}.part",
             out.file_name().map(|f| f.to_string_lossy()).unwrap_or_default()
         ));
+        // #504: the frames replay the document's input track (the job's, or the hub's), so an
+        // export shows each pick from its entry on; session view values never reach it (#501).
+        let mut track = if job.track.is_empty() { self.track_json(&job.doc) } else { job.track.clone() };
+        if self.planted(Planted::VariantExportFinalChoice) {
+            // Planted: each choice's entries all take its last entry's option.
+            let last: BTreeMap<String, Value> = track.iter().map(|e| (e["control"].to_string(), e["value"].clone())).collect();
+            for e in &mut track {
+                e["value"] = last[&e["control"].to_string()].clone();
+            }
+        }
+        doc = crate::played::with_track(&doc, &track);
         let _ = self.inline_tables(&mut doc);
         let _ = self.inline_vectors(&mut doc);
         self.inline_occurrences(&mut doc, &job.track).map_err(|i| json!({"code": i.code, "issues": [i.to_json()]}))?;
@@ -710,6 +726,11 @@ impl Hub<'_> {
     fn bake_back(&mut self, id: &str, doc: &Value) {
         let mut baked = doc.clone();
         baked["channels"]["baked"] = json!({"target": "items/baked", "type": "f32", "keys": {}});
+        self.push_revision(id, baked);
+    }
+
+    /// Planted programs' edit: `doc` as a new current revision of `id`, by the last writer.
+    pub(crate) fn push_revision(&mut self, id: &str, baked: Value) {
         let hash = hex(Sha256::digest(baked.to_string()));
         let rows = self.revisions.entry(id.to_string()).or_default();
         let last = rows.iter().rev().find(|r| r.state == "current");
@@ -796,6 +817,8 @@ impl Hub<'_> {
                 }
             }
             self.session_state.insert(doc.to_string(), state);
+            // #504: a view value the session now holds shows at once.
+            self.replay(doc, self.now);
         }
         let state = self
             .session_state

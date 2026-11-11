@@ -507,7 +507,7 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
     for &i in &stack {
         held[i] = true;
     }
-    for (i, a) in solids.iter().enumerate() {
+    for (i, a) in solids.iter().enumerate().filter(|_| !cfg.relations.is_empty()) {
         for (j, b) in solids.iter().enumerate().skip(i + 1) {
             if cfg.related(&a.id, &b.id) && !contact[i].contains(&j) {
                 contact[i].push(j);

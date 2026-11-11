@@ -1,0 +1,109 @@
+{
+  "format": 1,
+  "id": "01JB1918CT0000000000000001",
+  "profile": "scene",
+  "title": "Channel targets",
+  "description": "Issue #1918 criterion 1: a kinematic paddle following a channel, a hinge motor whose target is a channel, and a kinematic solve driving a slider from a channel, each read at its step's time.",
+  "size": [640, 360],
+  "camera": "cam",
+  "transport": { "span": "2s", "frame_rate": [60, 1] },
+  "requires": { "modules": { "scene3d": "^1" } },
+  "items": {
+    "cam": { "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0", "params": { "projection": "perspective", "position": [0, 4, 12], "target": [0, 1, 0], "fov": 40 } },
+    "paddle": { "id": "paddle", "kind": "mark.box@1", "name": "Paddle", "order": "a1", "params": { "size": [1, 0.1, 1] }, "at": { "pos": [0, 1, 0] } },
+    "wheel": { "id": "wheel", "kind": "mark.box@1", "name": "Wheel", "order": "a2", "params": { "size": [0.6, 0.1, 0.6] } },
+    "dial": { "id": "dial", "kind": "mark.box@1", "name": "Dial", "order": "a3", "params": { "size": [0.1, 0.1, 0.1] }, "at": { "pos": [0, 0, 5] } },
+    "slider": { "id": "slider", "kind": "mark.box@1", "name": "Slider", "order": "a4", "params": { "size": [0.1, 0.1, 0.1] }, "at": { "pos": [0, 0, -5] } }
+  },
+  "channels": {
+    "paddle": {
+      "target": "items/paddle/at/pos",
+      "type": "vec3",
+      "keys": {
+        "k0": { "t": "0s", "value": [0, 1, 0], "interp": "linear" },
+        "k1": { "t": "1s", "value": [1.5, 1.25, -0.5], "interp": "hold" },
+        "k2": { "t": "1.525s", "value": [0.5, 0.75, 0.25], "interp": "linear" },
+        "k3": { "t": "2s", "value": [0, 1, 0], "interp": "hold" }
+      }
+    },
+    "dial": {
+      "target": "items/dial/at/pos/0",
+      "type": "f32",
+      "keys": {
+        "k0": { "t": "0s", "value": 0, "interp": "hold" },
+        "k1": { "t": "0.525s", "value": 90, "interp": "hold" }
+      }
+    },
+    "slider": {
+      "target": "items/slider/at/pos/0",
+      "type": "f32",
+      "keys": {
+        "k0": { "t": "0s", "value": 0, "interp": "linear" },
+        "k1": { "t": "1s", "value": 0.5, "interp": "hold" },
+        "k2": { "t": "1.525s", "value": 0.75, "interp": "linear" },
+        "k3": { "t": "2s", "value": 0.25, "interp": "hold" }
+      }
+    }
+  },
+  "worlds": {
+    "rig": {
+      "kind": "physics.world@1",
+      "dimensions": 3,
+      "step_rate": 120,
+      "substeps": 4,
+      "gravity": [0, -9.81, 0],
+      "seed": 1918,
+      "mode": "dynamic",
+      "capacity": { "bodies": 8, "shapes": 8, "joints": 4, "contacts": 32, "particles": 0 },
+      "backend": { "name": "rapier3d", "version": "=0.36.1" },
+      "checkpoint": { "every": 60 },
+      "contact_materials": { "steel": { "friction": 0.5, "restitution": 0, "density": 7800 } },
+      "shapes": {
+        "plate": { "kind": "box", "half": [0.5, 0.05, 0.5] },
+        "disc": { "kind": "box", "half": [0.3, 0.05, 0.3] }
+      },
+      "bodies": {
+        "paddle": { "kind": "kinematic", "shapes": [{ "shape": "plate", "contact_material": "steel" }], "pose": { "pos": [0, 1, 0] }, "follow": "items/paddle/at/pos" },
+        "wheel": { "kind": "dynamic", "shapes": [{ "shape": "disc", "contact_material": "steel" }], "pose": { "pos": [0, 3, 3] }, "mass": 1, "gravity_scale": 0, "sleep": false }
+      },
+      "joints": {
+        "spin": {
+          "kind": "hinge",
+          "a": "world",
+          "b": "wheel",
+          "frame_a": { "anchor": [0, 3, 3], "axis": [0, 1, 0] },
+          "frame_b": { "anchor": [0, 0, 0], "axis": [0, 1, 0] },
+          "motor": { "mode": "velocity", "target": "items/dial/at/pos/0", "max_torque": 1000, "hz": 10, "damping_ratio": 1 }
+        }
+      },
+      "outputs": { "wheel": { "from": "wheel", "read": "pose", "to": "items/wheel/at" } }
+    },
+    "linkage": {
+      "kind": "physics.world@1",
+      "dimensions": 3,
+      "step_rate": 120,
+      "substeps": 4,
+      "gravity": [0, 0, 0],
+      "seed": 1918,
+      "mode": "kinematic",
+      "capacity": { "bodies": 4, "shapes": 4, "joints": 4, "contacts": 8, "particles": 0 },
+      "backend": { "name": "rapier3d", "version": "=0.36.1" },
+      "checkpoint": { "every": 60 },
+      "contact_materials": { "steel": { "friction": 0.5, "restitution": 0, "density": 7800 } },
+      "shapes": { "block": { "kind": "box", "half": [0.1, 0.1, 0.1] } },
+      "bodies": {
+        "slide": { "kind": "dynamic", "shapes": [{ "shape": "block", "contact_material": "steel" }], "pose": { "pos": [0, 0, 0] }, "mass": 1 }
+      },
+      "joints": {
+        "rail": {
+          "kind": "slider",
+          "a": "world",
+          "b": "slide",
+          "frame_a": { "anchor": [0, 0, 0], "axis": [1, 0, 0] },
+          "frame_b": { "anchor": [0, 0, 0], "axis": [1, 0, 0] }
+        }
+      },
+      "solve": { "drivers": [{ "joint": "rail", "channel": "items/slider/at/pos/0" }], "iterations": 20, "tolerance": 0.00001 }
+    }
+  }
+}

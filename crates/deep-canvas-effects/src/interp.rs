@@ -1343,7 +1343,8 @@ pub fn inputs(
             }
             // The step a stepped operator computes, which its runtime sets each step (#252).
             From::Step => Val::N(Sc::U32, vec![0.0]),
-            From::Time | From::Phase(_) | From::Seed => continue,
+            // A light response's port comes from the light loop, never the uniform (#485).
+            From::Time | From::Phase(_) | From::Seed | From::Port => continue,
         };
         out.insert(name.clone(), v);
     }
