@@ -324,8 +324,10 @@ try {
       console.log(JSON.stringify({ task: budget.id, targets: verdict.targets ?? null, status: verdict.status }));
       if (verdict.status !== 'PASS') verdicts.push([verdict.status, `${budget.id}: targets: ${verdict.reason}`, `Bring ${budget.id} back within its targets in ${manifest}, on a release build.`]);
     }
-    if (instructions?.status === 'FAIL') verdicts.push(['FAIL', `${budget.id}: instructions: ${instructions.reason}`, `Bring ${budget.id}'s instructions retired back within the margin of the merge base's.`]);
-    if (instructions?.status === 'INCONCLUSIVE') verdicts.push(['INCONCLUSIVE', `${budget.id}: instructions: ${instructions.reason}`, instructions.uncounted.length ? "Have the budget's command wait for each child it starts, from a process that isn't a platform binary such as /bin/sh." : "Run perf on macOS, whose /usr/bin/time -l reports instructions retired."]);
+    if (instructions?.status === 'FAIL') verdicts.push(['FAIL', `${budget.id}: instructions: ${instructions.reason}`, `Bring ${budget.id}'s instructions retired back within 2% of the merge base's.`]);
+    if (instructions?.status === 'INCONCLUSIVE') verdicts.push(['INCONCLUSIVE', `${budget.id}: instructions: ${instructions.reason}`, instructions.uncounted.length ? "Have the budget's command wait for each child it starts, from a process that isn't a platform binary such as /bin/sh."
+      : instructions.change === null ? "Run perf on macOS, whose /usr/bin/time -l reports instructions retired."
+      : `Rerun perf with both sides at the same QoS on a machine whose load is under its cores, or have ${budget.id} count work that doesn't wait by spinning or on a lock: that waiting counts, so it moves with the schedule.`]);
     for (const [metric, { status, reason }] of Object.entries(limits)) {
       if (status === 'PASS') continue;
       const fix = status === 'BLOCKED' ? 'Repair the measured command so each run reports this metric.'

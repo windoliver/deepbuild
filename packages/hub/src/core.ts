@@ -88,8 +88,8 @@ import type { CheckSpec } from '@deepbuild/conformance';
 import { retain } from './retention.js';
 import { Stacks, type StackWant } from './stacks.js';
 import { Starts } from './starts.js';
-import { checkArguments } from './tools.js';
-import { Canvas, nameOf, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
+import { checkArguments, nearest } from './tools.js';
+import { Canvas, nameOf, renderStill, showCall, waitForApp, WorldFile, type CanvasWorld } from './canvas.js';
 import { panelKit } from './panels.js';
 import { Replicas, REPLICA_LEASE } from './drive.js';
 import { plantedReload, plantedSessionEnd, plantedStop, type Plant } from './plant.js';
@@ -99,10 +99,11 @@ import { LogReads } from './log-reads.js';
 import { Hosts } from './hosts.js';
 import { Jobs } from './jobs.js';
 import { Libraries, LibraryRefused, LIBRARY_HOST_QUOTA, LIMIT_MAX, libraryHosts, type AssetKind } from './libraries.js';
+import { readPack } from './packs.js';
 import { excerpt, historyKey, type Restored } from './waits.js';
 import { claudeHomes, claudeOnPath, denyHolds, homeMods, homeOfTranscript, loginPlan, MODS_GONE, MODS_WATCH, overrideWords, pluginDirs, type HomeMods } from './mods.js';
 import { copySynced, disk, synced, testVfs, writeSynced, type Durable } from './vfs.js';
-import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, SCREEN_TOOLS } from './wire.js';
+import { AUTHORITY as EFFECTS, CHROME, derivedId, EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal, type Scope, SCREEN_TOOLS } from './wire.js';
 
 /** A process running Codex's own binary, by the path it was started from. */
 const CODEX_BINARY = /^(?:\S*\/)?codex(?:-[^\s/]+)?(?:\s|$)/;
@@ -430,7 +431,7 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
-  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight]), ownerSeen: () => this.seenBy(OWNER), emit: (sub, json) => this.emit(sub, json) });
+  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight]), ownerSeen: () => this.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
@@ -743,7 +744,7 @@ export class Core {
    * only where an answer may come back through it (#19: right after install no stop is held for anything else);
    * `acking` hears a session with a message typed mid-turn to acknowledge, so its next tool call's hook is held (#340).
    */
-  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
+  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string, caught?: boolean) => void, private readonly asking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
     this.root = rootOf(options.root);
     this.people = new People(this.root.dir);
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
@@ -1188,6 +1189,8 @@ export class Core {
     this.libraries = new Libraries({
       root: this.root.dir, now: this.now, host: () => this.extensions,
       keep: async (bytes, kind, source, license) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind, source, redaction: 'complete', license }), `${kind} from ${source}`)).sha256,
+      keepFile: async (file, sha256, kind, source, license) => (await this.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).file({ file, sha256, kind, source, redaction: 'complete', license }), `${kind} from ${source}`)).sha256,
+      has: (sha) => this.store.verify(sha),
       raise: (source, ask, plan) => this.asks.raise(this.connection('core'), source, ask, plan),
     });
     for (const pkg of await extensions.installed()) {
@@ -5790,6 +5793,7 @@ export class Core {
       case 'sessions.read': return this.log.reflecting(async () => ({ sessions: await this.sessionRows(this.seenBy(context.role)) }));
       case 'person.add': return this.addPerson(params, context);
       case 'library.on': case 'library.off': case 'library.rule': return this.library(method, params, context);
+      case 'pack.rule': return this.packRule(params, context);
       case 'job.rule': return this.jobRule(params, context);
       case 'person.invite': return this.invitePerson(params, context);
       case 'person.revoke': return this.revokePerson(params, context);
@@ -5814,6 +5818,7 @@ export class Core {
       case 'ask.card': return this.askCard(params);
       case 'decision.overrule': return this.overrule(params, context);
       case 'ask.undo': return this.undo(params, context);
+      case 'ask.take_over': return this.takeOver(params, context);
       case 'offer.save': return this.saveOffered(params, context);
       case 'staged.undo': return this.staging.undo(params);
       case 'agents.propose': await this.ready; return this.agents.propose(params);
@@ -5905,6 +5910,7 @@ export class Core {
       case 'checks.kinds': return { kinds: this.checkKinds.list() };
       case 'job.output': return { stdout: await this.runner.output(String(params.job)) };
       case 'canvas.show': return this.showCli(params, context);
+      case 'canvas.export': return this.exportStill(params);
       case 'canvas.revisions': return this.canvasCall({ call: 'revisions', doc: String(params.doc) });
       case 'canvas.messages': return this.canvasCall({ call: 'messages', session: String(params.session) });
       case 'canvas.user': return this.canvasUser(params, context);
@@ -6205,7 +6211,7 @@ export class Core {
   private async handbacks(): Promise<Obj> {
     const rows = (await this.record.raw(`SELECT session_id, json_extract(data, '$.reading') AS reading FROM events WHERE kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Hand-back %' ORDER BY log_pos`)) as { session_id: string; reading: string }[];
     const detail = rows.map((r) => ({ session: r.session_id, sent_back: r.reading.startsWith('Hand-back sent back'), reading: r.reading }));
-    return { id: 'handbacks_sent_back', label: 'Hand-backs sent back with the tool to use', value: detail.filter((d) => d.sent_back).length, of: detail.length, detail };
+    return { id: 'handbacks_sent_back', label: 'Hand-backs sent back with the tool to use', value: detail.filter((d) => d.sent_back).length, unit: 'count', source: 'record', age_ms: 0, basis: 'observed', of: detail.length, detail };
   }
   /** The question card's document (#84): the asks core's card, with the ask's text and where a task sends you. A URL in the text stays plain text. */
   private async askCard(params: Obj): Promise<Obj> {
@@ -6217,7 +6223,9 @@ export class Core {
     const question = row.question ?? '';
     const opens = card.kind === 'unblock' ? opensOf(question, signInCommands()) : undefined;
     const url = this.options.plant === 'link-from-agent-url' ? /https?:\/\/\S+/.exec(question)?.[0] : undefined;
-    return { ...card, question, ...(opens ? { opens } : {}), ...(url ? { link: url } : {}) };
+    // The card's revision, which an answer from this copy names (#1580).
+    const revision = (await this.cards(handle)).get(handle)?.revision ?? 1;
+    return { ...card, question, revision, ...(opens ? { opens } : {}), ...(url ? { link: url } : {}) };
   }
 
   /**
@@ -6225,8 +6233,8 @@ export class Core {
    * and the core saves it as a decision for the ask's repo, or its session; an ask with neither, and a block's task
    * (#85), saves none.
    */
-  private async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link' }): Promise<Obj> {
-    const { ask: handle, device: _device, signature: _signature, ...input } = params;
+  private async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> {
+    const { ask: handle, device: _device, signature: _signature, revision, ...input } = params;
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
     const [row] = (await this.record.raw(`SELECT e.session_id AS session, e.project_id AS project, e.data AS data, a.status AS status FROM events e JOIN asks a ON a.id = e.id WHERE e.id = ? AND e.kind = 'ask.created'`, [handle.slice(4)])) as { session: string | null; project: string | null; data: string; status: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; answer an ask deep inbox lists.`, handle));
@@ -6251,11 +6259,15 @@ export class Core {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
     // A channel's answer was checked by the channels (#65): a paired device's signature over the card it showed, or an account link.
-    if (!channel) await this.trusted('ask.answer', params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
-    // A paired phone's yes binds the plan its card stood for, and its own token, as the app's click does.
+    if (!channel) {
+      await this.trusted('ask.answer', params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle, await this.revisionOf(handle, ask));
+      await this.onRevision(handle, revision, params.signature);
+    }
+    // A paired phone's yes binds the plan its signature names, which the channels checked against the ask's (#1580),
+    // never one the hub fills in, and its own token, as the app's click does.
     if (channel?.proof === 'device' && chosen?.decision === 'allow') {
       input.token = `${channel.channel}:${ulid(this.now())}`;
-      input.plan_hash = (await this.asks.card(handle)).plan?.hash ?? null;
+      input.plan_hash = channel.plan_hash;
     }
     // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here,
     // for an approval only, so any other answer is handed on as its twin from the app is (#34).
@@ -6430,13 +6442,72 @@ export class Core {
   private async channelAsks(): Promise<ChannelAsk[]> {
     const rows = (await this.record.raw('SELECT id, question, options, answer FROM asks')) as { id: string; question: string | null; options: string | null; answer: string | null }[];
     const texts = new Map(rows.map((r) => [`ask:${r.id}`, r]));
+    const cards = await this.cards();
     return (await this.asks.inbox()).map((row) => {
       const t = texts.get(row.ask);
       const options = t?.options ? (JSON.parse(t.options) as { id: string; label: string }[]).map((o) => ({ id: String(o.id), label: String(o.label) })) : [];
       let answer: string | null = null;
       try { answer = t?.answer ? String(JSON.parse(t.answer)) : null; } catch { answer = t?.answer ?? null; }
-      return { handle: row.ask, kind: row.kind, question: t?.question ?? '', options, status: row.status, outcome: row.outcome, answer };
+      const card = cards.get(row.ask);
+      return { handle: row.ask, kind: row.kind, question: t?.question ?? '', options, status: row.status, outcome: row.outcome, answer, plan: card?.plan ?? null, revision: card?.revision ?? 1 };
     });
+  }
+  /**
+   * Each ask's card as the record holds it (#1580): the newest plan the core proposed, as a card draws it; its revision,
+   * 1 and one more for each change of plan and each Take over; and the device it was taken over to last. `handle`
+   * narrows it to one ask.
+   */
+  private async cards(handle?: string): Promise<Map<string, { plan: ChannelAsk['plan']; revision: number; holder: string | null }>> {
+    const one = handle ? ` AND (subject = ? OR json_extract(data, '$.ask') = ?)` : '';
+    const rows = (await this.record.raw(`SELECT kind, subject, json_extract(data, '$.ask') AS ask, json_extract(data, '$.hash') AS hash, json_extract(data, '$.steps') AS steps, json_extract(data, '$.device') AS device FROM events WHERE ((kind = 'plan.proposed' AND writer = 'core') OR kind = 'ask.taken_over')${one} ORDER BY log_pos`, handle ? [handle, handle] : [])) as { kind: string; subject: string | null; ask: string | null; hash: string | null; steps: string | null; device: string | null }[];
+    const held = new Map<string, { hash?: string; steps?: string; revision: number; holder: string | null }>();
+    for (const r of rows) {
+      const key = String(r.kind === 'ask.taken_over' ? r.subject : r.ask);
+      const card = held.get(key) ?? { revision: 1, holder: null };
+      held.set(key, card);
+      if (r.kind === 'ask.taken_over') Object.assign(card, { revision: card.revision + 1, holder: r.device });
+      else if (r.hash !== card.hash) Object.assign(card, { revision: card.revision + (card.hash === undefined ? 0 : 1), hash: String(r.hash), steps: r.steps ?? '[]' });
+    }
+    return new Map([...held].map(([key, c]) => [key, {
+      revision: c.revision, holder: c.holder,
+      plan: c.hash === undefined ? null : {
+        hash: c.hash,
+        steps: (JSON.parse(c.steps!) as Obj[]).map((s) => ({ does: String(s.does), changes: (Array.isArray(s.changes) ? s.changes : []).map(String), undo: String(s.undo), public: s.public === true, cost: Number(s.cost) })),
+      },
+    }]));
+  }
+  /**
+   * An answer from a copy of an ask's card at an earlier revision is refused, naming the revision; so is a signed one
+   * naming none from another device once the card was taken over (#1580). An answer from the CLI, which the OS
+   * confirmed, keeps no copy of its own and is held only to a revision it names.
+   */
+  private async onRevision(handle: string, revision: unknown, signature: unknown): Promise<void> {
+    const card = (await this.cards(handle)).get(handle) ?? { revision: 1, holder: null };
+    if (revision !== undefined && revision !== card.revision) {
+      throw new Refused(refusal('credential', '/params/revision', `${handle} stays open: this answer is from its card at revision ${JSON.stringify(revision)}, and the card is at revision ${card.revision} now${card.holder ? `, taken over to ${card.holder}` : ''}. Answer from the card as it is now.`, revision));
+    }
+    const device = (signature as { signed?: { device?: unknown } } | undefined)?.signed?.device;
+    if (revision === undefined && device !== undefined && card.holder !== null && device !== card.holder) {
+      throw new Refused(refusal('credential', '/params/revision', `${handle} stays open: its card moved to ${card.holder} by Take over, at revision ${card.revision}, and this answer from ${String(device)} names no revision. Answer it there, or take it over here.`, handle));
+    }
+  }
+  /**
+   * Take over (#1580; design: Channel): a device you paired moves an open ask's card to itself on the trusted path,
+   * signing the call with its own key. The card's revision rises, so an answer from a copy at the earlier one is
+   * refused, naming the revision, and every channel's card goes out again at the new one.
+   */
+  private async takeOver(params: Obj, context: CallContext): Promise<Obj> {
+    const handle = params.ask;
+    if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
+    const [row] = (await this.record.raw(`SELECT status FROM asks WHERE id = ?`, [handle.slice(4)])) as { status: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; take over an ask deep inbox lists.`, handle));
+    if (row.status !== 'open' && row.status !== 'later') throw new Refused(refusal('not_found', '/params/ask', `${handle} is closed, so its card has nowhere to move.`, handle));
+    if (params.signature === undefined) throw new Refused(refusal('unconfirmed', '/params/signature', `Take over moves ${handle}'s card to a device you paired, which signs the call with its own key.`, handle));
+    await this.trusted('ask.take_over', params, context, `take over ${handle}`, handle, 'take over');
+    const device = String((params.signature as { signed: { device: string } }).signed.device);
+    const revision = ((await this.cards(handle)).get(handle)?.revision ?? 1) + 1;
+    await this.appendCore('ask.taken_over', { device, revision }, { subject: handle });
+    return { ask: handle, device, revision };
   }
   /** Unpairs a device you paired, on the trusted path (#65): its signatures count for nothing, and it is told so. */
   private async unpair(params: Obj, context: CallContext): Promise<Obj> {
@@ -6563,6 +6634,18 @@ export class Core {
     if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'An install counts from the CLI, once the OS confirms you.', 'extension.install'));
     const agent = await this.agentAbove(context.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing was installed: this deep command runs inside agent session ${agent}'s process tree, and no agent installs a package. Install it from your own terminal.`, 'extension.install'));
+    if (!existsSync(join(from, 'deepbuild.json')) && existsSync(join(from, 'pack.json'))) {
+      if (!this.libraries) throw refuse('unavailable', '', 'The hub is not ready to install packs.', from, true);
+      const pack = readPack(from);
+      if (params.digest !== pack.digest) throw refuse('changed', '/params/digest', `${pack.ref} changed since its install plan was read.`, params.digest);
+      const why = await this.confirmer.you(`install ${pack.ref} (${pack.digest}) from ${from}; its assets fetch only after a separate authority ask or rule`, { handle: `pack:${pack.ref}`, revision: pack.digest, process: context.peer });
+      if (why) throw refuse('unconfirmed', '', `Nothing was installed: ${why}`, from, true);
+      const dir = this.libraries.packs.stage(pack);
+      const checked = await this.canvasCall({ call: 'install_pack', id: pack.id, dir });
+      if (checked.outcome !== 'installed') return { status: 'refused', reason: JSON.stringify(checked.issues) };
+      this.libraries.packs.admit(pack);
+      return { status: 'installed', id: pack.id, version: pack.version, digest: pack.digest };
+    }
     // Only for the prompt's words: the installer reads the manifest again, as data, and refuses what it must.
     const m = await readFile(join(from, 'deepbuild.json'), 'utf8').then((text) => JSON.parse(text) as { id?: unknown; version?: unknown; publisher_key?: unknown; sources?: { variant?: string; host?: string }[] })
       .catch(() => ({ id: undefined, version: undefined, publisher_key: undefined, sources: undefined }));
@@ -6711,10 +6794,10 @@ export class Core {
     return undefined;
   }
 
-  /** Streams every event after `after` to the subscriber, then each one appended from then on. */
-  async subscribe(sub: string, after: number): Promise<void> {
+  /** Streams every event after `after` to the subscriber, then each one appended from then on; a scope narrows it (#1575). */
+  async subscribe(sub: string, after: number, scope?: Scope): Promise<{ head?: number; snapshot?: true }> {
     await this.ready;
-    this.log.subscribe(sub, after);
+    return this.log.subscribe(sub, after, scope);
   }
   unsubscribe(sub: string): void {
     this.log.unsubscribe(sub);
@@ -6813,7 +6896,7 @@ export class Core {
 
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const file = this.worldFile.read();
+    const file = { ...this.worldFile.read(), packs: this.libraries?.packs.all() ?? [] };
     const sessions = [...this.sessions.values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
     const record: Obj = {};
     const asks = (await this.record.raw('SELECT id, session_id, status FROM asks')) as { id: string; session_id: string | null; status: string }[];
@@ -6854,8 +6937,12 @@ export class Core {
       if (rev === null) rev = ((await this.canvasCall({ call: 'revisions', doc: call.doc })).revisions as { rev: number; state: string }[] | undefined)?.find((r) => r.state === 'current')?.rev ?? 0;
       return this.canvasCall({ ...call, rev, session: as.session });
     }
+    if (isObj(call.document)) {
+      const held = await this.preparePackAssets(call.document);
+      if (held) return held;
+    }
     // An asset.game@1 item naming an asset by hash (#1066's from: {asset}, #1731) takes the license kept with it.
-    const game = this.gameAssets(call);
+    const game = await this.gameAssets(call);
     if (game.refused) return game.refused;
     call = game.call;
     const via = 'you' in as ? { peer: { pid: 0, start: 0 } } : { session: as.session };
@@ -6874,7 +6961,7 @@ export class Core {
    * the mesh.asset@1 it draws, with the license the asset was kept with at fetch, listed in the reply's `assets`. An
    * asset no fetch kept with its license is BLOCKED, naming the item and the asset, so the revision is refused.
    */
-  private gameAssets(call: Obj): { call: Obj; assets: Obj[]; refused?: Obj } {
+  private async gameAssets(call: Obj): Promise<{ call: Obj; assets: Obj[]; refused?: Obj }> {
     const doc = call.document;
     if (!isObj(doc) || !isObj(doc.items)) return { call, assets: [] };
     const items: Obj = {};
@@ -6885,12 +6972,19 @@ export class Core {
       if (typeof sha !== 'string') { items[key] = item; continue; }
       const it = item as Obj;
       const id = typeof it.id === 'string' ? it.id : key;
-      const kept = this.libraries?.asset(sha);
+      const pinned = this.libraries?.packs.byHash(doc.packs, sha);
+      let kept = this.libraries?.asset(sha, pinned?.pack);
+      if (pinned && (!kept || !await this.store.verify(sha))) {
+        const fetched = await this.libraries!.fetchPack(pinned.pack, pinned.asset.path);
+        if (fetched.status !== 'fetched') return { call, assets, refused: { ...fetched, outcome: 'refused', code: 'asset_blocked', issues: [{ severity: 'error', code: 'asset.blocked', ids: [id], message: `BLOCKED: ${JSON.stringify(fetched)}` }], snapshots: [] } };
+        kept = fetched.asset;
+      }
+      if (kept?.pack && (!pinned || pinned.pack !== kept.pack)) kept = undefined;
       if (!kept) {
         issues.push({ severity: 'error', code: 'asset.unlicensed', ids: [id], path: `/items/${key}/from/asset`, message: `BLOCKED: ${id} names asset ${sha}, which no fetch kept with a license; fetch it from a library first` });
         continue;
       }
-      assets.push({ item: id, asset: sha, license: kept.license, upstream: kept.upstream, library: kept.library });
+      assets.push({ item: id, asset: sha, license: kept.license, upstream: kept.upstream, ...(kept.pack ? { pack: kept.pack } : { library: kept.library }) });
       const { from: _from, budget: _budget, params: _params, ...rest } = it;
       items[key] = { ...rest, kind: 'mesh.asset@1', order: typeof rest.order === 'string' ? rest.order : `a${assets.length - 1}`, params: { sha256: sha, node: 0 } };
     }
@@ -6924,11 +7018,15 @@ export class Core {
     const libraries = this.libraries;
     if (!libraries) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_kinds', true);
     for (const k of Object.keys(args)) {
-      const takes = args.op === 'assets' ? ['op', 'query', 'kind', 'size_m', 'license', 'limit'] : ['op', 'library', 'id'];
+      const takes = args.op === 'assets' ? ['op', 'query', 'kind', 'size_m', 'license', 'limit'] : ['op', 'library', 'id', 'pack', 'asset'];
       if (args[k] !== null && args[k] !== undefined && !takes.includes(k)) throw refuse('unlisted_field', `/params/arguments/${k}`, `Leave out ${k}: ${String(args.op)} takes only ${takes.slice(1).join(', ')}.`, k);
     }
     try {
       if (args.op === 'fetch') {
+        if (typeof args.pack === 'string') {
+          if (typeof args.asset !== 'string' || args.library || args.id) throw refuse('required', '/params/arguments/asset', 'Give pack@version and one asset path, without library or id.', args.asset);
+          return { ...(await libraries.fetchPack(args.pack, args.asset)) };
+        }
         if (typeof args.library !== 'string' || typeof args.id !== 'string') throw refuse('required', `/params/arguments/${typeof args.library === 'string' ? 'id' : 'library'}`, 'Give library and id, as a search row names them.', null);
         return { ...(await libraries.fetch(args.library, args.id)) };
       }
@@ -6950,6 +7048,14 @@ export class Core {
   private async job(args: Obj, caller: string | undefined): Promise<Obj> {
     if (!this.jobKinds) throw refuse('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', 'deep_job', true);
     return args.op === 'list' ? this.jobKinds.list() : this.jobKinds.run(args, caller);
+  }
+  /** A pack's network authority is yours, never an agent's, and matches only that pack and license list. */
+  private async packRule(params: Obj, context: CallContext): Promise<Obj> {
+    const { pack, licenses } = params;
+    if (typeof pack !== 'string' || !Array.isArray(licenses) || !licenses.every((l) => typeof l === 'string' && l)) throw refuse('type', '/params', 'Name pack as owner/name and list its allowed license IDs.', params);
+    await this.asYou(context, 'pack.rule', `allow ${pack} to fetch assets under ${licenses.join(', ') || 'no license'}`, `pack:${pack}`, JSON.stringify(licenses));
+    if (!this.libraries) throw refuse('unavailable', '', 'The hub is not ready.', pack, true);
+    return this.libraries.packRule(pack, licenses as string[]);
   }
   /** `job.rule` (#1922): your standing rule for a paid tool, from your own terminal once the OS confirms you: the most a run may cost with no ask. */
   private async jobRule(params: Obj, context: CallContext): Promise<Obj> {
@@ -7007,6 +7113,34 @@ export class Core {
       } as JsonValue,
     });
     this.presented.push({ doc: p.doc, rev: p.rev, rect: p.rect, layers: p.layers, session });
+  }
+  /** The same first-use gate for a shown document and its exports, for every asset-reading kind. */
+  private async preparePackAssets(document: Obj): Promise<Obj | undefined> {
+    if (!this.libraries) return { status: 'BLOCKED', outcome: 'refused', cause: 'The asset host is not ready.', snapshots: [] };
+    for (const pack of Array.isArray(document.packs) ? document.packs : []) if (typeof pack !== 'string' || !this.libraries.packs.get(pack)) {
+      return { status: 'BLOCKED', outcome: 'refused', cause: `pack_missing: ${String(pack)}`, snapshots: [] };
+    }
+    for (const { pack, asset } of this.libraries.packs.used(document)) {
+      const fetched = await this.libraries.fetchPack(pack, asset.path);
+      if (fetched.status !== 'fetched') return { ...fetched, outcome: 'refused', code: 'asset_blocked', issues: [{ severity: 'error', code: 'asset.blocked', ids: [asset.path], message: `BLOCKED: ${JSON.stringify(fetched)}` }], snapshots: [] };
+    }
+    return undefined;
+  }
+  /** The hub resolves a pack export through its pinned store. The CLI writes only the returned PNG bytes. */
+  private async exportStill(params: Obj): Promise<Obj> {
+    if (!isObj(params.document) || typeof params.still !== 'string') throw refuse('type', '/params', 'Give document and still, a frame or marker.', params);
+    const held = await this.preparePackAssets(params.document);
+    if (held) return held;
+    const game = await this.gameAssets({ document: params.document });
+    if (game.refused) return game.refused;
+    const packs = this.libraries!.packs.all();
+    const rendered = await renderStill(game.call.document, params.still, this.root.evidence, packs);
+    const hash = (rendered.snapshots as Obj[] | undefined)?.[0]?.sha256;
+    if (rendered.outcome !== 'presented' || typeof hash !== 'string') return { status: 'BLOCKED', cause: `No still could be drawn: ${JSON.stringify(rendered)}` };
+    // The canvas store's bytes are rehashed before they leave the hub; neither an input path nor an output path
+    // is accepted here, so an agent cannot make the hub read or write outside its own evidence folder.
+    const bytes = await this.store.read(hash);
+    return { status: 'exported', sha256: hash, png: Buffer.from(bytes).toString('base64') };
   }
   /** `deep show` from the CLI: the peer check makes it the agent's whose process tree runs it, never by PID alone; else yours. */
   private async showCli(params: Obj, context: CallContext): Promise<Obj> {
@@ -7188,7 +7322,8 @@ export class Core {
   }
   private unknownCheck(worktree: string, check: unknown): Refused {
     const names = [...this.checksOf(worktree).keys()];
-    return refuse('enum', '/params/arguments/check', `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
+    const near = typeof check === 'string' ? nearest(check, names) : undefined;
+    return refuse('enum', '/params/arguments/check', near ? `Name ${near} in place of ${String(check)}.` : `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
   }
 
   /** deep_ask: raises the ask under the session, then waits for its answer as deep_wait does. */
