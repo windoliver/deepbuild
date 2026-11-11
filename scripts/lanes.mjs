@@ -300,6 +300,9 @@ alone.push('tests/acceptance/501/', 'tests/acceptance/501-redraft-ac10/');
 timed.push('tests/acceptance/501/budgets.test.ts');
 // #1818's files each build deep-show and mix seconds of audio through the media processors.
 alone.push('tests/acceptance/1818/');
+// #1720's files build deep-show and deep-hook, start and restart hubs and lay out an installed tree; so do the
+// #1718 tests it redrafts.
+alone.push('tests/acceptance/1720/', 'tests/acceptance/1718-redraft-1720/');
 // #1461's files build deep-drive plain and with env-plants, start real hubs and many replicas; its AC1 and AC14 file and
 // its AC28 file open the real app's window, with Accessibility and Screen Recording, by hand; its AC9 file is timed.
 alone.push('tests/acceptance/1461/');
@@ -369,6 +372,13 @@ timed.push('tests/acceptance/1575/budgets.test.ts', 'tests/acceptance/1575-redra
 alone.push('tests/acceptance/1964/');
 // #1723's files each start a real hub whose gate runs a document check through the canvas core, under a 480 s wait.
 alone.push('tests/acceptance/1723/');
+// #2026's files build the replica and deep-live plain and planted and run a hub over 30 days of history; three judge
+// wall-clock limits (Needs you's load, a replayed ask within 1 s, the hub-down line within 2 s).
+// The first draft's AC3 file is kept by hand: its wrong program, the app's reader keeping its place by event ID, can't
+// fail under the design, since the hub raises the replayed request's ask as a new event; its blind redraft runs in its place.
+alone.push('tests/acceptance/2026/', 'tests/acceptance/2026-redraft-ac3/');
+timed.push('tests/acceptance/2026/load.test.ts', 'tests/acceptance/2026/outage.test.ts', 'tests/acceptance/2026-redraft-ac3/replay.test.ts');
+byHand.push('tests/acceptance/2026/replay.test.ts');
 // #202's files each build deep-show (and the budgets the merge base too); its budgets time the check, kind_rules and
 // the kind kit.
 alone.push('tests/acceptance/202/');
