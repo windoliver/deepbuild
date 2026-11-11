@@ -550,11 +550,13 @@ fn video_frames(
             (*i, data.get(range).unwrap_or_default().to_vec())
         })
         .collect();
+    let full = track_color(t, &Planted::default())["range"] == "full";
     apple::decode_video(
         t.entry.fourcc,
         config,
         (t.entry.width, t.entry.height),
         &samples,
+        full,
     )
 }
 

@@ -404,12 +404,15 @@ extern "C" fn on_picture(
 }
 
 /// Decodes `samples` (index, bytes), in decode order, of a stream whose sample entry is
-/// `fourcc` with configuration box `config`, by the platform's decoder: each picture as I420.
+/// `fourcc` with configuration box `config`, by the platform's decoder: each picture as I420 in
+/// the stream's own range (#503: `y420` is video range, which the hardware decoder would squeeze a
+/// full-range stream into).
 pub fn decode_video(
     fourcc_: [u8; 4],
     config: &([u8; 4], Vec<u8>),
     size: (u16, u16),
     samples: &[(usize, Vec<u8>)],
+    full_range: bool,
 ) -> Result<Vec<Picture>, String> {
     let codec = match &fourcc_ {
         b"avc1" | b"avc3" => fourcc(b"avc1"),
@@ -442,7 +445,7 @@ pub fn decode_video(
             return Err(format!("CMVideoFormatDescriptionCreate: {st}"));
         }
         let fd = Cf(fd);
-        let y420 = i32_number(fourcc(b"y420") as i32);
+        let y420 = i32_number(fourcc(if full_range { b"f420" } else { b"y420" }) as i32);
         let attrs = dict(&[(kCVPixelBufferPixelFormatTypeKey, y420.0)]);
         let mut out = Box::new(Decoded {
             pictures: Vec::new(),
