@@ -118,7 +118,7 @@ Until `github.gate` is set, the hub posts with the `GH_TOKEN` or `GITHUB_TOKEN` 
 
 DeepBuild never changes branch protection or the repo's rules itself. `deep gate rules` prints the two rulesets the repo needs:
 
-- The default branch requires `deepbuild/verdict` from the gate's app. Only an admin, through the forge's bypass, updates or deletes the branch, so no agent's token merges or pushes it.
+- The default branch requires `deepbuild/verdict` from the gate's app. Only an admin, through the forge's bypass, updates or deletes the branch, and the gate's app updates it only by merging a pull request it passed, so no agent's token merges or pushes it.
 - Only an admin makes, moves or deletes a `deep/approved/` tag.
 
 Put each one on as the repo's admin:
@@ -139,7 +139,7 @@ From your checkout of the repo, `deep land judge --repo <checkout> --json` judge
 - An issue closes when its change lands, never before.
 - After each landing the default branch is read back. A tree other than the one its verdict covered stops landings, names the files and marks main red in `scripts/main-watch.mjs`, whatever the forge said it merged.
 
-Landings go through the forge's pull request merge with your own login (`GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`), so with the rules above on, that login must be the repo's admin, whom the rules let through. The gate's app only posts the verdict's status. DeepBuild never closes a pull request. `deep work --repo <checkout> --issues <n,...> --once --json` makes one pass of a run over a set: an open pull request from before the run that links an issue in the set joins as its attempt, and no second one starts beside it. Others idle past 7 days are listed under `stale`.
+Landings go through the forge's pull request merge with the gate's app once `github.gate` names it: the rules let the gate's app update the default branch through a pull request's merge, never a push. Give the gate's app "Contents: write", "Pull requests: write" and "Issues: write" beside "Commit statuses: write"; its landing token has no statuses. Until `github.gate` is set, landings go with your own login (`GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token`), which must then be the repo's admin. DeepBuild never closes a pull request. `deep work --repo <checkout> --issues <n,...> --once --json` makes one pass of a run over a set: an open pull request from before the run that links an issue in the set joins as its attempt, and no second one starts beside it. Others idle past 7 days are listed under `stale`.
 
 ## Approve an edit to a check
 

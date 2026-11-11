@@ -1197,6 +1197,7 @@ export class Core {
       root: this.root.dir, api: this.options.forge ?? 'https://api.github.com', plant: this.options.plant,
       token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       gateToken: (repo) => this.gateToken(repo), gateApp: () => this.forgeApp('gate'),
+      landingToken: (repo) => (this.landingTokens ??= gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate'), true))(repo),
       judge: (r) => this.judgeLanding(r),
       sendBack: (r) => this.landingSendBack(r),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
@@ -1345,6 +1346,8 @@ export class Core {
     return { app_id: app.app_id as number, key: () => keychain(service) };
   }
   private gateTokens?: (repo: string) => Promise<string | undefined>;
+  /** The gate's landing tokens (#1331), minted in this process and kept only in its memory, as its status tokens are. */
+  private landingTokens?: (repo: string) => Promise<string | undefined>;
   /** The gate's token for a repo: minted in this process, kept only in its memory. */
   private gateToken(repo: string): Promise<string | undefined> {
     return (this.gateTokens ??= gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate')))(repo);

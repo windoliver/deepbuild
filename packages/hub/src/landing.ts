@@ -55,6 +55,8 @@ export interface LandingOptions {
   token(): Promise<string | undefined>;
   /** The gate's own token for a repo (#1325): its verdict's status is posted with it, or with your login while it has none. */
   gateToken(repo: string): Promise<string | undefined>;
+  /** The gate's landing token for a repo: the merge and the issue's close go with it, through the rules' bypass for the gate's app. */
+  landingToken(repo: string): Promise<string | undefined>;
   gateApp(): AppKey | undefined;
   /**
    * The change judged as one claim on `commit`, a merge commit the checkout holds, by the issue's locked definition:
@@ -94,8 +96,9 @@ export class Landing {
 
   // ---- The forge.
 
-  private async call(method: string, path: string, body?: Obj): Promise<{ status: number; body: unknown }> {
-    const token = await this.o.token();
+  /** A call to the forge with your login, or with `as`, the gate's landing token, where the gate acts. */
+  private async call(method: string, path: string, body?: Obj, as?: string): Promise<{ status: number; body: unknown }> {
+    const token = as ?? await this.o.token();
     const res = await fetch(`${this.o.api}${path}`, {
       method, signal: AbortSignal.timeout(30_000),
       headers: { accept: 'application/vnd.github+json', ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
@@ -286,7 +289,10 @@ export class Landing {
   }
   /** The forge merges the change's head, and main is read back against the tree its verdict covered. */
   private async landOne(s: State, checkout: string, top: string, c: Change, judged: Judged, head: string): Promise<{ commit: string; stopped: Stop | null } | undefined> {
-    const merged = await this.call('PUT', `/repos/${s.repo}/pulls/${c.pr}/merge`, { sha: head, merge_method: 'merge' });
+    // The gate's own identity lands what it passed, once your settings name it; until then your login (#1325). The planted
+    // wrong program merges with your login though the gate's app is named.
+    const gate = this.o.gateApp() && this.o.plant !== 'lands-as-person' ? await this.o.landingToken(s.repo) : undefined;
+    const merged = await this.call('PUT', `/repos/${s.repo}/pulls/${c.pr}/merge`, { sha: head, merge_method: 'merge' }, gate);
     if (merged.status !== 200) return undefined;
     const said = isObj(merged.body) && typeof merged.body.sha === 'string' ? merged.body.sha : '';
     await this.fetch(checkout, []);
@@ -304,8 +310,8 @@ export class Landing {
       return { commit: main, stopped: { commit: main, files } };
     }
     // The issue closes now that its change landed, unless the budget window still settles part of it.
-    if (open.length) await this.call('POST', `/repos/${s.repo}/issues/${c.issue}/comments`, { body: `DeepBuild landed #${c.pr} at ${main}; this issue stays open until the scheduled budget window settles: ${open.map((t) => `"${t}"`).join(', ')}.` });
-    else await this.call('PATCH', `/repos/${s.repo}/issues/${c.issue}`, { state: 'closed' });
+    if (open.length) await this.call('POST', `/repos/${s.repo}/issues/${c.issue}/comments`, { body: `DeepBuild landed #${c.pr} at ${main}; this issue stays open until the scheduled budget window settles: ${open.map((t) => `"${t}"`).join(', ')}.` }, gate);
+    else await this.call('PATCH', `/repos/${s.repo}/issues/${c.issue}`, { state: 'closed' }, gate);
     this.save(s);
     return { commit: main, stopped: null };
   }
