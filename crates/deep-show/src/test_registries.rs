@@ -28,6 +28,9 @@ pub fn modules() -> Vec<Module> {
     let mut out: Vec<Module> = Vec::new();
     #[cfg(feature = "test-mark")]
     out.push(deep_canvas_test_modules::registries::mark());
+    // Issue #202's test canvas module: an item kind of 0.20 ms of CPU.
+    #[cfg(feature = "test-weight")]
+    out.push(deep_canvas_test_modules::weight::module());
     #[cfg(feature = "test-column-source")]
     out.push(deep_canvas_test_modules::registries::columns());
     // Issue #412's test canvas modules.
@@ -101,6 +104,20 @@ pub fn effects_with_base_steps() -> Module {
         (deep_canvas_effects::module::module().register)(r);
         r.entries
             .extend(deep_canvas::registry::core_lists::base_steps());
+    };
+    m
+}
+
+/// The effects module of the planted layout `test-gpu-output-in-effects` (#485): it declares
+/// `gpu.output@1` with today's outputs, which the core then leaves to it.
+#[cfg_attr(not(feature = "test-gpu-output-in-effects"), allow(dead_code))]
+pub fn effects_declaring_outputs() -> Module {
+    let mut m = deep_canvas_effects::module::module();
+    m.register = |r| {
+        (deep_canvas_effects::module::module().register)(r);
+        let (def, entries) = deep_canvas::registry::core_lists::gpu_output_registry();
+        r.registry(def);
+        r.entries.extend(entries);
     };
     m
 }

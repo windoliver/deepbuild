@@ -5,7 +5,7 @@
 // out under <dir>, ready for `npm pack`:
 //   deepbuild/  the `deep` command: the workspaces the CLI loads at the checkout's relative paths (package.json and
 //               runtime files, built dist/ without tests, maps or declarations), the root folders their code reads
-//               (adapters/, skills/deepbuild/, deep-hook's default rules, the banner's mark), and the third-party
+//               (adapters/, the first-party packs/, skills/deepbuild/, deep-hook's default rules, the banner's mark), and the third-party
 //               packages they load, bundled with what they don't need at run time left out. bin/deep.mjs is
 //               scripts/npm-launcher.mjs. This platform's deep-hook package is its optional dependency.
 //   deep-hook-<platform>-<arch>/  `@deepbuild/deep-hook-<platform>-<arch>`, for this host's platform and linux-x64 and
@@ -115,7 +115,7 @@ for (const dir of workspaces) {
 }
 
 // The root folders the workspaces read by relative path.
-for (const file of ['README.md', 'LICENSE', 'adapters', 'skills/deepbuild', 'crates/deep-hook/default-rules.json', 'brand/png/favicon-32.png']) copy(join(REPO, file), join(pkg, file));
+for (const file of ['README.md', 'LICENSE', 'adapters', 'packs', 'skills/deepbuild', 'crates/deep-hook/default-rules.json', 'brand/png/favicon-32.png']) copy(join(REPO, file), join(pkg, file));
 
 // Third-party packages, bundled: what they don't load at run time is left out. SQLite's native module is in the
 // platform package, which the launcher links in.
@@ -138,7 +138,7 @@ const names = Object.keys(dependencies).sort();
 writeFileSync(join(pkg, 'package.json'), `${JSON.stringify({
   name: 'deepbuild', version, description: 'DeepBuild: the deep command', type: 'module', license: root.license, engines: root.engines,
   bin: { deep: 'bin/deep.mjs' },
-  files: ['bin', 'packages', 'adapters', 'skills', 'crates', 'brand', 'README.md', 'LICENSE'],
+  files: ['bin', 'packages', 'adapters', 'packs', 'skills', 'crates', 'brand', 'README.md', 'LICENSE'],
   dependencies: Object.fromEntries(names.map((n) => [n, dependencies[n]])), bundleDependencies: names,
   optionalDependencies: Object.fromEntries([...builds.keys()].sort().map((p) => [hookName(p), version])),
 }, null, 2)}\n`);

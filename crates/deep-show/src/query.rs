@@ -80,6 +80,8 @@ pub struct Query {
     /// The why's path and time.
     pub path: Option<String>,
     pub t: i64,
+    /// #504: the document's input track the reads replay.
+    pub track: Vec<Value>,
 }
 
 /// One revision as a query reads it: the document as written, the form that draws, and the
@@ -321,12 +323,14 @@ impl Hub<'_> {
         let mut values = Map::new();
         let mut keys = Map::new();
         let mut sessions: Vec<DocSession> = Vec::new();
+        // #504: the reads replay the input track the query names.
+        let drawn = crate::played::with_track(&revision.drawn, &q.track);
         if !q.paths.is_empty() {
             if self.scenario.planted == Some(Planted::RelationFromPreviousBox) {
-                sessions = self.solved_from_previous_boxes(&revision.drawn, &times);
+                sessions = self.solved_from_previous_boxes(&drawn, &times);
             } else {
                 for t in &times {
-                    let s = self.evaluated(&revision.drawn, *t);
+                    let s = self.evaluated(&drawn, *t);
                     sessions.push(s);
                 }
             }
@@ -335,10 +339,10 @@ impl Hub<'_> {
             let hidden_by = item_path(path).and_then(|(id, _)| hidden.get(id));
             let mut vs = Vec::new();
             let mut ks = Vec::new();
-            for s in &sessions {
+            for (s, t) in sessions.iter().zip(&times) {
                 let read = match hidden_by {
                     Some(_) => None,
-                    None => self.read_path(s, &revision.doc, path),
+                    None => self.text_at(s, &drawn, path, *t).or_else(|| self.read_path(s, &revision.doc, path)),
                 };
                 match read {
                     Some((v, k)) => {
@@ -497,6 +501,25 @@ impl Hub<'_> {
             }
         }
         out
+    }
+
+    /// #504: `items/<id>/params/text` of a text with a `template`: what it shows at `t`, each
+    /// slot filled with the values that move the parts as the frame evaluates them (the same
+    /// [`deep_canvas_motion::eval::shown_doc`] the 3D card and `see` fill from).
+    fn text_at(&self, s: &DocSession, drawn: &Value, path: &str, t: i64) -> Option<(Value, Key)> {
+        let id = path.strip_prefix("items/")?.strip_suffix("/params/text")?;
+        let template = drawn.pointer(&format!("/items/{id}/params/template"))?.as_str()?;
+        let shown = match crate::film::program_of(&self.sched, s) {
+            Some(program) if self.scenario.planted != Some(Planted::ReadoutReadsDefaults) => {
+                let mut state = program.state();
+                program.evaluate(t, deep_canvas_motion::eval::Validity::Full, &mut state);
+                deep_canvas_motion::eval::shown_doc(drawn.as_object()?, &program, &state)
+            }
+            _ => drawn.clone(),
+        };
+        let text = deep_canvas::template::expand(&shown, template).ok()?;
+        let key = Hasher::of(self.sched.hash(), "deep_query.text").text(path).text(&text).finish();
+        Some((json!(text), key))
     }
 
     /// The evaluated value at `path` in an evaluated session, with the content key of what made
