@@ -81,7 +81,9 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
     if (r.project !== project) out.push((project = r.project) ?? 'no repo');
     // Its one name, its agent, then its word and why (#2018): its ID shows only in a name another row would otherwise
     // read the same as, and a verdict that isn't PASS or FAIL says whom it waits for and its evidence after its word.
-    out.push(`  ${r.title}  ${r.agent ?? 'agent'}  ${[r.word, r.why].filter(Boolean).join(' · ')}${age(r)}`);
+    // Its one flag beside its word (#2019), with the fix where one clears it.
+    const flag = r.flag ? `${r.flag.code}: ${r.flag.text}${r.flag.fix ? `. ${r.flag.fix}` : ''}` : '';
+    out.push(`  ${r.title}  ${r.agent ?? 'agent'}  ${[r.word, flag, r.why].filter(Boolean).join(' · ')}${age(r)}`);
     const d = o.detail?.[r.id];
     if (!d) continue;
     for (const line of [d.note, ...(d.readings ?? [])]) if (line) out.push(`      ${line}`);
@@ -120,6 +122,8 @@ export function whyText(w: Why, now = Date.now()): string {
   for (const f of w.facts) out.push(`  ${f.kind}  ${when(f.ts, now)}  log_pos ${f.log_pos}`);
   if (w.lacked.length) out.push('Each row above it, and the fact it lacked:');
   for (const l of w.lacked) out.push(`  ${l.row}: ${l.fact}`);
+  // Its flag beside its word (#2019), from the same reading, with each fact it read.
+  if (w.flag) out.push(`Flag: ${w.flag.code}: ${w.flag.text}${w.flag.fix ? `. ${w.flag.fix}` : ''}`, ...w.flag.facts.map((f) => `  ${f.kind}  ${when(f.ts, now)}  log_pos ${f.log_pos}`));
   return `${out.map(visible).join('\n')}\n`;
 }
 
@@ -212,8 +216,8 @@ export async function listCommand(args: readonly string[], detail: boolean): Pro
       const down = read.down !== undefined ? `The hub isn't answering, since ${clock(read.down)}; this is read from its database.\n` : '';
       // The planted wrong program builds its why from a reading of its own, which says quiet for a row at work.
       const said = activePlant() === 'why-second-reading' && why.word === 'working' ? { ...why, word: 'quiet', why: 'no hook since' } : why;
-      const { id, word, why: sentence, rule, facts, lacked } = said;
-      process.stdout.write(json ? `${JSON.stringify({ log_pos: read.log_pos, id, word, why: sentence, rule, facts, lacked })}\n` : `${down}${whyText(said)}`);
+      const { id, word, why: sentence, rule, facts, lacked, flag } = said;
+      process.stdout.write(json ? `${JSON.stringify({ log_pos: read.log_pos, id, word, why: sentence, rule, facts, lacked, ...(flag ? { flag } : {}) })}\n` : `${down}${whyText(said)}`);
       return;
     }
     const rows = planted(read.rows);
