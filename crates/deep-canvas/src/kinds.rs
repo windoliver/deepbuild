@@ -259,6 +259,25 @@ fn module_param(name: &'static str, module: &'static str, default: Value) -> Par
     }
 }
 
+/// A score (#154; Score `score.music@1`): music as data. The core holds the kind so a document
+/// names no module to use it; every field is the motion module's, which resolves its times through
+/// the tempo map and checks it, so a build without motion refuses a score with `module_missing`.
+fn score() -> Entry {
+    Entry {
+        family: "score",
+        name: "music",
+        versions: vec![Version {
+            major: 1,
+            minor: 0,
+            params: ["instruments", "events", "loop", "stems"]
+                .into_iter()
+                .map(|name| module_param(name, "motion", Value::Null))
+                .collect(),
+        }],
+        migrations: vec![],
+    }
+}
+
 /// The core's camera (Camera `camera@1`), every field at the design's default. The pose, the
 /// projection and the camera you move are evaluated here. `yield` eases back on a stage change
 /// or `camera.reset` and `reduced_motion` holds a move: no input of this slice's session
@@ -459,7 +478,7 @@ fn build() -> Registry {
         ],
     };
     Registry {
-        entries: vec![slab, camera(), circle(), series(), rect, dot],
+        entries: vec![slab, camera(), circle(), series(), rect, dot, score()],
     }
 }
 

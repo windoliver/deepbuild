@@ -98,8 +98,7 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "worlds",
     "brief",
     "checks",
-    // The media module's strips and the positional voices placed on items (#427; Strip and
-    // track, Emitter), read by the media module.
+    // #427: the media module's strips and the voices placed on items (Strip and track, Emitter).
     "strips",
     "emitters",
     // #499: the media module's buses and processors (Bus, Processor).
@@ -109,6 +108,7 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "spawns",
     // #502: the media module's ducking entries (Ducking), each a bus's gain under speech spans.
     "ducking",
+    "tempo_map",
     // #935: the media module's generated sounds, each held to audio.gen before an item names it.
     "sounds",
 ];

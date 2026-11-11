@@ -1,12 +1,13 @@
 // #1116: one real scene, as the issue's Proof asks: a fixture repository, three merged commits with a planted 2×
 // regression in one, every slot of the sandbox's throttle held, and a real window run through `throttle.mjs window`,
-// then the next window. Each test reads what the scene left. It runs once, on the first test's turn.
+// then the next window. Each test reads what the scene left. It runs once, on the first test's turn. #1116.dead61b9
+// and #1116.5aa02a5a, which expect a close, run from tests/acceptance/1116-redraft-1874/ under #1874's rule.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import test, { after } from 'node:test';
-import { dump, ended, fileIssue, followUps, fullWindow, hold, holder, issue, LIMIT, logLines, LONG, marked, fixture, openWindow, recordOf, records, REGRESSED, samples, sandbox, started, TASK, until } from './helpers.mjs';
+import { dump, ended, fileIssue, fullWindow, hold, holder, issue, LIMIT, logLines, LONG, marked, fixture, openWindow, recordOf, records, REGRESSED, samples, sandbox, started, TASK, until } from './helpers.mjs';
 
 const PLAIN = 9101, SLOW = 9102, LATE = 9103, NEXT = 9104, UNPROVEN = 9105;
 const box = sandbox({ after });
@@ -119,44 +120,6 @@ test('#1116.8e06730a three commits merged between windows get three records, eac
       assert.ok(taken >= 20, `${commit}'s ${name} side took ${taken} samples on the tree holding ${tags.join(', ')}, not 20\n${dump(box, s.run)}`);
     }
   }
-});
-
-test('#1116.dead61b9 a planted 2× regression in one of three commits leaves only that issue open, naming that commit, with one budget follow-up', LONG, async () => {
-  const s = await scene();
-  const record = recordOf(box, s.mergedB);
-  assert.equal(record?.state, 'FAIL', `the regressed commit's record\n${dump(box, s.run)}`);
-  assert.equal(record.tests.find(({ id }) => id === TASK)?.state, 'FAIL', `the regressed budget's state: ${JSON.stringify(record)}`);
-  for (const commit of [s.mergedA, s.mergedC]) assert.equal(recordOf(box, commit)?.state, 'PASS', `${commit} didn't pass\n${dump(box, s.run)}`);
-  assert.equal(issue(box, PLAIN).state, 'CLOSED', `the first commit's issue stayed open\n${dump(box, s.run)}`);
-  assert.equal(issue(box, LATE).state, 'CLOSED', `the commit merged after the regression has its issue open: it was measured against another base or on main's tree\n${dump(box, s.run)}`);
-  const slow = issue(box, SLOW);
-  assert.equal(slow.state, 'OPEN', `the regressed commit's issue was closed\n${dump(box, s.run)}`);
-  const said = slow.comments.join('\n');
-  assert.ok(said.includes(s.mergedB.slice(0, 7)), `the open issue doesn't name the commit ${s.mergedB}\n${dump(box, s.run)}`);
-  assert.ok(said.includes(TASK), `the open issue doesn't name the regression, ${TASK}\n${dump(box, s.run)}`);
-  // Exactly one, after both windows: a miss is never asked about twice.
-  const filed = followUps(box);
-  assert.equal(filed.length, 1, `follow-ups filed: ${JSON.stringify(filed)}`);
-  const text = `${filed[0].title}\n${filed[0].body}`;
-  assert.ok(/budget/i.test(text) && text.includes(`#${SLOW}`) && text.includes(s.mergedB.slice(0, 7)) && text.includes(TASK), `the follow-up doesn't name the budget, the issue and the commit: ${text}`);
-});
-
-test('#1116.5aa02a5a a commit merged during a window is measured in the next one, and till then its issue stays open', LONG, async () => {
-  const s = await scene();
-  assert.ok(s.sampled, `the window took no sample\n${dump(box, s.run)}`);
-  const { opened, closed } = windowOf(s);
-  assert.ok(s.merged > opened && s.merged < closed, `the fixture's commit landed outside the window: ${s.merged}, ${opened} to ${closed}\n${dump(box, s.run)}`);
-  for (const commit of [s.d, s.mergedE]) assert.ok(!s.first.records.some((record) => record.commit === commit), `${commit} has a record from the window it merged in\n${dump(box, s.run)}`);
-  assert.ok(!s.first.samples.some(({ tags }) => tags.includes('d') || tags.includes('e')), `the window sampled a commit merged during it\n${dump(box, s.run)}`);
-  assert.deepEqual(s.first.issues, { [NEXT]: 'OPEN', [UNPROVEN]: 'OPEN' }, `an unmeasured commit's issue left open: ${dump(box, s.run)}`);
-
-  const record = recordOf(box, s.d);
-  assert.equal(record?.state, 'PASS', `the next window didn't measure ${s.d}\n${dump(box, s.next)}`);
-  assert.equal(record.base, s.mergedC, `a commit straight on main is measured against its parent\n${JSON.stringify(record)}`);
-  assert.equal(issue(box, NEXT).state, 'CLOSED', `the next window's pass didn't close the issue\n${dump(box, s.next)}`);
-  // The next window measures only what's new: one record a commit, and nothing of the three again.
-  const all = records(box).map(({ commit }) => commit);
-  assert.deepEqual([...all].sort(), [s.mergedA, s.mergedB, s.mergedC, s.d, s.mergedE].sort(), `the records after two windows\n${dump(box, s.next)}`);
 });
 
 test('a pass leaves its issue open while another of its criteria isn\'t proven', LONG, async () => {
