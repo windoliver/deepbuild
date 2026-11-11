@@ -5153,6 +5153,16 @@ export interface ErrorV3 {
   evidence: Array<string>;
 }
 
+/** error@4 */
+export interface ErrorV4 {
+  code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm" | "role" | "credential" | "unknown_method" | "not_found" | "unconfirmed" | "unbound" | "unavailable" | "too_large" | "fell_behind" | "unknown_field";
+  retryable: boolean;
+  remediation: string;
+  path: string;
+  actual: string;
+  evidence: Array<string>;
+}
+
 /** evidence.put@1 */
 export interface EvidencePut {
   v: 1;
