@@ -11,7 +11,7 @@ import { sha256Hex } from '@deepbuild/contracts';
 import { type EvidenceStore } from '@deepbuild/evidence';
 
 import { type RecordStore } from '@deepbuild/record';
-import { evidence, judge } from '@deepbuild/resolver-decisions';
+import type { DecisionsProvider } from './decisions-port.js';
 
 import { Confirmer } from './confirm.js';
 
@@ -25,7 +25,7 @@ import { cachedRuleFiles, handleOf as ruleHandle, pageLines, reachOf as ruleReac
 
 import { deepHook, repoOf, type Root } from './paths.js';
 
-import { type WikiBuilt } from './wiki-build.js';
+import type { WikiBuild, KnowledgeProvider } from './knowledge-port.js';
 
 import { standingRules } from './standing.js';
 
@@ -35,6 +35,8 @@ import type { CallContext } from './session-types.js';
 import { TYPED_RULE, RULES_HEAD, letters, rulePieces, FOREIGN, type Obj, isObj } from "./hub-shared.js";
 
 export interface SessionMemoryOptions {
+  decisions: Pick<DecisionsProvider, 'evidence' | 'judge'>;
+  cwdOf: KnowledgeProvider['cwdOf'];
   settings: CoreOptions;
   services: {
     readonly record: RecordStore;
@@ -43,7 +45,7 @@ export interface SessionMemoryOptions {
     readonly raw: RecordStore['raw'];
     readonly root: Root;
     readonly store: EvidenceStore;
-    readonly wikiBuild: { build(): Promise<WikiBuilt>; forget(claim: string): Promise<string>; writeRules(): Promise<void> };
+    readonly wikiBuild: WikiBuild;
     readonly confirmer: Confirmer;
   };
   delivery: () => Pick<AnswerDeliveryPort, "routes">;
@@ -72,8 +74,8 @@ export class SessionMemory {
   /** One round of judging your standing rules by what later broke, at the margin and over the window in your settings (#23). */
   async judgeRules(): Promise<void> {
     const { margin, windowMs } = this.options.kernel.config().rules;
-    for (const e of await evidence({ record: this.options.services.record, now: this.options.services.now(), window: windowMs })) {
-      await this.options.services.asks.judged(this.options.events.connection('core'), e.decision, { rule: e.rule, yours: e.yours, margin, judgment: judge(e.rule, e.yours, margin) });
+    for (const e of await this.options.decisions.evidence({ record: this.options.services.record, now: this.options.services.now(), window: windowMs })) {
+      await this.options.services.asks.judged(this.options.events.connection('core'), e.decision, { rule: e.rule, yours: e.yours, margin, judgment: this.options.decisions.judge(e.rule, e.yours, margin) });
     }
     await this.syncStanding();
     await syncRejected(this.options.services.raw, this.options.services.root.dir);
@@ -90,7 +92,7 @@ export class SessionMemory {
 
   /** `deep memory`'s list (#111). */
   async lessons(): Promise<Lesson[]> {
-    const lessons = [...await lessonsOf(this.options.services.raw, await repoFolders(this.options.services.record, this.options.services.store)), ...await this.ruleLessons()];
+    const lessons = [...await lessonsOf(this.options.services.raw, await repoFolders(this.options.services.record, this.options.services.store, this.options.cwdOf)), ...await this.ruleLessons()];
     return lessons.map((l, i) => ({ ...l, rank: i + 1 }));
   }
 

@@ -21,7 +21,7 @@ import { type ClaimCheck, type DefinitionState, type RunKey, type StatePin } fro
 
 import { type ClaimState } from './verdict-chat.js';
 
-import { type ReviewOf } from './kinds.js';
+import type { ReviewOf } from './checks-port.js';
 import type { CheckSpec } from '@deepbuild/conformance';
 import { type StackWant } from './stacks.js';
 

@@ -66,6 +66,8 @@ export interface HookMeta {
   /** The session this one replaced in the same process, where its agent says. */
   parent?: string;
   id: string;
+  /** The hook's original nanosecond stamp, shared by event and reply ownership classification. */
+  seq?: string;
   agent: string;
   event: string;
   session: string;

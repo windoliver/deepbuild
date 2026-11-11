@@ -1,7 +1,8 @@
 // The core's worker thread: the core answers each request the event loop forwards, in order, and streams
 // appended events back for subscribers.
 import { parentPort, workerData } from 'node:worker_threads';
-import { Core, type CallContext } from './core.js';
+import type { Core, CallContext } from './core.js';
+import { createCore } from './hub-runtime.js';
 import type { Part } from './context-fit.js';
 import { ReadOnlyCore, unreadable } from './readonly-core.js';
 import { shedStartup } from './settle.js';
@@ -69,7 +70,7 @@ if (parentPort && workerData?.core) {
   // A record a newer version wrote is opened read-only, by a stand-in that appends nothing (#41).
   const options = workerData.core as CoreOptions;
   const why = unreadable(options);
-  const core = why ? new ReadOnlyCore(why) : new Core(options, (sub, event, caught) => port.postMessage({ op: 'frame', sub, event, ...(caught ? { caught } : {}) }), (sessions, judged, resend, cantRun) => port.postMessage({ op: 'asking', sessions, judged, resend, cantRun }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }));
+  const core = why ? new ReadOnlyCore(why) : createCore(options, (sub, event, caught) => port.postMessage({ op: 'frame', sub, event, ...(caught ? { caught } : {}) }), (sessions, judged, resend, cantRun) => port.postMessage({ op: 'asking', sessions, judged, resend, cantRun }), (session) => port.postMessage({ op: 'acking', session }), (values) => port.postMessage({ op: 'scrub', values }));
   core.started().then(
     () => { shedStartup(); port.postMessage({ op: 'started', hooks: core.hooks() }); },
     (error: unknown) => port.postMessage({ op: 'fatal', message: error instanceof Error ? error.stack ?? error.message : String(error) }),

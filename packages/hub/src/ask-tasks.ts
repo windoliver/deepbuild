@@ -37,11 +37,10 @@ import type { PaidKind } from '@deepbuild/gate';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { solveLine } from '@deepbuild/gate';
-import { renamedSince } from '@deepbuild/workspaces';
 import type { ClaimCheck, DefinitionState, StatePin, Surface } from './gate-runner.js';
 import { ISSUE_LINK, liveFetch, readIssue, recordedFetch, type Reading } from './github-source.js';
 import { headOf } from './session-facts.js';
-import type { Workspaces } from './workspaces.js';
+import type { WorkspaceService, WorkspacesProvider } from './workspaces-port.js';
 import { derivedId, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -213,7 +212,8 @@ interface AskTaskOptions {
   /** The targets of a claim's requirements that didn't resolve before its runs (#323): each verdict made on it is INVALID, naming them. */
   unresolved(claim: string, targets: { req: string; reason: string }[]): void;
   /** Where work outside a repo lives (#67). */
-  spaces: Pick<Workspaces, 'land' | 'fill' | 'pin' | 'keep' | 'claimState' | 'folderOf'>;
+  spaces: Pick<WorkspaceService, 'land' | 'fill' | 'pin' | 'keep' | 'claimState' | 'folderOf'>;
+  renamedSince: WorkspacesProvider['renamedSince'];
 }
 
 export class AskTasks {
@@ -566,7 +566,7 @@ export class AskTasks {
   /** The file a target's file was renamed to since the definition's base, when its symbol resolves there. */
   private async followed(cwd: string, base: string, target: string): Promise<string | undefined> {
     const [file, symbol] = target.split('#') as [string, string | undefined];
-    const now = await renamedSince(cwd, base, file);
+    const now = await this.o.renamedSince(cwd, base, file);
     return now && !(await this.unresolvedTarget(cwd, symbol ? `${now}#${symbol}` : now)) ? now : undefined;
   }
   /** One proposed diff of a definition for the renames a claim followed; the definition changes only on your approval. */

@@ -58,7 +58,7 @@ import { OpenItems } from './open-items.js';
 import { claimState, newestClaim, type ClaimState } from './verdict-chat.js';
 
 import { RUN_AS_YOU, Runs } from './runs.js';
-import { Kinds, type ReviewOf } from './kinds.js';
+import type { CheckKinds, ReviewOf } from './checks-port.js';
 import type { CheckSpec } from '@deepbuild/conformance';
 
 import { Stacks, type StackWant } from './stacks.js';
@@ -92,7 +92,7 @@ export interface StopJudgingOptions {
     readonly holds: Holds;
     readonly questions: Questions;
     readonly runner: Runner;
-    readonly checkKinds: Kinds;
+    readonly checkKinds: CheckKinds;
     readonly store: EvidenceStore;
     readonly trust: ProjectTrust;
     readonly heavy: HeavyQueue;

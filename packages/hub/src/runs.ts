@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { basename, isAbsolute, relative } from 'node:path';
-import { runCommandCheck, type CommandRun } from '@deepbuild/checks-command';
+import type { ChecksProvider, CommandRun } from './checks-port.js';
 import { sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { scrubText, type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 import type { CheckResult } from '@deepbuild/conformance';
@@ -14,7 +14,7 @@ import type { ExtensionHost } from '@deepbuild/extension-host';
 import { slot } from '@deepbuild/gate';
 import type { LeaseTable } from '@deepbuild/leases';
 import { after, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
-import type { Up } from '@deepbuild/env-local';
+import type { Up } from './environment-port.js';
 import { isRoot, type Hosts } from './hosts.js';
 import { words } from './claude-settings.js';
 import type { RunKey } from './gate-runner.js';
@@ -61,6 +61,7 @@ const isUnder = (path: string, dir: string) => {
 };
 
 interface RunsOptions {
+  command: ChecksProvider['command'];
   /** The journal file: each run started and not yet durably finished. */
   journalFile: string;
   point(): void;
@@ -342,7 +343,7 @@ export class Runs {
           const hosts = [...(run.grant.hosts ?? []), ...(serving?.hosts ?? [])];
           let record: CommandRun;
           try {
-            record = await runCommandCheck({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly, ...(run.outside ? { outside: true } : {}) });
+            record = await this.o.command({ host: this.o.host(), run: run.run, spec, checkout: run.cwd, deadline, env: { ...env, ...serving?.env }, ...(hosts.length ? { hosts } : {}), ...(run.stand_ins ? { standIns: run.stand_ins } : {}), stop: controller.signal, ...exitOnly, ...(run.outside ? { outside: true } : {}) });
           } catch (error) {
             await this.o.stacks.finish(run.run);
             throw error;

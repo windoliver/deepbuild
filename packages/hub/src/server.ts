@@ -264,9 +264,9 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
 async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void, onAcking: (session: string) => void, onScrub: (values: string[]) => void): Promise<CoreLink> {
-  const { Core } = await import('./core.js');
+  const { createCore } = await import('./hub-runtime.js');
   const { answer, asRefusal } = await import('./core-worker.js');
-  const core = new Core(options, onFrame, onAsking, onAcking, onScrub);
+  const core = createCore(options, onFrame, onAsking, onAcking, onScrub);
   const started = core.started().then(() => ({ hooks: core.hooks() }));
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {

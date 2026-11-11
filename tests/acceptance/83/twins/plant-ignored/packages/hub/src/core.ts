@@ -6,17 +6,16 @@ import { UsageTail } from '@deepbuild/readings';
 import { Numbers } from './numbers.js';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ADAPTERS, shipped } from '@deepbuild/adapters';
-import { openArchive } from '@deepbuild/archive';
+import { fileURLToPath } from 'node:url';
+import { ADAPTERS } from '@deepbuild/adapters';
 import { openAsks, type Asks } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
 import { openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
-import { resolverDecisions } from '@deepbuild/resolver-decisions';
-import { answers as stackHealthy, composeKind, downStack, environmentOf, keysOf, leaseKinds, newRun, portKind, SESSION_KINDS, upStack, WarmStack } from '@deepbuild/env-local';
+import type { DecisionsProvider } from './decisions-port.js';
+import type { EnvironmentProvider, ComposeResource } from './environment-port.js';
 import { openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/gate';
 
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
@@ -55,18 +54,16 @@ import { groupUnder } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { OWNER, People, scopeOf } from './people.js';
 
-import { MEMORY_TRANSCRIPTS, openWikiBuild, projectOf, type WikiBuilt } from './wiki-build.js';
+import type { KnowledgeProvider, WikiBuild } from './knowledge-port.js';
 import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
 import { Box } from './box.js';
 import { NEWER_SET, OLDER_SET } from './status.js';
 import { aboutCall, aboutPermission } from './standing.js';
 import { Channels } from './channels.js';
-import { Workspaces } from './workspaces.js';
+import type { WorkspacesProvider, WorkspaceService } from './workspaces-port.js';
 import { Devices } from './trusted.js';
-import { openIndex } from './search.js';
-
-import { gateTokens, openGitHub, type AppKey, type GitHub, type GitHubPlant } from '@deepbuild/github';
+import type { ForgeProvider, ForgeObserver, AppKey } from './forge-port.js';
 
 import { liveFetch, liveGraphql, readIssue, recordedFetch, recordedGraphql } from './github-source.js';
 import { OpenItems } from './open-items.js';
@@ -75,7 +72,7 @@ import { apiHost, networkCheck, reachable, slackThreads } from './reach.js';
 
 import { Answers } from './answers.js';
 import { Runs } from './runs.js';
-import { Kinds } from './kinds.js';
+import type { ChecksProvider, CheckKinds } from './checks-port.js';
 import type { CheckSpec } from '@deepbuild/conformance';
 import type { DocSpec } from './doc-checks.js';
 const PROMPTED = new Set(['claude-code', 'claude', 'codex', 'paseo']);
@@ -114,6 +111,16 @@ function lazyServices<T extends Record<string, () => unknown>>(read: T): { [K in
 export type { CallContext } from './session-types.js';
 
 type HookReply = { context?: string; block?: string; message?: string };
+/** Internal DI contract: required domain capabilities supplied by the outer runtime, never selected by Core. */
+export interface CoreProviders {
+  checks: ChecksProvider;
+  environment: EnvironmentProvider;
+  decisions: DecisionsProvider;
+  knowledge: KnowledgeProvider;
+  forge: ForgeProvider;
+  workspaces: WorkspacesProvider;
+}
+/** Internal kernel. Production constructs it through hub-runtime.createCore; package entry points stay unchanged. */
 export class Core {
   private delivery!: AnswerDelivery;
   private judging!: StopJudging;
@@ -137,7 +144,7 @@ export class Core {
   }
   private wireSessionMemory(): void {
 
-    this.memory = new SessionMemory({ settings: this.options, services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, raw: () => this.raw, root: () => this.root, store: () => this.store, wikiBuild: () => this.wikiBuild, confirmer: () => this.confirmer }), delivery: () => this.delivery, mcp: () => this.mcp, state: () => this.state, events: { connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { config: () => this.config() } });
+    this.memory = new SessionMemory({ decisions: this.providers.decisions, cwdOf: this.providers.knowledge.cwdOf, settings: this.options, services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, raw: () => this.raw, root: () => this.root, store: () => this.store, wikiBuild: () => this.wikiBuild, confirmer: () => this.confirmer }), delivery: () => this.delivery, mcp: () => this.mcp, state: () => this.state, events: { connection: (writer, extra) => this.connection(writer, extra), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { config: () => this.config() } });
   }
   private wireTranscripts(): void {
     const readreplaying = () => this.replaying;
@@ -159,7 +166,7 @@ export class Core {
     const readreplaying = () => this.replaying;
     const readblocked = () => this.blocked;
     const readjobs = () => this.jobs;
-    this.control = new HubControl({ settings: this.options, services: lazyServices({ log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
+    this.control = new HubControl({ settings: this.options, services: lazyServices({ wikiWritten: () => this.providers.knowledge.writtenOf, log: () => this.log, people: () => this.people, numbers: () => this.numbers, staging: () => this.staging, agents: () => this.agents, box: () => this.box, extensions: () => this.extensions, runs: () => this.runs, hosts: () => this.hosts, sessionStarts: () => this.sessionStarts, heavy: () => this.heavy, wikiBuild: () => this.wikiBuild, raw: () => this.raw, root: () => this.root, record: () => this.record, now: () => this.now, acceptance: () => this.acceptance, runner: () => this.runner, checkKinds: () => this.checkKinds, canvasSide: () => this.canvasSide, spaces: () => this.spaces, asks: () => this.asks, tasks: () => this.tasks, claudeSettings: () => this.claudeSettings, store: () => this.store, devices: () => this.devices, confirmer: () => this.confirmer, teardowns: () => this.teardowns, openItems: () => this.openItems, checkouts: () => this.checkouts, channels: () => this.channels, libraries: () => this.libraries, jobKinds: () => this.jobKinds, durable: () => this.durable, stacks: () => this.stacks }), delivery: () => this.delivery, judging: () => this.judging, state: () => this.state, memory: () => this.memory, mcp: () => this.mcp, transcripts: () => this.transcripts, events: { connection: (writer, extra) => this.connection(writer, extra), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), appendReading: (session, agent, reading, hook) => this.appendReading(session, agent, reading, hook), append: (connection, input, backfill) => this.append(connection, input, backfill) }, kernel: { get ready() { return readready(); }, get blocked() { return readblocked(); }, get jobs() { return readjobs(); } }, schedule: { testClock: (params) => this.testClock(params), replayLate: (kept) => this.replayLate(kept), get replaying() { return readreplaying(); }, queue: (work, starting) => this.queue(work, starting) } });
   }
 
   private transcriptReader!: TranscriptReader;
@@ -222,7 +229,7 @@ export class Core {
   /** The sessions whose stop a running hub replayed from the spool, to judge once the replay ends (#580). */
   private readonly lateStops: string[] = [];
   /** env-local's compose kind, with the Docker CLI it found when the hub started (#331). */
-  private compose?: ReturnType<typeof composeKind>;
+  private compose?: ComposeResource;
   /** DeepBuild's own headless jobs (#159): their hooks are theirs, never a session's. */
   private runner!: Runner;
   /** The blind acceptance job (#1328): the runner's one kind that writes, before an issue's first attempt. */
@@ -230,7 +237,7 @@ export class Core {
   /** Sessions started without your Send, under a run you approved (#1330). */
   private sessionStarts!: Starts;
   /** Setup's wiki build (#356). */
-  private wikiBuild!: { build(): Promise<WikiBuilt>; forget(claim: string): Promise<string>; writeRules(): Promise<void> };
+  private wikiBuild!: WikiBuild;
   private ready!: Promise<void>;
   /** The work items prompts name, read off the hook's parse, for the append that opens their tasks. */
   private readonly items = new WeakMap<Draft, WorkItem>();
@@ -246,10 +253,10 @@ export class Core {
   /** The ways to reach you (#65), once the extensions are ready. */
   private channels: Channels | undefined;
   /** Work outside a repo (#67). */
-  private spaces!: Workspaces;
+  private spaces!: WorkspaceService;
   /** The supervisor's runs (runs.ts). */
   private runs!: Runs;
-  private checkKinds!: Kinds;
+  private checkKinds!: CheckKinds;
   /** Each worktree's stack and every stack run a check started (#331, #332). */
   private stacks!: Stacks;
   /** Each outside resource a session created, and its teardown task (#342). */
@@ -276,7 +283,7 @@ export class Core {
   private askedThrough = '';
   /** Whether appends came back during a replay, so the files it kept are taken again after it. */
   private retake = false;
-  private github: GitHub | undefined;
+  private github: ForgeObserver | undefined;
   private claudeSettings!: ClaudeSettings;
   /** Hooks waiting on a network stop's try, which the hub finishes before it stops. */
   private readonly tried = new Set<Promise<unknown>>();
@@ -307,7 +314,7 @@ export class Core {
    * only where an answer may come back through it (#19: right after install no stop is held for anything else);
    * `acking` hears a session with a message typed mid-turn to acknowledge, so its next tool call's hook is held (#340).
    */
-  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string, caught?: boolean) => void, private readonly asking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
+  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string, caught?: boolean) => void, private readonly providers: CoreProviders, private readonly asking: (sessions: string[], judged: string[], resend: string[], cantRun: string[]) => void = () => undefined, private readonly acking: (session: string) => void = () => undefined, private readonly scrubbing: (values: string[]) => void = () => undefined) {
     this.wireHookServices();
     this.wireWorkServices();
     this.wireGateServices();
@@ -388,7 +395,7 @@ export class Core {
       root: this.root.dir, raw: (query, params) => this.record.raw(query, params), now: this.now, plant: options.plant, holds: this.holds,
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
     });
-    this.spaces = new Workspaces({
+    this.spaces = this.providers.workspaces.create({
       root: this.root.dir, now: this.now, plant: options.plant, record: () => this.record,
       raw: (query, params) => this.record.raw(query, params), append: (connection, input) => this.append(connection, input),
       connection: (extra) => this.connection('core', extra), keep: (bytes, source) => this.control.keep(bytes, source), fetch: (sha256) => this.store.read(sha256),
@@ -396,7 +403,7 @@ export class Core {
       adopted: (session, id) => { this.state.projects.set(session, id); }, told: (session, cwd, text) => this.delivery.later(session, cwd, text), rerun: (claim, checks, state) => this.gate.rerun(claim, checks, state),
     });
     this.tasks = new AskTasks({
-      spaces: this.spaces,
+      spaces: this.spaces, renamedSince: this.providers.workspaces.renamedSince,
       raw: (query, params) => this.record.raw(query, params), asks: () => this.asks, now: this.now, plant: options.plant, drafts: options.drafts, work: options.work,
       github: options.github, forge: options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
@@ -438,7 +445,7 @@ export class Core {
       start: (r) => this.judging.runApproved(r), ended: (run) => this.judging.runEnded(run), judged: (claim) => this.judging.judged(claim), stackStart: (folder, worktree) => this.stacks.expectedStart(folder, worktree), stacked: (folder) => this.stacks.wanted(folder),
       ...(options.plant === 'env-starts-at-every-claim' ? {
         startsAtClaim: async (folder: string, session: string, worktree: string) => {
-          const run = newRun();
+          const run = this.providers.environment.newRun();
           if (!this.stacks.wanted(folder)) return;
           const started = await this.stacks.serve({ run, claim: 'claim:planted', check: 'planted', folder, worktree, session, on_base: 'passes', expected_ms: null });
           if (!('cause' in started)) await this.stacks.finish(run);
@@ -469,10 +476,10 @@ export class Core {
     this.stacks = new Stacks({
       raw: (query, params) => this.record.raw(query, params), now: this.now, plant: options.plant, held: options.held, scrub: (values) => this.scrubbing(values),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), supervisor: () => this.supervisor, leases: () => this.leases,
-      environment: {
-        newRun, up: (spec) => upStack(this.host, { ...spec, compose: this.compose }), down: (run) => downStack(this.host, run), healthy: stackHealthy, wanted: environmentOf, keys: keysOf,
-        warm: (o) => new WarmStack({ ...o, host: this.host, compose: this.compose!, plant: options.plant, products: { declared: (f, p) => this.products.declared(f, p), holds: (w, n, k) => this.products.holds(w, n, k), place: (w, n, k, d) => this.products.placeIn(w, n, k, d), keep: (w, n, p, k, s) => this.products.keep(w, n, p, k, s), placeCache: (w, k, p, d) => this.products.placeCache(w, k, p, d), keepCache: (w, k, p, s) => this.products.keepCache(w, k, p, s) } }),
-      },
+      environment: this.providers.environment.stacks({
+        host: () => this.host, compose: () => this.compose, plant: options.plant,
+        products: { declared: (f, p) => this.products.declared(f, p), holds: (w, n, k) => this.products.holds(w, n, k), place: (w, n, k, d) => this.products.placeIn(w, n, k, d), keep: (w, n, p, k, s) => this.products.keep(w, n, p, k, s), placeCache: (w, k, p, d) => this.products.placeCache(w, k, p, d), keepCache: (w, k, p, s) => this.products.keepCache(w, k, p, s) },
+      }),
       stopping: () => this.stopping, session: (id) => this.state.sessions.get(id),
       pending: (worktree) => this.gate.pendingIn(worktree), idle: (session) => this.state.live.get(session)?.state !== 'working',
       plantedAsk: async (session, question) => { await this.control.raiseTask(session, this.state.sessions.get(session)?.agent ?? 'claude-code', { kind: 'unblock', question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done', steps: [question], where: 'your terminal', why: 'The pool is full', unblocks: [`session:${letters(session)}`], proves: 'stack.slot', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(new TextEncoder().encode(question)), pinned_to: { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(question)) } }); },
@@ -496,7 +503,7 @@ export class Core {
     this.box = new Box({
       root: this.root.dir, plant: options.plant, now: this.now,
       raise: async (source, ask, plan) => { await this.ready; return this.asks.raise(this.connection('core'), source, ask, plan as never); },
-      folders: async () => { await this.ready; return [...new Set([...[...this.state.sessions.values()].map((s) => s.cwd), ...(await repoFolders(this.record, this.store)).values()])]; },
+      folders: async () => { await this.ready; return [...new Set([...[...this.state.sessions.values()].map((s) => s.cwd), ...(await repoFolders(this.record, this.store, this.providers.knowledge.cwdOf)).values()])]; },
       lessons: async () => { await this.ready; return (await this.memory.lessons()).map((l) => ({ id: l.id, text: l.text })); },
       forget: async (id) => {
         const lesson = (await this.memory.lessons()).find((l) => l.id === id);
@@ -513,6 +520,7 @@ export class Core {
   private wireRunServices(): void {
     const options = this.options;
     this.runs = new Runs({
+      command: this.providers.checks.command,
       hosts: () => this.hosts,
       journalFile: this.root.runs, point: () => this.durable.point('journal_rewrite'), checkouts: join(this.root.dir, 'checkouts'), now: this.now, plant: options.plant, held: options.held,
       raw: (query, params) => this.record.raw(query, params), sync: () => this.record.sync(), appendAsCore: (input) => this.append(this.connection('core'), input as EventInput),
@@ -531,7 +539,7 @@ export class Core {
       },
     });
     // The check kinds the hub holds (#1537): command, review, numbers and the work kinds, each with its routes.
-    this.checkKinds = new Kinds({ host: () => this.host, submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant });
+    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
       raw: (query) => this.record.raw(query), now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -657,20 +665,19 @@ export class Core {
 
   }
 
-  private async openResources(): Promise<{ port: ReturnType<typeof portKind>; compose: ReturnType<typeof composeKind>; leases: LeaseTable }> {
+  private async openResources(): Promise<ReturnType<EnvironmentProvider['resources']> & { leases: LeaseTable }> {
 
-    this.mcp.index = openIndex(this.root.wiki, this.options.index);
+    this.mcp.index = this.providers.knowledge.index(this.root.wiki, this.options.index);
     this.mcp.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
-    const compose = this.compose = composeKind(join(this.root.dir, 'compose'));
-    // env-local's port kind (#331): ports from 3000 up, each checked free before it is leased.
-    const port = portKind({ free: this.options.plant !== 'env-leases-port-again' });
+    const { compose, port } = this.providers.environment.resources(join(this.root.dir, 'compose'), this.options.plant !== 'env-leases-port-again');
+    this.compose = compose;
     // The kernel's one lease table (#237): env-local declares its kinds there with their free checks, the core its
     // cpu.slot, and the supervisor takes every run's keys through it.
     const leases = this.leases = await openLeases({
       record: this.record, now: this.now, cores: CORES, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}), ...(this.options.plant === 'fills-every-slot' ? { plant: this.options.plant } : {}),
     });
-    for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
+    for (const kind of this.providers.environment.leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
     // deep_drive's replicas (#124): a replica's process ends with the hub that started it, whose pipe was its stdin,
     // so a replica lease an earlier hub left is released.
     await leases.declare('core', REPLICA_LEASE);
@@ -732,7 +739,7 @@ export class Core {
     return { port, compose, leases };
   }
 
-  private async openExecution(port: ReturnType<typeof portKind>, compose: ReturnType<typeof composeKind>, leases: LeaseTable): Promise<void> {
+  private async openExecution(port: ReturnType<EnvironmentProvider['resources']>['port'], compose: ComposeResource, leases: LeaseTable): Promise<void> {
     const asks = this.asks;
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
@@ -763,13 +770,11 @@ export class Core {
     // The keys a stack leased per session before this start (#332): its processes were reaped as the supervisor opened,
     // so each ends now that the record proves them gone.
     for (const v of await leases.leases()) {
-      if (!SESSION_KINDS.includes(v.lease.resource.kind) || !(v.lease.holder === 'core' || v.lease.holder.startsWith('mcp:'))) continue;
+      if (!this.providers.environment.sessionKinds.includes(v.lease.resource.kind) || !(v.lease.holder === 'core' || v.lease.holder.startsWith('mcp:'))) continue;
       const [row] = (await this.record.raw(`SELECT json_extract(data, '$.run') AS run FROM events WHERE kind = 'lease.acquired' AND subject = ? LIMIT 1`, [v.lease.id])) as { run: string | null }[];
       if (row?.run) await this.stacks.adopt(row.run, v.lease.id);
     }
-    this.host = this.options.host
-      ? ((await import(pathToFileURL(this.options.host).href)) as { default: (local: Host) => Host }).default(this.supervisor)
-      : this.supervisor;
+    this.host = this.options.host ? await this.providers.environment.host(this.supervisor, this.options.host) : this.supervisor;
     this.every('supervisor', 1000, () => this.supervisor.tick());
     // Shared build products (#1017): the store's index, its guard entry and its watch; session starts wait for it.
     await this.products.open();
@@ -783,8 +788,8 @@ export class Core {
     const ledger = this.ledger = await openLedger({ record: this.record, asks, now: this.now, price: async (run) => this.judging.priceOf(run.check) });
     // resolver-decisions ships on by default (#23): your saved decisions, and the budgets you approved, answer the
     // asks they cover, each answer gated by the core.
-    asks.registerResolver('resolver-decisions', resolverDecisions({ record: this.record, ledger }));
-    this.delivery.precheck = resolverDecisions({ record: this.record });
+    asks.registerResolver('resolver-decisions', this.providers.decisions.resolver({ record: this.record, ledger }));
+    this.delivery.precheck = this.providers.decisions.resolver({ record: this.record });
     await this.memory.syncStanding().catch(() => undefined);
     this.every('rules', HOUR, () => this.memory.judgeRules());
     // The runner reaps or reports what a crash cut, and ticks itself.
@@ -793,6 +798,7 @@ export class Core {
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
     });
     this.sessionStarts = new Starts({
+      credentials: this.providers.forge,
       root: this.root.dir, socket: this.root.socket, lock: this.root.lock, loginPath: () => this.config().loginPath, now: this.now, plant: this.options.plant,
       supervisor: () => this.supervisor, asks: () => asks, raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
       agentAbove: (peer) => this.state.agentAbove(peer), windowUsed: (agent, home) => this.runner.windowUsed(agent as JobSpec['agent'], home),
@@ -808,6 +814,7 @@ export class Core {
     const leases = this.leases;
     await this.spaces.open();
     this.acceptance = new Acceptance({
+      command: this.providers.checks.command,
       record: this.record, runner: () => this.runner, supervisor: () => this.supervisor, checkouts: () => this.checkouts, asks: () => this.asks, core: this.connection('core'), now: this.now, ...this.config().acceptance,
       append: async (kind, data) => { const ts = this.now(); await this.append(this.connection('core'), { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue }); },
       read: async (owner, name, n) => {
@@ -891,11 +898,9 @@ export class Core {
     // recent sessions worked in before the forge's retention deletes them: at start, then once an hour, one pass at a time.
     const env: Record<string, string | undefined> = { ...process.env };
     const repos: string[] = [];
-    const archive = await openArchive({
-      record: this.record, evidence: this.store, asks, adapters: shipped(), transcripts: MEMORY_TRANSCRIPTS, env, connection: this.connection('ext:deepbuild/archive'), now: this.now,
-      held: () => this.options.held, forge: { api: this.options.forge ?? 'https://api.github.com', repos },
-      // A session's copy is recorded under the repo its folder is in, so what it says reaches that repo's page (#356).
-      projectOf: (cwd, agent) => projectOf(cwd, agent, this.options.plant),
+    const archive = await this.providers.knowledge.archive({
+      record: this.record, evidence: this.store, asks, env, connection: this.connection('ext:deepbuild/archive'), now: this.now,
+      held: () => this.options.held, forge: { api: this.options.forge ?? 'https://api.github.com', repos }, plant: this.options.plant,
     });
     let archiving: Promise<void> | undefined;
     const archivePass = () => {
@@ -915,7 +920,7 @@ export class Core {
     this.archivedSessions = () => archive.archived();
     this.every('archived-threads', ARCHIVED_THREADS_MS, () => this.state.archivedThreads());
     // Setup's wiki build (#356) starts from a pass of its own, after the one at start has finished.
-    this.wikiBuild = openWikiBuild({
+    this.wikiBuild = this.providers.knowledge.wiki({
       record: this.record, root: this.root, store: this.store, runner: this.runner, asks, now: this.now, archive: async () => { await archiving; await archivePass(); },
       core: this.connection('core'), cli: this.connection('cli'), plant: this.options.plant, held: this.options.held,
     });
@@ -940,9 +945,9 @@ export class Core {
   }
 
   /** The github extension (#46): what it reads of the hub, and where its status lands. */
-  private openGitHub(): GitHub {
-    const plant = (['posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none'] as const).find((p: GitHubPlant) => p === this.options.plant);
-    return openGitHub({
+  private openGitHub(): ForgeObserver {
+    const plant = (['posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none'] as const).find((p) => p === this.options.plant);
+    return this.providers.forge.open({
       api: this.options.forge ?? 'https://api.github.com', state: join(this.root.dir, 'github.json'), snapshots: join(this.root.dir, 'objects'), raw: (query, params) => this.record.raw(query, params),
       reads: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       // The gate's own identity once your settings name it; until then your login, which no ruleset counts (#1325).
@@ -973,7 +978,7 @@ export class Core {
   private gateTokens?: (repo: string) => Promise<string | undefined>;
   /** The gate's token for a repo: minted in this process, kept only in its memory. */
   private gateToken(repo: string): Promise<string | undefined> {
-    return (this.gateTokens ??= gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate')))(repo);
+    return (this.gateTokens ??= this.providers.forge.gateTokens(this.options.forge ?? 'https://api.github.com', () => this.forgeApp('gate')))(repo);
   }
   /** `stack.slot` in <root>/config.json: how many warm stacks this machine keeps. */
   private stackSlots(): number {
@@ -1157,13 +1162,7 @@ export class Core {
     const replayed = this.replaying ?? Promise.resolve();
     // A network stop's try runs before it queues, so it holds no other hook of any session (#85).
     const tried = this.tryNetwork(drafts, meta);
-    const handled = replayed.then(() => tried).then(() => this.queue(async () => {
-      const done = await this.handleHook(drafts, meta, writer);
-      // Your rules at a tool call, in the hook's own turn (#344).
-      if (meta.event === 'SessionEnd') this.memory.ruleState.delete(meta.session);
-      if (meta.event === 'PreToolUse' || meta.event === 'PostToolUse') await this.memory.ruleHook(meta).catch((error: unknown) => process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`));
-      return done;
-    })).then(({ settled }) => settled);
+    const handled = replayed.then(() => tried).then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
     if (!tried) return handled;
     // It was acknowledged, so nothing else keeps it: the hub stops only once it's in the record.
     const kept = handled.catch(() => undefined).finally(() => this.tried.delete(kept));
@@ -1174,6 +1173,8 @@ export class Core {
   private async entryLater(meta: HookMeta): Promise<boolean> {
     const id = meta.fields?.prompt_id;
     if (meta.event !== 'UserPromptSubmit' || !id || !meta.transcript || childPrompt(meta) || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return false;
+    // The wrong program assumes a person now, without waiting for the transcript's origin evidence.
+    if (this.options.plant === 'unplaced-is-person') return false;
     if (this.state.sessions.get(meta.session)?.prompts.has(id)) return false;
     const tail = await this.transcriptReader.tail(meta.transcript, 4 << 20).catch(() => '');
     return !tail.split('\n').some((l) => l.includes(id) && l.includes('"promptId"'));
@@ -1383,7 +1384,13 @@ export class Core {
     }
     const count = this.judging.counters.get(meta.session) ?? await this.judging.counterOf(meta.session);
     const { appends, claimed, live, typed } = this.appendHookDrafts(drafts, meta, writer, verified, count);
-    return this.settleHook(drafts, meta, verified, replayed, session, call, appends, claimed, live, typed);
+    const done = await this.settleHook(drafts, meta, verified, replayed, session, call, appends, claimed, live, typed);
+    // Only live session hooks reach rules; jobs and unresolved ownership returned at routeHook above.
+    if (!replayed) {
+      if (meta.event === 'SessionEnd') this.memory.ruleState.delete(meta.session);
+      if (meta.event === 'PreToolUse' || meta.event === 'PostToolUse') await this.memory.ruleHook(meta).catch((error: unknown) => process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`));
+    }
+    return done;
   }
   private async settleHook(drafts: Draft[], meta: HookMeta, verified: boolean, replayed: boolean, session: Session | undefined, call: string | undefined, appends: Promise<void>[], claimed: boolean, live: Live, typed: { text: string; task: string | undefined }[]): Promise<{ settled: Promise<void> }> {
     this.state.follow(drafts, meta, verified);
@@ -2314,6 +2321,10 @@ export class Core {
       return reply;
     }
   private async buildReply(meta: HookMeta, until: number): Promise<{ context?: string; block?: string; message?: string }> {
+    // Event and reply routing use the same ownership evidence before any session-only side effect.
+    await (this.replaying ?? Promise.resolve());
+    const whose = await this.queue(() => this.state.whose(meta, meta.seq));
+    if (whose.job || whose.wait) return {};
     const own = !FOREIGN.has(meta.agent) && meta.session;
     // A tool call's reply carries a message typed mid-turn and the notices waiting for the session (#340, #352).
     if (own && (meta.event === 'PreToolUse' || meta.event === 'PostToolUse')) {
@@ -2325,9 +2336,6 @@ export class Core {
     }
     if (meta.event === 'SessionStart') return this.startReply(meta, until, own);
     if (!own || (meta.event === 'UserPromptSubmit' && childPrompt(meta))) return {};
-    // Behind the replay its hook waited for, so the queue holds the hook before this reply. A long replay can
-    // put a stop's reply past the server's wait; its line then shows at the next prompt, from the record.
-    await (this.replaying ?? Promise.resolve());
     const r = this.delivery.routesOf(meta.session, meta.cwd);
     if (meta.event === 'UserPromptSubmit') return this.promptReply(meta, until, r);
     if (meta.event !== 'Stop') return {};
@@ -2541,7 +2549,7 @@ export class Core {
     await Promise.all(this.tried);
     for (const session of [...this.unplaced.keys()]) await this.queue(() => this.placeHeld(session)).catch(() => undefined);
     await this.chain;
-    await this.state.stating;
+    await this.state.flushStates();
     // The pass the stop kept from starting, so the rows a stopped hub's database holds are the list as it stood.
     await this.state.recordStates().catch(() => undefined);
     this.transcripts.writeCursors();

@@ -6,7 +6,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cwdOf } from '@deepbuild/archive';
 import type { EvidenceStore } from '@deepbuild/evidence';
 import { ulid, type Connection, type Message, type RecordStore } from '@deepbuild/record';
 import { startOf } from './wire.js';
@@ -37,7 +36,7 @@ export const decisionKey = (lesson: string): string => sha256(`memory ${lesson}`
 const rejectedKey = (scope: string, direction: string): string => sha256(`rejected ${scope} ${direction}`);
 
 /** The folder each repo's sessions worked in, read from the first of its transcripts that names one. */
-export async function repoFolders(record: RecordStore, store: EvidenceStore): Promise<Map<string, string>> {
+export async function repoFolders(record: RecordStore, store: EvidenceStore, cwdOf: (text: string) => string | undefined): Promise<Map<string, string>> {
   const rows = (await record.raw('SELECT project_id AS project, transcript FROM sessions WHERE transcript IS NOT NULL AND project_id IS NOT NULL ORDER BY id')) as { project: string; transcript: string }[];
   const out = new Map<string, string>();
   for (const r of rows) {

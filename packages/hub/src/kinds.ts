@@ -11,8 +11,9 @@ import { independence, reviewFill, type ChangeSession, type ReviewerAnswer, type
 import { workFill } from '@deepbuild/checks-work';
 import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec } from '@deepbuild/conformance';
 import { admitKind } from '@deepbuild/gate';
-import type { Host } from '@deepbuild/supervisor';
-import type { JobRecord, JobSpec } from '@deepbuild/runner';
+import type { JobRecord } from '@deepbuild/runner';
+import type { KindsOptions, ReviewOf } from './checks-port.js';
+export type { ReviewOf } from './checks-port.js';
 
 /** Each route a gate run names a kind by. */
 const ROUTES = {
@@ -23,17 +24,6 @@ const ROUTES = {
 } as const;
 type Route = keyof typeof ROUTES;
 
-/** What a review run needs beyond its spec: the claim's session, to ask the second model on its agent and judge its independence. */
-export interface ReviewOf { claim: string; task: string; agent: string; transcript: string | undefined }
-interface KindsOptions {
-  host: () => Host;
-  /** The runner's submit, cancel and wait (#159): the review's second model runs as a `review` job. */
-  submit(spec: JobSpec): Promise<JobRecord>;
-  wait(job: string): Promise<JobRecord>;
-  cancel(job: string): Promise<JobRecord>;
-  /** The planted wrong program that holds `message` with no route into a gate run. */
-  plant?: string | undefined;
-}
 interface Held { fill: CheckRunnerFill; routes: Route[] }
 
 /** The rubric a review reads when your wiki holds none: `- <rule>: <text>`, in order. */

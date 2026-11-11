@@ -37,19 +37,19 @@ import { creditOf, reachOf as ruleReach, reachSince } from './rules.js';
 import { type Root } from './paths.js';
 import { People } from './people.js';
 
-import { type WikiBuilt } from './wiki-build.js';
+import type { WikiBuild, KnowledgeProvider } from './knowledge-port.js';
 import { Teardowns } from './teardowns.js';
 import { Agents } from './agents.js';
 import { Box } from './box.js';
 
 import { Channels, type ChannelAsk } from './channels.js';
-import { Workspaces } from './workspaces.js';
+import type { WorkspaceService } from './workspaces-port.js';
 import { Devices } from './trusted.js';
 
 import { OpenItems } from './open-items.js';
 
 import { Runs } from './runs.js';
-import { Kinds } from './kinds.js';
+import type { CheckKinds } from './checks-port.js';
 
 import { Stacks } from './stacks.js';
 import { Starts } from './starts.js';
@@ -71,6 +71,7 @@ import { type Obj } from "./hub-shared.js";
 export interface HubControlOptions {
   settings: CoreOptions;
   services: {
+    readonly wikiWritten: KnowledgeProvider['writtenOf'];
     readonly log: LogReads;
     readonly people: People;
     readonly numbers: Numbers;
@@ -82,16 +83,16 @@ export interface HubControlOptions {
     readonly hosts: Hosts;
     readonly sessionStarts: Starts;
     readonly heavy: HeavyQueue;
-    readonly wikiBuild: { build(): Promise<WikiBuilt>; forget(claim: string): Promise<string>; writeRules(): Promise<void> };
+    readonly wikiBuild: WikiBuild;
     readonly raw: RecordStore['raw'];
     readonly root: Root;
     readonly record: RecordStore;
     readonly now: () => number;
     readonly acceptance: Acceptance;
     readonly runner: Runner;
-    readonly checkKinds: Kinds;
+    readonly checkKinds: CheckKinds;
     readonly canvasSide: HubCanvas;
-    readonly spaces: Workspaces;
+    readonly spaces: WorkspaceService;
     readonly asks: Asks;
     readonly tasks: AskTasks;
     readonly claudeSettings: ClaudeSettings;

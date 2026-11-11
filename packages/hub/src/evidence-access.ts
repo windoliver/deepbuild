@@ -11,7 +11,7 @@ import { citedEvidence } from '@deepbuild/extension-host';
 import { type RecordStore } from '@deepbuild/record';
 import { type Checkouts } from '@deepbuild/gate';
 
-import { Workspaces } from './workspaces.js';
+import type { WorkspaceService } from './workspaces-port.js';
 
 import { retain } from './retention.js';
 
@@ -31,7 +31,7 @@ readonly durable: Durable;
 readonly record: RecordStore;
 readonly checkouts: Checkouts;
 readonly now: () => number;
-readonly spaces: Workspaces;
+readonly spaces: WorkspaceService;
  };
  events: Pick<HubEvents, "appendCore">;
 

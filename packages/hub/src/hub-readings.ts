@@ -3,7 +3,7 @@ import type { StopJudgingPort, TranscriptsPort } from './hub-ports.js';
 import { execFile } from 'node:child_process';
 import { existsSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { chmod, copyFile, mkdir, realpath } from 'node:fs/promises';
-import { writtenOf as wikiWritten } from '@deepbuild/wiki';
+import type { KnowledgeProvider } from './knowledge-port.js';
 
 import { networkInterfaces } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
@@ -34,6 +34,7 @@ import { DAY, ghToken, SECRETS_TTL, type Obj, isObj, misjudged } from "./hub-sha
 export interface HubReadingsOptions {
  settings: CoreOptions;
  services: {
+readonly wikiWritten: KnowledgeProvider['writtenOf'];
 readonly root: Root;
 readonly record: RecordStore;
 readonly asks: Asks;
@@ -85,14 +86,14 @@ export class HubReadings {
       await synced(partial);
       for (const [from, name] of copies) await copySynced(from, join(folder, name));
       // What the wiki last wrote sits beside its folder (#356): without it, every restored page would read as your edit.
-      if (existsSync(wikiWritten(this.options.services.root.wiki))) await copyFile(wikiWritten(this.options.services.root.wiki), wikiWritten(join(folder, 'wiki')));
+      if (existsSync(this.options.services.wikiWritten(this.options.services.root.wiki))) await copyFile(this.options.services.wikiWritten(this.options.services.root.wiki), this.options.services.wikiWritten(join(folder, 'wiki')));
       // ledger.db names a whole backup only once all of it is on disk, and lasts once its folder is synced.
       await synced(folder);
       renameSync(partial, ledger);
     } catch (error) {
       rmSync(partial, { force: true });
       for (const [, name] of copies) rmSync(join(folder, name), { recursive: true, force: true });
-      rmSync(wikiWritten(join(folder, 'wiki')), { force: true });
+      rmSync(this.options.services.wikiWritten(join(folder, 'wiki')), { force: true });
       throw error;
     }
     // After the rename the backup is whole, so a failed sync here leaves it as it is.

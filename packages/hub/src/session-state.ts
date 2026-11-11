@@ -137,6 +137,8 @@ export class SessionState {
   stating: Promise<void> | undefined;
 
   private restate = false;
+  private stateWake: (() => void) | undefined;
+  private stateTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** The sessions appended to since the last state pass, or all of them: at the start, each minute and after a failed pass. */
   touched: Set<string> | 'all' = 'all';
@@ -421,10 +423,24 @@ export class SessionState {
   stateSoon(): void {
     if (!this.statesRead || this.options.kernel.stopping) return;
     if (this.stating) { this.restate = true; return; }
-    this.stating = new Promise((done) => setTimeout(done, 200)).then(() => this.recordStates()).catch(() => undefined).finally(() => {
+    this.stating = new Promise<void>((done) => {
+      this.stateWake = () => {
+        clearTimeout(this.stateTimer);
+        this.stateTimer = undefined;
+        this.stateWake = undefined;
+        done();
+      };
+      this.stateTimer = setTimeout(this.stateWake, 200);
+    }).then(() => this.recordStates()).catch(() => undefined).finally(() => {
       this.stating = undefined;
       if (this.restate) { this.restate = false; this.stateSoon(); }
     });
+  }
+
+  /** Stop owns the debounce: wake it before draining so shutdown never waits on an abandoned delay. */
+  async flushStates(): Promise<void> {
+    this.stateWake?.();
+    await this.statesSettled();
   }
 
   /** Marks the row `id` read, as row.set with `unread: false`, if it's unread; whether it was (#1461). */
