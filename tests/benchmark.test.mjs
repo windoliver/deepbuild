@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { compare, judgeLimit, measure, measureOnce, parseCpuMs, parsePeakRss, summarize, validateBudgets } from '../scripts/benchmark.mjs';
+import { compare, judgeLimit, judgeTask, measure, measureOnce, parseCpuMs, parsePeakRss, summarize, validateBudgets } from '../scripts/benchmark.mjs';
 
 const budget = { id: 'startup', command: ['binary'], margin: 0.5, limits: { peakBytes: 10_000_000 }, initialReason: 'First measured executable in issue #12.' };
 const config = { tasks: [budget] };
@@ -231,4 +231,15 @@ test('a command counts whole however its children were started', { skip: process
     assert.deepEqual(run.uncounted, [], name);
     assert.ok(run.instructions > 0, `${name}: ${run.instructions}`);
   }
+});
+
+// #1405: what waits counts its waiting, so a count run at another QoS doesn't compare. awk waits on nothing, and both
+// sides start it through taskpolicy, so their counts match and alone read PASS; one side lowered still reads
+// INCONCLUSIVE, naming the QoS.
+test('a budget whose sides ran at different QoS reads INCONCLUSIVE, never PASS', { skip: process.platform !== 'darwin' }, () => {
+  const awk = ['/usr/bin/awk', 'BEGIN { for (i = 0; i < 1000000; i++) s += i }'];
+  const task = { id: 'lowered', command: ['/usr/sbin/taskpolicy', '-c', 'utility', ...awk], margin: 1000, limits: {}, initialReason: 'A test.' };
+  const { instructions } = judgeTask(task, { ...task, command: ['/usr/sbin/taskpolicy', '-t', '0', '-l', '0', ...awk] }, process.cwd(), process.cwd());
+  assert.equal(instructions.status, 'INCONCLUSIVE', JSON.stringify(instructions));
+  assert.match(instructions.reason, /utility QoS and the merge base \d+% at legacy.*the counts alone read PASS/, instructions.reason);
 });
