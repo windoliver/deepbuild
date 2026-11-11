@@ -257,6 +257,38 @@ impl Reader {
         };
         let hold = self.word(o, "interpolate", p, "linear", &["linear", "hold"]) == "hold";
         let from = o.get("from").unwrap_or(&Value::Null);
+        // #1921: `<body>#*` reads every element body of an each: body, and writes each one's pose
+        // into its row of an instancer's position and rotation columns.
+        if let Some(body) = from.as_str().and_then(|f| f.strip_suffix("#*")) {
+            let element = |id: &String| id.strip_prefix(body).is_some_and(|e| e.starts_with('#'));
+            let instancer = to.as_deref().and_then(|t| t.strip_prefix("items/"));
+            let refusal = if !bodies.keys().any(element) {
+                Some((
+                    "from",
+                    format!("{body} is not a body of this world with each:"),
+                ))
+            } else if read != Read::Pose {
+                Some(("read", "an output from <body>#* reads pose".to_string()))
+            } else if instancer.is_none_or(|i| i.contains('/')) {
+                Some((
+                    "to",
+                    "an output from <body>#* writes items/<instancer ID>".to_string(),
+                ))
+            } else {
+                None
+            };
+            if let Some((key, what)) = refusal {
+                let at = o.get(key).unwrap_or(&Value::Null);
+                self.refuse("ref_unresolved", join(p, key), at, what);
+                return None;
+            }
+            return Some(Output {
+                from: format!("{body}#*"),
+                read,
+                to,
+                hold,
+            });
+        }
         let found = from.as_str().filter(|id| {
             if read.of_joint() {
                 joints.contains_key(*id)

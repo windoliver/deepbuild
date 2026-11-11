@@ -1,0 +1,118 @@
+The #1921 suite run once at base commit 35df4523f ("Merge pull request #2280 …"; no implementation of #1921; #1918's,
+#2009's, #2010's, #2011's and #2012's merges are there), on macOS arm64 (Mac17,10, rustc 1.99.1, Node 24.22.0, vitest
+5.0.5), with `PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx
+vitest run --root tests/acceptance/1921 --testTimeout=600000 --no-file-parallelism ac2-each-element-order.test.ts
+ac4-one-by-one-twin.test.ts` (the checkout's path redacted to `<checkout>`; the base's deep-physics was built just
+before, 2 min 41 s cold, so the run's own cargo build was a no-op).
+
+Run: the two files whose only binary, deep-physics, builds cheaply. 3 of 3 tests fail, each at an assertion because the
+surface is absent, none in the harness and none BLOCKED:
+- ac2's two tests: the pile's world is refused at check with `unknown_field` at `bodies/crate/each` (the base's body
+  takes no `each`), so the order test fails on the check's errors before it reads `built` (which the base doesn't
+  answer either), and the capacity test finds no error at `capacity/bodies` (the base reads `capacity` but enforces
+  nothing by it).
+- ac4's test: the twin, 800 bodies declared one by one under their element addresses, checks with no error at the base
+  (its first assertion passes), but the drop's world is refused: `unknown_field` at `bodies/boxes/each` and
+  `bodies/balls/each`, and `ref_unresolved` at `outputs/boxes/from` and `outputs/balls/from` ("boxes#*" is not a body),
+  so its bake answers no step hashes.
+
+Not run at the base, by the job's brief (a cold deep-show or deep-gpu build takes many minutes):
+- ac1-scale-out-of-physics.test.ts (4 tests) builds deep-show. Its surface is absent at the base, so each test would
+  fail there at an assertion. Its refusal test needs only deep-physics, and the base's answer to its two checks was read
+  apart from the run with the same calls: both the scaled and the sized lab answer one error, `unknown_field` at
+  `bodies/box/item` with `actual` "crate", so no error holds the scale (2, 1, 1) and the sized lab doesn't check clean.
+  The rest test's bake is refused for the same field before deep-show is reached; the token tests and the twin present
+  the sized lab in deep-show, whose physics module runs the same world check, so the scene is refused
+  (`physics_refused`) and isn't presented; and the scenario's `planted: "output_writes_whole_transform"` isn't a name
+  the base's deep-show takes.
+- ac3-one-instanced-draw.test.ts (1 test) builds deep-gpu. It bakes the drop with deep-physics first, which the base
+  refuses (`each`, `<body>#*`, as in ac4), so it fails there; beyond that, the base's deep-gpu runs no physics.world@1
+  (its worlds are #419's fixture worlds), so no column would be written back.
+- ac5-seek-columns.test.ts (2 tests) builds deep-show. It bakes the drop with deep-physics first, which the base
+  refuses, as in ac4; beyond that, deep-show's physics module refuses the same world, so the scene isn't presented, and
+  `output_keeps_previous_columns` isn't a planted name the base takes.
+- ac6-budget-and-uploads.test.ts (2 tests) builds deep-gpu. The uploads test bakes the drop with deep-physics first,
+  which the base refuses, as in ac4; the base's view3d reports no `element_uploads`. The budget test's request, a scene
+  with `world: "drop"`, was given to the base's `node scripts/physics-budget.mjs` apart from the run: it answers
+  `{"ok":false,"code":"bad_input"}` with exit 2 before building anything (it takes only a world document), so the test
+  fails at "exits 0".
+
+The type-check, `npx tsc -p tests/acceptance/1921/tsconfig.json`, exits 0.
+
+
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1921
+
+ ❯ ac2-each-element-order.test.ts (2 tests | 2 failed) 993ms
+   ❯ #1921.e4dd3dda a body with each: an instancer builds one body per element, in element-ID order, within the world's capacity (2)
+     × #1921.e4dd3dda (order) a body with each: a 400-element instancer builds 400 bodies in element-ID order, each at its element's pose 236ms
+     × #1921.e4dd3dda (capacity) a world whose capacity: {bodies} is below the element count is refused at check, naming both counts 4ms
+ ❯ ac4-one-by-one-twin.test.ts (1 test | 1 failed) 1615ms
+   ❯ #1921.e35aba59 bodies built per instancer element step exactly as the same bodies declared one by one (1)
+     × #1921.e35aba59 400 boxes and 400 balls dropped on a plane give, at every one of 600 steps, the same world state hash as a twin world that declares the 800 bodies one by one in the same order 1302ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-each-element-order.test.ts > #1921.e4dd3dda a body with each: an instancer builds one body per element, in element-ID order, within the world's capacity > #1921.e4dd3dda (order) a body with each: a 400-element instancer builds 400 bodies in element-ID order, each at its element's pose
+AssertionError: the pile, its capacity the element count, checks with no error:
+  {"check":"document.validate","code":"unknown_field","severity":"error","ids":["crate"],"path":"bodies/crate/each","actual":"crates","t":null,"what":"bodies/crate/each is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority","fix":"Remove the field, or require the kind's minor that defines it."}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[\"crate\"],\"path\":\"bodies/crate/each\",\"actual\":\"crates\",\"t\":null,\"what\":\"bodies/crate/each is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}",
++ ]
+
+ ❯ none ../2009/helpers.ts:66:73
+     64| /** No failures; the message lists them. */
+     65| export function none(failures: readonly string[], what: string): void {
+     66|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     67| }
+     68| /** A planted twin is caught: the judge that passes the real program f…
+ ❯ ac2-each-element-order.test.ts:26:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac2-each-element-order.test.ts > #1921.e4dd3dda a body with each: an instancer builds one body per element, in element-ID order, within the world's capacity > #1921.e4dd3dda (capacity) a world whose capacity: {bodies} is below the element count is refused at check, naming both counts
+AssertionError: an error issue at capacity/bodies (or capacity); the errors: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["crate"],"path":"bodies/crate/each","actual":"crates","t":null,"what":"bodies/crate/each is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 0 to be greater than 0
+ ❯ ac2-each-element-order.test.ts:46:111
+     44|     const errors = errorsOf(checked, 'the pile with capacity.bodies 39…
+     45|     const atCapacity = errors.filter((e) => /(^|\/)capacity(\/bodies)?…
+     46|     expect(atCapacity.length, `an error issue at capacity/bodies (or c…
+       |                                                                                                               ^
+     47|     const both = atCapacity.filter((e) => /\b399\b/.test(JSON.stringif…
+     48|     expect(both.map((e) => show(e)), `it names both the capacity, 399,…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac4-one-by-one-twin.test.ts > #1921.e35aba59 bodies built per instancer element step exactly as the same bodies declared one by one > #1921.e35aba59 400 boxes and 400 balls dropped on a plane give, at every one of 600 steps, the same world state hash as a twin world that declares the 800 bodies one by one in the same order
+AssertionError: the drop, bodies per element answers ok: {"ok":false,"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["boxes"],"path":"bodies/boxes/each","actual":"boxes","t":null,"what":"bodies/boxes/each is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["balls"],"path":"bodies/balls/each","actual":"balls","t":null,"what":"bodies/balls/each is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["boxes"],"path":"outputs/boxes/from","actual":"boxes#*","t":null,"what":"\"boxes#*\" is not a body of this world, which pose reads","fix":"Name an ID the document holds, or remove the reference."},{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["balls"],"path":"outputs/balls/from","actual":"balls#*","t":null,"what":"\"balls#*\" is not a body of this world, which pose reads","fix":"Name an ID the document holds, or remove the reference."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answered ../2010/helpers.ts:86:63
+     84|
+     85| export function answered(reply: JsonObject | undefined, what: string):…
+     86|   expect(reply?.['ok'], `${what} answers ok: ${show(reply)}`).toBe(tru…
+       |                                                               ^
+     87|   return reply!;
+     88| }
+ ❯ stepHashes ../2010/helpers.ts:101:22
+ ❯ ac4-one-by-one-twin.test.ts:29:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Start at  09:21:22
+   Duration  2.77s (tests 98%, transform 1%, import 1%)
+

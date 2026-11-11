@@ -29,6 +29,7 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
     PhysicsWorld::default()
 }
 
+pub mod bound;
 pub mod fp;
 mod occurrences;
 pub mod runner;
@@ -188,6 +189,11 @@ fn shared(w: &World, shape: &Shape) -> Option<SharedShape> {
 }
 
 impl Rapier {
+    /// The bodies in the order this world built them (#1921: `check`'s `built`).
+    pub fn built(&self) -> Vec<String> {
+        self.bodies.iter().map(|(id, _)| id.clone()).collect()
+    }
+
     /// Moves body `id`'s canonical field `field` (an index of `FIELDS`) by `ulps` f32 values: the
     /// one-field shift a golden's locator is proved on (Checkpoint ring). False for no such body.
     pub fn shift(&mut self, id: &str, field: usize, ulps: i64) -> bool {
@@ -636,7 +642,8 @@ impl Backend for Rapier {
         p.normalized_max_linear_velocity = w.solver.max_speed as f32;
         p.max_ccd_substeps = usize::from(w.solver.ccd);
         let mut handles = BTreeMap::new();
-        for (id, b) in &w.bodies {
+        for id in deep_canvas_physics::occurrence::built_order(w) {
+            let b = &w.bodies[id];
             let mut locks = LockedAxes::empty();
             let flags = [
                 (b.lock_linear[0], LockedAxes::TRANSLATION_LOCKED_X),

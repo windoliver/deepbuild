@@ -4418,6 +4418,75 @@ export interface DefinitionLocked {
   evidence?: Array<string>;
 }
 
+/** definition.locked@10 */
+export interface DefinitionLockedV10 {
+  v: 10;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+        automated?: boolean;
+      };
+      expected_ms?: number;
+      deadline_ms?: number;
+      surface: {
+        kind: string;
+        routes?: Array<string>;
+        format?: string;
+        name?: string;
+        path?: string;
+        exports?: Array<string>;
+      } | null;
+      references?: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      command?: string;
+      criterion?: string;
+      targets?: Array<string>;
+      paid?: "live call" | "hosted browser run" | "model job";
+      runs?: number;
+      held_out?: Array<{
+        files: { [key: string]: string };
+      }>;
+      timing?: boolean;
+      settled_by?: "budget-window";
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.locked@2 */
 export interface DefinitionLockedV2 {
   v: 2;
@@ -5561,6 +5630,35 @@ export interface JobRecorded {
       ref: string;
       sha256?: string;
     }>;
+  };
+  evidence?: Array<string>;
+}
+
+/** landing.made@1 */
+export interface LandingMade {
+  v: 1;
+  id: string;
+  kind: "landing.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    step: "judged" | "sent_back" | "held" | "landed" | "stopped" | "joined";
+    repo: string;
+    pr: number;
+    issue: number;
+    head: string | null;
+    main: string | null;
+    commit: string | null;
+    tree: string | null;
+    claim: string | null;
+    outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "none";
+    files: Array<string>;
+    open: Array<string>;
   };
   evidence?: Array<string>;
 }
