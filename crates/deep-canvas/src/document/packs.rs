@@ -19,6 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
+use super::pack_kinds::check_kinds;
 use super::{member, Issue};
 use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
@@ -52,6 +53,8 @@ pub struct Planted {
     pub each_by_count: bool,
     /// #2015: a repeat over faces walks the part's triangles (the elements function's plant).
     pub each_per_triangle: bool,
+    /// #1956: the pack check of a kind's migration stops at its first fault.
+    pub migration_first_fault: bool,
     /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
     pub orphan_drops: bool,
     /// #1961: that load hands the broken-out ID to the new expansion, which writes it.
@@ -218,7 +221,7 @@ impl KindRule {
 }
 
 /// What a kind rule's expression resolves through: the build's `ease@1`, when it has one.
-struct RuleScope<'a>(&'a Sealed);
+pub(super) struct RuleScope<'a>(pub(super) &'a Sealed);
 
 impl crate::expr::Resolve for RuleScope<'_> {
     fn eases(&self) -> Result<(), String> {
@@ -442,10 +445,14 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         None => BTreeMap::new(),
         Some(a) => check_aliases(a, &mut issues),
     };
-    let kinds = match fields.get("kinds") {
-        None => BTreeMap::new(),
-        Some(k) => super::pack_kinds::check_kinds(&id, k, &recipes, &assets, sealed, &mut issues),
-    };
+    let kinds = check_kinds(
+        &id,
+        fields,
+        &recipes,
+        &assets,
+        (sealed, planted),
+        &mut issues,
+    );
     for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
         issues.extend(module_fields::check(sealed, manifest, key));
     }
@@ -670,6 +677,7 @@ const PACK_KEYS: &[&str] = &[
     "providers",
     "layouts",
     "kinds",
+    "corpus",
 ];
 
 /// The canvas module that admits and runs a pack's programs (#238).
@@ -1318,7 +1326,7 @@ fn read_lets(
 }
 
 /// Why `value` is no value of `input`, if it isn't.
-fn input_fault(input: &Input, value: &Value) -> Option<String> {
+pub(super) fn input_fault(input: &Input, value: &Value) -> Option<String> {
     let range = |n: f64| -> Option<String> {
         let below = input.min.is_some_and(|min| n < min);
         let above = input.max.is_some_and(|max| n > max);
@@ -1476,7 +1484,7 @@ fn manifest_id(manifest: &Value) -> Option<String> {
 /// The packs a document resolved: by name, for a kind's `<pack>` half.
 #[derive(Clone, Debug, Default)]
 pub struct Resolved<'a> {
-    by_name: BTreeMap<String, &'a Pack>,
+    pub(super) by_name: BTreeMap<String, &'a Pack>,
     /// The sealed modules' elements functions by builder kind (`family.name`), which a repeat
     /// over elements counts by (#2015).
     elements: BTreeMap<String, registry::Elements>,

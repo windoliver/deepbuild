@@ -175,6 +175,8 @@ pub enum Planted {
     KitDefaultsOnly,
     /// #202: the expander walks an instance's inputs in a hash map's order.
     ExpandsInHashOrder,
+    /// #1956: the pack check of a kind's migration stops at its first fault.
+    MigrationFirstFault,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #2015: a repeat over elements seeds each derived item with the part's element count too.
@@ -1227,6 +1229,7 @@ impl<'a> Hub<'a> {
             orphan_hands_id: scenario.planted == Some(Planted::OrphanLoadHandsIdToExpansion),
             rules_twice: scenario.planted == Some(Planted::RulesEvaluatedTwice),
             kit_defaults_only: scenario.planted == Some(Planted::KitDefaultsOnly),
+            migration_first_fault: scenario.planted == Some(Planted::MigrationFirstFault),
             walk_inputs: (scenario.planted == Some(Planted::ExpandsInHashOrder))
                 .then_some(walk_in_hash_order as deep_canvas::document::packs::WalkInputs),
         };
