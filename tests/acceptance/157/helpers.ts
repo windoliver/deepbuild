@@ -130,12 +130,18 @@ export function leftIn(dir: string): string[] {
 
 // ---------------------------------------------------------------------------------------------------
 // The look (README: Fixtures): flat colours the tests know, and a finish (grain for criterion 4). Its bytes go into
-// the evidence store; a film names it as #407's films do.
+// the evidence store; a film names it as #407's films do. It resolves under the look guard (deep-canvas-marks look.rs
+// `resolve_in`) wherever status shows and everywhere: every status colour 3:1 on the ground, the raised ground and hover
+// and selected over either, and 4.5:1 to the ground for its label; ink_primary, ink_secondary and ink_tertiary 4.5:1
+// on each of those surfaces; every role at an alpha the ink's colour; every opaque role but the ground, and every
+// alpha role over the ground and the raised ground, at least min_distance (0.1) in OKLab from each status colour; and a
+// focus ring 3:1 on every surface. A look the guard refuses is silently replaced by the shipped one, which has none of
+// the roles the films name, so a colour here changes only within those rules.
 
 export interface Look { id: string; sha: string; bytes: Buffer }
 export const COLOURS = {
-  ground: '#808080', muted: '#4d4d4d', accent: '#f2c230', raised: '#b3b3b3', paper: '#f0f0f0', black: '#000000', white: '#ffffff',
-  ramp_lo: '#1040c0', ramp_hi: '#f08020',
+  ground: '#e8e8e8', muted: '#8c8c8c', accent: '#f2c230', raised: '#d4d4d4', paper: '#f0f0f0', black: '#000000', white: '#ffffff',
+  ramp_lo: '#0838a8', ramp_hi: '#f08020',
 } as const;
 export type Role = keyof typeof COLOURS | 'ink';
 export function lookOf(id: string, colours: Partial<Record<keyof typeof COLOURS, string>> = {}, finish: JsonObject[] = []): Look {
@@ -144,13 +150,13 @@ export function lookOf(id: string, colours: Partial<Record<keyof typeof COLOURS,
     id, format: 1, basis: 'drawing', license: 'Apache-2.0', description: `The #157 acceptance look ${id}: flat colours the tests know.`,
     palette: {
       ...c, graphite: '#1b1d22', fog: '#e3e4e6',
-      graphite_secondary: '#1b1d22d6', graphite_tertiary: '#1b1d2285', graphite_disabled: '#1b1d2233', graphite_hover: '#1b1d220f', graphite_selected: '#1b1d221a',
+      graphite_secondary: '#1b1d22d6', graphite_tertiary: '#1b1d22d6', graphite_disabled: '#1b1d2233', graphite_hover: '#1b1d220f', graphite_selected: '#1b1d221a',
       orchid: '#b0207f', indigo: '#2c3e7b',
     },
     roles: {
       ground: 'ground', ink: 'graphite', muted: 'muted', accent: 'accent', raised: 'raised', divider: 'fog', paper: 'paper', black: 'black', white: 'white',
       ramp_lo: 'ramp_lo', ramp_hi: 'ramp_hi',
-      ink_primary: 'graphite', ink_secondary: 'graphite_secondary', ink_tertiary: 'graphite_tertiary', ink_disabled: 'graphite_disabled',
+      ink_primary: 'graphite', ink_secondary: 'graphite_secondary', ink_tertiary: 'graphite_tertiary', ink_disabled: 'graphite_disabled', focus: 'graphite',
       hover: 'graphite_hover', selected: 'graphite_selected', session_readout: 'orchid', session_line: 'indigo',
     },
     themes: { light: {} },
@@ -229,7 +235,7 @@ export function toneChannels(frames: number, sr: number): Float32Array[] {
 }
 /**
  * A fixture film, its look and sound put in the evidence store: `size` (160 × 90) at `rate` (24/1) for `frames`
- * frames; a ground (`ground`, grey 128), a static side panel over the left 40% (`muted`), and, unless `moving` is
+ * frames; a ground (`ground`, grey 232), a static side panel over the left 40% (`muted`), and, unless `moving` is
  * false, a bar (`accent`) moving right one pixel a frame and a tick (`raised`) moving down one pixel a frame, each
  * starting over at its edge, so every frame differs from every other and no frame is flat; `items` drawn over them.
  */

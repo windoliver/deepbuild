@@ -260,9 +260,11 @@ The Oracle lane's plants are in its README.
 
 All made at test time; nothing but the README, the helpers and the tests is committed; no personal data; licences CC0.
 
-- **The look** (`helpers.ts` `lookOf`, after #407's): flat colours the tests know — `ground` #808080, `muted` #4d4d4d,
-  `accent` #f2c230, `raised` #b3b3b3, `paper` #f0f0f0 (luma 240/255, 0.94), `black`, `white`, `ramp_lo` #1040c0,
-  `ramp_hi` #f08020, `ink` #1b1d22; Inter as `body`.
+- **The look** (`helpers.ts` `lookOf`, after #407's): flat colours the tests know — `ground` #e8e8e8, `muted` #8c8c8c,
+  `accent` #f2c230, `raised` #d4d4d4, `paper` #f0f0f0 (luma 240/255, 0.94), `black`, `white`, `ramp_lo` #0838a8,
+  `ramp_hi` #f08020, `ink` #1b1d22 (its tiers at alphas d6, d6 and 33, `focus` the ink); Inter as `body`. Chosen so the
+  look guard (`look::resolve_in`) resolves it, with the paper as its ground too, wherever status shows and everywhere: a
+  refused look would fall back to the shipped one, which names none of these roles.
 - **The fixture film** (`filmDoc`): 160 × 90 at 24 fps unless a test says otherwise; a ground, a static side panel
   over the left 40% (`muted`), a bar (`accent`) moving right a pixel a frame and a tick (`raised`) moving down a pixel a
   frame, each starting over at its edge (at 160 × 90 their periods, 92 and 87 frames, repeat together only after
